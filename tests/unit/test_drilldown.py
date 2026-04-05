@@ -30,6 +30,8 @@ class CommandRecorder:
             return "some pod status"
         if "deployments" in command or "statefulsets" in command:
             return json.dumps({"items": []})
+        if "externalsecrets" in command:
+            return json.dumps({"items": []})
         return "{}"
 
 

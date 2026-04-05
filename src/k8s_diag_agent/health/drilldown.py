@@ -9,6 +9,7 @@ from textwrap import shorten
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from ..collect.cluster_snapshot import WarningEventSummary
+from .image_pull_secret import ImagePullSecretInsight
 
 
 def _now_iso() -> str:
@@ -137,6 +138,7 @@ class DrilldownEvidence:
     affected_workloads: Tuple[Dict[str, Any], ...]
     summary: Dict[str, Any]
     collection_timestamps: Dict[str, str]
+    image_pull_secret_insights: Tuple[Dict[str, Any], ...]
 
 
 @dataclass
@@ -154,7 +156,12 @@ class DrilldownCollector:
         else:
             self._runner = self.command_runner
 
-    def collect(self, context: str, namespaces: Sequence[str]) -> DrilldownEvidence:
+    def collect(
+        self,
+        context: str,
+        namespaces: Sequence[str],
+        image_pull_secret_insight: ImagePullSecretInsight | None = None,
+    ) -> DrilldownEvidence:
         warning_events = self._collect_warning_events(context, limit=self.max_warning_events)
         non_running = self._collect_non_running_pods(context, limit=self.max_non_running_pods)
         described = self._describe_pods(context, non_running[: self.max_pod_descriptions])
@@ -169,6 +176,7 @@ class DrilldownCollector:
             "non_running_pods": len(non_running),
             "pod_descriptions": len(described),
             "rollout_entries": len(rollout_entries),
+            "image_pull_secret_insights": 1 if image_pull_secret_insight else 0,
         }
         affected_workloads = tuple(
             {"kind": "Pod", "namespace": pod.namespace, "name": pod.name, "phase": pod.phase, "reason": pod.reason}
@@ -179,6 +187,7 @@ class DrilldownCollector:
             "warning_events": _now_iso(),
             "pods": _now_iso(),
             "rollouts": _now_iso(),
+            "image_pull_secret_insight": _now_iso(),
         }
         return DrilldownEvidence(
             warning_events=warning_events,
@@ -189,6 +198,9 @@ class DrilldownCollector:
             affected_workloads=affected_workloads,
             summary=summary,
             collection_timestamps=collection_timestamps,
+            image_pull_secret_insights=(image_pull_secret_insight.to_dict(),)
+            if image_pull_secret_insight
+            else (),
         )
 
     def _kubectl(self, context: str, *args: str) -> str:
@@ -413,6 +425,8 @@ class DrilldownArtifact:
     rollout_status: Tuple[DrilldownRolloutStatus, ...]
     collection_timestamps: Dict[str, str]
 
+    image_pull_secret_insight: ImagePullSecretInsight | None = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "run_label": self.run_label,
@@ -432,6 +446,9 @@ class DrilldownArtifact:
             "pod_descriptions": self.pod_descriptions,
             "rollout_status": [entry.to_dict() for entry in self.rollout_status],
             "collection_timestamps": self.collection_timestamps,
+            "image_pull_secret_insight": self.image_pull_secret_insight.to_dict()
+            if self.image_pull_secret_insight
+            else None,
         }
 
     @classmethod
@@ -469,6 +486,11 @@ class DrilldownArtifact:
             for entry in rollout_raw:
                 if isinstance(entry, Mapping):
                     rollouts.append(DrilldownRolloutStatus.from_dict(entry))
+        insight_raw = raw.get("image_pull_secret_insight")
+        if isinstance(insight_raw, Mapping):
+            insight_value = ImagePullSecretInsight.from_dict(insight_raw)
+        else:
+            insight_value = None
         return cls(
             run_label=str(raw.get("run_label") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -491,4 +513,5 @@ class DrilldownArtifact:
             collection_timestamps={
                 str(key): str(value) for key, value in (raw.get("collection_timestamps") or {}).items()
             },
+            image_pull_secret_insight=insight_value,
         )

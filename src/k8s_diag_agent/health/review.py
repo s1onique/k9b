@@ -9,6 +9,7 @@ from typing import Iterable, Sequence, Tuple
 
 from ..llm.assessor_schema import AssessorAssessment
 from .drilldown import DrilldownArtifact, DrilldownPod
+from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON
 
 
 @dataclass(frozen=True)
@@ -83,19 +84,27 @@ def _ranking_key(candidate: DrilldownCandidate) -> Tuple[int, float, str]:
 
 
 def _priority_bucket(artifact: DrilldownArtifact) -> int:
-    if _has_image_pull_backoff(artifact):
+    if _has_image_pull_secret_issue(artifact):
         return 0
-    if _has_crash_loop_backoff(artifact):
+    if _has_image_pull_backoff(artifact):
         return 1
-    if _has_failed_job(artifact):
+    if _has_crash_loop_backoff(artifact):
         return 2
-    if _has_pending_pod(artifact):
+    if _has_failed_job(artifact):
         return 3
-    return 4
+    if _has_pending_pod(artifact):
+        return 4
+    return 5
 
 
 def _has_image_pull_backoff(artifact: DrilldownArtifact) -> bool:
     return _trigger_present(artifact, "imagepullbackoff") or _pod_reason_contains(artifact, "imagepullbackoff")
+
+
+def _has_image_pull_secret_issue(artifact: DrilldownArtifact) -> bool:
+    if artifact.image_pull_secret_insight:
+        return True
+    return _trigger_present(artifact, BROKEN_IMAGE_PULL_SECRET_REASON)
 
 
 def _has_crash_loop_backoff(artifact: DrilldownArtifact) -> bool:

@@ -30,6 +30,11 @@ from ..render.formatter import assessment_to_dict
 from .baseline import BaselineDriftCategory, BaselinePolicy
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .utils import normalize_ref
+from .image_pull_secret import (
+    BROKEN_IMAGE_PULL_SECRET_REASON,
+    ImagePullSecretInsight,
+    ImagePullSecretInspector,
+)
 
 
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
@@ -488,6 +493,7 @@ def build_health_assessment(
     previous: Optional[HealthHistoryEntry],
     baseline: BaselinePolicy,
     warning_event_threshold: int = 0,
+    image_pull_secret_insight: ImagePullSecretInsight | None = None,
 ) -> HealthAssessmentResult:
     generator = _SignalIdGenerator(target.label)
     signals: List[Signal] = []
@@ -547,7 +553,9 @@ def build_health_assessment(
     missing_signal_map: Dict[str, str] = {}
     baseline_next_checks: List[NextCheck] = []
     baseline_reasons: List[str] = []
+    image_pull_secret_next_checks: List[NextCheck] = []
     references: List[str] = []
+    insight_hypothesis: Hypothesis | None = None
     for missing_item in missing:
         issues_detected = True
         signal = add_signal(
@@ -861,6 +869,49 @@ def build_health_assessment(
             "high",
             Layer.WORKLOAD,
         )
+        if image_pull_secret_insight and image_pull_secret_insight.external_secrets:
+            details = image_pull_secret_insight
+            target_status = details.target_secret_status
+            primary_external = details.external_secrets[0]
+            issues_detected = True
+            signal = add_signal(
+                (
+                    f"Registry image pull secret {details.secret_name} supply chain is broken in "
+                    f"{details.namespace}."
+                ),
+                "high",
+                Layer.WORKLOAD,
+            )
+            record_finding(
+                (
+                    f"ExternalSecret {primary_external.name} reports {primary_external.status_reason}: "
+                    f"{primary_external.status_message or 'missing secret'} for {details.secret_name}."
+                ),
+                Layer.WORKLOAD,
+                [signal.id],
+            )
+            image_pull_secret_next_checks.append(
+                NextCheck(
+                    description="Review the ExternalSecret and backing Kubernetes secret for the failing image pull secret.",
+                    owner="platform engineer",
+                    method="kubectl",
+                    evidence_needed=[
+                        f"kubectl describe externalsecret {primary_external.name} -n {details.namespace}",
+                        f"kubectl describe secret {details.secret_name} -n {details.namespace}",
+                    ],
+                )
+            )
+            insight_hypothesis = Hypothesis(
+                id=generator.next_id(),
+                description=(
+                    f"Image pull secret {details.secret_name} is missing because ExternalSecret {primary_external.name} failed to update the secret ({primary_external.status_reason})."
+                ),
+                confidence=ConfidenceLevel.MEDIUM,
+                probable_layer=Layer.WORKLOAD,
+                what_would_falsify=(
+                    f"ExternalSecret {primary_external.name} reports Ready and secret {target_status.name or details.secret_name} exists."
+                ),
+            )
     if job_failures > 0:
         workload_issue_present = True
         issues_detected = True
@@ -985,6 +1036,8 @@ def build_health_assessment(
                 ),
             )
         ]
+        if insight_hypothesis:
+            hypotheses.insert(0, insight_hypothesis)
         safety_level = SafetyLevel.LOW_RISK
     else:
         hypotheses = [
@@ -1027,11 +1080,14 @@ def build_health_assessment(
             )
         )
     next_checks.extend(baseline_next_checks)
+    next_checks.extend(image_pull_secret_next_checks)
 
     if status.helm_error:
         references.append("helm collection error")
     if missing:
         references.append("missing evidence")
+    if image_pull_secret_insight:
+        references.append("image pull secret supply chain")
     if not references:
         references.append("routine health monitoring")
 
@@ -1069,6 +1125,7 @@ class HealthSnapshotRecord:
     snapshot: ClusterSnapshot
     path: Path
     assessment: Optional[HealthAssessmentResult] = None
+    image_pull_secret_insight: ImagePullSecretInsight | None = None
 
     def refs(self) -> Tuple[str, str]:
         return (normalize_ref(self.target.context), normalize_ref(self.target.label))
@@ -1325,8 +1382,9 @@ class HealthLoopRunner:
         manual_drilldown_contexts: Sequence[str] | None = None,
         snapshot_collector: Callable[[str], ClusterSnapshot] = collect_cluster_snapshot,
         comparison_fn: Callable[[ClusterSnapshot, ClusterSnapshot], ClusterComparison] = compare_snapshots,
-        quiet: bool = False,
         drilldown_collector: DrilldownCollector | None = None,
+        image_pull_secret_inspector: ImagePullSecretInspector | None = None,
+        quiet: bool = False,
     ) -> None:
         self.config = config
         self.available_contexts = set(available_contexts)
@@ -1347,6 +1405,7 @@ class HealthLoopRunner:
         self.run_id = _build_runtime_run_id(self.run_label)
         self.baseline_policy = config.baseline_policy
         self._drilldown_collector = drilldown_collector
+        self._image_pull_secret_inspector = image_pull_secret_inspector or ImagePullSecretInspector()
 
     def execute(
         self,
@@ -1418,51 +1477,66 @@ class HealthLoopRunner:
         for record in records:
             cluster_id = record.snapshot.metadata.cluster_id
             previous = history.get(cluster_id)
-            watched_release_versions = _watched_release_versions(
-                record.snapshot, record.target.watched_helm_releases
-            )
-            watched_crd_versions = _watched_crd_versions(
-                record.snapshot, record.target.watched_crd_families
-            )
-            assessment_result: Optional[HealthAssessmentResult] = None
-            if record.target.monitor_health:
-                assessment_result = build_health_assessment(
-                    record.snapshot,
-                    record.target,
-                    previous,
-                    self.config.baseline_policy,
-                    self.config.trigger_policy.warning_event_threshold,
+        watched_release_versions = _watched_release_versions(
+            record.snapshot, record.target.watched_helm_releases
+        )
+        watched_crd_versions = _watched_crd_versions(
+            record.snapshot, record.target.watched_crd_families
+        )
+        assessment_result: Optional[HealthAssessmentResult] = None
+        insight: ImagePullSecretInsight | None = None
+        pod_counts = record.snapshot.health_signals.pod_counts
+        if record.target.monitor_health and pod_counts.image_pull_backoff > 0:
+            try:
+                insight = self._image_pull_secret_inspector.inspect(
+                    record.target.context,
+                    (),
+                    record.snapshot.health_signals.warning_events,
                 )
-                record.assessment = assessment_result
-                assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
-                artifact = HealthAssessmentArtifact(
-                    run_label=self.run_label,
-                    run_id=self.run_id,
-                    timestamp=datetime.now(timezone.utc),
-                    context=record.target.context,
-                    label=record.target.label,
-                    cluster_id=cluster_id,
-                    snapshot_path=str(record.path),
-                    assessment=assessment_to_dict(assessment_result.assessment),
-                    missing_evidence=assessment_result.missing_evidence,
-                    health_rating=assessment_result.rating,
+            except Exception as exc:
+                self._collection_messages.append(
+                    f"Image pull secret inspection failed for '{record.target.context}': {exc}"
                 )
-                _write_json(artifact.to_dict(), assessment_path)
-                artifacts.append(artifact)
-            history[cluster_id] = HealthHistoryEntry(
+        if record.target.monitor_health:
+            assessment_result = build_health_assessment(
+                record.snapshot,
+                record.target,
+                previous,
+                self.config.baseline_policy,
+                self.config.trigger_policy.warning_event_threshold,
+                image_pull_secret_insight=insight,
+            )
+            record.assessment = assessment_result
+            assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
+            artifact = HealthAssessmentArtifact(
+                run_label=self.run_label,
+                run_id=self.run_id,
+                timestamp=datetime.now(timezone.utc),
+                context=record.target.context,
+                label=record.target.label,
                 cluster_id=cluster_id,
-                node_count=record.snapshot.metadata.node_count,
-                pod_count=record.snapshot.metadata.pod_count,
-                control_plane_version=record.snapshot.metadata.control_plane_version or "",
-                health_rating=assessment_result.rating if assessment_result else HealthRating.HEALTHY,
-                missing_evidence=assessment_result.missing_evidence if assessment_result else (),
-                watched_helm_releases=watched_release_versions,
-                watched_crd_families=watched_crd_versions,
-                node_conditions=record.snapshot.health_signals.node_conditions.to_dict(),
-                pod_counts=record.snapshot.health_signals.pod_counts.to_dict(),
-                job_failures=record.snapshot.health_signals.job_failures,
-                warning_event_count=len(record.snapshot.health_signals.warning_events),
+                snapshot_path=str(record.path),
+                assessment=assessment_to_dict(assessment_result.assessment),
+                missing_evidence=assessment_result.missing_evidence,
+                health_rating=assessment_result.rating,
             )
+            _write_json(artifact.to_dict(), assessment_path)
+            artifacts.append(artifact)
+        history[cluster_id] = HealthHistoryEntry(
+            cluster_id=cluster_id,
+            node_count=record.snapshot.metadata.node_count,
+            pod_count=record.snapshot.metadata.pod_count,
+            control_plane_version=record.snapshot.metadata.control_plane_version or "",
+            health_rating=assessment_result.rating if assessment_result else HealthRating.HEALTHY,
+            missing_evidence=assessment_result.missing_evidence if assessment_result else (),
+            watched_helm_releases=watched_release_versions,
+            watched_crd_families=watched_crd_versions,
+            node_conditions=record.snapshot.health_signals.node_conditions.to_dict(),
+            pod_counts=record.snapshot.health_signals.pod_counts.to_dict(),
+            job_failures=record.snapshot.health_signals.job_failures,
+            warning_event_count=len(record.snapshot.health_signals.warning_events),
+        )
+        record.image_pull_secret_insight = insight
         return artifacts
 
     def _build_drilldowns(
@@ -1478,7 +1552,11 @@ class HealthLoopRunner:
             if not reasons:
                 continue
             try:
-                evidence = collector.collect(record.target.context, (record.target.context,))
+                evidence = collector.collect(
+                    record.target.context,
+                    (record.target.context,),
+                    record.image_pull_secret_insight,
+                )
             except RuntimeError as exc:
                 self._collection_messages.append(
                     f"Drilldown for '{record.target.context}' failed: {exc}"
@@ -1545,6 +1623,8 @@ class HealthLoopRunner:
             reasons.append("warning_event_threshold")
         if record.snapshot.health_signals.job_failures > 0:
             reasons.append("job_failures")
+        if record.image_pull_secret_insight:
+            reasons.append(BROKEN_IMAGE_PULL_SECRET_REASON)
         unique_reasons = tuple(dict.fromkeys(reasons))
         return unique_reasons
 

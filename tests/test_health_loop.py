@@ -3,7 +3,7 @@ import shutil
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 from tests.path_helper import ensure_src_in_path
 
@@ -37,6 +37,13 @@ from k8s_diag_agent.health.loop import (
     build_health_assessment,
     determine_pair_trigger_reasons,
 )
+from k8s_diag_agent.health.image_pull_secret import (
+    BROKEN_IMAGE_PULL_SECRET_REASON,
+    ExternalSecretStatus,
+    ImagePullSecretInsight,
+    ImagePullSecretInspector,
+    TargetSecretStatus,
+)
 
 
 class HealthLoopTests(unittest.TestCase):
@@ -54,7 +61,12 @@ class HealthLoopTests(unittest.TestCase):
             super().__init__(command_runner=lambda command: "{}")
             self.calls: List[tuple[str, Tuple[str, ...]]] = []
 
-        def collect(self, context: str, namespaces: Sequence[str]) -> DrilldownEvidence:
+        def collect(
+            self,
+            context: str,
+            namespaces: Sequence[str],
+            image_pull_secret_insight: ImagePullSecretInsight | None = None,
+        ) -> DrilldownEvidence:
             self.calls.append((context, tuple(namespaces)))
             return DrilldownEvidence(
                 warning_events=(),
@@ -69,7 +81,23 @@ class HealthLoopTests(unittest.TestCase):
                     "pods": "2026-01-01T00:00:00Z",
                     "rollouts": "2026-01-01T00:00:00Z",
                 },
+                image_pull_secret_insights=(),
             )
+
+    class _StubImagePullSecretInspector(ImagePullSecretInspector):
+        def __init__(self, insight: ImagePullSecretInsight | None = None):
+            super().__init__(command_runner=lambda command: "{}")
+            self.insight = insight
+            self.calls: List[tuple[str, Tuple[str, ...], Tuple[WarningEventSummary, ...]]] = []
+
+        def inspect(
+            self,
+            context: str,
+            namespaces: Iterable[str],
+            warning_events: Iterable[WarningEventSummary],
+        ) -> ImagePullSecretInsight | None:
+            self.calls.append((context, tuple(namespaces), tuple(warning_events)))
+            return self.insight
 
     def _make_snapshot(
         self,
@@ -100,6 +128,34 @@ class HealthLoopTests(unittest.TestCase):
         if health_signals is not None:
             payload["health_signals"] = health_signals
         return ClusterSnapshot.from_dict(payload)
+
+    def _make_image_pull_secret_insight(self) -> ImagePullSecretInsight:
+        external_secret = ExternalSecretStatus(
+            namespace="default",
+            name="glcr-secret-external",
+            target_secret="glcr-secret",
+            secret_store_ref={"name": "glcr-store", "kind": "SecretStore", "namespace": "default"},
+            status_reason="UpdateFailed",
+            status_message="Secret does not exist",
+            ready=False,
+        )
+        return ImagePullSecretInsight(
+            namespace="default",
+            secret_name="glcr-secret",
+            deployments=({"namespace": "default", "name": "app-deployment"},),
+            external_secrets=(external_secret,),
+            secret_store_refs=({"name": "glcr-store", "kind": "SecretStore", "namespace": "default"},),
+            target_secret_status=TargetSecretStatus.missing("default", "glcr-secret", "secret not found"),
+            events=(
+                WarningEventSummary(
+                    namespace="default",
+                    reason="FailedToRetrieveImagePullSecret",
+                    message='Failed to retrieve image pull secret "glcr-secret".',
+                    count=1,
+                    last_seen="2026-01-01T00:00:00Z",
+                ),
+            ),
+        )
 
     def _baseline_policy(
         self,
@@ -549,6 +605,58 @@ class HealthLoopTests(unittest.TestCase):
         self.assertEqual(len(drilldowns), 1)
         self.assertIn("CrashLoopBackOff", drilldowns[0].trigger_reasons)
 
+    def test_drilldown_reasons_include_image_pull_secret_supply_chain(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-alpha",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 0,
+                    "pending": 0,
+                    "image_pull_backoff": 1,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-alpha": snapshot}
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        target = HealthTarget(
+            context="cluster-alpha",
+            label="cluster-alpha",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        config = HealthRunConfig(
+            run_label="test",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        stub_collector = self._StubDrilldownCollector()
+        stub_inspector = self._StubImagePullSecretInspector(self._make_image_pull_secret_insight())
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=stub_collector,
+            image_pull_secret_inspector=stub_inspector,
+        )
+        _, _, drilldowns = runner.execute()
+        self.assertTrue(drilldowns)
+        self.assertIn(BROKEN_IMAGE_PULL_SECRET_REASON, drilldowns[0].trigger_reasons)
+
     def test_build_health_assessment_crashloop_backoff_degrades(self) -> None:
         snapshot = self._make_snapshot(
             "cluster-crashloop",
@@ -609,6 +717,44 @@ class HealthLoopTests(unittest.TestCase):
                 "ImagePullBackOff" in finding.description
                 for finding in result.assessment.findings
             )
+        )
+
+    def test_build_health_assessment_records_secret_supply_chain(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-imageerr",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "pending": 0,
+                    "crash_loop_backoff": 0,
+                    "image_pull_backoff": 1,
+                    "completed_job_pods": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        target = HealthTarget(
+            context="cluster-imageerr",
+            label="cluster-imageerr",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        insight = self._make_image_pull_secret_insight()
+        result = build_health_assessment(
+            snapshot,
+            target,
+            None,
+            BaselinePolicy.empty(),
+            image_pull_secret_insight=insight,
+        )
+        descriptions = [finding.description for finding in result.assessment.findings]
+        self.assertTrue(
+            any("ExternalSecret glcr-secret-external" in desc for desc in descriptions)
+        )
+        self.assertIn(
+            "Image pull secret glcr-secret", result.assessment.hypotheses[0].description
         )
 
     def test_drilldown_not_created_when_healthy(self) -> None:
