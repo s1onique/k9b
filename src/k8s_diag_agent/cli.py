@@ -48,6 +48,33 @@ class BatchSnapshotConfig:
 def main(argv: Iterable[str] | None = None) -> int:
     source_args = list(argv) if argv is not None else sys.argv[1:]
     normalized = _normalize_args(source_args)
+    parser = build_parser()
+    args = parser.parse_args(normalized)
+    command = args.command or "fixture"
+
+    if command == "snapshot":
+        return _handle_snapshot(args)
+    if command == "compare":
+        return _handle_compare(args)
+    if command == "batch-snapshot":
+        return _handle_batch_snapshot(args)
+    if command == "assess-snapshots":
+        return _handle_assess_snapshots(args)
+    if command == "run-feedback":
+        return _handle_run_feedback(args)
+    return _handle_fixture(args)
+
+
+def _normalize_args(argv: Iterable[str]) -> List[str]:
+    normalized = list(argv)
+    if not normalized:
+        return ["fixture"]
+    if normalized[0] in _SUBCOMMANDS:
+        return normalized
+    return ["fixture", *normalized]
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run diagnostics or snapshot tools.")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -106,29 +133,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     run_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
 
-    args = parser.parse_args(normalized)
-    command = args.command or "fixture"
-
-    if command == "snapshot":
-        return _handle_snapshot(args)
-    if command == "compare":
-        return _handle_compare(args)
-    if command == "batch-snapshot":
-        return _handle_batch_snapshot(args)
-    if command == "assess-snapshots":
-        return _handle_assess_snapshots(args)
-    if command == "run-feedback":
-        return _handle_run_feedback(args)
-    return _handle_fixture(args)
-
-
-def _normalize_args(argv: Iterable[str]) -> List[str]:
-    normalized = list(argv)
-    if not normalized:
-        return ["fixture"]
-    if normalized[0] in _SUBCOMMANDS:
-        return normalized
-    return ["fixture", *normalized]
+    return parser
 
 
 def _handle_fixture(args: argparse.Namespace) -> int:

@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, NoReturn, Optional, cast
 
 import requests
 
 from .assessor_schema import AssessorAssessment
 from .base import LLMProvider
+
+DEFAULT_TIMEOUT_SECONDS = 90
 
 if TYPE_CHECKING:
     from .base import LLMAssessmentInput
@@ -28,8 +30,9 @@ _SYSTEM_INSTRUCTIONS = (
 @dataclass(frozen=True)
 class LlamaCppProviderConfig:
     base_url: str
-    api_key: str
     model: str
+    api_key: Optional[str] = None
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     @property
     def endpoint(self) -> str:
@@ -39,21 +42,47 @@ class LlamaCppProviderConfig:
     @classmethod
     def from_env(cls, env: Optional[Dict[str, str]] = None) -> "LlamaCppProviderConfig":
         source = env or os.environ
-        missing = []
-        values: Dict[str, str] = {}
-        for key in ("LLAMA_CPP_BASE_URL", "LLAMA_CPP_API_KEY", "LLAMA_CPP_MODEL"):
-            raw = source.get(key)
-            if not raw or not raw.strip():
-                missing.append(key)
-                continue
-            values[key] = raw.strip()
+        missing: list[str] = []
+        base_raw = source.get("LLAMA_CPP_BASE_URL")
+        base_url = base_raw.strip() if base_raw is not None else ""
+        if not base_url:
+            missing.append("LLAMA_CPP_BASE_URL")
+        model_raw = source.get("LLAMA_CPP_MODEL")
+        model = model_raw.strip() if model_raw is not None else ""
+        if not model:
+            missing.append("LLAMA_CPP_MODEL")
         if missing:
             raise RuntimeError(f"Missing environment variables for llamacpp provider: {', '.join(missing)}")
+        api_key_raw = source.get("LLAMA_CPP_API_KEY")
+        api_key: Optional[str] = None
+        if api_key_raw is not None:
+            stripped = api_key_raw.strip()
+            if stripped:
+                api_key = stripped
+        timeout_seconds = cls._parse_timeout(source.get("LLAMA_CPP_TIMEOUT_SECONDS"))
         return cls(
-            base_url=values["LLAMA_CPP_BASE_URL"],
-            api_key=values["LLAMA_CPP_API_KEY"],
-            model=values["LLAMA_CPP_MODEL"],
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
         )
+
+    @staticmethod
+    def _parse_timeout(value: Optional[str]) -> int:
+        if value is None:
+            return DEFAULT_TIMEOUT_SECONDS
+        trimmed = value.strip()
+        if not trimmed:
+            return DEFAULT_TIMEOUT_SECONDS
+        try:
+            parsed = int(trimmed)
+        except ValueError as exc:
+            raise ValueError(
+                f"LLAMA_CPP_TIMEOUT_SECONDS must be an integer but got '{value}'"
+            ) from exc
+        if parsed <= 0:
+            raise ValueError("LLAMA_CPP_TIMEOUT_SECONDS must be a positive integer")
+        return parsed
 
 
 class LlamaCppProvider(LLMProvider):
@@ -89,45 +118,202 @@ class LlamaCppProvider(LLMProvider):
         }
 
     def _request_headers(self, config: LlamaCppProviderConfig) -> Dict[str, str]:
-        return {
+        headers: Dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": f"Bearer {config.api_key}",
         }
+        if config.api_key:
+            headers["Authorization"] = f"Bearer {config.api_key}"
+        return headers
 
-    def _extract_assessment(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_assessment(self, data: Any) -> Dict[str, Any]:
+        payload_snippet = self._payload_snippet(data)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"llama.cpp response expected an object but got {self._type_name(data)}; "
+                f"response snippet: {payload_snippet}"
+            )
+        choices0_type: Optional[str] = None
+        message_type: Optional[str] = None
+
+        def debug_context() -> str:
+            parts = [f"response snippet: {payload_snippet}"]
+            if choices0_type:
+                parts.append(f"choices[0] type: {choices0_type}")
+            if message_type:
+                parts.append(f"choices[0]['message'] type: {message_type}")
+            return "; ".join(parts)
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"llama.cpp response expected an object but got {self._type_name(data)}; {debug_context()}"
+            )
+
+        def raise_shape_error(path: str, expected: str, value: Any) -> NoReturn:
+            raise ValueError(
+                f"llama.cpp response {path} expected {expected} but got {self._type_name(value)}; "
+                f"{debug_context()}"
+            )
+
+        def extract_text_from_content(node: Any, path: str) -> Optional[str]:
+            if node is None:
+                return None
+            if isinstance(node, str):
+                return node
+            if isinstance(node, dict):
+                nested_path = f"{path}['content']"
+                return extract_text_from_content(node.get("content"), nested_path)
+            raise_shape_error(path, "a string or nested 'content' object", node)
+
         choices = data.get("choices")
-        if not isinstance(choices, list) or not choices:
-            raise ValueError("llama.cpp response missing choices")
-        top = choices[0]
-        message = top.get("message") or {}
-        content = message.get("content")
-        if isinstance(content, dict):
-            # some servers wrap the text content inside an object
-            content = content.get("content")
-        if not isinstance(content, str):
-            raise ValueError("llama.cpp response message lacks textual content")
+        if not isinstance(choices, list):
+            raise_shape_error("'choices'", "a list", choices)
+        if not choices:
+            raise ValueError(
+                f"llama.cpp response 'choices' expected a non-empty list; {debug_context()}"
+            )
+        top_choice = choices[0]
+        choices0_type = self._type_name(top_choice)
+        if not isinstance(top_choice, dict):
+            raise_shape_error("'choices[0]'", "a dictionary", top_choice)
+
+        message = top_choice.get("message")
+        if message is not None:
+            message_type = self._type_name(message)
+        if message is not None and not isinstance(message, (dict, str)):
+            raise_shape_error("'choices[0]['message']'", "a dictionary or string", message)
+
+        content: Optional[str]
+        if isinstance(message, str):
+            content = message
+        elif isinstance(message, dict):
+            content = extract_text_from_content(
+                message.get("content"), "'choices[0]['message']['content']'"
+            )
+        else:
+            content = None
+
+        if content is None:
+            text_field = top_choice.get("text")
+            if text_field is None:
+                raise ValueError(
+                    f"llama.cpp response choice lacks textual content; response snippet: {payload_snippet}"
+                )
+            if not isinstance(text_field, str):
+                raise_shape_error("'choices[0]['text']'", "a string", text_field)
+            content = text_field
+
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
-            raise ValueError("llama.cpp response did not contain valid JSON") from exc
+            excerpt = content[:500]
+            excerpt_snippet = " ".join(excerpt.split()) or excerpt
+            if len(content) > 500:
+                excerpt_snippet = f"{excerpt_snippet}…"
+            raise ValueError(
+                f"llama.cpp response text content is not valid JSON (first 500 chars: {excerpt_snippet}); "
+                f"response snippet: {payload_snippet}"
+            ) from exc
         if not isinstance(parsed, dict):
-            raise ValueError("llama.cpp response JSON must be an object")
-        return parsed
+            raise_shape_error("message JSON", "an object", parsed)
+        return cast(Dict[str, Any], parsed)
+
+    @staticmethod
+    def _base_url_mutually_exclusive_v1(base_url: str) -> bool:
+        return base_url.rstrip('/').endswith('/v1')
+
+    @staticmethod
+    def _format_http_status(response: Any) -> Optional[str]:
+        status_code = getattr(response, "status_code", None)
+        if status_code is None:
+            return None
+        reason = getattr(response, "reason", "") or ""
+        reason_text = f" {reason}" if reason else ""
+        return f"HTTP {status_code}{reason_text}"
+
+    @staticmethod
+    def _response_body_snippet(response: Any, limit: int = 320) -> Optional[str]:
+        raw = getattr(response, "text", None)
+        if raw is None:
+            return None
+        text = str(raw).strip()
+        if not text:
+            return None
+        snippet = " ".join(text.split())
+        if len(snippet) > limit:
+            snippet = snippet[:limit].rstrip()
+            snippet = f"{snippet}…"
+        return snippet
+
+    @staticmethod
+    def _type_name(value: Any) -> str:
+        if value is None:
+            return "NoneType"
+        return type(value).__name__
+
+    @staticmethod
+    def _payload_snippet(value: Any, limit: int = 320) -> str:
+        try:
+            serialized = json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError):
+            serialized = repr(value)
+        snippet = " ".join(serialized.split())
+        if len(snippet) > limit:
+            snippet = snippet[:limit].rstrip()
+            snippet = f"{snippet}…"
+        return snippet
+
+    @classmethod
+    def _build_error_message(
+        cls,
+        config: LlamaCppProviderConfig,
+        endpoint: str,
+        exc: requests.RequestException,
+        response: Optional[requests.Response],
+        timeout_seconds: int,
+    ) -> str:
+        context: list[str] = [f"Endpoint {endpoint} (LLAMA_CPP_BASE_URL={config.base_url})"]
+        if cls._base_url_mutually_exclusive_v1(config.base_url):
+            context.append("Base URL already includes '/v1'; provider still appends '/v1/chat/completions'. Remove the trailing '/v1' if you only meant to specify the server root.")
+        if response is not None:
+            status_text = cls._format_http_status(response)
+            if status_text:
+                context.append(status_text)
+            snippet = cls._response_body_snippet(response)
+            if snippet:
+                context.append(f"Response snippet: {snippet}")
+        else:
+            context.append(f"{exc.__class__.__name__}: {exc}")
+        context.append(f"timeout={timeout_seconds}s")
+        return "llama.cpp request failed: " + "; ".join(context)
 
     def assess(self, prompt: str, payload: "LLMAssessmentInput") -> Dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
         request_payload = self._build_payload(prompt, config)
+        response: Optional[requests.Response] = None
+        timeout_seconds = config.timeout_seconds
         try:
             response = session.post(
-                endpoint, json=request_payload, headers=self._request_headers(config), timeout=30
+                endpoint,
+                json=request_payload,
+                headers=self._request_headers(config),
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
         except requests.RequestException as exc:
-            raise RuntimeError("llama.cpp request failed") from exc
+            raise RuntimeError(
+                self._build_error_message(config, endpoint, exc, response, timeout_seconds)
+            ) from exc
+        assert response is not None
         raw = response.json()
         assessment = self._extract_assessment(raw)
-        validated = AssessorAssessment.from_dict(assessment)
+        try:
+            validated = AssessorAssessment.from_dict(assessment)
+        except ValueError as exc:
+            snippet = self._payload_snippet(assessment)
+            raise ValueError(
+                f"Assessor schema validation failed: {exc}; assessment snippet: {snippet}"
+            ) from exc
         return validated.to_dict()
 
 

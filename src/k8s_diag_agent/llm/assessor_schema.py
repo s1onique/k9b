@@ -7,25 +7,44 @@ from typing import Any, Dict, Iterable, List, Optional
 from ..models import ConfidenceLevel, SafetyLevel
 
 
+def _type_name(value: Any) -> str:
+    if value is None:
+        return "NoneType"
+    return type(value).__name__
+
+
 def _require_str(value: Any, name: str) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
+        raise ValueError(f"{name} expected a string but got {_type_name(value)}")
+    stripped = value.strip()
+    if not stripped:
         raise ValueError(f"{name} must be a non-empty string")
-    return value.strip()
+    return stripped
 
 
-def _ensure_list(raw: Any, name: str) -> List[Any]:
+def _ensure_mapping(raw: Any, path: str) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} expected an object but got {_type_name(raw)}")
+    return raw
+
+
+def _ensure_list(raw: Any, path: str) -> List[Any]:
     if isinstance(raw, list):
         return raw
-    raise ValueError(f"{name} must be a list")
+    raise ValueError(f"{path} expected a list but got {_type_name(raw)}")
 
 
-def _list_of_strings(raw: Iterable[Any], name: str) -> List[str]:
+def _list_of_strings(raw: Iterable[Any], path: str) -> List[str]:
     result: List[str] = []
-    for item in raw:
-        if isinstance(item, str) and item.strip():
-            result.append(item.strip())
-        else:
-            raise ValueError(f"{name} contains invalid string entries")
+    for index, item in enumerate(raw):
+        if isinstance(item, str):
+            trimmed = item.strip()
+            if trimmed:
+                result.append(trimmed)
+                continue
+        raise ValueError(
+            f"{path}[{index}] expected a non-empty string but got {_type_name(item)}"
+        )
     return result
 
 
@@ -38,13 +57,14 @@ class AssessorSignal:
     severity: str
 
     @classmethod
-    def from_dict(cls, raw: Dict[str, Any]) -> "AssessorSignal":
+    def from_dict(cls, raw: Any, path: str) -> "AssessorSignal":
+        payload = _ensure_mapping(raw, path)
         return cls(
-            id=_require_str(raw.get("id"), "signal.id"),
-            description=_require_str(raw.get("description"), "signal.description"),
-            layer=_require_str(raw.get("layer"), "signal.layer"),
-            evidence_id=_require_str(raw.get("evidence_id"), "signal.evidence_id"),
-            severity=_require_str(raw.get("severity"), "signal.severity"),
+            id=_require_str(payload.get("id"), f"{path}.id"),
+            description=_require_str(payload.get("description"), f"{path}.description"),
+            layer=_require_str(payload.get("layer"), f"{path}.layer"),
+            evidence_id=_require_str(payload.get("evidence_id"), f"{path}.evidence_id"),
+            severity=_require_str(payload.get("severity"), f"{path}.severity"),
         )
 
     def to_dict(self) -> Dict[str, str]:
@@ -64,11 +84,16 @@ class AssessorFinding:
     layer: str
 
     @classmethod
-    def from_dict(cls, raw: Dict[str, Any]) -> "AssessorFinding":
+    def from_dict(cls, raw: Any, path: str) -> "AssessorFinding":
+        payload = _ensure_mapping(raw, path)
+        supporting_signals_raw = payload.get("supporting_signals", [])
         return cls(
-            description=_require_str(raw.get("description"), "finding.description"),
-            supporting_signals=_list_of_strings(raw.get("supporting_signals", []), "finding.supporting_signals"),
-            layer=_require_str(raw.get("layer"), "finding.layer"),
+            description=_require_str(payload.get("description"), f"{path}.description"),
+            supporting_signals=_list_of_strings(
+                _ensure_list(supporting_signals_raw, f"{path}.supporting_signals"),
+                f"{path}.supporting_signals",
+            ),
+            layer=_require_str(payload.get("layer"), f"{path}.layer"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -87,13 +112,17 @@ class AssessorHypothesis:
     what_would_falsify: str
 
     @classmethod
-    def from_dict(cls, raw: Dict[str, Any]) -> "AssessorHypothesis":
-        confidence_value = _require_str(raw.get("confidence"), "hypothesis.confidence")
+    def from_dict(cls, raw: Any, path: str) -> "AssessorHypothesis":
+        payload = _ensure_mapping(raw, path)
+        confidence_value = _require_str(payload.get("confidence"), f"{path}.confidence")
         return cls(
-            description=_require_str(raw.get("description"), "hypothesis.description"),
+            description=_require_str(payload.get("description"), f"{path}.description"),
             confidence=ConfidenceLevel(confidence_value.lower()),
-            probable_layer=_require_str(raw.get("probable_layer"), "hypothesis.probable_layer"),
-            what_would_falsify=_require_str(raw.get("what_would_falsify"), "hypothesis.what_would_falsify"),
+            probable_layer=_require_str(payload.get("probable_layer"), f"{path}.probable_layer"),
+            what_would_falsify=_require_str(
+                payload.get("what_would_falsify"),
+                f"{path}.what_would_falsify",
+            ),
         )
 
     def to_dict(self) -> Dict[str, str]:
@@ -113,12 +142,17 @@ class AssessorNextCheck:
     evidence_needed: List[str]
 
     @classmethod
-    def from_dict(cls, raw: Dict[str, Any]) -> "AssessorNextCheck":
+    def from_dict(cls, raw: Any, path: str) -> "AssessorNextCheck":
+        payload = _ensure_mapping(raw, path)
+        evidence_needed_raw = payload.get("evidence_needed", [])
         return cls(
-            description=_require_str(raw.get("description"), "next_check.description"),
-            owner=_require_str(raw.get("owner"), "next_check.owner"),
-            method=_require_str(raw.get("method"), "next_check.method"),
-            evidence_needed=_list_of_strings(raw.get("evidence_needed", []), "next_check.evidence_needed"),
+            description=_require_str(payload.get("description"), f"{path}.description"),
+            owner=_require_str(payload.get("owner"), f"{path}.owner"),
+            method=_require_str(payload.get("method"), f"{path}.method"),
+            evidence_needed=_list_of_strings(
+                _ensure_list(evidence_needed_raw, f"{path}.evidence_needed"),
+                f"{path}.evidence_needed",
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -138,12 +172,17 @@ class AssessorRecommendedAction:
     safety_level: SafetyLevel
 
     @classmethod
-    def from_dict(cls, raw: Dict[str, Any]) -> "AssessorRecommendedAction":
-        references = _list_of_strings(raw.get("references", []), "recommended_action.references")
-        safety_value = _require_str(raw.get("safety_level"), "recommended_action.safety_level")
+    def from_dict(cls, raw: Any, path: str) -> "AssessorRecommendedAction":
+        payload = _ensure_mapping(raw, path)
+        references_raw = payload.get("references", [])
+        references = _list_of_strings(
+            _ensure_list(references_raw, f"{path}.references"),
+            f"{path}.references",
+        )
+        safety_value = _require_str(payload.get("safety_level"), f"{path}.safety_level")
         return cls(
-            type=_require_str(raw.get("type"), "recommended_action.type"),
-            description=_require_str(raw.get("description"), "recommended_action.description"),
+            type=_require_str(payload.get("type"), f"{path}.type"),
+            description=_require_str(payload.get("description"), f"{path}.description"),
             references=references,
             safety_level=SafetyLevel(safety_value.lower()),
         )
@@ -169,26 +208,46 @@ class AssessorAssessment:
     overall_confidence: Optional[ConfidenceLevel] = None
 
     @classmethod
-    def from_dict(cls, raw: Dict[str, Any]) -> "AssessorAssessment":
+    def from_dict(cls, raw: Any, path: str = "assessment") -> "AssessorAssessment":
+        payload = _ensure_mapping(raw, path)
+        observed_signals_raw = _ensure_list(payload.get("observed_signals"), f"{path}.observed_signals")
         observed_signals = [
-            AssessorSignal.from_dict(entry) for entry in _ensure_list(raw.get("observed_signals"), "observed_signals")
+            AssessorSignal.from_dict(entry, f"{path}.observed_signals[{index}]")
+            for index, entry in enumerate(observed_signals_raw)
         ]
+        findings_raw = _ensure_list(payload.get("findings"), f"{path}.findings")
         findings = [
-            AssessorFinding.from_dict(entry) for entry in _ensure_list(raw.get("findings"), "findings")
+            AssessorFinding.from_dict(entry, f"{path}.findings[{index}]")
+            for index, entry in enumerate(findings_raw)
         ]
+        hypotheses_raw = _ensure_list(payload.get("hypotheses"), f"{path}.hypotheses")
         hypotheses = [
-            AssessorHypothesis.from_dict(entry) for entry in _ensure_list(raw.get("hypotheses"), "hypotheses")
+            AssessorHypothesis.from_dict(entry, f"{path}.hypotheses[{index}]")
+            for index, entry in enumerate(hypotheses_raw)
         ]
+        next_checks_raw = _ensure_list(
+            payload.get("next_evidence_to_collect"),
+            f"{path}.next_evidence_to_collect",
+        )
         next_checks = [
-            AssessorNextCheck.from_dict(entry)
-            for entry in _ensure_list(raw.get("next_evidence_to_collect"), "next_evidence_to_collect")
+            AssessorNextCheck.from_dict(entry, f"{path}.next_evidence_to_collect[{index}]")
+            for index, entry in enumerate(next_checks_raw)
         ]
-        recommended = AssessorRecommendedAction.from_dict(raw.get("recommended_action", {}))
-        safety_value = _require_str(raw.get("safety_level"), "safety_level")
-        overall_raw = raw.get("overall_confidence")
+        recommended_raw = payload.get("recommended_action")
+        recommended = AssessorRecommendedAction.from_dict(
+            recommended_raw, f"{path}.recommended_action"
+        )
+        safety_value = _require_str(payload.get("safety_level"), f"{path}.safety_level")
+        overall_raw = payload.get("overall_confidence")
         overall = None
         if overall_raw is not None:
-            overall = ConfidenceLevel(_require_str(overall_raw, "overall_confidence").lower())
+            overall = ConfidenceLevel(_require_str(overall_raw, f"{path}.overall_confidence").lower())
+        probable_layer_value = payload.get("probable_layer_of_origin")
+        probable_layer = (
+            _require_str(probable_layer_value, f"{path}.probable_layer_of_origin")
+            if probable_layer_value
+            else None
+        )
         return cls(
             observed_signals=observed_signals,
             findings=findings,
@@ -196,9 +255,7 @@ class AssessorAssessment:
             next_evidence_to_collect=next_checks,
             recommended_action=recommended,
             safety_level=SafetyLevel(safety_value.lower()),
-            probable_layer_of_origin=_require_str(raw.get("probable_layer_of_origin"), "probable_layer_of_origin")
-            if raw.get("probable_layer_of_origin")
-            else None,
+            probable_layer_of_origin=probable_layer,
             overall_confidence=overall,
         )
 

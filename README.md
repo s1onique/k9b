@@ -33,6 +33,14 @@ Reads `snapshots/targets.local.json` (or the path passed via `--config`). Copy `
 - `.venv/bin/python -m unittest discover tests` (active verification path)
 - `.venv/bin/python -m mypy src tests` (type checker; see [typing guidance](docs/typing.md))
 
+## Fast feedback loops
+
+Use these quick guards before the full verification pipeline settles in:
+
+- `.venv/bin/python -m ruff check src tests`
+- `.venv/bin/python -m pytest tests/unit/test_cli_smoke.py`
+- `pre-commit run --all-files`
+
 ## Optional LLM assessment path
 
 ```bash
@@ -66,9 +74,11 @@ See `docs/typing.md` for the type-annotation conventions that guide new code.
 
 Configure the environment before invoking `assess-snapshots` so the `llamacpp` provider can talk to your OpenAI-compatible llama.cpp deployment:
 
-- `LLAMA_CPP_BASE_URL`: base URL of the llama.cpp service (for example `http://localhost:8080`).
-- `LLAMA_CPP_API_KEY`: bearer token or API key that the server expects.
-- `LLAMA_CPP_MODEL`: model alias exposed by the server (for example `llama3-q4_0`).
+- `LLAMA_CPP_BASE_URL` (required): base URL of the llama.cpp service (for example `http://localhost:8080`). Do not include `/v1` or other path fragments; the provider appends `/v1/chat/completions` automatically.
+- `LLAMA_CPP_MODEL` (required): model alias exposed by the server (for example `llama3-q4_0`).
+- `LLAMA_CPP_API_KEY` (optional): bearer token or API key that the server expects; omit or leave blank to skip the `Authorization` header when your deployment does not require authentication.
+
+Because the provider appends `/v1/chat/completions`, ensure `LLAMA_CPP_BASE_URL` does not already include `/v1` so that the final endpoint resolves correctly.
 
 The `llamacpp` provider sends the prompt and sanitized cluster evidence to `/v1/chat/completions` and validates the JSON response with `AssessorAssessment.from_dict`. If you need deterministic fallback behavior, keep using `--provider default`.
 
@@ -83,3 +93,5 @@ k8s-diag-agent assess-snapshots \
   tests/fixtures/snapshots/sanitized-beta.json \
   --provider llamacpp
 ```
+
+If your llama.cpp endpoint does not require authentication, drop the `LLAMA_CPP_API_KEY` assignment (or set it to an empty string) and the provider will send the request without an `Authorization` header.

@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.0.339
+    hooks:
+      - id: ruff
+        args: ["check", "--select", "E,F,I,UP", "src", "tests"]
+  - repo: local
+    hooks:
+      - id: ban-private-contexts
+        name: Ban private contexts and live config paths
+        entry: python scripts/check_private_contexts.py
+        language: python
+        pass_filenames: true
