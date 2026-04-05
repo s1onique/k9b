@@ -91,7 +91,7 @@ def _run_health_loop_once(
 
 
 def _has_llama_config(env: Mapping[str, str] | None = None) -> bool:
-    source = env or os.environ
+    source = os.environ if env is None else env
     return bool(source.get("LLAMA_CPP_BASE_URL") and source.get("LLAMA_CPP_MODEL"))
 
 
@@ -143,7 +143,7 @@ def run_operator_review(
     python_bin: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> int:
-    env_source = env or os.environ
+    env_source = os.environ if env is None else env
     if run_health:
         try:
             config_path = _resolve_health_config(health_config)
