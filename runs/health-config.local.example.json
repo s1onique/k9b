@@ -1,0 +1,47 @@
+{
+  "run_id": "health-run-2026-04-05",
+  "collector_version": "0.1.0",
+  "output_dir": "runs",
+  "targets": [
+    {
+      "context": "cluster-alpha",
+      "label": "cluster-alpha",
+      "monitor_health": true,
+      "watched_helm_releases": ["kube-system/observability"],
+      "watched_crd_families": ["monitoring.example.com"]
+    },
+    {
+      "context": "cluster-beta",
+      "label": "cluster-beta",
+      "monitor_health": true,
+      "watched_helm_releases": ["kube-system/observability", "stateful-stack/service"]
+    },
+    {
+      "context": "cluster-gamma",
+      "label": "cluster-gamma",
+      "monitor_health": false,
+      "watched_crd_families": ["database.example.com"]
+    }
+  ],
+  "peer_mappings": [
+    {
+      "source": "cluster-alpha",
+      "peers": ["cluster-beta"]
+    },
+    {
+      "source": "cluster-beta",
+      "peers": ["cluster-alpha"]
+    }
+  ],
+  "comparison_triggers": {
+    "control_plane_version": true,
+    "watched_helm_release": true,
+    "watched_crd": true,
+    "health_regression": true,
+    "missing_evidence": true,
+    "manual": true
+  },
+  "manual_pairs": [
+    {"primary": "cluster-alpha", "secondary": "cluster-beta"}
+  ]
+}

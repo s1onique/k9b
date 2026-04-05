@@ -22,14 +22,25 @@ from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .reason.diagnoser import build_findings_and_hypotheses
 from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .feedback.runner import run_feedback_loop
+from .health import run_health_loop
 
 
-_SUBCOMMANDS = {"fixture", "snapshot", "compare", "batch-snapshot", "assess-snapshots", "run-feedback"}
+_SUBCOMMANDS = {
+    "fixture",
+    "snapshot",
+    "compare",
+    "batch-snapshot",
+    "assess-snapshots",
+    "run-feedback",
+    "run-health-loop",
+}
 
 _DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
 _BATCH_CONFIG_FALLBACK = Path("snapshots/targets.local.example.json")
 _RUN_CONFIG_DEFAULT = Path("runs/run-config.local.json")
 _RUN_CONFIG_FALLBACK = Path("runs/run-config.local.example.json")
+_HEALTH_CONFIG_DEFAULT = Path("runs/health-config.local.json")
+_HEALTH_CONFIG_FALLBACK = Path("runs/health-config.local.example.json")
 
 
 @dataclass(frozen=True)
@@ -62,6 +73,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         return _handle_assess_snapshots(args)
     if command == "run-feedback":
         return _handle_run_feedback(args)
+    if command == "run-health-loop":
+        return _handle_health_loop(args)
     return _handle_fixture(args)
 
 
@@ -132,6 +145,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional provider override for assessments.",
     )
     run_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
+
+    health_parser = subparsers.add_parser("run-health-loop", help="Run per-cluster health assessments.")
+    health_parser.add_argument(
+        "--config",
+        "-c",
+        type=Path,
+        default=_HEALTH_CONFIG_DEFAULT,
+        help="Health run configuration file (defaults to runs/health-config.local.json; template files require explicit --config).",
+    )
+    health_parser.add_argument(
+        "--trigger",
+        "-t",
+        action="append",
+        help="Manual comparison trigger in the format primary:secondary.",
+    )
+    health_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
 
     return parser
 
@@ -356,6 +385,20 @@ def _handle_run_feedback(args: argparse.Namespace) -> int:
         print(f"Unable to resolve run config: {exc}", file=sys.stderr)
         return 1
     exit_code, _ = run_feedback_loop(config_path, provider_override=args.provider, quiet=args.quiet)
+    return exit_code
+
+
+def _handle_health_loop(args: argparse.Namespace) -> int:
+    try:
+        config_path = _resolve_config_path(
+            args.config,
+            _HEALTH_CONFIG_FALLBACK,
+            args.config == _HEALTH_CONFIG_DEFAULT,
+        )
+    except RuntimeError as exc:
+        print(f"Unable to resolve health config: {exc}", file=sys.stderr)
+        return 1
+    exit_code, _, _ = run_health_loop(config_path, manual_triggers=args.trigger or [], quiet=args.quiet)
     return exit_code
 
 

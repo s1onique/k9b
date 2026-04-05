@@ -21,6 +21,11 @@ class CLISmokeTest(unittest.TestCase):
             "batch-snapshot": ["batch-snapshot", "--config", "snapshots/targets.local.example.json"],
             "assess-snapshots": ["assess-snapshots", str(sanitized_snapshot), "snapshots/test.json"],
             "run-feedback": ["run-feedback", "--config", "runs/run-config.local.example.json"],
+            "run-health-loop": [
+                "run-health-loop",
+                "--config",
+                "runs/health-config.local.example.json",
+            ],
         }
         for command, args in commands.items():
             with self.subTest(command=command):
