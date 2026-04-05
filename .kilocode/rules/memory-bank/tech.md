@@ -40,8 +40,16 @@ Current priorities are:
 
 ## Snapshot/comparison status
 
-- Live cluster snapshot collection and comparison both exist now; CLI flows can collect a typed `ClusterSnapshot` and run the comparator without reworking the fixture path.
-- The next technical step is orchestrating multi-context runs (context configs, batch collection, and handling partial evidence) while keeping the existing regression harness stable.
+- Live cluster snapshot collection and comparison both exist now; CLI flows can collect a typed `ClusterSnapshot`, run the comparator, and feed `run-health-loop` without reworking the fixture path.
+- The health loop now emits review artifacts, drilldowns, and typed adaptation proposals (see `docs/schemas/health-proposal-schema.md` and `docs/schemas/run-artifact-layout.md`) while still preserving the regression harness.
+- There is now a `check-proposal` command that replays each proposed adjustment against a fixture before acceptance, and `assess-drilldown` validates the drilldown evidence extracted by the health run.
+-- The next technical step is orchestrating multi-context runs (context configs, batch collection, and handling partial evidence) while tying the resulting evidence/proposal bundle into the existing regression harness so health-driven adaptation stays traceable.
+
+## Health review/adaptation status
+
+- `run-health-loop` now produces per-cluster assessments, drilldown artifacts, reviews, trigger summaries, and typed proposals under `runs/health/` so every iteration is inspectable.
+- Review scoring feeds `generate_proposals_from_review`, which emits proposals for warning thresholds, baseline policies, and drilldown prioritization; `check-proposal` replays them against deterministic fixtures (`tests/fixtures/...`) before they can influence runtime policies.
+- The adaptation helpers (`src/k8s_diag_agent/health/adaptation.py`) keep proposal objects typed and provide `evaluate_proposal` for quick evaluation using production-quality fixtures.
 
 ## Technical position for v1
 

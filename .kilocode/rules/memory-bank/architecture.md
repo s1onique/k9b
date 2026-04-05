@@ -30,6 +30,7 @@ The first implementation slice is explicitly:
 - **structured-output-first**
 
 - live-cluster snapshot and comparison tooling are now part of the CLI, but the fixture-driven regression harness remains the authoritative grounding for reasoning behavior.
+- `run-health-loop` now wires collection, per-cluster assessment, drilldown, review scoring, and proposal generation into the same CLI so operators can trace each adaptation proposal back to observable evidence.
 - heavy persistence is **out of the first slice**
 - LangGraph or any orchestration framework is **not a v1 architectural commitment**
 - domain contracts must not depend on LangGraph, provider APIs, or hosted/runtime assumptions
@@ -178,11 +179,11 @@ A stable way to connect fixture scenarios, expected behavior, and regression/eva
 
 The architecture is composed around the same three feedback loops stated in doctrine:
 
-1. **Operational loop:** collect -> snapshot -> compare -> assess -> recommend. Each vertical slice keeps the evidence flow intact through `collect`, `normalize`, `correlate`, `reason`, and `recommend` so operator guidance mirrors the latest cycle.
-2. **Evaluation loop:** replay artifacts, score behavior, classify failures, and surface regressions before accepting a change; `evals` drives this loop and feeds actionable signals back into every layer.
-3. **Adaptation loop:** propose edits to volatile assets (prompts, mappings, thresholds), rerun the evaluation loop, and accept or reject changes with documented outcomes. No schema, contract, or safety definition may mutate without this loop’s traceable approval.
+1. **Operational loop:** `run-health-loop` wires `collect`, `normalize`, `correlate`, `reason`, and `recommend` into a single execution that also writes health reviews, drilldowns, trigger artifacts, and adaptation proposals so every step stays inspectable.
+2. **Evaluation loop:** replay artifacts, score behavior, classify failures, and surface regressions before accepting a change; `evals`, `assess-drilldown`, and `check-proposal` runs drive this loop so review scoring remains transparent.
+3. **Adaptation loop:** propose edits to volatile assets through `generate_proposals_from_review`, rerun the collected evidence via `check-proposal`, and accept or reject changes with documented outcomes; no schema, contract, or safety posture mutates without this loop’s traceable approval.
 
-These loops also safeguard the stable contracts: moving a schema field or adjusting safety level requires retracing the operational loop and rerunning the evaluation loop so the adaptation loop can approve the change.
+These loops also safeguard the stable contracts: moving a schema field or adjusting a safety level now requires retracing the operational loop, rerunning the evaluation loop (including proposal replays), and securing the adaptation loop’s approval before deployment.
 
 ## Architectural principles for this repo
 

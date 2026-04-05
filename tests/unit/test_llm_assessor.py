@@ -629,7 +629,7 @@ class LLMCLIWiringTest(unittest.TestCase):
             secondary_path = Path(tmpdir) / "secondary.json"
             secondary_path.write_text(json.dumps(secondary_data), encoding="utf-8")
             provider = RecordingProvider()
-            with patch("k8s_diag_agent.cli.get_provider", return_value=provider):
+            with patch("k8s_diag_agent.cli_handlers.get_provider", return_value=provider):
                 with patch("sys.stdout", new_callable=io.StringIO) as fake_out:
                     exit_code = main([
                         "assess-snapshots",

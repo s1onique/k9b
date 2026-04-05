@@ -26,8 +26,8 @@ class CliSnapshotTest(unittest.TestCase):
         snapshot = ClusterSnapshot(metadata=metadata)
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "snapshot.json"
-            with patch("k8s_diag_agent.cli.list_kube_contexts", return_value=["demo"]), patch(
-                "k8s_diag_agent.cli.collect_cluster_snapshot",
+            with patch("k8s_diag_agent.cli_handlers.list_kube_contexts", return_value=["demo"]), patch(
+                "k8s_diag_agent.cli_handlers.collect_cluster_snapshot",
                 return_value=snapshot,
             ), patch("builtins.print"):
                 exit_code = main(["snapshot", "--context", "demo", "--output", str(output_path)])
@@ -54,8 +54,8 @@ class CliSnapshotTest(unittest.TestCase):
             }
             config_path = Path(tmpdir) / "targets.json"
             config_path.write_text(json.dumps(config), encoding="utf-8")
-            with patch("k8s_diag_agent.cli.list_kube_contexts", return_value=["alpha", "beta"]), patch(
-                "k8s_diag_agent.cli.collect_cluster_snapshot",
+            with patch("k8s_diag_agent.cli_handlers.list_kube_contexts", return_value=["alpha", "beta"]), patch(
+                "k8s_diag_agent.cli_handlers.collect_cluster_snapshot",
                 side_effect=lambda ctx: snapshot if ctx == "alpha" else (_ for _ in ()).throw(RuntimeError("boom")),
             ), patch("builtins.print"):
                 exit_code = main(["batch-snapshot", "--config", str(config_path)])
@@ -83,8 +83,8 @@ class CliSnapshotTest(unittest.TestCase):
                 "--output",
                 str(output_path),
             ]
-            with patch("k8s_diag_agent.cli.list_kube_contexts", return_value=["demo"]), patch(
-                "k8s_diag_agent.cli.collect_cluster_snapshot",
+            with patch("k8s_diag_agent.cli_handlers.list_kube_contexts", return_value=["demo"]), patch(
+                "k8s_diag_agent.cli_handlers.collect_cluster_snapshot",
                 return_value=snapshot,
             ), patch("builtins.print"), patch.object(sys, "argv", cli_args):
                 exit_code = main()
@@ -116,7 +116,7 @@ class CliConfigFallbackTest(unittest.TestCase):
 
     def test_run_feedback_allows_explicit_example_config(self) -> None:
         with patch("builtins.print"), patch(
-            "k8s_diag_agent.cli.run_feedback_loop", return_value=(0, [])
+            "k8s_diag_agent.cli_handlers.run_feedback_loop", return_value=(0, [])
         ) as run_feedback:
             exit_code = main(["run-feedback", "--config", "runs/run-config.local.example.json"])
         self.assertEqual(exit_code, 0)

@@ -16,20 +16,19 @@ It should track meaningful project progress, not chat-by-chat noise.
 
 ## Current phase
 
-The project is in the **scaffolded implementation** phase; the minimal module/test layout already exists and attention is shifting toward real cluster snapshot ingestion, two-cluster comparison, and keeping the fixture-driven slice stable.
+The project is in the **health-loop stabilization** phase; the CLI now runs live snapshot collection, health scoring, drilldown gathering, and review-driven adaptation proposals so that real evidence feeds training, evaluation, and guarded change gates.
 
 Current focus:
-- stabilizing repo guidance and coding conventions (e.g., .venv usage),
-- keeping the fixture-driven vertical slice and regression harness healthy,
-- operating the live snapshot collector and comparator so CLI flows cover real evidence,
-- preparing the optional LLM assessment path on snapshot comparisons ahead of watch-mode,
-- expanding coverage around multi-context flows (target configs, batch collection, partial evidence handling) while keeping tests green.
+- keeping `run-health-loop` artifacts (snapshots, assessments, reviews, proposals) documented and replayable,
+- expanding drilldown collection/assessment so operators have targeted context for each regression,
+- forcing eval coverage around review scoring, proposal generation, and `check-proposal` replays while preserving the fixture-driven regression harness,
+- documenting the operator workflow that links `run-health-loop` → review/scoring → proposal generation → `check-proposal` before any adaptation acts on production.
 
 ## Feedback loop status
 
-- **Operational loop:** Snapshot collection, comparison, and recommendation flows remain chained so collect -> snapshot -> compare -> assess -> recommend stays observable.
-- **Evaluation loop:** Fixtures and eval artifacts are replayed, scored, and classified to keep failure modes visible before any adaptation occurs.
-- **Adaptation loop:** Volatile assets (prompts, mappings, thresholds, contracts, safety posture) can only adjust through a replayable, eval-gated proposal/accept/reject cycle; no live autonomous mutation is permitted.
+- **Operational loop:** `run-health-loop` now drives collect -> normalize -> health assessment -> review -> adaptation proposal, emitting won approval trails (snapshots, comparisons, reviews, drilldowns, triggers, proposals) for every run.
+- **Evaluation loop:** Fixture regressions, `run-feedback` artifacts, and proposal replays continue to be scored so review scoring, `assess-drilldown`, and `check-proposal` stay transparent before any acceptance.
+- **Adaptation loop:** Every review proposal produced under `runs/health/proposals` is replayed against deterministic fixtures (via `check-proposal`), scored, and either accepted or rejected; no prompts, thresholds, or policies mutate outside this gated cycle.
 
 Production snapshot tooling is now live for manual collection/comparison; the next data-driven milestone is orchestrating multiple contexts safely.
 
@@ -68,6 +67,12 @@ The repository currently has:
 - `src/k8s_diag_agent/collect/cluster_snapshot.py`
 - `src/k8s_diag_agent/collect/live_snapshot.py`
 - `src/k8s_diag_agent/compare/two_cluster.py`
+- `src/k8s_diag_agent/health/loop.py` (health run orchestration, reviews, proposal generation)
+- `src/k8s_diag_agent/health/adaptation.py` (deterministic proposal helpers and `check-proposal` evaluation)
+### Health/adaptation artifacts
+- `docs/schemas/health-proposal-schema.md` documents the typed proposal shape that lives under `runs/health/proposals`.
+- `runs/health/` contains snapshots, assessments, triggers, reviews, drilldowns, and proposals for each per-cluster iteration.
+- CLI commands `run-health-loop`, `assess-drilldown`, and `check-proposal` coordinate collection, review, and proposal replay for operators.
 
 ### Documentation artifacts
 - `docs/cluster_snapshot_plan.md`
@@ -205,10 +210,10 @@ Do not update this file for:
 
 ## Current summary
 
-The repo has a firm guidance layer, the scaffolding is live, and the first fixture-driven slice works; the current work centers on real cluster snapshot ingestion/comparison across multiple contexts while keeping diagnostics stable.
+The repo has a firm guidance layer, the scaffolding is live, and the work now centers on per-cluster health monitoring: collecting new snapshots, drilling down on anomalies, writing health reviews, and producing adaptation proposals that can be replayed safely via `check-proposal`.
 
 The next important move is to:
-1. solidify the cluster snapshot input contract and ingestion helpers,
-2. stabilize multi-context collection/configuration and surfacing partial evidence,
-3. keep the fixture-driven regression slice healthy while the new signals land,
-4. and expand regression coverage to show partial-collection behavior is handled safely.
+1. keep the health artifact layout (snapshots, assessments, reviews, proposals, triggers) consistent and well documented,
+2. expand regression coverage around review scoring, proposal generation, and proposal replay,
+3. keep the fixture-driven regression slice healthy while the new health signals land,
+4. and tighten the operator workflow from `run-health-loop` through review -> proposal -> `check-proposal` so each adaptation is grounded in evidence.

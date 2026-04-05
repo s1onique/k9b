@@ -47,9 +47,10 @@ In the first phase, the product should focus on:
 - structured incident/health inputs and typed cluster snapshots,
 - evidence normalization,
 - correlation across common Kubernetes layers,
-- structured assessments,
+- health-centric assessments (including drilldown collection and scoring),
+- proposal-aware guidance that encodes review reasoning,
 - next-check recommendations,
-- evaluation against realistic diagnostic scenarios,
+- evaluation against realistic diagnostic scenarios and `check-proposal` replays,
 - and optional assessments driven by sanitized snapshot comparisons.
 
 Initial emphasis is on correctness, clarity, and testability.
@@ -76,9 +77,9 @@ The first phase should not optimize for:
 ## Feedback loops
 The product is explicitly organized around:
 
-1. **Operational loop:** collect -> snapshot -> compare -> assess -> recommend. Every cycle keeps diagnostic signal, findings, and guidance aligned with the latest evidence.
-2. **Evaluation loop:** replay artifacts, score behavior, and classify failures so regressions or false-certainty paths are visible before changes land in production.
-3. **Adaptation loop:** propose edits to volatile assets (prompts, thresholds, mappings), rerun the relevant evals, and accept or reject the change with transparent outcomes; this loop also governs any core schema or safety-posture adjustment so there is no silent mutation.
+1. **Operational loop:** `run-health-loop` drives collect -> normalize -> health assessment -> review -> proposal, emitting snapshots, comparisons, triggers, reviews, drilldowns, and proposals so operators understand the latest health posture.
+2. **Evaluation loop:** replay artifacts, score behavior, and classify failures so review scoring, `assess-drilldown`, and `check-proposal` runs keep regressions or false-certainty paths visible before any adaptation acceptance.
+3. **Adaptation loop:** every review proposal under `runs/health/proposals` is rerun through deterministic fixtures (`check-proposal`) and must pass the evaluation gates before prompts, thresholds, or mappings are updated; there is no silent mutation of schema or safety posture.
 
 These loops keep the roadmap grounded, the guidance honest, and the reasoning assets evolvable only by reviewable, eval-gated cycles.
 

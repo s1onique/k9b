@@ -28,6 +28,14 @@ k8s-diag-agent batch-snapshot [--config snapshots/targets.local.json]
 ```
 Reads `snapshots/targets.local.json` (or the path passed via `--config`). Copy `snapshots/targets.local.example.json`, which uses placeholder contexts such as `cluster-alpha`, into `snapshots/targets.local.json`, replace the placeholders with your real kube contexts, and keep the populated `.local` file untracked. Real runs require the `.local` file; the CLI now fails fast rather than falling back to the example placeholder, so documentation or CI wishing to exercise the command must explicitly point at the example config.
 
+### Evaluate a health proposal
+
+```bash
+k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixture tests/fixtures/snapshots/sanitized-alpha.json]
+```
+
+`check-proposal` replays a health review proposal against a fixture, reports noise reduction, signal loss, and the simulated test outcome, and lets operators gate each adaptation before it touches configurable thresholds.
+
 ## Development
 
 - `.venv/bin/python -m unittest discover tests` (active verification path)
@@ -86,8 +94,18 @@ Every run also gathers lightweight health signals (node readiness/pressure count
    - `runs/health/assessments/` for the serialized `Assessment` objects that include the new deterministic findings about collection quality, watched resources, and regression-aware signals
    - `runs/health/comparisons/` for the diffs that explain why peers were compared
    - `runs/health/triggers/` for the trigger envelopes that store the exact reason strings that caused each comparison
+   - `runs/health/drilldowns/` for the collected drilldown evidence that feeds `assess-drilldown` and contextualizes the review
+   - `runs/health/reviews/` for the health review payloads plus `runs/health/proposals/` for typed adaptation ideas (see `docs/schemas/health-proposal-schema.md` for the proposal contract)
    - `runs/health/history.json` for the persisted per-cluster history that powers "changed since previous run" findings (node/pod counts, control plane version, watched Helm releases/CRDs, and missing evidence). This history plays a key role in keeping future runs regression-aware.
 4. Repeat the command to capture another point in time; the deterministic findings plus the persisted history let you replay or reason about regressions without needing a scheduler. Use `--trigger primary:secondary` when you want to force a peer comparison for a single run.
+
+
+### Health review and adaptation workflow
+
+1. Run `run-health-loop` to collect snapshots, build health assessments, record review artifacts, and emit adaptation proposals; each proposal is written under `runs/health/proposals/` and references the review that inspired it.
+2. Inspect the drilldown evidence under `runs/health/drilldowns/` or call `assess-drilldown` if you need an optional LLM judgment on a focused artifact.
+3. Re-evaluate any proposal with `k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixture <fixture>]` to see the projected noise reduction, signal loss, and test/eval outcome before accepting a change to thresholds or policies.
+4. Repeat the health loop + review + proposal cycle so changes remain grounded in evidence, and only apply adjustments after they survive the `check-proposal` replay.
 
 
 ### Local config runbook
