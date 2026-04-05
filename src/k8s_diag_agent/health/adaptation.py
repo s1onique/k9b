@@ -1,18 +1,70 @@
 """Deterministic adaptation helpers for health review proposals."""
 from __future__ import annotations
 
+import difflib
 import json
 import re
-from dataclasses import dataclass
+from collections import OrderedDict
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from ..models import ConfidenceLevel
-from .baseline import BaselinePolicy
+from .baseline import (
+    BaselinePolicy,
+    BaselineDriftCategory,
+    DEFAULT_CRD_NEXT_CHECK,
+    DEFAULT_RELEASE_NEXT_CHECK,
+)
 from .review_feedback import DrilldownSelection, HealthReviewArtifact, QualityMetric
 
 _RELEASE_DRIFT_RE = re.compile(r"watched Helm release (?P<release>[^\s]+) drift", re.IGNORECASE)
 _CRD_DRIFT_RE = re.compile(r"watched CRD (?P<family>[^\s]+) storage drift", re.IGNORECASE)
+
+
+class ProposalLifecycleStatus(str, Enum):
+    PROPOSED = "proposed"
+    REPLAYED = "replayed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    PROMOTED = "promoted"
+    APPLIED = "applied"
+
+
+@dataclass(frozen=True)
+class ProposalLifecycleEntry:
+    status: ProposalLifecycleStatus
+    timestamp: str
+    note: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "status": self.status.value,
+            "timestamp": self.timestamp,
+        }
+        if self.note:
+            data["note"] = self.note
+        return data
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _freeze_payload(value: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
+    base = dict(value or {})
+    return MappingProxyType(base)
+
+
+def _empty_payload() -> Mapping[str, Any]:
+    return MappingProxyType({})
+
+
+def _default_lifecycle_history() -> Tuple[ProposalLifecycleEntry, ...]:
+    return (ProposalLifecycleEntry(status=ProposalLifecycleStatus.PROPOSED, timestamp=_now_iso()),)
 
 
 @dataclass(frozen=True)
@@ -26,6 +78,15 @@ class HealthProposal:
     confidence: ConfidenceLevel
     expected_benefit: str
     rollback_note: str
+    promotion_payload: Mapping[str, Any] = field(default_factory=_empty_payload)
+    lifecycle_history: Tuple[ProposalLifecycleEntry, ...] = field(default_factory=_default_lifecycle_history)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "promotion_payload", _freeze_payload(self.promotion_payload))
+        history = tuple(self.lifecycle_history) if self.lifecycle_history else _default_lifecycle_history()
+        if not history:
+            history = _default_lifecycle_history()
+        object.__setattr__(self, "lifecycle_history", history)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -38,7 +99,12 @@ class HealthProposal:
             "confidence": self.confidence.value,
             "expected_benefit": self.expected_benefit,
             "rollback_note": self.rollback_note,
+            "promotion_payload": dict(self.promotion_payload),
+            "lifecycle_history": [entry.to_dict() for entry in self.lifecycle_history],
         }
+
+    def __hash__(self) -> int:
+        return hash((self.proposal_id, self.source_run_id, self.target, self.proposed_change))
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "HealthProposal":
@@ -51,6 +117,26 @@ class HealthProposal:
             confidence = ConfidenceLevel(str(confidence_value))
         except ValueError as exc:
             raise ValueError(f"Invalid confidence value: {confidence_value}") from exc
+        payload_raw = raw.get("promotion_payload") or {}
+        payload = _freeze_payload(payload_raw if isinstance(payload_raw, Mapping) else {})
+        history_entries: List[ProposalLifecycleEntry] = []
+        history_raw = raw.get("lifecycle_history")
+        if isinstance(history_raw, Sequence):
+            for entry_raw in history_raw:
+                if not isinstance(entry_raw, Mapping):
+                    continue
+                status_value = entry_raw.get("status")
+                timestamp_value = entry_raw.get("timestamp")
+                note_value = entry_raw.get("note")
+                timestamp = str(timestamp_value) if timestamp_value else _now_iso()
+                try:
+                    status = ProposalLifecycleStatus(str(status_value)) if status_value else ProposalLifecycleStatus.PROPOSED
+                except ValueError:
+                    status = ProposalLifecycleStatus.PROPOSED
+                history_entries.append(
+                    ProposalLifecycleEntry(status=status, timestamp=timestamp, note=str(note_value) if note_value else None)
+                )
+        history = tuple(history_entries) if history_entries else _default_lifecycle_history()
         return cls(
             proposal_id=str(raw.get("proposal_id") or ""),
             source_run_id=str(raw.get("source_run_id") or ""),
@@ -61,6 +147,8 @@ class HealthProposal:
             confidence=confidence,
             expected_benefit=str(raw.get("expected_benefit") or ""),
             rollback_note=str(raw.get("rollback_note") or ""),
+            promotion_payload=payload,
+            lifecycle_history=history,
         )
 
 
@@ -193,6 +281,7 @@ def _warning_threshold_proposal(
         confidence=ConfidenceLevel.MEDIUM,
         expected_benefit="Suppress repeating warnings that do not lead to failures.",
         rollback_note=f"Revert threshold to {current_threshold} if true failures begin to appear.",
+        promotion_payload={"threshold": candidate},
     )
 
 
@@ -224,6 +313,7 @@ def _noise_reason_proposal(
         confidence=ConfidenceLevel.LOW,
         expected_benefit="Focus alerts on signals that correlate with failures.",
         rollback_note="Remove the reason from the ignore list if it later leads to real incidents.",
+        promotion_payload={"reason": reason},
     )
 
 
@@ -252,9 +342,11 @@ def _baseline_release_proposals(
                 continue
             allowed = ", ".join(dict.fromkeys((*policy.allowed_versions, *missing)))
             change = f"Allow {release_key} versions {allowed}."
+            versions_to_add = missing
         else:
             sample = versions[0] if versions else "latest"
             change = f"Start tracking Helm release {release_key} and allow version {sample}."
+            versions_to_add = [sample]
         proposals.append(
             HealthProposal(
                 proposal_id=f"{run_id}-release-{_slugify(release_key)}",
@@ -268,6 +360,10 @@ def _baseline_release_proposals(
                 confidence=ConfidenceLevel.MEDIUM,
                 expected_benefit="Prevent repeated baseline drift alerts for this release.",
                 rollback_note="Revert the baseline entry if this version causes instability.",
+                promotion_payload={
+                    "release_key": release_key,
+                    "versions": versions_to_add,
+                },
             )
         )
     return proposals
@@ -304,6 +400,7 @@ def _baseline_crd_proposals(
                 confidence=ConfidenceLevel.MEDIUM,
                 expected_benefit="Avoid spurious baseline violations when CRD storage versions vary.",
                 rollback_note="Remove or adjust the CRD expectation if it causes false positives.",
+                promotion_payload={"family": family, "reason": reason},
             )
         )
     return proposals
@@ -387,3 +484,217 @@ def _describe_signal_loss(proposal: HealthProposal, pods: int) -> str:
         level = "low" if pods == 0 else "medium"
         return f"Possible signal loss: {level} (non-running pods observed: {pods})."
     return "Signal loss unlikely; proposal only adjusts baseline expectations."
+
+
+def with_lifecycle_status(
+    proposal: HealthProposal,
+    status: ProposalLifecycleStatus,
+    note: Optional[str] = None,
+) -> HealthProposal:
+    history = proposal.lifecycle_history
+    if history and history[-1].status == status:
+        return proposal
+    entry = ProposalLifecycleEntry(status=status, timestamp=_now_iso(), note=note)
+    return replace(proposal, lifecycle_history=history + (entry,))
+
+
+class PromotionError(Exception):
+    pass
+
+
+class UnsupportedProposalTarget(PromotionError):
+    pass
+
+
+class PromotionNotApplicable(PromotionError):
+    pass
+
+
+_HEALTH_CONFIG_TARGETS = {
+    "health.trigger_policy.warning_event_threshold",
+    "health.noise_filters.ignored_reasons",
+}
+
+_BASELINE_TARGETS = {
+    "health.baseline_policy.watched_releases",
+    "health.baseline_policy.required_crd_families",
+    "health.baseline_policy.ignored_drift",
+}
+
+
+def render_proposal_patch(
+    proposal: HealthProposal,
+    health_config_path: Path,
+    output_dir: Path,
+    baseline_path: Path | None = None,
+) -> Path:
+    target = proposal.target
+    if target in _HEALTH_CONFIG_TARGETS:
+        target_path = health_config_path
+    elif target in _BASELINE_TARGETS:
+        target_path = baseline_path or _resolve_baseline_path(health_config_path)
+    else:
+        raise UnsupportedProposalTarget(f"Unsupported proposal target: {target}")
+    original_text = target_path.read_text(encoding="utf-8")
+    data = _load_ordered_json(target_path)
+    if target == "health.trigger_policy.warning_event_threshold":
+        _apply_threshold_update(data, proposal.promotion_payload)
+    elif target == "health.noise_filters.ignored_reasons":
+        _apply_noise_update(data, proposal.promotion_payload)
+    elif target == "health.baseline_policy.watched_releases":
+        _apply_release_update(data, proposal.promotion_payload)
+    elif target == "health.baseline_policy.required_crd_families":
+        _apply_crd_update(data, proposal.promotion_payload)
+    elif target == "health.baseline_policy.ignored_drift":
+        _apply_ignored_drift_update(data, proposal.promotion_payload)
+    else:
+        raise UnsupportedProposalTarget(f"Unsupported proposal target: {target}")
+    updated_text = _dump_json(data)
+    return _write_patch(target_path, original_text, updated_text, output_dir, proposal.proposal_id)
+
+
+def _load_ordered_json(path: Path) -> OrderedDict[str, Any]:
+    raw_text = path.read_text(encoding="utf-8")
+    parsed = json.loads(raw_text, object_pairs_hook=OrderedDict)
+    if isinstance(parsed, Mapping):
+        return OrderedDict(parsed)
+    return OrderedDict()
+
+
+def _dump_json(data: Mapping[str, Any]) -> str:
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _apply_threshold_update(data: OrderedDict[str, Any], payload: Mapping[str, Any]) -> None:
+    triggers = data.setdefault("comparison_triggers", OrderedDict())
+    threshold_value = payload.get("threshold")
+    if threshold_value is None:
+        raise PromotionError("Promotion payload missing threshold value")
+    try:
+        triggers["warning_event_threshold"] = int(threshold_value)
+    except (TypeError, ValueError) as exc:
+        raise PromotionError(f"Invalid threshold value: {threshold_value}") from exc
+
+
+def _apply_noise_update(data: OrderedDict[str, Any], payload: Mapping[str, Any]) -> None:
+    reason = payload.get("reason")
+    if not reason:
+        raise PromotionError("Promotion payload missing noise reason")
+    noise_filters = data.setdefault("noise_filters", OrderedDict())
+    ignored = noise_filters.setdefault("ignored_reasons", [])
+    if not isinstance(ignored, list):
+        ignored = list(ignored)
+        noise_filters["ignored_reasons"] = ignored
+    if reason not in ignored:
+        ignored.append(str(reason))
+
+
+def _apply_release_update(data: OrderedDict[str, Any], payload: Mapping[str, Any]) -> None:
+    release_key = payload.get("release_key")
+    versions = payload.get("versions")
+    if not release_key or not versions:
+        raise PromotionError("Promotion payload missing release key or versions")
+    releases = data.setdefault("watched_releases", [])
+    target_entry: Optional[OrderedDict[str, Any]] = None
+    for entry in releases:
+        if isinstance(entry, Mapping) and str(entry.get("release")) == release_key:
+            target_entry = OrderedDict(entry)
+            index = releases.index(entry)
+            releases[index] = target_entry
+            break
+    if target_entry is None:
+        target_entry = OrderedDict(
+            [
+                ("release", release_key),
+                ("allowed_versions", []),
+                ("why", "Platform stability depends on curated Helm releases."),
+                ("next_check", DEFAULT_RELEASE_NEXT_CHECK),
+            ]
+        )
+        releases.append(target_entry)
+    allowed = target_entry.setdefault("allowed_versions", [])
+    if not isinstance(allowed, list):
+        allowed = list(allowed)
+        target_entry["allowed_versions"] = allowed
+    seen: set[str] = { _normalize_version(str(entry)) for entry in allowed if entry }
+    for version in versions:
+        normalized = _normalize_version(str(version))
+        if not normalized or normalized in seen:
+            continue
+        allowed.append(str(version))
+        seen.add(normalized)
+
+
+def _apply_crd_update(data: OrderedDict[str, Any], payload: Mapping[str, Any]) -> None:
+    family = payload.get("family")
+    if not family:
+        raise PromotionError("Promotion payload missing CRD family")
+    crds = data.setdefault("required_crd_families", [])
+    for entry in crds:
+        if isinstance(entry, Mapping) and str(entry.get("family")) == family:
+            return
+    crds.append(
+        OrderedDict(
+            [
+                ("family", family),
+                ("why", "Workload delivery requires this CRD family."),
+                ("next_check", DEFAULT_CRD_NEXT_CHECK),
+            ]
+        )
+    )
+
+
+def _apply_ignored_drift_update(data: OrderedDict[str, Any], payload: Mapping[str, Any]) -> None:
+    category = payload.get("category")
+    if not category:
+        raise PromotionError("Promotion payload missing drift category")
+    valid_categories = {item.value for item in BaselineDriftCategory}
+    if str(category) not in valid_categories:
+        raise PromotionError(f"Unknown drift category: {category}")
+    ignored = data.setdefault("ignored_drift", [])
+    if not isinstance(ignored, list):
+        ignored = list(ignored)
+        data["ignored_drift"] = ignored
+    if category not in ignored:
+        ignored.append(category)
+
+
+def _resolve_baseline_path(config_path: Path) -> Path:
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    baseline_raw = raw.get("baseline_policy_path") if isinstance(raw, Mapping) else None
+    if baseline_raw:
+        baseline_path = Path(str(baseline_raw))
+        if not baseline_path.is_absolute():
+            baseline_path = config_path.parent / baseline_path
+    else:
+        baseline_path = config_path.parent / "health-baseline.json"
+    return baseline_path
+
+
+def _write_patch(
+    target_path: Path,
+    original_text: str,
+    updated_text: str,
+    output_dir: Path,
+    proposal_id: str,
+) -> Path:
+    if original_text == updated_text:
+        raise PromotionNotApplicable("No changes would result from this promotion")
+    original_lines = original_text.splitlines()
+    updated_lines = updated_text.splitlines()
+    diff_lines = list(
+        difflib.unified_diff(
+            original_lines,
+            updated_lines,
+            fromfile=str(target_path),
+            tofile=str(target_path),
+            lineterm="",
+        )
+    )
+    if not diff_lines:
+        raise PromotionNotApplicable("No differences found after promotion")
+    patch_content = "\n".join(diff_lines) + "\n"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    patch_file = output_dir / f"{proposal_id}.patch"
+    patch_file.write_text(patch_content, encoding="utf-8")
+    return patch_file

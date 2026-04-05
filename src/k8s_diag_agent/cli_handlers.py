@@ -15,7 +15,16 @@ from .compare.two_cluster import compare_snapshots
 from .correlate.linkers import correlate_signals
 from .feedback.runner import run_feedback_loop
 from .health import run_health_loop, schedule_health_loop
-from .health.adaptation import HealthProposal, evaluate_proposal
+from .health.adaptation import (
+    HealthProposal,
+    ProposalLifecycleStatus,
+    PromotionError,
+    PromotionNotApplicable,
+    UnsupportedProposalTarget,
+    evaluate_proposal,
+    render_proposal_patch,
+    with_lifecycle_status,
+)
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
 from .llm.assessor_schema import AssessorAssessment
@@ -292,6 +301,45 @@ def handle_check_proposal(args: argparse.Namespace) -> int:
     print(f"  Likely noise reduction: {evaluation.noise_reduction}")
     print(f"  Possible signal loss: {evaluation.signal_loss}")
     print(f"  Test/eval outcome: {evaluation.test_outcome}")
+    promoted = with_lifecycle_status(
+        proposal, ProposalLifecycleStatus.REPLAYED, note=f"Replayed against {args.fixture}"
+    )
+    if promoted is not proposal:
+        args.proposal.write_text(json.dumps(promoted.to_dict(), indent=2), encoding="utf-8")
+    return 0
+
+
+def handle_promote_proposal(args: argparse.Namespace) -> int:
+    try:
+        raw = json.loads(args.proposal.read_text(encoding="utf-8"))
+        proposal = HealthProposal.from_dict(raw)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Unable to read proposal: {exc}", file=sys.stderr)
+        return 1
+    try:
+        patch_path = render_proposal_patch(
+            proposal,
+            health_config_path=args.health_config,
+            baseline_path=args.baseline,
+            output_dir=args.output_dir,
+        )
+    except PromotionNotApplicable as exc:
+        print(f"Promotion not required: {exc}", file=sys.stderr)
+        return 1
+    except PromotionError as exc:
+        print(f"Unable to promote proposal: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Unable to render promotion: {exc}", file=sys.stderr)
+        return 1
+    updated = with_lifecycle_status(
+        proposal,
+        ProposalLifecycleStatus.PROMOTED,
+        note=f"Promotion patch: {patch_path}",
+    )
+    if updated is not proposal:
+        args.proposal.write_text(json.dumps(updated.to_dict(), indent=2), encoding="utf-8")
+    print(f"Promotion patch written to '{patch_path}'")
     return 0
 
 

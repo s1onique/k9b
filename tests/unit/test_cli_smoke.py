@@ -17,10 +17,10 @@ class CLISmokeTest(unittest.TestCase):
         commands = {
             "fixture": ["fixture", str(fixture_path)],
             "snapshot": ["snapshot", "--context", "cluster-alpha", "--output", "snapshots/test.json"],
-            "compare": ["compare", str(sanitized_snapshot), str(sanitized_snapshot)],
-            "batch-snapshot": ["batch-snapshot", "--config", "snapshots/targets.local.example.json"],
-            "assess-snapshots": ["assess-snapshots", str(sanitized_snapshot), "snapshots/test.json"],
-            "assess-drilldown": ["assess-drilldown", "runs/health/drilldowns/sample.json"],
+        "compare": ["compare", str(sanitized_snapshot), str(sanitized_snapshot)],
+        "batch-snapshot": ["batch-snapshot", "--config", "snapshots/targets.local.example.json"],
+        "assess-snapshots": ["assess-snapshots", str(sanitized_snapshot), "snapshots/test.json"],
+        "assess-drilldown": ["assess-drilldown", "runs/health/drilldowns/sample.json"],
         "run-feedback": ["run-feedback", "--config", "runs/run-config.local.example.json"],
         "run-health-loop": [
             "run-health-loop",
@@ -28,6 +28,7 @@ class CLISmokeTest(unittest.TestCase):
             "runs/health-config.local.example.json",
         ],
         "check-proposal": ["check-proposal", "runs/health/proposals/sample.json"],
+        "promote-proposal": ["promote-proposal", "runs/health/proposals/sample.json"],
     }
         for command, args in commands.items():
             with self.subTest(command=command):

@@ -21,6 +21,7 @@ from .cli_handlers import (
     handle_fixture,
     handle_health_loop,
     handle_run_feedback,
+    handle_promote_proposal,
     handle_snapshot,
 )
 from .collect.live_snapshot import list_kube_contexts
@@ -37,6 +38,7 @@ _SUBCOMMANDS = {
     "run-feedback",
     "run-health-loop",
     "check-proposal",
+    "promote-proposal",
 }
 
 _DEFAULT_BATCH_CONFIG = DEFAULT_BATCH_CONFIG
@@ -67,6 +69,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         return handle_health_loop(args, default_config=_HEALTH_CONFIG_DEFAULT)
     if command == "check-proposal":
         return handle_check_proposal(args)
+    if command == "promote-proposal":
+        return handle_promote_proposal(args)
     return handle_fixture(args)
 
 
@@ -207,6 +211,29 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("tests/fixtures/snapshots/sanitized-alpha.json"),
         help="Fixture to replay when evaluating the proposal.",
+    )
+
+    promote_parser = subparsers.add_parser(
+        "promote-proposal",
+        help="Render candidate health config or baseline patches from a proposal.",
+    )
+    promote_parser.add_argument("proposal", type=Path, help="Path to a proposal JSON artifact.")
+    promote_parser.add_argument(
+        "--health-config",
+        type=Path,
+        default=Path("runs/health-config.local.json"),
+        help="Health config file that drives the proposal generation (used for defaults and baseline paths).",
+    )
+    promote_parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="Optional baseline policy file override (otherwise resolved from the health config).",
+    )
+    promote_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("runs/health/promotions"),
+        help="Directory where promotion patches are written.",
     )
 
     return parser
