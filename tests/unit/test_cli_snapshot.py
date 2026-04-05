@@ -3,8 +3,10 @@ import tempfile
 import unittest
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
+import k8s_diag_agent.cli as cli
 from k8s_diag_agent.cli import main
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
@@ -89,3 +91,33 @@ class CliSnapshotTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             data = json.loads(output_path.read_text(encoding="utf-8"))
         self.assertEqual(data["metadata"]["cluster_id"], "demo")
+
+
+class CliConfigFallbackTest(unittest.TestCase):
+    @patch("builtins.print")
+    def test_batch_snapshot_rejects_example_config(self, printed: Any) -> None:
+        with patch.object(cli, "_DEFAULT_BATCH_CONFIG", Path("snapshots/targets.local.test.json")):
+            exit_code = main(["batch-snapshot"])
+        self.assertNotEqual(exit_code, 0)
+        self.assertTrue(
+            any("Local config" in args[0] for args, _ in printed.call_args_list),
+            "Should print a local config error",
+        )
+
+    @patch("builtins.print")
+    def test_run_feedback_rejects_example_config(self, printed: Any) -> None:
+        with patch.object(cli, "_RUN_CONFIG_DEFAULT", Path("runs/run-config.local.test.json")):
+            exit_code = main(["run-feedback"])
+        self.assertNotEqual(exit_code, 0)
+        self.assertTrue(
+            any("Local config" in args[0] for args, _ in printed.call_args_list),
+            "Should print a local config error",
+        )
+
+    def test_run_feedback_allows_explicit_example_config(self) -> None:
+        with patch("builtins.print"), patch(
+            "k8s_diag_agent.cli.run_feedback_loop", return_value=(0, [])
+        ) as run_feedback:
+            exit_code = main(["run-feedback", "--config", "runs/run-config.local.example.json"])
+        self.assertEqual(exit_code, 0)
+        run_feedback.assert_called_once()

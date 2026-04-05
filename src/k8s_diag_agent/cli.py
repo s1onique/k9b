@@ -67,7 +67,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     compare_parser.add_argument("snapshot_b", type=Path, help="Second snapshot JSON file.")
 
     batch_parser = subparsers.add_parser("batch-snapshot", help="Collect snapshots for configured contexts.")
-    batch_parser.add_argument("--config", "-c", type=Path, default=_DEFAULT_BATCH_CONFIG, help="Path to JSON config listing batch targets.")
+    batch_parser.add_argument(
+        "--config",
+        "-c",
+        type=Path,
+        default=_DEFAULT_BATCH_CONFIG,
+        help="Path to JSON config listing batch targets (defaults to snapshots/targets.local.json, which must point at your real contexts).",
+    )
 
     assess_parser = subparsers.add_parser(
         "assess-snapshots",
@@ -90,7 +96,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "-c",
         type=Path,
         default=_RUN_CONFIG_DEFAULT,
-        help="Feedback run configuration file (prefers local config, falls back to template).",
+        help="Feedback run configuration file (defaults to runs/run-config.local.json; template files require explicit --config).",
     )
     run_parser.add_argument(
         "--provider",
@@ -178,7 +184,15 @@ def _handle_snapshot(args: argparse.Namespace) -> int:
 
 
 def _handle_batch_snapshot(args: argparse.Namespace) -> int:
-    config_path = _resolve_config_path(args.config, _BATCH_CONFIG_FALLBACK, args.config == _DEFAULT_BATCH_CONFIG)
+    try:
+        config_path = _resolve_config_path(
+            args.config,
+            _BATCH_CONFIG_FALLBACK,
+            args.config == _DEFAULT_BATCH_CONFIG,
+        )
+    except RuntimeError as exc:
+        print(f"Unable to resolve batch config: {exc}", file=sys.stderr)
+        return 1
     try:
         config = _load_batch_config(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -251,8 +265,10 @@ def _resolve_config_path(preferred: Path, fallback: Path, allow_fallback: bool) 
     if preferred.exists():
         return preferred
     if allow_fallback and fallback.exists():
-        return fallback
-    return preferred
+        raise RuntimeError(
+            f"Local config {preferred} is missing; copy {fallback} → {preferred} and replace the placeholder contexts with your real kube contexts before running."
+        )
+    raise RuntimeError(f"Config {preferred} not found; create it from {fallback} before running.")
 
 
 def _format_partial_status(status: CollectionStatus) -> Optional[str]:
@@ -325,7 +341,15 @@ def _handle_assess_snapshots(args: argparse.Namespace) -> int:
 
 
 def _handle_run_feedback(args: argparse.Namespace) -> int:
-    config_path = _resolve_config_path(args.config, _RUN_CONFIG_FALLBACK, args.config == _RUN_CONFIG_DEFAULT)
+    try:
+        config_path = _resolve_config_path(
+            args.config,
+            _RUN_CONFIG_FALLBACK,
+            args.config == _RUN_CONFIG_DEFAULT,
+        )
+    except RuntimeError as exc:
+        print(f"Unable to resolve run config: {exc}", file=sys.stderr)
+        return 1
     exit_code, _ = run_feedback_loop(config_path, provider_override=args.provider, quiet=args.quiet)
     return exit_code
 

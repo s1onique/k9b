@@ -26,7 +26,7 @@ Runs the comparator over two snapshot files, reporting differences in Kubernetes
 ```bash
 k8s-diag-agent batch-snapshot [--config snapshots/targets.local.json]
 ```
-Reads `snapshots/targets.local.json` (or the path passed via `--config`). Copy `snapshots/targets.local.example.json`, which uses placeholder contexts such as `cluster-alpha`, into `snapshots/targets.local.json`, fill in your own kube contexts, and keep the populated `.local` file untracked. The CLI falls back to the template when no local file exists so documentation or CI can still exercise the command.
+Reads `snapshots/targets.local.json` (or the path passed via `--config`). Copy `snapshots/targets.local.example.json`, which uses placeholder contexts such as `cluster-alpha`, into `snapshots/targets.local.json`, replace the placeholders with your real kube contexts, and keep the populated `.local` file untracked. Real runs require the `.local` file; the CLI now fails fast rather than falling back to the example placeholder, so documentation or CI wishing to exercise the command must explicitly point at the example config.
 
 ## Development
 
@@ -54,7 +54,7 @@ k8s-diag-agent run-feedback --config runs/run-config.local.json
 
 
 ### Local config runbook
-1. Copy `runs/run-config.local.example.json` → `runs/run-config.local.json` and `snapshots/targets.local.example.json` → `snapshots/targets.local.json` before running collection. Replace each `cluster-*` placeholder with your real contexts and keep the populated `.local` files out of git. `.gitignore` already keeps runtime configs and logs ignored so the repository stays free of private names.
+1. Copy `runs/run-config.local.example.json` → `runs/run-config.local.json` and `snapshots/targets.local.example.json` → `snapshots/targets.local.json` before running collection. Replace each `cluster-*` placeholder with your real contexts and keep the populated `.local` files out of git; real runs now require the `.local` files because the CLI will exit when only the example config exists. `.gitignore` already keeps runtime configs and logs ignored so the repository stays free of private names.
 2. `collect_and_compare_clusters.sh` loads the preferred config (`local` first, then the template) and builds the `CONTEXTS` array from the `targets` list. Use this script to automate the same run-feedback/batch-snapshot flows; the `--context` overrides are still available for ad-hoc targets.
 3. Always invoke diagnostics via `.venv/bin/python` so the virtualenv-controlled interpreter stays aligned with project guidance.
 

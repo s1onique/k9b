@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from .cluster_snapshot import (
     ClusterSnapshot,
@@ -54,7 +54,7 @@ def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
 
 
 def _collect_metadata(context: str) -> ClusterSnapshotMetadata:
-    version_output = _kubectl(context, "version", "--short")
+    version_output = _kubectl(context, "version", "--output", "json")
     control_plane_version = _parse_server_version(version_output)
     node_count = _count_lines(_kubectl(context, "get", "nodes", "--no-headers"))
     pod_count = _count_lines(_kubectl(context, "get", "pods", "--all-namespaces", "--no-headers"))
@@ -132,10 +132,23 @@ def _run_command(command: Sequence[str]) -> str:
 
 
 def _parse_server_version(output: str) -> str:
-    for line in output.splitlines():
-        if line.startswith("Server Version:"):
-            return line.split(":", 1)[1].strip()
-    raise RuntimeError("Unable to parse Server Version from kubectl output.")
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "kubectl version output could not be parsed; ensure your kubectl supports `version --output json`."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("kubectl version output is not a JSON object.")
+    server_info: Any = payload.get("serverVersion")
+    if not isinstance(server_info, dict):
+        raise RuntimeError("kubectl version output is missing the `serverVersion` section.")
+    git_version = server_info.get("gitVersion")
+    if not isinstance(git_version, str) or not git_version:
+        raise RuntimeError(
+            "kubectl version output is missing `serverVersion.gitVersion`; ensure the control plane is reachable."
+        )
+    return git_version
 
 
 def _count_lines(output: str) -> int:
