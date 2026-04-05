@@ -1,3 +1,4 @@
+import json
 import shutil
 import unittest
 from pathlib import Path
@@ -144,6 +145,22 @@ class HealthLoopTests(unittest.TestCase):
         reasons = determine_pair_trigger_reasons(primary_record, secondary_record, policy, {}, set())
         self.assertTrue(any("watched Helm release" in reason for reason in reasons))
 
+    def test_load_deprecated_run_id_maps_to_run_label(self) -> None:
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        config_path = self.tmp_dir / "health-config.json"
+        payload = {
+            "run_id": "legacy-run",
+            "targets": [
+                {"context": "cluster-alpha", "label": "cluster-alpha"},
+            ],
+            "peer_mappings": [
+                {"source": "cluster-alpha", "peers": ["cluster-alpha"]},
+            ],
+        }
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        config = HealthRunConfig.load(config_path)
+        self.assertEqual(config.run_label, "legacy-run")
+
     def test_no_comparison_when_no_trigger_fires(self) -> None:
         snapshots = {
             "cluster-alpha": self._make_snapshot("alpha"),
@@ -174,7 +191,7 @@ class HealthLoopTests(unittest.TestCase):
             watched_crd_families=(),
         )
         config = HealthRunConfig(
-            run_id="test-health",
+            run_label="test-health",
             output_dir=self.tmp_dir,
             collector_version="0.1",
             targets=(target_alpha, target_beta),

@@ -70,6 +70,8 @@ k8s-diag-agent run-health-loop --config runs/health-config.local.json [--trigger
 
 Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`, keep placeholders (`cluster-alpha`, `cluster-beta`, etc.), and replace them with your real contexts before running. The config describes which clusters to monitor, watched Helm releases/CRDs, trigger policies, and peer mappings. Use `--trigger` to force a manual comparison pair for a single run.
 
+The health config now declares a stable `run_label` instead of a fixed `run_id`. Every invocation of `run-health-loop` generates a unique `run_id` (timestamped and safe for filenames) while keeping the configured label in the produced artifacts so you can still correlate runs with your policy. Existing configs that still set `run_id` will continue to work for now, but that value is treated as the run label and a warning flags the deprecation.
+
 
 ### Local config runbook
 1. Copy `runs/run-config.local.example.json` → `runs/run-config.local.json` and `snapshots/targets.local.example.json` → `snapshots/targets.local.json` before running collection. Replace each `cluster-*` placeholder with your real contexts and keep the populated `.local` files out of git; real runs now require the `.local` files because the CLI will exit when only the example config exists. `.gitignore` already keeps runtime configs and logs ignored so the repository stays free of private names.

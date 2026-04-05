@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -62,6 +63,12 @@ def _format_snapshot_filename(run_id: str, label: str, captured_at: datetime) ->
     timestamp = captured_at.strftime("%Y%m%dT%H%M%SZ")
     safe_label = _safe_label(label)
     return f"{run_id}-{safe_label}-{timestamp}.json"
+
+
+def _build_runtime_run_id(label: str) -> str:
+    component = _safe_label(label)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{component}-{timestamp}"
 
 
 class HealthRating(str, Enum):
@@ -142,6 +149,7 @@ class HealthAssessmentResult:
 
 @dataclass
 class HealthAssessmentArtifact:
+    run_label: str
     run_id: str
     timestamp: datetime
     context: str
@@ -155,6 +163,7 @@ class HealthAssessmentArtifact:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "run_label": self.run_label,
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
             "context": self.context,
@@ -170,6 +179,7 @@ class HealthAssessmentArtifact:
 
 @dataclass
 class ComparisonTriggerArtifact:
+    run_label: str
     run_id: str
     timestamp: datetime
     primary: str
@@ -183,6 +193,7 @@ class ComparisonTriggerArtifact:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "run_label": self.run_label,
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
             "primary": self.primary,
@@ -198,7 +209,7 @@ class ComparisonTriggerArtifact:
 
 @dataclass
 class HealthRunConfig:
-    run_id: str
+    run_label: str
     output_dir: Path
     collector_version: str
     targets: Tuple[HealthTarget, ...]
@@ -209,7 +220,21 @@ class HealthRunConfig:
     @classmethod
     def load(cls, path: Path) -> "HealthRunConfig":
         raw = json.loads(path.read_text(encoding="utf-8"))
-        run_id = str(raw.get("run_id") or _safe_label(path.stem))
+        raw_label = raw.get("run_label")
+        legacy_run_id = raw.get("run_id")
+        if raw_label is not None:
+            label_source = str(raw_label)
+        elif legacy_run_id is not None:
+            label_source = str(legacy_run_id)
+            warnings.warn(
+                "The health config key 'run_id' is deprecated. "
+                "Provide 'run_label' instead; the legacy value will be used as the stable label while each execution generates a unique run_id.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        else:
+            label_source = path.stem
+        run_label = _safe_label(label_source)
         output_dir = Path(str(raw.get("output_dir") or "runs"))
         collector_version = str(raw.get("collector_version") or "dev")
 
@@ -315,7 +340,7 @@ class HealthRunConfig:
             )
 
         return cls(
-            run_id=run_id,
+            run_label=run_label,
             output_dir=output_dir,
             collector_version=collector_version,
             targets=tuple(targets),
@@ -611,6 +636,8 @@ class HealthLoopRunner:
             (item.primary, item.secondary) for item in manual_items
         }
         self._collection_messages: List[str] = []
+        self.run_label = config.run_label
+        self.run_id = _build_runtime_run_id(self.run_label)
 
     def execute(
         self,
@@ -624,7 +651,7 @@ class HealthLoopRunner:
         self._persist_history(history, directories["history"])
         if not self.quiet:
             print(
-                f"Health run '{self.config.run_id}' produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
+                f"Health run '{self.run_label}' ({self.run_id}) produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
             )
             for message in self._collection_messages:
                 print(message)
@@ -659,7 +686,7 @@ class HealthLoopRunner:
                 message = f"Snapshot for '{target.context}' failed: {exc}"
                 self._collection_messages.append(message)
                 continue
-            filename = _format_snapshot_filename(self.config.run_id, target.label, snapshot.metadata.captured_at)
+            filename = _format_snapshot_filename(self.run_id, target.label, snapshot.metadata.captured_at)
             path = directory / filename
             _write_json(snapshot.to_dict(), path)
             self._collection_messages.append(f"Collected snapshot for '{target.context}' -> {path}")
@@ -680,11 +707,12 @@ class HealthLoopRunner:
             if record.target.monitor_health:
                 assessment_result = build_health_assessment(record.snapshot, record.target, previous)
                 record.assessment = assessment_result
-                assessment_path = assessment_dir / f"{self.config.run_id}-{record.target.label}-assessment.json"
+                assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
                 _write_json(assessment_to_dict(assessment_result.assessment), assessment_path)
                 artifacts.append(
                     HealthAssessmentArtifact(
-                        run_id=self.config.run_id,
+                        run_label=self.run_label,
+                        run_id=self.run_id,
                         timestamp=datetime.now(timezone.utc),
                         context=record.target.context,
                         label=record.target.label,
@@ -736,7 +764,7 @@ class HealthLoopRunner:
                     continue
                 comparison = self.comparison_fn(primary_record.snapshot, secondary_record.snapshot)
                 summary = {key: len(value) for key, value in comparison.differences.items()}
-                comparison_path = directories["comparisons"] / f"{self.config.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-comparison.json"
+                comparison_path = directories["comparisons"] / f"{self.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-comparison.json"
                 _write_json(
                     {
                         "differences": _serialize_value(comparison.differences),
@@ -745,7 +773,8 @@ class HealthLoopRunner:
                     comparison_path,
                 )
                 artifact = ComparisonTriggerArtifact(
-                    run_id=self.config.run_id,
+                    run_label=self.run_label,
+                    run_id=self.run_id,
                     timestamp=datetime.now(timezone.utc),
                     primary=primary_record.target.context,
                     secondary=secondary_record.target.context,
@@ -756,7 +785,7 @@ class HealthLoopRunner:
                     differences=_serialize_value(comparison.differences),
                 )
                 triggers.append(artifact)
-                trigger_path = directories["triggers"] / f"{self.config.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-trigger.json"
+                trigger_path = directories["triggers"] / f"{self.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-trigger.json"
                 _write_json(artifact.to_dict(), trigger_path)
                 self._collection_messages.append(
                     f"Triggered comparison {primary_record.target.label} vs {secondary_record.target.label}: {', '.join(reasons)}"

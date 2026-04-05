@@ -1,5 +1,5 @@
 {
-  "run_id": "health-run-2026-04-05",
+  "run_label": "health-run",
   "collector_version": "0.1.0",
   "output_dir": "runs",
   "targets": [
