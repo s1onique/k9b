@@ -24,6 +24,7 @@ from .reason.diagnoser import build_findings_and_hypotheses
 from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .feedback.runner import run_feedback_loop
 from .health import run_health_loop, schedule_health_loop
+from .health.adaptation import HealthProposal, evaluate_proposal
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
 
@@ -81,6 +82,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         return _handle_run_feedback(args)
     if command == "run-health-loop":
         return _handle_health_loop(args)
+    if command == "check-proposal":
+        return _handle_check_proposal(args)
     return _handle_fixture(args)
 
 
@@ -208,6 +211,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-runs",
         type=_positive_int,
         help="Optional cap on repeated runs (requires --every-seconds).",
+    )
+
+    check_parser = subparsers.add_parser(
+        "check-proposal",
+        help="Evaluate a health proposal against a replay fixture.",
+    )
+    check_parser.add_argument("proposal", type=Path, help="Path to a proposal JSON artifact.")
+    check_parser.add_argument(
+        "--fixture",
+        "-f",
+        type=Path,
+        default=Path("tests/fixtures/snapshots/sanitized-alpha.json"),
+        help="Fixture to replay when evaluating the proposal.",
     )
 
     return parser
@@ -493,6 +509,21 @@ def _handle_health_loop(args: argparse.Namespace) -> int:
         max_runs=args.max_runs,
         run_once=args.once,
     )
+
+
+def _handle_check_proposal(args: argparse.Namespace) -> int:
+    try:
+        raw = json.loads(args.proposal.read_text(encoding="utf-8"))
+        proposal = HealthProposal.from_dict(raw)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Unable to read proposal: {exc}", file=sys.stderr)
+        return 1
+    evaluation = evaluate_proposal(proposal, args.fixture)
+    print(f"Proposal: {proposal.proposal_id}")
+    print(f"  Likely noise reduction: {evaluation.noise_reduction}")
+    print(f"  Possible signal loss: {evaluation.signal_loss}")
+    print(f"  Test/eval outcome: {evaluation.test_outcome}")
+    return 0
 
 
 def _load_snapshot(path: Path) -> ClusterSnapshot:

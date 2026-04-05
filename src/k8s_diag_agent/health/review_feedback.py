@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar
 
 from ..feedback.models import FailureMode, ProposedImprovement
 from ..models import ConfidenceLevel
@@ -29,6 +29,15 @@ _REASON_PRIORITIES: Dict[str, int] = {
 }
 _DEFAULT_PRIORITY = 5
 
+
+def _normalize_text(value: Any | None) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+T = TypeVar("T")
 
 def _severity_bucket(artifact: DrilldownArtifact) -> int:
     priorities = [_REASON_PRIORITIES.get(reason.lower(), _DEFAULT_PRIORITY) for reason in artifact.trigger_reasons]
@@ -66,6 +75,20 @@ class DrilldownSelection:
             "non_running_pod_count": self.non_running_pod_count,
         }
 
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "DrilldownSelection":
+        if not isinstance(raw, Mapping):
+            raise ValueError("Drilldown selection must be a mapping")
+        return cls(
+            context=str(raw.get("context") or ""),
+            label=str(raw.get("label") or ""),
+            severity=int(raw.get("severity") or 0),
+            reasons=tuple(str(item) for item in raw.get("reasons") or ()),
+            missing_evidence=tuple(str(item) for item in raw.get("missing_evidence") or ()),
+            warning_event_count=int(raw.get("warning_event_count") or 0),
+            non_running_pod_count=int(raw.get("non_running_pod_count") or 0),
+        )
+
 
 @dataclass(frozen=True)
 class QualityMetric:
@@ -81,6 +104,17 @@ class QualityMetric:
             "score": self.score,
             "detail": self.detail,
         }
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "QualityMetric":
+        if not isinstance(raw, Mapping):
+            raise ValueError("Quality metric must be a mapping")
+        return cls(
+            dimension=str(raw.get("dimension") or ""),
+            level=str(raw.get("level") or ""),
+            score=int(raw.get("score") or 0),
+            detail=str(raw.get("detail") or ""),
+        )
 
 
 @dataclass(frozen=True)
@@ -114,6 +148,62 @@ class HealthReviewArtifact:
                 for improvement in self.proposed_improvements
             ],
         }
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "HealthReviewArtifact":
+        if not isinstance(raw, Mapping):
+            raise ValueError("Health review artifact must be a mapping")
+        def _parse_sequence(key: str, parser: Callable[[Mapping[str, Any]], T]) -> Tuple[T, ...]:
+            values = raw.get(key) or []
+            if not isinstance(values, Sequence):
+                return ()
+            return tuple(parser(item) for item in values if isinstance(item, Mapping))
+
+        selections = _parse_sequence("selected_drilldowns", DrilldownSelection.from_dict)
+
+        metrics = _parse_sequence("quality_summary", QualityMetric.from_dict)
+
+        improvements_raw = raw.get("proposed_improvements") or []
+        improvements: List[ProposedImprovement] = []
+        for entry in improvements_raw:
+            if not isinstance(entry, Mapping):
+                continue
+            confidence_value = entry.get("confidence")
+            confidence = None
+            if confidence_value:
+                try:
+                    confidence = ConfidenceLevel(str(confidence_value))
+                except ValueError:
+                    confidence = None
+            related = []
+            for fm in entry.get("related_failure_modes") or []:
+                try:
+                    related.append(FailureMode(str(fm)))
+                except ValueError:
+                    continue
+            improvements.append(
+                ProposedImprovement(
+                    id=str(entry.get("id") or ""),
+                    description=str(entry.get("description") or ""),
+                    target=str(entry.get("target") or ""),
+                    owner=_normalize_text(entry.get("owner")),
+                    confidence=confidence,
+                    rationale=_normalize_text(entry.get("rationale")),
+                    related_failure_modes=related,
+                )
+            )
+
+        failure_modes = tuple(str(item) for item in (raw.get("failure_modes") or []))
+
+        return cls(
+            run_id=str(raw.get("run_id") or ""),
+            timestamp=datetime.fromisoformat(str(raw.get("timestamp") or datetime.now(timezone.utc).isoformat())),
+            selected_drilldowns=selections,
+            quality_summary=metrics,
+            failure_modes=failure_modes,
+            proposed_improvements=tuple(improvements),
+            review_version=str(raw.get("review_version") or "health-review:v1"),
+        )
 
 
 def _summarize_drilldowns(drilldowns: Sequence[DrilldownArtifact], limit: int = 3) -> Tuple[DrilldownSelection, ...]:

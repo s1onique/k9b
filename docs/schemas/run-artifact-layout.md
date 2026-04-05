@@ -8,6 +8,7 @@ Defines where replayable evidence, comparison summaries, assessments, and feedba
 - `runs/assessments/`: assessment payloads (matching `docs/schemas/assessment-schema.md`) produced during reasoning or LLM paths to keep track of expected outputs.
 - `runs/feedback/`: `RunArtifact` JSON blobs that bind snapshots, comparisons, assessments, validation results, failure modes, and proposed improvements.
 - `runs/health/`: health artifacts produced by `run-health-loop`, including per-cluster assessments, triggered comparisons, and the persistent health history that feeds trigger heuristics.
+- `runs/health/proposals/`: typed adaptation proposals derived from health review artifacts.
 
 ## Naming conventions
 - Snapshot files are `runs/snapshots/{context}-{timestamp}.json` so collection flows can append data without breaking the deterministic CLI or fixture runner.

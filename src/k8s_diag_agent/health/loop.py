@@ -35,6 +35,7 @@ from .image_pull_secret import (
     ImagePullSecretInsight,
     ImagePullSecretInspector,
 )
+from .adaptation import collect_trigger_details, generate_proposals_from_review
 from .review_feedback import build_health_review
 
 
@@ -1664,7 +1665,7 @@ class HealthLoopRunner:
         triggers = self._evaluate_triggers(records, previous_history, directories)
         drilldowns = self._build_drilldowns(records, previous_history, directories["drilldowns"])
         self._persist_history(history, directories["history"])
-        self._write_review_artifact(assessments, drilldowns, directories["reviews"])
+        self._write_review_artifact(assessments, drilldowns, directories)
         if not self.quiet:
             print(
                 f"Health run '{self.run_label}' ({self.run_id}) produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
@@ -1683,6 +1684,7 @@ class HealthLoopRunner:
             "triggers": root / "triggers",
             "drilldowns": root / "drilldowns",
             "reviews": root / "reviews",
+            "proposals": root / "proposals",
             "history": root / _HISTORY_FILENAME,
         }
         for key, path in subdirs.items():
@@ -1842,8 +1844,9 @@ class HealthLoopRunner:
         self,
         assessments: List[HealthAssessmentArtifact],
         drilldowns: List[DrilldownArtifact],
-        directory: Path,
+        directories: Dict[str, Path],
     ) -> None:
+        directory = directories["reviews"]
         try:
             review = build_health_review(
                 run_id=self.run_id,
@@ -1857,6 +1860,22 @@ class HealthLoopRunner:
         path = directory / f"{self.run_id}-review.json"
         _write_json(review.to_dict(), path)
         self._collection_messages.append(f"Health review written to '{path}'")
+        try:
+            trigger_details = collect_trigger_details(directories["triggers"], self.run_id)
+            proposals = generate_proposals_from_review(
+                review=review,
+                review_path=path,
+                run_id=self.run_id,
+                warning_threshold=self.config.trigger_policy.warning_event_threshold,
+                baseline_policy=self.config.baseline_policy,
+                trigger_details=trigger_details,
+            )
+            for proposal in proposals:
+                proposal_path = directories["proposals"] / f"{proposal.proposal_id}.json"
+                _write_json(proposal.to_dict(), proposal_path)
+                self._collection_messages.append(f"Health proposal written to '{proposal_path}'")
+        except Exception as exc:
+            self._collection_messages.append(f"Health proposal generation failed: {exc}")
 
     def _determine_drilldown_reasons(
         self,
