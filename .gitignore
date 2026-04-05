@@ -1,0 +1,44 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+.env.*
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+coverage/
+
+# Logs / temp
+*.log
+tmp/
+.tmp/
+.cache/
+
+# Generated run artifacts
+artifacts/
+reports/
+runs/
+exports/

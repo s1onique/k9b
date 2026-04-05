@@ -1,0 +1,48 @@
+version: "1.0"
+
+eval_case:
+  id: string
+  title: string
+  category: string
+  priority: critical | high | medium | low
+
+  purpose: string
+  scenario: string
+  input: string
+
+  context:
+    repo_phase: string
+    relevant_layers:
+      - string
+    relevant_rules:
+      - string
+    related_playbooks:
+      - string
+
+  expected_behavior:
+    required:
+      - string
+    preferred:
+      - string
+    forbidden:
+      - string
+
+  expected_output:
+    must_include:
+      - string
+    should_include:
+      - string
+    must_not_include:
+      - string
+
+  scoring:
+    pass_conditions:
+      - string
+    fail_conditions:
+      - string
+
+  notes:
+    rationale: string
+    future_regression_value: string
+
+  status: active | draft | deprecated
