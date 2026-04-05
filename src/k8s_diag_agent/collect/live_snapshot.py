@@ -195,6 +195,17 @@ def _collect_warning_events(
     return tuple(events), ()
 
 
+def _pod_owned_by_job(pod: Mapping[str, Any]) -> bool:
+    metadata = pod.get("metadata") or {}
+    owners = metadata.get("ownerReferences") or []
+    for owner in owners:
+        if not isinstance(owner, Mapping):
+            continue
+        if str(owner.get("kind") or "").lower() == "job":
+            return True
+    return False
+
+
 def _summarize_node_conditions(
     nodes: Sequence[Mapping[str, Any]]
 ) -> NodeConditionCounts:
@@ -247,10 +258,14 @@ def _summarize_pod_health(
     pending = 0
     crash_loop_backoff = 0
     image_pull_backoff = 0
+    completed_job_pods = 0
     for pod in pods:
         status = pod.get("status") or {}
         phase = str(status.get("phase") or "").lower()
         counted_non_running = False
+        if phase == "succeeded" and _pod_owned_by_job(pod):
+            completed_job_pods += 1
+            continue
         if phase and phase != "running":
             non_running += 1
             counted_non_running = True
@@ -285,6 +300,7 @@ def _summarize_pod_health(
         pending=pending,
         crash_loop_backoff=crash_loop_backoff,
         image_pull_backoff=image_pull_backoff,
+        completed_job_pods=completed_job_pods,
     )
 
 

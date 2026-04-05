@@ -74,6 +74,33 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
         self.assertEqual(snapshot.health_signals.job_failures, 0)
         self.assertEqual(snapshot.health_signals.warning_events, ())
 
+    @patch("k8s_diag_agent.collect.live_snapshot._run_command")
+    def test_succeeded_job_pods_not_counted_as_non_running(self, run_command: Any) -> None:
+        base_runner = _make_runner()
+
+        def runner(command: Sequence[str]) -> str:
+            if command[0] == "kubectl" and "pods" in command:
+                payload = {
+                    "items": [
+                        {
+                            "metadata": {
+                                "name": "backup-job-pod",
+                                "ownerReferences": [
+                                    {"kind": "Job", "name": "backup-job"}
+                                ],
+                            },
+                            "status": {"phase": "Succeeded", "containerStatuses": []},
+                        }
+                    ]
+                }
+                return json.dumps(payload)
+            return base_runner(command)
+
+        run_command.side_effect = runner
+        snapshot = collect_cluster_snapshot("demo")
+        self.assertEqual(snapshot.health_signals.pod_counts.non_running, 0)
+        self.assertEqual(snapshot.health_signals.pod_counts.completed_job_pods, 1)
+
 
 class VersionParsingTest(unittest.TestCase):
     def test_parse_server_version_from_json(self) -> None:

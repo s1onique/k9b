@@ -63,10 +63,11 @@ class PodHealthCounts:
     pending: int
     crash_loop_backoff: int
     image_pull_backoff: int
+    completed_job_pods: int
 
     @classmethod
     def empty(cls) -> "PodHealthCounts":
-        return cls(0, 0, 0, 0)
+        return cls(0, 0, 0, 0, 0)
 
     def to_dict(self) -> Dict[str, int]:
         return {
@@ -74,6 +75,7 @@ class PodHealthCounts:
             "pending": self.pending,
             "crash_loop_backoff": self.crash_loop_backoff,
             "image_pull_backoff": self.image_pull_backoff,
+            "completed_job_pods": self.completed_job_pods,
         }
 
     @classmethod
@@ -85,6 +87,7 @@ class PodHealthCounts:
             pending=_safe_int(source.get("pending")) or 0,
             crash_loop_backoff=_safe_int(source.get("crash_loop_backoff")) or 0,
             image_pull_backoff=_safe_int(source.get("image_pull_backoff")) or 0,
+            completed_job_pods=_safe_int(source.get("completed_job_pods")) or 0,
         )
 
 

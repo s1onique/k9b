@@ -68,7 +68,7 @@ k8s-diag-agent run-feedback --config runs/run-config.local.json
 k8s-diag-agent run-health-loop --config runs/health-config.local.json [--trigger primary:secondary]
 ```
 
-Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`, keep placeholders (`cluster-alpha`, `cluster-beta`, etc.), and replace them with your real contexts before running. The config describes which clusters to monitor, watched Helm releases/CRDs, trigger policies, and peer mappings. Use `--trigger` to force a manual comparison pair for a single run.
+Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`, keep placeholders (`cluster-alpha`, `cluster-beta`, etc.), and replace them with your real contexts before running. The config describes which clusters to monitor, watched Helm releases/CRDs, trigger policies, and peer mappings. Leave `peer_mappings` empty (and omit `manual_pairs`) when you just need per-cluster health assessments because comparisons only run for configured peers or explicit triggers. Use `--trigger` to force a manual comparison pair for a single run.
 
 The health config now declares a stable `run_label` instead of a fixed `run_id`. Every invocation of `run-health-loop` generates a unique `run_id` (timestamped and safe for filenames) while keeping the configured label in the produced artifacts so you can still correlate runs with your policy. Existing configs that still set `run_id` will continue to work for now, but that value is treated as the run label and a warning flags the deprecation.
 

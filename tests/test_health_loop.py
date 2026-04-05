@@ -549,6 +549,68 @@ class HealthLoopTests(unittest.TestCase):
         self.assertEqual(len(drilldowns), 1)
         self.assertIn("CrashLoopBackOff", drilldowns[0].trigger_reasons)
 
+    def test_build_health_assessment_crashloop_backoff_degrades(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-crashloop",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "pending": 0,
+                    "crash_loop_backoff": 1,
+                    "image_pull_backoff": 0,
+                    "completed_job_pods": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        target = HealthTarget(
+            context="cluster-crashloop",
+            label="cluster-crashloop",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        result = build_health_assessment(snapshot, target, None, BaselinePolicy.empty())
+        self.assertEqual(result.rating, HealthRating.DEGRADED)
+        self.assertTrue(
+            any(
+                "CrashLoopBackOff" in finding.description
+                for finding in result.assessment.findings
+            )
+        )
+
+    def test_build_health_assessment_image_pull_backoff_degrades(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-imageerr",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "pending": 0,
+                    "crash_loop_backoff": 0,
+                    "image_pull_backoff": 1,
+                    "completed_job_pods": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        target = HealthTarget(
+            context="cluster-imageerr",
+            label="cluster-imageerr",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        result = build_health_assessment(snapshot, target, None, BaselinePolicy.empty())
+        self.assertEqual(result.rating, HealthRating.DEGRADED)
+        self.assertTrue(
+            any(
+                "ImagePullBackOff" in finding.description
+                for finding in result.assessment.findings
+            )
+        )
+
     def test_drilldown_not_created_when_healthy(self) -> None:
         snapshot = self._make_snapshot(
             "cluster-alpha",
@@ -597,6 +659,160 @@ class HealthLoopTests(unittest.TestCase):
         )
         _, _, drilldowns = runner.execute()
         self.assertEqual(drilldowns, [])
+
+    def test_health_assessment_artifact_contains_metadata(self) -> None:
+        snapshot = self._make_snapshot("cluster-artifact")
+        snapshots = {"cluster-artifact": snapshot}
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        target = HealthTarget(
+            context="cluster-artifact",
+            label="cluster-artifact",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        config = HealthRunConfig(
+            run_label="artifact",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+        assessments, _, _ = runner.execute()
+        self.assertEqual(len(assessments), 1)
+        artifact_dir = self.tmp_dir / "health" / "assessments"
+        files = list(artifact_dir.glob("*.json"))
+        self.assertTrue(files)
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        self.assertEqual(data.get("run_label"), config.run_label)
+        self.assertEqual(data.get("cluster_id"), "cluster-artifact")
+        assessment_data = data.get("assessment") or {}
+        self.assertGreater(len(assessment_data.get("findings", [])), 0)
+        self.assertGreater(len(assessment_data.get("hypotheses", [])), 0)
+        self.assertTrue(assessment_data.get("recommended_action"))
+
+    def test_config_allows_empty_peer_mappings_for_health_only(self) -> None:
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        baseline_path = self.tmp_dir / "health-baseline.json"
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "control_plane_version_range": {},
+                    "watched_releases": [],
+                    "required_crd_families": [],
+                    "ignored_drift": [],
+                    "peer_roles": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = self.tmp_dir / "health-config.json"
+        payload = {
+            "run_label": "health-only",
+            "targets": [
+                {"context": "cluster-alpha", "label": "cluster-alpha"},
+            ],
+            "peer_mappings": [],
+            "manual_pairs": [],
+            "baseline_policy_path": baseline_path.name,
+        }
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        config = HealthRunConfig.load(config_path)
+        self.assertEqual(config.peers, ())
+        self.assertEqual(config.manual_pairs, ())
+
+    def test_health_only_mode_skips_peer_comparison(self) -> None:
+        snapshots = {
+            "cluster-alpha": self._make_snapshot("alpha"),
+        }
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        comparison_called: List[bool] = []
+
+        def compare_stub(a: ClusterSnapshot, b: ClusterSnapshot) -> ClusterComparison:
+            comparison_called.append(True)
+            return compare_snapshots(a, b)
+
+        target = HealthTarget(
+            context="cluster-alpha",
+            label="cluster-alpha",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        config = HealthRunConfig(
+            run_label="health-only",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_stub,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+        _, triggers, _ = runner.execute()
+        self.assertFalse(comparison_called)
+        self.assertEqual(triggers, [])
+        self.assertIn("No peer mappings configured; running health-only mode.", runner._collection_messages)
+
+    def test_manual_pairs_reference_unknown_cluster_fails(self) -> None:
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        baseline_path = self.tmp_dir / "health-baseline.json"
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "control_plane_version_range": {},
+                    "watched_releases": [],
+                    "required_crd_families": [],
+                    "ignored_drift": [],
+                    "peer_roles": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = self.tmp_dir / "health-config.json"
+        payload = {
+            "run_label": "health",
+            "targets": [
+                {"context": "cluster-alpha", "label": "cluster-alpha"},
+            ],
+            "peer_mappings": [
+                {"source": "cluster-alpha", "peers": ["cluster-alpha"]}
+            ],
+            "manual_pairs": [
+                {"primary": "cluster-alpha", "secondary": "cluster-missing"}
+            ],
+            "baseline_policy_path": baseline_path.name,
+        }
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Manual pair references unknown cluster"):
+            HealthRunConfig.load(config_path)
 
     def test_drilldown_artifact_serialization(self) -> None:
         timestamp = datetime(2026, 1, 2, tzinfo=timezone.utc)

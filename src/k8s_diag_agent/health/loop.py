@@ -127,7 +127,7 @@ class TriggerPolicy:
     health_regression: bool
     missing_evidence: bool
     manual: bool
-    warning_event_threshold: int = 0
+    warning_event_threshold: int = 3
 
 
 @dataclass
@@ -383,7 +383,26 @@ class HealthRunConfig:
             references.add(normalize_ref(target.context))
             references.add(normalize_ref(target.label))
 
+        manual_raw = raw.get("manual_pairs") or []
+        manual_pairs: List[ManualComparison] = []
+        for entry in manual_raw:
+            if not isinstance(entry, dict):
+                continue
+            primary = entry.get("primary")
+            secondary = entry.get("secondary")
+            if not primary or not secondary:
+                continue
+            normalized_primary = normalize_ref(str(primary))
+            normalized_secondary = normalize_ref(str(secondary))
+            if normalized_primary not in references or normalized_secondary not in references:
+                raise ValueError("Manual pair references unknown cluster")
+            manual_pairs.append(
+                ManualComparison(primary=normalized_primary, secondary=normalized_secondary)
+            )
+
         peers_raw = raw.get("peer_mappings")
+        if peers_raw is None:
+            peers_raw = []
         if not isinstance(peers_raw, list):
             raise ValueError("`peer_mappings` must be a list")
         peers: List[ComparisonPeer] = []
@@ -415,7 +434,7 @@ class HealthRunConfig:
                     peers=tuple(normalized_peers),
                 )
             )
-        if not peers:
+        if not peers and manual_pairs:
             raise ValueError("`peer_mappings` must define at least one group")
 
         trigger_raw = raw.get("comparison_triggers") or {}
@@ -428,23 +447,6 @@ class HealthRunConfig:
             manual=bool(trigger_raw.get("manual", True)),
             warning_event_threshold=_parse_threshold(trigger_raw.get("warning_event_threshold")),
         )
-
-        manual_raw = raw.get("manual_pairs") or []
-        manual_pairs: List[ManualComparison] = []
-        for entry in manual_raw:
-            if not isinstance(entry, dict):
-                continue
-            primary = entry.get("primary")
-            secondary = entry.get("secondary")
-            if not primary or not secondary:
-                continue
-            normalized_primary = normalize_ref(str(primary))
-            normalized_secondary = normalize_ref(str(secondary))
-            if normalized_primary not in references or normalized_secondary not in references:
-                raise ValueError("Manual pair references unknown cluster")
-            manual_pairs.append(
-                ManualComparison(primary=normalized_primary, secondary=normalized_secondary)
-            )
 
         baseline_raw = raw.get("baseline_policy_path")
         if baseline_raw:
@@ -485,6 +487,7 @@ def build_health_assessment(
     target: HealthTarget,
     previous: Optional[HealthHistoryEntry],
     baseline: BaselinePolicy,
+    warning_event_threshold: int = 0,
 ) -> HealthAssessmentResult:
     generator = _SignalIdGenerator(target.label)
     signals: List[Signal] = []
@@ -794,6 +797,12 @@ def build_health_assessment(
     workload_issue_present = False
     node_issue_present = False
     warning_event_count = len(warning_events)
+    warning_threshold = warning_event_threshold
+    warning_triggered = (
+        warning_event_count > 0
+        if warning_threshold <= 0
+        else warning_event_count >= warning_threshold
+    )
     node_components: List[str] = []
     node_severity = "medium"
     if node_conditions.not_ready > 0:
@@ -861,7 +870,7 @@ def build_health_assessment(
             "medium",
             Layer.WORKLOAD,
         )
-    if warning_event_count > 0:
+    if warning_triggered:
         workload_issue_present = True
         issues_detected = True
         latest_warning = warning_events[0]
@@ -871,8 +880,11 @@ def build_health_assessment(
             else ""
         )
         references.append("warning events")
+        threshold_note = (
+            f" (threshold {warning_threshold})" if warning_threshold > 0 else ""
+        )
         _record_issue(
-            f"{warning_event_count} warning events recorded{warning_desc}.",
+            f"{warning_event_count} warning events recorded{threshold_note}{warning_desc}.",
             "low",
             Layer.OBSERVABILITY,
         )
@@ -1419,24 +1431,24 @@ class HealthLoopRunner:
                     record.target,
                     previous,
                     self.config.baseline_policy,
+                    self.config.trigger_policy.warning_event_threshold,
                 )
                 record.assessment = assessment_result
                 assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
-                _write_json(assessment_to_dict(assessment_result.assessment), assessment_path)
-                artifacts.append(
-                    HealthAssessmentArtifact(
-                        run_label=self.run_label,
-                        run_id=self.run_id,
-                        timestamp=datetime.now(timezone.utc),
-                        context=record.target.context,
-                        label=record.target.label,
-                        cluster_id=cluster_id,
-                        snapshot_path=str(record.path),
-                        assessment=assessment_to_dict(assessment_result.assessment),
-                        missing_evidence=assessment_result.missing_evidence,
-                        health_rating=assessment_result.rating,
-                    )
+                artifact = HealthAssessmentArtifact(
+                    run_label=self.run_label,
+                    run_id=self.run_id,
+                    timestamp=datetime.now(timezone.utc),
+                    context=record.target.context,
+                    label=record.target.label,
+                    cluster_id=cluster_id,
+                    snapshot_path=str(record.path),
+                    assessment=assessment_to_dict(assessment_result.assessment),
+                    missing_evidence=assessment_result.missing_evidence,
+                    health_rating=assessment_result.rating,
                 )
+                _write_json(artifact.to_dict(), assessment_path)
+                artifacts.append(artifact)
             history[cluster_id] = HealthHistoryEntry(
                 cluster_id=cluster_id,
                 node_count=record.snapshot.metadata.node_count,
@@ -1524,7 +1536,12 @@ class HealthLoopRunner:
             reasons.append("ImagePullBackOff")
         warning_threshold = self.config.trigger_policy.warning_event_threshold
         warning_events = record.snapshot.health_signals.warning_events
-        if warning_threshold > 0 and len(warning_events) >= warning_threshold:
+        threshold_met = (
+            len(warning_events) > 0
+            if warning_threshold <= 0
+            else len(warning_events) >= warning_threshold
+        )
+        if threshold_met:
             reasons.append("warning_event_threshold")
         if record.snapshot.health_signals.job_failures > 0:
             reasons.append("job_failures")
@@ -1538,6 +1555,9 @@ class HealthLoopRunner:
         directories: Dict[str, Path],
     ) -> List[ComparisonTriggerArtifact]:
         triggers: List[ComparisonTriggerArtifact] = []
+        if not self.config.peers:
+            self._collection_messages.append(_HEALTH_ONLY_MESSAGE)
+            return triggers
         record_lookup: Dict[str, HealthSnapshotRecord] = {}
         for record in records:
             primary_ref, label_ref = record.refs()
@@ -1678,6 +1698,7 @@ def run_health_loop(
 
 
 _HEALTH_LOCK_FILENAME = ".health-loop.lock"
+_HEALTH_ONLY_MESSAGE = "No peer mappings configured; running health-only mode."
 
 
 class HealthLoopScheduler:

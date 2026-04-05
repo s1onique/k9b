@@ -1,0 +1,40 @@
+{
+  "control_plane_version_range": {
+    "min_version": "v1.25.0",
+    "max_version": "v1.26.5",
+    "why": "Only supported Kubernetes versions are permitted to keep the control plane consistent across the fleet.",
+    "next_check": "Inspect the kube-apiserver and kubelet versions before applying new workloads."
+  },
+  "watched_releases": [
+    {
+      "release": "kube-system/observability",
+      "allowed_versions": ["1.1.0", "1.1.1"],
+      "why": "The observability stack is curated by the platform channel and must stay on a known chart.",
+      "next_check": "Compare the Helm release version to the baseline manifest and reconcile if needed."
+    },
+    {
+      "release": "stateful-stack/service",
+      "allowed_versions": ["2.0.0"],
+      "why": "Critical services depend on the documented chart version to keep APIs stable.",
+      "next_check": "Validate the Helm release version in each cluster against the platform manifest."
+    }
+  ],
+  "required_crd_families": [
+    {
+      "family": "monitoring.example.com",
+      "why": "Monitoring operators rely on these CRDs for alerting and dashboards.",
+      "next_check": "Ensure the CRD exists on every control plane and is in Active state."
+    },
+    {
+      "family": "database.example.com",
+      "why": "Database controllers expect this family to orchestrate storage bindings.",
+      "next_check": "Verify the CRD is present and at the expected storage version."
+    }
+  ],
+  "ignored_drift": ["missing_evidence"],
+  "peer_roles": {
+    "cluster-alpha": "primary",
+    "cluster-beta": "canary",
+    "cluster-gamma": "secondary"
+  }
+}
