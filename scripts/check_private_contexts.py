@@ -11,8 +11,18 @@ from typing import Iterable, Sequence, Set
 RUNTIME_CONFIG_PATHS = (
     Path("runs/run-config.local.json"),
     Path("runs/run-config.json"),
+    Path("runs/health-config.local.json"),
     Path("snapshots/targets.local.json"),
 )
+
+SNAPSHOT_DIRECTORIES = (
+    Path("runs/snapshots"),
+    Path("snapshots"),
+)
+
+ALLOWED_SNAPSHOT_FILES = {
+    Path("snapshots/targets.local.example.json").as_posix(),
+}
 
 
 def _normalize_name(value: object | None) -> str | None:
@@ -62,7 +72,42 @@ def _gather_private_contexts() -> Set[str]:
         if isinstance(raw, dict):
             result.update(_extract_targets(raw))
             result.update(_extract_pairs(raw))
+    result.update(_gather_snapshot_contexts())
     return result
+
+
+def _gather_snapshot_contexts() -> Set[str]:
+    contexts: Set[str] = set()
+    for directory in SNAPSHOT_DIRECTORIES:
+        if not directory.exists():
+            continue
+        for entry in directory.glob("*.json"):
+            normalized = entry.as_posix()
+            if normalized in ALLOWED_SNAPSHOT_FILES:
+                continue
+            try:
+                payload = json.loads(entry.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(payload, dict):
+                metadata = payload.get("metadata") or {}
+                context = _normalize_name(metadata.get("cluster_id"))
+                if context:
+                    contexts.add(context)
+    return contexts
+
+
+def _is_snapshot_path(raw_path: str) -> bool:
+    normalized = Path(raw_path).as_posix()
+    if normalized in ALLOWED_SNAPSHOT_FILES:
+        return False
+    for directory in SNAPSHOT_DIRECTORIES:
+        prefix = directory.as_posix()
+        if not prefix.endswith("/"):
+            prefix = f"{prefix}/"
+        if normalized.startswith(prefix):
+            return True
+    return False
 
 
 def _check_files(files: Iterable[str], banned_contexts: Set[str]) -> list[str]:
@@ -72,6 +117,9 @@ def _check_files(files: Iterable[str], banned_contexts: Set[str]) -> list[str]:
         normalized = Path(raw_path).as_posix()
         if normalized in banned_paths:
             problems.append(f"runtime config path staged: {normalized}")
+            continue
+        if _is_snapshot_path(normalized):
+            problems.append(f"runtime snapshot path staged: {normalized}")
             continue
         if not banned_contexts:
             continue

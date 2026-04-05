@@ -20,6 +20,7 @@ class CLISmokeTest(unittest.TestCase):
             "compare": ["compare", str(sanitized_snapshot), str(sanitized_snapshot)],
             "batch-snapshot": ["batch-snapshot", "--config", "snapshots/targets.local.example.json"],
             "assess-snapshots": ["assess-snapshots", str(sanitized_snapshot), "snapshots/test.json"],
+            "assess-drilldown": ["assess-drilldown", "runs/health/drilldowns/sample.json"],
             "run-feedback": ["run-feedback", "--config", "runs/run-config.local.example.json"],
             "run-health-loop": [
                 "run-health-loop",

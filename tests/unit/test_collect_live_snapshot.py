@@ -21,9 +21,35 @@ def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Calla
             if "version" in command:
                 return json.dumps({"serverVersion": {"gitVersion": "v1.28.0"}})
             if "nodes" in command:
-                return "node1\n"
+                return json.dumps(
+                    {
+                        "items": [
+                            {
+                                "metadata": {"name": "node1"},
+                                "status": {
+                                    "conditions": [
+                                        {"type": "Ready", "status": "True"}
+                                    ]
+                                },
+                            }
+                        ]
+                    }
+                )
             if "pods" in command:
-                return "pod1\npod2\n"
+                return json.dumps(
+                    {
+                        "items": [
+                            {
+                                "metadata": {"name": "pod1"},
+                                "status": {"phase": "Running", "containerStatuses": []},
+                            }
+                        ]
+                    }
+                )
+            if "jobs" in command:
+                return json.dumps({"items": []})
+            if "events" in command:
+                return json.dumps({"items": []})
         return ""
     return runner
 
@@ -36,6 +62,8 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
         self.assertIn("helm", snapshot.collection_status.helm_error or "")
         self.assertEqual(snapshot.helm_releases, {})
         self.assertFalse(snapshot.collection_status.missing_evidence)
+        self.assertEqual(snapshot.health_signals.node_conditions.total, 1)
+        self.assertEqual(snapshot.health_signals.pod_counts.non_running, 0)
 
     @patch("k8s_diag_agent.collect.live_snapshot._run_command")
     def test_crd_listing_failure_becomes_missing_evidence(self, run_command: Any) -> None:
@@ -43,6 +71,8 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
         snapshot = collect_cluster_snapshot("demo")
         self.assertIn("crd_list", snapshot.collection_status.missing_evidence)
         self.assertEqual(snapshot.crds, {})
+        self.assertEqual(snapshot.health_signals.job_failures, 0)
+        self.assertEqual(snapshot.health_signals.warning_events, ())
 
 
 class VersionParsingTest(unittest.TestCase):

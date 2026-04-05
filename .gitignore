@@ -55,6 +55,12 @@ runs/*.log
 snapshots/*
 !snapshots/
 !snapshots/targets.local.example.json
+*.local.json
+!*.local.example.json
 exports/
+
+# Health loop runtime artifacts and configs
+runs/health/
+runs/health-config.local.json
 
 .kilo

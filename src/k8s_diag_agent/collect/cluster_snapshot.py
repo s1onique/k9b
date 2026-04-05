@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,141 @@ class ClusterSnapshotMetadata:
     region: Optional[str] = None
     labels: Dict[str, str] = field(default_factory=dict)
 
+
+@dataclass(frozen=True)
+class NodeConditionCounts:
+    total: int
+    ready: int
+    not_ready: int
+    memory_pressure: int
+    disk_pressure: int
+    pid_pressure: int
+    network_unavailable: int
+
+    @classmethod
+    def empty(cls) -> "NodeConditionCounts":
+        return cls(0, 0, 0, 0, 0, 0, 0)
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            "total": self.total,
+            "ready": self.ready,
+            "not_ready": self.not_ready,
+            "memory_pressure": self.memory_pressure,
+            "disk_pressure": self.disk_pressure,
+            "pid_pressure": self.pid_pressure,
+            "network_unavailable": self.network_unavailable,
+        }
+
+    @classmethod
+    def from_dict(cls, source: Mapping[str, Any] | None) -> "NodeConditionCounts":
+        if not isinstance(source, Mapping):
+            return cls.empty()
+        return cls(
+            total=_safe_int(source.get("total")) or 0,
+            ready=_safe_int(source.get("ready")) or 0,
+            not_ready=_safe_int(source.get("not_ready")) or 0,
+            memory_pressure=_safe_int(source.get("memory_pressure")) or 0,
+            disk_pressure=_safe_int(source.get("disk_pressure")) or 0,
+            pid_pressure=_safe_int(source.get("pid_pressure")) or 0,
+            network_unavailable=_safe_int(source.get("network_unavailable")) or 0,
+        )
+
+
+@dataclass(frozen=True)
+class PodHealthCounts:
+    non_running: int
+    pending: int
+    crash_loop_backoff: int
+    image_pull_backoff: int
+
+    @classmethod
+    def empty(cls) -> "PodHealthCounts":
+        return cls(0, 0, 0, 0)
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            "non_running": self.non_running,
+            "pending": self.pending,
+            "crash_loop_backoff": self.crash_loop_backoff,
+            "image_pull_backoff": self.image_pull_backoff,
+        }
+
+    @classmethod
+    def from_dict(cls, source: Mapping[str, Any] | None) -> "PodHealthCounts":
+        if not isinstance(source, Mapping):
+            return cls.empty()
+        return cls(
+            non_running=_safe_int(source.get("non_running")) or 0,
+            pending=_safe_int(source.get("pending")) or 0,
+            crash_loop_backoff=_safe_int(source.get("crash_loop_backoff")) or 0,
+            image_pull_backoff=_safe_int(source.get("image_pull_backoff")) or 0,
+        )
+
+
+@dataclass(frozen=True)
+class WarningEventSummary:
+    namespace: str
+    reason: str
+    message: str
+    count: int
+    last_seen: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "namespace": self.namespace,
+            "reason": self.reason,
+            "message": self.message,
+            "count": self.count,
+            "last_seen": self.last_seen,
+        }
+
+    @classmethod
+    def from_dict(cls, source: Mapping[str, Any]) -> "WarningEventSummary":
+        return cls(
+            namespace=str(source.get("namespace") or ""),
+            reason=str(source.get("reason") or ""),
+            message=str(source.get("message") or ""),
+            count=_safe_int(source.get("count")) or 0,
+            last_seen=str(source.get("last_seen") or ""),
+        )
+
+
+@dataclass(frozen=True)
+class ClusterHealthSignals:
+    node_conditions: NodeConditionCounts
+    pod_counts: PodHealthCounts
+    job_failures: int
+    warning_events: Tuple[WarningEventSummary, ...]
+
+    @classmethod
+    def empty(cls) -> "ClusterHealthSignals":
+        return cls(NodeConditionCounts.empty(), PodHealthCounts.empty(), 0, ())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "node_conditions": self.node_conditions.to_dict(),
+            "pod_counts": self.pod_counts.to_dict(),
+            "job_failures": self.job_failures,
+            "warning_events": [event.to_dict() for event in self.warning_events],
+        }
+
+    @classmethod
+    def from_dict(cls, source: Mapping[str, Any] | None) -> "ClusterHealthSignals":
+        if not isinstance(source, Mapping):
+            return cls.empty()
+        events: List[WarningEventSummary] = []
+        for entry in _iter_dicts(source.get("warning_events")):
+            try:
+                events.append(WarningEventSummary.from_dict(entry))
+            except KeyError:
+                continue
+        return cls(
+            node_conditions=NodeConditionCounts.from_dict(source.get("node_conditions")),
+            pod_counts=PodHealthCounts.from_dict(source.get("pod_counts")),
+            job_failures=_safe_int(source.get("job_failures")) or 0,
+            warning_events=tuple(events),
+        )
 
 @dataclass(frozen=True)
 class HelmReleaseRecord:
@@ -82,6 +217,7 @@ class ClusterSnapshot:
     helm_releases: Dict[str, HelmReleaseRecord] = field(default_factory=dict)
     crds: Dict[str, CRDRecord] = field(default_factory=dict)
     collection_status: "CollectionStatus" = field(default_factory=lambda: CollectionStatus())
+    health_signals: "ClusterHealthSignals" = field(default_factory=ClusterHealthSignals.empty)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ClusterSnapshot":
@@ -112,6 +248,7 @@ class ClusterSnapshot:
         helm_releases = _build_helm_releases(data.get("helm_releases"))
         crds = _build_crds(data.get("crds"))
         status = _build_collection_status(data.get("status"))
+        signals = _build_health_signals(data.get("health_signals"))
         return cls(
             metadata=metadata,
             workloads=workloads,
@@ -119,6 +256,7 @@ class ClusterSnapshot:
             helm_releases=helm_releases,
             crds=crds,
             collection_status=status,
+            health_signals=signals,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -137,6 +275,7 @@ class ClusterSnapshot:
             "helm_releases": [release.to_dict() for release in self.helm_releases.values()],
             "crds": [crd.to_dict() for crd in self.crds.values()],
             "status": self.collection_status.to_dict(),
+            "health_signals": self.health_signals.to_dict(),
         }
 
 
@@ -279,6 +418,12 @@ def _build_collection_status(source: Any) -> CollectionStatus:
     else:
         missing_list = ()
     return CollectionStatus(helm_error=helm_error, missing_evidence=missing_list)
+
+
+def _build_health_signals(source: Any) -> ClusterHealthSignals:
+    if not isinstance(source, Mapping):
+        return ClusterHealthSignals.empty()
+    return ClusterHealthSignals.from_dict(source)
 
 
 @dataclass(frozen=True)

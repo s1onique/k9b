@@ -4,14 +4,18 @@ from __future__ import annotations
 import json
 import subprocess
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .cluster_snapshot import (
+    ClusterHealthSignals,
     ClusterSnapshot,
     ClusterSnapshotMetadata,
     CollectionStatus,
     CRDRecord,
     HelmReleaseRecord,
+    NodeConditionCounts,
+    PodHealthCounts,
+    WarningEventSummary,
 )
 
 
@@ -22,7 +26,7 @@ def list_kube_contexts() -> List[str]:
 
 def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
     """Collect cluster data while recording Helm/CRD issues instead of crashing."""
-    metadata = _collect_metadata(context)
+    metadata, node_conditions, pod_counts = _collect_metadata(context)
     helm_releases: Dict[str, HelmReleaseRecord] = {}
     helm_error: Optional[str] = None
     try:
@@ -38,9 +42,21 @@ def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
         # Record CRD listing failure as missing evidence but keep the rest of the snapshot.
         missing_evidence.append("crd_list")
 
+    job_failures, job_missing = _collect_job_failures(context)
+    warning_events, warning_missing = _collect_warning_events(context)
+    missing_evidence.extend(job_missing)
+    missing_evidence.extend(warning_missing)
+
     status = CollectionStatus(
         helm_error=helm_error,
         missing_evidence=tuple(missing_evidence),
+    )
+
+    health_signals = ClusterHealthSignals(
+        node_conditions=node_conditions,
+        pod_counts=pod_counts,
+        job_failures=job_failures,
+        warning_events=warning_events,
     )
 
     return ClusterSnapshot(
@@ -50,21 +66,29 @@ def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
         helm_releases=helm_releases,
         crds=crds,
         collection_status=status,
+        health_signals=health_signals,
     )
 
 
-def _collect_metadata(context: str) -> ClusterSnapshotMetadata:
+def _collect_metadata(
+    context: str,
+) -> Tuple[ClusterSnapshotMetadata, NodeConditionCounts, PodHealthCounts]:
     version_output = _kubectl(context, "version", "--output", "json")
     control_plane_version = _parse_server_version(version_output)
-    node_count = _count_lines(_kubectl(context, "get", "nodes", "--no-headers"))
-    pod_count = _count_lines(_kubectl(context, "get", "pods", "--all-namespaces", "--no-headers"))
-    return ClusterSnapshotMetadata(
+    node_payload = json.loads(_kubectl(context, "get", "nodes", "-o", "json"))
+    node_items = _extract_items(node_payload)
+    pod_payload = json.loads(
+        _kubectl(context, "get", "pods", "--all-namespaces", "-o", "json")
+    )
+    pod_items = _extract_items(pod_payload)
+    metadata = ClusterSnapshotMetadata(
         cluster_id=context,
         captured_at=datetime.now(timezone.utc),
         control_plane_version=control_plane_version,
-        node_count=node_count,
-        pod_count=pod_count,
+        node_count=len(node_items),
+        pod_count=len(pod_items),
     )
+    return metadata, _summarize_node_conditions(node_items), _summarize_pod_health(pod_items)
 
 
 def _collect_helm_releases(context: str) -> Dict[str, HelmReleaseRecord]:
@@ -105,6 +129,180 @@ def _collect_crds(context: str) -> Dict[str, CRDRecord]:
             continue
         results[record.name] = record
     return results
+
+
+def _collect_job_failures(context: str) -> Tuple[int, Tuple[str, ...]]:
+    try:
+        output = _kubectl(context, "get", "jobs", "--all-namespaces", "-o", "json")
+    except RuntimeError:
+        return 0, ("jobs",)
+    payload = json.loads(output)
+    failures = 0
+    for entry in _extract_items(payload):
+        status = entry.get("status") or {}
+        failures += _int_or_zero(status.get("failed"))
+    return failures, ()
+
+
+def _collect_warning_events(
+    context: str, limit: int = 6
+) -> Tuple[Tuple[WarningEventSummary, ...], Tuple[str, ...]]:
+    try:
+        output = _kubectl(
+            context,
+            "get",
+            "events",
+            "--all-namespaces",
+            "--field-selector",
+            "type=Warning",
+            "--sort-by=.metadata.creationTimestamp",
+            "-o",
+            "json",
+        )
+    except RuntimeError:
+        return (), ("events",)
+    payload = json.loads(output)
+    items = _extract_items(payload)
+    sorted_items = sorted(
+        items,
+        key=lambda event: str(
+            (event.get("metadata") or {}).get("creationTimestamp") or ""
+        ),
+        reverse=True,
+    )
+    events: List[WarningEventSummary] = []
+    for entry in sorted_items:
+        if len(events) >= limit:
+            break
+        metadata = entry.get("metadata") or {}
+        namespace = str(metadata.get("namespace") or "")
+        reason = str(entry.get("reason") or "")
+        message = str(entry.get("message") or "")
+        last_seen = str(
+            metadata.get("lastTimestamp") or
+            metadata.get("eventTime") or
+            metadata.get("creationTimestamp") or ""
+        )
+        events.append(
+            WarningEventSummary(
+                namespace=namespace,
+                reason=reason,
+                message=message,
+                count=_int_or_zero(entry.get("count")),
+                last_seen=last_seen,
+            )
+        )
+    return tuple(events), ()
+
+
+def _summarize_node_conditions(
+    nodes: Sequence[Mapping[str, Any]]
+) -> NodeConditionCounts:
+    total = len(nodes)
+    ready = 0
+    not_ready = 0
+    memory_pressure = 0
+    disk_pressure = 0
+    pid_pressure = 0
+    network_unavailable = 0
+    for node in nodes:
+        status = node.get("status") or {}
+        conditions = status.get("conditions") or []
+        saw_ready = False
+        node_ready = False
+        for condition in conditions:
+            cond_type = condition.get("type")
+            cond_status = condition.get("status")
+            if cond_type == "Ready":
+                saw_ready = True
+                if cond_status == "True":
+                    node_ready = True
+            elif cond_type == "MemoryPressure" and cond_status == "True":
+                memory_pressure += 1
+            elif cond_type == "DiskPressure" and cond_status == "True":
+                disk_pressure += 1
+            elif cond_type == "PIDPressure" and cond_status == "True":
+                pid_pressure += 1
+            elif cond_type == "NetworkUnavailable" and cond_status == "True":
+                network_unavailable += 1
+        if saw_ready and node_ready:
+            ready += 1
+        else:
+            not_ready += 1
+    return NodeConditionCounts(
+        total=total,
+        ready=ready,
+        not_ready=not_ready,
+        memory_pressure=memory_pressure,
+        disk_pressure=disk_pressure,
+        pid_pressure=pid_pressure,
+        network_unavailable=network_unavailable,
+    )
+
+
+def _summarize_pod_health(
+    pods: Sequence[Mapping[str, Any]]
+) -> PodHealthCounts:
+    non_running = 0
+    pending = 0
+    crash_loop_backoff = 0
+    image_pull_backoff = 0
+    for pod in pods:
+        status = pod.get("status") or {}
+        phase = str(status.get("phase") or "").lower()
+        counted_non_running = False
+        if phase and phase != "running":
+            non_running += 1
+            counted_non_running = True
+        if phase == "pending":
+            pending += 1
+        container_statuses = status.get("containerStatuses") or []
+        for container in container_statuses:
+            reason_found: str | None = None
+            for attr in ("state", "lastState"):
+                state_section = container.get(attr) or {}
+                if not isinstance(state_section, Mapping):
+                    continue
+                waiting = state_section.get("waiting")
+                if not isinstance(waiting, Mapping):
+                    continue
+                reason = str(waiting.get("reason") or "")
+                if reason == "CrashLoopBackOff":
+                    crash_loop_backoff += 1
+                    reason_found = reason
+                elif reason == "ImagePullBackOff":
+                    image_pull_backoff += 1
+                    reason_found = reason
+                if reason_found:
+                    if not counted_non_running:
+                        non_running += 1
+                        counted_non_running = True
+                    break
+            if reason_found:
+                break
+    return PodHealthCounts(
+        non_running=non_running,
+        pending=pending,
+        crash_loop_backoff=crash_loop_backoff,
+        image_pull_backoff=image_pull_backoff,
+    )
+
+
+def _extract_items(payload: Any) -> List[Mapping[str, Any]]:
+    if isinstance(payload, Mapping):
+        items = payload.get("items")
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, Mapping)]
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, Mapping)]
+    return []
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _kubectl(context: str, *args: str) -> str:
@@ -149,7 +347,3 @@ def _parse_server_version(output: str) -> str:
             "kubectl version output is missing `serverVersion.gitVersion`; ensure the control plane is reachable."
         )
     return git_version
-
-
-def _count_lines(output: str) -> int:
-    return sum(1 for line in output.splitlines() if line.strip())

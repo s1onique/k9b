@@ -72,11 +72,30 @@ Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`
 
 The health config now declares a stable `run_label` instead of a fixed `run_id`. Every invocation of `run-health-loop` generates a unique `run_id` (timestamped and safe for filenames) while keeping the configured label in the produced artifacts so you can still correlate runs with your policy. Existing configs that still set `run_id` will continue to work for now, but that value is treated as the run label and a warning flags the deprecation.
 
+Scheduling is optional but the health loop now ships with built-in rhythm control: `--every-seconds` keeps re-running the loop at the requested interval, `--max-runs` caps the number of iterations, and `--once` forces a single collection even if you pass scheduling arguments. A lockfile under `runs/health/.health-loop.lock` prevents overlapping runs and each iteration emits a short summary of the generated artifacts so you can track progress without enabling the verbose collector output.
+
+Every run also gathers lightweight health signals (node readiness/pressure counts, non-running pods, CrashLoopBackOff and ImagePullBackOff tallies, pending pods, failed jobs, and recent warning events) and wires them into the assessment so findings explicitly separate baseline drift, workload health issues, missing evidence, and regressions.
+
+
+### One-shot health run workflow
+
+1. Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`, replace placeholder contexts with your real clusters, and keep the populated file out of git. `.gitignore` now ignores every `*.local.json` runtime config plus any `snapshots/*.json` captures, and the private-context checker scans live snapshot files so cluster ids can’t slip into commits.
+2. Run `.venv/bin/python -m k8s_diag_agent.cli run-health-loop --config runs/health-config.local.json` (or `k8s-diag-agent run-health-loop --config runs/health-config.local.json`). Each invocation still emits a unique `run_id` but reuses the stable `run_label` you configured so the artifacts stay correlated across runs.
+3. Inspect the generated artifacts if you want a reviewable record of the execution:
+   - `runs/health/snapshots/` for raw cluster evidence captured during this run
+   - `runs/health/assessments/` for the serialized `Assessment` objects that include the new deterministic findings about collection quality, watched resources, and regression-aware signals
+   - `runs/health/comparisons/` for the diffs that explain why peers were compared
+   - `runs/health/triggers/` for the trigger envelopes that store the exact reason strings that caused each comparison
+   - `runs/health/history.json` for the persisted per-cluster history that powers "changed since previous run" findings (node/pod counts, control plane version, watched Helm releases/CRDs, and missing evidence). This history plays a key role in keeping future runs regression-aware.
+4. Repeat the command to capture another point in time; the deterministic findings plus the persisted history let you replay or reason about regressions without needing a scheduler. Use `--trigger primary:secondary` when you want to force a peer comparison for a single run.
+
 
 ### Local config runbook
 1. Copy `runs/run-config.local.example.json` → `runs/run-config.local.json` and `snapshots/targets.local.example.json` → `snapshots/targets.local.json` before running collection. Replace each `cluster-*` placeholder with your real contexts and keep the populated `.local` files out of git; real runs now require the `.local` files because the CLI will exit when only the example config exists. `.gitignore` already keeps runtime configs and logs ignored so the repository stays free of private names.
 2. `collect_and_compare_clusters.sh` loads the preferred config (`local` first, then the template) and builds the `CONTEXTS` array from the `targets` list. Use this script to automate the same run-feedback/batch-snapshot flows; the `--context` overrides are still available for ad-hoc targets.
 3. Always invoke diagnostics via `.venv/bin/python` so the virtualenv-controlled interpreter stays aligned with project guidance.
+
+The `ban-private-contexts` pre-commit hook now also inspects the tracked snapshot directories so names collected at runtime never slip into commits.
 
 If the LLM assessment is optional or fails, the run still captures the snapshots/comparisons, records the failure in the feedback artifact, and only exits non-zero when collection itself fails critically. The resulting artifacts become the typed trace that later evaluation, scoring, and adaptation loops consume.
 

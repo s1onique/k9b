@@ -39,9 +39,11 @@
     "watched_crd": true,
     "health_regression": true,
     "missing_evidence": true,
-    "manual": true
+    "manual": true,
+    "warning_event_threshold": 5
   },
   "manual_pairs": [
     {"primary": "cluster-alpha", "secondary": "cluster-beta"}
-  ]
+  ],
+  "baseline_policy_path": "health-baseline.json"
 }
