@@ -1,0 +1,25 @@
+{
+  "run_id": "example-feedback",
+  "provider": "default",
+  "collector_version": "0.1.0",
+  "output_dir": "runs",
+  "targets": [
+    {"context": "cluster-alpha", "label": "cluster-alpha"},
+    {"context": "cluster-beta", "label": "cluster-beta"},
+    {"context": "cluster-gamma", "label": "cluster-gamma"}
+  ],
+  "pairs": [
+    {
+      "primary": "cluster-alpha",
+      "secondary": "cluster-beta",
+      "label": "alpha-vs-beta",
+      "assess": true
+    },
+    {
+      "primary": "cluster-alpha",
+      "secondary": "cluster-gamma",
+      "label": "alpha-vs-gamma",
+      "assess": true
+    }
+  ]
+}

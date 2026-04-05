@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
-SOURCE_PACKAGE = ROOT / "src" / "k8s_diag_agent"
+SOURCE_PACKAGE = ROOT.parent / "src" / "k8s_diag_agent"
 
 if str(SOURCE_PACKAGE) not in __path__:
     __path__.insert(0, str(SOURCE_PACKAGE))

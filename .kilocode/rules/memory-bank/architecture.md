@@ -174,6 +174,16 @@ A structured machine-readable assessment object that distinguishes:
 ### Eval case linkage
 A stable way to connect fixture scenarios, expected behavior, and regression/eval coverage.
 
+## Feedback-loop grounding
+
+The architecture is composed around the same three feedback loops stated in doctrine:
+
+1. **Operational loop:** collect -> snapshot -> compare -> assess -> recommend. Each vertical slice keeps the evidence flow intact through `collect`, `normalize`, `correlate`, `reason`, and `recommend` so operator guidance mirrors the latest cycle.
+2. **Evaluation loop:** replay artifacts, score behavior, classify failures, and surface regressions before accepting a change; `evals` drives this loop and feeds actionable signals back into every layer.
+3. **Adaptation loop:** propose edits to volatile assets (prompts, mappings, thresholds), rerun the evaluation loop, and accept or reject changes with documented outcomes. No schema, contract, or safety definition may mutate without this loop’s traceable approval.
+
+These loops also safeguard the stable contracts: moving a schema field or adjusting safety level requires retracing the operational loop and rerunning the evaluation loop so the adaptation loop can approve the change.
+
 ## Architectural principles for this repo
 
 ### 1. Evidence before conclusion

@@ -95,6 +95,16 @@ The default implementation posture is:
 
 Complexity must earn its place.
 
+## Feedback-loop doctrine
+
+The project is governed by three concurrent feedback loops that reinforce evidence, safety, and evolvability:
+
+1. **Operational loop:** collect -> snapshot -> compare -> assess -> recommend. Every iteration keeps the agent grounded in fresh evidence and operator guidance.
+2. **Evaluation loop:** replay artifacts -> score -> classify failures, ensuring regressions and false-certainty paths are visible before adaptation.
+3. **Adaptation loop:** propose changes to volatile assets -> run evals -> accept/reject, so prompts, mappings, thresholds, and similar reasoning assets evolve only through replayable, eval-gated, rollback-safe change.
+
+These loops keep diagnostics honest, make behavior inspectable, and limit change to well-understood, reviewable cycles.
+
 ## Hard constraints
 
 The repository must not intentionally evolve toward a system that:
@@ -106,6 +116,12 @@ The repository must not intentionally evolve toward a system that:
 - recommends risky action without saying so,
 - treats one symptom as proof of causality,
 - or makes hard-to-reverse architectural commitments casually.
+
+Additional prohibitions guard stability:
+
+- no silent mutation of core schemas or contracts; every change must travel through a documented review, evaluation, and rollback path.
+- no silent mutation of the safety posture; adjustments must be explicit, reviewed, and traceable.
+- no live self-modification of contracts, safety posture, or reasoning assets without review, eval validation, and rollback capability.
 
 ## Default architectural stance
 

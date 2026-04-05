@@ -1,13 +1,14 @@
 import json
 import subprocess
 import unittest
+from typing import Any, Callable, Sequence
 from unittest.mock import patch
 
 from k8s_diag_agent.collect.live_snapshot import collect_cluster_snapshot
 
 
-def _make_runner(helm_failure: bool = False, crd_failure: bool = False):
-    def runner(command):
+def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Callable[[Sequence[str]], str]:
+    def runner(command: Sequence[str]) -> str:
         if command[0] == "helm":
             if helm_failure:
                 raise RuntimeError("`helm` failed: not found")
@@ -29,7 +30,7 @@ def _make_runner(helm_failure: bool = False, crd_failure: bool = False):
 
 class LiveSnapshotCollectionTest(unittest.TestCase):
     @patch("k8s_diag_agent.collect.live_snapshot._run_command")
-    def test_missing_helm_is_recorded(self, run_command):
+    def test_missing_helm_is_recorded(self, run_command: Any) -> None:
         run_command.side_effect = _make_runner(helm_failure=True)
         snapshot = collect_cluster_snapshot("demo")
         self.assertIn("helm", snapshot.collection_status.helm_error or "")
@@ -37,7 +38,7 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
         self.assertFalse(snapshot.collection_status.missing_evidence)
 
     @patch("k8s_diag_agent.collect.live_snapshot._run_command")
-    def test_crd_listing_failure_becomes_missing_evidence(self, run_command):
+    def test_crd_listing_failure_becomes_missing_evidence(self, run_command: Any) -> None:
         run_command.side_effect = _make_runner(crd_failure=True)
         snapshot = collect_cluster_snapshot("demo")
         self.assertIn("crd_list", snapshot.collection_status.missing_evidence)

@@ -21,6 +21,19 @@ from .schemas import (  # noqa: F401
     AssessmentValidator,
     FixtureValidator,
 )
+from .feedback import (  # noqa: F401
+    ArtifactValidationError,
+    AssessmentArtifact,
+    FailureMode,
+    FeedbackRunConfig,
+    FeedbackRunRunner,
+    ProposedImprovement,
+    RunArtifact,
+    RunArtifactValidator,
+    SnapshotPairArtifact,
+    ValidationResult,
+    run_feedback_loop,
+)
 
 __all__ = [
     "Assessment",
@@ -40,4 +53,15 @@ __all__ = [
     "extract_cluster_snapshots",
     "ClusterComparison",
     "compare_snapshots",
+    "ArtifactValidationError",
+    "AssessmentArtifact",
+    "FailureMode",
+    "FeedbackRunConfig",
+    "FeedbackRunRunner",
+    "ProposedImprovement",
+    "RunArtifact",
+    "RunArtifactValidator",
+    "SnapshotPairArtifact",
+    "ValidationResult",
+    "run_feedback_loop",
 ]

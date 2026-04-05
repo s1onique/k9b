@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -61,3 +62,30 @@ class CliSnapshotTest(unittest.TestCase):
             self.assertTrue(alpha_path.exists())
             data = json.loads(alpha_path.read_text(encoding="utf-8"))
             self.assertEqual(data["metadata"]["cluster_id"], "demo")
+
+    def test_main_respects_sys_argv_when_no_explicit_arguments(self) -> None:
+        metadata = ClusterSnapshotMetadata(
+            cluster_id="demo",
+            captured_at=datetime(2026, 4, 5, tzinfo=timezone.utc),
+            control_plane_version="1.28.0",
+            node_count=1,
+        )
+        snapshot = ClusterSnapshot(metadata=metadata)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "snapshot.json"
+            cli_args = [
+                "k8s_diag_agent.cli",
+                "snapshot",
+                "--context",
+                "demo",
+                "--output",
+                str(output_path),
+            ]
+            with patch("k8s_diag_agent.cli.list_kube_contexts", return_value=["demo"]), patch(
+                "k8s_diag_agent.cli.collect_cluster_snapshot",
+                return_value=snapshot,
+            ), patch("builtins.print"), patch.object(sys, "argv", cli_args):
+                exit_code = main()
+            self.assertEqual(exit_code, 0)
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["metadata"]["cluster_id"], "demo")

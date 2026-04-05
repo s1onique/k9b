@@ -1,8 +1,6 @@
 """Provider-agnostic seam for LLM assessments."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any, Dict
 
 from ..collect.cluster_snapshot import ClusterSnapshot
@@ -16,22 +14,8 @@ from .assessor_schema import (
     AssessorRecommendedAction,
     AssessorSignal,
 )
-
-
-@dataclass(frozen=True)
-class LLMAssessmentInput:
-    primary_snapshot: Dict[str, Any]
-    secondary_snapshot: Dict[str, Any]
-    comparison: Dict[str, Any]
-    collection_statuses: Dict[str, Dict[str, Any]]
-
-
-class LLMProvider(ABC):
-    """Provider contract for producing structured assessments."""
-
-    @abstractmethod
-    def assess(self, prompt: str, payload: LLMAssessmentInput) -> Dict[str, Any]:
-        ...
+from .base import LLMAssessmentInput, LLMProvider
+from .llamacpp_provider import LlamaCppProvider
 
 
 class DefaultLLMProvider(LLMProvider):
@@ -112,8 +96,8 @@ class DefaultLLMProvider(LLMProvider):
         )
         return assessment.to_dict()
 
-
 PROVIDERS: Dict[str, LLMProvider] = {"default": DefaultLLMProvider()}
+PROVIDERS["llamacpp"] = LlamaCppProvider()
 DEFAULT_PROVIDER_NAME = "default"
 AVAILABLE_PROVIDERS = tuple(PROVIDERS.keys())
 

@@ -73,6 +73,15 @@ The first phase should not optimize for:
 7. Structured outputs are preferred over opaque prose.
 8. Diagnostic correctness outranks UI sophistication.
 
+## Feedback loops
+The product is explicitly organized around:
+
+1. **Operational loop:** collect -> snapshot -> compare -> assess -> recommend. Every cycle keeps diagnostic signal, findings, and guidance aligned with the latest evidence.
+2. **Evaluation loop:** replay artifacts, score behavior, and classify failures so regressions or false-certainty paths are visible before changes land in production.
+3. **Adaptation loop:** propose edits to volatile assets (prompts, thresholds, mappings), rerun the relevant evals, and accept or reject the change with transparent outcomes; this loop also governs any core schema or safety-posture adjustment so there is no silent mutation.
+
+These loops keep the roadmap grounded, the guidance honest, and the reasoning assets evolvable only by reviewable, eval-gated cycles.
+
 ## Expected outputs
 The product should usually produce:
 - observed signals

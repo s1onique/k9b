@@ -21,11 +21,15 @@ from .normalize.evidence import normalize_signals
 from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .reason.diagnoser import build_findings_and_hypotheses
 from .render.formatter import assessment_to_dict, dump_json, format_summary
+from .feedback.runner import run_feedback_loop
 
 
-_SUBCOMMANDS = {"fixture", "snapshot", "compare", "batch-snapshot", "assess-snapshots"}
+_SUBCOMMANDS = {"fixture", "snapshot", "compare", "batch-snapshot", "assess-snapshots", "run-feedback"}
 
-_DEFAULT_BATCH_CONFIG = Path("snapshots/targets.json")
+_DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
+_BATCH_CONFIG_FALLBACK = Path("snapshots/targets.local.example.json")
+_RUN_CONFIG_DEFAULT = Path("runs/run-config.local.json")
+_RUN_CONFIG_FALLBACK = Path("runs/run-config.local.example.json")
 
 
 @dataclass(frozen=True)
@@ -42,7 +46,8 @@ class BatchSnapshotConfig:
 
 
 def main(argv: Iterable[str] | None = None) -> int:
-    normalized = _normalize_args(argv)
+    source_args = list(argv) if argv is not None else sys.argv[1:]
+    normalized = _normalize_args(source_args)
     parser = argparse.ArgumentParser(description="Run diagnostics or snapshot tools.")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -79,6 +84,22 @@ def main(argv: Iterable[str] | None = None) -> int:
     assess_parser.add_argument("--output", "-o", type=Path, help="Optional path for assessment JSON output.")
     assess_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
 
+    run_parser = subparsers.add_parser("run-feedback", help="Run the operational feedback loop.")
+    run_parser.add_argument(
+        "--config",
+        "-c",
+        type=Path,
+        default=_RUN_CONFIG_DEFAULT,
+        help="Feedback run configuration file (prefers local config, falls back to template).",
+    )
+    run_parser.add_argument(
+        "--provider",
+        "-p",
+        choices=AVAILABLE_PROVIDERS,
+        help="Optional provider override for assessments.",
+    )
+    run_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
+
     args = parser.parse_args(normalized)
     command = args.command or "fixture"
 
@@ -90,11 +111,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         return _handle_batch_snapshot(args)
     if command == "assess-snapshots":
         return _handle_assess_snapshots(args)
+    if command == "run-feedback":
+        return _handle_run_feedback(args)
     return _handle_fixture(args)
 
 
-def _normalize_args(argv: Iterable[str] | None) -> List[str]:
-    normalized = list(argv or [])
+def _normalize_args(argv: Iterable[str]) -> List[str]:
+    normalized = list(argv)
     if not normalized:
         return ["fixture"]
     if normalized[0] in _SUBCOMMANDS:
@@ -155,13 +178,14 @@ def _handle_snapshot(args: argparse.Namespace) -> int:
 
 
 def _handle_batch_snapshot(args: argparse.Namespace) -> int:
+    config_path = _resolve_config_path(args.config, _BATCH_CONFIG_FALLBACK, args.config == _DEFAULT_BATCH_CONFIG)
     try:
-        config = _load_batch_config(args.config)
+        config = _load_batch_config(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        print(f"Unable to load batch config {args.config}: {exc}", file=sys.stderr)
+        print(f"Unable to load batch config {config_path}: {exc}", file=sys.stderr)
         return 1
     if not config.targets:
-        print(f"Batch config {args.config} contains no targets.", file=sys.stderr)
+        print(f"Batch config {config_path} contains no targets.", file=sys.stderr)
         return 1
     try:
         contexts = list_kube_contexts()
@@ -221,6 +245,14 @@ def _load_batch_config(path: Path) -> BatchSnapshotConfig:
             )
         )
     return BatchSnapshotConfig(tuple(targets), output_dir)
+
+
+def _resolve_config_path(preferred: Path, fallback: Path, allow_fallback: bool) -> Path:
+    if preferred.exists():
+        return preferred
+    if allow_fallback and fallback.exists():
+        return fallback
+    return preferred
 
 
 def _format_partial_status(status: CollectionStatus) -> Optional[str]:
@@ -290,6 +322,12 @@ def _handle_assess_snapshots(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def _handle_run_feedback(args: argparse.Namespace) -> int:
+    config_path = _resolve_config_path(args.config, _RUN_CONFIG_FALLBACK, args.config == _RUN_CONFIG_DEFAULT)
+    exit_code, _ = run_feedback_loop(config_path, provider_override=args.provider, quiet=args.quiet)
+    return exit_code
 
 
 def _load_snapshot(path: Path) -> ClusterSnapshot:

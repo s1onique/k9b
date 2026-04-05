@@ -80,6 +80,9 @@ If a change has non-trivial blast radius, include rollback, fallback, or contain
 ## SAFETY-005 — Missing observability is a safety issue
 If a system cannot be inspected well enough to validate behavior, treat that as an operational risk, not a minor inconvenience.
 
+## SAFETY-006 — Do not mutate the safety posture silently
+Any shift in the safety posture (risk classification, action safety levels, recommended thresholds) must be explicit, reviewed, and documented before it is trusted.
+
 ---
 
 # EVOL rules
@@ -104,6 +107,12 @@ If a shortcut materially reduces future options, call it out as debt rather than
 
 ## EVOL-007 — Externalize volatile behavior where practical
 Keep prompts, policy assets, examples, mappings, and eval scenarios inspectable and revisable outside deeply embedded core code when practical.
+
+## EVOL-008 — Preserve core contracts explicitly
+Core schemas, output contracts, domain interfaces, and safety definitions may not change without a documented review, replayable validation, and rollback plan.
+
+## EVOL-009 — Guard volatile reasoning assets with evals
+Prompts, examples, mappings, thresholds, and similar volatile assets evolve only by proposing concrete edits, replaying evaluation artifacts, scoring the results, classifying any failures, and accepting or rejecting the change explicitly.
 
 ---
 
@@ -315,7 +324,21 @@ Do not keep adding near-duplicate rules that say the same thing in different wor
 ## GOV-004 — Update durable memory when project reality changes
 If architecture, priorities, or roadmap assumptions change materially, update Memory Bank files.
 
+## GOV-005 — No live self-modification without review
+The system must not alter core contracts, safety posture, or reasoning behavior autonomously; any adaptation must go through a reviewed, eval-gated, rollback-safe process.
+
 ---
+
+# LOOP rules
+
+## LOOP-001 — Operational loop explicitness
+The project revolves around the operational feedback loop: collect -> snapshot -> compare -> assess -> recommend. Every cycle must keep evidence, findings, confidence, and recommended actions synchronized and observable.
+
+## LOOP-002 — Evaluation loop discipline
+The evaluation feedback loop replays artifacts, scores behavior, and classifies failures before adaptation. No acceptance is final until this loop confirms stability.
+
+## LOOP-003 — Adaptation loop gating
+The adaptation feedback loop proposes edits to volatile assets, reruns the relevant evals, and accepts or rejects the change with transparent outcomes; it never bypasses the evaluation loop.
 
 # Summary rule
 

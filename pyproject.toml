@@ -4,13 +4,13 @@ version = "0.1.0"
 description = "Fixture-driven Kubernetes diagnostics pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["requests>=2.31.0"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: System :: Monitoring",
 ]
 [project.optional-dependencies]
-dev = ["mypy>=1.9"]
+dev = ["mypy>=1.9", "types-requests>=2.31.0"]
 [project.scripts]
 k8s-diag-agent = "k8s_diag_agent.cli:main"
 [tool.hatch.build.targets.sdist]

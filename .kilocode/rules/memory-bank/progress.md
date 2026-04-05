@@ -25,6 +25,12 @@ Current focus:
 - preparing the optional LLM assessment path on snapshot comparisons ahead of watch-mode,
 - expanding coverage around multi-context flows (target configs, batch collection, partial evidence handling) while keeping tests green.
 
+## Feedback loop status
+
+- **Operational loop:** Snapshot collection, comparison, and recommendation flows remain chained so collect -> snapshot -> compare -> assess -> recommend stays observable.
+- **Evaluation loop:** Fixtures and eval artifacts are replayed, scored, and classified to keep failure modes visible before any adaptation occurs.
+- **Adaptation loop:** Volatile assets (prompts, mappings, thresholds, contracts, safety posture) can only adjust through a replayable, eval-gated proposal/accept/reject cycle; no live autonomous mutation is permitted.
+
 Production snapshot tooling is now live for manual collection/comparison; the next data-driven milestone is orchestrating multiple contexts safely.
 
 ## What exists now

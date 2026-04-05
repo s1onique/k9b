@@ -1,0 +1,18 @@
+{
+  "output_dir": "snapshots",
+  "targets": [
+    {
+      "context": "cluster-alpha",
+      "label": "cluster-alpha",
+      "output": "snapshots/cluster-alpha.json"
+    },
+    {
+      "context": "cluster-beta",
+      "label": "cluster-beta"
+    },
+    {
+      "context": "cluster-gamma",
+      "label": "cluster-gamma"
+    }
+  ]
+}

@@ -37,11 +37,24 @@ coverage/
 tmp/
 .tmp/
 .cache/
+logs/
 
 # Generated run artifacts
 artifacts/
 reports/
-runs/
+exports/
+runs/assessments/
+runs/comparisons/
+runs/feedback/
+runs/snapshots/
+runs/run-config.local.json
+runs/run-config.json
+runs/*.log
+
+# Snapshot targets and runtime config
+snapshots/*
+!snapshots/
+!snapshots/targets.local.example.json
 exports/
 
 .kilo

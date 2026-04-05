@@ -24,9 +24,9 @@ Runs the comparator over two snapshot files, reporting differences in Kubernetes
 
 ### Collect snapshots for configured contexts
 ```bash
-k8s-diag-agent batch-snapshot [--config snapshots/targets.json]
+k8s-diag-agent batch-snapshot [--config snapshots/targets.local.json]
 ```
-Reads `snapshots/targets.json` (or the path passed via `--config`), validates each listed context, and writes typed `ClusterSnapshot` files into `snapshots/` while recording partial Helm/CRD failures inside each snapshot.
+Reads `snapshots/targets.local.json` (or the path passed via `--config`). Copy `snapshots/targets.local.example.json`, which uses placeholder contexts such as `cluster-alpha`, into `snapshots/targets.local.json`, fill in your own kube contexts, and keep the populated `.local` file untracked. The CLI falls back to the template when no local file exists so documentation or CI can still exercise the command.
 
 ## Development
 
@@ -44,4 +44,42 @@ k8s-diag-agent assess-snapshots \
 
 The new `assess-snapshots` command runs the live comparison logic, feeds the sanitized snapshots and diff into the provider seam, and emits an `Assessment`-like JSON payload. Base the initial pairs on `tests/fixtures/snapshots/sanitized-alpha.json` and the derived comparison artifact under `tests/fixtures/comparisons/sanitized-alpha-vs-beta.json` while adjusting the secondary snapshot to produce the diff you want to replay.
 
+## Operational feedback run
+
+Use `run-feedback` to anchor the operational + evaluation loop so each collection, comparison, and optional assessment becomes typed, inspectable, and replayable.
+
+```
+k8s-diag-agent run-feedback --config runs/run-config.local.json
+```
+
+
+### Local config runbook
+1. Copy `runs/run-config.local.example.json` → `runs/run-config.local.json` and `snapshots/targets.local.example.json` → `snapshots/targets.local.json` before running collection. Replace each `cluster-*` placeholder with your real contexts and keep the populated `.local` files out of git. `.gitignore` already keeps runtime configs and logs ignored so the repository stays free of private names.
+2. `collect_and_compare_clusters.sh` loads the preferred config (`local` first, then the template) and builds the `CONTEXTS` array from the `targets` list. Use this script to automate the same run-feedback/batch-snapshot flows; the `--context` overrides are still available for ad-hoc targets.
+3. Always invoke diagnostics via `.venv/bin/python` so the virtualenv-controlled interpreter stays aligned with project guidance.
+
+If the LLM assessment is optional or fails, the run still captures the snapshots/comparisons, records the failure in the feedback artifact, and only exits non-zero when collection itself fails critically. The resulting artifacts become the typed trace that later evaluation, scoring, and adaptation loops consume.
+
 See `docs/typing.md` for the type-annotation conventions that guide new code.
+
+## llama.cpp provider
+
+Configure the environment before invoking `assess-snapshots` so the `llamacpp` provider can talk to your OpenAI-compatible llama.cpp deployment:
+
+- `LLAMA_CPP_BASE_URL`: base URL of the llama.cpp service (for example `http://localhost:8080`).
+- `LLAMA_CPP_API_KEY`: bearer token or API key that the server expects.
+- `LLAMA_CPP_MODEL`: model alias exposed by the server (for example `llama3-q4_0`).
+
+The `llamacpp` provider sends the prompt and sanitized cluster evidence to `/v1/chat/completions` and validates the JSON response with `AssessorAssessment.from_dict`. If you need deterministic fallback behavior, keep using `--provider default`.
+
+Example usage:
+
+```bash
+LLAMA_CPP_BASE_URL=http://localhost:8080 \
+LLAMA_CPP_API_KEY=my-key \
+LLAMA_CPP_MODEL=llama3-q4_0 \
+k8s-diag-agent assess-snapshots \
+  tests/fixtures/snapshots/sanitized-alpha.json \
+  tests/fixtures/snapshots/sanitized-beta.json \
+  --provider llamacpp
+```
