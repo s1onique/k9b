@@ -35,6 +35,7 @@ from .image_pull_secret import (
     ImagePullSecretInsight,
     ImagePullSecretInspector,
 )
+from .review_feedback import build_health_review
 
 
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
@@ -1663,6 +1664,7 @@ class HealthLoopRunner:
         triggers = self._evaluate_triggers(records, previous_history, directories)
         drilldowns = self._build_drilldowns(records, previous_history, directories["drilldowns"])
         self._persist_history(history, directories["history"])
+        self._write_review_artifact(assessments, drilldowns, directories["reviews"])
         if not self.quiet:
             print(
                 f"Health run '{self.run_label}' ({self.run_id}) produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
@@ -1680,6 +1682,7 @@ class HealthLoopRunner:
             "comparisons": root / "comparisons",
             "triggers": root / "triggers",
             "drilldowns": root / "drilldowns",
+            "reviews": root / "reviews",
             "history": root / _HISTORY_FILENAME,
         }
         for key, path in subdirs.items():
@@ -1834,6 +1837,26 @@ class HealthLoopRunner:
                 f"Drilldown evidence collected for '{record.target.context}' -> {path}"
             )
         return artifacts
+
+    def _write_review_artifact(
+        self,
+        assessments: List[HealthAssessmentArtifact],
+        drilldowns: List[DrilldownArtifact],
+        directory: Path,
+    ) -> None:
+        try:
+            review = build_health_review(
+                run_id=self.run_id,
+                assessments=assessments,
+                drilldowns=drilldowns,
+                warning_threshold=self.config.trigger_policy.warning_event_threshold,
+            )
+        except Exception as exc:
+            self._collection_messages.append(f"Health review generation failed: {exc}")
+            return
+        path = directory / f"{self.run_id}-review.json"
+        _write_json(review.to_dict(), path)
+        self._collection_messages.append(f"Health review written to '{path}'")
 
     def _determine_drilldown_reasons(
         self,
