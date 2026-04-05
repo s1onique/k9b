@@ -44,12 +44,13 @@ The product should behave like a careful Kubernetes diagnostician:
 
 ## Initial product scope
 In the first phase, the product should focus on:
-- structured incident/health inputs,
+- structured incident/health inputs and typed cluster snapshots,
 - evidence normalization,
 - correlation across common Kubernetes layers,
 - structured assessments,
 - next-check recommendations,
-- and evaluation against realistic diagnostic scenarios.
+- evaluation against realistic diagnostic scenarios,
+- and optional assessments driven by sanitized snapshot comparisons.
 
 Initial emphasis is on correctness, clarity, and testability.
 
@@ -58,7 +59,7 @@ The first phase should not optimize for:
 - autonomous remediation,
 - direct production mutation by default,
 - chat polish over diagnostic quality,
-- broad multi-cluster fleet orchestration,
+- fleet-wide loop/watch orchestration beyond the batch collector,
 - highly customized vendor-specific integrations,
 - or unsupported root-cause certainty.
 
@@ -130,8 +131,7 @@ The product is succeeding when it improves:
 ## Current product strategy
 Start simple.
 
-Prefer:
-- fixture-based scenarios before heavy live integrations,
+- fixture-based scenarios while keeping the new typed snapshot/comparison flows stable,
 - modular monolith before service decomposition,
 - clear internal domain types before backend-specific plumbing,
 - and eval-driven refinement before broad feature expansion.

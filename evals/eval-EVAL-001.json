@@ -1,0 +1,14 @@
+{
+  "eval_id": "EVAL-001",
+  "fixture": "fixtures/crashloop_incomplete.json",
+  "expectations": {
+    "must_include": [
+      "observed_signals",
+      "findings",
+      "hypotheses",
+      "recommended_action",
+      "safety_level"
+    ],
+    "confidence": "low"
+  }
+}

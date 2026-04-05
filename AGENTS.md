@@ -11,6 +11,12 @@ The goal is to help platform engineers and operators:
 - recommend the next useful diagnostic step,
 - and suggest safe actions when appropriate.
 
+## Environment
+
+- Run every Python command through `.venv/bin/python` (tests, scripts, lint, installs).
+- Install dependencies with `.venv/bin/python -m pip`; do not call the system `python` binary.
+- Keep `.venv/` ignored so local virtual environments stay out of commits.
+
 This file is the human-readable entrypoint for repository guidance.
 Detailed standing rules live under `.kilocode/rules/`.
 Deeper doctrine, playbooks, and eval definitions live under `docs/doctrine/`.

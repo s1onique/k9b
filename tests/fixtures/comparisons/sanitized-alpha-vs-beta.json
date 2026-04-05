@@ -1,0 +1,61 @@
+{
+  "differences": {
+    "metadata": {
+      "node_count": {
+        "primary": 3,
+        "secondary": 4
+      },
+      "pod_count": {
+        "primary": 58,
+        "secondary": 61
+      }
+    },
+    "helm_releases": {
+      "default/payments": {
+        "primary": {
+          "name": "payments",
+          "namespace": "default",
+          "chart": "payments-2.1.0",
+          "chart_version": "2.1.0",
+          "app_version": "2.1.0"
+        },
+        "secondary": {
+          "name": "payments",
+          "namespace": "default",
+          "chart": "payments-2.2.0",
+          "chart_version": "2.2.0",
+          "app_version": "2.2.0"
+        }
+      }
+    },
+    "crds": {
+      "widgets.example.com": {
+        "primary": {
+          "name": "widgets.example.com",
+          "served_versions": [
+            "v1",
+            "v1beta1"
+          ],
+          "storage_version": "v1"
+        },
+        "secondary": {
+          "name": "widgets.example.com",
+          "served_versions": [
+            "v1"
+          ],
+          "storage_version": "v1"
+        }
+      },
+      "datapipelines.example.com": {
+        "primary": {
+          "name": "datapipelines.example.com",
+          "served_versions": [
+            "v1"
+          ],
+          "storage_version": "v1"
+        },
+        "secondary": null
+      }
+    }
+  }
+}

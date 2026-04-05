@@ -1,0 +1,56 @@
+{
+  "metadata": {
+    "cluster_id": "sanitized-alpha",
+    "captured_at": "2026-03-20T10:00:00Z",
+    "control_plane_version": "v1.28.0",
+    "node_count": 3,
+    "pod_count": 58,
+    "region": "us-west1",
+    "labels": {
+      "team": "platform",
+      "purpose": "regression"
+    }
+  },
+  "workloads": {},
+  "metrics": {
+    "cluster_cpu_utilization": 72.5,
+    "cluster_memory_utilization": 62.1
+  },
+  "helm_releases": [
+    {
+      "name": "payments",
+      "namespace": "default",
+      "chart": "payments-2.1.0",
+      "chart_version": "2.1.0",
+      "app_version": "2.1.0"
+    },
+    {
+      "name": "ingress",
+      "namespace": "kube-system",
+      "chart": "ingress-nginx-5.2.0",
+      "chart_version": "5.2.0",
+      "app_version": "2.4.1"
+    }
+  ],
+  "crds": [
+    {
+      "name": "widgets.example.com",
+      "served_versions": [
+        "v1",
+        "v1beta1"
+      ],
+      "storage_version": "v1"
+    },
+    {
+      "name": "datapipelines.example.com",
+      "served_versions": [
+        "v1"
+      ],
+      "storage_version": "v1"
+    }
+  ],
+  "status": {
+    "helm_error": null,
+    "missing_evidence": []
+  }
+}

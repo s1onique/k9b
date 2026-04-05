@@ -501,3 +501,320 @@ evals:
         Useful during repeated bootstrap and refactor cycles.
 
     status: active
+
+  - id: EVAL-009
+    title: Prefer fixture-first over premature live integration
+    category: implementation
+    priority: high
+
+    purpose: >
+      Ensure the agent recommends a replayable fixture-first slice before broad live Kubernetes integration.
+
+    scenario: >
+      A proposal suggests starting by wiring the agent directly to live Kubernetes APIs,
+      metrics backends, and log systems before any replayable fixture-driven slice exists.
+
+    input: >
+      Recommend what should be built first.
+
+    context:
+      repo_phase: bootstrap
+      relevant_layers:
+        - implementation
+        - architecture
+      relevant_rules:
+        - ARCH-001
+        - ARCH-005
+        - IMPL-002
+        - EVAL-003
+      related_playbooks:
+        - redesign_staging.md
+        - design_review.md
+
+    expected_behavior:
+      required:
+        - Prefer a replayable fixture-first vertical slice.
+        - Defer live integrations until after the first working slice and evals exist.
+      preferred:
+        - Explain why fixture-first improves testability and iteration speed.
+      forbidden:
+        - Recommend broad live integration as the first build step without a concrete current pressure.
+
+    expected_output:
+      must_include:
+        - recommendation
+        - why
+        - next validation step
+      should_include:
+        - tradeoffs
+      must_not_include:
+        - premature live-integration-first plan
+
+    scoring:
+      pass_conditions:
+        - The answer recommends fixture-first implementation.
+        - The answer stages live integrations later.
+      fail_conditions:
+        - The answer recommends live integrations as the immediate first step.
+
+    notes:
+      rationale: >
+        Protects the repo against early coupling to external systems before core contracts stabilize.
+      future_regression_value: >
+        Important whenever integration pressure rises before the core slice is proven.
+
+    status: active
+
+  - id: EVAL-010
+    title: Keep provider and orchestration framework non-foundational in v1
+    category: architecture
+    priority: high
+
+    purpose: >
+      Ensure the agent does not treat LangGraph or a single model/provider framework as a foundational v1 commitment.
+
+    scenario: >
+      A proposal assumes LangGraph and one model provider must be part of the core architecture before
+      the first working fixture-driven slice exists.
+
+    input: >
+      Review the proposal and recommend whether to proceed.
+
+    context:
+      repo_phase: bootstrap
+      relevant_layers:
+        - architecture
+        - implementation
+      relevant_rules:
+        - EVOL-002
+        - EVOL-003
+        - ARCH-003
+        - ARCH-004
+      related_playbooks:
+        - design_review.md
+        - redesign_staging.md
+
+    expected_behavior:
+      required:
+        - Keep orchestration/provider concerns behind seams.
+        - Reject treating LangGraph or a single provider as foundational without current need.
+      preferred:
+        - Frame LangGraph and provider/runtime choices as deferred or adapter-level concerns.
+      forbidden:
+        - Recommend architecture that leaks provider/framework choices into domain contracts.
+
+    expected_output:
+      must_include:
+        - recommendation
+        - tradeoffs
+        - evolution / migration impact
+      should_include:
+        - simpler alternative
+      must_not_include:
+        - framework-led architecture commitment
+
+    scoring:
+      pass_conditions:
+        - The answer keeps framework/provider choices non-foundational in v1.
+      fail_conditions:
+        - The answer hard-binds the architecture to LangGraph or one provider without justification.
+
+    notes:
+      rationale: >
+        Protects provider independence and keeps the first slice reversible.
+      future_regression_value: >
+        Important whenever orchestration-tool enthusiasm exceeds current implementation needs.
+
+    status: active
+
+  - id: EVAL-011
+    title: Defer persistence until current pressure justifies it
+    category: architecture
+    priority: high
+
+    purpose: >
+      Ensure the agent does not introduce Postgres, JSON persistence, or other heavy storage architecture
+      before the first useful assessment slice exists.
+
+    scenario: >
+      A proposal introduces Postgres with semi-structured JSON storage before any replayable fixture-to-assessment
+      path is implemented.
+
+    input: >
+      Review the proposal and recommend whether to proceed.
+
+    context:
+      repo_phase: bootstrap
+      relevant_layers:
+        - architecture
+        - persistence
+      relevant_rules:
+        - EVOL-002
+        - EVOL-004
+        - ARCH-005
+        - IMPL-006
+      related_playbooks:
+        - design_review.md
+        - redesign_staging.md
+
+    expected_behavior:
+      required:
+        - Reject persistence as premature unless a concrete current pressure is shown.
+        - Preserve DB-free first-slice direction.
+      preferred:
+        - Explain what evidence would justify adding persistence later.
+      forbidden:
+        - Introduce heavy persistence architecture as a default early move.
+
+    expected_output:
+      must_include:
+        - recommendation
+        - why
+        - what would change the recommendation
+      should_include:
+        - simpler alternative
+      must_not_include:
+        - premature database-first plan
+
+    scoring:
+      pass_conditions:
+        - The answer defers persistence until a real need is evidenced.
+      fail_conditions:
+        - The answer recommends adding DB/storage architecture before the first slice exists.
+
+    notes:
+      rationale: >
+        Protects the repo against premature infrastructure and unnecessary one-way doors.
+      future_regression_value: >
+        Important if earlier design discussions continue to reintroduce storage pressure.
+
+    status: active
+
+  - id: EVAL-012
+    title: Require structured assessment output instead of prose-only diagnosis
+    category: output-shape
+    priority: critical
+
+    purpose: >
+      Ensure the agent returns a structured assessment contract rather than opaque prose-only diagnosis.
+
+    scenario: >
+      The agent is asked to assess an incident and responds with only narrative prose, without explicitly
+      distinguishing signal, finding, hypothesis, confidence, next evidence, recommended action, and safety level.
+
+    input: >
+      Assess the incident and produce the output.
+
+    context:
+      repo_phase: bootstrap
+      relevant_layers:
+        - output
+        - diagnostics
+      relevant_rules:
+        - OUTPUT-001
+        - DIAG-002
+        - DIAG-006
+        - TRUTH-004
+      related_playbooks:
+        - design_review.md
+
+    expected_behavior:
+      required:
+        - Require structured assessment output.
+        - Distinguish signal, finding, hypothesis, confidence, next evidence, recommended action, and safety level.
+      preferred:
+        - Include probable layer of origin when relevant.
+      forbidden:
+        - Return prose-only diagnosis as sufficient.
+
+    expected_output:
+      must_include:
+        - observed signals
+        - findings
+        - hypotheses
+        - confidence
+        - next evidence to collect
+        - recommended action
+        - safety level
+      should_include:
+        - probable layer of origin
+      must_not_include:
+        - opaque prose-only diagnosis
+
+    scoring:
+      pass_conditions:
+        - The answer uses the structured assessment contract.
+      fail_conditions:
+        - The answer returns only narrative prose without the required structure.
+
+    notes:
+      rationale: >
+        Protects one of the core product promises: machine-readable, reviewable diagnostic output.
+      future_regression_value: >
+        Important as implementation pressure may tempt shortcuts toward prose-first answers.
+
+    status: active
+
+  - id: EVAL-013
+    title: Recommend the smallest replayable first slice
+    category: implementation
+    priority: high
+
+    purpose: >
+      Ensure the agent recommends a replayable fixture-to-assessment path as the first end-to-end implementation slice.
+
+    scenario: >
+      The repo is pre-implementation and the agent is asked what to build first.
+
+    input: >
+      Recommend the first end-to-end implementation slice for this repository.
+
+    context:
+      repo_phase: bootstrap
+      relevant_layers:
+        - implementation
+        - architecture
+        - evals
+      relevant_rules:
+        - IMPL-002
+        - IMPL-007
+        - ARCH-001
+        - ARCH-005
+        - EVAL-001
+      related_playbooks:
+        - redesign_staging.md
+
+    expected_behavior:
+      required:
+        - Recommend a replayable fixture-to-assessment path.
+        - Include tests or evals as part of the first slice.
+        - Avoid live-cluster and DB dependencies.
+      preferred:
+        - Keep the first slice single-process and structured-output-first.
+      forbidden:
+        - Recommend a broad multi-service, live-integrated, or persistence-heavy first build.
+
+    expected_output:
+      must_include:
+        - recommendation
+        - why
+        - next validation step
+      should_include:
+        - tests
+        - tradeoffs
+      must_not_include:
+        - oversized initial implementation plan
+
+    scoring:
+      pass_conditions:
+        - The answer recommends a small replayable first slice with verification.
+      fail_conditions:
+        - The answer recommends a large architecture-first buildout.
+
+    notes:
+      rationale: >
+        Encodes the merged decision that the first implementation should be the smallest coherent replayable slice.
+      future_regression_value: >
+        Important whenever planning drifts toward architecture before working behavior.
+
+    status: active

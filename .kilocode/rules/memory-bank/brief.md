@@ -15,14 +15,13 @@ Build an agent that helps platform engineers and operators understand abnormal K
 - Stay evolvable as models, integrations, and requirements change.
 
 ## Initial scope
-Start with a simple, modular system that can:
-- ingest structured incident/health input,
+- ingest structured incident/health input and typed cluster snapshots,
 - normalize evidence,
 - produce a structured assessment,
 - express uncertainty,
 - and recommend next checks.
 
-Initial development should prioritize fixture-based and test-driven workflows over live-cluster automation.
+Initial development still prioritizes fixture-based and test-driven workflows, but the repository now also ships the typed snapshot/compare CLI flows so live evidence can be validated alongside fixtures.
 
 ## Initial non-goals
 Not in the first phase:

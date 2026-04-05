@@ -16,16 +16,16 @@ It should track meaningful project progress, not chat-by-chat noise.
 
 ## Current phase
 
-The project is in the **bootstrap / doctrine-definition** phase.
+The project is in the **scaffolded implementation** phase; the minimal module/test layout already exists and attention is shifting toward real cluster snapshot ingestion, two-cluster comparison, and keeping the fixture-driven slice stable.
 
 Current focus:
-- establishing repo-level guidance,
-- defining the agent’s mission and behavior,
-- defining architecture and output contracts,
-- defining Kubernetes monitoring domain rules,
-- and creating the initial Memory Bank.
+- stabilizing repo guidance and coding conventions (e.g., .venv usage),
+- keeping the fixture-driven vertical slice and regression harness healthy,
+- operating the live snapshot collector and comparator so CLI flows cover real evidence,
+- preparing the optional LLM assessment path on snapshot comparisons ahead of watch-mode,
+- expanding coverage around multi-context flows (target configs, batch collection, partial evidence handling) while keeping tests green.
 
-No production implementation exists yet.
+Production snapshot tooling is now live for manual collection/comparison; the next data-driven milestone is orchestrating multiple contexts safely.
 
 ## What exists now
 
@@ -42,14 +42,14 @@ The repository currently has:
 - `.kilocode/rules/40-tool-use.md`
 - `.kilocode/rules/50-kubernetes-monitoring-domain.md`
 
-### Memory Bank files being established
+### Memory Bank files
 - `.kilocode/rules/memory-bank/brief.md`
 - `.kilocode/rules/memory-bank/product.md`
 - `.kilocode/rules/memory-bank/architecture.md`
 - `.kilocode/rules/memory-bank/tech.md`
 - `.kilocode/rules/memory-bank/progress.md`
 
-### Doctrine structure planned
+### Doctrine files
 - `docs/doctrine/constitution.md`
 - `docs/doctrine/precedence.md`
 - `docs/doctrine/seed_rules.md`
@@ -57,6 +57,15 @@ The repository currently has:
 - `docs/doctrine/playbooks/redesign_staging.md`
 - `docs/doctrine/evals/eval_schema.yaml`
 - `docs/doctrine/evals/seed_evals.yaml`
+
+### Source scaffolding
+- `src/k8s_diag_agent/collect/cluster_snapshot.py`
+- `src/k8s_diag_agent/collect/live_snapshot.py`
+- `src/k8s_diag_agent/compare/two_cluster.py`
+
+### Documentation artifacts
+- `docs/cluster_snapshot_plan.md`
+- `docs/schemas/fixture-schema.md`
 
 ## Key decisions already made
 
@@ -93,80 +102,85 @@ Preferred logical boundaries are:
 ### Development stance
 The first useful implementation should be:
 - simple,
-- fixture-driven,
+- fixture-first,
+- replayable,
 - test-heavy,
 - structured in output,
 - and easy to evolve.
+
+## Resolved since older design chat
+
+The following are now treated as resolved for v1:
+
+- no DB in v1
+- no LangGraph commitment in v1
+- live-cluster integration in v1
+- no autonomous remediation in v1
+- no framework-led architecture in v1
+- structured assessment object first
+- fixture-first vertical slice first
 
 ## What is intentionally not done yet
 
 The following are intentionally deferred:
 
-- choosing the final implementation language/runtime,
-- choosing the final LLM provider/runtime path,
-- live-cluster integrations,
-- autonomous remediation,
-- multi-service decomposition,
-- heavy persistence design,
-- UI-first product work,
-- broad multi-cluster orchestration.
+- choosing the final implementation language/runtime
+- choosing the final LLM provider/runtime path
+- LangGraph or similar orchestration commitments
+- database/persistence subsystem
+- autonomous remediation
+- multi-service decomposition
+- UI-first product work
+- periodic loop/watch orchestration beyond the new batch collector
+
+## Current blockers
+
+Implementation planning is currently blocked on:
+
+- chosen language/runtime
+- chosen v1 public surface: CLI, library API, or both
+- defined v1 assessment schema
+- defined v1 fixture input schema (including cluster snapshot metadata)
+- selected first end-to-end scenario
+- decision on deterministic-only vs LLM-assisted v1 reasoning
+- multi-cluster orchestration (batch collection, watch loop, per-context config)
+- surfacing partial/missing evidence to reasoning layers
 
 ## Immediate next milestones
 
-### 1. Finish Memory Bank bootstrap
-Create and commit the initial Memory Bank files.
+### 1. Stabilize the cluster snapshot contract
+Document `cluster_snapshots` inputs, metadata expectations, and ensure validators/tests handle missing or partial snapshot data.
 
-### 2. Create doctrine files
-Add the first `docs/doctrine/` files:
-- constitution
-- precedence
-- seed rules
-- playbooks
-- eval schema
-- seed evals
+### 2. Automate multi-context runs
+Add configs + batch commands so multiple contexts can be collected consistently and snapshot collection issues are recorded.
 
-### 3. Create repo hygiene files
-Add:
-- `README.md`
-- `.gitignore`
+### 3. Keep the fixture-driven slice working
+Preserve the existing CLI/fixture regression path while wiring in the new evidence sources behind the current harness.
 
-### 4. Scaffold the first implementation shape
-Create the initial project layout for a modular monolith with clear seams for:
-- evidence input
-- normalization
-- reasoning
-- recommendation
-- rendering
-- evals/tests
-
-### 5. Build the first vertical slice
-Implement the smallest end-to-end path that can:
-- load a structured fixture,
-- normalize evidence,
-- produce findings and hypotheses,
-- assign confidence,
-- recommend next checks/actions,
-- and validate behavior with tests/evals.
+### 4. Expand regression coverage for snapshots
+Add tests or evals that exercise snapshot ingestion, comparison logic, and partial-evidence handling when collecting real clusters.
 
 ## Near-term success criteria
 
 The next stage is successful if the repo can do all of the following:
 
-- provide stable repo guidance to Kilo,
-- preserve durable project memory,
-- define the governing doctrine clearly,
-- support a first vertical slice implementation,
-- and test at least one realistic diagnostic scenario end to end.
+- provide stable repo guidance to Kilo
+- preserve durable project memory
+- define the governing doctrine clearly
+- support a first vertical slice implementation
+- define stable fixture and assessment contracts
+- and test at least one realistic diagnostic scenario end to end
 
 ## Risks to watch now
 
 Current early-stage risks:
 
-- too much duplication between `AGENTS.md`, repo rules, Memory Bank, and doctrine files,
-- over-design before the first working vertical slice,
-- choosing framework/tooling too early,
-- writing long policy prose without turning important rules into evals,
-- allowing domain logic to become entangled with provider/runtime assumptions.
+- too much duplication between `AGENTS.md`, repo rules, Memory Bank, and doctrine files
+- over-design before the first working vertical slice
+- choosing framework/tooling too early
+- writing long policy prose without turning important rules into evals
+- allowing domain logic to become entangled with provider/runtime assumptions
+- reintroducing DB, orchestration, or live-integration complexity before the first slice is proven
 
 ## Update rules for this file
 
@@ -185,10 +199,10 @@ Do not update this file for:
 
 ## Current summary
 
-The repo has a strong initial guidance layer and a clear architectural/product stance, but it is still pre-implementation.
+The repo has a firm guidance layer, the scaffolding is live, and the first fixture-driven slice works; the current work centers on real cluster snapshot ingestion/comparison across multiple contexts while keeping diagnostics stable.
 
-The next important move is to turn doctrine and repo guidance into:
-1. committed Memory Bank files,
-2. committed doctrine files,
-3. an initial code/test/eval scaffold,
-4. and a first fixture-driven vertical slice.
+The next important move is to:
+1. solidify the cluster snapshot input contract and ingestion helpers,
+2. stabilize multi-context collection/configuration and surfacing partial evidence,
+3. keep the fixture-driven regression slice healthy while the new signals land,
+4. and expand regression coverage to show partial-collection behavior is handled safely.

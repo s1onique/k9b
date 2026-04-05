@@ -16,7 +16,8 @@ secrets/
 # Python
 __pycache__/
 *.py[cod]
-.venv/
+# Virtualenvs
+/.venv/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -42,3 +43,5 @@ artifacts/
 reports/
 runs/
 exports/
+
+.kilo

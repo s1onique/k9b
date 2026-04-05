@@ -33,18 +33,43 @@ Current priorities are:
 6. observability of reasoning behavior
 7. low-friction iteration
 
+## Workspace conventions
+
+- Run every Python command through `.venv/bin/python` so the virtual environment is the canonical interpreter.
+- `.venv/bin/python -m unittest discover tests` remains the active verification path unless we intentionally switch to another runner.
+
+## Snapshot/comparison status
+
+- Live cluster snapshot collection and comparison both exist now; CLI flows can collect a typed `ClusterSnapshot` and run the comparator without reworking the fixture path.
+- The next technical step is orchestrating multi-context runs (context configs, batch collection, and handling partial evidence) while keeping the existing regression harness stable.
+
+## Technical position for v1
+
+The first implementation slice should be:
+
+- fixture-first
+- offline / replayable
+- DB-free
+- framework-noncommittal
+- structured-output-first
+- optimized for test ergonomics and iteration speed
+
+The first slice should not depend on:
+- live Kubernetes APIs
+- LangGraph
+- heavy persistence
+- provider-specific inference runtimes
+- autonomous remediation flows
+
 ## Likely technical building blocks
 
 The project will likely need components for:
 
-### Kubernetes-facing data input
-Possible inputs include:
-- Kubernetes object snapshots
-- events
-- metrics
-- logs
-- rollout/config metadata
-- manually prepared incident fixtures
+### Fixture / input loading
+Possible initial inputs include:
+- structured incident fixtures
+- scenario test inputs
+- later, Kubernetes objects/events/metrics/logs snapshots
 
 The initial phase should prefer structured fixture input over complex live-cluster collection.
 
@@ -60,10 +85,10 @@ The system should have stable internal domain types for concepts such as:
 - `ConfidenceLevel`
 - `SafetyLevel`
 
-The domain layer should remain independent from specific model providers or backend schemas.
+The domain layer should remain independent from specific model providers, orchestration frameworks, or backend schemas.
 
 ### Reasoning layer
-The system will likely need a reasoning component that:
+The system will need a reasoning component that:
 - consumes normalized evidence,
 - produces findings and hypotheses,
 - assigns confidence conservatively,
@@ -73,9 +98,9 @@ The system will likely need a reasoning component that:
 This layer may combine:
 - deterministic logic,
 - rules/policies,
-- and LLM assistance.
+- and optional LLM assistance.
 
-The exact balance is intentionally undecided early on.
+The exact balance remains intentionally unresolved until the first slice is defined.
 
 ### Output layer
 The system should produce structured outputs first.
@@ -98,6 +123,19 @@ It should eventually support:
 - evidence-handling checks
 - recommendation-safety checks
 - output-shape validation
+
+## Technical decision gates for v1
+
+The following decisions should be made before or during initial scaffolding:
+
+1. choose primary language/runtime
+2. choose canonical assessment schema
+3. choose canonical fixture schema
+4. choose v1 public surface: CLI, library API, or both
+5. choose deterministic-only vs LLM-assisted v1 reasoning
+6. choose whether provider adapter seam is implemented now or stubbed
+
+These are the main gates blocking implementation planning.
 
 ## Technical direction by concern
 
@@ -137,7 +175,7 @@ Possible categories:
 Exact layout remains open, but volatile reasoning assets should be easy to inspect, test, and revise.
 
 ### Persistence
-Not yet justified as a major subsystem.
+Explicitly deferred for v1.
 
 Do not add heavy persistence architecture until a concrete need appears.
 
@@ -147,7 +185,7 @@ Possible future needs:
 - storing evidence snapshots
 - audit history
 
-Until then, prefer simple file-based or test-fixture-driven flows.
+Until then, prefer simple file-based or fixture-driven flows.
 
 ### Interfaces
 Not yet fixed.
@@ -161,7 +199,7 @@ Potential future surfaces:
 The first useful implementation does not need all of them.
 
 ### Live integrations
-Should be introduced incrementally.
+Explicitly deferred for the first implementation slice.
 
 The first useful version should work well with:
 - static fixtures
@@ -169,6 +207,29 @@ The first useful version should work well with:
 - deterministic tests
 
 Live-cluster integrations can come later once internal domain contracts and evals are stable.
+
+## Deferred technologies
+
+These are explicitly deferred unless a current pressure justifies them:
+
+- LangGraph
+- HolmesGPT / k8sgpt style orchestration/tool ecosystems
+- Postgres / JSON persistence
+- live Kubernetes API integrations
+- provider-specific inference runtime commitments
+- heavy service/API infrastructure
+
+## Must-not-couple-yet constraints
+
+Do not tightly couple:
+
+- orchestration framework ↔ domain contracts
+- persistence ↔ reasoning core
+- rendering ↔ reasoning
+- provider/runtime APIs ↔ domain types
+- fixture schema ↔ normalized evidence schema
+
+These boundaries should remain loose until the first vertical slice is working and tested.
 
 ## Technical constraints
 
@@ -179,6 +240,7 @@ Avoid choices that make it hard to:
 - switch model providers,
 - replace orchestration logic,
 - change prompt/policy layout,
+- add persistence later only if needed,
 - or split modules later if justified.
 
 ### Observability
@@ -203,6 +265,7 @@ Avoid tight coupling between:
 - reasoning and rendering
 - policy assets and core code
 - provider APIs and domain types
+- persistence concerns and the first slice
 
 ## Initial implementation bias
 
@@ -218,17 +281,30 @@ The first vertical slice should likely be able to:
 
 That matters more right now than choosing the “perfect” framework stack.
 
+## First implementation acceptance criteria
+
+The first implementation slice should be considered successful if it can:
+
+- load at least one replayable fixture
+- transform that fixture into normalized evidence
+- produce a structured assessment object
+- clearly distinguish signal, finding, hypothesis, confidence, next evidence, recommended action, and safety level
+- run without live-cluster dependency
+- run without database dependency
+- validate behavior with tests and at least one regression/eval case
+
 ## Known unresolved technical questions
 
 These are intentionally open:
 
 - primary implementation language
 - exact project/package layout
+- canonical assessment schema
+- canonical fixture schema
+- deterministic-only vs hybrid reasoning path
 - LLM orchestration framework, if any
 - model provider/runtime strategy
-- persistence needs
-- live-cluster collection strategy
-- whether API/CLI/UI comes first
+- whether CLI, library API, or both come first
 - long-term prompt/policy asset layout
 - multi-cluster support strategy
 

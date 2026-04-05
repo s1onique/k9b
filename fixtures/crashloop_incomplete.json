@@ -1,0 +1,43 @@
+{
+  "id": "crashloop-incomplete-evidence",
+  "timestamp": "2026-04-05T18:00:00Z",
+  "namespace": "default",
+  "workload": {
+    "kind": "Deployment",
+    "name": "frontend"
+  },
+  "signals": {
+    "pods": [
+      {
+        "name": "frontend-abc123",
+        "status": "CrashLoopBackOff",
+        "restart_count": 5,
+        "last_message": "failed to start",
+        "last_probe": "liveness"
+      }
+    ],
+    "events": [
+      {
+        "type": "Warning",
+        "reason": "BackOff",
+        "message": "Back-off restarting failed container"
+      }
+    ],
+    "metrics": [],
+    "logs": []
+  },
+  "observability_gaps": [
+    {
+      "description": "No application logs are available yet.",
+      "missing": ["logs"]
+    }
+  ],
+  "rollout_history": {
+    "last_deployment": {
+      "revision": "3",
+      "started_at": "2026-04-05T17:55:00Z"
+    },
+    "pending_rollout": false
+  },
+  "seed_eval_id": "EVAL-001"
+}
