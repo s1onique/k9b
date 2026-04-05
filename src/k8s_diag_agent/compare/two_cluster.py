@@ -2,20 +2,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 
 from ..collect.cluster_snapshot import ClusterSnapshot
 
+
+@dataclass(frozen=True)
+class ComparisonIntentMetadata:
+    intent: Optional[str]
+    expected_drift_categories: Tuple[str, ...] = ()
+    unexpected_drift_categories: Tuple[str, ...] = ()
+    notes: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "intent": self.intent,
+            "expected_drift_categories": list(self.expected_drift_categories),
+            "unexpected_drift_categories": list(self.unexpected_drift_categories),
+            "notes": self.notes,
+        }
 
 @dataclass(frozen=True)
 class ClusterComparison:
     primary_snapshot: ClusterSnapshot
     secondary_snapshot: ClusterSnapshot
     differences: Dict[str, Dict[str, Any]]
+    metadata: Optional[ComparisonIntentMetadata] = None
 
 
 def compare_snapshots(
-    primary: ClusterSnapshot, secondary: ClusterSnapshot
+    primary: ClusterSnapshot,
+    secondary: ClusterSnapshot,
+    metadata: Optional[ComparisonIntentMetadata] = None,
 ) -> ClusterComparison:
     metadata_diffs = _compare_metadata(primary, secondary)
     metric_diffs = _compare_metrics(primary, secondary)
@@ -34,6 +52,7 @@ def compare_snapshots(
         primary_snapshot=primary,
         secondary_snapshot=secondary,
         differences=differences,
+        metadata=metadata,
     )
 
 

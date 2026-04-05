@@ -168,6 +168,10 @@ def _run_artifact_strategy(draw: st.DrawFn) -> RunArtifact:
         run_id=draw(st.text(min_size=1)),
         timestamp=draw(st.datetimes(timezones=st.just(timezone.utc))),
         context_name=draw(st.one_of(st.none(), st.text(min_size=1))),
+        comparison_intent=draw(st.one_of(st.none(), st.text(min_size=1))),
+        comparison_notes=draw(st.one_of(st.none(), st.text(min_size=1))),
+        expected_drift_categories=tuple(draw(st.lists(st.text(min_size=1), max_size=3))),
+        unexpected_drift_categories=tuple(draw(st.lists(st.text(min_size=1), max_size=3))),
         collector_version=draw(st.text(min_size=1)),
         collection_status=draw(st.text(min_size=1)),
         snapshot_pair=draw(_snapshot_pair_strategy()),
@@ -195,6 +199,14 @@ class FeedbackArtifactPropertyTests(unittest.TestCase):
     def test_feedback_serialization_keeps_nested_metadata(self, artifact: RunArtifact) -> None:
         serialized = _serialize_run_artifact(artifact)
         self.assertEqual(serialized["run_id"], artifact.run_id)
+        self.assertEqual(serialized.get("comparison_intent"), artifact.comparison_intent)
+        self.assertEqual(serialized.get("comparison_notes"), artifact.comparison_notes)
+        self.assertEqual(
+            serialized.get("expected_drift_categories"), artifact.expected_drift_categories
+        )
+        self.assertEqual(
+            serialized.get("unexpected_drift_categories"), artifact.unexpected_drift_categories
+        )
         self.assertEqual(serialized["timestamp"], artifact.timestamp.isoformat())
         self.assertEqual(
             serialized["snapshot_pair"]["primary_snapshot_id"], artifact.snapshot_pair.primary_snapshot_id

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 @dataclass(frozen=True)
@@ -11,6 +11,7 @@ class LLMAssessmentInput:
     primary_snapshot: Dict[str, Any]
     secondary_snapshot: Dict[str, Any]
     comparison: Dict[str, Any]
+    comparison_metadata: Optional[Dict[str, Any]]
     collection_statuses: Dict[str, Dict[str, Any]]
 
 

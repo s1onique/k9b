@@ -13,13 +13,21 @@
       "primary": "cluster-alpha",
       "secondary": "cluster-beta",
       "label": "alpha-vs-beta",
-      "assess": true
+      "assess": true,
+      "intent": "same-role-parity",
+      "expected_drift_categories": ["helm_releases"],
+      "unexpected_drift_categories": ["metadata"],
+      "notes": "Both clusters serve the same operational role."
     },
     {
       "primary": "cluster-alpha",
       "secondary": "cluster-gamma",
       "label": "alpha-vs-gamma",
-      "assess": true
+      "assess": true,
+      "intent": "prod-vs-dr",
+      "expected_drift_categories": ["region", "node_count"],
+      "unexpected_drift_categories": ["helm_releases"],
+      "notes": "Gamma is a DR inventory cluster with a different purpose."
     }
   ]
 }

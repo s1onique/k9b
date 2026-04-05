@@ -1,7 +1,7 @@
 """Provider-agnostic seam for LLM assessments."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from ..collect.cluster_snapshot import ClusterSnapshot
 from ..compare.two_cluster import ClusterComparison
@@ -112,10 +112,16 @@ def get_provider(name: str | None = None) -> LLMProvider:
 def build_assessment_input(
     primary: ClusterSnapshot, secondary: ClusterSnapshot, comparison: ClusterComparison
 ) -> LLMAssessmentInput:
+    metadata_payload: Optional[Dict[str, Any]]
+    if comparison.metadata:
+        metadata_payload = comparison.metadata.to_dict()
+    else:
+        metadata_payload = None
     return LLMAssessmentInput(
         primary_snapshot=primary.to_dict(),
         secondary_snapshot=secondary.to_dict(),
         comparison={"differences": comparison.differences},
+        comparison_metadata=metadata_payload,
         collection_statuses={
             "primary": primary.collection_status.to_dict(),
             "secondary": secondary.collection_status.to_dict(),

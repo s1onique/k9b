@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..models import ConfidenceLevel
 from . import models
@@ -197,6 +197,8 @@ class RunArtifactValidator:
             run_id=str(data["run_id"]),
             timestamp=timestamp,
             context_name=data.get("context_name"),
+            comparison_intent=data.get("comparison_intent"),
+            comparison_notes=data.get("comparison_notes"),
             collector_version=str(data.get("collector_version", "unknown")),
             collection_status=str(data.get("collection_status", "complete")),
             comparison_summary={
@@ -209,4 +211,6 @@ class RunArtifactValidator:
             failure_modes=failure_modes,
             proposed_improvements=proposed_improvements,
             notes=data.get("notes"),
+            expected_drift_categories=tuple(str(item) for item in data.get("expected_drift_categories", [])),
+            unexpected_drift_categories=tuple(str(item) for item in data.get("unexpected_drift_categories", [])),
         )

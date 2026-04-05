@@ -22,7 +22,7 @@ from k8s_diag_agent.collect.cluster_snapshot import (
     CRDRecord,
     HelmReleaseRecord,
 )
-from k8s_diag_agent.compare.two_cluster import compare_snapshots
+from k8s_diag_agent.compare.two_cluster import ComparisonIntentMetadata, compare_snapshots
 
 
 def _mock_assessment_payload() -> Dict[str, Any]:
@@ -288,6 +288,55 @@ class PromptBuilderTest(unittest.TestCase):
         self.assertIn("crd_diffs=1", log_output)
         self.assertIn("prompt_chars=", log_output)
 
+    def test_prompt_handles_missing_intent_with_lower_confidence(self) -> None:
+        comparison = compare_snapshots(self.primary_snapshot, self.secondary_snapshot)
+        metadata = ComparisonIntentMetadata(None, (), (), None)
+        prompt = build_assessment_prompt(
+            self.primary_snapshot,
+            self.secondary_snapshot,
+            comparison,
+            intent_metadata=metadata,
+        )
+        self.assertIn("Comparison intent: unspecified", prompt)
+        self.assertIn("lower overall confidence", prompt)
+
+    def test_prompt_emphasizes_same_role_parity_expectations(self) -> None:
+        comparison = compare_snapshots(self.primary_snapshot, self.secondary_snapshot)
+        metadata = ComparisonIntentMetadata(
+            intent="same-role-parity",
+            expected_drift_categories=("helm_releases", "crds"),
+            unexpected_drift_categories=("metadata",),
+            notes="Both clusters run the same production role.",
+        )
+        prompt = build_assessment_prompt(
+            self.primary_snapshot,
+            self.secondary_snapshot,
+            comparison,
+            intent_metadata=metadata,
+        )
+        self.assertIn("Comparison intent: same-role-parity", prompt)
+        self.assertIn("Expected drift categories: helm_releases, crds", prompt)
+        self.assertIn("Suspicious drift categories: metadata", prompt)
+
+    def test_prompt_describes_intentionally_different_environments(self) -> None:
+        comparison = compare_snapshots(self.primary_snapshot, self.secondary_snapshot)
+        metadata = ComparisonIntentMetadata(
+            intent="prod-vs-dr",
+            expected_drift_categories=("region", "node_count"),
+            unexpected_drift_categories=("helm_releases",),
+            notes="Secondary snapshot represents the DR inventory cluster.",
+        )
+        prompt = build_assessment_prompt(
+            self.primary_snapshot,
+            self.secondary_snapshot,
+            comparison,
+            intent_metadata=metadata,
+        )
+        self.assertIn("Comparison intent: prod-vs-dr", prompt)
+        self.assertIn("Notes: Secondary snapshot represents the DR inventory cluster.", prompt)
+        self.assertIn("({})".format(", ".join(metadata.expected_drift_categories)), prompt)
+        self.assertIn("({})".format(", ".join(metadata.unexpected_drift_categories)), prompt)
+
 
 class LlamaCppProviderTest(unittest.TestCase):
     def _dummy_payload(self) -> LLMAssessmentInput:
@@ -295,6 +344,7 @@ class LlamaCppProviderTest(unittest.TestCase):
             primary_snapshot={"foo": "bar"},
             secondary_snapshot={"foo": "baz"},
             comparison={"differences": {}},
+            comparison_metadata=None,
             collection_statuses={"primary": {"status": "ok"}, "secondary": {"status": "ok"}},
         )
 

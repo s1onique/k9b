@@ -17,7 +17,7 @@ def _load_fixture_snapshot() -> Dict[str, Any]:
 
 
 class FeedbackRunnerTest(unittest.TestCase):
-    def _write_config(self, directory: Path, run_id: str, pairs: list[dict[str, object]]) -> Path:
+    def _write_config(self, directory: Path, run_id: str, pairs: list[dict[str, Any]]) -> Path:
         config = {
             "run_id": run_id,
             "provider": "default",
@@ -139,3 +139,27 @@ class FeedbackRunnerTest(unittest.TestCase):
             artifact = artifacts[0]
             self.assertIsNone(artifact.assessment)
             self.assertEqual(artifact.validation_results, [])
+
+    @patch("k8s_diag_agent.feedback.runner.list_kube_contexts", return_value=["alpha", "beta"])
+    @patch("k8s_diag_agent.feedback.runner.collect_cluster_snapshot")
+    def test_pair_metadata_survives_artifact(self, collect_mock: Any, contexts_mock: Any) -> None:
+        collect_mock.side_effect = lambda ctx: self._snapshot_for(ctx)
+        pair_metadata = {
+            "primary": "alpha",
+            "secondary": "beta",
+            "label": "intent-aware",
+            "intent": "prod-vs-prod",
+            "expected_drift_categories": ["helm_releases"],
+            "unexpected_drift_categories": ["metadata"],
+            "notes": "Both clusters share the same role.",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            config_path = self._write_config(base, "test-metadata", [pair_metadata])
+            exit_code, artifacts = run_feedback_loop(config_path, quiet=True)
+            self.assertEqual(exit_code, 0)
+            artifact = artifacts[0]
+            self.assertEqual(artifact.comparison_intent, "prod-vs-prod")
+            self.assertEqual(artifact.comparison_notes, "Both clusters share the same role.")
+            self.assertEqual(artifact.expected_drift_categories, ("helm_releases",))
+            self.assertEqual(artifact.unexpected_drift_categories, ("metadata",))

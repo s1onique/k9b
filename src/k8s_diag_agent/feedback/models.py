@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import ConfidenceLevel
 
@@ -69,6 +69,10 @@ class RunArtifact:
     collector_version: str
     collection_status: str
     snapshot_pair: SnapshotPairArtifact
+    comparison_intent: Optional[str] = None
+    comparison_notes: Optional[str] = None
+    expected_drift_categories: Tuple[str, ...] = field(default_factory=tuple)
+    unexpected_drift_categories: Tuple[str, ...] = field(default_factory=tuple)
     comparison_summary: Dict[str, int] = field(default_factory=dict)
     missing_evidence: List[str] = field(default_factory=list)
     assessment: Optional[AssessmentArtifact] = None

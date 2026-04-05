@@ -13,7 +13,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..collect.cluster_snapshot import ClusterSnapshot, CollectionStatus
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
-from ..compare.two_cluster import ClusterComparison, compare_snapshots
+from ..compare.two_cluster import (
+    ClusterComparison,
+    ComparisonIntentMetadata,
+    compare_snapshots,
+)
 from ..llm.assessor_schema import AssessorAssessment
 from ..llm.prompts import build_assessment_prompt
 from ..llm.provider import (
@@ -40,6 +44,29 @@ def _safe_label(value: str) -> str:
     cleaned = cleaned.strip("-")
     result = cleaned.lower() or "entry"
     return result
+
+
+def _normalize_text(value: object | None) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_category_list(value: object | None) -> Tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        normalized = _normalize_text(value)
+        return (normalized,) if normalized else ()
+    if isinstance(value, (list, tuple)):
+        categories: List[str] = []
+        for item in value:
+            normalized = _normalize_text(item)
+            if normalized:
+                categories.append(normalized)
+        return tuple(categories)
+    raise ValueError("drift categories must be a string or list of strings")
 
 
 def _write_json(data: Any, path: Path) -> None:
@@ -75,12 +102,16 @@ class FeedbackTarget:
     output: Optional[Path]
 
 
+_DEFAULT_COMPARISON_METADATA = ComparisonIntentMetadata(None, (), (), None)
+
+
 @dataclass(frozen=True)
 class FeedbackPair:
     primary: str
     secondary: str
     label: str
     assess: bool
+    comparison_metadata: ComparisonIntentMetadata = _DEFAULT_COMPARISON_METADATA
 
 
 @dataclass(frozen=True)
@@ -138,12 +169,23 @@ class FeedbackRunConfig:
                 raise ValueError(f"Pair references unknown context: {primary} vs {secondary}")
             label = _safe_label(entry.get("label") or f"{primary}-vs-{secondary}")
             assess_flag = bool(entry.get("assess", True))
+            intent = _normalize_text(entry.get("intent"))
+            notes = _normalize_text(entry.get("notes") or entry.get("role_description"))
+            expected_categories = _parse_category_list(entry.get("expected_drift_categories"))
+            unexpected_categories = _parse_category_list(entry.get("unexpected_drift_categories"))
+            metadata = ComparisonIntentMetadata(
+                intent=intent,
+                expected_drift_categories=expected_categories,
+                unexpected_drift_categories=unexpected_categories,
+                notes=notes,
+            )
             pairs.append(
                 FeedbackPair(
                     primary=str(primary),
                     secondary=str(secondary),
                     label=label,
                     assess=assess_flag,
+                    comparison_metadata=metadata,
                 )
             )
         if not pairs:
@@ -239,7 +281,9 @@ class FeedbackRunRunner:
         secondary = self._lookup_record(pair.secondary, records)
         if not primary or not secondary:
             return None
-        comparison = compare_snapshots(primary.snapshot, secondary.snapshot)
+        comparison = compare_snapshots(
+            primary.snapshot, secondary.snapshot, metadata=pair.comparison_metadata
+        )
         comparison_path = directories["comparisons"] / f"{self.config.run_id}-{pair.label}-diff.json"
         _write_json({"differences": comparison.differences}, comparison_path)
         snapshot_pair = SnapshotPairArtifact(
@@ -292,6 +336,10 @@ class FeedbackRunRunner:
             run_id=self.config.run_id,
             timestamp=datetime.now(timezone.utc),
             context_name=pair.label,
+            comparison_intent=pair.comparison_metadata.intent,
+            comparison_notes=pair.comparison_metadata.notes,
+            expected_drift_categories=pair.comparison_metadata.expected_drift_categories,
+            unexpected_drift_categories=pair.comparison_metadata.unexpected_drift_categories,
             collector_version=self.config.collector_version,
             collection_status=self._collection_status(snapshot_pair),
             snapshot_pair=snapshot_pair,
@@ -383,7 +431,12 @@ class FeedbackRunRunner:
         provider = self._get_provider_instance()
         if not provider:
             return None, self._provider_error or "provider unavailable"
-        prompt = build_assessment_prompt(primary.snapshot, secondary.snapshot, comparison)
+        prompt = build_assessment_prompt(
+            primary.snapshot,
+            secondary.snapshot,
+            comparison,
+            intent_metadata=comparison.metadata,
+        )
         payload = build_assessment_input(primary.snapshot, secondary.snapshot, comparison)
         try:
             raw = provider.assess(prompt, payload)

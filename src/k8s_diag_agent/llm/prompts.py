@@ -4,10 +4,10 @@ from __future__ import annotations
 import json
 import logging
 from textwrap import dedent
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..collect.cluster_snapshot import ClusterSnapshot
-from ..compare.two_cluster import ClusterComparison
+from ..compare.two_cluster import ClusterComparison, ComparisonIntentMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,54 @@ def _summarize_crd_diffs(crd_diffs: Dict[str, Dict[str, Any]]) -> List[Dict[str,
     return entries
 
 
+def _format_categories(label: str, values: Tuple[str, ...]) -> str:
+    if not values:
+        return f"{label}: none declared"
+    return f"{label}: {', '.join(values)}"
+
+
+def _describe_comparison_context(metadata: Optional[ComparisonIntentMetadata]) -> str:
+    if metadata is None:
+        return "Comparison intent: unspecified (no metadata provided)\nNotes: none provided\nExpected drift categories: none declared\nSuspicious drift categories: none declared"
+    lines: List[str] = []
+    intent = metadata.intent or "unspecified"
+    lines.append(f"Comparison intent: {intent}")
+    notes = metadata.notes or "none provided"
+    lines.append(f"Notes: {notes}")
+    lines.append(_format_categories("Expected drift categories", metadata.expected_drift_categories))
+    lines.append(_format_categories("Suspicious drift categories", metadata.unexpected_drift_categories))
+    return "\n".join(lines)
+
+
+def _build_intent_guidance(metadata: Optional[ComparisonIntentMetadata]) -> str:
+    if metadata is None or not metadata.intent:
+        return (
+            "No comparison intent was declared for this pair, so treat any detected drift as ambiguous and lower overall confidence. "
+            "Mention the missing intent when describing hypotheses and next evidence, and avoid assuming the environments share a role."
+        )
+    guidance_lines: List[str] = [f"Frame your assessment around the declared intent '{metadata.intent}'."]
+    if metadata.expected_drift_categories:
+        guidance_lines.append(
+            "Differences that match the expected drift categories "
+            f"({', '.join(metadata.expected_drift_categories)}) should be described as anticipated drift consistent with the intent."
+        )
+    else:
+        guidance_lines.append("No expected drift categories were declared; remain open to new normal patterns for this intent.")
+    if metadata.unexpected_drift_categories:
+        guidance_lines.append(
+            "Treat any difference that falls into the suspicious drift categories "
+            f"({', '.join(metadata.unexpected_drift_categories)}) as unexpected for this intent and raise its priority."
+        )
+    else:
+        guidance_lines.append("No suspicious drift categories were declared; rely on the intent description to judge urgency.")
+    return " ".join(guidance_lines)
+
+
 def build_assessment_prompt(
-    primary: ClusterSnapshot, secondary: ClusterSnapshot, comparison: ClusterComparison
+    primary: ClusterSnapshot,
+    secondary: ClusterSnapshot,
+    comparison: ClusterComparison,
+    intent_metadata: Optional[ComparisonIntentMetadata] = None,
 ) -> str:
     metadata_deltas = comparison.differences.get("metadata", {})
     helm_diffs = comparison.differences.get("helm_releases", {})
@@ -106,6 +152,12 @@ def build_assessment_prompt(
 
         Snapshot collection status:
         {collection_status}
+
+        Comparison context:
+        {comparison_context}
+
+        Interpretation guidance:
+        {intent_guidance}
 
         Provide a structured JSON assessment that lists observed signals, findings, hypotheses (with confidence and falsifiable checks), next evidence to collect, recommended actions, safety level, and optional metadata such as probable layer of origin.
         Keep confidence aligned with how much difference exists between the snapshots. If no difference exists, recommend observation-only steps.
@@ -206,6 +258,8 @@ def build_assessment_prompt(
         crd_diff_count=len(crd_summary),
         crd_changes=json.dumps(crd_summary, indent=2),
         collection_status=json.dumps(statuses, indent=2),
+        comparison_context=_describe_comparison_context(intent_metadata),
+        intent_guidance=_build_intent_guidance(intent_metadata),
     )
     logger.info(
         "LLM prompt prepared: helm_diffs=%d, crd_diffs=%d, prompt_chars=%d",
