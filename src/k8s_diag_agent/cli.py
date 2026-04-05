@@ -15,7 +15,6 @@ from .compare.two_cluster import compare_snapshots
 from .correlate.linkers import correlate_signals
 from .llm.assessor_schema import AssessorAssessment
 from .llm.base import LLMAssessmentInput
-from .llm.drilldown_prompts import build_drilldown_prompt
 from .llm.prompts import build_assessment_prompt
 from .llm.provider import AVAILABLE_PROVIDERS, build_assessment_input, get_provider
 from .models import Assessment
@@ -26,6 +25,7 @@ from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .feedback.runner import run_feedback_loop
 from .health import run_health_loop, schedule_health_loop
 from .health.drilldown import DrilldownArtifact
+from .health.drilldown_assessor import assess_drilldown_artifact
 
 
 _SUBCOMMANDS = {
@@ -429,35 +429,10 @@ def _handle_assess_drilldown(args: argparse.Namespace) -> int:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"Unable to load drilldown artifact: {exc}", file=sys.stderr)
         return 1
-    prompt = build_drilldown_prompt(artifact)
-    provider = get_provider(args.provider)
-    differences = {
-        reason: artifact.evidence_summary
-        for reason in artifact.trigger_reasons
-    }
-    if not differences:
-        differences = {"drilldown": artifact.evidence_summary}
-    payload = LLMAssessmentInput(
-        primary_snapshot={
-            "context": artifact.context,
-            "cluster_id": artifact.cluster_id,
-            "trigger_reasons": list(artifact.trigger_reasons),
-            "missing_evidence": list(artifact.missing_evidence),
-        },
-        secondary_snapshot={},
-        comparison={"differences": differences},
-        comparison_metadata=None,
-        collection_statuses={"drilldown": artifact.collection_timestamps},
-    )
     try:
-        raw_assessment = provider.assess(prompt, payload)
+        validated = assess_drilldown_artifact(artifact, provider_name=args.provider)
     except Exception as exc:
         print(f"LLM assessment failed: {exc}", file=sys.stderr)
-        return 1
-    try:
-        validated = AssessorAssessment.from_dict(raw_assessment)
-    except ValueError as exc:
-        print(f"LLM assessment returned invalid schema: {exc}", file=sys.stderr)
         return 1
     serialized = validated.to_dict()
     if args.output:
