@@ -1,0 +1,209 @@
+{
+  "cluster_snapshots": [
+    {
+      "metadata": {
+        "cluster_id": "pattern-probe",
+        "captured_at": "2026-04-05T12:00:00Z",
+        "control_plane_version": "v1.28.0",
+        "node_count": 3,
+        "pod_count": 20
+      },
+      "status": {
+        "helm_error": null,
+        "missing_evidence": []
+      },
+      "health_signals": {
+        "node_conditions": {
+          "total": 3,
+          "ready": 3,
+          "not_ready": 0,
+          "memory_pressure": 0,
+          "disk_pressure": 0,
+          "pid_pressure": 0,
+          "network_unavailable": 0
+        },
+        "pod_counts": {
+          "non_running": 1,
+          "pending": 1,
+          "crash_loop_backoff": 0,
+          "image_pull_backoff": 0,
+          "completed_job_pods": 0
+        },
+        "job_failures": 0,
+        "warning_events": [
+          {
+            "namespace": "web",
+            "reason": "Unhealthy",
+            "message": "Readiness probe failed: HTTP probe timed out after 1s",
+            "count": 3,
+            "last_seen": "2026-04-05T11:59:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "cluster_id": "pattern-scheduling",
+        "captured_at": "2026-04-05T12:05:00Z",
+        "control_plane_version": "v1.28.0",
+        "node_count": 3,
+        "pod_count": 22
+      },
+      "status": {
+        "helm_error": null,
+        "missing_evidence": []
+      },
+      "health_signals": {
+        "node_conditions": {
+          "total": 3,
+          "ready": 3,
+          "not_ready": 0,
+          "memory_pressure": 0,
+          "disk_pressure": 0,
+          "pid_pressure": 0,
+          "network_unavailable": 0
+        },
+        "pod_counts": {
+          "non_running": 2,
+          "pending": 2,
+          "crash_loop_backoff": 0,
+          "image_pull_backoff": 0,
+          "completed_job_pods": 0
+        },
+        "job_failures": 0,
+        "warning_events": [
+          {
+            "namespace": "backend",
+            "reason": "FailedScheduling",
+            "message": "0/3 nodes are available: 3 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }",
+            "count": 1,
+            "last_seen": "2026-04-05T12:03:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "cluster_id": "pattern-metrics",
+        "captured_at": "2026-04-05T12:10:00Z",
+        "control_plane_version": "v1.28.0",
+        "node_count": 3,
+        "pod_count": 18
+      },
+      "status": {
+        "helm_error": null,
+        "missing_evidence": []
+      },
+      "health_signals": {
+        "node_conditions": {
+          "total": 3,
+          "ready": 3,
+          "not_ready": 0,
+          "memory_pressure": 0,
+          "disk_pressure": 0,
+          "pid_pressure": 0,
+          "network_unavailable": 0
+        },
+        "pod_counts": {
+          "non_running": 0,
+          "pending": 0,
+          "crash_loop_backoff": 0,
+          "image_pull_backoff": 0,
+          "completed_job_pods": 0
+        },
+        "job_failures": 0,
+        "warning_events": [
+          {
+            "namespace": "scale",
+            "reason": "FailedGetResourceMetric",
+            "message": "HPA cannot read metrics-server resource metric (metrics-server is down)",
+            "count": 1,
+            "last_seen": "2026-04-05T12:07:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "cluster_id": "pattern-pvc",
+        "captured_at": "2026-04-05T12:15:00Z",
+        "control_plane_version": "v1.28.0",
+        "node_count": 3,
+        "pod_count": 25
+      },
+      "status": {
+        "helm_error": null,
+        "missing_evidence": []
+      },
+      "health_signals": {
+        "node_conditions": {
+          "total": 3,
+          "ready": 3,
+          "not_ready": 0,
+          "memory_pressure": 0,
+          "disk_pressure": 0,
+          "pid_pressure": 0,
+          "network_unavailable": 0
+        },
+        "pod_counts": {
+          "non_running": 1,
+          "pending": 1,
+          "crash_loop_backoff": 0,
+          "image_pull_backoff": 0,
+          "completed_job_pods": 0
+        },
+        "job_failures": 0,
+        "warning_events": [
+          {
+            "namespace": "database",
+            "reason": "ProvisioningFailed",
+            "message": "PersistentVolumeClaim mysql-data failed provisioning because the storageclass is not available",
+            "count": 1,
+            "last_seen": "2026-04-05T12:13:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "cluster_id": "pattern-ingress",
+        "captured_at": "2026-04-05T12:20:00Z",
+        "control_plane_version": "v1.28.0",
+        "node_count": 3,
+        "pod_count": 30
+      },
+      "status": {
+        "helm_error": null,
+        "missing_evidence": []
+      },
+      "health_signals": {
+        "node_conditions": {
+          "total": 3,
+          "ready": 3,
+          "not_ready": 0,
+          "memory_pressure": 0,
+          "disk_pressure": 0,
+          "pid_pressure": 0,
+          "network_unavailable": 0
+        },
+        "pod_counts": {
+          "non_running": 0,
+          "pending": 0,
+          "crash_loop_backoff": 0,
+          "image_pull_backoff": 0,
+          "completed_job_pods": 0
+        },
+        "job_failures": 0,
+        "warning_events": [
+          {
+            "namespace": "web",
+            "reason": "Failed",
+            "message": "Ingress controller timed out waiting for backend default/api because endpoints are missing",
+            "count": 1,
+            "last_seen": "2026-04-05T12:18:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

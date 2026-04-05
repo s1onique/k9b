@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from textwrap import shorten
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Callable, ClassVar, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from ..collect.cluster_snapshot import WarningEventSummary
 from .image_pull_secret import ImagePullSecretInsight
@@ -138,7 +138,8 @@ class DrilldownEvidence:
     affected_workloads: Tuple[Dict[str, Any], ...]
     summary: Dict[str, Any]
     collection_timestamps: Dict[str, str]
-    image_pull_secret_insights: Tuple[Dict[str, Any], ...]
+    pattern_details: Dict[str, str] = field(default_factory=dict)
+    image_pull_secret_insights: Tuple[Dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -149,6 +150,38 @@ class DrilldownCollector:
     max_rollout_namespaces: int = 3
     max_rollouts: int = 8
     command_runner: Callable[[Sequence[str]], str] | None = None
+    _PATTERN_COMMAND_TEMPLATES: ClassVar[Dict[str, List[Sequence[str]]]] = {
+        "probe_failure": [
+            ("get", "pods", "-n", "{namespace}", "-o", "wide"),
+            ("describe", "pods", "-n", "{namespace}"),
+        ],
+        "failed_scheduling": [
+            ("describe", "pods", "-n", "{namespace}"),
+            ("describe", "nodes"),
+            ("get", "nodes", "-o", "wide"),
+        ],
+        "missing_metrics": [
+            ("get", "hpa", "-n", "{namespace}"),
+            ("get", "deployment", "metrics-server", "-n", "kube-system"),
+            ("get", "pods", "-n", "kube-system", "-l", "k8s-app=metrics-server"),
+        ],
+        "pvc_pending": [
+            ("get", "pvc", "-n", "{namespace}"),
+            ("describe", "pvc", "-n", "{namespace}"),
+        ],
+        "ingress_timeout": [
+            ("get", "ingress", "-n", "{namespace}"),
+            ("get", "endpoints", "-n", "{namespace}"),
+            ("describe", "svc", "-n", "{namespace}"),
+        ],
+    }
+    _PATTERN_DEFAULT_NAMESPACE: ClassVar[Dict[str, str]] = {
+        "probe_failure": "default",
+        "failed_scheduling": "default",
+        "missing_metrics": "kube-system",
+        "pvc_pending": "default",
+        "ingress_timeout": "default",
+    }
 
     def __post_init__(self) -> None:
         if self.command_runner is None:
@@ -161,6 +194,8 @@ class DrilldownCollector:
         context: str,
         namespaces: Sequence[str],
         image_pull_secret_insight: ImagePullSecretInsight | None = None,
+        pattern_reasons: Sequence[str] | None = None,
+        pattern_metadata: Mapping[str, Sequence[str]] | None = None,
     ) -> DrilldownEvidence:
         warning_events = self._collect_warning_events(context, limit=self.max_warning_events)
         non_running = self._collect_non_running_pods(context, limit=self.max_non_running_pods)
@@ -178,6 +213,8 @@ class DrilldownCollector:
             "rollout_entries": len(rollout_entries),
             "image_pull_secret_insights": 1 if image_pull_secret_insight else 0,
         }
+        pattern_details = self._collect_pattern_details(context, pattern_reasons, pattern_metadata)
+        summary["pattern_details"] = len(pattern_details)
         affected_workloads = tuple(
             {"kind": "Pod", "namespace": pod.namespace, "name": pod.name, "phase": pod.phase, "reason": pod.reason}
             for pod in non_running
@@ -198,6 +235,7 @@ class DrilldownCollector:
             affected_workloads=affected_workloads,
             summary=summary,
             collection_timestamps=collection_timestamps,
+            pattern_details=pattern_details,
             image_pull_secret_insights=(image_pull_secret_insight.to_dict(),)
             if image_pull_secret_insight
             else (),
@@ -386,6 +424,58 @@ class DrilldownCollector:
             )
         return results
 
+    def _collect_pattern_details(
+        self,
+        context: str,
+        pattern_reasons: Sequence[str] | None,
+        pattern_metadata: Mapping[str, Sequence[str]] | None,
+    ) -> Dict[str, str]:
+        details: Dict[str, str] = {}
+        if not pattern_reasons:
+            return details
+        metadata = pattern_metadata or {}
+        for reason in dict.fromkeys(pattern_reasons):
+            commands = self._commands_for_reason(reason, metadata.get(reason))
+            if not commands:
+                continue
+            outputs: List[str] = []
+            for command in commands:
+                try:
+                    output = self._kubectl(context, *command)
+                except RuntimeError as exc:
+                    outputs.append(f"error: {exc}")
+                    continue
+                outputs.append(shorten(output, width=800, placeholder="... (truncated)"))
+            if outputs:
+                details[reason] = "\n".join(outputs)
+        return details
+
+    def _commands_for_reason(
+        self, reason: str, namespaces: Sequence[str] | None
+    ) -> List[Sequence[str]]:
+        templates = self._PATTERN_COMMAND_TEMPLATES.get(reason)
+        if not templates:
+            return []
+        namespace = self._namespace_for_reason(reason, namespaces)
+        commands: List[Sequence[str]] = []
+        for template in templates:
+            commands.append(
+                tuple(
+                    namespace if token == "{namespace}" else token
+                    for token in template
+                )
+            )
+        return commands
+
+    def _namespace_for_reason(
+        self, reason: str, namespaces: Sequence[str] | None
+    ) -> str:
+        if namespaces:
+            for namespace in namespaces:
+                if namespace:
+                    return namespace
+        return self._PATTERN_DEFAULT_NAMESPACE.get(reason, "default")
+
     def _make_namespace_list(
         self,
         namespaces: Sequence[str],
@@ -424,8 +514,8 @@ class DrilldownArtifact:
     pod_descriptions: Dict[str, str]
     rollout_status: Tuple[DrilldownRolloutStatus, ...]
     collection_timestamps: Dict[str, str]
-
     image_pull_secret_insight: ImagePullSecretInsight | None = None
+    pattern_details: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -446,6 +536,7 @@ class DrilldownArtifact:
             "pod_descriptions": self.pod_descriptions,
             "rollout_status": [entry.to_dict() for entry in self.rollout_status],
             "collection_timestamps": self.collection_timestamps,
+            "pattern_details": self.pattern_details,
             "image_pull_secret_insight": self.image_pull_secret_insight.to_dict()
             if self.image_pull_secret_insight
             else None,
@@ -486,6 +577,11 @@ class DrilldownArtifact:
             for entry in rollout_raw:
                 if isinstance(entry, Mapping):
                     rollouts.append(DrilldownRolloutStatus.from_dict(entry))
+        pattern_details_raw = raw.get("pattern_details", {})
+        pattern_details: Dict[str, str] = {}
+        if isinstance(pattern_details_raw, Mapping):
+            for key, value in pattern_details_raw.items():
+                pattern_details[str(key)] = str(value)
         insight_raw = raw.get("image_pull_secret_insight")
         if isinstance(insight_raw, Mapping):
             insight_value = ImagePullSecretInsight.from_dict(insight_raw)
@@ -513,5 +609,6 @@ class DrilldownArtifact:
             collection_timestamps={
                 str(key): str(value) for key, value in (raw.get("collection_timestamps") or {}).items()
             },
+            pattern_details=pattern_details,
             image_pull_secret_insight=insight_value,
         )

@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from ..collect.cluster_snapshot import ClusterSnapshot
+from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..models import (
@@ -227,6 +227,8 @@ class HealthAssessmentResult:
     node_count: int
     pod_count: Optional[int]
     control_plane_version: str
+    pattern_reasons: Tuple[str, ...] = field(default_factory=tuple)
+    pattern_metadata: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass
@@ -556,6 +558,12 @@ def build_health_assessment(
     image_pull_secret_next_checks: List[NextCheck] = []
     references: List[str] = []
     insight_hypothesis: Hypothesis | None = None
+    pattern_reasons: List[str] = []
+    pattern_metadata: Dict[str, Tuple[str, ...]] = {}
+    pattern_next_checks: List[NextCheck] = []
+    pattern_refs: List[str] = []
+    pattern_hypotheses: List[Hypothesis] = []
+    matched_event_ids: Set[int] = set()
     for missing_item in missing:
         issues_detected = True
         signal = add_signal(
@@ -996,6 +1004,231 @@ def build_health_assessment(
         Layer.OBSERVABILITY,
     )
 
+    def _unused_warning_events() -> List[WarningEventSummary]:
+        return [event for event in warning_events if id(event) not in matched_event_ids]
+
+    def _capture_namespaces(events: Sequence[WarningEventSummary]) -> Tuple[str, ...]:
+        seen: List[str] = []
+        for event in events:
+            namespace = (event.namespace or "").strip()
+            if namespace and namespace not in seen:
+                seen.append(namespace)
+        return tuple(seen)
+
+    def _record_pattern(
+        reason_tag: str,
+        signal_desc: str,
+        severity: str,
+        layer: Layer,
+        hypothesis_desc: str,
+        hypothesis_confidence: ConfidenceLevel,
+        probable_layer: Layer,
+        falsify: str,
+        next_check_desc: str,
+        evidence_needed: Sequence[str],
+        namespaces: Sequence[str],
+        reference_label: str,
+    ) -> None:
+        nonlocal issues_detected
+        issues_detected = True
+        signal = add_signal(signal_desc, severity, layer)
+        record_finding(signal_desc, layer, [signal.id])
+        pattern_reasons.append(reason_tag)
+        namespace_tuple = tuple(dict.fromkeys(item for item in namespaces if item))
+        pattern_metadata[reason_tag] = namespace_tuple
+        pattern_refs.append(reference_label)
+        pattern_next_checks.append(
+            NextCheck(
+                description=next_check_desc,
+                owner="platform engineer",
+                method="kubectl",
+                evidence_needed=list(evidence_needed),
+            )
+        )
+        pattern_hypotheses.append(
+            Hypothesis(
+                id=generator.next_id(),
+                description=hypothesis_desc,
+                confidence=hypothesis_confidence,
+                probable_layer=probable_layer,
+                what_would_falsify=falsify,
+            )
+        )
+
+    def _mark_events(events: Sequence[WarningEventSummary]) -> None:
+        for event in events:
+            matched_event_ids.add(id(event))
+
+    def _describe_namespace(namespace_list: Sequence[str], fallback: str) -> str:
+        for namespace in namespace_list:
+            if namespace:
+                return namespace
+        return fallback
+
+    def _match_probe_events() -> None:
+        candidates = [event for event in _unused_warning_events() if "readiness probe" in (event.message or "").lower() or "liveness probe" in (event.message or "").lower()]
+        if not candidates:
+            return
+        _mark_events(candidates)
+        namespace = _describe_namespace(_capture_namespaces(candidates), "default")
+        signal_desc = f"Readiness/liveness probe failures recorded in {namespace}."
+        _record_pattern(
+            reason_tag="probe_failure",
+            signal_desc=signal_desc,
+            severity="medium",
+            layer=Layer.WORKLOAD,
+            hypothesis_desc=(
+                "A recent rollout or configuration change is likely hitting the probe endpoint before readiness/liveness succeeds; pods stay unready."
+            ),
+            hypothesis_confidence=ConfidenceLevel.MEDIUM,
+            probable_layer=Layer.WORKLOAD,
+            falsify="Pods start reporting Ready and probe failures stop appearing.",
+            next_check_desc=f"Inspect pods in {namespace} that are failing probes and review the rollout history.",
+            evidence_needed=[
+                f"kubectl describe pods -n {namespace}",
+                f"kubectl logs -n {namespace} <pod> --previous",
+                f"kubectl rollout status deployment -n {namespace}",
+            ],
+            namespaces=[namespace],
+            reference_label="probe failure pattern",
+        )
+
+    def _match_scheduling_events() -> None:
+        def _scheduling_cause(event: WarningEventSummary) -> str | None:
+            msg = (event.message or "").lower()
+            if "untolerated taint" in msg:
+                return "node taints"
+            if "affinity" in msg:
+                return "node affinity"
+            if "insufficient" in msg:
+                return "resource shortage"
+            return None
+
+        matches: List[tuple[WarningEventSummary, str]] = []
+        for event in _unused_warning_events():
+            if event.reason != "FailedScheduling":
+                continue
+            cause = _scheduling_cause(event)
+            if not cause:
+                continue
+            matches.append((event, cause))
+        if not matches:
+            return
+        events, causes = zip(*matches)
+        _mark_events(events)
+        namespace = _describe_namespace(_capture_namespaces(events), "default")
+        cause_label = causes[0]
+        signal_desc = f"Pods remain Pending in {namespace} because scheduling is blocked by {cause_label}."
+        _record_pattern(
+            reason_tag="failed_scheduling",
+            signal_desc=signal_desc,
+            severity="medium",
+            layer=Layer.WORKLOAD,
+            hypothesis_desc=(
+                f"Scheduling is prevented by {cause_label}, so pods cannot land on nodes; node taints, affinity, or capacity must be rechecked."
+            ),
+            hypothesis_confidence=ConfidenceLevel.MEDIUM,
+            probable_layer=Layer.NODE,
+            falsify="Pods eventually schedule once nodes match the requested taints/affinity and available resources.",
+            next_check_desc=f"Describe Pending pods and node taints/affinity in {namespace} to confirm the scheduling block.",
+            evidence_needed=[
+                f"kubectl describe pods -n {namespace} --field-selector=status.phase=Pending",
+                "kubectl describe nodes",
+            ],
+            namespaces=[namespace],
+            reference_label="scheduling block pattern",
+        )
+
+    def _match_metrics_events() -> None:
+        matches = [event for event in _unused_warning_events() if event.reason == "FailedGetResourceMetric" or "metrics-server" in (event.message or "").lower()]
+        if not matches:
+            return
+        _mark_events(matches)
+        namespace = _describe_namespace(_capture_namespaces(matches), "default")
+        signal_desc = f"HPA resource metrics are unavailable in {namespace}; metrics-server may be offline."
+        _record_pattern(
+            reason_tag="missing_metrics",
+            signal_desc=signal_desc,
+            severity="medium",
+            layer=Layer.OBSERVABILITY,
+            hypothesis_desc=(
+                "The metrics-server endpoint or HPA resource metric API is unreachable, so scaling decisions cannot proceed."
+            ),
+            hypothesis_confidence=ConfidenceLevel.MEDIUM,
+            probable_layer=Layer.OBSERVABILITY,
+            falsify="Metrics-server becomes healthy and resource metrics are present for the HPA.",
+            next_check_desc=f"Collect HPA and metrics-server status in {namespace} to see what is missing.",
+            evidence_needed=[
+                f"kubectl describe hpa -n {namespace}",
+                "kubectl get deployment metrics-server -n kube-system",
+            ],
+            namespaces=[namespace],
+            reference_label="metrics-server pattern",
+        )
+
+    def _match_pvc_events() -> None:
+        matches = [event for event in _unused_warning_events() if event.reason in {"ProvisioningFailed", "VolumeBindingFailed"} or "persistentvolumeclaim" in (event.message or "").lower()]
+        if not matches:
+            return
+        _mark_events(matches)
+        namespace = _describe_namespace(_capture_namespaces(matches), "default")
+        signal_desc = f"PersistentVolumeClaims in {namespace} remain Pending because provisioning failed."
+        _record_pattern(
+            reason_tag="pvc_pending",
+            signal_desc=signal_desc,
+            severity="medium",
+            layer=Layer.STORAGE,
+            hypothesis_desc=(
+                "The storage class or provisioner cannot satisfy the PVC request, leaving volumes unbound."
+            ),
+            hypothesis_confidence=ConfidenceLevel.MEDIUM,
+            probable_layer=Layer.STORAGE,
+            falsify="PVCs bind and PVs attach without provisioning errors.",
+            next_check_desc=f"Describe PVCs and related storageclasses in {namespace} to examine the provisioning failure.",
+            evidence_needed=[
+                f"kubectl describe pvc -n {namespace}",
+                "kubectl get storageclass",
+            ],
+            namespaces=[namespace],
+            reference_label="PVC provisioning pattern",
+        )
+
+    def _match_ingress_events() -> None:
+        matches = [event for event in _unused_warning_events() if event.reason in {"Unhealthy", "Failed", "BackendTimeout"}]
+        matches = [event for event in matches if any(keyword in (event.message or "").lower() for keyword in ("backend", "endpoint", "timeout", "connection refused", "503"))]
+        matches = [event for event in matches if "probe" not in (event.message or "").lower()]
+        if not matches:
+            return
+        _mark_events(matches)
+        namespace = _describe_namespace(_capture_namespaces(matches), "default")
+        signal_desc = f"Ingress/backend timeouts detected in {namespace}."
+        _record_pattern(
+            reason_tag="ingress_timeout",
+            signal_desc=signal_desc,
+            severity="medium",
+            layer=Layer.NETWORK,
+            hypothesis_desc=(
+                "Ingress or service endpoints are missing/unhealthy, leading to backend timeouts at the gateway."
+            ),
+            hypothesis_confidence=ConfidenceLevel.MEDIUM,
+            probable_layer=Layer.NETWORK,
+            falsify="Endpoints report Ready and timeouts disappear when traffic reaches backends.",
+            next_check_desc=f"Inspect ingress endpoints and services in {namespace} to verify backend availability.",
+            evidence_needed=[
+                f"kubectl get ingress -n {namespace}",
+                f"kubectl get endpoints -n {namespace}",
+                f"kubectl describe svc -n {namespace}",
+            ],
+            namespaces=[namespace],
+            reference_label="ingress timeout pattern",
+        )
+
+    _match_probe_events()
+    _match_scheduling_events()
+    _match_metrics_events()
+    _match_pvc_events()
+    _match_ingress_events()
+
     def _pick_layer() -> Layer:
         ranking = {"high": 0, "medium": 1, "low": 2}
         best = min(signals, key=lambda signal: ranking.get(signal.severity, 2))
@@ -1023,21 +1256,22 @@ def build_health_assessment(
                 else "Missing telemetry or version drift suggests the cluster may be unstable."
             )
         )
-        hypotheses = [
-            Hypothesis(
-                id=generator.next_id(),
-                description=description,
-                confidence=ConfidenceLevel.MEDIUM,
-                probable_layer=dominant_layer,
-                what_would_falsify=(
-                    "Nodes become ready, pods stay running, warning events quiet down, and Helm errors stay absent."
-                    if node_issue_present or workload_issue_present
-                    else "Telemetry gaps close and node/pod counts stabilize without Helm errors."
-                ),
-            )
-        ]
+        base_hypothesis = Hypothesis(
+            id=generator.next_id(),
+            description=description,
+            confidence=ConfidenceLevel.MEDIUM,
+            probable_layer=dominant_layer,
+            what_would_falsify=(
+                "Nodes become ready, pods stay running, warning events quiet down, and Helm errors stay absent."
+                if node_issue_present or workload_issue_present
+                else "Telemetry gaps close and node/pod counts stabilize without Helm errors."
+            ),
+        )
+        detailed_hypotheses: List[Hypothesis] = []
+        detailed_hypotheses.extend(pattern_hypotheses)
         if insight_hypothesis:
-            hypotheses.insert(0, insight_hypothesis)
+            detailed_hypotheses.append(insight_hypothesis)
+        hypotheses = detailed_hypotheses + [base_hypothesis]
         safety_level = SafetyLevel.LOW_RISK
     else:
         hypotheses = [
@@ -1079,6 +1313,7 @@ def build_health_assessment(
                 evidence_needed=["nodes", "pods", "jobs", "events"],
             )
         )
+    next_checks.extend(pattern_next_checks)
     next_checks.extend(baseline_next_checks)
     next_checks.extend(image_pull_secret_next_checks)
 
@@ -1088,8 +1323,10 @@ def build_health_assessment(
         references.append("missing evidence")
     if image_pull_secret_insight:
         references.append("image pull secret supply chain")
+    references.extend(pattern_refs)
     if not references:
         references.append("routine health monitoring")
+    references = list(dict.fromkeys(references))
 
     assessment_action = RecommendedAction(
         type="observation",
@@ -1116,6 +1353,8 @@ def build_health_assessment(
         node_count=snapshot.metadata.node_count,
         pod_count=snapshot.metadata.pod_count,
         control_plane_version=control_plane_version,
+        pattern_reasons=tuple(dict.fromkeys(pattern_reasons)),
+        pattern_metadata={key: tuple(pattern_metadata.get(key, ())) for key in pattern_metadata},
     )
 
 
@@ -1125,6 +1364,8 @@ class HealthSnapshotRecord:
     snapshot: ClusterSnapshot
     path: Path
     assessment: Optional[HealthAssessmentResult] = None
+    pattern_reasons: Tuple[str, ...] = field(default_factory=tuple)
+    pattern_metadata: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
     image_pull_secret_insight: ImagePullSecretInsight | None = None
 
     def refs(self) -> Tuple[str, str]:
@@ -1507,6 +1748,8 @@ class HealthLoopRunner:
                 image_pull_secret_insight=insight,
             )
             record.assessment = assessment_result
+            record.pattern_reasons = assessment_result.pattern_reasons
+            record.pattern_metadata = assessment_result.pattern_metadata
             assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
             artifact = HealthAssessmentArtifact(
                 run_label=self.run_label,
@@ -1556,6 +1799,8 @@ class HealthLoopRunner:
                     record.target.context,
                     (record.target.context,),
                     record.image_pull_secret_insight,
+                    pattern_reasons=record.pattern_reasons,
+                    pattern_metadata=record.pattern_metadata,
                 )
             except RuntimeError as exc:
                 self._collection_messages.append(
@@ -1580,6 +1825,7 @@ class HealthLoopRunner:
                 pod_descriptions=evidence.pod_descriptions,
                 rollout_status=evidence.rollouts,
                 collection_timestamps=evidence.collection_timestamps,
+                pattern_details=evidence.pattern_details,
             )
             path = directory / f"{self.run_id}-{record.target.label}-drilldown.json"
             _write_json(artifact.to_dict(), path)
@@ -1625,6 +1871,7 @@ class HealthLoopRunner:
             reasons.append("job_failures")
         if record.image_pull_secret_insight:
             reasons.append(BROKEN_IMAGE_PULL_SECRET_REASON)
+        reasons.extend(record.pattern_reasons)
         unique_reasons = tuple(dict.fromkeys(reasons))
         return unique_reasons
 

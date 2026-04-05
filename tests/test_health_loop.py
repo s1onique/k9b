@@ -3,14 +3,18 @@ import shutil
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from tests.path_helper import ensure_src_in_path
 
 ensure_src_in_path()
 
 from k8s_diag_agent.compare.two_cluster import ClusterComparison, compare_snapshots
-from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
+from k8s_diag_agent.collect.cluster_snapshot import (
+    ClusterSnapshot,
+    WarningEventSummary,
+    extract_cluster_snapshots,
+)
 from k8s_diag_agent.health.baseline import (
     BaselinePolicy,
     BaselineDriftCategory,
@@ -27,6 +31,7 @@ from k8s_diag_agent.health.drilldown import (
 )
 from k8s_diag_agent.health.loop import (
     ComparisonPeer,
+    HealthAssessmentResult,
     HealthLoopRunner,
     HealthHistoryEntry,
     HealthRating,
@@ -51,6 +56,7 @@ class HealthLoopTests(unittest.TestCase):
         self.tmp_dir = Path("tests/tmp-health")
         if self.tmp_dir.exists():
             shutil.rmtree(self.tmp_dir)
+        self.pattern_snapshots = self._load_pattern_snapshots()
 
     def tearDown(self) -> None:
         if self.tmp_dir.exists():
@@ -66,6 +72,8 @@ class HealthLoopTests(unittest.TestCase):
             context: str,
             namespaces: Sequence[str],
             image_pull_secret_insight: ImagePullSecretInsight | None = None,
+            pattern_reasons: Sequence[str] | None = None,
+            pattern_metadata: Mapping[str, Sequence[str]] | None = None,
         ) -> DrilldownEvidence:
             self.calls.append((context, tuple(namespaces)))
             return DrilldownEvidence(
@@ -156,6 +164,23 @@ class HealthLoopTests(unittest.TestCase):
                 ),
             ),
         )
+
+    def _load_pattern_snapshots(self) -> Dict[str, ClusterSnapshot]:
+        path = Path("tests/fixtures/snapshots/deterministic-patterns.json")
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        snapshots = extract_cluster_snapshots(raw)
+        return {snapshot.metadata.cluster_id: snapshot for snapshot in snapshots}
+
+    def _pattern_assessment(self, cluster_id: str) -> HealthAssessmentResult:
+        snapshot = self.pattern_snapshots[cluster_id]
+        target = HealthTarget(
+            context=cluster_id,
+            label=cluster_id,
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        return build_health_assessment(snapshot, target, None, BaselinePolicy.empty())
 
     def _baseline_policy(
         self,
@@ -657,6 +682,45 @@ class HealthLoopTests(unittest.TestCase):
         self.assertTrue(drilldowns)
         self.assertIn(BROKEN_IMAGE_PULL_SECRET_REASON, drilldowns[0].trigger_reasons)
 
+    def test_drilldown_collects_pattern_details_for_probe(self) -> None:
+        snapshot = self.pattern_snapshots["pattern-probe"]
+        snapshots = {"pattern-probe": snapshot}
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        target = HealthTarget(
+            context="pattern-probe",
+            label="pattern-probe",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        config = HealthRunConfig(
+            run_label="pattern",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        collector_stub = DrilldownCollector(command_runner=lambda command: "{}")
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=collector_stub,
+        )
+        _, _, drilldowns = runner.execute()
+        self.assertTrue(drilldowns)
+        self.assertIn("probe_failure", drilldowns[0].trigger_reasons)
+        self.assertIn("probe_failure", drilldowns[0].pattern_details)
+
     def test_build_health_assessment_crashloop_backoff_degrades(self) -> None:
         snapshot = self._make_snapshot(
             "cluster-crashloop",
@@ -756,6 +820,53 @@ class HealthLoopTests(unittest.TestCase):
         self.assertIn(
             "Image pull secret glcr-secret", result.assessment.hypotheses[0].description
         )
+
+    def test_deterministic_patterns_emit_findings_and_checks(self) -> None:
+        expectations = [
+            {
+                "cluster_id": "pattern-probe",
+                "reason": "probe_failure",
+                "finding_fragment": "Readiness/liveness probe",
+                "next_check_fragment": "Inspect pods in",
+            },
+            {
+                "cluster_id": "pattern-scheduling",
+                "reason": "failed_scheduling",
+                "finding_fragment": "Pods remain Pending",
+                "next_check_fragment": "Describe Pending pods",
+            },
+            {
+                "cluster_id": "pattern-metrics",
+                "reason": "missing_metrics",
+                "finding_fragment": "HPA resource metrics",
+                "next_check_fragment": "Collect HPA and metrics-server",
+            },
+            {
+                "cluster_id": "pattern-pvc",
+                "reason": "pvc_pending",
+                "finding_fragment": "PersistentVolumeClaims in",
+                "next_check_fragment": "Describe PVCs and related storageclasses",
+            },
+            {
+                "cluster_id": "pattern-ingress",
+                "reason": "ingress_timeout",
+                "finding_fragment": "Ingress/backend timeouts",
+                "next_check_fragment": "Inspect ingress endpoints",
+            },
+        ]
+        for spec in expectations:
+            with self.subTest(reason=spec["reason"]):
+                result = self._pattern_assessment(spec["cluster_id"])
+                self.assertIn(spec["reason"], result.pattern_reasons)
+                descriptions = [finding.description for finding in result.assessment.findings]
+                self.assertTrue(
+                    any(spec["finding_fragment"] in desc for desc in descriptions)
+                )
+                check_descriptions = [check.description for check in result.assessment.next_evidence_to_collect]
+                self.assertTrue(
+                    any(spec["next_check_fragment"] in desc for desc in check_descriptions)
+                )
+
 
     def test_drilldown_not_created_when_healthy(self) -> None:
         snapshot = self._make_snapshot(
