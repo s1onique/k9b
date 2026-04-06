@@ -6,6 +6,8 @@ LLM-based Kubernetes monitoring and diagnostics agent.
 ## Purpose
 Build an agent that helps platform engineers and operators understand abnormal Kubernetes states by separating raw signals from findings, findings from hypotheses, and hypotheses from recommended next checks or actions.
 
+Structured logging and a documented security posture keep the artifacts and operator workflows auditable before any adaptation touches production.
+
 ## Primary goals
 - Detect and summarize abnormal cluster and workload conditions.
 - Correlate evidence across Kubernetes objects, events, metrics, logs, and recent change history.
@@ -53,6 +55,8 @@ The project is improving when it becomes better at:
 - rollback-safe guidance,
 - observability,
 - and eval coverage.
+- policy gating that clearly surfaces cohort-aware eligible/skipped/unsafe statuses before proposing suspicious-drift pairings.
+- a fast operator workflow (`scripts/run_health_once.sh`) that bundles config inspection, a one-shot health run, the summary view, and optional digest generation.
 
 ## Governing repo guidance
 Primary human-readable entrypoint: `AGENTS.md`

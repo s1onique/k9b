@@ -83,7 +83,7 @@ k8s-diag-agent run-health-loop --config runs/health-config.local.json [--trigger
 
  Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`, keep placeholders (`cluster-alpha`, `cluster-beta`, etc.), and replace them with your real contexts before running. The config describes which clusters to monitor, watched Helm releases/CRDs, trigger policies, and peer mappings.
  Each target entry now declares `cluster_class`, `cluster_role`, and `baseline_cohort` (or legacy `platform_generation`) so the loop can reason about responsibility and cohort compatibility across suspicious-drift pairs.
- Run `.venv/bin/python scripts/inspect_health_config.py runs/health-config.local.json` to preview the metadata matrix and confirm every suspicious-drift comparison remains eligible before executing the loop.
+ Run `.venv/bin/python scripts/inspect_health_config.py runs/health-config.local.json` to preview the metadata matrix, see which peers are eligible, skipped, or unsafe, and confirm every suspicious-drift comparison remains policy-compatible before executing the loop.
  Each mapping must declare exactly one `primary`/`secondary` pair so the intentional same-role comparison stays focused. Leave `peer_mappings` empty (and omit `manual_pairs`) when you just need per-cluster health assessments because comparisons only run for configured peers or explicit triggers. Use `--trigger` to force a manual comparison pair for a single run.
 
 The health config now declares a stable `run_label` instead of a fixed `run_id`. Every invocation of `run-health-loop` generates a unique `run_id` (timestamped and safe for filenames) while keeping the configured label in the produced artifacts so you can still correlate runs with your policy. Existing configs that still set `run_id` will continue to work for now, but that value is treated as the run label and a warning flags the deprecation.
@@ -92,7 +92,7 @@ Scheduling is optional but the health loop now ships with built-in rhythm contro
 
 To operate the loop continuously, use `scripts/run_health_scheduler.py` with the cadence flags that match your shift cycle (for example `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 48`). The wrapper drives `run-health-loop`, logs each scheduler invocation to `runs/health/scheduler.log`, and keeps the deterministic file-backed layout that every review and adaptation run relies on.
 
-After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Each comparison line now documents whether the pair was eligible, why it was run or skipped, the classification (expected vs suspicious drift), the expected and ignored drift categories, and any notes you configured in `peer_mappings`, making it easier to understand how the policy drove the comparison. Include `--run-id <id>` when you need to revisit a specific iteration.
+ After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Each comparison line now documents whether the pair was eligible, skipped, or flagged as unsafe, why it was run or skipped, the classification (expected vs suspicious drift), the expected and ignored drift categories, and any notes you configured in `peer_mappings`, making it easier to understand how the policy drove the comparison. Include `--run-id <id>` when you need to revisit a specific iteration.
 
 Every run also gathers lightweight health signals (node readiness/pressure counts, non-running pods, CrashLoopBackOff and ImagePullBackOff tallies, pending pods, failed jobs, and recent warning events) and wires them into the assessment so findings explicitly separate baseline drift, workload health issues, missing evidence, and regressions.
 
@@ -111,6 +111,11 @@ Every run also gathers lightweight health signals (node readiness/pressure count
    - `runs/health/reviews/` for the health review payloads plus `runs/health/proposals/` for typed adaptation ideas (see `docs/schemas/health-proposal-schema.md` for the proposal contract)
    - `runs/health/history.json` for the persisted per-cluster history that powers "changed since previous run" findings (node/pod counts, control plane version, watched Helm releases/CRDs, and missing evidence). This history plays a key role in keeping future runs regression-aware.
 4. Repeat the command to capture another point in time; the deterministic findings plus the persisted history let you replay or reason about regressions without needing a scheduler. Use `--trigger primary:secondary` when you want to force a peer comparison for a single run.
+
+
+### Operator quick run script
+
+`scripts/run_health_once.sh` wraps `inspect_health_config.py`, `run-health-loop --once`, and `health-summary`; pass `--digest` or `--digest-output <path>` to run `make_health_digest.sh` afterward. The wrapper reads the config's `output_dir`, keeps every step inside the configured artifact layout, and presents the same eligibility/unsafe signals you already get from the individual commands.
 
 
 ### Health review and adaptation workflow

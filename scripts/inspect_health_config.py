@@ -56,7 +56,16 @@ def _print_targets(config: HealthRunConfig) -> None:
         )
 
 
+def _format_meta(value: str | None) -> str:
+    return value or "missing"
+
+
+def _format_categories(values: tuple[str, ...]) -> str:
+    return ", ".join(values) if values else "none"
+
+
 def _check_peers(config: HealthRunConfig, records: dict[str, HealthSnapshotRecord]) -> int:
+    status_counts = {"eligible": 0, "skipped": 0, "unsafe": 0}
     eligible_suspicious = 0
     total_suspicious = 0
     issues_found = False
@@ -78,26 +87,48 @@ def _check_peers(config: HealthRunConfig, records: dict[str, HealthSnapshotRecor
         (
             policy_eligible,
             policy_reason,
-            *_ignored,
+            primary_class,
+            secondary_class,
+            primary_role,
+            secondary_role,
             primary_cohort,
             secondary_cohort,
         ) = _policy_eligible_pair(
             primary, secondary, peer.intent, config.baseline_policy
         )
-        status = "eligible" if policy_eligible else "skipped"
+        if policy_eligible:
+            status = "eligible"
+        elif peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
+            status = "unsafe"
+            issues_found = True
+        else:
+            status = "skipped"
+        status_counts[status] += 1
+        if policy_eligible and peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
+            eligible_suspicious += 1
         print(
-            f"- {primary.target.label} vs {secondary.target.label} ({peer.intent.value}): "
+            f"- {primary.target.label} ({primary.target.context}) vs "
+            f"{secondary.target.label} ({secondary.target.context}) ({peer.intent.label()}): "
             f"{status}; reason: {policy_reason}"
         )
-        if peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
-            if policy_eligible:
-                eligible_suspicious += 1
-            if not policy_eligible and "baseline cohort" in policy_reason.lower():
-                issues_found = True
-        if not policy_eligible and "baseline cohort" in policy_reason.lower():
-            print(
-                f"  Cohort breakdown: primary={primary_cohort}, secondary={secondary_cohort}"
-            )
+        print(
+            f"  class: {_format_meta(primary_class)} vs {_format_meta(secondary_class)}"
+        )
+        print(
+            f"  roles: {_format_meta(primary_role)} vs {_format_meta(secondary_role)}"
+        )
+        print(
+            f"  cohorts: {_format_meta(primary_cohort)} vs {_format_meta(secondary_cohort)}"
+        )
+        print(
+            f"  expected drift categories: {_format_categories(peer.expected_drift_categories)}"
+        )
+        if peer.notes:
+            print(f"  notes: {peer.notes}")
+        print("")
+    print("Comparison status summary:")
+    for label in ("eligible", "skipped", "unsafe"):
+        print(f"- {label}: {status_counts[label]}")
     if total_suspicious:
         print(
             f"  Suspicious drift pairs eligible: {eligible_suspicious}/{total_suspicious}"
@@ -105,7 +136,7 @@ def _check_peers(config: HealthRunConfig, records: dict[str, HealthSnapshotRecor
         if eligible_suspicious == 0:
             print("  (No eligible suspicious-drift comparisons configured yet.)")
     if issues_found:
-        print("Cohort metadata issues detected; please fix before running the loop.")
+        print("Unsafe suspicious-drift mappings detected; fix the configuration before running the loop.")
     return int(issues_found)
 
 

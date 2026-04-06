@@ -23,6 +23,8 @@ Current focus:
 - expanding drilldown collection/assessment so operators have targeted context for each regression,
 - forcing eval coverage around review scoring, proposal generation, and `check-proposal` replays while preserving the fixture-driven regression harness,
 - documenting the operator workflow that links `run-health-loop` → review/scoring → proposal generation → `check-proposal` before any adaptation acts on production.
+- improving policy realism so the inspector flags suspicious-drift peers as eligible, skipped, or unsafe and the security posture is preserved via structured logging,
+- adding a quick `scripts/run_health_once.sh` driver that runs config inspection, a one-shot health loop, `health-summary`, and optional digest generation without introducing new subsystems.
 
 ## Feedback loop status
 

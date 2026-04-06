@@ -3,15 +3,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 from .cli_handlers import (
-    BATCH_CONFIG_FALLBACK,
     DEFAULT_BATCH_CONFIG,
-    HEALTH_CONFIG_FALLBACK,
     HEALTH_CONFIG_DEFAULT,
-    RUN_CONFIG_FALLBACK,
     RUN_CONFIG_DEFAULT,
     handle_assess_drilldown,
     handle_assess_snapshots,
@@ -25,9 +22,7 @@ from .cli_handlers import (
     handle_promote_proposal,
     handle_snapshot,
 )
-from .collect.live_snapshot import list_kube_contexts
-from .feedback.runner import run_feedback_loop
-from .llm.provider import AVAILABLE_PROVIDERS, get_provider
+from .llm.provider import AVAILABLE_PROVIDERS
 
 _SUBCOMMANDS = {
     "fixture",
@@ -78,7 +73,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     return handle_fixture(args)
 
 
-def _normalize_args(argv: Iterable[str]) -> List[str]:
+def _normalize_args(argv: Iterable[str]) -> list[str]:
     normalized = list(argv)
     if not normalized:
         return ["fixture"]
@@ -105,9 +100,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fixture_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
 
-    snapshot_parser = subparsers.add_parser("snapshot", help="Collect a typed cluster snapshot.")
-    snapshot_parser.add_argument("--context", required=True, help="Kubernetes context name to collect.")
-    snapshot_parser.add_argument("--output", "-o", type=Path, required=True, help="Path for snapshot JSON.")
+    snapshot_parser = subparsers.add_parser(
+        "snapshot",
+        help="Collect a typed cluster snapshot.",
+    )
+    snapshot_parser.add_argument(
+        "--context",
+        required=True,
+        help="Kubernetes context name to collect.",
+    )
+    snapshot_parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        required=True,
+        help="Path for snapshot JSON.",
+    )
 
     compare_parser = subparsers.add_parser("compare", help="Compare two snapshots.")
     compare_parser.add_argument("snapshot_a", type=Path, help="First snapshot JSON file.")
@@ -119,7 +127,10 @@ def build_parser() -> argparse.ArgumentParser:
         "-c",
         type=Path,
         default=_DEFAULT_BATCH_CONFIG,
-        help="Path to JSON config listing batch targets (defaults to snapshots/targets.local.json, which must point at your real contexts).",
+        help=(
+            "Path to JSON config listing batch targets "
+            "(defaults to snapshots/targets.local.json, which must point at your real contexts)."
+        ),
     )
 
     assess_parser = subparsers.add_parser(
@@ -134,8 +145,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="default",
         help="LLM provider name to use for assessment.",
     )
-    assess_parser.add_argument("--output", "-o", type=Path, help="Optional path for assessment JSON output.")
-    assess_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
+    assess_parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        help="Optional path for assessment JSON output.",
+    )
+    assess_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress summary output.",
+    )
 
     drilldown_parser = subparsers.add_parser(
         "assess-drilldown",
@@ -148,8 +168,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="default",
         help="LLM provider name to use for assessment.",
     )
-    drilldown_parser.add_argument("--output", "-o", type=Path, help="Optional path for assessment JSON output.")
-    drilldown_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
+    drilldown_parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        help="Optional path for assessment JSON output.",
+    )
+    drilldown_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress summary output.",
+    )
 
     run_parser = subparsers.add_parser("run-feedback", help="Run the operational feedback loop.")
     run_parser.add_argument(
@@ -157,7 +186,10 @@ def build_parser() -> argparse.ArgumentParser:
         "-c",
         type=Path,
         default=_RUN_CONFIG_DEFAULT,
-        help="Feedback run configuration file (defaults to runs/run-config.local.json; template files require explicit --config).",
+        help=(
+            "Feedback run configuration file (defaults to runs/run-config.local.json; "
+            "template files require explicit --config)."
+        ),
     )
     run_parser.add_argument(
         "--provider",
@@ -173,7 +205,10 @@ def build_parser() -> argparse.ArgumentParser:
         "-c",
         type=Path,
         default=_HEALTH_CONFIG_DEFAULT,
-        help="Health run configuration file (defaults to runs/health-config.local.json; template files require explicit --config).",
+        help=(
+            "Health run configuration file (defaults to runs/health-config.local.json; "
+            "template files require explicit --config)."
+        ),
     )
     health_parser.add_argument(
         "--trigger",
@@ -241,7 +276,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--health-config",
         type=Path,
         default=Path("runs/health-config.local.json"),
-        help="Health config file that drives the proposal generation (used for defaults and baseline paths).",
+        help=(
+            "Health config file that drives the proposal generation "
+            "(used for defaults and baseline paths)."
+        ),
     )
     promote_parser.add_argument(
         "--baseline",

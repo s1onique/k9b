@@ -50,6 +50,8 @@ Current priorities are:
 - `run-health-loop` now produces per-cluster assessments, drilldown artifacts, reviews, trigger summaries, and typed proposals under `runs/health/` so every iteration is inspectable.
 - Review scoring feeds `generate_proposals_from_review`, which emits proposals for warning thresholds, baseline policies, and drilldown prioritization; `check-proposal` replays them against deterministic fixtures (`tests/fixtures/...`) before they can influence runtime policies.
 - The adaptation helpers (`src/k8s_diag_agent/health/adaptation.py`) keep proposal objects typed and provide `evaluate_proposal` for quick evaluation using production-quality fixtures.
+- Cohort-aware comparison gating now marks suspicious-drift peers as eligible, skipped, or unsafe, and `scripts/inspect_health_config.py` surfaces those statuses alongside the structured logging metadata that the security policy requires.
+- `scripts/run_health_once.sh` ties the inspector, `run-health-loop --once`, `health-summary`, and optional `make_health_digest.sh` digest so quick operator workflows leave the same audit trail as the longer loops.
 
 ## Technical position for v1
 

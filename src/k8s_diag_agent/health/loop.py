@@ -512,10 +512,11 @@ class HealthRunConfig:
         if not targets:
             raise ValueError("`targets` must include at least one entry")
 
-        references: Set[str] = set()
+        target_lookup: Dict[str, HealthTarget] = {}
         for target in targets:
-            references.add(normalize_ref(target.context))
-            references.add(normalize_ref(target.label))
+            target_lookup[normalize_ref(target.context)] = target
+            target_lookup[normalize_ref(target.label)] = target
+        references: Set[str] = set(target_lookup.keys())
 
         manual_raw = raw.get("manual_pairs") or []
         manual_pairs: List[ManualComparison] = []
@@ -600,6 +601,8 @@ class HealthRunConfig:
             baseline_policy = BaselinePolicy.load_from_file(baseline_path)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise ValueError(f"Unable to load baseline policy {baseline_path}: {exc}")
+
+        _validate_suspicious_pairs(peers, target_lookup, baseline_policy)
 
         return cls(
             run_label=run_label,
@@ -2419,6 +2422,47 @@ def _parse_manual_triggers(values: Sequence[str]) -> List[ManualComparison]:
             ManualComparison(primary=normalize_ref(primary), secondary=normalize_ref(secondary))
         )
     return manual
+
+
+def _validate_suspicious_pairs(
+    peers: Sequence[ComparisonPeer],
+    target_lookup: dict[str, HealthTarget],
+    baseline: BaselinePolicy,
+) -> None:
+    issues: list[str] = []
+    for peer in peers:
+        if peer.intent != ComparisonIntent.SUSPICIOUS_DRIFT:
+            continue
+        primary = target_lookup.get(peer.primary)
+        secondary = target_lookup.get(peer.secondary)
+        if not primary or not secondary:
+            issues.append(
+                f"Suspicious-drift mapping {peer.primary} -> {peer.secondary} references unknown targets."
+            )
+            continue
+        problems: list[str] = []
+        if primary.cluster_class != secondary.cluster_class:
+            problems.append(
+                f"cluster_class differs ({primary.cluster_class or 'missing'} vs {secondary.cluster_class or 'missing'})"
+            )
+        if primary.baseline_cohort != secondary.baseline_cohort:
+            problems.append(
+                f"baseline_cohort differs ({primary.baseline_cohort or 'missing'} vs {secondary.baseline_cohort or 'missing'})"
+            )
+        if problems:
+            issues.append(
+                (
+                    f"Suspicious-drift pair {primary.label} ({primary.context}) vs "
+                    f"{secondary.label} ({secondary.context}) invalid: "
+                    + "; ".join(problems)
+                )
+            )
+    if issues:
+        raise ValueError(
+            "Suspicious-drift comparisons must stay within the same class/cohort and be backed by baseline peer roles. "
+            + "Fix the following issues:\n- "
+            + "\n- ".join(issues)
+        )
 
 
 def run_health_loop(

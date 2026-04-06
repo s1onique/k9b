@@ -5,6 +5,19 @@ from .collect.cluster_snapshot import (
     extract_cluster_snapshots,
 )
 from .compare.two_cluster import ClusterComparison, compare_snapshots
+from .feedback import (  # noqa: F401
+    ArtifactValidationError,
+    AssessmentArtifact,
+    FailureMode,
+    FeedbackRunConfig,
+    FeedbackRunRunner,
+    ProposedImprovement,
+    RunArtifact,
+    RunArtifactValidator,
+    SnapshotPairArtifact,
+    ValidationResult,
+    run_feedback_loop,
+)
 from .models import (
     Assessment,
     ConfidenceLevel,
@@ -20,19 +33,6 @@ from .models import (
 from .schemas import (  # noqa: F401
     AssessmentValidator,
     FixtureValidator,
-)
-from .feedback import (  # noqa: F401
-    ArtifactValidationError,
-    AssessmentArtifact,
-    FailureMode,
-    FeedbackRunConfig,
-    FeedbackRunRunner,
-    ProposedImprovement,
-    RunArtifact,
-    RunArtifactValidator,
-    SnapshotPairArtifact,
-    ValidationResult,
-    run_feedback_loop,
 )
 
 __all__ = [
