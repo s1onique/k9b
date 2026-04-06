@@ -20,6 +20,7 @@ from .cli_handlers import (
     handle_compare,
     handle_fixture,
     handle_health_loop,
+    handle_health_summary,
     handle_run_feedback,
     handle_promote_proposal,
     handle_snapshot,
@@ -39,6 +40,7 @@ _SUBCOMMANDS = {
     "run-health-loop",
     "check-proposal",
     "promote-proposal",
+    "health-summary",
 }
 
 _DEFAULT_BATCH_CONFIG = DEFAULT_BATCH_CONFIG
@@ -67,6 +69,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         return handle_run_feedback(args, default_config=_RUN_CONFIG_DEFAULT)
     if command == "run-health-loop":
         return handle_health_loop(args, default_config=_HEALTH_CONFIG_DEFAULT)
+    if command == "health-summary":
+        return handle_health_summary(args)
     if command == "check-proposal":
         return handle_check_proposal(args)
     if command == "promote-proposal":
@@ -198,6 +202,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-runs",
         type=_positive_int,
         help="Optional cap on repeated runs (requires --every-seconds).",
+    )
+
+    summary_parser = subparsers.add_parser(
+        "health-summary",
+        help="Show a compact overview of the latest health run artifacts.",
+    )
+    summary_parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        default=Path("runs/health"),
+        help="Base directory of health artifacts (default: runs/health).",
+    )
+    summary_parser.add_argument(
+        "--run-id",
+        help="Optionally target a specific run_id instead of the latest.",
     )
 
     check_parser = subparsers.add_parser(

@@ -35,6 +35,7 @@ from .normalize.evidence import normalize_signals
 from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .reason.diagnoser import build_findings_and_hypotheses
 from .render.formatter import assessment_to_dict, dump_json, format_summary
+from .health.summary import format_health_summary, gather_health_summary
 
 
 DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
@@ -287,6 +288,16 @@ def handle_health_loop(args: argparse.Namespace, default_config: Path = HEALTH_C
         max_runs=args.max_runs,
         run_once=args.once,
     )
+
+
+def handle_health_summary(args: argparse.Namespace) -> int:
+    try:
+        summary = gather_health_summary(args.runs_dir, run_id=args.run_id)
+    except RuntimeError as exc:
+        print(f"Unable to summarize health runs: {exc}", file=sys.stderr)
+        return 1
+    print(format_health_summary(summary))
+    return 0
 
 
 def handle_check_proposal(args: argparse.Namespace) -> int:

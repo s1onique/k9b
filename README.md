@@ -82,6 +82,10 @@ The health config now declares a stable `run_label` instead of a fixed `run_id`.
 
 Scheduling is optional but the health loop now ships with built-in rhythm control: `--every-seconds` keeps re-running the loop at the requested interval, `--max-runs` caps the number of iterations, and `--once` forces a single collection even if you pass scheduling arguments. A lockfile under `runs/health/.health-loop.lock` prevents overlapping runs and each iteration emits a short summary of the generated artifacts so you can track progress without enabling the verbose collector output.
 
+To operate the loop continuously, use `scripts/run_health_scheduler.py` with the cadence flags that match your shift cycle (for example `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 48`). The wrapper drives `run-health-loop`, logs each scheduler invocation to `runs/health/scheduler.log`, and keeps the deterministic file-backed layout that every review and adaptation run relies on.
+
+After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Include `--run-id <id>` when you need to revisit a specific iteration.
+
 Every run also gathers lightweight health signals (node readiness/pressure counts, non-running pods, CrashLoopBackOff and ImagePullBackOff tallies, pending pods, failed jobs, and recent warning events) and wires them into the assessment so findings explicitly separate baseline drift, workload health issues, missing evidence, and regressions.
 
 

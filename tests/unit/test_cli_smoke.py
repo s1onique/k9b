@@ -29,6 +29,7 @@ class CLISmokeTest(unittest.TestCase):
         ],
         "check-proposal": ["check-proposal", "runs/health/proposals/sample.json"],
         "promote-proposal": ["promote-proposal", "runs/health/proposals/sample.json"],
+        "health-summary": ["health-summary"],
     }
         for command, args in commands.items():
             with self.subTest(command=command):
