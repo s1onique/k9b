@@ -10,6 +10,9 @@ CONFIG_PATH="runs/health-config.local.json"
 RUNS_DIR_OVERRIDE=""
 GENERATE_DIGEST=0
 DIGEST_OUTPUT=""
+DIGEST_TARGET="none"
+
+echo "Operator quick-run steps: inspect config → run health loop → summarize artifacts → optional digest."
 
 usage() {
   cat <<'EOF'
@@ -108,8 +111,8 @@ else
   exit 1
 fi
 
-if [[ $GENERATE_DIGEST -eq 1 ]]; then
-  DIGEST_TARGET="stdout"
+  if [[ $GENERATE_DIGEST -eq 1 ]]; then
+    DIGEST_TARGET="stdout"
   if [[ -n "$DIGEST_OUTPUT" ]]; then
     DIGEST_TARGET="$DIGEST_OUTPUT"
   fi
@@ -126,4 +129,4 @@ if [[ $GENERATE_DIGEST -eq 1 ]]; then
   fi
 fi
 
-echo "Operator health snapshot complete"
+echo "Operator health snapshot complete (runs_dir=$RUNS_DIR, summary=$SUMMARY_OUTPUT, digest=$DIGEST_TARGET)"

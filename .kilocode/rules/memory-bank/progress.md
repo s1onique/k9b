@@ -25,6 +25,7 @@ Current focus:
 - documenting the operator workflow that links `run-health-loop` → review/scoring → proposal generation → `check-proposal` before any adaptation acts on production.
 - improving policy realism and the new policy preflight so suspicious-drift pairs only run when class/role/cohort metadata plus watched releases align, and structured logging records the inspection outcome for audit,
 - expanding the quick-run driver (`scripts/run_health_once.sh`) so it reports the config inspection result, health run exit, summary artifact, and optional digest location while reusing existing CLI commands.
+- syncing documented guidance with `docs/baseline_watch_practices.md` so platform-level baseline pruning and watched release targeting stay align with the preflight gate.
 
 ## Feedback loop status
 
@@ -213,10 +214,11 @@ Do not update this file for:
 
 ## Current summary
 
-The repo has a firm guidance layer, the scaffolding is live, and the work now centers on per-cluster health monitoring: collecting new snapshots, drilling down on anomalies, writing health reviews, and producing adaptation proposals that can be replayed safely via `check-proposal`.
+The repo has a firm guidance layer, the scaffolding is live, and the work now centers on per-cluster health monitoring: collecting new snapshots, drilling down on anomalies, writing health reviews, producing adaptation proposals, and keeping the inspector/quick-run gating honest so the policy memory stays accurate.
 
 The next important move is to:
 1. keep the health artifact layout (snapshots, assessments, reviews, proposals, triggers) consistent and well documented,
 2. expand regression coverage around review scoring, proposal generation, and proposal replay,
 3. keep the fixture-driven regression slice healthy while the new health signals land,
-4. and tighten the operator workflow from `run-health-loop` through review -> proposal -> `check-proposal` so each adaptation is grounded in evidence.
+4. tighten the operator workflow from `run-health-loop` through review -> proposal -> `check-proposal` so each adaptation is grounded in evidence,
+5. and lock the new baseline/watch guidance into the documented memory via `docs/baseline_watch_practices.md` so operators can prune policy drift deliberately.

@@ -37,6 +37,7 @@ Current priorities are:
 
 - Run every Python command through `.venv/bin/python` so the virtual environment is the canonical interpreter.
 - `.venv/bin/python -m unittest discover tests` remains the active verification path unless we intentionally switch to another runner.
+- `.venv/bin/python -m mypy src tests` and `.venv/bin/python -m ruff check src tests` are part of the fast-feedback checklist when iterating on this project.
 
 ## Snapshot/comparison status
 
@@ -50,8 +51,8 @@ Current priorities are:
 - `run-health-loop` now produces per-cluster assessments, drilldown artifacts, reviews, trigger summaries, and typed proposals under `runs/health/` so every iteration is inspectable.
 - Review scoring feeds `generate_proposals_from_review`, which emits proposals for warning thresholds, baseline policies, and drilldown prioritization; `check-proposal` replays them against deterministic fixtures (`tests/fixtures/...`) before they can influence runtime policies.
 - The adaptation helpers (`src/k8s_diag_agent/health/adaptation.py`) keep proposal objects typed and provide `evaluate_proposal` for quick evaluation using production-quality fixtures.
-- Cohort-aware comparison gating now marks suspicious-drift peers as eligible, skipped, or unsafe, while `scripts/inspect_health_config.py` also checks watched releases against the local baseline and records the outcome in the structured logging metadata that the security policy requires.
-- `scripts/run_health_once.sh` ties the inspector, `run-health-loop --once`, `health-summary`, and optional `make_health_digest.sh` digest so quick operator workflows expose the config inspection result, health run outcome, summary artifact, and digest target using the same audit trail as the longer loops.
+- Cohort-aware comparison gating now marks suspicious-drift peers as eligible, skipped, or unsafe, while `scripts/inspect_health_config.py` checks watched releases against the local baseline, flags missing policies, suspicious metadata gaps, and absent class/role/cohort declarations, and points operators to `docs/baseline_watch_practices.md` before the loop starts.
+- `scripts/run_health_once.sh` ties the inspector, `run-health-loop --once`, `health-summary`, and optional `make_health_digest.sh` digest so quick operator workflows expose the config inspection result, health run outcome, summary artifact, digest target, and the steps they executed using the same audit trail as the longer loops.
 
 ## Technical position for v1
 

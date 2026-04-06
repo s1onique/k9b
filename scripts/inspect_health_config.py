@@ -18,6 +18,8 @@ from k8s_diag_agent.health.loop import (
     _policy_eligible_pair,
 )
 
+BASELINE_GUIDE_DOC = Path("docs/baseline_watch_practices.md")
+
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -66,6 +68,21 @@ def _print_targets(config: HealthRunConfig) -> None:
             f"- {target.label} ({target.context}): class={target.cluster_class}, "
             f"role={target.cluster_role}, cohort={target.baseline_cohort}"
         )
+
+
+def _collect_missing_metadata(config: HealthRunConfig) -> list[tuple[str, tuple[str, ...]]]:
+    missing_list: list[tuple[str, tuple[str, ...]]] = []
+    for target in config.targets:
+        missing_fields: list[str] = []
+        if not target.cluster_class:
+            missing_fields.append("cluster_class")
+        if not target.cluster_role:
+            missing_fields.append("cluster_role")
+        if not target.baseline_cohort:
+            missing_fields.append("baseline_cohort")
+        if missing_fields:
+            missing_list.append((target.label, tuple(missing_fields)))
+    return missing_list
 
 
 def _format_meta(value: str | None) -> str:
@@ -234,6 +251,41 @@ def _print_release_summary(
             print(f"    - {label}: {release_key}")
 
 
+def _print_release_guidance(release_issues: list[tuple[str, str]]) -> None:
+    if not release_issues:
+        return
+    print("Release guidance:")
+    print("  - Keep tracked releases aligned with the platform-level baseline definition so retention is predictable.")
+    print("  - Remove a release from a target’s WATCHED list before deleting it from the baseline, or add a matching baseline entry that describes the supported release family.")
+    guide = BASELINE_GUIDE_DOC
+    print(f"  - See {guide} for pruning tips and how to reason about platform-level parity when you pick watched releases.")
+
+
+def _print_metadata_guidance(metadata_issues: list[tuple[str, tuple[str, ...]]]) -> None:
+    if not metadata_issues:
+        return
+    guide = BASELINE_GUIDE_DOC
+    print("Metadata guidance:")
+    print("  - Every target must declare cluster_class, cluster_role, and baseline_cohort so comparisons stay deterministic and auditable.")
+    print("  - Update the listed fields in your health config or use the example policy as a template, then rerun inspect to confirm eligibility.")
+    print(f"  - See {guide} for naming guidance and platform-level cohort modeling.")
+
+
+def _print_peer_guidance(reports: list[PeerComparisonReport]) -> None:
+    unsafe_reports = [
+        report
+        for report in reports
+        if report.intent == ComparisonIntent.SUSPICIOUS_DRIFT and report.status == "unsafe"
+    ]
+    if not unsafe_reports:
+        return
+    guide = BASELINE_GUIDE_DOC
+    print("Suspicious drift guidance:")
+    print("  - Ensure primary/secondary pairs share compatible class/role/cohort metadata before allowing a drift comparison.")
+    print("  - If the pairing should still be compared, mark the intent as expected drift or add matching drift categories in the baseline policy.")
+    print(f"  - See {guide} for cohort-aware policy structure and how to keep suspicious-drift pairs safe.")
+
+
 def _print_preflight_summary(
     config_path: Path,
     baseline_path: Path | None,
@@ -242,6 +294,7 @@ def _print_preflight_summary(
     status_counts: dict[str, int],
     release_issues: list[tuple[str, str]],
     config: HealthRunConfig,
+    metadata_issues: list[tuple[str, tuple[str, ...]]],
 ) -> None:
     unsafe = status_counts.get("unsafe", 0)
     overall_state = "FAIL" if release_issues or unsafe else "PASS"
@@ -256,6 +309,18 @@ def _print_preflight_summary(
     _print_peer_summary(reports, status_counts)
     print("")
     _print_release_summary(config, release_issues)
+    if metadata_issues:
+        print("")
+        print("Metadata coverage: FAIL")
+        for label, fields in metadata_issues:
+            fields_list = ", ".join(fields)
+            print(f"  - {label}: missing {fields_list}")
+    elif not release_issues and not unsafe:
+        print("")
+        print("Metadata coverage: PASS")
+    _print_release_guidance(release_issues)
+    _print_metadata_guidance(metadata_issues)
+    _print_peer_guidance(reports)
 
 
 def main() -> None:
@@ -270,6 +335,7 @@ def main() -> None:
     _print_targets(config)
     reports, status_counts = _collect_peer_reports(config, records)
     release_issues = _check_release_coverage(config)
+    metadata_issues = _collect_missing_metadata(config)
     _print_preflight_summary(
         args.config,
         config.baseline_policy_path,
@@ -278,12 +344,13 @@ def main() -> None:
         status_counts,
         release_issues,
         config,
+        metadata_issues,
     )
     suspicious_issues = any(
         report.intent == ComparisonIntent.SUSPICIOUS_DRIFT and not report.policy_eligible
         for report in reports
     )
-    issues = bool(release_issues or suspicious_issues)
+    issues = bool(release_issues or suspicious_issues or metadata_issues)
     sys.exit(int(issues))
 
 

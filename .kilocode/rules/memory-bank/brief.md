@@ -57,6 +57,7 @@ The project is improving when it becomes better at:
 - and eval coverage.
 - policy gating that clearly surfaces cohort-aware eligible/skipped/unsafe statuses before proposing suspicious-drift pairings.
 - a fast operator workflow (`scripts/run_health_once.sh`) that bundles config inspection, a one-shot health run, the summary view, and optional digest generation.
+- improved preflight diagnostics that call out missing baseline releases, suspicious-drift metadata mismatches, and absent class/role/cohort declarations with links to `docs/baseline_watch_practices.md` so operators can fix policy drift before the loop starts.
 
 ## Governing repo guidance
 Primary human-readable entrypoint: `AGENTS.md`

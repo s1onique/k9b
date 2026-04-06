@@ -14,6 +14,8 @@ Tracked JSON files under `runs/` provide placeholders and examples for configuri
 
 This separation keeps placeholder values isolated while letting the live runner pick up real fleet policy from your local overrides.
 
+For guidance on pruning baseline release entries and aligning watched Helm releases with the platform-level policy, see `docs/baseline_watch_practices.md`.
+
 ## Cluster metadata and comparisons
 
 - Each target entry in `health-config.local.json` must now declare `cluster_class`, `cluster_role`, and `baseline_cohort` (or legacy `platform_generation`) so the loop can reason about intent, responsibilities, and cohort compatibility. Run `scripts/inspect_health_config.py runs/health-config.local.json` to preview the metadata matrix, see which peer mappings are eligible, skipped, or unsafe, and confirm every suspicious-drift comparison stays within the same class/cohort before executing the loop.

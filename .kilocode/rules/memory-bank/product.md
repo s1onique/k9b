@@ -83,8 +83,11 @@ The product is explicitly organized around:
 
 These loops keep the roadmap grounded, the guidance honest, and the reasoning assets evolvable only by reviewable, eval-gated cycles.
 
-Policy realism now enforces cohort-aware gating plus release compatibility checks so the inspect script flags every suspicious-drift comparison as eligible, skipped, or unsafe and surfaces baseline mismatches before the loop runs; structured logging keeps those artifacts auditable and aligned with the repo’s security posture while the resulting health reviews, drilldowns, and proposals remain traceable to well-defined inputs.
-Operators can run the inspect → health run → summary → digest workflow via `scripts/run_health_once.sh`, which reuses the existing commands while preserving the structured logs and policy metadata that guard adaptations and makes the quick-run path feel as trustworthy as the scheduled loop.
+Policy realism now enforces cohort-aware gating plus release compatibility checks so the inspect script flags every suspicious-drift comparison as eligible, skipped, or unsafe, surfaces missing baseline releases, and calls out any absent class/role/cohort declarations before the loop runs. Structured logging keeps those artifacts auditable and aligned with the repo’s security posture while the resulting health reviews, drilldowns, and proposals remain traceable to well-defined inputs.
+
+Operators can run the inspect → health run → summary → digest workflow via `scripts/run_health_once.sh`, which reuses the existing commands while preserving the structured logs and policy metadata that guard adaptations. The helper now prints the deterministic steps and artifacts so the quick-run path mirrors the scheduled loop’s audit trail and keeps every health/proposal/promotion lifecycle step visible.
+
+Fast feedback expectations remain intact: every operator-ready change should still pass the preflight-enhanced inspect path, the quick-run helper, and the regression/eval commands (`.venv/bin/python -m unittest discover tests`, `.venv/bin/python -m mypy src tests`, `.venv/bin/python -m ruff check src tests`) before touching production assets.
 
 ## Expected outputs
 The product should usually produce:

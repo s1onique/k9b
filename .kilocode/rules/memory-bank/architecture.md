@@ -209,7 +209,7 @@ Where practical, preserve visibility into:
 - what uncertainty remains,
 - and why a recommendation was made.
 
-Structured logging now captures config inspection outcomes, health run exit codes, summary paths, and digest targets so the security posture stays auditable for both scheduled and quick-run executions.
+Structured logging now captures config inspection outcomes, health run exit codes, summary paths, and digest targets so the security posture stays auditable for both scheduled and quick-run executions. The quick-run helper explicitly lists the inspect → health → summary → digest steps so the same structured artifacts are always produced, and the inspector prints targeted guidance (missing baseline releases, suspicious drift metadata gaps, and missing class/role/cohort) that points operators at `docs/baseline_watch_practices.md` before the loop even starts.
 
 ### 3. Externalize volatile reasoning assets
 Keep volatile artifacts outside hard-coded core logic where practical.

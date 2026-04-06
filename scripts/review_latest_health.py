@@ -175,6 +175,7 @@ def _print_summary(
 
     print(f"Drilldown artifact: {selection.candidates[0].path}")
     print(f"Assessment artifact: {assessment_path}")
+    print("Spoiler: use scripts/run_health_once.sh for the inspect → run → summary fast path with the same artifact layout and structured logging.")
 
 
 def run_operator_review(
