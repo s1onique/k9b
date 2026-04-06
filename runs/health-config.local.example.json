@@ -10,7 +10,8 @@
       "watched_helm_releases": ["kube-system/observability"],
       "watched_crd_families": ["monitoring.example.com"],
       "cluster_class": "production",
-      "cluster_role": "primary"
+      "cluster_role": "primary",
+      "baseline_cohort": "fleet-production"
     },
     {
       "context": "cluster-beta",
@@ -19,7 +20,8 @@
       "watched_helm_releases": ["kube-system/observability", "platform/cluster-ops"],
       "watched_crd_families": ["database.example.com"],
       "cluster_class": "production",
-      "cluster_role": "primary"
+      "cluster_role": "primary",
+      "baseline_cohort": "fleet-production"
     },
     {
       "context": "cluster-gamma",
@@ -28,7 +30,8 @@
       "watched_helm_releases": ["platform/cluster-ops"],
       "watched_crd_families": [],
       "cluster_class": "dr",
-      "cluster_role": "secondary"
+      "cluster_role": "secondary",
+      "baseline_cohort": "fleet-dr"
     }
   ],
   "peer_mappings": [

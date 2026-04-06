@@ -16,6 +16,6 @@ This separation keeps placeholder values isolated while letting the live runner 
 
 ## Cluster metadata and comparisons
 
-- Each target entry in `health-config.local.json` can include optional `cluster_class` and `cluster_role` fields to describe its intent within the fleet. These values are surfaced in health summaries and drive policy-aware pairing.
+- Each target entry in `health-config.local.json` must now declare `cluster_class`, `cluster_role`, and `baseline_cohort` (or legacy `platform_generation`) so the loop can reason about intent, responsibilities, and cohort compatibility. Run `scripts/inspect_health_config.py runs/health-config.local.json` to preview the metadata matrix, highlight cohort mismatches, and ensure every suspicious-drift pair is eligible before executing the loop.
 - Peer mappings now accept an `intent` field (`suspicious-drift`, `expected-drift`, or `irrelevant-drift`). The loop only triggers comparisons when the declared intent is compatible with the clustered metadata and the policy permits it.
 - Health runs record their comparison decisions next to the other artifacts as `<run-id>-comparison-decisions.json`. The summary view reads that file to explain which pairs were eligible, which ones actually executed, and why they fired (or did not).

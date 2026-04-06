@@ -3,7 +3,7 @@ import shutil
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple, cast
 
 from tests.path_helper import ensure_src_in_path
 
@@ -107,6 +107,15 @@ class HealthLoopTests(unittest.TestCase):
         ) -> ImagePullSecretInsight | None:
             self.calls.append((context, tuple(namespaces), tuple(warning_events)))
             return self.insight
+
+    def _read_comparison_decision(self) -> Mapping[str, Any]:
+        decision_dir = self.tmp_dir / "health"
+        files = list(decision_dir.glob("*-comparison-decisions.json"))
+        self.assertEqual(len(files), 1, "Expected exactly one comparison decision artifact")
+        raw = json.loads(files[0].read_text(encoding="utf-8"))
+        decisions = cast(List[Mapping[str, Any]], raw)
+        self.assertEqual(len(decisions), 1, "Expected a single comparison decision entry")
+        return decisions[0]
 
     def _make_snapshot(
         self,
@@ -513,7 +522,13 @@ class HealthLoopTests(unittest.TestCase):
         payload = {
             "run_id": "legacy-run",
             "targets": [
-                {"context": "cluster-alpha", "label": "cluster-alpha"},
+                {
+                    "context": "cluster-alpha",
+                    "label": "cluster-alpha",
+                    "cluster_class": "prod",
+                    "cluster_role": "primary",
+                    "baseline_cohort": "fleet-production",
+                }
             ],
             "peer_mappings": [
                 {"source": "cluster-alpha", "peers": ["cluster-alpha"]},
@@ -540,6 +555,40 @@ class HealthLoopTests(unittest.TestCase):
         )
         config = HealthRunConfig.load(config_path)
         self.assertEqual(config.run_label, "legacy-run")
+
+    def test_config_requires_target_metadata(self) -> None:
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        baseline_path = self.tmp_dir / "health-baseline.json"
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "control_plane_version_range": {},
+                    "watched_releases": [],
+                    "required_crd_families": [],
+                    "ignored_drift": [],
+                    "peer_roles": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = self.tmp_dir / "health-config.json"
+        payload = {
+            "run_label": "health",
+            "targets": [
+                {
+                    "context": "cluster-alpha",
+                    "label": "cluster-alpha",
+                    "cluster_class": "prod",
+                    "cluster_role": "primary",
+                }
+            ],
+            "peer_mappings": [],
+            "manual_pairs": [],
+            "baseline_policy_path": baseline_path.name,
+        }
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "baseline_cohort/platform_generation"):
+            HealthRunConfig.load(config_path)
 
     def test_no_comparison_when_no_trigger_fires(self) -> None:
         snapshots = {
@@ -599,6 +648,185 @@ class HealthLoopTests(unittest.TestCase):
         self.assertFalse(comparison_called)
         self.assertEqual(triggers, [])
         self.assertEqual(drilldowns, [])
+
+    def test_all_targets_produce_assessments(self) -> None:
+        snapshots = {
+            "cluster-alpha": self._make_snapshot("alpha"),
+            "cluster-beta": self._make_snapshot("beta"),
+        }
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        targets = (
+            HealthTarget(
+                context="cluster-alpha",
+                label="cluster-alpha",
+                monitor_health=True,
+                watched_helm_releases=(),
+                watched_crd_families=(),
+                cluster_class="prod",
+                cluster_role="primary",
+                baseline_cohort="fleet-production",
+            ),
+            HealthTarget(
+                context="cluster-beta",
+                label="cluster-beta",
+                monitor_health=True,
+                watched_helm_releases=(),
+                watched_crd_families=(),
+                cluster_class="prod",
+                cluster_role="primary",
+                baseline_cohort="fleet-production",
+            ),
+        )
+        config = HealthRunConfig(
+            run_label="coverage",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=targets,
+            peers=(),
+            trigger_policy=TriggerPolicy(False, False, False, False, False, False),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+        assessments, triggers, _ = runner.execute()
+        self.assertEqual(len(assessments), len(targets))
+        self.assertCountEqual([artifact.label for artifact in assessments], ["cluster-alpha", "cluster-beta"])
+        self.assertEqual(triggers, [])
+
+    def test_suspicious_pair_with_matching_baseline_cohorts_is_policy_eligible(self) -> None:
+        snapshots = {
+            "cluster-alpha": self._make_snapshot("alpha"),
+            "cluster-beta": self._make_snapshot("beta"),
+        }
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        target_alpha = HealthTarget(
+            context="cluster-alpha",
+            label="cluster-alpha",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+            cluster_class="prod",
+            cluster_role="primary",
+            baseline_cohort="fleet-production",
+        )
+        target_beta = HealthTarget(
+            context="cluster-beta",
+            label="cluster-beta",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+            cluster_class="prod",
+            cluster_role="primary",
+            baseline_cohort="fleet-production",
+        )
+        config = HealthRunConfig(
+            run_label="cohort-eligible",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target_alpha, target_beta),
+            peers=(
+                ComparisonPeer(
+                    primary="cluster-alpha",
+                    secondary="cluster-beta",
+                    intent=ComparisonIntent.SUSPICIOUS_DRIFT,
+                ),
+            ),
+            trigger_policy=TriggerPolicy(False, False, False, False, False, False),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+        runner.execute()
+        decision = self._read_comparison_decision()
+        self.assertTrue(decision["policy_eligible"])
+        self.assertFalse(decision["triggered"])
+        self.assertEqual(decision.get("primary_cohort"), "fleet-production")
+        self.assertEqual(decision.get("secondary_cohort"), "fleet-production")
+        self.assertIn("policy compatible but no triggers fired", decision["reason"])
+
+    def test_suspicious_pair_ineligible_when_cohort_mismatch(self) -> None:
+        snapshots = {
+            "cluster-alpha": self._make_snapshot("alpha"),
+            "cluster-beta": self._make_snapshot("beta"),
+        }
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        target_alpha = HealthTarget(
+            context="cluster-alpha",
+            label="cluster-alpha",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+            cluster_class="prod",
+            cluster_role="primary",
+            baseline_cohort="fleet-production",
+        )
+        target_beta = HealthTarget(
+            context="cluster-beta",
+            label="cluster-beta",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+            cluster_class="prod",
+            cluster_role="primary",
+            baseline_cohort="fleet-dr",
+        )
+        config = HealthRunConfig(
+            run_label="cohort-mismatch",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target_alpha, target_beta),
+            peers=(
+                ComparisonPeer(
+                    primary="cluster-alpha",
+                    secondary="cluster-beta",
+                    intent=ComparisonIntent.SUSPICIOUS_DRIFT,
+                ),
+            ),
+            trigger_policy=TriggerPolicy(False, False, False, False, False, False),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+        runner.execute()
+        decision = self._read_comparison_decision()
+        self.assertFalse(decision["policy_eligible"])
+        self.assertFalse(decision["triggered"])
+        self.assertIn("baseline cohorts differ", decision["reason"])
+        self.assertEqual(decision.get("primary_cohort"), "fleet-production")
+        self.assertEqual(decision.get("secondary_cohort"), "fleet-dr")
 
     def test_drilldown_trigger_created_on_crashloop(self) -> None:
         snapshot = self._make_snapshot(
@@ -1002,7 +1230,13 @@ class HealthLoopTests(unittest.TestCase):
         payload = {
             "run_label": "health-only",
             "targets": [
-                {"context": "cluster-alpha", "label": "cluster-alpha"},
+                {
+                    "context": "cluster-alpha",
+                    "label": "cluster-alpha",
+                    "cluster_class": "prod",
+                    "cluster_role": "primary",
+                    "baseline_cohort": "fleet-production",
+                }
             ],
             "peer_mappings": [],
             "manual_pairs": [],
@@ -1077,7 +1311,13 @@ class HealthLoopTests(unittest.TestCase):
         payload = {
             "run_label": "health",
             "targets": [
-                {"context": "cluster-alpha", "label": "cluster-alpha"},
+                {
+                    "context": "cluster-alpha",
+                    "label": "cluster-alpha",
+                    "cluster_class": "prod",
+                    "cluster_role": "primary",
+                    "baseline_cohort": "fleet-production",
+                }
             ],
             "peer_mappings": [
                 {"source": "cluster-alpha", "peers": ["cluster-alpha"]}

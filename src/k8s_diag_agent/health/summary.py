@@ -27,6 +27,7 @@ class ClusterSummary:
     missing_evidence: Tuple[str, ...] | None
     cluster_class: str | None
     cluster_role: str | None
+    baseline_cohort: str | None
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,8 @@ class ComparisonSummary:
     secondary_class: str | None
     primary_role: str | None
     secondary_role: str | None
+    primary_cohort: str | None
+    secondary_cohort: str | None
     expected_drift_categories: Tuple[str, ...]
     ignored_drift_categories: Tuple[str, ...]
     notes: str | None
@@ -149,7 +152,9 @@ def format_health_summary(summary: HealthSummary) -> str:
             warnings = entry.warning_count if entry.warning_count is not None else "n/a"
             pods = entry.non_running_pods if entry.non_running_pods is not None else "n/a"
             rating = _sanitize_text(entry.health_rating) or "unknown"
-            metadata = _format_class_role(entry.cluster_class, entry.cluster_role)
+            metadata = _format_cluster_metadata(
+                entry.cluster_class, entry.cluster_role, entry.baseline_cohort
+            )
             label = _sanitize_text(entry.label) or "unknown"
             lines.append(
                 f"- {label}{metadata}: {rating} (non-running pods: {pods}, warnings: {warnings})"
@@ -222,8 +227,12 @@ def format_health_summary(summary: HealthSummary) -> str:
         for comp in summary.comparisons:
             eligibility = "eligible" if comp.policy_eligible else "skipped"
             triggered_text = "triggered" if comp.triggered else "not triggered"
-            primary_meta = _format_class_role(comp.primary_class, comp.primary_role)
-            secondary_meta = _format_class_role(comp.secondary_class, comp.secondary_role)
+            primary_meta = _format_cluster_metadata(
+                comp.primary_class, comp.primary_role, comp.primary_cohort
+            )
+            secondary_meta = _format_cluster_metadata(
+                comp.secondary_class, comp.secondary_role, comp.secondary_cohort
+            )
             primary_label = _sanitize_text(comp.primary_label) or "unknown"
             secondary_label = _sanitize_text(comp.secondary_label) or "unknown"
             comparison_intent = _sanitize_text(comp.comparison_intent) or comp.comparison_intent
@@ -320,6 +329,7 @@ def _build_cluster_summaries(
             missing_evidence=_history_list(history, label, "missing_evidence"),
             cluster_class=_lookup_history_field(history, label, "cluster_class"),
             cluster_role=_lookup_history_field(history, label, "cluster_role"),
+            baseline_cohort=_lookup_history_field(history, label, "baseline_cohort"),
         )
         summaries.append(summary_entry)
     return summaries
@@ -385,17 +395,25 @@ def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> 
     return None
 
 
-def _format_class_role(cluster_class: str | None, cluster_role: str | None) -> str:
+def _format_cluster_metadata(
+    cluster_class: str | None, cluster_role: str | None, baseline_cohort: str | None
+) -> str:
+    class_role_parts: List[str] = []
     sanitized_class = _sanitize_text(cluster_class)
     sanitized_role = _sanitize_text(cluster_role)
-    parts: List[str] = []
     if sanitized_class:
-        parts.append(sanitized_class)
+        class_role_parts.append(sanitized_class)
     if sanitized_role:
-        parts.append(sanitized_role)
+        class_role_parts.append(sanitized_role)
+    parts: List[str] = []
+    if class_role_parts:
+        parts.append("/".join(class_role_parts))
+    sanitized_cohort = _sanitize_text(baseline_cohort)
+    if sanitized_cohort:
+        parts.append(f"cohort {sanitized_cohort}")
     if not parts:
         return ""
-    return f" ({'/'.join(parts)})"
+    return f" ({'; '.join(parts)})"
 
 
 def _describe_categories(categories: Tuple[str, ...]) -> str:
@@ -501,6 +519,8 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> List[ComparisonSum
                 secondary_class=str(entry.get("secondary_class")) if entry.get("secondary_class") is not None else None,
                 primary_role=str(entry.get("primary_role")) if entry.get("primary_role") is not None else None,
                 secondary_role=str(entry.get("secondary_role")) if entry.get("secondary_role") is not None else None,
+                primary_cohort=str(entry.get("primary_cohort")) if entry.get("primary_cohort") is not None else None,
+                secondary_cohort=str(entry.get("secondary_cohort")) if entry.get("secondary_cohort") is not None else None,
                 expected_drift_categories=tuple(
                     str(item) for item in (entry.get("expected_drift_categories") or ()) if item
                 ),

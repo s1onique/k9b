@@ -135,3 +135,44 @@ class HealthSummaryTests(unittest.TestCase):
         self.assertIn("prod/primary", formatted)
         self.assertIn("Comparison policy decisions", formatted)
         self.assertIn("classification suspicious drift", formatted)
+
+    def test_all_assessments_are_reported(self) -> None:
+        run_id = "multicluster-20260102T000000Z"
+        self._write(
+            f"assessments/{run_id}-cluster-alpha-assessment.json",
+            {"findings": [{"description": "alpha"}]},
+        )
+        self._write(
+            f"assessments/{run_id}-cluster-beta-assessment.json",
+            {"findings": [{"description": "beta"}]},
+        )
+        summary = gather_health_summary(self.health_dir, run_id=run_id)
+        labels = [entry.label for entry in summary.clusters]
+        self.assertCountEqual(labels, ["cluster-alpha", "cluster-beta"])
+
+    def test_cluster_summary_records_baseline_cohort(self) -> None:
+        run_id = "baseline-cohort-20260102T000000Z"
+        self._write(
+            f"assessments/{run_id}-cluster-alpha-assessment.json",
+            {"findings": [{"description": "baseline"}]},
+        )
+        self._write(
+            "history.json",
+            {
+                "cluster-alpha": {
+                    "health_rating": "healthy",
+                    "warning_event_count": 0,
+                    "pod_counts": {"non_running": 0},
+                    "missing_evidence": [],
+                    "cluster_class": "prod",
+                    "cluster_role": "primary",
+                    "baseline_cohort": "fleet-production",
+                }
+            },
+        )
+        summary = gather_health_summary(self.health_dir, run_id=run_id)
+        self.assertEqual(len(summary.clusters), 1)
+        entry = summary.clusters[0]
+        self.assertEqual(entry.baseline_cohort, "fleet-production")
+        formatted = format_health_summary(summary)
+        self.assertIn("cohort fleet-production", formatted)

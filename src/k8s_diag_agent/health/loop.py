@@ -142,6 +142,7 @@ class HealthTarget:
     watched_crd_families: Tuple[str, ...]
     cluster_class: Optional[str] = None
     cluster_role: Optional[str] = None
+    baseline_cohort: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -201,6 +202,7 @@ class HealthHistoryEntry:
     warning_event_count: int = 0
     cluster_class: Optional[str] = None
     cluster_role: Optional[str] = None
+    baseline_cohort: Optional[str] = None
 
     @classmethod
     def from_dict(cls, cluster_id: str, data: Dict[str, Any]) -> "HealthHistoryEntry":
@@ -255,6 +257,7 @@ class HealthHistoryEntry:
             warning_event_count=_safe_int(data.get("warning_event_count")) or 0,
             cluster_class=_str_or_none(data.get("cluster_class")),
             cluster_role=_str_or_none(data.get("cluster_role")),
+            baseline_cohort=_str_or_none(data.get("baseline_cohort") or data.get("platform_generation")),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -272,6 +275,7 @@ class HealthHistoryEntry:
             "warning_event_count": self.warning_event_count,
             "cluster_class": self.cluster_class,
             "cluster_role": self.cluster_role,
+            "baseline_cohort": self.baseline_cohort,
         }
 
 
@@ -398,6 +402,8 @@ class ComparisonDecision:
     secondary_class: Optional[str]
     primary_role: Optional[str]
     secondary_role: Optional[str]
+    primary_cohort: Optional[str]
+    secondary_cohort: Optional[str]
     expected_drift_categories: Tuple[str, ...]
     ignored_drift_categories: Tuple[str, ...]
     notes: Optional[str]
@@ -414,6 +420,8 @@ class ComparisonDecision:
             "secondary_class": self.secondary_class,
             "primary_role": self.primary_role,
             "secondary_role": self.secondary_role,
+            "primary_cohort": self.primary_cohort,
+            "secondary_cohort": self.secondary_cohort,
             "expected_drift_categories": list(self.expected_drift_categories),
             "ignored_drift_categories": list(self.ignored_drift_categories),
             "notes": self.notes,
@@ -474,6 +482,21 @@ class HealthRunConfig:
                 for item in entry.get("watched_crd_families") or []
                 if str(item).strip()
             )
+            cluster_class = _str_or_none(entry.get("cluster_class"))
+            cluster_role = _str_or_none(entry.get("cluster_role"))
+            cohort_value = entry.get("baseline_cohort") or entry.get("platform_generation")
+            baseline_cohort = _str_or_none(cohort_value)
+            missing_metadata: List[str] = []
+            if not cluster_class:
+                missing_metadata.append("cluster_class")
+            if not cluster_role:
+                missing_metadata.append("cluster_role")
+            if not baseline_cohort:
+                missing_metadata.append("baseline_cohort/platform_generation")
+            if missing_metadata:
+                raise ValueError(
+                    f"Target '{label}' missing required metadata: {', '.join(missing_metadata)}"
+                )
             targets.append(
                 HealthTarget(
                     context=str(context),
@@ -481,8 +504,9 @@ class HealthRunConfig:
                     monitor_health=monitor_health,
                     watched_helm_releases=watched_helm,
                     watched_crd_families=watched_crd,
-                    cluster_class=_str_or_none(entry.get("cluster_class")),
-                    cluster_role=_str_or_none(entry.get("cluster_role")),
+                    cluster_class=cluster_class,
+                    cluster_role=cluster_role,
+                    baseline_cohort=baseline_cohort,
                 )
             )
         if not targets:
@@ -1887,71 +1911,72 @@ class HealthLoopRunner:
         for record in records:
             cluster_id = record.snapshot.metadata.cluster_id
             previous = history.get(cluster_id)
-        watched_release_versions = _watched_release_versions(
-            record.snapshot, record.target.watched_helm_releases
-        )
-        watched_crd_versions = _watched_crd_versions(
-            record.snapshot, record.target.watched_crd_families
-        )
-        assessment_result: Optional[HealthAssessmentResult] = None
-        insight: ImagePullSecretInsight | None = None
-        pod_counts = record.snapshot.health_signals.pod_counts
-        if record.target.monitor_health and pod_counts.image_pull_backoff > 0:
-            try:
-                insight = self._image_pull_secret_inspector.inspect(
-                    record.target.context,
-                    (),
-                    record.snapshot.health_signals.warning_events,
-                )
-            except Exception as exc:
-                self._collection_messages.append(
-                    f"Image pull secret inspection failed for '{record.target.context}': {exc}"
-                )
-        if record.target.monitor_health:
-            assessment_result = build_health_assessment(
-                record.snapshot,
-                record.target,
-                previous,
-                self.config.baseline_policy,
-                self.config.trigger_policy.warning_event_threshold,
-                image_pull_secret_insight=insight,
+            watched_release_versions = _watched_release_versions(
+                record.snapshot, record.target.watched_helm_releases
             )
-            record.assessment = assessment_result
-            record.pattern_reasons = assessment_result.pattern_reasons
-            record.pattern_metadata = assessment_result.pattern_metadata
-            assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
-            artifact = HealthAssessmentArtifact(
-                run_label=self.run_label,
-                run_id=self.run_id,
-                timestamp=datetime.now(timezone.utc),
-                context=record.target.context,
-                label=record.target.label,
+            watched_crd_versions = _watched_crd_versions(
+                record.snapshot, record.target.watched_crd_families
+            )
+            assessment_result: Optional[HealthAssessmentResult] = None
+            insight: ImagePullSecretInsight | None = None
+            pod_counts = record.snapshot.health_signals.pod_counts
+            if record.target.monitor_health and pod_counts.image_pull_backoff > 0:
+                try:
+                    insight = self._image_pull_secret_inspector.inspect(
+                        record.target.context,
+                        (),
+                        record.snapshot.health_signals.warning_events,
+                    )
+                except Exception as exc:
+                    self._collection_messages.append(
+                        f"Image pull secret inspection failed for '{record.target.context}': {exc}"
+                    )
+            if record.target.monitor_health:
+                assessment_result = build_health_assessment(
+                    record.snapshot,
+                    record.target,
+                    previous,
+                    self.config.baseline_policy,
+                    self.config.trigger_policy.warning_event_threshold,
+                    image_pull_secret_insight=insight,
+                )
+                record.assessment = assessment_result
+                record.pattern_reasons = assessment_result.pattern_reasons
+                record.pattern_metadata = assessment_result.pattern_metadata
+                assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
+                artifact = HealthAssessmentArtifact(
+                    run_label=self.run_label,
+                    run_id=self.run_id,
+                    timestamp=datetime.now(timezone.utc),
+                    context=record.target.context,
+                    label=record.target.label,
+                    cluster_id=cluster_id,
+                    snapshot_path=str(record.path),
+                    assessment=assessment_to_dict(assessment_result.assessment),
+                    missing_evidence=assessment_result.missing_evidence,
+                    health_rating=assessment_result.rating,
+                )
+                HealthAssessmentValidator.validate(artifact.to_dict())
+                _write_json(artifact.to_dict(), assessment_path)
+                artifacts.append(artifact)
+            history[cluster_id] = HealthHistoryEntry(
                 cluster_id=cluster_id,
-                snapshot_path=str(record.path),
-                assessment=assessment_to_dict(assessment_result.assessment),
-                missing_evidence=assessment_result.missing_evidence,
-                health_rating=assessment_result.rating,
+                node_count=record.snapshot.metadata.node_count,
+                pod_count=record.snapshot.metadata.pod_count,
+                control_plane_version=record.snapshot.metadata.control_plane_version or "",
+                health_rating=assessment_result.rating if assessment_result else HealthRating.HEALTHY,
+                missing_evidence=assessment_result.missing_evidence if assessment_result else (),
+                watched_helm_releases=watched_release_versions,
+                watched_crd_families=watched_crd_versions,
+                node_conditions=record.snapshot.health_signals.node_conditions.to_dict(),
+                pod_counts=record.snapshot.health_signals.pod_counts.to_dict(),
+                job_failures=record.snapshot.health_signals.job_failures,
+                warning_event_count=len(record.snapshot.health_signals.warning_events),
+                cluster_class=record.target.cluster_class,
+                cluster_role=record.target.cluster_role,
+                baseline_cohort=record.target.baseline_cohort,
             )
-            HealthAssessmentValidator.validate(artifact.to_dict())
-            _write_json(artifact.to_dict(), assessment_path)
-            artifacts.append(artifact)
-        history[cluster_id] = HealthHistoryEntry(
-            cluster_id=cluster_id,
-            node_count=record.snapshot.metadata.node_count,
-            pod_count=record.snapshot.metadata.pod_count,
-            control_plane_version=record.snapshot.metadata.control_plane_version or "",
-            health_rating=assessment_result.rating if assessment_result else HealthRating.HEALTHY,
-            missing_evidence=assessment_result.missing_evidence if assessment_result else (),
-            watched_helm_releases=watched_release_versions,
-            watched_crd_families=watched_crd_versions,
-            node_conditions=record.snapshot.health_signals.node_conditions.to_dict(),
-            pod_counts=record.snapshot.health_signals.pod_counts.to_dict(),
-            job_failures=record.snapshot.health_signals.job_failures,
-            warning_event_count=len(record.snapshot.health_signals.warning_events),
-            cluster_class=record.target.cluster_class,
-            cluster_role=record.target.cluster_role,
-        )
-        record.image_pull_secret_insight = insight
+            record.image_pull_secret_insight = insight
         return artifacts
 
     def _build_drilldowns(
@@ -2160,6 +2185,8 @@ class HealthLoopRunner:
                 secondary_class,
                 primary_role,
                 secondary_role,
+                primary_cohort,
+                secondary_cohort,
             ) = _policy_eligible_pair(
                 primary_record,
                 secondary_record,
@@ -2200,6 +2227,8 @@ class HealthLoopRunner:
                     secondary_class=secondary_class,
                     primary_role=primary_role,
                     secondary_role=secondary_role,
+                    primary_cohort=primary_cohort,
+                    secondary_cohort=secondary_cohort,
                     expected_drift_categories=expected_categories,
                     ignored_drift_categories=ignored_categories,
                     notes=peer_notes,
@@ -2295,11 +2324,22 @@ def _policy_eligible_pair(
     secondary: HealthSnapshotRecord,
     intent: ComparisonIntent,
     baseline: BaselinePolicy,
-) -> Tuple[bool, str, Optional[str], Optional[str], Optional[str], Optional[str]]:
+) -> Tuple[
+    bool,
+    str,
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+]:
     primary_class = primary.target.cluster_class
     secondary_class = secondary.target.cluster_class
     primary_role = _resolve_peer_role(primary, baseline)
     secondary_role = _resolve_peer_role(secondary, baseline)
+    primary_cohort = primary.target.baseline_cohort
+    secondary_cohort = secondary.target.baseline_cohort
     reasons: List[str] = []
     if not primary_class or not secondary_class:
         reasons.append("cluster class metadata missing")
@@ -2310,6 +2350,12 @@ def _policy_eligible_pair(
             reasons.append("peer role metadata missing")
         elif primary_role != secondary_role:
             reasons.append("peer roles differ")
+        if not primary_cohort or not secondary_cohort:
+            reasons.append("baseline cohort metadata missing")
+        elif primary_cohort != secondary_cohort:
+            reasons.append(
+                f"baseline cohorts differ ({primary_cohort} vs {secondary_cohort})"
+            )
     if intent == ComparisonIntent.IRRELEVANT_DRIFT:
         reasons.append("comparison intent marked this pair as irrelevant drift")
     if reasons:
@@ -2320,6 +2366,8 @@ def _policy_eligible_pair(
             secondary_class,
             primary_role,
             secondary_role,
+            primary_cohort,
+            secondary_cohort,
         )
     return (
         True,
@@ -2328,6 +2376,8 @@ def _policy_eligible_pair(
         secondary_class,
         primary_role,
         secondary_role,
+        primary_cohort,
+        secondary_cohort,
     )
 
 

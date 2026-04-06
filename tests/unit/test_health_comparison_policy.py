@@ -31,6 +31,7 @@ class ComparisonPolicyTest(unittest.TestCase):
         label: str,
         cluster_class: str | None,
         cluster_role: str | None,
+        baseline_cohort: str | None = "cohort-default",
     ) -> HealthSnapshotRecord:
         snapshot = ComparisonPolicyTest._make_snapshot(cluster_id)
         target = HealthTarget(
@@ -41,6 +42,7 @@ class ComparisonPolicyTest(unittest.TestCase):
             watched_crd_families=(),
             cluster_class=cluster_class,
             cluster_role=cluster_role,
+            baseline_cohort=baseline_cohort,
         )
         return HealthSnapshotRecord(target=target, snapshot=snapshot, path=Path(f"{cluster_id}.json"))
 
@@ -59,17 +61,19 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline({"alpha": "primary", "beta": "primary"})
         primary = self._record("alpha", "alpha", "prod", "primary")
         secondary = self._record("beta", "beta", "prod", "primary")
-        eligible, reason, *_ = _policy_eligible_pair(
+        eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
             primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
         )
         self.assertTrue(eligible)
         self.assertEqual(reason, "policy compatible")
+        self.assertEqual(primary_cohort, secondary_cohort)
+        self.assertEqual(primary_cohort, "cohort-default")
 
     def test_role_mismatch_blocks_suspicious_intent(self) -> None:
         baseline = self._baseline()
         primary = self._record("alpha", "alpha", "prod", "primary")
         secondary = self._record("beta", "beta", "prod", "canary")
-        eligible, reason, *_ = _policy_eligible_pair(
+        eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
             primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
         )
         self.assertFalse(eligible)
@@ -79,8 +83,42 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline()
         primary = self._record("alpha", "alpha", None, "primary")
         secondary = self._record("beta", "beta", "prod", "primary")
-        eligible, reason, *_ = _policy_eligible_pair(
+        eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
             primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
         )
         self.assertFalse(eligible)
         self.assertIn("cluster class metadata missing", reason)
+
+    def test_baseline_cohort_mismatch_blocks_suspicious_intent(self) -> None:
+        baseline = self._baseline({"alpha": "primary", "beta": "primary"})
+        primary = self._record("alpha", "alpha", "prod", "primary", "cohort-1")
+        secondary = self._record("beta", "beta", "prod", "primary", "cohort-2")
+        eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+        )
+        self.assertFalse(eligible)
+        self.assertIn("baseline cohorts differ", reason)
+        self.assertEqual(primary_cohort, "cohort-1")
+        self.assertEqual(secondary_cohort, "cohort-2")
+
+    def test_baseline_cohort_missing_blocks_suspicious_intent(self) -> None:
+        baseline = self._baseline({"alpha": "primary", "beta": "primary"})
+        primary = self._record("alpha", "alpha", "prod", "primary", None)
+        secondary = self._record("beta", "beta", "prod", "primary", "cohort-1")
+        eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+        )
+        self.assertFalse(eligible)
+        self.assertIn("baseline cohort metadata missing", reason)
+        self.assertIsNone(primary_cohort)
+        self.assertEqual(secondary_cohort, "cohort-1")
+
+    def test_expected_drift_ignores_cohort_mismatch(self) -> None:
+        baseline = self._baseline({"alpha": "primary", "beta": "primary"})
+        primary = self._record("alpha", "alpha", "prod", "primary", "cohort-a")
+        secondary = self._record("beta", "beta", "prod", "primary", "cohort-b")
+        eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
+            primary, secondary, ComparisonIntent.EXPECTED_DRIFT, baseline
+        )
+        self.assertTrue(eligible)
+        self.assertEqual(reason, "policy compatible")
