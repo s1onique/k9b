@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON="$ROOT/.venv/bin/python"
 SRC_PATH="$ROOT/src"
-export PYTHONPATH="$SRC_PATH:$PYTHONPATH"
+export PYTHONPATH="$SRC_PATH${PYTHONPATH:+:$PYTHONPATH}"
 
 CONFIG_PATH="runs/health-config.local.json"
 RUNS_DIR_OVERRIDE=""
