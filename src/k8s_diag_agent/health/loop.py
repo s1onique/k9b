@@ -29,7 +29,11 @@ from ..models import (
 )
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
-from .adaptation import collect_trigger_details, generate_proposals_from_review
+from .adaptation import (
+    HealthProposal,
+    collect_trigger_details,
+    generate_proposals_from_review,
+)
 from .baseline import (
     BaselineDriftCategory,
     BaselinePolicy,
@@ -518,10 +522,10 @@ class HealthRunConfig:
     peers: tuple[ComparisonPeer, ...]
     trigger_policy: TriggerPolicy
     manual_pairs: tuple[ManualComparison, ...]
-    cohort_baselines: dict[str, tuple[BaselinePolicy, Path]] = field(default_factory=dict)
-    target_baselines: dict[str, tuple[BaselinePolicy, Path | None]] = field(default_factory=dict)
     baseline_policy: BaselinePolicy
     baseline_policy_path: Path | None = None
+    cohort_baselines: dict[str, tuple[BaselinePolicy, Path]] = field(default_factory=dict)
+    target_baselines: dict[str, tuple[BaselinePolicy, Path | None]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> HealthRunConfig:
@@ -1979,7 +1983,9 @@ class HealthLoopRunner:
         history = self._load_history(directories["history"])
         previous_history = {key: entry for key, entry in history.items()}
         records = self._collect_snapshots(directories["snapshots"])
-        assessments = self._build_assessments(records, history, directories["assessments"])
+        assessments = self._build_assessments(
+            records, history, directories["assessments"], directories["root"]
+        )
         triggers = self._evaluate_triggers(records, previous_history, directories)
         drilldowns = self._build_drilldowns(records, previous_history, directories["drilldowns"])
         self._persist_history(history, directories["history"])
@@ -2100,6 +2106,7 @@ class HealthLoopRunner:
         records: list[HealthSnapshotRecord],
         history: dict[str, HealthHistoryEntry],
         assessment_dir: Path,
+        root_dir: Path,
     ) -> list[HealthAssessmentArtifact]:
         artifacts: list[HealthAssessmentArtifact] = []
         for record in records:
@@ -2157,9 +2164,7 @@ class HealthLoopRunner:
                     notification = build_degraded_health_notification(
                         self.run_id, record, artifact
                     )
-                    write_notification_artifact(
-                        directories["root"] / "notifications", notification
-                    )
+                    write_notification_artifact(root_dir / "notifications", notification)
             history[cluster_id] = HealthHistoryEntry(
                 cluster_id=cluster_id,
                 node_count=record.snapshot.metadata.node_count,

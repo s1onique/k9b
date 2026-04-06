@@ -34,6 +34,7 @@ from k8s_diag_agent.health.image_pull_secret import (
     TargetSecretStatus,
 )
 from k8s_diag_agent.health.loop import (
+    BaselineRegistry,
     ComparisonIntent,
     ComparisonPeer,
     HealthAssessmentResult,
@@ -45,7 +46,6 @@ from k8s_diag_agent.health.loop import (
     HealthTarget,
     TriggerPolicy,
     build_health_assessment,
-    BaselineRegistry,
     determine_pair_trigger_reasons,
 )
 
@@ -428,12 +428,14 @@ class HealthLoopTests(unittest.TestCase):
             target=primary_target,
             snapshot=primary_snapshot,
             path=Path("/tmp"),
+            baseline_policy=BaselinePolicy.empty(),
             assessment=build_health_assessment(primary_snapshot, primary_target, None, BaselinePolicy.empty()),
         )
         secondary_record = HealthSnapshotRecord(
             target=secondary_target,
             snapshot=secondary_snapshot,
             path=Path("/tmp"),
+            baseline_policy=BaselinePolicy.empty(),
             assessment=build_health_assessment(secondary_snapshot, secondary_target, None, BaselinePolicy.empty()),
         )
         baseline = self._baseline_policy(ignored=[BaselineDriftCategory.WATCHED_HELM_RELEASE])
@@ -494,12 +496,14 @@ class HealthLoopTests(unittest.TestCase):
             target=primary_target,
             snapshot=primary_snapshot,
             path=Path("/tmp"),
+            baseline_policy=BaselinePolicy.empty(),
             assessment=build_health_assessment(primary_snapshot, primary_target, None, BaselinePolicy.empty()),
         )
         secondary_record = HealthSnapshotRecord(
             target=secondary_target,
             snapshot=secondary_snapshot,
             path=Path("/tmp"),
+            baseline_policy=BaselinePolicy.empty(),
             assessment=build_health_assessment(secondary_snapshot, secondary_target, None, BaselinePolicy.empty()),
         )
         policy = TriggerPolicy(True, True, True, True, True, True)

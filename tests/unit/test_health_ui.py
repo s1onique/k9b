@@ -6,15 +6,14 @@ from pathlib import Path
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.health.adaptation import HealthProposal
+from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
     DrilldownArtifact,
     HealthAssessmentArtifact,
+    HealthRating,
     HealthSnapshotRecord,
     HealthTarget,
-    HealthRating,
-    TargetSecretStatus,
 )
-from k8s_diag_agent.health.notifications import write_notification_artifact
 from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.models import ConfidenceLevel
 
@@ -123,3 +122,6 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(len(data["clusters"]), 1)
         self.assertEqual(len(data["drilldowns"]), 1)
         self.assertEqual(len(data["proposals"]), 1)
+        cluster_entry = data["clusters"][0]
+        self.assertIn("cluster_class", cluster_entry)
+        self.assertIn("cluster_role", cluster_entry)

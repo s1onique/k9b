@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING
 
-from ..collect.cluster_snapshot import ClusterSnapshot
-from ..models import ConfidenceLevel
-from .adaptation import HealthProposal, ProposalLifecycleEntry
-from .loop import DrilldownArtifact, HealthAssessmentArtifact, HealthSnapshotRecord, UTC
+from .adaptation import HealthProposal
+
+if TYPE_CHECKING:
+    from .loop import DrilldownArtifact, HealthAssessmentArtifact, HealthSnapshotRecord
 
 
 def _serialize_cluster(record: HealthSnapshotRecord, assessment_map: Mapping[str, HealthAssessmentArtifact | None]) -> dict[str, object]:
@@ -20,6 +21,8 @@ def _serialize_cluster(record: HealthSnapshotRecord, assessment_map: Mapping[str
     return {
         "label": record.target.label,
         "context": record.target.context,
+        "cluster_class": record.target.cluster_class,
+        "cluster_role": record.target.cluster_role,
         "health_rating": assessment.health_rating.value if assessment else "unknown",
         "warnings": warning_events,
         "non_running_pods": pod_counts.non_running,

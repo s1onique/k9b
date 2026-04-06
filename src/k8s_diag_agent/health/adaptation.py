@@ -28,12 +28,14 @@ _CRD_DRIFT_RE = re.compile(r"watched CRD (?P<family>[^\s]+) storage drift", re.I
 
 
 class ProposalLifecycleStatus(StrEnum):
-    PROPOSED = "proposed"
-    REPLAYED = "replayed"
+    PENDING = "pending"
+    CHECKED = "checked"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
-    PROMOTED = "promoted"
     APPLIED = "applied"
+    PROPOSED = "proposed"
+    REPLAYED = "replayed"
+    PROMOTED = "promoted"
 
 
 @dataclass(frozen=True)
@@ -66,7 +68,7 @@ def _empty_payload() -> Mapping[str, Any]:
 
 
 def _default_lifecycle_history() -> tuple[ProposalLifecycleEntry, ...]:
-    return (ProposalLifecycleEntry(status=ProposalLifecycleStatus.PROPOSED, timestamp=_now_iso()),)
+    return (ProposalLifecycleEntry(status=ProposalLifecycleStatus.PENDING, timestamp=_now_iso()),)
 
 
 @dataclass(frozen=True)
@@ -134,9 +136,9 @@ class HealthProposal:
                 note_value = entry_raw.get("note")
                 timestamp = str(timestamp_value) if timestamp_value else _now_iso()
                 try:
-                    status = ProposalLifecycleStatus(str(status_value)) if status_value else ProposalLifecycleStatus.PROPOSED
+                    status = ProposalLifecycleStatus(str(status_value)) if status_value else ProposalLifecycleStatus.PENDING
                 except ValueError:
-                    status = ProposalLifecycleStatus.PROPOSED
+                    status = ProposalLifecycleStatus.PENDING
                 history_entries.append(
                     ProposalLifecycleEntry(status=status, timestamp=timestamp, note=str(note_value) if note_value else None)
                 )

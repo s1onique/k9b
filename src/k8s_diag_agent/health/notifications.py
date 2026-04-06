@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping
+from typing import TYPE_CHECKING
 
 from .adaptation import HealthProposal, ProposalEvaluation
-from .loop import ComparisonTriggerArtifact, HealthAssessmentArtifact, HealthSnapshotRecord, UTC
+
+if TYPE_CHECKING:
+    from .loop import ComparisonTriggerArtifact, HealthAssessmentArtifact, HealthSnapshotRecord
 
 
 def _timestamp() -> str:
@@ -36,6 +39,23 @@ class NotificationArtifact:
             "context": self.context,
             "timestamp": self.timestamp,
         }
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> NotificationArtifact:
+        if not isinstance(raw, Mapping):
+            raise ValueError("Notification artifact must be a mapping")
+        details_raw = raw.get("details") or {}
+        details = dict(details_raw) if isinstance(details_raw, Mapping) else {}
+        timestamp = str(raw.get("timestamp")) if raw.get("timestamp") else _timestamp()
+        return cls(
+            kind=str(raw.get("kind") or ""),
+            summary=str(raw.get("summary") or ""),
+            details=details,
+            run_id=str(raw.get("run_id")) if raw.get("run_id") else None,
+            cluster_label=str(raw.get("cluster_label")) if raw.get("cluster_label") else None,
+            context=str(raw.get("context")) if raw.get("context") else None,
+            timestamp=timestamp,
+        )
 
 
 def write_notification_artifact(directory: Path, artifact: NotificationArtifact) -> Path:

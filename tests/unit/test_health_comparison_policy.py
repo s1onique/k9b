@@ -45,7 +45,12 @@ class ComparisonPolicyTest(unittest.TestCase):
             cluster_role=cluster_role,
             baseline_cohort=baseline_cohort,
         )
-        return HealthSnapshotRecord(target=target, snapshot=snapshot, path=Path(f"{cluster_id}.json"))
+        return HealthSnapshotRecord(
+            target=target,
+            snapshot=snapshot,
+            path=Path(f"{cluster_id}.json"),
+            baseline_policy=BaselinePolicy.empty(),
+        )
 
     @staticmethod
     def _baseline(role_map: dict[str, str] | None = None) -> BaselinePolicy:

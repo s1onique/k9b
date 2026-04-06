@@ -15,9 +15,11 @@ from .cli_handlers import (
     handle_batch_snapshot,
     handle_check_proposal,
     handle_compare,
+    handle_deliver_notifications,
     handle_fixture,
     handle_health_loop,
     handle_health_summary,
+    handle_health_ui,
     handle_promote_proposal,
     handle_run_feedback,
     handle_snapshot,
@@ -36,6 +38,8 @@ _SUBCOMMANDS = {
     "check-proposal",
     "promote-proposal",
     "health-summary",
+    "health-ui",
+    "deliver-notifications",
 }
 
 _DEFAULT_BATCH_CONFIG = DEFAULT_BATCH_CONFIG
@@ -66,6 +70,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         return handle_health_loop(args, default_config=_HEALTH_CONFIG_DEFAULT)
     if command == "health-summary":
         return handle_health_summary(args)
+    if command == "health-ui":
+        return handle_health_ui(args)
+    if command == "deliver-notifications":
+        return handle_deliver_notifications(args)
     if command == "check-proposal":
         return handle_check_proposal(args)
     if command == "promote-proposal":
@@ -252,6 +260,49 @@ def build_parser() -> argparse.ArgumentParser:
     summary_parser.add_argument(
         "--run-id",
         help="Optionally target a specific run_id instead of the latest.",
+    )
+
+    ui_parser = subparsers.add_parser(
+        "health-ui",
+        help="Launch the operator-facing UI for recent health runs.",
+    )
+    ui_parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        default=Path("runs/health"),
+        help="Health artifacts directory the UI should monitor.",
+    )
+    ui_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind the UI server.",
+    )
+    ui_parser.add_argument(
+        "--port",
+        type=_positive_int,
+        default=8080,
+        help="Port to listen for operator UI requests.",
+    )
+
+    notify_parser = subparsers.add_parser(
+        "deliver-notifications",
+        help="Send Mattermost notices for health artifacts.",
+    )
+    notify_parser.add_argument(
+        "--notifications-dir",
+        type=Path,
+        default=Path("runs/health/notifications"),
+        help="Directory where health notification artifacts are emitted.",
+    )
+    notify_parser.add_argument(
+        "--webhook-url",
+        required=True,
+        help="Mattermost incoming webhook URL to send notifications to.",
+    )
+    notify_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only render the payloads without sending HTTP requests.",
     )
 
     check_parser = subparsers.add_parser(

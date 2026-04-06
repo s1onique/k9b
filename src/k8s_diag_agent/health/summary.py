@@ -630,6 +630,7 @@ def _signal_note(before: int, after: int) -> str:
 def _has_promoted_status(proposal: HealthProposal) -> bool:
     return any(
         entry.status in {
+            ProposalLifecycleStatus.ACCEPTED,
             ProposalLifecycleStatus.PROMOTED,
             ProposalLifecycleStatus.APPLIED,
         }

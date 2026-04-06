@@ -9,6 +9,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+import requests
+
 from .collect.cluster_snapshot import ClusterSnapshot, CollectionStatus
 from .collect.fixture_loader import load_fixture
 from .collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
@@ -25,12 +27,12 @@ from .health.adaptation import (
     render_proposal_patch,
     with_lifecycle_status,
 )
+from .health.drilldown import DrilldownArtifact
+from .health.drilldown_assessor import assess_drilldown_artifact
 from .health.notifications import (
     build_proposal_checked_notification,
     write_notification_artifact,
 )
-from .health.drilldown import DrilldownArtifact
-from .health.drilldown_assessor import assess_drilldown_artifact
 from .health.summary import format_health_summary, gather_health_summary
 from .llm.assessor_schema import AssessorAssessment
 from .llm.prompts import build_assessment_prompt
@@ -41,10 +43,7 @@ from .reason.diagnoser import build_findings_and_hypotheses
 from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .structured_logging import emit_structured_log
-from .health.notifications import (
-    build_proposal_checked_notification,
-    write_notification_artifact,
-)
+from .ui import start_ui_server
 
 DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
 BATCH_CONFIG_FALLBACK = Path("snapshots/targets.local.example.json")
@@ -469,6 +468,45 @@ def handle_health_summary(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_health_ui(args: argparse.Namespace) -> int:
+    start_ui_server(runs_dir=args.runs_dir, host=args.host, port=args.port)
+    return 0
+
+
+def handle_deliver_notifications(args: argparse.Namespace) -> int:
+    from .notifications.mattermost import (
+        MattermostNotifier,
+        load_notification_artifact,
+        render_mattermost_payload,
+    )
+    directory = args.notifications_dir
+    artifacts = sorted(directory.glob("*.json"))
+    if not artifacts:
+        print(f"No notification artifacts found in '{directory}'.")
+        return 0
+    notifier = MattermostNotifier(args.webhook_url)
+    failure = False
+    for path in artifacts:
+        try:
+            artifact = load_notification_artifact(path)
+        except Exception as exc:
+            print(f"Skipping {path.name}: {exc}", file=sys.stderr)
+            continue
+        payload = render_mattermost_payload(artifact)
+        snippet = payload.get("text", "")
+        print(f"Prepared {artifact.kind} ({path.name}): {snippet.splitlines()[0] if snippet else ''}")
+        if args.dry_run:
+            print("  (dry-run; not sent)")
+            continue
+        try:
+            notifier.dispatch(artifact)
+            print(f"  Sent {artifact.kind} to Mattermost webhook.")
+        except requests.RequestException as exc:
+            print(f"Failed to send {path.name}: {exc}", file=sys.stderr)
+            failure = True
+    return 1 if failure else 0
+
+
 def handle_check_proposal(args: argparse.Namespace) -> int:
     try:
         raw = json.loads(args.proposal.read_text(encoding="utf-8"))
@@ -500,7 +538,7 @@ def handle_check_proposal(args: argparse.Namespace) -> int:
     evaluated_proposal = replace(proposal, promotion_evaluation=evaluation)
     promoted = with_lifecycle_status(
         evaluated_proposal,
-        ProposalLifecycleStatus.REPLAYED,
+        ProposalLifecycleStatus.CHECKED,
         note=f"Replayed against {args.fixture}",
     )
     if promoted is not proposal:
@@ -519,7 +557,11 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     if not evaluation:
         print("Proposal must be replayed and evaluated before promotion.", file=sys.stderr)
         return 1
-    if not any(entry.status == ProposalLifecycleStatus.REPLAYED for entry in proposal.lifecycle_history):
+    required_history = {
+        ProposalLifecycleStatus.CHECKED,
+        ProposalLifecycleStatus.REPLAYED,
+    }
+    if not any(entry.status in required_history for entry in proposal.lifecycle_history):
         print("Proposal must be replayed before promotion.", file=sys.stderr)
         return 1
     try:
@@ -544,7 +586,7 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     updated_note = " | ".join(note_parts)
     updated = with_lifecycle_status(
         proposal,
-        ProposalLifecycleStatus.PROMOTED,
+        ProposalLifecycleStatus.ACCEPTED,
         note=updated_note,
     )
     if updated is not proposal:

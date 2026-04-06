@@ -46,7 +46,12 @@ def _build_records(config: HealthRunConfig) -> dict[str, HealthSnapshotRecord]:
     records: dict[str, HealthSnapshotRecord] = {}
     for target in config.targets:
         snapshot = _dummy_snapshot(target)
-        record = HealthSnapshotRecord(target=target, snapshot=snapshot, path=Path(target.label))
+        record = HealthSnapshotRecord(
+            target=target,
+            snapshot=snapshot,
+            path=Path(target.label),
+            baseline_policy=BaselinePolicy.empty(),
+        )
         for reference in record.refs():
             records[reference] = record
     return records
