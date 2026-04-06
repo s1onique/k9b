@@ -125,3 +125,8 @@ class HealthUITests(unittest.TestCase):
         cluster_entry = data["clusters"][0]
         self.assertIn("cluster_class", cluster_entry)
         self.assertIn("cluster_role", cluster_entry)
+        self.assertIn("artifact_paths", cluster_entry)
+        self.assertIn("fleet_status", data)
+        self.assertIn("proposal_status_summary", data)
+        self.assertIn("artifact_path", data["latest_drilldown"])
+        self.assertIn("artifact_path", data["proposals"][0])

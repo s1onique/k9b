@@ -30,6 +30,11 @@ class UIViewModelTests(unittest.TestCase):
                     "non_running_pods": 1,
                     "baseline_policy_path": "policy.json",
                     "missing_evidence": ["foo"],
+                    "artifact_paths": {
+                        "snapshot": "snapshots/cluster-a.json",
+                        "assessment": "assessments/cluster-a.json",
+                        "drilldown": "drilldowns/cluster-a.json",
+                    },
                 }
             ],
             "proposals": [
@@ -41,11 +46,24 @@ class UIViewModelTests(unittest.TestCase):
                     "rationale": "test",
                     "expected_benefit": "less noise",
                     "source_run_id": "run-1",
+                    "artifact_path": "proposals/p1.json",
+                    "review_artifact": "reviews/run-1-review.json",
                     "lifecycle_history": [
                         {"status": "pending", "timestamp": "2026-01-01T00:00:00Z"}
                     ],
                 }
             ],
+            "fleet_status": {
+                "rating_counts": [
+                    {"rating": "degraded", "count": 1}
+                ],
+                "degraded_clusters": ["cluster-a"],
+            },
+            "proposal_status_summary": {
+                "status_counts": [
+                    {"status": "pending", "count": 1}
+                ]
+            },
             "latest_drilldown": {
                 "label": "cluster-a",
                 "context": "cluster-a",
@@ -55,6 +73,7 @@ class UIViewModelTests(unittest.TestCase):
                 "summary": {"foo": "bar"},
                 "rollout_status": ["stable"],
                 "pattern_details": {"pattern": "noise"},
+                "artifact_path": "drilldowns/cluster-a.json",
             },
         }
         context = build_ui_context(index)
@@ -68,3 +87,12 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(findings.rollout_status, ("stable",))
         self.assertEqual(findings.pattern_details[0][0], "pattern")
         self.assertIn("bar", findings.summary[0][1])
+        self.assertEqual(context.clusters[0].snapshot_path, "snapshots/cluster-a.json")
+        self.assertEqual(context.clusters[0].assessment_path, "assessments/cluster-a.json")
+        self.assertEqual(context.clusters[0].drilldown_path, "drilldowns/cluster-a.json")
+        self.assertEqual(context.proposals[0].artifact_path, "proposals/p1.json")
+        self.assertEqual(context.proposals[0].review_path, "reviews/run-1-review.json")
+        self.assertEqual(context.proposals[0].lifecycle_history[0][0], "pending")
+        self.assertEqual(context.fleet_status.degraded_clusters, ("cluster-a",))
+        self.assertEqual(context.proposal_status_summary.status_counts[0][0], "pending")
+        self.assertEqual(findings.artifact_path, "drilldowns/cluster-a.json")

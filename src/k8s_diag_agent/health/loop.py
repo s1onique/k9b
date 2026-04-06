@@ -7,7 +7,7 @@ import re
 import time
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -389,9 +389,10 @@ class HealthAssessmentArtifact:
     missing_evidence: tuple[str, ...]
     health_rating: HealthRating
     notes: str | None = None
+    artifact_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "run_label": self.run_label,
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
@@ -404,6 +405,9 @@ class HealthAssessmentArtifact:
             "health_rating": self.health_rating.value,
             "notes": self.notes,
         }
+        if self.artifact_path:
+            data["artifact_path"] = self.artifact_path
+        return data
 
 
 @dataclass(frozen=True)
@@ -2156,6 +2160,7 @@ class HealthLoopRunner:
                     assessment=assessment_to_dict(assessment_result.assessment),
                     missing_evidence=assessment_result.missing_evidence,
                     health_rating=assessment_result.rating,
+                    artifact_path=str(assessment_path),
                 )
                 HealthAssessmentValidator.validate(artifact.to_dict())
                 _write_json(artifact.to_dict(), assessment_path)
@@ -2211,6 +2216,7 @@ class HealthLoopRunner:
                     f"Drilldown for '{record.target.context}' failed: {exc}"
                 )
                 continue
+            path = directory / f"{self.run_id}-{record.target.label}-drilldown.json"
             artifact = DrilldownArtifact(
                 run_label=self.run_label,
                 run_id=self.run_id,
@@ -2230,8 +2236,8 @@ class HealthLoopRunner:
                 rollout_status=evidence.rollouts,
                 collection_timestamps=evidence.collection_timestamps,
                 pattern_details=evidence.pattern_details,
+                artifact_path=str(path),
             )
-            path = directory / f"{self.run_id}-{record.target.label}-drilldown.json"
             DrilldownArtifactValidator.validate(artifact.to_dict())
             _write_json(artifact.to_dict(), path)
             artifacts.append(artifact)
@@ -2308,7 +2314,8 @@ class HealthLoopRunner:
                     event="proposal-generated",
                 )
                 self._collection_messages.append(f"Health proposal written to '{proposal_path}'")
-                proposal_records.append(proposal)
+                proposal_with_path = replace(proposal, artifact_path=str(proposal_path))
+                proposal_records.append(proposal_with_path)
                 notification = build_proposal_created_notification(self.run_id, proposal)
                 write_notification_artifact(
                     directories["root"] / "notifications", notification

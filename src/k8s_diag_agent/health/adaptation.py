@@ -85,6 +85,7 @@ class HealthProposal:
     promotion_payload: Mapping[str, Any] = field(default_factory=_empty_payload)
     lifecycle_history: tuple[ProposalLifecycleEntry, ...] = field(default_factory=_default_lifecycle_history)
     promotion_evaluation: ProposalEvaluation | None = None
+    artifact_path: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "promotion_payload", _freeze_payload(self.promotion_payload))
@@ -107,6 +108,7 @@ class HealthProposal:
             "promotion_payload": dict(self.promotion_payload),
             "lifecycle_history": [entry.to_dict() for entry in self.lifecycle_history],
             "promotion_evaluation": self.promotion_evaluation.to_dict() if self.promotion_evaluation else None,
+            "artifact_path": self.artifact_path,
         }
 
     def __hash__(self) -> int:
@@ -163,6 +165,7 @@ class HealthProposal:
             promotion_payload=payload,
             lifecycle_history=history,
             promotion_evaluation=evaluation,
+            artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
         )
 
 

@@ -39,6 +39,7 @@ from .llm.prompts import build_assessment_prompt
 from .llm.provider import build_assessment_input, get_provider
 from .models import Assessment
 from .normalize.evidence import normalize_signals
+from .notifications.delivery import DeliveryJournal, artifact_digest
 from .reason.diagnoser import build_findings_and_hypotheses
 from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .render.formatter import assessment_to_dict, dump_json, format_summary
@@ -480,7 +481,12 @@ def handle_deliver_notifications(args: argparse.Namespace) -> int:
         render_mattermost_payload,
     )
     directory = args.notifications_dir
-    artifacts = sorted(directory.glob("*.json"))
+    journal = DeliveryJournal.load(directory)
+    artifacts = sorted(
+        path
+        for path in directory.glob("*.json")
+        if path.name != journal.path.name
+    )
     if not artifacts:
         print(f"No notification artifacts found in '{directory}'.")
         return 0
@@ -492,6 +498,10 @@ def handle_deliver_notifications(args: argparse.Namespace) -> int:
         except Exception as exc:
             print(f"Skipping {path.name}: {exc}", file=sys.stderr)
             continue
+        digest = artifact_digest(artifact)
+        if journal.is_delivered(path.name, digest):
+            print(f"Skipping {path.name}: already delivered")
+            continue
         payload = render_mattermost_payload(artifact)
         snippet = payload.get("text", "")
         print(f"Prepared {artifact.kind} ({path.name}): {snippet.splitlines()[0] if snippet else ''}")
@@ -500,8 +510,10 @@ def handle_deliver_notifications(args: argparse.Namespace) -> int:
             continue
         try:
             notifier.dispatch(artifact)
+            journal.record_result(path.name, digest, "sent")
             print(f"  Sent {artifact.kind} to Mattermost webhook.")
         except requests.RequestException as exc:
+            journal.record_result(path.name, digest, "failed", str(exc))
             print(f"Failed to send {path.name}: {exc}", file=sys.stderr)
             failure = True
     return 1 if failure else 0

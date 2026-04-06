@@ -1,7 +1,10 @@
 import unittest
+from unittest.mock import Mock, patch
+
+import requests
 
 from k8s_diag_agent.health.notifications import NotificationArtifact
-from k8s_diag_agent.notifications.mattermost import render_mattermost_payload
+from k8s_diag_agent.notifications.mattermost import MattermostNotifier, render_mattermost_payload
 
 
 class MattermostNotificationTests(unittest.TestCase):
@@ -14,6 +17,33 @@ class MattermostNotificationTests(unittest.TestCase):
             cluster_label="cluster-a",
             context="context-a",
         )
+
+    def test_dispatch_retries_until_success(self) -> None:
+        class DummyResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+        session = requests.Session()
+        calls = {"count": 0}
+
+        def side_effect(*args: object, **kwargs: object) -> DummyResponse:
+            calls["count"] += 1
+            if calls["count"] < 2:
+                raise requests.RequestException("boom")
+            return DummyResponse()
+
+        session.post = Mock(side_effect=side_effect)  # type: ignore[method-assign]
+        notifier = MattermostNotifier(
+            "https://example.com/webhook",
+            session=session,
+            max_attempts=3,
+            backoff_seconds=0,
+        )
+        artifact = self._artifact("degraded-health", {"warnings": ["foo"], "cluster": "cluster-a"})
+        with patch("k8s_diag_agent.notifications.mattermost.time.sleep") as sleep_mock:
+            notifier.dispatch(artifact)
+        self.assertEqual(calls["count"], 2)
+        sleep_mock.assert_called_once()
 
     def test_degraded_health_payload_includes_missing_evidence(self) -> None:
         artifact = self._artifact("degraded-health", {"warnings": ["foo"], "cluster": "cluster-a"})

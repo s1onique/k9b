@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -25,15 +26,34 @@ def render_mattermost_payload(artifact: NotificationArtifact) -> dict[str, objec
 
 
 class MattermostNotifier:
-    def __init__(self, webhook_url: str, *, session: requests.Session | None = None) -> None:
+    def __init__(
+        self,
+        webhook_url: str,
+        *,
+        session: requests.Session | None = None,
+        max_attempts: int = 3,
+        backoff_seconds: float = 0.5,
+    ) -> None:
         self.webhook_url = webhook_url
         self.session = session or requests.Session()
+        self.max_attempts = max_attempts
+        self.backoff_seconds = backoff_seconds
 
     def dispatch(self, artifact: NotificationArtifact) -> requests.Response:
         payload = render_mattermost_payload(artifact)
-        response = self.session.post(self.webhook_url, json=payload, timeout=10)
-        response.raise_for_status()
-        return response
+        last_error: requests.RequestException | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                response = self.session.post(self.webhook_url, json=payload, timeout=10)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt >= self.max_attempts:
+                    raise
+                time.sleep(self.backoff_seconds)
+        assert last_error is not None
+        raise last_error
 
 
 def _default_render(artifact: NotificationArtifact) -> str:

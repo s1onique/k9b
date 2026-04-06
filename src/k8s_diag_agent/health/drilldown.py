@@ -517,9 +517,10 @@ class DrilldownArtifact:
     collection_timestamps: dict[str, str]
     image_pull_secret_insight: ImagePullSecretInsight | None = None
     pattern_details: dict[str, str] = field(default_factory=dict)
+    artifact_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "run_label": self.run_label,
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
@@ -542,6 +543,9 @@ class DrilldownArtifact:
             if self.image_pull_secret_insight
             else None,
         }
+        if self.artifact_path:
+            data["artifact_path"] = self.artifact_path
+        return data
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> DrilldownArtifact:
@@ -612,4 +616,5 @@ class DrilldownArtifact:
             },
             pattern_details=pattern_details,
             image_pull_secret_insight=insight_value,
+            artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
         )

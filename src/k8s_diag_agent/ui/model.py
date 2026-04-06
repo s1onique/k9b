@@ -34,6 +34,9 @@ class ClusterView:
     non_running_pods: int
     baseline_policy_path: str
     missing_evidence: tuple[str, ...]
+    snapshot_path: str | None
+    assessment_path: str | None
+    drilldown_path: str | None
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,9 @@ class ProposalView:
     expected_benefit: str
     source_run_id: str
     latest_note: str | None
+    artifact_path: str | None
+    review_path: str | None
+    lifecycle_history: tuple[tuple[str, str, str | None], ...]
 
 
 @dataclass(frozen=True)
@@ -58,6 +64,18 @@ class FindingsView:
     summary: tuple[tuple[str, str], ...]
     rollout_status: tuple[str, ...]
     pattern_details: tuple[tuple[str, str], ...]
+    artifact_path: str | None = None
+
+
+@dataclass(frozen=True)
+class FleetStatusSummary:
+    rating_counts: tuple[tuple[str, int], ...]
+    degraded_clusters: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ProposalStatusSummary:
+    status_counts: tuple[tuple[str, int], ...]
 
 
 @dataclass(frozen=True)
@@ -66,6 +84,8 @@ class UIIndexContext:
     clusters: tuple[ClusterView, ...]
     proposals: tuple[ProposalView, ...]
     latest_findings: FindingsView | None
+    fleet_status: FleetStatusSummary
+    proposal_status_summary: ProposalStatusSummary
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -97,10 +117,23 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     )
     proposals = tuple(_build_proposal_view(proposal) for proposal in index.get("proposals") or [])
     latest_findings = _build_findings(index.get("latest_drilldown"))
-    return UIIndexContext(run=run, clusters=clusters, proposals=proposals, latest_findings=latest_findings)
+    fleet_status = _build_fleet_status(index.get("fleet_status"))
+    proposal_status_summary = _build_proposal_status_summary(index.get("proposal_status_summary"))
+    return UIIndexContext(
+        run=run,
+        clusters=clusters,
+        proposals=proposals,
+        latest_findings=latest_findings,
+        fleet_status=fleet_status,
+        proposal_status_summary=proposal_status_summary,
+    )
 
 
 def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
+    artifacts = cluster.get("artifact_paths")
+    snapshot = _coerce_optional_str(_value_from_mapping(artifacts, "snapshot"))
+    assessment = _coerce_optional_str(_value_from_mapping(artifacts, "assessment"))
+    drilldown = _coerce_optional_str(_value_from_mapping(artifacts, "drilldown"))
     return ClusterView(
         label=_coerce_str(cluster.get("label")),
         context=_coerce_str(cluster.get("context")),
@@ -114,6 +147,9 @@ def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
         non_running_pods=_coerce_int(cluster.get("non_running_pods")),
         baseline_policy_path=_coerce_str(cluster.get("baseline_policy_path")),
         missing_evidence=_coerce_sequence(cluster.get("missing_evidence")),
+        snapshot_path=snapshot,
+        assessment_path=assessment,
+        drilldown_path=drilldown,
     )
 
 
@@ -123,6 +159,7 @@ def _build_proposal_view(proposal: Mapping[str, object]) -> ProposalView:
     note = _coerce_str(latest_entry.get("note")) if latest_entry and isinstance(latest_entry, Mapping) and latest_entry.get("note") else None
     if note == "-":
         note = None
+    lifecycle_history = _build_lifecycle_history(history)
     return ProposalView(
         proposal_id=_coerce_str(proposal.get("proposal_id")),
         target=_coerce_str(proposal.get("target")),
@@ -132,6 +169,9 @@ def _build_proposal_view(proposal: Mapping[str, object]) -> ProposalView:
         expected_benefit=_coerce_str(proposal.get("expected_benefit")),
         source_run_id=_coerce_str(proposal.get("source_run_id")),
         latest_note=note,
+        artifact_path=_coerce_optional_str(proposal.get("artifact_path")),
+        review_path=_coerce_optional_str(proposal.get("review_artifact")),
+        lifecycle_history=lifecycle_history,
     )
 
 
@@ -147,6 +187,7 @@ def _build_findings(raw: object | None) -> FindingsView | None:
         summary=_serialize_map(raw.get("summary")),
         rollout_status=_coerce_sequence(raw.get("rollout_status")),
         pattern_details=_serialize_map(raw.get("pattern_details")),
+        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
     )
 
 
@@ -194,6 +235,53 @@ def _serialize_map(value: object | None) -> tuple[tuple[str, str], ...]:
     for key, entry in value.items():
         results.append((str(key), _stringify(entry)))
     return tuple(results)
+
+
+def _build_fleet_status(raw: object | None) -> FleetStatusSummary:
+    if not isinstance(raw, Mapping):
+        return FleetStatusSummary(rating_counts=(), degraded_clusters=())
+    counts_raw = raw.get("rating_counts") or ()
+    rating_counts = tuple(
+        (_coerce_str(entry.get("rating")), _coerce_int(entry.get("count")))
+        for entry in counts_raw
+        if isinstance(entry, Mapping)
+    )
+    degraded = _coerce_sequence(raw.get("degraded_clusters"))
+    return FleetStatusSummary(rating_counts=rating_counts, degraded_clusters=degraded)
+
+
+def _build_proposal_status_summary(raw: object | None) -> ProposalStatusSummary:
+    if not isinstance(raw, Mapping):
+        return ProposalStatusSummary(status_counts=())
+    counts_raw = raw.get("status_counts") or ()
+    status_counts = tuple(
+        (_coerce_str(entry.get("status")), _coerce_int(entry.get("count")))
+        for entry in counts_raw
+        if isinstance(entry, Mapping)
+    )
+    return ProposalStatusSummary(status_counts=status_counts)
+
+
+def _build_lifecycle_history(raw: object | None) -> tuple[tuple[str, str, str | None], ...]:
+    entries: list[tuple[str, str, str | None]] = []
+    if not isinstance(raw, Sequence):
+        return ()
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        status = _coerce_str(entry.get("status"))
+        timestamp = _coerce_str(entry.get("timestamp"))
+        note = _coerce_optional_str(entry.get("note"))
+        if note == "-":
+            note = None
+        entries.append((status, timestamp, note))
+    return tuple(entries)
+
+
+def _value_from_mapping(mapping: object | None, key: str) -> object | None:
+    if isinstance(mapping, Mapping):
+        return mapping.get(key)
+    return None
 
 
 def _stringify(value: object | None) -> str:
