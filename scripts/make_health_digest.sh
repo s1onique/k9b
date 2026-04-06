@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="$ROOT/.venv/bin/python"
+SRC_PATH="$ROOT/src"
+export PYTHONPATH="$SRC_PATH:$PYTHONPATH"
+
 RUNS_DIR="runs/health"
 CONFIG_PATH="runs/health-config.local.json"
 BASELINE_FALLBACK="runs/health-baseline.json"
@@ -69,7 +74,7 @@ parse_args() {
 
 infer_latest_run_id() {
   local assessments_dir="$RUNS_DIR/assessments"
-  python3 - "$assessments_dir" <<'PY'
+  "$PYTHON" - "$assessments_dir" <<'PY'
 import os, re, sys
 root = sys.argv[1]
 if not os.path.isdir(root):
@@ -86,7 +91,7 @@ print(sorted(run_ids)[-1] if run_ids else "")
 PY
 }
 
-require_cmd python3
+require_cmd "$PYTHON"
 parse_args "$@"
 
 if [[ -z "$RUN_ID" ]]; then
@@ -101,7 +106,7 @@ fi
 TMP_OUT="$(mktemp)"
 trap 'rm -f "$TMP_OUT"' EXIT
 
-python3 - "$RUNS_DIR" "$CONFIG_PATH" "$BASELINE_FALLBACK" "$RUN_ID" "$INCLUDE_FULL_JSON" > "$TMP_OUT" <<'PY'
+"$PYTHON" - "$ROOT" "$RUNS_DIR" "$CONFIG_PATH" "$BASELINE_FALLBACK" "$RUN_ID" "$INCLUDE_FULL_JSON" > "$TMP_OUT" <<'PY'
 from __future__ import annotations
 import glob
 import json
@@ -109,13 +114,20 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
-runs_dir = Path(sys.argv[1])
-config_path = Path(sys.argv[2])
-baseline_fallback = Path(sys.argv[3])
-run_id = sys.argv[4]
-include_full_json = sys.argv[5] == "1"
+root = Path(sys.argv[1])
+runs_dir = Path(sys.argv[2])
+config_path = Path(sys.argv[3])
+baseline_fallback = Path(sys.argv[4])
+run_id = sys.argv[5]
+include_full_json = sys.argv[6] == "1"
+
+src_path = root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+from k8s_diag_agent.security import sanitize_payload
 
 
 def load_json(path: Path) -> Any:
@@ -164,6 +176,10 @@ comparisons = [(p, load_json(p)) for p in artifact_paths("comparisons")]
 history_path = runs_dir / "history.json"
 history = load_json(history_path) if history_path.exists() else None
 
+safe_config: Mapping[str, Any] = sanitize_payload(config) if isinstance(config, Mapping) else {}
+safe_baseline: Mapping[str, Any] = sanitize_payload(baseline) if isinstance(baseline, Mapping) else {}
+safe_history: Mapping[str, Any] = sanitize_payload(history) if isinstance(history, Mapping) else {}
+
 out: list[str] = []
 out.append("# Health Loop Digest")
 out.append("")
@@ -186,10 +202,13 @@ out.append("")
 out.append("## Config Summary")
 out.append("")
 if isinstance(config, dict):
-    out.append(f"- run_label: {code(str(config.get('run_label') or config.get('run_id') or 'unknown'))}")
-    out.append(f"- collector_version: {code(str(config.get('collector_version') or 'unknown'))}")
-    out.append(f"- output_dir: {code(str(config.get('output_dir') or 'runs'))}")
-    targets = config.get("targets") if isinstance(config.get("targets"), list) else []
+    config_values = safe_config
+    out.append(
+        f"- run_label: {code(str(config_values.get('run_label') or config_values.get('run_id') or 'unknown'))}"
+    )
+    out.append(f"- collector_version: {code(str(config_values.get('collector_version') or 'unknown'))}")
+    out.append(f"- output_dir: {code(str(config_values.get('output_dir') or 'runs'))}")
+    targets = config_values.get("targets") if isinstance(config_values.get("targets"), list) else []
     out.append("- targets:")
     if targets:
         for t in targets:
@@ -199,14 +218,14 @@ if isinstance(config, dict):
                 )
     else:
         out.append("  - none")
-    triggers_cfg = config.get("comparison_triggers") if isinstance(config.get("comparison_triggers"), dict) else {}
+    triggers_cfg = config_values.get("comparison_triggers") if isinstance(config_values.get("comparison_triggers"), dict) else {}
     out.append("- comparison_triggers:")
     if triggers_cfg:
         for k, v in triggers_cfg.items():
             out.append(f"  - {k}={v}")
     else:
         out.append("  - none")
-    manual_pairs = config.get("manual_pairs") if isinstance(config.get("manual_pairs"), list) else []
+    manual_pairs = config_values.get("manual_pairs") if isinstance(config_values.get("manual_pairs"), list) else []
     out.append("- manual_pairs:")
     if manual_pairs:
         for pair in manual_pairs:
@@ -222,11 +241,16 @@ out.append("")
 out.append("## Baseline Summary")
 out.append("")
 if isinstance(baseline, dict):
-    cvr = baseline.get("control_plane_version_range") if isinstance(baseline.get("control_plane_version_range"), dict) else {}
+    baseline_values = safe_baseline
+    cvr = baseline_values.get("control_plane_version_range") if isinstance(
+        baseline_values.get("control_plane_version_range"), dict
+    ) else {}
     out.append(
         f"- control_plane_version_range: {code(str(cvr.get('min_version','?')))} .. {code(str(cvr.get('max_version','?')))}"
     )
-    watched = baseline.get("watched_releases") if isinstance(baseline.get("watched_releases"), list) else []
+    watched = baseline_values.get("watched_releases") if isinstance(
+        baseline_values.get("watched_releases"), list
+    ) else []
     out.append("- watched_releases:")
     if watched:
         for item in watched:
@@ -235,7 +259,9 @@ if isinstance(baseline, dict):
                 out.append(f"  - {item.get('release','?')} allowed={','.join(map(str, allowed))}")
     else:
         out.append("  - none")
-    crds = baseline.get("required_crd_families") if isinstance(baseline.get("required_crd_families"), list) else []
+    crds = baseline_values.get("required_crd_families") if isinstance(
+        baseline_values.get("required_crd_families"), list
+    ) else []
     out.append("- required_crd_families:")
     if crds:
         for item in crds:
@@ -243,7 +269,9 @@ if isinstance(baseline, dict):
                 out.append(f"  - {item.get('family','?')}")
     else:
         out.append("  - none")
-    ignored = baseline.get("ignored_drift") if isinstance(baseline.get("ignored_drift"), list) else []
+    ignored = baseline_values.get("ignored_drift") if isinstance(
+        baseline_values.get("ignored_drift"), list
+    ) else []
     out.append(f"- ignored_drift: {', '.join(map(str, ignored)) if ignored else 'none'}")
 else:
     out.append(f"- baseline file not found or invalid: {code(str(baseline_path))}")
@@ -260,13 +288,16 @@ else:
             out.append("- invalid JSON")
             out.append("")
             continue
-        assessment = data.get("assessment") if isinstance(data.get("assessment"), dict) else {}
+        safe_data = sanitize_payload(data)
+        assessment = safe_data.get("assessment") if isinstance(safe_data.get("assessment"), dict) else {}
         findings = assessment.get("findings") if isinstance(assessment.get("findings"), list) else []
         hypotheses = assessment.get("hypotheses") if isinstance(assessment.get("hypotheses"), list) else []
-        out.append(f"- cluster_label: {code(str(data.get('cluster_label') or data.get('label') or data.get('cluster') or 'unknown'))}")
-        out.append(f"- run_label: {code(str(data.get('run_label') or 'unknown'))}")
-        out.append(f"- run_id: {code(str(data.get('run_id') or 'unknown'))}")
-        out.append(f"- snapshot_path: {code(str(data.get('snapshot_path') or ''))}")
+        out.append(
+            f"- cluster_label: {code(str(safe_data.get('cluster_label') or safe_data.get('label') or safe_data.get('cluster') or 'unknown'))}"
+        )
+        out.append(f"- run_label: {code(str(safe_data.get('run_label') or 'unknown'))}")
+        out.append(f"- run_id: {code(str(safe_data.get('run_id') or 'unknown'))}")
+        out.append(f"- snapshot_path: {code(str(safe_data.get('snapshot_path') or ''))}")
         out.append(f"- findings_count: {len(findings)}")
         out.append(f"- hypotheses_count: {len(hypotheses)}")
         out.append(f"- overall_confidence: {code(str(assessment.get('overall_confidence') or ''))}")
@@ -289,12 +320,14 @@ else:
                     out.append(f"  - {h}")
         else:
             out.append("  - none")
-        ra = assessment.get("recommended_action") if isinstance(assessment.get("recommended_action"), dict) else {}
+        ra = assessment.get("recommended_action") if isinstance(
+            assessment.get("recommended_action"), dict
+        ) else {}
         out.append(f"- recommended_action: {ra.get('description') or ra.get('type') or ''}")
         out.append("")
         if include_full_json:
             out.append("```json")
-            out.append(compact(data))
+            out.append(compact(sanitize_payload(data)))
             out.append("```")
             out.append("")
 
@@ -309,15 +342,16 @@ else:
             out.append("- invalid JSON")
             out.append("")
             continue
-        reasons = data.get("trigger_reasons") if isinstance(data.get("trigger_reasons"), list) else []
-        affected_ns = data.get("affected_namespaces") if isinstance(data.get("affected_namespaces"), list) else []
-        affected_wl = data.get("affected_workloads") if isinstance(data.get("affected_workloads"), list) else []
-        warning_events = data.get("warning_events") if isinstance(data.get("warning_events"), list) else []
-        non_running = data.get("non_running_pods") if isinstance(data.get("non_running_pods"), list) else []
-        pod_desc = data.get("pod_descriptions") if isinstance(data.get("pod_descriptions"), list) else []
-        rollout = data.get("rollout_status") if isinstance(data.get("rollout_status"), list) else []
-        missing = data.get("missing_evidence") if isinstance(data.get("missing_evidence"), list) else []
-        out.append(f"- cluster_label: {code(str(data.get('cluster_label') or data.get('label') or 'unknown'))}")
+        safe_data = sanitize_payload(data)
+        reasons = safe_data.get("trigger_reasons") if isinstance(safe_data.get("trigger_reasons"), list) else []
+        affected_ns = safe_data.get("affected_namespaces") if isinstance(safe_data.get("affected_namespaces"), list) else []
+        affected_wl = safe_data.get("affected_workloads") if isinstance(safe_data.get("affected_workloads"), list) else []
+        warning_events = safe_data.get("warning_events") if isinstance(safe_data.get("warning_events"), list) else []
+        non_running = safe_data.get("non_running_pods") if isinstance(safe_data.get("non_running_pods"), list) else []
+        pod_desc = safe_data.get("pod_descriptions") if isinstance(safe_data.get("pod_descriptions"), list) else []
+        rollout = safe_data.get("rollout_status") if isinstance(safe_data.get("rollout_status"), list) else []
+        missing = safe_data.get("missing_evidence") if isinstance(safe_data.get("missing_evidence"), list) else []
+        out.append(f"- cluster_label: {code(str(safe_data.get('cluster_label') or safe_data.get('label') or 'unknown'))}")
         out.append("- trigger_reasons:")
         if reasons:
             for r in reasons:
@@ -334,7 +368,7 @@ else:
         out.append("")
         if include_full_json:
             out.append("```json")
-            out.append(compact(data))
+            out.append(compact(sanitize_payload(data)))
             out.append("```")
             out.append("")
 
@@ -345,11 +379,12 @@ if not triggers:
 else:
     for path, data in triggers:
         out.append(f"### {path.name}")
-        if isinstance(data, dict):
-            for k, v in data.items():
+        safe_data = sanitize_payload(data)
+        if isinstance(safe_data, Mapping):
+            for k, v in safe_data.items():
                 out.append(f"- {k}: {compact(v)}")
         else:
-            out.append(f"- invalid JSON: {compact(data)}")
+            out.append(f"- invalid JSON: {compact(safe_data)}")
         out.append("")
 
 out.append("## Comparison Artifacts")
@@ -359,19 +394,20 @@ if not comparisons:
 else:
     for path, data in comparisons:
         out.append(f"### {path.name}")
-        if isinstance(data, dict):
-            for k, v in data.items():
+        safe_data = sanitize_payload(data)
+        if isinstance(safe_data, Mapping):
+            for k, v in safe_data.items():
                 out.append(f"- {k}: {compact(v)}")
         else:
-            out.append(f"- invalid JSON: {compact(data)}")
+            out.append(f"- invalid JSON: {compact(safe_data)}")
         out.append("")
 
 out.append("## Health History Excerpt")
 out.append("")
 if isinstance(history, dict):
-    for key, value in history.items():
+    for key, value in safe_history.items():
         out.append(f"### {key}")
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             for k, v in value.items():
                 out.append(f"- {k}: {compact(v)}")
         else:

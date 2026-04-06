@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from .adaptation import HealthProposal, ProposalLifecycleStatus
 from .utils import normalize_ref
+from ..security import sanitize_payload
 
 _ASSESSMENT_PATTERN = re.compile(r"(?P<run_id>.+-\d{8}T\d{6}Z)-(?P<label>.+)-assessment\.json$")
 _TIMESTAMP_LENGTH = 16  # YYYYMMDDTHHMMSSZ
@@ -93,6 +94,15 @@ class HealthSummary:
     comparisons: Tuple["ComparisonSummary", ...]
 
 
+def _sanitize_text(value: str | None) -> str | None:
+    sanitized = sanitize_payload(value)
+    if isinstance(sanitized, str):
+        return sanitized
+    if sanitized is None:
+        return None
+    return str(sanitized)
+
+
 def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> HealthSummary:
     assessments_dir = runs_dir / "assessments"
     history_path = runs_dir / "history.json"
@@ -133,10 +143,11 @@ def format_health_summary(summary: HealthSummary) -> str:
         for entry in summary.clusters:
             warnings = entry.warning_count if entry.warning_count is not None else "n/a"
             pods = entry.non_running_pods if entry.non_running_pods is not None else "n/a"
-            rating = entry.health_rating or "unknown"
+            rating = _sanitize_text(entry.health_rating) or "unknown"
             metadata = _format_class_role(entry.cluster_class, entry.cluster_role)
+            label = _sanitize_text(entry.label) or "unknown"
             lines.append(
-                f"- {entry.label}{metadata}: {rating} (non-running pods: {pods}, warnings: {warnings})"
+                f"- {label}{metadata}: {rating} (non-running pods: {pods}, warnings: {warnings})"
             )
     else:
         lines.append("- none")
@@ -144,16 +155,21 @@ def format_health_summary(summary: HealthSummary) -> str:
     lines.append("Top findings:")
     if summary.clusters:
         for entry in summary.clusters:
-            finding = entry.top_finding or "none"
-            lines.append(f"- {entry.label}: {finding}")
+            finding = _sanitize_text(entry.top_finding) or "none"
+            label = _sanitize_text(entry.label) or "unknown"
+            lines.append(f"- {label}: {finding}")
     else:
         lines.append("- none")
 
     lines.append("Proposals generated:")
     if summary.proposals:
         for proposal in summary.proposals:
+            proposal_id = _sanitize_text(proposal.proposal_id) or proposal.proposal_id
+            confidence = _sanitize_text(proposal.confidence) or proposal.confidence
+            target = _sanitize_text(proposal.target) or proposal.target
+            rationale = _sanitize_text(proposal.rationale) or proposal.rationale
             lines.append(
-                f"- {proposal.proposal_id} [{proposal.confidence}] target {proposal.target}: {proposal.rationale}"
+                f"- {proposal_id} [{confidence}] target {target}: {rationale}"
             )
     else:
         lines.append("- none")
@@ -161,9 +177,12 @@ def format_health_summary(summary: HealthSummary) -> str:
     lines.append("Promoted proposals applied:")
     if summary.promoted:
         for report in summary.promoted:
+            proposal_id = _sanitize_text(report.proposal_id) or report.proposal_id
+            context = _sanitize_text(report.context) or "unknown"
+            signal_note = _sanitize_text(report.signal_note) or report.signal_note
             lines.append(
-                f"- {report.proposal_id} ({report.context or 'unknown'}): noise {report.noise_before}->{report.noise_after},"
-                f" quality {report.quality_before or 'n/a'}->{report.quality_after or 'n/a'}, {report.signal_note}"
+                f"- {proposal_id} ({context}): noise {report.noise_before}->{report.noise_after},"
+                f" quality {report.quality_before or 'n/a'}->{report.quality_after or 'n/a'}, {signal_note}"
             )
     else:
         lines.append("- none")
@@ -171,10 +190,16 @@ def format_health_summary(summary: HealthSummary) -> str:
     lines.append("Comparisons triggered:")
     if summary.triggers:
         for trigger in summary.triggers:
-            reason_text = ", ".join(trigger.reasons) or "unspecified"
-            notes = f" ({trigger.notes})" if trigger.notes else ""
+            sanitized_reasons = [
+                _sanitize_text(reason) or reason for reason in trigger.reasons if reason
+            ]
+            reason_text = ", ".join(sanitized_reasons) or "unspecified"
+            notes_value = _sanitize_text(trigger.notes)
+            notes = f" ({notes_value})" if notes_value else ""
+            primary_label = _sanitize_text(trigger.primary_label) or "unknown"
+            secondary_label = _sanitize_text(trigger.secondary_label) or "unknown"
             lines.append(
-                f"- {trigger.primary_label} vs {trigger.secondary_label}: {reason_text}{notes}"
+                f"- {primary_label} vs {secondary_label}: {reason_text}{notes}"
             )
     else:
         lines.append("- none")
@@ -186,9 +211,13 @@ def format_health_summary(summary: HealthSummary) -> str:
             triggered_text = "triggered" if comp.triggered else "not triggered"
             primary_meta = _format_class_role(comp.primary_class, comp.primary_role)
             secondary_meta = _format_class_role(comp.secondary_class, comp.secondary_role)
+            primary_label = _sanitize_text(comp.primary_label) or "unknown"
+            secondary_label = _sanitize_text(comp.secondary_label) or "unknown"
+            comparison_intent = _sanitize_text(comp.comparison_intent) or comp.comparison_intent
+            reason = _sanitize_text(comp.reason) or comp.reason
             lines.append(
-                f"- {comp.primary_label}{primary_meta} vs {comp.secondary_label}{secondary_meta}: "
-                f"{eligibility}, {triggered_text}, intent {comp.comparison_intent}, reason {comp.reason}"
+                f"- {primary_label}{primary_meta} vs {secondary_label}{secondary_meta}: "
+                f"{eligibility}, {triggered_text}, intent {comparison_intent}, reason {reason}"
             )
     else:
         lines.append("- none")
@@ -339,11 +368,13 @@ def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> 
 
 
 def _format_class_role(cluster_class: str | None, cluster_role: str | None) -> str:
+    sanitized_class = _sanitize_text(cluster_class)
+    sanitized_role = _sanitize_text(cluster_role)
     parts: List[str] = []
-    if cluster_class:
-        parts.append(cluster_class)
-    if cluster_role:
-        parts.append(cluster_role)
+    if sanitized_class:
+        parts.append(sanitized_class)
+    if sanitized_role:
+        parts.append(sanitized_role)
     if not parts:
         return ""
     return f" ({'/'.join(parts)})"

@@ -6,7 +6,7 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
 from .collect.cluster_snapshot import ClusterSnapshot, CollectionStatus
 from .collect.fixture_loader import load_fixture
@@ -59,6 +59,37 @@ class BatchSnapshotConfig:
     targets: Tuple[SnapshotTarget, ...]
     output_dir: Path
 
+CLI_LOG_PATH: Path | None = None
+
+
+def _cli_run_label(command: str, identifier: str | None = None) -> str:
+    label = command
+    if identifier:
+        label = f"{label}-{identifier}"
+    return label
+
+
+def _log_cli_event(
+    component: str,
+    run_label: str,
+    message: str,
+    *,
+    severity: str = "INFO",
+    run_id: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    **extra_metadata: Any,
+) -> dict[str, Any]:
+    return emit_structured_log(
+        component=component,
+        message=message,
+        run_label=run_label,
+        severity=severity,
+        run_id=run_id,
+        log_path=CLI_LOG_PATH,
+        metadata=metadata,
+        **extra_metadata,
+    )
+
 
 def handle_fixture(args: argparse.Namespace) -> int:
     fixture_data = load_fixture(args.fixture)
@@ -90,12 +121,34 @@ def handle_fixture(args: argparse.Namespace) -> int:
 
 
 def handle_snapshot(args: argparse.Namespace) -> int:
+    component = "cli-snapshot"
+    run_label = _cli_run_label(component, args.context)
+    _log_cli_event(
+        component,
+        run_label,
+        "snapshot command started",
+        metadata={"context": args.context},
+    )
     try:
         contexts = list_kube_contexts()
     except RuntimeError as exc:
+        _log_cli_event(
+            component,
+            run_label,
+            "unable to discover kube contexts",
+            severity="ERROR",
+            metadata={"error": str(exc)},
+        )
         print(f"Unable to discover kube contexts: {exc}", file=sys.stderr)
         return 1
     if contexts and args.context not in contexts:
+        _log_cli_event(
+            component,
+            run_label,
+            "requested context unavailable",
+            severity="ERROR",
+            metadata={"context": args.context, "available": contexts},
+        )
         print(
             f"Context '{args.context}' not found. Available contexts: {', '.join(contexts)}",
             file=sys.stderr,
@@ -104,11 +157,24 @@ def handle_snapshot(args: argparse.Namespace) -> int:
     try:
         snapshot = collect_cluster_snapshot(args.context)
     except RuntimeError as exc:
+        _log_cli_event(
+            component,
+            run_label,
+            "snapshot collection failed",
+            severity="ERROR",
+            metadata={"error": str(exc)},
+        )
         print(f"Snapshot collection failed: {exc}", file=sys.stderr)
         return 1
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(snapshot.to_dict(), indent=2), encoding="utf-8")
     print(f"Snapshot for '{args.context}' written to {args.output}")
+    _log_cli_event(
+        component,
+        run_label,
+        "snapshot command completed",
+        metadata={"output": str(args.output)},
+    )
     return 0
 
 
@@ -120,14 +186,44 @@ def handle_batch_snapshot(args: argparse.Namespace, default_config: Path = DEFAU
             args.config == default_config,
         )
     except RuntimeError as exc:
+        run_label = _cli_run_label("cli-batch-snapshot", args.config.name)
+        _log_cli_event(
+            "cli-batch-snapshot",
+            run_label,
+            "batch snapshot config resolution failed",
+            severity="ERROR",
+            metadata={"error": str(exc), "config": str(args.config)},
+        )
         print(f"Unable to resolve batch config: {exc}", file=sys.stderr)
         return 1
+    component = "cli-batch-snapshot"
+    run_label = _cli_run_label(component, config_path.name)
+    _log_cli_event(
+        component,
+        run_label,
+        "batch snapshot command started",
+        metadata={"config": str(config_path)},
+    )
     try:
         config = _load_batch_config(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
+        _log_cli_event(
+            component,
+            run_label,
+            "unable to load batch config",
+            severity="ERROR",
+            metadata={"error": str(exc), "config": str(config_path)},
+        )
         print(f"Unable to load batch config {config_path}: {exc}", file=sys.stderr)
         return 1
     if not config.targets:
+        _log_cli_event(
+            component,
+            run_label,
+            "batch config contains no targets",
+            severity="ERROR",
+            metadata={"config": str(config_path)},
+        )
         print(f"Batch config {config_path} contains no targets.", file=sys.stderr)
         return 1
     try:
@@ -164,21 +260,62 @@ def handle_batch_snapshot(args: argparse.Namespace, default_config: Path = DEFAU
     print(f"Batch snapshot processed {successes} target(s).")
     if issues:
         print(f"Issues encountered for {len(issues)} target(s).", file=sys.stderr)
+        _log_cli_event(
+            component,
+            run_label,
+            "batch snapshot completed with issues",
+            severity="WARNING",
+            metadata={"successes": successes, "issues": issues},
+        )
+    else:
+        _log_cli_event(
+            component,
+            run_label,
+            "batch snapshot completed",
+            metadata={"successes": successes},
+        )
     return 0
 
 
 def handle_compare(args: argparse.Namespace) -> int:
+    component = "cli-compare"
+    run_label = _cli_run_label(component, f"{args.snapshot_a.name}-{args.snapshot_b.name}")
+    _log_cli_event(
+        component,
+        run_label,
+        "compare command started",
+        metadata={"snapshot_a": str(args.snapshot_a), "snapshot_b": str(args.snapshot_b)},
+    )
     try:
         primary = _load_snapshot(args.snapshot_a)
         secondary = _load_snapshot(args.snapshot_b)
     except (OSError, json.JSONDecodeError, KeyError) as exc:
+        _log_cli_event(
+            component,
+            run_label,
+            "unable to load snapshots",
+            severity="ERROR",
+            metadata={"error": str(exc)},
+        )
         print(f"Unable to load snapshots: {exc}", file=sys.stderr)
         return 1
     comparison = compare_snapshots(primary, secondary)
     if not comparison.differences:
         print("Snapshots match across tracked dimensions.")
+        _log_cli_event(
+            component,
+            run_label,
+            "compare command completed with no differences",
+            metadata={"differences": 0},
+        )
         return 0
     print(json.dumps(comparison.differences, indent=2))
+    _log_cli_event(
+        component,
+        run_label,
+        "compare command completed with differences",
+        metadata={"differences": len(comparison.differences)},
+    )
     return 0
 
 
@@ -246,6 +383,14 @@ def handle_assess_drilldown(args: argparse.Namespace) -> int:
 
 
 def handle_run_feedback(args: argparse.Namespace, default_config: Path = RUN_CONFIG_DEFAULT) -> int:
+    component = "cli-run-feedback"
+    start_label = _cli_run_label(component, args.config.stem)
+    _log_cli_event(
+        component,
+        start_label,
+        "run-feedback command started",
+        metadata={"config": str(args.config), "provider_override": args.provider},
+    )
     try:
         config_path = _resolve_config_path(
             args.config,
@@ -253,9 +398,25 @@ def handle_run_feedback(args: argparse.Namespace, default_config: Path = RUN_CON
             args.config == default_config,
         )
     except RuntimeError as exc:
+        _log_cli_event(
+            component,
+            start_label,
+            "unable to resolve run config",
+            severity="ERROR",
+            metadata={"error": str(exc), "config": str(args.config)},
+        )
         print(f"Unable to resolve run config: {exc}", file=sys.stderr)
         return 1
-    exit_code, _ = run_feedback_loop(config_path, provider_override=args.provider, quiet=args.quiet)
+    exit_code, artifacts = run_feedback_loop(config_path, provider_override=args.provider, quiet=args.quiet)
+    final_label = artifacts[0].run_id if artifacts else start_label
+    severity = "INFO" if exit_code == 0 else "ERROR"
+    _log_cli_event(
+        component,
+        final_label,
+        "run-feedback command completed",
+        severity=severity,
+        metadata={"exit_code": exit_code, "artifact_count": len(artifacts)},
+    )
     return exit_code
 
 

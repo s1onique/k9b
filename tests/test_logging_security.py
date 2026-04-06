@@ -22,6 +22,8 @@ from k8s_diag_agent.collect.cluster_snapshot import (
 )
 from k8s_diag_agent.security import sanitize_log_entry, sanitize_payload, sanitize_prompt
 from scripts import run_health_scheduler
+from k8s_diag_agent.compare.two_cluster import compare_snapshots
+from k8s_diag_agent.llm.provider import build_assessment_input
 
 
 class LoggingWorkflowTest(unittest.TestCase):
@@ -123,3 +125,17 @@ class SanitizerTest(unittest.TestCase):
     def test_log_entry_scrubs_sensitive_keys(self) -> None:
         entry = sanitize_log_entry({"message": "ok", "authorization": "Bearer xyz"})
         self.assertEqual(entry["authorization"], "<scrubbed>")
+
+
+class ProviderPayloadSanitizationTest(unittest.TestCase):
+    def test_build_assessment_input_redacts_sensitive_labels(self) -> None:
+        fixture_path = Path(__file__).resolve().parent / "fixtures" / "snapshots" / "sanitized-alpha.json"
+        raw_snapshot = json.loads(fixture_path.read_text(encoding="utf-8"))
+        labels = raw_snapshot.setdefault("metadata", {}).setdefault("labels", {})
+        labels["api_token"] = "Bearer secret-value"
+        primary = ClusterSnapshot.from_dict(raw_snapshot)
+        secondary = ClusterSnapshot.from_dict(raw_snapshot)
+        comparison = compare_snapshots(primary, secondary)
+        payload = build_assessment_input(primary, secondary, comparison)
+        self.assertEqual(payload.primary_snapshot["metadata"]["labels"]["api_token"], "<scrubbed>")
+        self.assertEqual(payload.secondary_snapshot["metadata"]["labels"]["api_token"], "<scrubbed>")
