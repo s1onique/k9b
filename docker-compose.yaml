@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    image: k8s-diag-python
+    command: ["backend"]
+    restart: unless-stopped
+    environment:
+      HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
+      HEALTH_RUNS_DIR: /app/runs/health
+      HEALTH_UI_RUNS_DIR: /app/runs/health
+      HEALTH_UI_HOST: 0.0.0.0
+      HEALTH_UI_PORT: "8080"
+      KUBECONFIG: /app/kubeconfig/config
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./runs:/app/runs
+      - ./podman/kubeconfig:/app/kubeconfig:Z
+
+  scheduler:
+    image: k8s-diag-python
+    command: ["scheduler"]
+    restart: unless-stopped
+    environment:
+      HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
+      HEALTH_RUNS_DIR: /app/runs/health
+      KUBECONFIG: /app/kubeconfig/config
+    volumes:
+      - ./runs:/app/runs
+      - ./podman/kubeconfig:/app/kubeconfig:Z
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    environment:
+      VITE_BACKEND_HOST: backend
+      VITE_BACKEND_PORT: "8080"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend:Z
+      - frontend_node_modules:/app/frontend/node_modules
+
+volumes:
+  frontend_node_modules:

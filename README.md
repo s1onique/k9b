@@ -165,6 +165,33 @@ Keeping the scheduler, backend, and frontend running together gives you a shifti
 
 The `ban-private-contexts` pre-commit hook now also inspects the tracked snapshot directories so names collected at runtime never slip into commits.
 
+## Containerized stack (Podman / Docker Compose)
+
+Build the Python and frontend images once, then wire them together with a shared `runs` volume and kubeconfig mount.
+
+1. Ensure the runtime configs you plan to use live under `runs/` (for example `runs/health-config.local.json`).
+2. Place a kubeconfig bundle under `podman/kubeconfig/config` (symlink or copy from `~/.kube/config`). The compose stack mounts this path so `kubectl`/`helm` inside the Python container can authenticate.
+3. `podman machine start` (for Podman Desktop on macOS) so the VM can handle port forwarding; `podman machine init` is required the first time.
+4. `podman compose up --build -d` (or `docker compose up --build -d`) to start scheduler, backend, and frontend. The backend publishes `8080`, the frontend publishes `5173`, and the scheduler keeps writing artifacts into `./runs/health`.
+5. `podman compose down` (or `docker compose down`) to stop the stack while keeping the `runs` artifacts on disk.
+
+### Volumes & environment worth noting
+
+- `./runs:/app/runs`: shared file-backed artifacts so the backend UI can read what the scheduler writes.
+- `./podman/kubeconfig:/app/kubeconfig`: kubeconfig required by `kubectl`/`helm`. Replace `podman/kubeconfig/config` with your real config before starting.
+- `frontend_node_modules:/app/frontend/node_modules`: keeps `npm ci` output outside the source tree when the frontend host directory is mounted.
+- Environment variables injected by the compose file:
+  - `HEALTH_CONFIG_PATH`, `HEALTH_RUNS_DIR`, `HEALTH_UI_RUNS_DIR`, `HEALTH_UI_HOST`, `HEALTH_UI_PORT` for the backend.
+  - `HEALTH_CONFIG_PATH`, `HEALTH_RUNS_DIR` for the scheduler.
+  - `KUBECONFIG` pointing at `/app/kubeconfig/config` for the Python containers.
+  - `VITE_BACKEND_HOST`, `VITE_BACKEND_PORT` so the Vite dev server proxies `/api` and `/artifact` to the backend container instead of `127.0.0.1`.
+
+### Podman Desktop (macOS) caveats
+
+- Podman Desktop runs containers inside a virtual machine, so publishing ports (`8080`, `5173`) is the only way to reach the UI from the macOS host. Use `podman machine ssh` if you need to troubleshoot inside the VM.
+- The VM does not automatically share `~/.kube`, so copy or symlink your kubeconfig into `podman/kubeconfig` before starting the stack. The Kubernetes context can still reference remote clusters; only the local file needs to exist.
+- Restarting the `podman machine` resets the VM; the compose stack can be brought up again without rebuilding as long as `./runs` and `podman/kubeconfig` remain intact.
+
 If the LLM assessment is optional or fails, the run still captures the snapshots/comparisons, records the failure in the feedback artifact, and only exits non-zero when collection itself fails critically. The resulting artifacts become the typed trace that later evaluation, scoring, and adaptation loops consume.
 
 See `docs/typing.md` for the type-annotation conventions that guide new code.
