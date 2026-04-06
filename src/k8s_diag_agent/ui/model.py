@@ -36,6 +36,10 @@ class ClusterView:
     non_running_pods: int
     baseline_policy_path: str
     missing_evidence: tuple[str, ...]
+    latest_run_timestamp: str
+    top_trigger_reason: str | None
+    drilldown_available: bool
+    drilldown_timestamp: str | None
     snapshot_path: str | None
     assessment_path: str | None
     drilldown_path: str | None
@@ -119,6 +123,54 @@ class FindingsView:
 
 
 @dataclass(frozen=True)
+class AssessmentFindingView:
+    description: str
+    layer: str
+    supporting_signals: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AssessmentHypothesisView:
+    description: str
+    confidence: str
+    probable_layer: str
+    what_would_falsify: str
+
+
+@dataclass(frozen=True)
+class AssessmentNextCheckView:
+    description: str
+    owner: str
+    method: str
+    evidence_needed: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RecommendedActionView:
+    action_type: str
+    description: str
+    references: tuple[str, ...]
+    safety_level: str
+
+
+@dataclass(frozen=True)
+class AssessmentView:
+    cluster_label: str
+    context: str
+    timestamp: str
+    health_rating: str
+    missing_evidence: tuple[str, ...]
+    findings: tuple[AssessmentFindingView, ...]
+    hypotheses: tuple[AssessmentHypothesisView, ...]
+    next_checks: tuple[AssessmentNextCheckView, ...]
+    recommended_action: RecommendedActionView | None
+    probable_layer: str | None
+    overall_confidence: str | None
+    artifact_path: str | None
+    snapshot_path: str | None
+
+
+@dataclass(frozen=True)
 class FleetStatusSummary:
     rating_counts: tuple[tuple[str, int], ...]
     degraded_clusters: tuple[str, ...]
@@ -135,6 +187,7 @@ class UIIndexContext:
     clusters: tuple[ClusterView, ...]
     proposals: tuple[ProposalView, ...]
     latest_findings: FindingsView | None
+    latest_assessment: AssessmentView | None
     fleet_status: FleetStatusSummary
     proposal_status_summary: ProposalStatusSummary
     drilldown_availability: DrilldownAvailabilityView
@@ -173,6 +226,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     )
     proposals = tuple(_build_proposal_view(proposal) for proposal in index.get("proposals") or [])
     latest_findings = _build_findings(index.get("latest_drilldown"))
+    latest_assessment = _build_assessment_view(index.get("latest_assessment"))
     fleet_status = _build_fleet_status(index.get("fleet_status"))
     proposal_status_summary = _build_proposal_status_summary(index.get("proposal_status_summary"))
     drilldown_availability = _build_drilldown_availability(index.get("drilldown_availability"))
@@ -183,6 +237,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         clusters=clusters,
         proposals=proposals,
         latest_findings=latest_findings,
+        latest_assessment=latest_assessment,
         fleet_status=fleet_status,
         proposal_status_summary=proposal_status_summary,
         drilldown_availability=drilldown_availability,
@@ -209,6 +264,10 @@ def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
         non_running_pods=_coerce_int(cluster.get("non_running_pods")),
         baseline_policy_path=_coerce_str(cluster.get("baseline_policy_path")),
         missing_evidence=_coerce_sequence(cluster.get("missing_evidence")),
+        latest_run_timestamp=_coerce_str(cluster.get("latest_run_timestamp")),
+        top_trigger_reason=_coerce_optional_str(cluster.get("top_trigger_reason")),
+        drilldown_available=bool(cluster.get("drilldown_available")),
+        drilldown_timestamp=_coerce_optional_str(cluster.get("drilldown_timestamp")),
         snapshot_path=snapshot,
         assessment_path=assessment,
         drilldown_path=drilldown,
@@ -458,4 +517,88 @@ def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysis
         suggested_next_checks=_coerce_sequence(raw.get("suggested_next_checks")),
         timestamp=_coerce_str(raw.get("timestamp")),
         artifact_path=_coerce_optional_str(raw.get("artifact_path")),
+    )
+
+
+def _build_assessment_view(raw: object | None) -> AssessmentView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return AssessmentView(
+        cluster_label=_coerce_str(raw.get("cluster_label")),
+        context=_coerce_str(raw.get("context")),
+        timestamp=_coerce_str(raw.get("timestamp")),
+        health_rating=_coerce_str(raw.get("health_rating")),
+        missing_evidence=_coerce_sequence(raw.get("missing_evidence")),
+        findings=_build_assessment_findings(raw.get("findings")),
+        hypotheses=_build_assessment_hypotheses(raw.get("hypotheses")),
+        next_checks=_build_assessment_next_checks(raw.get("next_evidence_to_collect")),
+        recommended_action=_build_recommended_action(raw.get("recommended_action")),
+        probable_layer=_coerce_optional_str(raw.get("probable_layer_of_origin")),
+        overall_confidence=_coerce_optional_str(raw.get("overall_confidence")),
+        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
+        snapshot_path=_coerce_optional_str(raw.get("snapshot_path")),
+    )
+
+
+def _build_assessment_findings(raw: object | None) -> tuple[AssessmentFindingView, ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    entries: list[AssessmentFindingView] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append(
+            AssessmentFindingView(
+                description=_coerce_str(entry.get("description")),
+                layer=_coerce_str(entry.get("layer")),
+                supporting_signals=_coerce_sequence(entry.get("supporting_signals")),
+            )
+        )
+    return tuple(entries)
+
+
+def _build_assessment_hypotheses(raw: object | None) -> tuple[AssessmentHypothesisView, ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    entries: list[AssessmentHypothesisView] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append(
+            AssessmentHypothesisView(
+                description=_coerce_str(entry.get("description")),
+                confidence=_coerce_str(entry.get("confidence")),
+                probable_layer=_coerce_str(entry.get("probable_layer")),
+                what_would_falsify=_coerce_str(entry.get("what_would_falsify")),
+            )
+        )
+    return tuple(entries)
+
+
+def _build_assessment_next_checks(raw: object | None) -> tuple[AssessmentNextCheckView, ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    entries: list[AssessmentNextCheckView] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append(
+            AssessmentNextCheckView(
+                description=_coerce_str(entry.get("description")),
+                owner=_coerce_str(entry.get("owner")),
+                method=_coerce_str(entry.get("method")),
+                evidence_needed=_coerce_sequence(entry.get("evidence_needed")),
+            )
+        )
+    return tuple(entries)
+
+
+def _build_recommended_action(raw: object | None) -> RecommendedActionView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return RecommendedActionView(
+        action_type=_coerce_str(raw.get("type")),
+        description=_coerce_str(raw.get("description")),
+        references=_coerce_sequence(raw.get("references")),
+        safety_level=_coerce_str(raw.get("safety_level")),
     )

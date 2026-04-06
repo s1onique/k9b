@@ -1,7 +1,7 @@
 import unittest
 from typing import cast
 
-from k8s_diag_agent.ui.model import FindingsView, build_ui_context
+from k8s_diag_agent.ui.model import AssessmentView, FindingsView, RecommendedActionView, build_ui_context
 
 
 class UIViewModelTests(unittest.TestCase):
@@ -77,6 +77,42 @@ class UIViewModelTests(unittest.TestCase):
                 "pattern_details": {"pattern": "noise"},
                 "artifact_path": "drilldowns/cluster-a.json",
             },
+            "latest_assessment": {
+                "cluster_label": "cluster-a",
+                "context": "cluster-a",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "health_rating": "degraded",
+                "missing_evidence": ["foo"],
+                "findings": [
+                    {"description": "metric spike", "layer": "workload", "supporting_signals": ["sig-1"]}
+                ],
+                "hypotheses": [
+                    {
+                        "description": "routing issue",
+                        "confidence": "medium",
+                        "probable_layer": "network",
+                        "what_would_falsify": "packets flow normally",
+                    }
+                ],
+                "next_evidence_to_collect": [
+                    {
+                        "description": "capture tcpdump",
+                        "owner": "platform",
+                        "method": "kubectl",
+                        "evidence_needed": ["tcpdump"],
+                    }
+                ],
+                "recommended_action": {
+                    "type": "observation",
+                    "description": "monitor ingress metrics",
+                    "references": ["sig-1"],
+                    "safety_level": "low-risk",
+                },
+                "overall_confidence": "medium",
+                "probable_layer_of_origin": "network",
+                "artifact_path": "assessments/cluster-a.json",
+                "snapshot_path": "snapshots/cluster-a.json",
+            },
             "drilldown_availability": {
                 "total_clusters": 1,
                 "available": 1,
@@ -146,3 +182,10 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(context.external_analysis.count, 1)
         self.assertEqual(context.run.external_analysis_count, 1)
         self.assertEqual(context.run.notification_count, 1)
+        self.assertIsNotNone(context.latest_assessment)
+        assessment = cast(AssessmentView, context.latest_assessment)
+        self.assertEqual(assessment.cluster_label, "cluster-a")
+        self.assertIsNotNone(assessment.recommended_action)
+        recommended_action = cast(RecommendedActionView, assessment.recommended_action)
+        self.assertEqual(recommended_action.action_type, "observation")
+        self.assertEqual(assessment.next_checks[0].owner, "platform")

@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote
 
 from .model import (
+    AssessmentView,
     ClusterView,
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
@@ -30,29 +31,126 @@ from .model import (
 
 _CSS = """
 body {
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Space Grotesk', 'Inter', 'Segoe UI', system-ui, sans-serif;
   margin: 0;
-  background: linear-gradient(135deg, #0f172a, #111827);
-  color: #f9fafb;
+  background: linear-gradient(135deg, #020617, #0b1231 60%, #111827);
+  color: #f8fafc;
 }
 
 .page {
   max-width: 1200px;
   margin: auto;
-  padding: 2rem;
+  padding: 2rem 1rem 3rem;
 }
 
 .panel {
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 1rem;
-  padding: 1.5rem;
+  padding: 1.75rem;
   margin-bottom: 1.5rem;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
 }
 
 h1, h2 {
   margin-top: 0;
+}
+
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hero-content {
+  max-width: 680px;
+}
+
+.hero h1 {
+  font-size: 2.2rem;
+  letter-spacing: 0.02em;
+}
+
+.hero-meta {
+  margin: 0.35rem 0 0;
+  color: rgba(248, 250, 252, 0.75);
+  font-size: 0.9rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.refresh-button {
+  background: #4c1d95;
+  border: none;
+  padding: 0.65rem 1.15rem;
+  border-radius: 999px;
+  color: #f8fafc;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.refresh-button:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+}
+
+.floating-nav {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.8rem 1.1rem;
+  background: rgba(15, 118, 110, 0.08);
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.floating-nav a {
+  color: #a5b4fc;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+}
+
+.fleet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.fleet-metrics {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.fleet-metric {
+  padding: 0.6rem 0.9rem;
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 0.65rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  text-align: right;
+}
+
+.fleet-metric strong {
+  display: block;
+  font-size: 1.4rem;
+}
+
+.fleet-metric .small {
+  display: block;
+  margin-top: 0.2rem;
 }
 
 table {
@@ -64,6 +162,10 @@ th, td {
   text-align: left;
   padding: 0.6rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.fleet-table-card {
+  overflow-x: auto;
 }
 
 .status-pill {
@@ -85,102 +187,61 @@ th, td {
   padding-left: 1.5rem;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
-}
-
 .card {
-  background: rgba(30, 41, 59, 0.9);
+  background: rgba(30, 41, 59, 0.95);
   padding: 1rem;
-  border-radius: 0.75rem;
+  border-radius: 0.85rem;
   border: 1px solid rgba(148, 163, 184, 0.3);
 }
 
-.run-grid {
+.detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.detail-column {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  align-items: start;
 }
 
-.run-summary .card {
-  margin-bottom: 0.75rem;
+.detail-card {
+  background: rgba(15, 23, 42, 0.95);
+  border-radius: 0.85rem;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
 }
 
-.run-insight h3 {
-  margin-top: 0;
+.detail-card h3 {
+  margin: 0;
+  font-size: 1rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  font-size: 0.9rem;
   color: #94a3b8;
 }
 
-.status-summary {
-  margin-bottom: 0.5rem;
+.detail-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: rgba(248, 250, 252, 0.9);
 }
 
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.75rem;
+.detail-action {
+  background: rgba(59, 130, 246, 0.08);
+  padding: 0.75rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
-.status-card {
-  background: rgba(15, 118, 110, 0.2);
-  border-radius: 0.75rem;
-  padding: 0.65rem 0.8rem;
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  text-align: center;
-}
-
-.status-card strong {
-  display: block;
-  font-size: 1.4rem;
-}
-
-.status-card span {
-  display: block;
-  font-size: 0.85rem;
-  margin-top: 0.15rem;
-}
-
-.status-badges {
-  margin-bottom: 1rem;
+.detail-artifacts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.artifact-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
   font-size: 0.85rem;
-}
-
-.artifact-link {
-  color: #a5b4fc;
-}
-
-.artifact-link:hover {
-  text-decoration: underline;
-}
-
-.artifact-missing {
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.lifecycle-history {
-  margin: 0.25rem 0 0;
-  padding-left: 1.25rem;
-  font-size: 0.85rem;
-}
-
-.lifecycle-history li {
-  margin-bottom: 0.25rem;
 }
 
 .small {
@@ -277,8 +338,8 @@ th, td {
   border-bottom: none;
   padding-bottom: 0;
 }
-"""
 
+"""
 
 def start_ui_server(runs_dir: Path, host: str = "127.0.0.1", port: int = 8080) -> None:
     handler = functools.partial(HealthUIRequestHandler, runs_dir=runs_dir)
@@ -378,7 +439,6 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 def _render_html(context: UIIndexContext) -> str:
     cluster_rows = "".join(_render_cluster_row(cluster) for cluster in context.clusters)
     proposal_rows = "".join(_render_proposal_row(proposal) for proposal in context.proposals)
-    findings_html = _render_findings(context.latest_findings)
     run_card = _render_run_card(context.run)
     status_summary = _render_status_cards(context.fleet_status)
     degraded_hint = _render_degraded_hint(context.fleet_status)
@@ -386,8 +446,11 @@ def _render_html(context: UIIndexContext) -> str:
     drilldown_section = _render_drilldown_section(context.drilldown_availability)
     notification_section = _render_notification_history(context.notification_history)
     external_analysis_section = _render_external_analysis_section(context.external_analysis)
-    return f"""
-<!DOCTYPE html>
+    pending_proposals, total_proposals = _count_proposal_totals(context.proposal_status_summary)
+    detail_section = _render_detail_section(context)
+    detail_artifacts = _render_detail_artifacts(context)
+    return (
+        f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -397,72 +460,83 @@ def _render_html(context: UIIndexContext) -> str:
 </head>
 <body>
   <div class="page">
-    <header class="panel">
-      <h1>Health Operator Console</h1>
-      <p>Run <strong>{html.escape(context.run.run_label)}</strong> ({html.escape(context.run.run_id)}) at {html.escape(context.run.timestamp)}</p>
+    <header class="panel hero">
+      <div class="hero-content">
+        <h1>Health Operator Console</h1>
+        <p class="hero-meta">Run <strong>{html.escape(context.run.run_label)}</strong> ({html.escape(context.run.run_id)})</p>
+        <p class="hero-meta small">Collector {html.escape(context.run.collector_version)} &middot; {context.run.cluster_count} clusters &middot; {context.run.notification_count} notifications</p>
+      </div>
+      <div class="hero-actions">
+        <button class="refresh-button" type="button" onclick="location.reload()">Refresh data</button>
+        <span class="hero-meta small">Updated {html.escape(context.run.timestamp)}</span>
+      </div>
+      <div class="status-summary">{status_summary}</div>
+      {degraded_hint}
+    </header>
+    <nav class="floating-nav panel" aria-label="Quick links">
+      <a href="#fleet">Fleet overview</a>
+      <a href="#detail">Run detail</a>
+      <a href="#proposals">Proposal queue</a>
+    </nav>
+    <section class="panel">
+      <h2>Run summary</h2>
       <div class="run-grid">
-        <div class="run-summary">
-          {run_card}
-        </div>
-        <div class="run-insight">
-          <h3>Fleet snapshot</h3>
-          <div class="status-summary">
-            {status_summary}
+        {run_card}
+      </div>
+    </section>
+    <section id="fleet" class="panel">
+      <div class="fleet-header">
+        <h2>Fleet overview</h2>
+        <div class="fleet-metrics">
+          <div class="fleet-metric">
+            <span class="fleet-metric-label">Pending proposals</span>
+            <strong class="fleet-metric-value">{pending_proposals}</strong>
+            <span class="small">pending</span>
           </div>
-          {degraded_hint}
+          <div class="fleet-metric">
+            <span class="fleet-metric-label">Total proposals</span>
+            <strong class="fleet-metric-value">{total_proposals}</strong>
+            <span class="small">queued</span>
+          </div>
         </div>
       </div>
-    </header>
-    <section class="panel">
-      <h2>Fleet Status</h2>
-      <div class="card">
+      <div class="card fleet-table-card">
         <table>
           <thead>
             <tr>
               <th>Cluster</th>
-              <th>Class</th>
-              <th>Role</th>
+              <th>Class / Role</th>
               <th>Cohort</th>
               <th>Rating</th>
-              <th>Warnings</th>
-              <th>Non-running</th>
-              <th>Nodes</th>
-              <th>Control Plane</th>
+              <th>Latest run</th>
+              <th>Top trigger</th>
+              <th>Drilldown</th>
               <th>Artifacts</th>
             </tr>
           </thead>
           <tbody>
-            {cluster_rows or '<tr><td colspan="10">No clusters recorded yet</td></tr>'}
+            {cluster_rows or '<tr><td colspan="8">No clusters recorded yet.</td></tr>'}
           </tbody>
         </table>
       </div>
     </section>
+    <section id="detail" class="panel">
+      <h2>Cluster & run detail</h2>
+      <div class="detail-grid">
+        {detail_section}
+      </div>
+      <div class="detail-artifacts">
+        {detail_artifacts}
+      </div>
+    </section>
     <section class="panel">
-      <h2>Drilldown Availability</h2>
+      <h2>Drilldown availability</h2>
       <div class="card">
         {drilldown_section}
       </div>
     </section>
-    <section class="panel">
-      <h2>Latest Findings</h2>
-      <div class="card">
-        {findings_html}
-      </div>
-    </section>
-    <section class="panel">
-      <h2>External Analysis</h2>
-      <div class="card">
-        {external_analysis_section}
-      </div>
-    </section>
-    <section class="panel">
-      <h2>Notification History</h2>
-      <div class="card">
-        {notification_section}
-      </div>
-    </section>
-    <section class="panel">
-      <h2>Proposal Queue</h2>
+    <section id="proposals" class="panel">
+      <h2>Proposal queue</h2>
       <div class="card">
         {proposal_badges}
         <table>
@@ -486,10 +560,23 @@ def _render_html(context: UIIndexContext) -> str:
         </table>
       </div>
     </section>
+    <section class="panel">
+      <h2>External analysis</h2>
+      <div class="card">
+        {external_analysis_section}
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Notification history</h2>
+      <div class="card">
+        {notification_section}
+      </div>
+    </section>
   </div>
 </body>
 </html>
 """
+    )
 
 
 def _render_run_card(run: RunView) -> str:
@@ -514,17 +601,24 @@ def _render_cluster_row(cluster: ClusterView) -> str:
             ("Drilldown", cluster.drilldown_path),
         )
     )
+    trigger_reason = html.escape(cluster.top_trigger_reason or "Awaiting trigger")
+    drilldown_status = "Ready" if cluster.drilldown_available else "Missing"
+    timestamp = html.escape(cluster.drilldown_timestamp or "pending")
+    rating_class = _make_status_class(cluster.health_rating)
     return f"""
 <tr>
-  <td>{html.escape(cluster.label)}</td>
-  <td>{html.escape(cluster.cluster_class)}</td>
-  <td>{html.escape(cluster.cluster_role)}</td>
+  <td>
+    <strong>{html.escape(cluster.label)}</strong><br>
+    <span class="small">{html.escape(cluster.context)}</span>
+  </td>
+  <td>
+    {html.escape(cluster.cluster_class)} / {html.escape(cluster.cluster_role)}
+  </td>
   <td>{html.escape(cluster.baseline_cohort)}</td>
-  <td>{html.escape(cluster.health_rating)}</td>
-  <td>{cluster.warnings}</td>
-  <td>{cluster.non_running_pods}</td>
-  <td>{cluster.node_count}</td>
-  <td>{html.escape(cluster.control_plane_version)}</td>
+  <td><span class="status-pill {rating_class}">{html.escape(cluster.health_rating)}</span></td>
+  <td>{html.escape(cluster.latest_run_timestamp)}</td>
+  <td>{trigger_reason}</td>
+  <td><span class="small">{drilldown_status}</span><br><span class="small">{timestamp}</span></td>
   <td>{artifact_links}</td>
 </tr>
 """
@@ -728,6 +822,135 @@ def _render_external_analysis_entry(entry: ExternalAnalysisView) -> str:
       <div class="notification-artifact">{artifact_link}</div>
     </li>
     """
+
+
+def _count_proposal_totals(summary: ProposalStatusSummary) -> tuple[int, int]:
+    counts: dict[str, int] = {}
+    for status, count in summary.status_counts:
+        text = (status or "").lower()
+        if not text:
+            continue
+        counts[text] = counts.get(text, 0) + count
+    total = sum(counts.values())
+    return counts.get("pending", 0), total
+
+
+def _render_detail_section(context: UIIndexContext) -> str:
+    assessment_panel = _render_assessment_panel(context.latest_assessment)
+    drilldown_panel = _render_findings(context.latest_findings)
+    notification_panel = _render_related_notifications(context.notification_history, context.latest_assessment)
+    return f"""
+    <div class="detail-column">
+      <div class="detail-card">
+        <h3>Latest assessment summary</h3>
+        {assessment_panel}
+      </div>
+    </div>
+    <div class="detail-column">
+      <div class="detail-card">
+        <h3>Latest drilldown summary</h3>
+        {drilldown_panel}
+      </div>
+      <div class="detail-card">
+        <h3>Related notifications</h3>
+        {notification_panel}
+      </div>
+    </div>
+    """
+
+
+def _render_assessment_panel(assessment: AssessmentView | None) -> str:
+    if not assessment:
+        return '<p class="small">Assessment information will appear after the next run.</p>'
+    missing = ", ".join(html.escape(item) for item in assessment.missing_evidence) or "none"
+    findings = []
+    for finding in assessment.findings:
+        signals = ", ".join(html.escape(value) for value in finding.supporting_signals) or "n/a"
+        findings.append(
+            f"<li><strong>{html.escape(finding.description)}</strong><br><span class=\"small\">{html.escape(finding.layer)} · Signals: {signals}</span></li>"
+        )
+    hypotheses = []
+    for hypothesis in assessment.hypotheses:
+        falsifier = html.escape(hypothesis.what_would_falsify or "n/a")
+        hypotheses.append(
+            "<li><strong>"
+            f"{html.escape(hypothesis.description)}"
+            "</strong><br>"
+            "<span class=\"small\">"
+            f"Confidence: {html.escape(hypothesis.confidence)}, Layer: {html.escape(hypothesis.probable_layer)}"
+            "</span><br>"
+            "<span class=\"small\">"
+            f"Falsifier: {falsifier}"
+            "</span></li>"
+        )
+    next_checks = []
+    for check in assessment.next_checks:
+        evidence = ", ".join(html.escape(item) for item in check.evidence_needed) or "-"
+        next_checks.append(
+            f"<li><strong>{html.escape(check.description)}</strong><br><span class=\"small\">{html.escape(check.owner)} · {html.escape(check.method)}</span><br><span class=\"small\">Evidence needed: {evidence}</span></li>"
+        )
+    action_html = '<p class="small">No recommended action yet.</p>'
+    if assessment.recommended_action:
+        action = assessment.recommended_action
+        references = ", ".join(html.escape(value) for value in action.references) or "-"
+        action_html = f"""
+        <div class=\"detail-action\">
+          <p><strong>{html.escape(action.action_type)}</strong>: {html.escape(action.description)}</p>
+          <p class=\"small\">Safety: {html.escape(action.safety_level)} · References: {references}</p>
+        </div>
+        """
+    confidence_text = html.escape(assessment.overall_confidence or "n/a")
+    layer_text = html.escape(assessment.probable_layer or "n/a")
+    rating_class = _make_status_class(assessment.health_rating)
+    return f"""
+    <p class=\"small\">Cluster: {html.escape(assessment.cluster_label)} · Context: {html.escape(assessment.context)}</p>
+    <p class=\"small\">Confidence: {confidence_text} · Layer: {layer_text}</p>
+    <span class=\"status-pill {rating_class}\">{html.escape(assessment.health_rating)}</span>
+    <p class=\"small\">Missing evidence: {missing}</p>
+    <h4>Findings</h4>
+    <ul class=\"detail-list\">{''.join(findings) or '<li>No findings logged</li>'}</ul>
+    <h4>Hypotheses</h4>
+    <ul class=\"detail-list\">{''.join(hypotheses) or '<li>No hypotheses recorded</li>'}</ul>
+    <h4>Recommended next checks</h4>
+    <ul class=\"detail-list\">{''.join(next_checks) or '<li>No next checks yet</li>'}</ul>
+    {action_html}
+    """
+
+
+def _render_related_notifications(
+    notifications: tuple[NotificationView, ...],
+    assessment: AssessmentView | None,
+) -> str:
+    if not notifications:
+        return '<p class="small">No notifications recorded for this run.</p>'
+    relevant: list[NotificationView] = []
+    if assessment and (assessment.cluster_label or assessment.context):
+        for entry in notifications:
+            if assessment.cluster_label and entry.cluster_label == assessment.cluster_label:
+                relevant.append(entry)
+            elif assessment.context and entry.context == assessment.context:
+                relevant.append(entry)
+    if not relevant:
+        relevant = list(notifications[:3])
+    else:
+        relevant = relevant[:3]
+    if not relevant:
+        return '<p class="small">No related notifications.</p>'
+    entries = "".join(_render_notification_entry(entry) for entry in relevant)
+    return f"<ul class=\"notification-list\">{entries}</ul>"
+
+
+def _render_detail_artifacts(context: UIIndexContext) -> str:
+    links: list[tuple[str, str | None]] = []
+    if context.latest_assessment:
+        links.append(("Assessment JSON", context.latest_assessment.artifact_path))
+        links.append(("Snapshot JSON", context.latest_assessment.snapshot_path))
+    if context.latest_findings and context.latest_findings.artifact_path:
+        links.append(("Drilldown JSON", context.latest_findings.artifact_path))
+    filtered = [(label, path) for label, path in links if path]
+    if not filtered:
+        return '<p class="small">Artifacts will appear once the next run completes.</p>'
+    return _render_artifact_links(filtered)
 
 
 def _artifact_href(path: str) -> str:

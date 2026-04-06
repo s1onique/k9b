@@ -31,9 +31,11 @@ def _serialize_cluster(
     if drilldown:
         drilldown_path = _relative_path(root_dir, drilldown.artifact_path)
         drilldown_timestamp = drilldown.timestamp.isoformat()
+        trigger_reason = drilldown.trigger_reasons[0] if drilldown.trigger_reasons else None
     else:
         drilldown_path = None
         drilldown_timestamp = None
+        trigger_reason = None
     return {
         "label": record.target.label,
         "context": record.target.context,
@@ -47,6 +49,8 @@ def _serialize_cluster(
         "baseline_cohort": record.target.baseline_cohort,
         "baseline_policy_path": record.baseline_policy_path,
         "missing_evidence": list(assessment.missing_evidence) if assessment else [],
+        "latest_run_timestamp": record.snapshot.metadata.captured_at.isoformat(),
+        "top_trigger_reason": trigger_reason,
         "artifact_paths": {
             "snapshot": snapshot_path,
             "assessment": assessment_path,
@@ -118,6 +122,7 @@ def write_health_ui_index(
     drilldown_availability = _serialize_drilldown_availability(records, drilldown_map, output_dir)
     external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
     notification_history = _serialize_notification_history(notifications, output_dir)
+    latest_assessment = _serialize_latest_assessment(assessments, output_dir)
     index = {
         "run": {
             "run_id": run_id,
@@ -139,6 +144,7 @@ def write_health_ui_index(
         "drilldown_availability": drilldown_availability,
         "notification_history": notification_history,
         "external_analysis": external_analysis_data,
+        "latest_assessment": latest_assessment,
     }
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,3 +332,29 @@ def _stringify_notification_value(value: object | None) -> str:
         return json.dumps(value, ensure_ascii=False)
     except TypeError:
         return str(value)
+
+
+def _serialize_latest_assessment(
+    assessments: Sequence[HealthAssessmentArtifact],
+    root_dir: Path,
+) -> dict[str, object] | None:
+    if not assessments:
+        return None
+    latest = max(assessments, key=lambda artifact: artifact.timestamp)
+    return _serialize_assessment(latest, root_dir)
+
+
+def _serialize_assessment(artifact: HealthAssessmentArtifact, root_dir: Path) -> dict[str, object]:
+    data: dict[str, object] = dict(artifact.assessment or {})
+    data.update(
+        {
+            "cluster_label": artifact.label,
+            "context": artifact.context,
+            "timestamp": artifact.timestamp.isoformat(),
+            "health_rating": artifact.health_rating.value,
+            "missing_evidence": list(artifact.missing_evidence),
+            "artifact_path": _relative_path(root_dir, artifact.artifact_path),
+            "snapshot_path": _relative_path(root_dir, artifact.snapshot_path),
+        }
+    )
+    return data

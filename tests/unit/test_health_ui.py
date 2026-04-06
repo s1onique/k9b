@@ -165,3 +165,6 @@ class HealthUITests(unittest.TestCase):
         self.assertIn("external_analysis", data)
         self.assertEqual(data["external_analysis"]["count"], 1)
         self.assertEqual(data["run"]["notification_count"], 1)
+        self.assertIn("latest_assessment", data)
+        self.assertEqual(data["latest_assessment"]["cluster_label"], "cluster-alpha")
+        self.assertIn("artifact_path", data["latest_assessment"])
