@@ -48,8 +48,11 @@ k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixtur
 Use these quick guards before the full verification pipeline settles in:
 
 - `.venv/bin/python -m ruff check src tests`
+- `.venv/bin/python -m unittest tests/unit/test_fast_feedback_smoke.py`
 - `.venv/bin/python -m pytest tests/unit/test_cli_smoke.py`
 - `pre-commit run --all-files`
+
+The `test_fast_feedback_smoke.py` regression exercises the config loader, structured logging, and sanitization-aware CLI path so you can trust the fast feedback loop before you commit.
 
 ## Optional LLM assessment path
 
@@ -86,7 +89,7 @@ Scheduling is optional but the health loop now ships with built-in rhythm contro
 
 To operate the loop continuously, use `scripts/run_health_scheduler.py` with the cadence flags that match your shift cycle (for example `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 48`). The wrapper drives `run-health-loop`, logs each scheduler invocation to `runs/health/scheduler.log`, and keeps the deterministic file-backed layout that every review and adaptation run relies on.
 
-After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Include `--run-id <id>` when you need to revisit a specific iteration.
+After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Each comparison line now documents whether the pair was eligible, why it was run or skipped, the classification (expected vs suspicious drift), the expected and ignored drift categories, and any notes you configured in `peer_mappings`, making it easier to understand how the policy drove the comparison. Include `--run-id <id>` when you need to revisit a specific iteration.
 
 Every run also gathers lightweight health signals (node readiness/pressure counts, non-running pods, CrashLoopBackOff and ImagePullBackOff tallies, pending pods, failed jobs, and recent warning events) and wires them into the assessment so findings explicitly separate baseline drift, workload health issues, missing evidence, and regressions.
 
@@ -94,6 +97,7 @@ Every run also gathers lightweight health signals (node readiness/pressure count
 ### One-shot health run workflow
 
 1. Copy `runs/health-config.local.example.json` → `runs/health-config.local.json`, replace placeholder contexts with your real clusters, and keep the populated file out of git. `.gitignore` now ignores every `*.local.json` runtime config plus any `snapshots/*.json` captures, and the private-context checker scans live snapshot files so cluster ids can’t slip into commits.
+    The bundled example policy highlights how to declare the fleet metadata you actually care about: watched Helm releases and CRDs, cluster class/role annotations, and an intentional same-role peer mapping where expected drift categories are spelled out. The baseline file in the same directory now captures a realistic control-plane version window, curated release targets, required CRD families, and the drift categories you choose to ignore versus the ones you expect to change.
 2. Run `.venv/bin/python -m k8s_diag_agent.cli run-health-loop --config runs/health-config.local.json` (or `k8s-diag-agent run-health-loop --config runs/health-config.local.json`). Each invocation still emits a unique `run_id` but reuses the stable `run_label` you configured so the artifacts stay correlated across runs.
 3. Inspect the generated artifacts if you want a reviewable record of the execution:
    - `runs/health/snapshots/` for raw cluster evidence captured during this run

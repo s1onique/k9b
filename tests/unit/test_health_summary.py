@@ -134,4 +134,4 @@ class HealthSummaryTests(unittest.TestCase):
         self.assertIn("manual", formatted)
         self.assertIn("prod/primary", formatted)
         self.assertIn("Comparison policy decisions", formatted)
-        self.assertIn("intent suspicious drift", formatted)
+        self.assertIn("classification suspicious drift", formatted)

@@ -126,6 +126,12 @@ class SanitizerTest(unittest.TestCase):
         entry = sanitize_log_entry({"message": "ok", "authorization": "Bearer xyz"})
         self.assertEqual(entry["authorization"], "<scrubbed>")
 
+    def test_token_like_log_lines_are_sanitized(self) -> None:
+        log_line = "Received token=abc123 from webhook"
+        sanitized = sanitize_payload(log_line)
+        self.assertNotIn("abc123", sanitized)
+        self.assertIn("<scrubbed>", sanitized)
+
 
 class ProviderPayloadSanitizationTest(unittest.TestCase):
     def test_build_assessment_input_redacts_sensitive_labels(self) -> None:

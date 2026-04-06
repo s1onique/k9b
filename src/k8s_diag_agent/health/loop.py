@@ -106,6 +106,22 @@ def _watched_crd_versions(
     return versions
 
 
+def _normalize_category_list(value: Any | None) -> Tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        normalized = _str_or_none(value)
+        return (normalized,) if normalized else ()
+    if isinstance(value, Sequence):
+        categories: List[str] = []
+        for item in value:
+            normalized = _str_or_none(item)
+            if normalized:
+                categories.append(normalized)
+        return tuple(dict.fromkeys(categories))
+    return ()
+
+
 class HealthRating(str, Enum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
@@ -127,6 +143,8 @@ class ComparisonPeer:
     source: str
     peers: Tuple[str, ...]
     intent: "ComparisonIntent"
+    expected_drift_categories: Tuple[str, ...] = field(default_factory=tuple)
+    notes: Optional[str] = None
 
 
 class ComparisonIntent(str, Enum):
@@ -366,6 +384,9 @@ class ComparisonDecision:
     secondary_class: Optional[str]
     primary_role: Optional[str]
     secondary_role: Optional[str]
+    expected_drift_categories: Tuple[str, ...]
+    ignored_drift_categories: Tuple[str, ...]
+    notes: Optional[str]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -379,6 +400,9 @@ class ComparisonDecision:
             "secondary_class": self.secondary_class,
             "primary_role": self.primary_role,
             "secondary_role": self.secondary_role,
+            "expected_drift_categories": list(self.expected_drift_categories),
+            "ignored_drift_categories": list(self.ignored_drift_categories),
+            "notes": self.notes,
         }
 
 
@@ -501,11 +525,15 @@ class HealthRunConfig:
             if not normalized_peers:
                 continue
             intent_value = _parse_comparison_intent(entry.get("intent"))
+            expected_categories = _normalize_category_list(entry.get("expected_drift_categories"))
+            notes = _str_or_none(entry.get("notes"))
             peers.append(
                 ComparisonPeer(
                     source=normalized_source,
                     peers=tuple(normalized_peers),
                     intent=intent_value,
+                    expected_drift_categories=expected_categories,
+                    notes=notes,
                 )
             )
         if not peers and manual_pairs:
@@ -2102,6 +2130,11 @@ class HealthLoopRunner:
                 secondary_record = record_lookup.get(secondary_ref)
                 if not secondary_record:
                     continue
+                expected_categories = tuple(sorted(peer.expected_drift_categories))
+                ignored_categories = tuple(
+                    sorted(cat.value for cat in self.baseline_policy.ignored_drift_categories)
+                )
+                peer_notes = peer.notes
                 (
                     policy_eligible,
                     policy_reason,
@@ -2149,6 +2182,9 @@ class HealthLoopRunner:
                         secondary_class=secondary_class,
                         primary_role=primary_role,
                         secondary_role=secondary_role,
+                        expected_drift_categories=expected_categories,
+                        ignored_drift_categories=ignored_categories,
+                        notes=peer_notes,
                     )
                 )
                 if not policy_eligible or not triggered:

@@ -68,6 +68,9 @@ class ComparisonSummary:
     secondary_class: str | None
     primary_role: str | None
     secondary_role: str | None
+    expected_drift_categories: Tuple[str, ...]
+    ignored_drift_categories: Tuple[str, ...]
+    notes: str | None
 
 
 @dataclass(frozen=True)
@@ -215,9 +218,14 @@ def format_health_summary(summary: HealthSummary) -> str:
             secondary_label = _sanitize_text(comp.secondary_label) or "unknown"
             comparison_intent = _sanitize_text(comp.comparison_intent) or comp.comparison_intent
             reason = _sanitize_text(comp.reason) or comp.reason
+            expected_text = _describe_categories(comp.expected_drift_categories)
+            ignored_text = _describe_categories(comp.ignored_drift_categories)
+            notes_value = _sanitize_text(comp.notes)
+            notes = f", notes {notes_value}" if notes_value else ""
             lines.append(
                 f"- {primary_label}{primary_meta} vs {secondary_label}{secondary_meta}: "
-                f"{eligibility}, {triggered_text}, intent {comparison_intent}, reason {reason}"
+                f"{eligibility}, {triggered_text}, classification {comparison_intent}, "
+                f"expected drift {expected_text}, ignored drift {ignored_text}, reason {reason}{notes}"
             )
     else:
         lines.append("- none")
@@ -380,6 +388,19 @@ def _format_class_role(cluster_class: str | None, cluster_role: str | None) -> s
     return f" ({'/'.join(parts)})"
 
 
+def _describe_categories(categories: Tuple[str, ...]) -> str:
+    if not categories:
+        return "none"
+    parts: List[str] = []
+    for category in categories:
+        sanitized = _sanitize_text(category)
+        if sanitized:
+            parts.append(sanitized)
+        else:
+            parts.append(category)
+    return ", ".join(parts)
+
+
 def _load_all_proposals(proposals_dir: Path) -> List[HealthProposal]:
     proposals: List[HealthProposal] = []
     if not proposals_dir.is_dir():
@@ -462,6 +483,13 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> List[ComparisonSum
                 secondary_class=str(entry.get("secondary_class")) if entry.get("secondary_class") is not None else None,
                 primary_role=str(entry.get("primary_role")) if entry.get("primary_role") is not None else None,
                 secondary_role=str(entry.get("secondary_role")) if entry.get("secondary_role") is not None else None,
+                expected_drift_categories=tuple(
+                    str(item) for item in (entry.get("expected_drift_categories") or ()) if item
+                ),
+                ignored_drift_categories=tuple(
+                    str(item) for item in (entry.get("ignored_drift_categories") or ()) if item
+                ),
+                notes=str(entry.get("notes")) if entry.get("notes") else None,
             )
         )
     return summaries

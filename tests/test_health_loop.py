@@ -187,6 +187,7 @@ class HealthLoopTests(unittest.TestCase):
         self,
         ignored: Sequence[BaselineDriftCategory] | None = None,
         release_versions: Sequence[str] | None = None,
+        expected: Sequence[BaselineDriftCategory] | None = None,
     ) -> BaselinePolicy:
         cp = ControlPlaneExpectation(
             min_version="v1.24.0",
@@ -210,6 +211,7 @@ class HealthLoopTests(unittest.TestCase):
             release_policies={release_policy.release_key: release_policy},
             required_crds={crd_policy.family: crd_policy},
             ignored_drift_categories=set(ignored or []),
+            expected_drift_categories=set(expected or []),
             peer_roles={"cluster-alpha": "primary", "cluster-beta": "canary"},
         )
 
@@ -367,6 +369,15 @@ class HealthLoopTests(unittest.TestCase):
                 for finding in result.assessment.findings
                 if "Watched Helm release" in finding.description
             )
+        )
+
+    def test_baseline_example_includes_expected_drift(self) -> None:
+        baseline_path = Path("runs/health-baseline.example.json")
+        baseline = BaselinePolicy.load_from_file(baseline_path)
+        self.assertTrue(baseline.expected_drift_categories)
+        self.assertIn(
+            BaselineDriftCategory.WATCHED_HELM_RELEASE,
+            baseline.expected_drift_categories,
         )
 
     def test_no_trigger_when_baseline_allows_release_drift(self) -> None:

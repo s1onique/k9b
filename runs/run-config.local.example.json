@@ -14,20 +14,20 @@
       "secondary": "cluster-beta",
       "label": "alpha-vs-beta",
       "assess": true,
-      "intent": "same-role-parity",
+      "intent": "suspicious-drift",
       "expected_drift_categories": ["helm_releases"],
       "unexpected_drift_categories": ["metadata"],
-      "notes": "Both clusters serve the same operational role."
+      "notes": "Production primaries should stay in sync so deviations are suspicious."
     },
     {
       "primary": "cluster-alpha",
       "secondary": "cluster-gamma",
       "label": "alpha-vs-gamma",
       "assess": true,
-      "intent": "prod-vs-dr",
+      "intent": "expected-drift",
       "expected_drift_categories": ["region", "node_count"],
       "unexpected_drift_categories": ["helm_releases"],
-      "notes": "Gamma is a DR inventory cluster with a different purpose."
+      "notes": "Gamma hosts the DR inventory so Helm releases may drift intentionally."
     }
   ]
 }

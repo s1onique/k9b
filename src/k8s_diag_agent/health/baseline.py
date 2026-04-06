@@ -107,6 +107,7 @@ class BaselinePolicy:
     release_policies: Dict[str, ReleasePolicy]
     required_crds: Dict[str, CRDPolicy]
     ignored_drift_categories: Set[BaselineDriftCategory]
+    expected_drift_categories: Set[BaselineDriftCategory]
     peer_roles: Dict[str, str]
 
     @staticmethod
@@ -157,7 +158,7 @@ class BaselinePolicy:
         return CRDPolicy(family=family, why=why, next_check=next_check)
 
     @staticmethod
-    def _parse_ignored(values: Sequence[str]) -> Set[BaselineDriftCategory]:
+    def _parse_drift_categories(values: Sequence[str]) -> Set[BaselineDriftCategory]:
         cats: Set[BaselineDriftCategory] = set()
         for value in values:
             normalized = _str_or_none(value)
@@ -201,13 +202,15 @@ class BaselinePolicy:
             crd_entry = cls._parse_crd(entry)
             if crd_entry:
                 crd_policies[crd_entry.family] = crd_entry
-        ignored = cls._parse_ignored(raw.get("ignored_drift") or [])
+        ignored = cls._parse_drift_categories(raw.get("ignored_drift") or [])
+        expected = cls._parse_drift_categories(raw.get("expected_drift") or [])
         peer_roles = cls._normalize_peer_roles(raw.get("peer_roles") or {})
         return cls(
             control_plane_expectation=control_plane,
             release_policies=release_policies,
             required_crds=crd_policies,
             ignored_drift_categories=ignored,
+            expected_drift_categories=expected,
             peer_roles=peer_roles,
         )
 
@@ -218,6 +221,7 @@ class BaselinePolicy:
             release_policies={},
             required_crds={},
             ignored_drift_categories=set(),
+            expected_drift_categories=set(),
             peer_roles={},
         )
 

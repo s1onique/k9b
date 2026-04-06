@@ -1,5 +1,5 @@
 {
-  "run_label": "health-run",
+  "run_label": "fleet-health",
   "collector_version": "0.1.0",
   "output_dir": "runs",
   "targets": [
@@ -9,23 +9,25 @@
       "monitor_health": true,
       "watched_helm_releases": ["kube-system/observability"],
       "watched_crd_families": ["monitoring.example.com"],
-      "cluster_class": "prod",
+      "cluster_class": "production",
       "cluster_role": "primary"
     },
     {
       "context": "cluster-beta",
       "label": "cluster-beta",
       "monitor_health": true,
-      "watched_helm_releases": ["kube-system/observability", "stateful-stack/service"],
-      "cluster_class": "prod",
+      "watched_helm_releases": ["kube-system/observability", "platform/cluster-ops"],
+      "watched_crd_families": ["database.example.com"],
+      "cluster_class": "production",
       "cluster_role": "primary"
     },
     {
       "context": "cluster-gamma",
       "label": "cluster-gamma",
       "monitor_health": false,
-      "watched_crd_families": ["database.example.com"],
-      "cluster_class": "staging",
+      "watched_helm_releases": ["platform/cluster-ops"],
+      "watched_crd_families": [],
+      "cluster_class": "dr",
       "cluster_role": "secondary"
     }
   ],
@@ -33,12 +35,9 @@
     {
       "source": "cluster-alpha",
       "peers": ["cluster-beta"],
-      "intent": "suspicious-drift"
-    },
-    {
-      "source": "cluster-beta",
-      "peers": ["cluster-alpha"],
-      "intent": "suspicious-drift"
+      "intent": "suspicious-drift",
+      "expected_drift_categories": ["watched_helm_release"],
+      "notes": "Same-role parity comparison for production primaries."
     }
   ],
   "comparison_triggers": {
@@ -50,8 +49,6 @@
     "manual": true,
     "warning_event_threshold": 5
   },
-  "manual_pairs": [
-    {"primary": "cluster-alpha", "secondary": "cluster-beta"}
-  ],
+  "manual_pairs": [],
   "baseline_policy_path": "health-baseline.example.json"
 }

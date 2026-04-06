@@ -14,6 +14,7 @@ _PROMPT_SENSITIVE_PATTERNS = [
     re.compile(r"(?i)client_secret\s*[:=]\s*\S+"),
     re.compile(r"(?i)access_token\s*[:=]\s*\S+"),
     re.compile(r"(?i)kubeconfig\b"),
+    re.compile(r"(?i)token\s*[=:]\s*\S+"),
 ]
 _SENSITIVE_KEYWORDS = (
     "token",
