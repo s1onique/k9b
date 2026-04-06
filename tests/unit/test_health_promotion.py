@@ -3,14 +3,21 @@ import shutil
 import tempfile
 import unittest
 from argparse import Namespace
+from dataclasses import replace
 from pathlib import Path
+from typing import Optional
 
 from tests.path_helper import ensure_src_in_path
 
 ensure_src_in_path()
 
 from k8s_diag_agent.cli_handlers import handle_promote_proposal
-from k8s_diag_agent.health.adaptation import HealthProposal
+from k8s_diag_agent.health.adaptation import (
+    HealthProposal,
+    ProposalEvaluation,
+    ProposalLifecycleStatus,
+    with_lifecycle_status,
+)
 from k8s_diag_agent.models import ConfidenceLevel
 
 
@@ -29,12 +36,27 @@ class HealthPromotionTest(unittest.TestCase):
     def _write_proposal(self, proposal: HealthProposal) -> None:
         self.proposal_path.write_text(json.dumps(proposal.to_dict(), indent=2), encoding="utf-8")
 
-    def _invoke(self) -> int:
+    def _ready_proposal(self, proposal: HealthProposal) -> HealthProposal:
+        evaluation = ProposalEvaluation(
+            proposal_id=proposal.proposal_id,
+            noise_reduction="Estimated noise reduction",
+            signal_loss="Estimated signal loss",
+            test_outcome="Fixture evaluation",
+        )
+        evaluated = replace(proposal, promotion_evaluation=evaluation)
+        return with_lifecycle_status(
+            evaluated,
+            ProposalLifecycleStatus.REPLAYED,
+            note="replayed for tests",
+        )
+
+    def _invoke(self, note: Optional[str] = None) -> int:
         args = Namespace(
             proposal=self.proposal_path,
             health_config=self.health_config,
             baseline=self.baseline,
             output_dir=self.promotions,
+            note=note,
         )
         return handle_promote_proposal(args)
 
@@ -51,7 +73,7 @@ class HealthPromotionTest(unittest.TestCase):
             rollback_note="Revert if real issues arise.",
             promotion_payload={"threshold": 10},
         )
-        self._write_proposal(proposal)
+        self._write_proposal(self._ready_proposal(proposal))
         before = self.health_config.read_text(encoding="utf-8")
         exit_code = self._invoke()
         self.assertEqual(exit_code, 0)
@@ -76,7 +98,7 @@ class HealthPromotionTest(unittest.TestCase):
             rollback_note="Revert to prior versions if instability occurs.",
             promotion_payload={"release_key": "stateful-stack/service", "versions": ["2.0.1"]},
         )
-        self._write_proposal(proposal)
+        self._write_proposal(self._ready_proposal(proposal))
         before = self.baseline.read_text(encoding="utf-8")
         exit_code = self._invoke()
         self.assertEqual(exit_code, 0)
@@ -88,6 +110,49 @@ class HealthPromotionTest(unittest.TestCase):
         self.assertIn("+        \"2.0.1\"", patch_content)
         after = self.baseline.read_text(encoding="utf-8")
         self.assertEqual(before, after, "Baseline file should not be mutated by promotion command")
+
+    def test_promotion_requires_replay_evaluation(self) -> None:
+        proposal = HealthProposal(
+            proposal_id="gate-test",
+            source_run_id="run-gate",
+            source_artifact_path="runs/health/reviews/run-gate-review.json",
+            target="health.trigger_policy.warning_event_threshold",
+            proposed_change="Adjust for gating.",
+            rationale="Gate enforcement.",
+            confidence=ConfidenceLevel.LOW,
+            expected_benefit="Safety.",
+            rollback_note="Revert if needed.",
+            promotion_payload={"threshold": 3},
+        )
+        self._write_proposal(proposal)
+        exit_code = self._invoke()
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(self.promotions.exists())
+
+    def test_promotion_requires_replayed_status(self) -> None:
+        evaluation = ProposalEvaluation(
+            proposal_id="gate-test",
+            noise_reduction="minimal",
+            signal_loss="low",
+            test_outcome="fixture brief",
+        )
+        proposal = HealthProposal(
+            proposal_id="gate-test",
+            source_run_id="run-gate",
+            source_artifact_path="runs/health/reviews/run-gate-review.json",
+            target="health.trigger_policy.warning_event_threshold",
+            proposed_change="Adjust for gating.",
+            rationale="Gate enforcement.",
+            confidence=ConfidenceLevel.LOW,
+            expected_benefit="Safety.",
+            rollback_note="Revert if needed.",
+            promotion_payload={"threshold": 3},
+            promotion_evaluation=evaluation,
+        )
+        self._write_proposal(proposal)
+        exit_code = self._invoke()
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(self.promotions.exists())
 
     def test_unsupported_target_is_rejected(self) -> None:
         proposal = HealthProposal(

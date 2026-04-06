@@ -577,8 +577,8 @@ class HealthLoopTests(unittest.TestCase):
             targets=(target_alpha, target_beta),
             peers=(
                 ComparisonPeer(
-                    source="cluster-alpha",
-                    peers=("cluster-beta",),
+                    primary="cluster-alpha",
+                    secondary="cluster-beta",
                     intent=ComparisonIntent.SUSPICIOUS_DRIFT,
                 ),
             ),

@@ -254,6 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("runs/health/promotions"),
         help="Directory where promotion patches are written.",
     )
+    promote_parser.add_argument(
+        "--note",
+        help="Optional operator rationale or note to store with the promotion lifecycle entry.",
+    )
 
     return parser
 

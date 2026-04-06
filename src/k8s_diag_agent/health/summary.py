@@ -54,6 +54,8 @@ class TriggerSummary:
     secondary_label: str
     reasons: Tuple[str, ...]
     notes: str | None
+    comparison_intent: str | None = None
+    peer_notes: str | None = None
 
 
 @dataclass(frozen=True)
@@ -199,10 +201,18 @@ def format_health_summary(summary: HealthSummary) -> str:
             reason_text = ", ".join(sanitized_reasons) or "unspecified"
             notes_value = _sanitize_text(trigger.notes)
             notes = f" ({notes_value})" if notes_value else ""
+            classification_value = _sanitize_text(trigger.comparison_intent)
+            classification = (
+                f", classification {classification_value}"
+                if classification_value
+                else ""
+            )
+            peer_note_value = _sanitize_text(trigger.peer_notes)
+            peer_note = f", peer notes {peer_note_value}" if peer_note_value else ""
             primary_label = _sanitize_text(trigger.primary_label) or "unknown"
             secondary_label = _sanitize_text(trigger.secondary_label) or "unknown"
             lines.append(
-                f"- {primary_label} vs {secondary_label}: {reason_text}{notes}"
+                f"- {primary_label} vs {secondary_label}: {reason_text}{classification}{notes}{peer_note}"
             )
     else:
         lines.append("- none")
@@ -444,6 +454,12 @@ def _collect_triggers(triggers_dir: Path, run_id: str) -> List[TriggerSummary]:
         data = _load_json(path)
         reasons = tuple(str(item) for item in (data.get("trigger_reasons") or ()) if item)
         notes = str(data.get("notes")) if data.get("notes") else None
+        comparison_intent = (
+            str(data.get("comparison_intent"))
+            if data.get("comparison_intent")
+            else None
+        )
+        peer_notes = str(data.get("peer_notes")) if data.get("peer_notes") else None
         triggers.append(
             TriggerSummary(
                 primary=str(data.get("primary") or ""),
@@ -452,6 +468,8 @@ def _collect_triggers(triggers_dir: Path, run_id: str) -> List[TriggerSummary]:
                 secondary_label=str(data.get("secondary_label") or ""),
                 reasons=reasons,
                 notes=notes,
+                comparison_intent=comparison_intent,
+                peer_notes=peer_notes,
             )
         )
     return triggers

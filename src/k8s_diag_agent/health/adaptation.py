@@ -81,6 +81,7 @@ class HealthProposal:
     rollback_note: str
     promotion_payload: Mapping[str, Any] = field(default_factory=_empty_payload)
     lifecycle_history: Tuple[ProposalLifecycleEntry, ...] = field(default_factory=_default_lifecycle_history)
+    promotion_evaluation: ProposalEvaluation | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "promotion_payload", _freeze_payload(self.promotion_payload))
@@ -102,6 +103,7 @@ class HealthProposal:
             "rollback_note": self.rollback_note,
             "promotion_payload": dict(self.promotion_payload),
             "lifecycle_history": [entry.to_dict() for entry in self.lifecycle_history],
+            "promotion_evaluation": self.promotion_evaluation.to_dict() if self.promotion_evaluation else None,
         }
 
     def __hash__(self) -> int:
@@ -138,6 +140,13 @@ class HealthProposal:
                     ProposalLifecycleEntry(status=status, timestamp=timestamp, note=str(note_value) if note_value else None)
                 )
         history = tuple(history_entries) if history_entries else _default_lifecycle_history()
+        evaluation_raw = raw.get("promotion_evaluation")
+        evaluation: ProposalEvaluation | None = None
+        if isinstance(evaluation_raw, Mapping):
+            try:
+                evaluation = ProposalEvaluation.from_dict(evaluation_raw)
+            except ValueError:
+                evaluation = None
         return cls(
             proposal_id=str(raw.get("proposal_id") or ""),
             source_run_id=str(raw.get("source_run_id") or ""),
@@ -150,6 +159,7 @@ class HealthProposal:
             rollback_note=str(raw.get("rollback_note") or ""),
             promotion_payload=payload,
             lifecycle_history=history,
+            promotion_evaluation=evaluation,
         )
 
 
@@ -159,6 +169,25 @@ class ProposalEvaluation:
     noise_reduction: str
     signal_loss: str
     test_outcome: str
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "proposal_id": self.proposal_id,
+            "noise_reduction": self.noise_reduction,
+            "signal_loss": self.signal_loss,
+            "test_outcome": self.test_outcome,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "ProposalEvaluation":
+        if not isinstance(raw, Mapping):
+            raise ValueError("promotion_evaluation must be a mapping")
+        return cls(
+            proposal_id=str(raw.get("proposal_id") or ""),
+            noise_reduction=str(raw.get("noise_reduction") or ""),
+            signal_loss=str(raw.get("signal_loss") or ""),
+            test_outcome=str(raw.get("test_outcome") or ""),
+        )
 
 
 def _metric(review: HealthReviewArtifact, dimension: str) -> Optional[QualityMetric]:

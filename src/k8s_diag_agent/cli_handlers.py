@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Tuple
 
@@ -485,8 +485,11 @@ def handle_check_proposal(args: argparse.Namespace) -> int:
     print(f"  Likely noise reduction: {evaluation.noise_reduction}")
     print(f"  Possible signal loss: {evaluation.signal_loss}")
     print(f"  Test/eval outcome: {evaluation.test_outcome}")
+    evaluated_proposal = replace(proposal, promotion_evaluation=evaluation)
     promoted = with_lifecycle_status(
-        proposal, ProposalLifecycleStatus.REPLAYED, note=f"Replayed against {args.fixture}"
+        evaluated_proposal,
+        ProposalLifecycleStatus.REPLAYED,
+        note=f"Replayed against {args.fixture}",
     )
     if promoted is not proposal:
         args.proposal.write_text(json.dumps(promoted.to_dict(), indent=2), encoding="utf-8")
@@ -499,6 +502,13 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
         proposal = HealthProposal.from_dict(raw)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"Unable to read proposal: {exc}", file=sys.stderr)
+        return 1
+    evaluation = proposal.promotion_evaluation
+    if not evaluation:
+        print("Proposal must be replayed and evaluated before promotion.", file=sys.stderr)
+        return 1
+    if not any(entry.status == ProposalLifecycleStatus.REPLAYED for entry in proposal.lifecycle_history):
+        print("Proposal must be replayed before promotion.", file=sys.stderr)
         return 1
     try:
         patch_path = render_proposal_patch(
@@ -516,14 +526,25 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     except (OSError, json.JSONDecodeError) as exc:
         print(f"Unable to render promotion: {exc}", file=sys.stderr)
         return 1
+    note_parts = [f"Promotion patch: {patch_path}"]
+    if args.note:
+        note_parts.append(args.note)
+    updated_note = " | ".join(note_parts)
     updated = with_lifecycle_status(
         proposal,
         ProposalLifecycleStatus.PROMOTED,
-        note=f"Promotion patch: {patch_path}",
+        note=updated_note,
     )
     if updated is not proposal:
         args.proposal.write_text(json.dumps(updated.to_dict(), indent=2), encoding="utf-8")
     run_label = proposal.source_run_id or proposal.proposal_id
+    metadata = {
+        "noise_reduction": evaluation.noise_reduction,
+        "signal_loss": evaluation.signal_loss,
+        "test_outcome": evaluation.test_outcome,
+    }
+    if args.note:
+        metadata["operator_note"] = args.note
     emit_structured_log(
         component="proposal-promotion",
         severity="INFO",
@@ -532,6 +553,7 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
         run_id=proposal.source_run_id or None,
         proposal_id=proposal.proposal_id,
         artifact_path=str(patch_path),
+        metadata=metadata,
         event="promotion",
     )
     print(f"Promotion patch written to '{patch_path}'")
