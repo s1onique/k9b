@@ -21,7 +21,8 @@ const defaultPayloads = {
 const createFetchMock = (payloads: Record<string, unknown>) =>
   vi.fn((input: RequestInfo) => {
     const url = typeof input === "string" ? input : input.url;
-    const payload = payloads[url];
+    const base = url.split("?")[0];
+    const payload = payloads[url] ?? payloads[base];
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${url}`));
     }
@@ -65,6 +66,8 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await user.click(summaryToggle);
     const findingMatches = await screen.findAllByText(sampleClusterDetail.findings[0].label!, {
       exact: false,
     });

@@ -18,5 +18,7 @@ export const fetchRun = (): Promise<RunPayload> => fetchJson<RunPayload>("/api/r
 export const fetchFleet = (): Promise<FleetPayload> => fetchJson<FleetPayload>("/api/fleet");
 export const fetchProposals = (): Promise<ProposalsPayload> => fetchJson<ProposalsPayload>("/api/proposals");
 export const fetchNotifications = (): Promise<NotificationsPayload> => fetchJson<NotificationsPayload>("/api/notifications");
-export const fetchClusterDetail = (): Promise<ClusterDetailPayload> =>
-  fetchJson<ClusterDetailPayload>("/api/cluster-detail");
+export const fetchClusterDetail = (clusterLabel?: string): Promise<ClusterDetailPayload> => {
+  const suffix = clusterLabel ? `?cluster_label=${encodeURIComponent(clusterLabel)}` : "";
+  return fetchJson<ClusterDetailPayload>(`/api/cluster-detail${suffix}`);
+};

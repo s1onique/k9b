@@ -40,6 +40,11 @@ const truncateText = (value: string, length = 160) => {
   return `${value.slice(0, length).trim()}…`;
 };
 
+const FRESHNESS_THRESHOLD_MINUTES = 10;
+const relativeRecency = (timestamp: string) => dayjs(timestamp).fromNow();
+const isStaleTimestamp = (timestamp: string) =>
+  dayjs().diff(timestamp, "minute") >= FRESHNESS_THRESHOLD_MINUTES;
+
 const statusClass = (value: string) => {
   const normalized = value.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
   return `status-pill status-pill-${normalized}`;
@@ -132,56 +137,79 @@ export const ProposalList = ({
   }
 
   return (
-    <div className="proposal-rail">
+    <div className="proposal-table">
       {visible.map((proposal) => {
         const expandedEntry = expanded.has(proposal.proposalId);
-        const rationale = expandedEntry
+        const summaryRationale = expandedEntry
           ? proposal.rationale
-          : truncateText(proposal.rationale);
+          : truncateText(proposal.rationale, 180);
         return (
-          <article className="proposal-card" key={proposal.proposalId}>
-            <header>
+          <article
+            className="proposal-row"
+            key={proposal.proposalId}
+            data-testid="proposal-row"
+            data-proposal-id={proposal.proposalId}
+          >
+            <div className="proposal-row-summary">
               <div>
-                <p className="eyebrow">{proposal.target}</p>
-                <h3>{proposal.proposalId}</h3>
+                <p className="eyebrow compact">{proposal.target}</p>
+                <strong>{proposal.proposalId}</strong>
+                <div className="proposal-status-line">
+                  <span className={statusClass(proposal.status)}>{proposal.status}</span>
+                  <span
+                    className={`confidence-badge level-${priorityLabel(proposal.confidence)}`}
+                  >
+                    {proposal.confidence} confidence
+                  </span>
+                </div>
               </div>
-              <div className="proposal-meta">
-                <span className={statusClass(proposal.status)}>{proposal.status}</span>
-                <span
-                  className={`confidence-badge level-${priorityLabel(proposal.confidence)}`}
-                >
-                  {proposal.confidence} confidence
-                </span>
+              <div className="proposal-row-actions">
+                <span className="small">Run {proposal.sourceRunId}</span>
+                <button type="button" className="text-button" onClick={() => toggle(proposal.proposalId)}>
+                  {expandedEntry ? "Hide details" : "Show details"}
+                </button>
               </div>
-            </header>
-            <p className="proposal-rationale">{rationale}</p>
-            <div className="lifecycle-row">
-              {proposal.lifecycle.map((step) => (
-                <span className="lifecycle-chip" key={`${step.status}-${step.timestamp}`}>
-                  {step.status}
-                </span>
-              ))}
             </div>
-            <div className="proposal-actions">
-              <p className="small">Benefit: {proposal.expectedBenefit}</p>
-              <p className="small">Run: {proposal.sourceRunId}</p>
-            </div>
-            <div className="proposal-footer">
-              {proposal.artifacts.map((artifact) => {
-                const url = artifactUrl(artifact.path);
-                return url ? (
-                  <a key={artifact.label} className="link" href={url} target="_blank" rel="noreferrer">
-                    {artifact.label}
-                  </a>
-                ) : null;
-              })}
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => toggle(proposal.proposalId)}
-              >
-                {expandedEntry ? "Show less" : "Expand rationale"}
-              </button>
+            <div className={`proposal-row-details ${expandedEntry ? "is-visible" : ""}`}>
+              <p className="proposal-rationale">{summaryRationale}</p>
+              <div className="proposal-meta-grid">
+                <div>
+                  <p className="small">Expected benefit</p>
+                  <p className="small">{proposal.expectedBenefit}</p>
+                </div>
+                <div>
+                  <p className="small">Lifecycle</p>
+                  <div className="lifecycle-row">
+                    {proposal.lifecycle.map((step) => (
+                      <span className="lifecycle-chip" key={`${step.status}-${step.timestamp}`}>
+                        {step.status}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="small">Latest note</p>
+                  <p className="small">{proposal.latestNote || "n/a"}</p>
+                </div>
+              </div>
+              <div className="proposal-artifacts">
+                {proposal.artifacts.map((artifact) => {
+                  const url = artifactUrl(artifact.path);
+                  return (
+                    url && (
+                      <a
+                        key={artifact.label}
+                        className="artifact-chip"
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {artifact.label}
+                      </a>
+                    )
+                  );
+                })}
+              </div>
             </div>
           </article>
         );
@@ -228,34 +256,63 @@ const App = () => {
   const [expandedProposals, setExpandedProposals] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"findings" | "hypotheses" | "checks">("findings");
   const [lastRefresh, setLastRefresh] = useState(() => dayjs());
+  const [selectedClusterLabel, setSelectedClusterLabel] = useState<string | null>(null);
+  const [clusterDetailExpanded, setClusterDetailExpanded] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      const [runPayload, fleetPayload, proposalsPayload, notificationsPayload, detailPayload] =
-        await Promise.all([
-          fetchRun(),
-          fetchFleet(),
-          fetchProposals(),
-          fetchNotifications(),
-          fetchClusterDetail(),
-        ]);
+      const [runPayload, fleetPayload, proposalsPayload, notificationsPayload] = await Promise.all([
+        fetchRun(),
+        fetchFleet(),
+        fetchProposals(),
+        fetchNotifications(),
+      ]);
       setRun(runPayload);
       setFleet(fleetPayload);
       setProposals(proposalsPayload);
       setNotifications(notificationsPayload);
-      setClusterDetail(detailPayload);
+      if (!selectedClusterLabel) {
+        const fallbackLabel = fleetPayload.clusters[0]?.label ?? null;
+        if (fallbackLabel) {
+          setSelectedClusterLabel(fallbackLabel);
+        }
+      }
       setLastRefresh(dayjs());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [selectedClusterLabel]);
 
   useEffect(() => {
     refresh();
     const timer = setInterval(refresh, 30_000);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedClusterLabel) {
+      setClusterDetail(null);
+      return;
+    }
+    let active = true;
+    const loadDetail = async () => {
+      try {
+        const detailPayload = await fetchClusterDetail(selectedClusterLabel);
+        if (active) {
+          setClusterDetail(detailPayload);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    };
+    loadDetail();
+    return () => {
+      active = false;
+    };
+  }, [selectedClusterLabel, lastRefresh]);
 
   const statusOptions = useMemo(() => {
     const entries = proposals?.statusSummary.map((entry) => entry.status) ?? [];
@@ -274,7 +331,15 @@ const App = () => {
     });
   };
 
-  if (!run || !fleet || !proposals || !notifications || !clusterDetail) {
+  const handleClusterSelection = (label: string) => {
+    if (!label || label === selectedClusterLabel) {
+      return;
+    }
+    setSelectedClusterLabel(label);
+    setClusterDetailExpanded(false);
+  };
+
+  if (!run || !fleet || !proposals || !notifications) {
     return (
       <div className="app-shell loading">
         <div>
@@ -285,16 +350,34 @@ const App = () => {
     );
   }
 
-  const runRecency = dayjs(run.timestamp).fromNow();
+  const runRecency = relativeRecency(run.timestamp);
+  const runFresh = !isStaleTimestamp(run.timestamp);
+  const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
+  const runMetrics = [
+    { label: "Clusters", value: run.clusterCount },
+    { label: "Proposals", value: run.proposalCount },
+    { label: "Notifications", value: run.notificationCount },
+    { label: "Drilldowns", value: run.drilldownCount },
+  ];
+  const selectedCluster = fleet.clusters.find((cluster) => cluster.label === selectedClusterLabel) ?? null;
+  const clusterRecency = selectedCluster?.latestRunTimestamp
+    ? relativeRecency(selectedCluster.latestRunTimestamp)
+    : null;
+  const clusterFresh = selectedCluster ? !isStaleTimestamp(selectedCluster.latestRunTimestamp) : true;
 
   return (
     <div className="app-shell">
-      <header className="panel hero">
+      <header className="panel hero compact">
         <div>
           <p className="eyebrow">Operator console</p>
           <h1>Fleet triage cockpit</h1>
-          <p className="muted">Run {run.label} · {run.runId}</p>
-          <p className="muted">Last detected {runRecency}</p>
+          <div className="hero-meta">
+            <span className="muted small">Run {run.label} · {run.runId}</span>
+            <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
+              {runFresh ? "Fresh data" : "Stale data"} · {runRecency}
+            </span>
+          </div>
+          <p className="muted">Collector {run.collectorVersion}</p>
         </div>
         <div className="hero-actions">
           <button type="button" onClick={refresh}>
@@ -307,33 +390,32 @@ const App = () => {
         <a href="#fleet">Fleet overview</a>
         <a href="#cluster">Cluster detail</a>
         <a href="#proposals">Proposal queue</a>
-        <a href="#run-detail">Run detail</a>
+        <a href="#run-detail">Run summary</a>
         <a href="#notifications">Notifications</a>
       </nav>
       {error && <div className="alert">{error}</div>}
-      <section className="panel" id="run-detail">
-        <div className="section-head">
-          <h2>Run summary</h2>
+      <section className="panel run-summary" id="run-detail">
+        <div className="run-summary-head">
+          <div>
+            <p className="eyebrow">Run summary</p>
+            <h2>{run.label}</h2>
+          </div>
+          <div className="run-summary-freshness">
+            <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
+              Last run {runRecency}
+            </span>
+            <p className="muted small">{formatTimestamp(run.timestamp)}</p>
+          </div>
         </div>
-        <div className="run-grid">
-          <article className="metric-card">
-            <p className="eyebrow">Clusters</p>
-            <strong>{run.clusterCount}</strong>
-          </article>
-          <article className="metric-card">
-            <p className="eyebrow">Proposals</p>
-            <strong>{run.proposalCount}</strong>
-          </article>
-          <article className="metric-card">
-            <p className="eyebrow">Notifications</p>
-            <strong>{run.notificationCount}</strong>
-          </article>
-          <article className="metric-card">
-            <p className="eyebrow">Drilldowns</p>
-            <strong>{run.drilldownCount}</strong>
-          </article>
+        <div className="run-metric-grid">
+          {runMetrics.map((metric) => (
+            <article className="metric-chip" key={metric.label}>
+              <p className="eyebrow">{metric.label}</p>
+              <strong>{metric.value}</strong>
+            </article>
+          ))}
         </div>
-        <div className="artifact-strip">
+        <div className="artifact-strip run-artifacts">
           {run.artifacts.map((artifact) => {
             const url = artifactUrl(artifact.path);
             return (
@@ -345,6 +427,11 @@ const App = () => {
             );
           })}
         </div>
+        {!runFresh && (
+          <div className="alert alert-inline">
+            Latest run is {runAgeMinutes} minute{runAgeMinutes === 1 ? "" : "s"} old; ensure the scheduler is running.
+          </div>
+        )}
       </section>
       <section className="panel" id="fleet">
         <div className="section-head">
@@ -375,38 +462,58 @@ const App = () => {
             <thead>
               <tr>
                 <th>Cluster</th>
-                <th>Class / Role</th>
-                <th>Cohort</th>
                 <th>Rating</th>
                 <th>Latest run</th>
-                <th>Top trigger</th>
+                <th>Trigger</th>
                 <th>Drilldown</th>
               </tr>
             </thead>
             <tbody>
-              {fleet.clusters.map((cluster) => (
-                <tr key={cluster.label}>
-                  <td>
-                    <strong>{cluster.label}</strong>
-                    <p className="small">{cluster.context}</p>
-                  </td>
-                  <td>
-                    {cluster.clusterClass} / {cluster.clusterRole}
-                  </td>
-                  <td>{cluster.baselineCohort}</td>
-                  <td>
-                    <span className={statusClass(cluster.healthRating)}>{cluster.healthRating}</span>
-                  </td>
-                  <td>{formatTimestamp(cluster.latestRunTimestamp)}</td>
-                  <td>{cluster.topTriggerReason || "Awaiting trigger"}</td>
-                  <td>
-                    <span className="small">
-                      {cluster.drilldownAvailable ? "Ready" : "Missing"}
-                    </span>
-                    <p className="small">{cluster.drilldownTimestamp || "pending"}</p>
-                  </td>
-                </tr>
-              ))}
+              {fleet.clusters.map((cluster) => {
+                const isSelected = cluster.label === selectedClusterLabel;
+                const clusterRowFresh = !isStaleTimestamp(cluster.latestRunTimestamp);
+                const clusterRowRecency = relativeRecency(cluster.latestRunTimestamp);
+                return (
+                  <tr
+                    key={cluster.label}
+                    className={isSelected ? "row-selected" : undefined}
+                    onClick={() => handleClusterSelection(cluster.label)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleClusterSelection(cluster.label);
+                      }
+                    }}
+                    tabIndex={0}
+                  >
+                    <td>
+                      <strong>{cluster.label}</strong>
+                      <p className="small compact">{cluster.context}</p>
+                      <p className="tiny compact">
+                        {cluster.clusterClass}/{cluster.clusterRole} · {cluster.baselineCohort}
+                      </p>
+                    </td>
+                    <td>
+                      <span className={statusClass(cluster.healthRating)}>{cluster.healthRating}</span>
+                    </td>
+                    <td>
+                      <span className={`recency-pill ${clusterRowFresh ? "fresh" : "stale"}`}>
+                        {clusterRowRecency}
+                      </span>
+                      <p className="small compact">{formatTimestamp(cluster.latestRunTimestamp)}</p>
+                    </td>
+                    <td>
+                      <p className="small">{cluster.topTriggerReason || "Awaiting trigger"}</p>
+                    </td>
+                    <td>
+                      <span className="small">
+                        {cluster.drilldownAvailable ? "Ready" : "Missing"}
+                      </span>
+                      <p className="small compact">{cluster.drilldownTimestamp || "pending"}</p>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -414,189 +521,255 @@ const App = () => {
       <section className="panel" id="cluster">
         <div className="section-head">
           <h2>Cluster detail</h2>
-          <div className="tab-list">
-            {[
-              { id: "findings", label: "Findings" },
-              { id: "hypotheses", label: "Hypotheses" },
-              { id: "checks", label: "Next checks" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`tab ${activeTab === tab.id ? "active" : ""}`}
-                onClick={() => setActiveTab(tab.id as "findings" | "hypotheses" | "checks")}
+          <div className="cluster-controls">
+            <label>
+              Cluster
+              <select
+                value={selectedClusterLabel ?? ""}
+                onChange={(event) => handleClusterSelection(event.target.value)}
               >
-                {tab.label}
-              </button>
-            ))}
+                {fleet.clusters.length ? (
+                  fleet.clusters.map((cluster) => (
+                    <option key={cluster.label} value={cluster.label}>
+                      {cluster.label} · {cluster.context}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No clusters configured</option>
+                )}
+              </select>
+            </label>
           </div>
         </div>
-        <div className="cluster-assessment">
-          <div>
-            <p className="eyebrow">Selected cluster</p>
-            <h3>{clusterDetail.selectedClusterLabel || "Cluster"}</h3>
-            {clusterDetail.selectedClusterContext ? (
-              <p className="small">{clusterDetail.selectedClusterContext}</p>
-            ) : null}
-          </div>
-          {clusterDetail.assessment ? (
-            <div className="assessment-meta">
-              <span className={statusClass(clusterDetail.assessment.healthRating)}>
-                {clusterDetail.assessment.healthRating}
-              </span>
-              <p className="small">
-                Missing evidence: {clusterDetail.assessment.missingEvidence.join(", ") || "none"}
-              </p>
-              <p className="small">
-                Confidence: {clusterDetail.assessment.overallConfidence || "unknown"}
-              </p>
-              {clusterDetail.assessment.artifactPath ? (
-                <a
-                  className="link"
-                  href={artifactUrl(clusterDetail.assessment.artifactPath)}
-                  target="_blank"
-                  rel="noreferrer"
+        <details
+          className="cluster-detail-panel"
+          open={clusterDetailExpanded}
+          onToggle={(event) => setClusterDetailExpanded(event.currentTarget.open)}
+        >
+          <summary>
+            <div className="cluster-detail-summary">
+              <div>
+                <p className="eyebrow">Selected cluster</p>
+                <strong>
+                  {clusterDetail?.selectedClusterLabel || selectedClusterLabel || "Cluster"}
+                </strong>
+                <p className="small compact">
+                  {selectedCluster?.context || clusterDetail?.selectedClusterContext || "Context unknown"}
+                </p>
+              </div>
+              <div className="cluster-detail-summary-meta">
+                <span
+                  className={statusClass(
+                    clusterDetail?.assessment?.healthRating ?? selectedCluster?.healthRating ?? "pending"
+                  )}
                 >
-                  View assessment artifact
-                </a>
-              ) : null}
+                  {clusterDetail?.assessment?.healthRating ?? selectedCluster?.healthRating ?? "Pending"}
+                </span>
+                <span className={`recency-pill ${clusterFresh ? "fresh" : "stale"}`}>
+                  {clusterRecency ?? "Awaiting run"}
+                </span>
+              </div>
             </div>
-          ) : (
-            <p className="muted">No assessment data is available yet.</p>
-          )}
-          {clusterDetail.artifacts.length ? (
-            <div className="artifact-strip cluster-artifacts">
-              {clusterDetail.artifacts.map((artifact) => {
-                const url = artifactUrl(artifact.path);
-                return (
-                  url && (
-                    <a
-                      key={artifact.label}
-                      className="artifact-link"
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {artifact.label}
-                    </a>
-                  )
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-        <article className="tab-panel">
-          {activeTab === "findings" && (
-            <div className="finding-list">
-              {clusterDetail.findings.map((finding) => (
-                <article className="finding-card" key={`${finding.label}-${finding.context}`}>
-                  <header>
-                    <div>
-                      <strong>
-                        {finding.label || "cluster"} · {finding.context || "n/a"}
-                      </strong>
-                      <p className="muted">Triggers: {finding.triggerReasons.join(", ") || "none"}</p>
-                      <p className="small">
-                        Warnings: {finding.warningEvents} · Non-running pods: {finding.nonRunningPods}
-                      </p>
-                    </div>
-                    {finding.artifactPath ? (
-                      <a
-                        className="link"
-                        href={artifactUrl(finding.artifactPath)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View raw evidence
-                      </a>
+            <p className="small muted">Tap to expand findings, hypotheses, and next checks</p>
+          </summary>
+          <div className="cluster-detail-body">
+            {clusterDetail ? (
+              <>
+                <div className="cluster-assessment">
+                  <div>
+                    <p className="eyebrow">Selected cluster</p>
+                    <h3>{clusterDetail.selectedClusterLabel || "Cluster"}</h3>
+                    {clusterDetail.selectedClusterContext ? (
+                      <p className="small">{clusterDetail.selectedClusterContext}</p>
                     ) : null}
-                  </header>
-                  <EvidenceDetails title="Summary" entries={finding.summaryEntries} />
-                  <EvidenceDetails title="Patterns" entries={finding.patternDetails} />
-                  {finding.rolloutStatus.length ? (
-                    <p className="small">Rollout status: {finding.rolloutStatus.join(", ")}</p>
+                  </div>
+                  {clusterDetail.assessment ? (
+                    <div className="assessment-meta">
+                      <span className={statusClass(clusterDetail.assessment.healthRating)}>
+                        {clusterDetail.assessment.healthRating}
+                      </span>
+                      <p className="small">
+                        Missing evidence: {clusterDetail.assessment.missingEvidence.join(", ") || "none"}
+                      </p>
+                      <p className="small">
+                        Confidence: {clusterDetail.assessment.overallConfidence || "unknown"}
+                      </p>
+                      {clusterDetail.assessment.artifactPath ? (
+                        <a
+                          className="link"
+                          href={artifactUrl(clusterDetail.assessment.artifactPath)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View assessment artifact
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="muted">No assessment data is available yet.</p>
+                  )}
+                  {clusterDetail.artifacts.length ? (
+                    <div className="artifact-strip cluster-artifacts">
+                      {clusterDetail.artifacts.map((artifact) => {
+                        const url = artifactUrl(artifact.path);
+                        return (
+                          url && (
+                            <a
+                              key={artifact.label}
+                              className="artifact-link"
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {artifact.label}
+                            </a>
+                          )
+                        );
+                      })}
+                    </div>
                   ) : null}
+                </div>
+                <div className="tab-list">
+                  {[
+                    { id: "findings", label: "Findings" },
+                    { id: "hypotheses", label: "Hypotheses" },
+                    { id: "checks", label: "Next checks" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`tab ${activeTab === tab.id ? "active" : ""}`}
+                      onClick={() => setActiveTab(tab.id as "findings" | "hypotheses" | "checks")}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <article className="tab-panel">
+                  {activeTab === "findings" && (
+                    <div className="finding-list">
+                      {clusterDetail.findings.map((finding) => (
+                        <article className="finding-card" key={`${finding.label}-${finding.context}`}>
+                          <header>
+                            <div>
+                              <strong>
+                                {finding.label || "cluster"} · {finding.context || "n/a"}
+                              </strong>
+                              <p className="muted">
+                                Triggers: {finding.triggerReasons.join(", ") || "none"}
+                              </p>
+                              <p className="small">
+                                Warnings: {finding.warningEvents} · Non-running pods: {finding.nonRunningPods}
+                              </p>
+                            </div>
+                            {finding.artifactPath ? (
+                              <a
+                                className="link"
+                                href={artifactUrl(finding.artifactPath)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                View raw evidence
+                              </a>
+                            ) : null}
+                          </header>
+                          <EvidenceDetails title="Summary" entries={finding.summaryEntries} />
+                          <EvidenceDetails title="Patterns" entries={finding.patternDetails} />
+                          {finding.rolloutStatus.length ? (
+                            <p className="small">Rollout status: {finding.rolloutStatus.join(", ")}</p>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  {activeTab === "hypotheses" && (
+                    <div className="finding-list">
+                      {clusterDetail.hypotheses.map((hypothesis) => (
+                        <article className="finding-card compact" key={hypothesis.description}>
+                          <strong>{hypothesis.description}</strong>
+                          <p className="small">
+                            Confidence: {hypothesis.confidence} · Layer: {hypothesis.probableLayer}
+                          </p>
+                          <p className="small">Falsifier: {hypothesis.falsifier}</p>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  {activeTab === "checks" && (
+                    <div className="finding-list">
+                      {clusterDetail.nextChecks.map((check) => (
+                        <article className="finding-card compact" key={check.description}>
+                          <strong>{check.description}</strong>
+                          <p className="small">
+                            Owner: {check.owner} · Method: {check.method}
+                          </p>
+                          <p className="small">Evidence: {check.evidenceNeeded.join(", ") || "n/a"}</p>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </article>
-              ))}
-            </div>
-          )}
-          {activeTab === "hypotheses" && (
-            <div className="finding-list">
-              {clusterDetail.hypotheses.map((hypothesis) => (
-                <article className="finding-card compact" key={hypothesis.description}>
-                  <strong>{hypothesis.description}</strong>
-                  <p className="small">
-                    Confidence: {hypothesis.confidence} · Layer: {hypothesis.probableLayer}
-                  </p>
-                  <p className="small">Falsifier: {hypothesis.falsifier}</p>
-                </article>
-              ))}
-            </div>
-          )}
-          {activeTab === "checks" && (
-            <div className="finding-list">
-              {clusterDetail.nextChecks.map((check) => (
-                <article className="finding-card compact" key={check.description}>
-                  <strong>{check.description}</strong>
-                  <p className="small">
-                    Owner: {check.owner} · Method: {check.method}
-                  </p>
-                  <p className="small">Evidence: {check.evidenceNeeded.join(", ") || "n/a"}</p>
-                </article>
-              ))}
-            </div>
-          )}
-        </article>
-        <div className="cluster-lists">
-          <div className="drilldown-summary">
-            <h3>Drilldown summary</h3>
-            <p className="small">
-              {clusterDetail.drilldownAvailability.available}/{
-                clusterDetail.drilldownAvailability.totalClusters} ready ·
-              Missing: {clusterDetail.drilldownAvailability.missingClusters.join(", ") || "none"}
-            </p>
-            <div className="drilldown-grid">
-              {clusterDetail.drilldownCoverage.map((entry) => (
-                <article
-                  className={`drilldown-card ${entry.available ? "available" : "missing"}`}
-                  key={entry.label}
-                >
-                  <header>
-                    <strong>{entry.label}</strong>
-                    <span>{entry.available ? "Ready" : "Missing"}</span>
-                  </header>
-                  <p className="small">Context: {entry.context}</p>
-                  <p className="small">Captured: {entry.timestamp || "pending"}</p>
-                  {entry.artifactPath ? (
-                    <a className="link" href={artifactUrl(entry.artifactPath)} target="_blank" rel="noreferrer">
-                      View drilldown
-                    </a>
-                  ) : null}
-                </article>
-              ))}
-            </div>
+                <div className="cluster-lists">
+                  <div className="drilldown-summary">
+                    <h3>Drilldown summary</h3>
+                    <p className="small">
+                      {clusterDetail.drilldownAvailability.available}/
+                        {clusterDetail.drilldownAvailability.totalClusters} ready ·
+                      Missing: {clusterDetail.drilldownAvailability.missingClusters.join(", ") || "none"}
+                    </p>
+                    <div className="drilldown-grid">
+                      {clusterDetail.drilldownCoverage.map((entry) => (
+                        <article
+                          className={`drilldown-card ${entry.available ? "available" : "missing"}`}
+                          key={entry.label}
+                        >
+                          <header>
+                            <strong>{entry.label}</strong>
+                            <span>{entry.available ? "Ready" : "Missing"}</span>
+                          </header>
+                          <p className="small">Context: {entry.context}</p>
+                          <p className="small">Captured: {entry.timestamp || "pending"}</p>
+                          {entry.artifactPath ? (
+                            <a
+                              className="link"
+                              href={artifactUrl(entry.artifactPath)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View drilldown
+                            </a>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h3>Related proposals</h3>
+                    {clusterDetail.relatedProposals.map((proposal) => (
+                      <div className="related-card" key={proposal.proposalId}>
+                        <p className="eyebrow">{proposal.proposalId}</p>
+                        <p className="small">{proposal.target}</p>
+                        <span className={statusClass(proposal.status)}>{proposal.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <h3>Related notifications</h3>
+                    {clusterDetail.relatedNotifications.map((notification) => (
+                      <div className="related-card" key={notification.timestamp + notification.kind}>
+                        <p className="eyebrow">{notification.kind}</p>
+                        <p className="small">{notification.summary}</p>
+                        <span className="small">{formatTimestamp(notification.timestamp)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="muted">Loading cluster evidence…</p>
+            )}
           </div>
-          <div>
-            <h3>Related proposals</h3>
-            {clusterDetail.relatedProposals.map((proposal) => (
-              <div className="related-card" key={proposal.proposalId}>
-                <p className="eyebrow">{proposal.proposalId}</p>
-                <p className="small">{proposal.target}</p>
-                <span className={statusClass(proposal.status)}>{proposal.status}</span>
-              </div>
-            ))}
-          </div>
-          <div>
-            <h3>Related notifications</h3>
-            {clusterDetail.relatedNotifications.map((notification) => (
-              <div className="related-card" key={notification.timestamp + notification.kind}>
-                <p className="eyebrow">{notification.kind}</p>
-                <p className="small">{notification.summary}</p>
-                <span className="small">{formatTimestamp(notification.timestamp)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </details>
       </section>
       <section className="panel" id="proposals">
         <div className="section-head">

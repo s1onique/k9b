@@ -19,7 +19,7 @@ describe("ProposalList", () => {
       toggle,
     });
 
-    expect(screen.getByRole("heading", { level: 3, name: "critical-01" })).toBeInTheDocument();
+    expect(screen.getByText("critical-01")).toBeInTheDocument();
     expect(screen.queryByText("medium-01")).toBeNull();
     expect(screen.queryByText("low-01")).toBeNull();
   });
@@ -36,8 +36,8 @@ describe("ProposalList", () => {
       toggle,
     });
 
-    const headings = screen.getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual([
+    const rows = screen.getAllByTestId("proposal-row");
+    expect(rows.map((row) => row.dataset.proposalId)).toEqual([
       "critical-01",
       "medium-01",
       "low-01",

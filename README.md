@@ -115,9 +115,17 @@ Scheduling is optional but the health loop now ships with built-in rhythm contro
 
 To operate the loop continuously, use `scripts/run_health_scheduler.py` with the cadence flags that match your shift cycle (for example `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 48`). The wrapper drives `run-health-loop`, logs each scheduler invocation to `runs/health/scheduler.log`, and keeps the deterministic file-backed layout that every review and adaptation run relies on.
 
- After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Each comparison line now documents whether the pair was eligible, skipped, or flagged as unsafe, why it was run or skipped, the classification (expected vs suspicious drift), the expected and ignored drift categories, and any notes you configured in `peer_mappings`, making it easier to understand how the policy drove the comparison. Include `--run-id <id>` when you need to revisit a specific iteration.
+After a run finishes, `k8s-diag-agent health-summary --runs-dir runs/health` prints a compact view of the latest artifacts: per-cluster health ratings, the top finding, generated proposals, promoted/adapted proposals with before/after noise/quality deltas, and the comparisons that triggered. Each comparison line now documents whether the pair was eligible, skipped, or flagged as unsafe, why it was run or skipped, the classification (expected vs suspicious drift), the expected and ignored drift categories, and any notes you configured in `peer_mappings`, making it easier to understand how the policy drove the comparison. Include `--run-id <id>` when you need to revisit a specific iteration.
 
 Every run also gathers lightweight health signals (node readiness/pressure counts, non-running pods, CrashLoopBackOff and ImagePullBackOff tallies, pending pods, failed jobs, and recent warning events) and wires them into the assessment so findings explicitly separate baseline drift, workload health issues, missing evidence, and regressions.
+
+### Continuous scheduler + UI workflow
+
+1. Start the backend (`scripts/start_backend.sh`) so the API serving the UI and artifact endpoints keeps the latest diagnostics in `runs/health`.
+2. Launch the scheduler alongside it via `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 0`. The helper keeps writing to the file-backed `runs/health` hierarchy (snapshots, assessments, proposals, digests, and `scheduler.log`) so the UI sees fresh artifacts without any database or job queue.
+3. In a separate terminal, run `scripts/start_frontend.sh` (or `cd frontend && npm run dev`) to keep the React UI pointed at the backend; the UI will poll `/api` and surface fleet/cluster states as each periodic run completes.
+
+Keeping the scheduler, backend, and frontend running together gives you a shifting production-like loop: the scheduler continuously collects evidence, the backend serves the updated artifacts, and the frontend renders the compact fleet dashboard plus selection-driven cluster detail without introducing a new persistence layer.
 
 
 ### One-shot health run workflow
