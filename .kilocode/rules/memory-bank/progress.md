@@ -77,6 +77,7 @@ The repository currently has:
 ### Documentation artifacts
 - `docs/cluster_snapshot_plan.md`
 - `docs/schemas/fixture-schema.md`
+- `docs/security-policy.md`
 
 ## Key decisions already made
 

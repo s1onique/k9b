@@ -27,7 +27,12 @@ from ..models import (
     Signal,
 )
 from ..render.formatter import assessment_to_dict
-from .baseline import BaselineDriftCategory, BaselinePolicy
+from .baseline import (
+    BaselineDriftCategory,
+    BaselinePolicy,
+    resolve_baseline_policy_path,
+    _str_or_none,
+)
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .utils import normalize_ref
 from .image_pull_secret import (
@@ -112,12 +117,30 @@ class HealthTarget:
     monitor_health: bool
     watched_helm_releases: Tuple[str, ...]
     watched_crd_families: Tuple[str, ...]
+    cluster_class: Optional[str] = None
+    cluster_role: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class ComparisonPeer:
     source: str
     peers: Tuple[str, ...]
+    intent: "ComparisonIntent"
+
+
+class ComparisonIntent(str, Enum):
+    EXPECTED_DRIFT = "expected-drift"
+    SUSPICIOUS_DRIFT = "suspicious-drift"
+    IRRELEVANT_DRIFT = "irrelevant-drift"
+
+    def label(self) -> str:
+        if self == ComparisonIntent.EXPECTED_DRIFT:
+            return "expected drift"
+        if self == ComparisonIntent.SUSPICIOUS_DRIFT:
+            return "suspicious drift"
+        if self == ComparisonIntent.IRRELEVANT_DRIFT:
+            return "irrelevant drift"
+        return str(self)
 
 
 @dataclass(frozen=True)
@@ -151,6 +174,8 @@ class HealthHistoryEntry:
     pod_counts: Dict[str, int] = field(default_factory=dict)
     job_failures: int = 0
     warning_event_count: int = 0
+    cluster_class: Optional[str] = None
+    cluster_role: Optional[str] = None
 
     @classmethod
     def from_dict(cls, cluster_id: str, data: Dict[str, Any]) -> "HealthHistoryEntry":
@@ -203,6 +228,8 @@ class HealthHistoryEntry:
             pod_counts=pod_counts,
             job_failures=_safe_int(data.get("job_failures")) or 0,
             warning_event_count=_safe_int(data.get("warning_event_count")) or 0,
+            cluster_class=_str_or_none(data.get("cluster_class")),
+            cluster_role=_str_or_none(data.get("cluster_role")),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -218,6 +245,8 @@ class HealthHistoryEntry:
             "pod_counts": self.pod_counts,
             "job_failures": self.job_failures,
             "warning_event_count": self.warning_event_count,
+            "cluster_class": self.cluster_class,
+            "cluster_role": self.cluster_role,
         }
 
 
@@ -273,6 +302,7 @@ class TriggerDetail:
     why: str
     next_check: Optional[str]
     peer_roles: Optional[str] = None
+    classification: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         data = {
@@ -286,6 +316,8 @@ class TriggerDetail:
         }
         if self.peer_roles:
             data["peer_roles"] = self.peer_roles
+        if self.classification:
+            data["classification"] = self.classification
         return data
 
 
@@ -318,6 +350,34 @@ class ComparisonTriggerArtifact:
             "differences": self.differences,
             "trigger_details": [detail.to_dict() for detail in self.trigger_details],
             "notes": self.notes,
+        }
+
+
+@dataclass(frozen=True)
+class ComparisonDecision:
+    primary_label: str
+    secondary_label: str
+    policy_eligible: bool
+    triggered: bool
+    comparison_intent: str
+    reason: str
+    primary_class: Optional[str]
+    secondary_class: Optional[str]
+    primary_role: Optional[str]
+    secondary_role: Optional[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "primary_label": self.primary_label,
+            "secondary_label": self.secondary_label,
+            "policy_eligible": self.policy_eligible,
+            "triggered": self.triggered,
+            "comparison_intent": self.comparison_intent,
+            "reason": self.reason,
+            "primary_class": self.primary_class,
+            "secondary_class": self.secondary_class,
+            "primary_role": self.primary_role,
+            "secondary_role": self.secondary_role,
         }
 
 
@@ -382,6 +442,8 @@ class HealthRunConfig:
                     monitor_health=monitor_health,
                     watched_helm_releases=watched_helm,
                     watched_crd_families=watched_crd,
+                    cluster_class=_str_or_none(entry.get("cluster_class")),
+                    cluster_role=_str_or_none(entry.get("cluster_role")),
                 )
             )
         if not targets:
@@ -437,10 +499,12 @@ class HealthRunConfig:
                 normalized_peers.append(normalized_peer)
             if not normalized_peers:
                 continue
+            intent_value = _parse_comparison_intent(entry.get("intent"))
             peers.append(
                 ComparisonPeer(
                     source=normalized_source,
                     peers=tuple(normalized_peers),
+                    intent=intent_value,
                 )
             )
         if not peers and manual_pairs:
@@ -458,12 +522,11 @@ class HealthRunConfig:
         )
 
         baseline_raw = raw.get("baseline_policy_path")
-        if baseline_raw:
-            baseline_path = Path(str(baseline_raw))
-            if not baseline_path.is_absolute():
-                baseline_path = path.parent / baseline_path
-        else:
-            baseline_path = path.parent / "health-baseline.json"
+        explicit_path = str(baseline_raw) if baseline_raw else None
+        try:
+            baseline_path = resolve_baseline_policy_path(path.parent, explicit_path)
+        except FileNotFoundError as exc:
+            raise ValueError(f"Unable to locate baseline policy near {path.parent}: {exc}")
         try:
             baseline_policy = BaselinePolicy.load_from_file(baseline_path)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -1381,6 +1444,7 @@ def determine_pair_trigger_reasons(
     history: Dict[str, HealthHistoryEntry],
     manual_keys: Set[Tuple[str, str]],
     baseline: BaselinePolicy,
+    classification: Optional[str] = None,
 ) -> List[TriggerDetail]:
     details: List[TriggerDetail] = []
     primary_ref, _ = primary.refs()
@@ -1432,6 +1496,7 @@ def determine_pair_trigger_reasons(
                 why="Manual comparison requested",
                 next_check=None,
                 peer_roles=role_summary,
+                classification=classification,
             )
         )
     if policy.control_plane_version and not baseline.is_drift_allowed(
@@ -1464,6 +1529,7 @@ def determine_pair_trigger_reasons(
                     why=" ".join(why_parts).strip(),
                     next_check=expectation.next_check if expectation else None,
                     peer_roles=role_summary,
+                    classification=classification,
                 )
             )
     if policy.watched_helm_release and not baseline.is_drift_allowed(
@@ -1509,6 +1575,7 @@ def determine_pair_trigger_reasons(
                     why=" ".join(why_parts).strip(),
                     next_check=next_check_value,
                     peer_roles=role_summary,
+                    classification=classification,
                 )
             )
     if policy.watched_crd and not baseline.is_drift_allowed(
@@ -1550,6 +1617,7 @@ def determine_pair_trigger_reasons(
                     why=" ".join(why_parts).strip(),
                     next_check=next_crd_check,
                     peer_roles=role_summary,
+                    classification=classification,
                 )
             )
     if policy.health_regression:
@@ -1569,6 +1637,7 @@ def determine_pair_trigger_reasons(
                     why="Health rating degraded since last healthy run.",
                     next_check=None,
                     peer_roles=role_summary,
+                    classification=classification,
                 )
             )
         secondary_prev = history.get(secondary.snapshot.metadata.cluster_id)
@@ -1587,6 +1656,7 @@ def determine_pair_trigger_reasons(
                     why="Health rating degraded since last healthy run.",
                     next_check=None,
                     peer_roles=role_summary,
+                    classification=classification,
                 )
             )
     if policy.missing_evidence:
@@ -1608,6 +1678,7 @@ def determine_pair_trigger_reasons(
                         why="Missing telemetry appeared since last run.",
                         next_check=None,
                         peer_roles=role_summary,
+                        classification=classification,
                     )
                 )
 
@@ -1783,6 +1854,8 @@ class HealthLoopRunner:
             pod_counts=record.snapshot.health_signals.pod_counts.to_dict(),
             job_failures=record.snapshot.health_signals.job_failures,
             warning_event_count=len(record.snapshot.health_signals.warning_events),
+            cluster_class=record.target.cluster_class,
+            cluster_role=record.target.cluster_role,
         )
         record.image_pull_secret_insight = insight
         return artifacts
@@ -1924,6 +1997,7 @@ class HealthLoopRunner:
         directories: Dict[str, Path],
     ) -> List[ComparisonTriggerArtifact]:
         triggers: List[ComparisonTriggerArtifact] = []
+        decisions: List[ComparisonDecision] = []
         if not self.config.peers:
             self._collection_messages.append(_HEALTH_ONLY_MESSAGE)
             return triggers
@@ -1940,15 +2014,56 @@ class HealthLoopRunner:
                 secondary_record = record_lookup.get(secondary_ref)
                 if not secondary_record:
                     continue
-                trigger_details = determine_pair_trigger_reasons(
+                (
+                    policy_eligible,
+                    policy_reason,
+                    primary_class,
+                    secondary_class,
+                    primary_role,
+                    secondary_role,
+                ) = _policy_eligible_pair(
                     primary_record,
                     secondary_record,
-                    self.config.trigger_policy,
-                    history,
-                    self._manual_keys,
+                    peer.intent,
                     self.baseline_policy,
                 )
-                if not trigger_details:
+                classification_label = peer.intent.label()
+                trigger_details: List[TriggerDetail] = []
+                if policy_eligible:
+                    trigger_details = determine_pair_trigger_reasons(
+                        primary_record,
+                        secondary_record,
+                        self.config.trigger_policy,
+                        history,
+                        self._manual_keys,
+                        self.baseline_policy,
+                        classification_label,
+                    )
+                triggered = bool(trigger_details)
+                if not policy_eligible:
+                    self._collection_messages.append(
+                        f"Comparison {primary_record.target.label} vs {secondary_record.target.label} skipped: {policy_reason}"
+                    )
+                decision_reason = (
+                    policy_reason
+                    if not policy_eligible
+                    else "; ".join(detail.reason for detail in trigger_details) if triggered else "policy compatible but no triggers fired"
+                )
+                decisions.append(
+                    ComparisonDecision(
+                        primary_label=primary_record.target.label,
+                        secondary_label=secondary_record.target.label,
+                        policy_eligible=policy_eligible,
+                        triggered=triggered,
+                        comparison_intent=classification_label,
+                        reason=decision_reason,
+                        primary_class=primary_class,
+                        secondary_class=secondary_class,
+                        primary_role=primary_role,
+                        secondary_role=secondary_role,
+                    )
+                )
+                if not policy_eligible or not triggered:
                     continue
                 comparison = self.comparison_fn(primary_record.snapshot, secondary_record.snapshot)
                 summary = {key: len(value) for key, value in comparison.differences.items()}
@@ -1984,6 +2099,8 @@ class HealthLoopRunner:
                         f"{', '.join(detail.reason for detail in trigger_details)}"
                     )
                 )
+        decision_path = directories["root"] / f"{self.run_id}-comparison-decisions.json"
+        _write_json([decision.to_dict() for decision in decisions], decision_path)
         return triggers
 
     def _load_history(self, history_path: Path) -> Dict[str, HealthHistoryEntry]:
@@ -1999,6 +2116,58 @@ class HealthLoopRunner:
     def _persist_history(self, history: Dict[str, HealthHistoryEntry], history_path: Path) -> None:
         data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
         _write_json(data, history_path)
+
+def _resolve_peer_role(record: HealthSnapshotRecord, baseline: BaselinePolicy) -> Optional[str]:
+    explicit_role = record.target.cluster_role
+    if explicit_role:
+        return explicit_role.strip() or None
+    for reference in record.refs():
+        role = baseline.role_for(reference)
+        if role:
+            return role
+    return None
+
+
+def _policy_eligible_pair(
+    primary: HealthSnapshotRecord,
+    secondary: HealthSnapshotRecord,
+    intent: ComparisonIntent,
+    baseline: BaselinePolicy,
+) -> Tuple[bool, str, Optional[str], Optional[str], Optional[str], Optional[str]]:
+    primary_class = primary.target.cluster_class
+    secondary_class = secondary.target.cluster_class
+    primary_role = _resolve_peer_role(primary, baseline)
+    secondary_role = _resolve_peer_role(secondary, baseline)
+    reasons: List[str] = []
+    if not primary_class or not secondary_class:
+        reasons.append("cluster class metadata missing")
+    elif primary_class != secondary_class:
+        reasons.append("cluster class mismatch")
+    if intent == ComparisonIntent.SUSPICIOUS_DRIFT:
+        if not primary_role or not secondary_role:
+            reasons.append("peer role metadata missing")
+        elif primary_role != secondary_role:
+            reasons.append("peer roles differ")
+    if intent == ComparisonIntent.IRRELEVANT_DRIFT:
+        reasons.append("comparison intent marked this pair as irrelevant drift")
+    if reasons:
+        return (
+            False,
+            "; ".join(reasons),
+            primary_class,
+            secondary_class,
+            primary_role,
+            secondary_role,
+        )
+    return (
+        True,
+        "policy compatible",
+        primary_class,
+        secondary_class,
+        primary_role,
+        secondary_role,
+    )
+
 
 def _safe_int(value: Any | None) -> Optional[int]:
     if value is None:
@@ -2017,6 +2186,15 @@ def _parse_threshold(value: Any | None) -> int:
     except (TypeError, ValueError):
         return 0
     return max(0, threshold)
+
+
+def _parse_comparison_intent(value: Any | None) -> ComparisonIntent:
+    if value is None:
+        return ComparisonIntent.SUSPICIOUS_DRIFT
+    try:
+        return ComparisonIntent(str(value))
+    except ValueError:
+        return ComparisonIntent.SUSPICIOUS_DRIFT
 
 
 def _parse_manual_triggers(values: Sequence[str]) -> List[ManualComparison]:

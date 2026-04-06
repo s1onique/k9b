@@ -85,6 +85,8 @@ class HealthSummaryTests(unittest.TestCase):
                     "warning_event_count": 3,
                     "pod_counts": {"non_running": 2},
                     "missing_evidence": ["events"],
+                    "cluster_class": "prod",
+                    "cluster_role": "primary",
                 }
             },
         )
@@ -103,6 +105,23 @@ class HealthSummaryTests(unittest.TestCase):
                 "notes": "Manual run",
             },
         )
+        self._write(
+            f"{latest_run}-comparison-decisions.json",
+            [
+                {
+                    "primary_label": "cluster-alpha",
+                    "secondary_label": "cluster-beta",
+                    "policy_eligible": True,
+                    "triggered": True,
+                    "comparison_intent": "suspicious drift",
+                    "reason": "manual comparison",
+                    "primary_class": "prod",
+                    "secondary_class": "prod",
+                    "primary_role": "primary",
+                    "secondary_role": "primary",
+                }
+            ],
+        )
 
         summary = gather_health_summary(self.health_dir)
         formatted = format_health_summary(summary)
@@ -113,3 +132,6 @@ class HealthSummaryTests(unittest.TestCase):
         self.assertIn("noise 6->3", formatted)
         self.assertIn("signal loss risk", formatted)
         self.assertIn("manual", formatted)
+        self.assertIn("prod/primary", formatted)
+        self.assertIn("Comparison policy decisions", formatted)
+        self.assertIn("intent suspicious drift", formatted)

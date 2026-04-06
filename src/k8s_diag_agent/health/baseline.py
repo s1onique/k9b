@@ -25,6 +25,10 @@ DEFAULT_CONTROL_PLANE_NEXT_CHECK = "Review kube-apiserver and kubelet versions t
 DEFAULT_RELEASE_NEXT_CHECK = "Validate the Helm release version against the curated platform channel."
 DEFAULT_CRD_NEXT_CHECK = "Confirm the CRD family exists and is being served across the cluster."
 
+BASELINE_LOCAL_NAME = "health-baseline.local.json"
+BASELINE_LEGACY_NAME = "health-baseline.json"
+BASELINE_EXAMPLE_NAME = "health-baseline.example.json"
+
 
 def _parse_version_tuple(value: str) -> Tuple[int, ...]:
     digits = [int(segment) for segment in re.findall(r"\d+", value)]
@@ -228,6 +232,23 @@ class BaselinePolicy:
 
     def role_for(self, reference: str) -> Optional[str]:
         return self.peer_roles.get(normalize_ref(reference))
+
+
+def resolve_baseline_policy_path(directory: Path, explicit: Optional[str] = None) -> Path:
+    if explicit:
+        explicit_path = Path(explicit)
+        return explicit_path if explicit_path.is_absolute() else directory / explicit_path
+    for candidate in (
+        directory / BASELINE_LOCAL_NAME,
+        directory / BASELINE_LEGACY_NAME,
+        directory / BASELINE_EXAMPLE_NAME,
+    ):
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "Unable to locate a baseline policy."
+        f" Checked: {directory / BASELINE_LOCAL_NAME}, {directory / BASELINE_LEGACY_NAME}, {directory / BASELINE_EXAMPLE_NAME}"
+    )
 
 
 def _str_or_none(value: Optional[str]) -> Optional[str]:

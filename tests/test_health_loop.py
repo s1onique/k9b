@@ -31,6 +31,7 @@ from k8s_diag_agent.health.drilldown import (
 )
 from k8s_diag_agent.health.loop import (
     ComparisonPeer,
+    ComparisonIntent,
     HealthAssessmentResult,
     HealthLoopRunner,
     HealthHistoryEntry,
@@ -426,6 +427,7 @@ class HealthLoopTests(unittest.TestCase):
             {},
             set(),
             baseline,
+            ComparisonIntent.SUSPICIOUS_DRIFT.label(),
         )
         self.assertFalse(
             any(detail.type == BaselineDriftCategory.WATCHED_HELM_RELEASE.value for detail in details)
@@ -488,6 +490,7 @@ class HealthLoopTests(unittest.TestCase):
             {},
             set(),
             BaselinePolicy.empty(),
+            ComparisonIntent.SUSPICIOUS_DRIFT.label(),
         )
         self.assertTrue(
             any(detail.type == BaselineDriftCategory.WATCHED_HELM_RELEASE.value for detail in details)
@@ -561,7 +564,13 @@ class HealthLoopTests(unittest.TestCase):
             output_dir=self.tmp_dir,
             collector_version="0.1",
             targets=(target_alpha, target_beta),
-            peers=(ComparisonPeer(source="cluster-alpha", peers=("cluster-beta",)),),
+            peers=(
+                ComparisonPeer(
+                    source="cluster-alpha",
+                    peers=("cluster-beta",),
+                    intent=ComparisonIntent.SUSPICIOUS_DRIFT,
+                ),
+            ),
             trigger_policy=TriggerPolicy(False, False, False, False, False, False),
             manual_pairs=(),
             baseline_policy=BaselinePolicy.empty(),

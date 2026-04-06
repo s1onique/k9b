@@ -22,7 +22,7 @@ class HealthPromotionTest(unittest.TestCase):
         self.health_config = self.root / "health-config.json"
         self.baseline = self.root / "health-baseline.json"
         shutil.copy(Path("runs/health-config.local.example.json"), self.health_config)
-        shutil.copy(Path("runs/health-baseline.json"), self.baseline)
+        shutil.copy(Path("runs/health-baseline.example.json"), self.baseline)
         self.promotions = self.root / "promotions"
         self.proposal_path = self.root / "proposal.json"
 

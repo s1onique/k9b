@@ -18,6 +18,7 @@ from .baseline import (
     BaselineDriftCategory,
     DEFAULT_CRD_NEXT_CHECK,
     DEFAULT_RELEASE_NEXT_CHECK,
+    resolve_baseline_policy_path,
 )
 from .review_feedback import DrilldownSelection, HealthReviewArtifact, QualityMetric
 
@@ -662,13 +663,11 @@ def _apply_ignored_drift_update(data: OrderedDict[str, Any], payload: Mapping[st
 def _resolve_baseline_path(config_path: Path) -> Path:
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     baseline_raw = raw.get("baseline_policy_path") if isinstance(raw, Mapping) else None
-    if baseline_raw:
-        baseline_path = Path(str(baseline_raw))
-        if not baseline_path.is_absolute():
-            baseline_path = config_path.parent / baseline_path
-    else:
-        baseline_path = config_path.parent / "health-baseline.json"
-    return baseline_path
+    explicit = str(baseline_raw) if baseline_raw else None
+    try:
+        return resolve_baseline_policy_path(config_path.parent, explicit)
+    except FileNotFoundError as exc:
+        raise PromotionError(str(exc)) from exc
 
 
 def _write_patch(

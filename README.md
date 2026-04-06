@@ -40,6 +40,8 @@ k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixtur
 
 - `.venv/bin/python -m unittest discover tests` (active verification path)
 - `.venv/bin/python -m mypy src tests` (type checker; see [typing guidance](docs/typing.md))
+- Logs from the health loop, drilldown collectors, review/scoring flows, and scheduler/operator helpers must follow the standards defined in [docs/logging-policy.md](docs/logging-policy.md).
+- Follow [docs/security-policy.md](docs/security-policy.md) for secrets handling, live evidence boundaries, provider/environment rules, and proposal-gated adaptation hygiene.
 
 ## Fast feedback loops
 

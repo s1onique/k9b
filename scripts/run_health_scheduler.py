@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -30,11 +31,46 @@ def _ensure_python() -> Path:
     return PYTHON_BIN
 
 
-def _append_log(message: str) -> None:
+def _load_config_metadata(config_path: Path) -> dict[str, object]:
+    metadata: dict[str, object] = {"config_path": str(config_path)}
+    try:
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return metadata
+    run_label = raw.get("run_label") or raw.get("run_id")
+    if run_label:
+        metadata["run_label"] = str(run_label)
+    targets = raw.get("targets")
+    if isinstance(targets, list):
+        labels: list[str] = []
+        for target in targets:
+            if not isinstance(target, dict):
+                continue
+            label_value = target.get("label") or target.get("context")
+            if label_value:
+                labels.append(str(label_value))
+        if labels:
+            metadata["target_labels"] = ",".join(labels)
+    return metadata
+
+
+def _append_log(
+    message: str,
+    severity: str = "INFO",
+    metadata: dict[str, object] | None = None,
+) -> None:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     DEFAULT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": timestamp,
+        "component": "health-scheduler",
+        "severity": severity.upper(),
+        "message": message,
+    }
+    if metadata:
+        entry.update(metadata)
     with DEFAULT_LOG.open("a", encoding="utf-8") as handle:
-        handle.write(f"{timestamp} {message}\n")
+        handle.write(json.dumps(entry, separators=(',', ':')) + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     python = _ensure_python()
+    config_metadata = _load_config_metadata(args.config)
     command = [
         str(python),
         "-m",
@@ -86,10 +123,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.quiet:
         command.append("--quiet")
 
-    _append_log("Starting scheduler with command: %s" % " ".join(command))
+    _append_log(
+        "Starting scheduler",
+        metadata={
+            **config_metadata,
+            "command": " ".join(command),
+            "event": "start",
+        },
+    )
     result = subprocess.run(command, env=os.environ)
     status = "succeeded" if result.returncode == 0 else f"failed (code {result.returncode})"
-    _append_log(f"Scheduler {status}")
+    severity = "INFO" if result.returncode == 0 else "ERROR"
+    _append_log(
+        f"Scheduler {status}",
+        severity=severity,
+        metadata={
+            **config_metadata,
+            "event": "stop",
+            "exit_code": result.returncode,
+            "status": status,
+        },
+    )
     return result.returncode
 
 

@@ -8,29 +8,37 @@
       "label": "cluster-alpha",
       "monitor_health": true,
       "watched_helm_releases": ["kube-system/observability"],
-      "watched_crd_families": ["monitoring.example.com"]
+      "watched_crd_families": ["monitoring.example.com"],
+      "cluster_class": "prod",
+      "cluster_role": "primary"
     },
     {
       "context": "cluster-beta",
       "label": "cluster-beta",
       "monitor_health": true,
-      "watched_helm_releases": ["kube-system/observability", "stateful-stack/service"]
+      "watched_helm_releases": ["kube-system/observability", "stateful-stack/service"],
+      "cluster_class": "prod",
+      "cluster_role": "primary"
     },
     {
       "context": "cluster-gamma",
       "label": "cluster-gamma",
       "monitor_health": false,
-      "watched_crd_families": ["database.example.com"]
+      "watched_crd_families": ["database.example.com"],
+      "cluster_class": "staging",
+      "cluster_role": "secondary"
     }
   ],
   "peer_mappings": [
     {
       "source": "cluster-alpha",
-      "peers": ["cluster-beta"]
+      "peers": ["cluster-beta"],
+      "intent": "suspicious-drift"
     },
     {
       "source": "cluster-beta",
-      "peers": ["cluster-alpha"]
+      "peers": ["cluster-alpha"],
+      "intent": "suspicious-drift"
     }
   ],
   "comparison_triggers": {
@@ -45,5 +53,5 @@
   "manual_pairs": [
     {"primary": "cluster-alpha", "secondary": "cluster-beta"}
   ],
-  "baseline_policy_path": "health-baseline.json"
+  "baseline_policy_path": "health-baseline.example.json"
 }

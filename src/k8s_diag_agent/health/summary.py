@@ -24,6 +24,8 @@ class ClusterSummary:
     warning_count: int | None
     non_running_pods: int | None
     missing_evidence: Tuple[str, ...] | None
+    cluster_class: str | None
+    cluster_role: str | None
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,20 @@ class TriggerSummary:
 
 
 @dataclass(frozen=True)
+class ComparisonSummary:
+    primary_label: str
+    secondary_label: str
+    policy_eligible: bool
+    triggered: bool
+    comparison_intent: str
+    reason: str
+    primary_class: str | None
+    secondary_class: str | None
+    primary_role: str | None
+    secondary_role: str | None
+
+
+@dataclass(frozen=True)
 class PromotedComparison:
     proposal_id: str
     context: str | None
@@ -74,6 +90,7 @@ class HealthSummary:
     proposals: Tuple[ProposalSummary, ...]
     promoted: Tuple[PromotedComparison, ...]
     triggers: Tuple[TriggerSummary, ...]
+    comparisons: Tuple["ComparisonSummary", ...]
 
 
 def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> HealthSummary:
@@ -94,6 +111,7 @@ def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> Healt
     proposal_list = _collect_proposals_for_run(all_proposals, run_id)
     trigger_artifacts = _collect_triggers(triggers_dir, run_id)
     promoted = _collect_promoted_reports(all_proposals, reviews_dir, run_id)
+    comparison_summaries = _collect_comparison_summaries(runs_dir, run_id)
 
     return HealthSummary(
         run_id=run_id,
@@ -102,6 +120,7 @@ def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> Healt
         proposals=tuple(proposal_list),
         promoted=tuple(promoted),
         triggers=tuple(trigger_artifacts),
+        comparisons=tuple(comparison_summaries),
     )
 
 
@@ -115,8 +134,9 @@ def format_health_summary(summary: HealthSummary) -> str:
             warnings = entry.warning_count if entry.warning_count is not None else "n/a"
             pods = entry.non_running_pods if entry.non_running_pods is not None else "n/a"
             rating = entry.health_rating or "unknown"
+            metadata = _format_class_role(entry.cluster_class, entry.cluster_role)
             lines.append(
-                f"- {entry.label}: {rating} (non-running pods: {pods}, warnings: {warnings})"
+                f"- {entry.label}{metadata}: {rating} (non-running pods: {pods}, warnings: {warnings})"
             )
     else:
         lines.append("- none")
@@ -155,6 +175,20 @@ def format_health_summary(summary: HealthSummary) -> str:
             notes = f" ({trigger.notes})" if trigger.notes else ""
             lines.append(
                 f"- {trigger.primary_label} vs {trigger.secondary_label}: {reason_text}{notes}"
+            )
+    else:
+        lines.append("- none")
+
+    lines.append("Comparison policy decisions:")
+    if summary.comparisons:
+        for comp in summary.comparisons:
+            eligibility = "eligible" if comp.policy_eligible else "skipped"
+            triggered_text = "triggered" if comp.triggered else "not triggered"
+            primary_meta = _format_class_role(comp.primary_class, comp.primary_role)
+            secondary_meta = _format_class_role(comp.secondary_class, comp.secondary_role)
+            lines.append(
+                f"- {comp.primary_label}{primary_meta} vs {comp.secondary_label}{secondary_meta}: "
+                f"{eligibility}, {triggered_text}, intent {comp.comparison_intent}, reason {comp.reason}"
             )
     else:
         lines.append("- none")
@@ -237,6 +271,8 @@ def _build_cluster_summaries(
             warning_count=_history_int(history, label, "warning_event_count"),
             non_running_pods=_history_int(history, label, "pod_counts", "non_running"),
             missing_evidence=_history_list(history, label, "missing_evidence"),
+            cluster_class=_lookup_history_field(history, label, "cluster_class"),
+            cluster_role=_lookup_history_field(history, label, "cluster_role"),
         )
         summaries.append(summary_entry)
     return summaries
@@ -302,6 +338,17 @@ def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> 
     return None
 
 
+def _format_class_role(cluster_class: str | None, cluster_role: str | None) -> str:
+    parts: List[str] = []
+    if cluster_class:
+        parts.append(cluster_class)
+    if cluster_role:
+        parts.append(cluster_role)
+    if not parts:
+        return ""
+    return f" ({'/'.join(parts)})"
+
+
 def _load_all_proposals(proposals_dir: Path) -> List[HealthProposal]:
     proposals: List[HealthProposal] = []
     if not proposals_dir.is_dir():
@@ -356,6 +403,37 @@ def _collect_triggers(triggers_dir: Path, run_id: str) -> List[TriggerSummary]:
             )
         )
     return triggers
+
+
+def _collect_comparison_summaries(root: Path, run_id: str) -> List[ComparisonSummary]:
+    path = root / f"{run_id}-comparison-decisions.json"
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(raw, Sequence):
+        return []
+    summaries: List[ComparisonSummary] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        summaries.append(
+            ComparisonSummary(
+                primary_label=str(entry.get("primary_label") or ""),
+                secondary_label=str(entry.get("secondary_label") or ""),
+                policy_eligible=bool(entry.get("policy_eligible")),
+                triggered=bool(entry.get("triggered")),
+                comparison_intent=str(entry.get("comparison_intent") or ""),
+                reason=str(entry.get("reason") or ""),
+                primary_class=str(entry.get("primary_class")) if entry.get("primary_class") is not None else None,
+                secondary_class=str(entry.get("secondary_class")) if entry.get("secondary_class") is not None else None,
+                primary_role=str(entry.get("primary_role")) if entry.get("primary_role") is not None else None,
+                secondary_role=str(entry.get("secondary_role")) if entry.get("secondary_role") is not None else None,
+            )
+        )
+    return summaries
 
 
 def _collect_promoted_reports(
