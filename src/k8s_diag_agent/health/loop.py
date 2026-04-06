@@ -9,7 +9,7 @@ import warnings
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -128,7 +128,7 @@ def _normalize_category_list(value: Any | None) -> tuple[str, ...]:
     return ()
 
 
-class HealthRating(str, Enum):
+class HealthRating(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
 
@@ -154,7 +154,7 @@ class ComparisonPeer:
     notes: str | None = None
 
 
-class ComparisonIntent(str, Enum):
+class ComparisonIntent(StrEnum):
     EXPECTED_DRIFT = "expected-drift"
     SUSPICIOUS_DRIFT = "suspicious-drift"
     IRRELEVANT_DRIFT = "irrelevant-drift"

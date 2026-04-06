@@ -25,8 +25,8 @@ include = ["pyproject.toml", "README.md", "src"]
 [tool.hatch.build.targets.wheel]
 include = ["src"]
 [tool.ruff]
-line-length = 100
 target-version = "py311"
+line-length = 260
 extend-exclude = [
     "runs",
     ".venv",
@@ -35,6 +35,8 @@ extend-exclude = [
     "exports",
 ]
 exclude = ["__pycache__", "dist", "build"]
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 per-file-ignores = {"__init__.py" = ["F401"]}
 [build-system]

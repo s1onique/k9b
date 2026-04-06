@@ -472,7 +472,7 @@ def _propose_improvements(
             ProposedImprovement(
                 id="warning-event-threshold",
                 description=(
-                    f"Consider raising warning_event_threshold above {current} to ignore repeated warnings when pods remain healthy."
+                    f"Consider raising warning_event_threshold from {current} to {candidate} to ignore repeated warnings when pods remain healthy."
                 ),
                 target="health.trigger_policy.warning_event_threshold",
                 owner="platform engineer",

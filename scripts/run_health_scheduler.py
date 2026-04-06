@@ -14,7 +14,13 @@ PYTHON_BIN = ROOT / ".venv" / "bin" / "python"
 DEFAULT_CONFIG = Path("runs/health-config.local.json")
 DEFAULT_LOG = ROOT / "runs" / "health" / "scheduler.log"
 
-from k8s_diag_agent.structured_logging import emit_structured_log
+
+def _ensure_src_path_in_sys_path() -> None:
+    src_path = ROOT / "src"
+    src_str = str(src_path)
+    if src_str not in sys.path:
+        sys.path.insert(0, src_str)
+
 
 def _positive_int(value: str) -> int:
     ivalue = int(value)
@@ -59,6 +65,9 @@ def _append_log(
     severity: str = "INFO",
     metadata: dict[str, object] | None = None,
 ) -> None:
+    _ensure_src_path_in_sys_path()
+    from k8s_diag_agent.structured_logging import emit_structured_log
+
     extra = dict(metadata or {})
     label = str(extra.pop("run_label", extra.get("run_id") or "health-scheduler"))
     run_id = extra.pop("run_id", None)

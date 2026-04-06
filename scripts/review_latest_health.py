@@ -3,31 +3,71 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Mapping
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC_PATH = ROOT / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
-
-from k8s_diag_agent.health.drilldown_assessor import assess_drilldown_artifact
-from k8s_diag_agent.health.review import (
-    LatestRunSelection,
-    assessment_path_for_drilldown,
-    load_assessment,
-    select_latest_run,
-)
-from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
+from typing import TYPE_CHECKING
 
 DEFAULT_HEALTH_DIR = Path("runs/health")
 DEFAULT_HEALTH_CONFIG = Path("runs/health-config.local.json")
 HEALTH_CONFIG_FALLBACK = Path("runs/health-config.local.example.json")
-DEFAULT_PYTHON = ROOT / ".venv" / "bin" / "python"
+
+
+def _root_path() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _ensure_src_path_in_sys_path() -> None:
+    root = _root_path()
+    src_path = root / "src"
+    src_str = str(src_path)
+    if src_str not in sys.path:
+        sys.path.insert(0, src_str)
+
+
+if TYPE_CHECKING:
+    _ensure_src_path_in_sys_path()
+    from k8s_diag_agent.health.review import LatestRunSelection
+    from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
+
+
+def _missing_assess_drilldown_artifact(*args: object, **kwargs: object) -> None:
+    raise RuntimeError("LLM assessor helper not loaded; import failed or path not configured.")
+
+
+assess_drilldown_artifact: Callable[..., AssessorAssessment]
+assess_drilldown_artifact = _missing_assess_drilldown_artifact
+
+
+def _ensure_assess_drilldown_artifact() -> Callable[..., AssessorAssessment]:
+    global assess_drilldown_artifact
+    if assess_drilldown_artifact is _missing_assess_drilldown_artifact:
+        from k8s_diag_agent.health.drilldown_assessor import assess_drilldown_artifact as real_assess
+
+        assess_drilldown_artifact = real_assess
+    return assess_drilldown_artifact
+
+
+def _missing_review_helper(*args: object, **kwargs: object) -> object:
+    raise RuntimeError("Review helpers not loaded; import failure or missing path.")
+
+
+assessment_path_for_drilldown: Callable[..., Path] = _missing_review_helper  # type: ignore[assignment]
+load_assessment: Callable[..., AssessorAssessment | None] = _missing_review_helper  # type: ignore[assignment]
+select_latest_run: Callable[..., LatestRunSelection] = _missing_review_helper  # type: ignore[assignment]
+
+
+def _ensure_review_helpers() -> None:
+    global assessment_path_for_drilldown, load_assessment, select_latest_run
+    if assessment_path_for_drilldown is _missing_review_helper:
+        review_module = importlib.import_module("k8s_diag_agent.health.review")
+        assessment_path_for_drilldown = review_module.assessment_path_for_drilldown
+        load_assessment = review_module.load_assessment
+        select_latest_run = review_module.select_latest_run
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -53,11 +93,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _python_executable() -> Path:
-    if not DEFAULT_PYTHON.exists():
+    python_binary = _root_path() / ".venv" / "bin" / "python"
+    if not python_binary.exists():
         raise RuntimeError(
-            f"Python executable {DEFAULT_PYTHON} not found; activate or create .venv before running."
+            f"Python executable {python_binary} not found; activate or create .venv before running."
         )
-    return DEFAULT_PYTHON
+    return python_binary
 
 
 def _resolve_health_config(path: Path) -> Path:
@@ -144,6 +185,8 @@ def run_operator_review(
     env: Mapping[str, str] | None = None,
 ) -> int:
     env_source = os.environ if env is None else env
+    _ensure_src_path_in_sys_path()
+    _ensure_review_helpers()
     if run_health:
         try:
             config_path = _resolve_health_config(health_config)
@@ -169,7 +212,8 @@ def run_operator_review(
     if _has_llama_config(env_source):
         print("LLAMA_CPP config detected; running LLM drilldown assessment.")
         try:
-            assessment = assess_drilldown_artifact(candidate.artifact, provider_name="llamacpp")
+            assessor = _ensure_assess_drilldown_artifact()
+            assessment = assessor(candidate.artifact, provider_name="llamacpp")
         except Exception as exc:
             print(f"LLM assessment failed: {exc}", file=sys.stderr)
         else:

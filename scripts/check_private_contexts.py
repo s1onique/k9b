@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence, Set
-
 
 RUNTIME_CONFIG_PATHS = (
     Path("runs/run-config.local.json"),
@@ -32,8 +31,8 @@ def _normalize_name(value: object | None) -> str | None:
     return text if text else None
 
 
-def _extract_targets(raw: dict[str, object]) -> Set[str]:
-    contexts: Set[str] = set()
+def _extract_targets(raw: dict[str, object]) -> set[str]:
+    contexts: set[str] = set()
     for entry in raw.get("targets", []):
         if not isinstance(entry, dict):
             continue
@@ -46,8 +45,8 @@ def _extract_targets(raw: dict[str, object]) -> Set[str]:
     return contexts
 
 
-def _extract_pairs(raw: dict[str, object]) -> Set[str]:
-    contexts: Set[str] = set()
+def _extract_pairs(raw: dict[str, object]) -> set[str]:
+    contexts: set[str] = set()
     for entry in raw.get("pairs", []):
         if not isinstance(entry, dict):
             continue
@@ -60,8 +59,8 @@ def _extract_pairs(raw: dict[str, object]) -> Set[str]:
     return contexts
 
 
-def _gather_private_contexts() -> Set[str]:
-    result: Set[str] = set()
+def _gather_private_contexts() -> set[str]:
+    result: set[str] = set()
     for path in RUNTIME_CONFIG_PATHS:
         if not path.exists():
             continue
@@ -76,8 +75,8 @@ def _gather_private_contexts() -> Set[str]:
     return result
 
 
-def _gather_snapshot_contexts() -> Set[str]:
-    contexts: Set[str] = set()
+def _gather_snapshot_contexts() -> set[str]:
+    contexts: set[str] = set()
     for directory in SNAPSHOT_DIRECTORIES:
         if not directory.exists():
             continue
@@ -110,7 +109,7 @@ def _is_snapshot_path(raw_path: str) -> bool:
     return False
 
 
-def _check_files(files: Iterable[str], banned_contexts: Set[str]) -> list[str]:
+def _check_files(files: Iterable[str], banned_contexts: set[str]) -> list[str]:
     problems: list[str] = []
     banned_paths = {str(path) for path in RUNTIME_CONFIG_PATHS}
     for raw_path in files:

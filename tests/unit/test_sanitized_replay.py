@@ -5,10 +5,6 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
-from tests.path_helper import ensure_src_in_path
-
-ensure_src_in_path()
-
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.feedback.runner import run_feedback_loop
 

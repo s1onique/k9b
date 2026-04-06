@@ -1,10 +1,6 @@
 import unittest
 from pathlib import Path
 
-from tests.path_helper import ensure_src_in_path
-
-ensure_src_in_path()
-
 from k8s_diag_agent.cli import _SUBCOMMANDS, build_parser
 
 

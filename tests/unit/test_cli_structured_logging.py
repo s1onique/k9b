@@ -5,10 +5,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.path_helper import ensure_src_in_path
-
-ensure_src_in_path()
-
 from k8s_diag_agent.cli_handlers import (
     handle_batch_snapshot,
     handle_compare,

@@ -2,24 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class SafetyLevel(str, Enum):
+class SafetyLevel(StrEnum):
     OBSERVE_ONLY = "observe-only"
     LOW_RISK = "low-risk"
     CHANGE_WITH_CAUTION = "change-with-caution"
     POTENTIALLY_DISRUPTIVE = "potentially-disruptive"
 
 
-class Layer(str, Enum):
+class Layer(StrEnum):
     WORKLOAD = "workload"
     NODE = "node"
     STORAGE = "storage"

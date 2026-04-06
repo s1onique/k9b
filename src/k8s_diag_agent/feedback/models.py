@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from ..models import ConfidenceLevel
 
 
-class FailureMode(str, Enum):
+class FailureMode(StrEnum):
     MISSING_EVIDENCE = "missing_evidence"
     FALSE_CERTAINTY = "false_certainty"
     VALIDATION_FAILURE = "validation_failure"

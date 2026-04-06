@@ -4,10 +4,6 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tests.path_helper import ensure_src_in_path
-
-ensure_src_in_path()
-
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
     WarningEventSummary,

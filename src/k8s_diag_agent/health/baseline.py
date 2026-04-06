@@ -6,14 +6,14 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from .utils import normalize_ref
 
 
-class BaselineDriftCategory(str, Enum):
+class BaselineDriftCategory(StrEnum):
     CONTROL_PLANE_VERSION = "control_plane_version"
     WATCHED_HELM_RELEASE = "watched_helm_release"
     WATCHED_CRD = "watched_crd"

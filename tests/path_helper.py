@@ -7,3 +7,6 @@ def ensure_src_in_path() -> None:
     src = str(src_path)
     if src not in sys.path:
         sys.path.insert(0, src)
+
+
+ensure_src_in_path()

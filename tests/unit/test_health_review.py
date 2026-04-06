@@ -9,10 +9,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from tests.path_helper import ensure_src_in_path
-
-ensure_src_in_path()
-
 from k8s_diag_agent.health.drilldown import DrilldownArtifact, DrilldownPod
 from k8s_diag_agent.health.review import (
     DrilldownCandidate,
@@ -91,7 +87,8 @@ class HealthReviewLogicTest(unittest.TestCase):
 
     def test_top_drilldown_ranking_prefers_severity(self) -> None:
         ts = datetime.now(UTC)
-        pods = lambda phase, reason: [DrilldownPod(namespace="ns", name="pod", phase=phase, reason=reason)]
+        def pods(phase: str, reason: str) -> list[DrilldownPod]:
+            return [DrilldownPod(namespace="ns", name="pod", phase=phase, reason=reason)]
         candidates = [
             DrilldownCandidate(Path("image.json"), _make_artifact("run", ts, "image", ("ImagePullBackOff",), pods("pending", "ImagePullBackOff"))),
             DrilldownCandidate(Path("crash.json"), _make_artifact("run", ts, "crash", ("CrashLoopBackOff",), pods("running", "CrashLoopBackOff"))),

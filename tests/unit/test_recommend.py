@@ -1,9 +1,5 @@
 import unittest
 
-from tests.path_helper import ensure_src_in_path
-
-ensure_src_in_path()
-
 from k8s_diag_agent.models import ConfidenceLevel, Hypothesis, Layer
 from k8s_diag_agent.recommend.next_steps import build_recommended_action, propose_next_steps
 

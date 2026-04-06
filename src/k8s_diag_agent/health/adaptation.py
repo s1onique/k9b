@@ -8,7 +8,7 @@ from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -27,7 +27,7 @@ _RELEASE_DRIFT_RE = re.compile(r"watched Helm release (?P<release>[^\s]+) drift"
 _CRD_DRIFT_RE = re.compile(r"watched CRD (?P<family>[^\s]+) storage drift", re.IGNORECASE)
 
 
-class ProposalLifecycleStatus(str, Enum):
+class ProposalLifecycleStatus(StrEnum):
     PROPOSED = "proposed"
     REPLAYED = "replayed"
     ACCEPTED = "accepted"
