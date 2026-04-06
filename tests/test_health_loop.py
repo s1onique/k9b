@@ -62,9 +62,10 @@ class HealthLoopTests(unittest.TestCase):
             shutil.rmtree(self.tmp_dir)
 
     class _StubDrilldownCollector(DrilldownCollector):
-        def __init__(self) -> None:
+        def __init__(self, non_running_pods: Sequence[DrilldownPod] | None = None) -> None:
             super().__init__(command_runner=lambda command: "{}")
             self.calls: list[tuple[str, tuple[str, ...]]] = []
+            self._non_running_pods: tuple[DrilldownPod, ...] = tuple(non_running_pods) if non_running_pods else ()
 
         def collect(
             self,
@@ -77,7 +78,7 @@ class HealthLoopTests(unittest.TestCase):
             self.calls.append((context, tuple(namespaces)))
             return DrilldownEvidence(
                 warning_events=(),
-                non_running_pods=(),
+                non_running_pods=self._non_running_pods,
                 pod_descriptions={},
                 rollouts=(),
                 affected_namespaces=tuple(namespaces or ("default",)),
@@ -974,6 +975,68 @@ class HealthLoopTests(unittest.TestCase):
         self.assertTrue(drilldowns)
         self.assertIn("probe_failure", drilldowns[0].trigger_reasons)
         self.assertIn("probe_failure", drilldowns[0].pattern_details)
+
+    def test_ui_index_serializes_drilldown_pods(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-ui",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 1,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                    "completed_job_pods": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+
+        def collector(context: str) -> ClusterSnapshot:
+            return snapshots[context]
+
+        target = HealthTarget(
+            context="cluster-ui",
+            label="cluster-ui",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        config = HealthRunConfig(
+            run_label="ui-index",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+        )
+        pods = (
+            DrilldownPod(
+                namespace="default",
+                name="app-ui",
+                phase="pending",
+                reason="CrashLoopBackOff",
+            ),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=collector,
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(non_running_pods=pods),
+        )
+        runner.execute()
+        index_path = self.tmp_dir / "health" / "ui-index.json"
+        self.assertTrue(index_path.exists())
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["run"]["drilldown_count"], 1)
+        drilldown_entry = payload["drilldowns"][0]
+        self.assertEqual(drilldown_entry["non_running_pods"][0]["name"], "app-ui")
 
     def test_build_health_assessment_crashloop_backoff_degrades(self) -> None:
         snapshot = self._make_snapshot(

@@ -62,15 +62,18 @@ def _serialize_cluster(
 
 
 def _serialize_drilldown(artifact: DrilldownArtifact, root_dir: Path) -> dict[str, object]:
+    pod_entries = [pod.to_dict() for pod in artifact.non_running_pods]
+    rollout_entries = [entry.to_dict() for entry in artifact.rollout_status]
     return {
         "label": artifact.label,
         "context": artifact.context,
         "cluster_id": artifact.cluster_id,
         "trigger_reasons": list(artifact.trigger_reasons),
+        "missing_evidence": list(artifact.missing_evidence),
         "warning_events": len(artifact.warning_events),
-        "non_running_pods": artifact.non_running_pods,
+        "non_running_pods": pod_entries,
         "summary": artifact.evidence_summary,
-        "rollout_status": artifact.rollout_status,
+        "rollout_status": rollout_entries,
         "pattern_details": artifact.pattern_details,
         "artifact_path": _relative_path(root_dir, artifact.artifact_path),
     }

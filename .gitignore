@@ -66,3 +66,23 @@ runs/health-baseline.local.json
 
 .kilo
 .hypothesis/
+
+# Frontend build output
+frontend/dist/
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Frontend local env files
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Frontend tool caches
+frontend/.vite/
+frontend/.cache/
+
+# Optional coverage output
+frontend/coverage/
