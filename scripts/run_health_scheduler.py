@@ -7,7 +7,6 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +14,7 @@ PYTHON_BIN = ROOT / ".venv" / "bin" / "python"
 DEFAULT_CONFIG = Path("runs/health-config.local.json")
 DEFAULT_LOG = ROOT / "runs" / "health" / "scheduler.log"
 
+from k8s_diag_agent.structured_logging import emit_structured_log
 
 def _positive_int(value: str) -> int:
     ivalue = int(value)
@@ -59,18 +59,18 @@ def _append_log(
     severity: str = "INFO",
     metadata: dict[str, object] | None = None,
 ) -> None:
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    DEFAULT_LOG.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "timestamp": timestamp,
-        "component": "health-scheduler",
-        "severity": severity.upper(),
-        "message": message,
-    }
-    if metadata:
-        entry.update(metadata)
-    with DEFAULT_LOG.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, separators=(',', ':')) + "\n")
+    extra = dict(metadata or {})
+    label = str(extra.pop("run_label", extra.get("run_id") or "health-scheduler"))
+    run_id = extra.pop("run_id", None)
+    emit_structured_log(
+        component="health-scheduler",
+        message=message,
+        severity=severity,
+        run_label=label,
+        run_id=run_id,
+        log_path=DEFAULT_LOG,
+        metadata=extra,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -16,6 +16,7 @@ from .assessor_schema import (
 )
 from .base import LLMAssessmentInput, LLMProvider
 from .llamacpp_provider import LlamaCppProvider
+from ..security import sanitize_payload
 
 
 class DefaultLLMProvider(LLMProvider):
@@ -118,12 +119,14 @@ def build_assessment_input(
     else:
         metadata_payload = None
     return LLMAssessmentInput(
-        primary_snapshot=primary.to_dict(),
-        secondary_snapshot=secondary.to_dict(),
-        comparison={"differences": comparison.differences},
-        comparison_metadata=metadata_payload,
-        collection_statuses={
-            "primary": primary.collection_status.to_dict(),
-            "secondary": secondary.collection_status.to_dict(),
-        },
+        primary_snapshot=sanitize_payload(primary.to_dict()),
+        secondary_snapshot=sanitize_payload(secondary.to_dict()),
+        comparison=sanitize_payload({"differences": comparison.differences}),
+        comparison_metadata=sanitize_payload(metadata_payload) if metadata_payload else None,
+        collection_statuses=sanitize_payload(
+            {
+                "primary": primary.collection_status.to_dict(),
+                "secondary": secondary.collection_status.to_dict(),
+            }
+        ),
     )

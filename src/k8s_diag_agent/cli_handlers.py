@@ -36,6 +36,7 @@ from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .reason.diagnoser import build_findings_and_hypotheses
 from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .health.summary import format_health_summary, gather_health_summary
+from .structured_logging import emit_structured_log
 
 
 DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
@@ -308,6 +309,17 @@ def handle_check_proposal(args: argparse.Namespace) -> int:
         print(f"Unable to read proposal: {exc}", file=sys.stderr)
         return 1
     evaluation = evaluate_proposal(proposal, args.fixture)
+    run_label = proposal.source_run_id or proposal.proposal_id
+    emit_structured_log(
+        component="review-assessment",
+        severity="INFO",
+        message="Proposal replayed",
+        run_label=run_label,
+        run_id=proposal.source_run_id or None,
+        proposal_id=proposal.proposal_id,
+        artifact_path=str(args.proposal),
+        event="proposal-replay",
+    )
     print(f"Proposal: {proposal.proposal_id}")
     print(f"  Likely noise reduction: {evaluation.noise_reduction}")
     print(f"  Possible signal loss: {evaluation.signal_loss}")
@@ -350,6 +362,17 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     )
     if updated is not proposal:
         args.proposal.write_text(json.dumps(updated.to_dict(), indent=2), encoding="utf-8")
+    run_label = proposal.source_run_id or proposal.proposal_id
+    emit_structured_log(
+        component="proposal-promotion",
+        severity="INFO",
+        message="Promotion patch written",
+        run_label=run_label,
+        run_id=proposal.source_run_id or None,
+        proposal_id=proposal.proposal_id,
+        artifact_path=str(patch_path),
+        event="promotion",
+    )
     print(f"Promotion patch written to '{patch_path}'")
     return 0
 

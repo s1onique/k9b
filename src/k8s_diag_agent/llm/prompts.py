@@ -7,7 +7,8 @@ from textwrap import dedent
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..collect.cluster_snapshot import ClusterSnapshot
-from ..compare.two_cluster import ClusterComparison, ComparisonIntentMetadata
+from ..compare.two_cluster import ComparisonIntentMetadata, ClusterComparison
+from ..security import sanitize_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -261,10 +262,11 @@ def build_assessment_prompt(
         comparison_context=_describe_comparison_context(intent_metadata),
         intent_guidance=_build_intent_guidance(intent_metadata),
     )
+    sanitized = sanitize_prompt(prompt)
     logger.info(
         "LLM prompt prepared: helm_diffs=%d, crd_diffs=%d, prompt_chars=%d",
         len(helm_summary),
         len(crd_summary),
-        len(prompt),
+        len(sanitized),
     )
-    return prompt
+    return sanitized

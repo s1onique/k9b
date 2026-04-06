@@ -6,6 +6,7 @@ from textwrap import dedent
 from typing import Dict, List
 
 from ..health.drilldown import DrilldownArtifact
+from ..security import sanitize_prompt
 
 
 def _format_table(items: List[str], header: str) -> str:
@@ -130,4 +131,4 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
         collection_timestamps=json.dumps(artifact.collection_timestamps, indent=2),
         pod_descriptions=_summarize_descriptions(artifact.pod_descriptions),
     )
-    return prompt
+    return sanitize_prompt(prompt)
