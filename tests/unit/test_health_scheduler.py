@@ -26,6 +26,7 @@ class HealthSchedulerTests(unittest.TestCase):
             config_path=self.config_path,
             manual_triggers=(),
             manual_drilldown_contexts=(),
+            manual_external_analysis=(),
             quiet=True,
             interval_seconds=interval_seconds,
             max_runs=max_runs,
@@ -41,7 +42,7 @@ class HealthSchedulerTests(unittest.TestCase):
         ), patch("k8s_diag_agent.health.loop.run_health_loop") as run_mock, patch(
             "k8s_diag_agent.health.loop.time.sleep"
         ):
-            run_mock.return_value = (0, [], [], [])
+            run_mock.return_value = (0, [], [], [], [])
             exit_code = scheduler.run()
         self.assertEqual(exit_code, 0)
         self.assertEqual(run_mock.call_count, 3)

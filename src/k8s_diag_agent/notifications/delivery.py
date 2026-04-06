@@ -46,6 +46,14 @@ class DeliveryJournal:
         entry = self.records.get(artifact_name)
         return bool(entry and entry.get("status") == "sent" and entry.get("hash") == digest)
 
+    def needs_delivery(self, artifact_name: str, digest: str) -> bool:
+        entry = self.records.get(artifact_name)
+        if not entry:
+            return True
+        if entry.get("hash") != digest:
+            return True
+        return entry.get("status") != "sent"
+
     def record_result(
         self,
         artifact_name: str,

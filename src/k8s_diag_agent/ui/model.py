@@ -18,6 +18,8 @@ class RunView:
     cluster_count: int
     drilldown_count: int
     proposal_count: int
+    external_analysis_count: int
+    notification_count: int
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,55 @@ class ProposalView:
 
 
 @dataclass(frozen=True)
+class DrilldownCoverageEntry:
+    label: str
+    context: str
+    available: bool
+    timestamp: str | None
+    artifact_path: str | None
+
+
+@dataclass(frozen=True)
+class DrilldownAvailabilityView:
+    total_clusters: int
+    available: int
+    missing: int
+    missing_clusters: tuple[str, ...]
+    coverage: tuple[DrilldownCoverageEntry, ...]
+
+
+@dataclass(frozen=True)
+class NotificationView:
+    kind: str
+    summary: str
+    timestamp: str
+    run_id: str | None
+    cluster_label: str | None
+    context: str | None
+    details: tuple[tuple[str, str], ...]
+    artifact_path: str | None
+
+
+@dataclass(frozen=True)
+class ExternalAnalysisView:
+    tool_name: str
+    cluster_label: str | None
+    status: str
+    summary: str | None
+    findings: tuple[str, ...]
+    suggested_next_checks: tuple[str, ...]
+    timestamp: str
+    artifact_path: str | None
+
+
+@dataclass(frozen=True)
+class ExternalAnalysisSummary:
+    count: int
+    status_counts: tuple[tuple[str, int], ...]
+    artifacts: tuple[ExternalAnalysisView, ...]
+
+
+@dataclass(frozen=True)
 class FindingsView:
     label: str | None
     context: str | None
@@ -86,6 +137,9 @@ class UIIndexContext:
     latest_findings: FindingsView | None
     fleet_status: FleetStatusSummary
     proposal_status_summary: ProposalStatusSummary
+    drilldown_availability: DrilldownAvailabilityView
+    notification_history: tuple[NotificationView, ...]
+    external_analysis: ExternalAnalysisSummary
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -104,6 +158,8 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         cluster_count=_coerce_int(run_data.get("cluster_count")),
         drilldown_count=_coerce_int(run_data.get("drilldown_count")),
         proposal_count=_coerce_int(run_data.get("proposal_count")),
+        external_analysis_count=_coerce_int(run_data.get("external_analysis_count")),
+        notification_count=_coerce_int(run_data.get("notification_count")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -119,6 +175,9 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     latest_findings = _build_findings(index.get("latest_drilldown"))
     fleet_status = _build_fleet_status(index.get("fleet_status"))
     proposal_status_summary = _build_proposal_status_summary(index.get("proposal_status_summary"))
+    drilldown_availability = _build_drilldown_availability(index.get("drilldown_availability"))
+    notification_history = _build_notification_history(index.get("notification_history"))
+    external_analysis = _build_external_analysis(index.get("external_analysis"))
     return UIIndexContext(
         run=run,
         clusters=clusters,
@@ -126,6 +185,9 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         latest_findings=latest_findings,
         fleet_status=fleet_status,
         proposal_status_summary=proposal_status_summary,
+        drilldown_availability=drilldown_availability,
+        notification_history=notification_history,
+        external_analysis=external_analysis,
     )
 
 
@@ -293,3 +355,107 @@ def _stringify(value: object | None) -> str:
         return json.dumps(value, ensure_ascii=False)
     except TypeError:
         return str(value)
+
+
+def _build_drilldown_availability(raw: object | None) -> DrilldownAvailabilityView:
+    if not isinstance(raw, Mapping):
+        return DrilldownAvailabilityView(
+            total_clusters=0,
+            available=0,
+            missing=0,
+            missing_clusters=(),
+            coverage=(),
+        )
+    coverage_raw = raw.get("coverage") or ()
+    coverage = tuple(
+        _build_drilldown_coverage(entry)
+        for entry in coverage_raw
+        if isinstance(entry, Mapping)
+    )
+    return DrilldownAvailabilityView(
+        total_clusters=_coerce_int(raw.get("total_clusters")),
+        available=_coerce_int(raw.get("available")),
+        missing=_coerce_int(raw.get("missing")),
+        missing_clusters=_coerce_sequence(raw.get("missing_clusters")),
+        coverage=coverage,
+    )
+
+
+def _build_drilldown_coverage(raw: Mapping[str, object]) -> DrilldownCoverageEntry:
+    return DrilldownCoverageEntry(
+        label=_coerce_str(raw.get("label")),
+        context=_coerce_str(raw.get("context")),
+        available=bool(raw.get("available")),
+        timestamp=_coerce_optional_str(raw.get("timestamp")),
+        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
+    )
+
+
+def _build_notification_history(raw: object | None) -> tuple[NotificationView, ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    entries: list[NotificationView] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append(
+            NotificationView(
+                kind=_coerce_str(entry.get("kind")),
+                summary=_coerce_str(entry.get("summary")),
+                timestamp=_coerce_str(entry.get("timestamp")),
+                run_id=_coerce_optional_str(entry.get("run_id")),
+                cluster_label=_coerce_optional_str(entry.get("cluster_label")),
+                context=_coerce_optional_str(entry.get("context")),
+                details=_build_notification_details(entry.get("details")),
+                artifact_path=_coerce_optional_str(entry.get("artifact_path")),
+            )
+        )
+    return tuple(entries)
+
+
+def _build_notification_details(raw: object | None) -> tuple[tuple[str, str], ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    details: list[tuple[str, str]] = []
+    for detail in raw:
+        if not isinstance(detail, Mapping):
+            continue
+        label = _coerce_str(detail.get("label"))
+        value = _coerce_str(detail.get("value"))
+        details.append((label, value))
+    return tuple(details)
+
+
+def _build_external_analysis(raw: object | None) -> ExternalAnalysisSummary:
+    if not isinstance(raw, Mapping):
+        return ExternalAnalysisSummary(count=0, status_counts=(), artifacts=())
+    status_counts_raw = raw.get("status_counts") or ()
+    status_counts = tuple(
+        (_coerce_str(entry.get("status")), _coerce_int(entry.get("count")))
+        for entry in status_counts_raw
+        if isinstance(entry, Mapping)
+    )
+    artifacts_raw = raw.get("artifacts") or ()
+    artifacts = tuple(
+        _build_external_analysis_view(entry)
+        for entry in artifacts_raw
+        if isinstance(entry, Mapping)
+    )
+    return ExternalAnalysisSummary(
+        count=_coerce_int(raw.get("count")),
+        status_counts=status_counts,
+        artifacts=artifacts,
+    )
+
+
+def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysisView:
+    return ExternalAnalysisView(
+        tool_name=_coerce_str(raw.get("tool_name")),
+        cluster_label=_coerce_optional_str(raw.get("cluster_label")),
+        status=_coerce_str(raw.get("status")),
+        summary=_coerce_optional_str(raw.get("summary")),
+        findings=_coerce_sequence(raw.get("findings")),
+        suggested_next_checks=_coerce_sequence(raw.get("suggested_next_checks")),
+        timestamp=_coerce_str(raw.get("timestamp")),
+        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
+    )

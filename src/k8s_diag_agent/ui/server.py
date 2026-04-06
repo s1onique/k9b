@@ -13,8 +13,13 @@ from urllib.parse import parse_qs, quote
 
 from .model import (
     ClusterView,
+    DrilldownAvailabilityView,
+    DrilldownCoverageEntry,
+    ExternalAnalysisSummary,
+    ExternalAnalysisView,
     FindingsView,
     FleetStatusSummary,
+    NotificationView,
     ProposalStatusSummary,
     ProposalView,
     RunView,
@@ -182,6 +187,96 @@ th, td {
   font-size: 0.85rem;
   color: rgba(148, 163, 184, 0.9);
 }
+
+.drilldown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.drilldown-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.drilldown-card.available {
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+.drilldown-card.missing {
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.drilldown-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.95rem;
+}
+
+.notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.notification-entry {
+  background: rgba(30, 41, 59, 0.85);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  padding: 0.95rem 1rem;
+}
+
+.notification-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.notification-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.notification-details {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.notification-artifact {
+  margin-top: 0.5rem;
+}
+
+.external-analysis-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.external-analysis-entry {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  padding-bottom: 0.5rem;
+}
+
+.external-analysis-entry:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
 """
 
 
@@ -288,6 +383,9 @@ def _render_html(context: UIIndexContext) -> str:
     status_summary = _render_status_cards(context.fleet_status)
     degraded_hint = _render_degraded_hint(context.fleet_status)
     proposal_badges = _render_proposal_status_badges(context.proposal_status_summary)
+    drilldown_section = _render_drilldown_section(context.drilldown_availability)
+    notification_section = _render_notification_history(context.notification_history)
+    external_analysis_section = _render_external_analysis_section(context.external_analysis)
     return f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -340,9 +438,27 @@ def _render_html(context: UIIndexContext) -> str:
       </div>
     </section>
     <section class="panel">
+      <h2>Drilldown Availability</h2>
+      <div class="card">
+        {drilldown_section}
+      </div>
+    </section>
+    <section class="panel">
       <h2>Latest Findings</h2>
       <div class="card">
         {findings_html}
+      </div>
+    </section>
+    <section class="panel">
+      <h2>External Analysis</h2>
+      <div class="card">
+        {external_analysis_section}
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Notification History</h2>
+      <div class="card">
+        {notification_section}
       </div>
     </section>
     <section class="panel">
@@ -383,6 +499,8 @@ def _render_run_card(run: RunView) -> str:
         ("Clusters", str(run.cluster_count)),
         ("Drilldowns", str(run.drilldown_count)),
         ("Proposals", str(run.proposal_count)),
+        ("External Analysis", str(run.external_analysis_count)),
+        ("Notifications", str(run.notification_count)),
     ]
     cards = "".join(f"<div class=\"card\"><strong>{html.escape(label)}</strong><p>{html.escape(value)}</p></div>" for label, value in items)
     return cards
@@ -521,6 +639,95 @@ def _render_artifact_link(label: str, path: str | None) -> str:
         return f"<span class=\"artifact-missing\">{html.escape(label)}</span>"
     href = _artifact_href(path)
     return f"<a href=\"{html.escape(href)}\" class=\"artifact-link\" target=\"_blank\" rel=\"noopener\">{html.escape(label)}</a>"
+
+
+def _render_drilldown_section(availability: DrilldownAvailabilityView) -> str:
+    if not availability.coverage:
+        return '<p class="small">No drilldowns captured yet.</p>'
+    cards = "".join(_render_drilldown_card(entry) for entry in availability.coverage)
+    summary = (
+        f'<p class="small">{availability.available}/{availability.total_clusters} clusters have drilldowns.</p>'
+    )
+    if availability.missing_clusters:
+        missing = ", ".join(html.escape(label) for label in availability.missing_clusters)
+        summary += f'<p class="small">Missing drilldowns: {missing}</p>'
+    return f"<div class=\"drilldown-grid\">{cards}</div>{summary}"
+
+
+def _render_drilldown_card(entry: DrilldownCoverageEntry) -> str:
+    status = "Ready" if entry.available else "Missing"
+    status_class = "available" if entry.available else "missing"
+    timestamp = html.escape(entry.timestamp) if entry.timestamp else "pending"
+    artifact_link = _render_artifact_link("View drilldown", entry.artifact_path)
+    return f"""
+    <div class="drilldown-card {status_class}">
+      <div class="drilldown-card-head">
+        <strong>{html.escape(entry.label)}</strong>
+        <span>{status}</span>
+      </div>
+      <p class="small">Context: {html.escape(entry.context)}</p>
+      <p class="small">Captured: {timestamp}</p>
+      <div class="artifact-links">{artifact_link}</div>
+    </div>
+    """
+
+
+def _render_notification_history(notifications: tuple[NotificationView, ...]) -> str:
+    if not notifications:
+        return '<p class="small">No notifications recorded for this run.</p>'
+    entries = "".join(_render_notification_entry(entry) for entry in notifications)
+    return f"<ul class=\"notification-list\">{entries}</ul>"
+
+
+def _render_notification_entry(entry: NotificationView) -> str:
+    details = "".join(
+        f"<li><strong>{html.escape(label)}</strong>: {html.escape(value)}</li>"
+        for label, value in entry.details
+    ) or "<li>-</li>"
+    artifact_link = _render_artifact_link("View notification", entry.artifact_path)
+    return f"""
+    <li class="notification-entry">
+      <div class="notification-head">
+        <span class="status-pill {_make_status_class(entry.kind)}">{html.escape(entry.kind)}</span>
+        <strong>{html.escape(entry.summary)}</strong>
+        <span class="small">{html.escape(entry.timestamp)}</span>
+      </div>
+      <div class="notification-meta">
+        <span>Run: {html.escape(entry.run_id or "-")}</span>
+        <span>Cluster: {html.escape(entry.cluster_label or "-")}</span>
+        <span>Context: {html.escape(entry.context or "-")}</span>
+      </div>
+      <ul class="notification-details">{details}</ul>
+      <div class="notification-artifact">{artifact_link}</div>
+    </li>
+    """
+
+
+def _render_external_analysis_section(summary: ExternalAnalysisSummary) -> str:
+    if not summary.artifacts:
+        return '<p class="small">External analysis not executed for this run.</p>'
+    badges = "".join(
+        f"<span class=\"status-pill {_make_status_class(status)}\">{html.escape(status)} ({count})</span>"
+        for status, count in summary.status_counts
+    )
+    entries = "".join(_render_external_analysis_entry(entry) for entry in summary.artifacts)
+    return f"<div class=\"status-badges\">{badges}</div><ul class=\"external-analysis-list\">{entries}</ul>"
+
+
+def _render_external_analysis_entry(entry: ExternalAnalysisView) -> str:
+    details = entry.findings + entry.suggested_next_checks
+    detail_lines = "".join(f"<li>{html.escape(value)}</li>" for value in details) or "<li>-</li>"
+    artifact_link = _render_artifact_link("View output", entry.artifact_path)
+    return f"""
+    <li class="external-analysis-entry">
+      <strong>{html.escape(entry.tool_name)}</strong>
+      <span class="small">{html.escape(entry.cluster_label or "")}</span>
+      <p>{html.escape(entry.summary or "-")}</p>
+      <p class="small">Status: {html.escape(entry.status)}, Captured: {html.escape(entry.timestamp)}</p>
+      <ul class="notification-details">{detail_lines}</ul>
+      <div class="notification-artifact">{artifact_link}</div>
+    </li>
+    """
 
 
 def _artifact_href(path: str) -> str:

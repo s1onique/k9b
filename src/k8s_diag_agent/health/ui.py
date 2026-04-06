@@ -8,7 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from .adaptation import HealthProposal
+from .notifications import NotificationArtifact
 
 if TYPE_CHECKING:
     from .loop import DrilldownArtifact, HealthAssessmentArtifact, HealthSnapshotRecord
@@ -26,7 +28,12 @@ def _serialize_cluster(
     snapshot_path = _relative_path(root_dir, record.path)
     assessment_path = _relative_path(root_dir, assessment.artifact_path if assessment else None)
     drilldown = drilldown_map.get(record.target.label)
-    drilldown_path = _relative_path(root_dir, drilldown.artifact_path if drilldown else None)
+    if drilldown:
+        drilldown_path = _relative_path(root_dir, drilldown.artifact_path)
+        drilldown_timestamp = drilldown.timestamp.isoformat()
+    else:
+        drilldown_path = None
+        drilldown_timestamp = None
     return {
         "label": record.target.label,
         "context": record.target.context,
@@ -45,6 +52,8 @@ def _serialize_cluster(
             "assessment": assessment_path,
             "drilldown": drilldown_path,
         },
+        "drilldown_available": bool(drilldown),
+        "drilldown_timestamp": drilldown_timestamp,
     }
 
 
@@ -79,6 +88,9 @@ def _serialize_proposal(proposal: HealthProposal, root_dir: Path) -> dict[str, o
     }
 
 
+NotificationRecord = tuple[NotificationArtifact, Path]
+
+
 def write_health_ui_index(
     output_dir: Path,
     run_id: str,
@@ -88,6 +100,8 @@ def write_health_ui_index(
     assessments: Sequence[HealthAssessmentArtifact],
     drilldowns: Sequence[DrilldownArtifact],
     proposals: Sequence[HealthProposal],
+    external_analysis: Sequence[ExternalAnalysisArtifact] = (),
+    notifications: Sequence[NotificationRecord] = (),
 ) -> Path:
     assessment_map = {artifact.label: artifact for artifact in assessments}
     drilldown_map = _latest_drilldown_map(drilldowns)
@@ -101,6 +115,9 @@ def write_health_ui_index(
     ]
     latest_drilldown = drilldown_entries[0] if drilldown_entries else None
     proposals_data = [_serialize_proposal(proposal, output_dir) for proposal in proposals]
+    drilldown_availability = _serialize_drilldown_availability(records, drilldown_map, output_dir)
+    external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
+    notification_history = _serialize_notification_history(notifications, output_dir)
     index = {
         "run": {
             "run_id": run_id,
@@ -110,6 +127,8 @@ def write_health_ui_index(
             "cluster_count": len(clusters),
             "drilldown_count": len(drilldowns),
             "proposal_count": len(proposals_data),
+            "external_analysis_count": external_analysis_data.get("count", 0),
+            "notification_count": len(notifications),
         },
         "fleet_status": _serialize_fleet_status(clusters),
         "clusters": clusters,
@@ -117,6 +136,9 @@ def write_health_ui_index(
         "latest_drilldown": latest_drilldown,
         "proposal_status_summary": _serialize_proposal_status_summary(proposals_data),
         "proposals": proposals_data,
+        "drilldown_availability": drilldown_availability,
+        "notification_history": notification_history,
+        "external_analysis": external_analysis_data,
     }
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,6 +174,8 @@ _PROPOSAL_STATUS_ORDER = (
     "replayed",
     "promoted",
 )
+_ANALYSIS_STATUS_ORDER = tuple(status.value for status in ExternalAnalysisStatus)
+_NOTIFICATION_HISTORY_LIMIT = 20
 
 
 def _serialize_fleet_status(clusters: Sequence[dict[str, object]]) -> dict[str, object]:
@@ -191,3 +215,114 @@ def _serialize_proposal_status_summary(proposals: Sequence[dict[str, object]]) -
             continue
         ordered.append({"status": status, "count": count})
     return {"status_counts": ordered}
+
+
+def _serialize_drilldown_availability(
+    records: Sequence[HealthSnapshotRecord],
+    drilldown_map: Mapping[str, DrilldownArtifact],
+    root_dir: Path,
+) -> dict[str, object]:
+    coverage: list[dict[str, object]] = []
+    available = 0
+    missing_labels: list[str] = []
+    for record in sorted(records, key=lambda item: item.target.label):
+        artifact = drilldown_map.get(record.target.label)
+        if artifact:
+            available += 1
+            timestamp = artifact.timestamp.isoformat()
+            path = _relative_path(root_dir, artifact.artifact_path)
+            available_flag = True
+        else:
+            timestamp = None
+            path = None
+            missing_labels.append(record.target.label)
+            available_flag = False
+        coverage.append(
+            {
+                "label": record.target.label,
+                "context": record.target.context,
+                "available": available_flag,
+                "timestamp": timestamp,
+                "artifact_path": path,
+            }
+        )
+    total = len(records)
+    return {
+        "total_clusters": total,
+        "available": available,
+        "missing": max(total - available, 0),
+        "coverage": coverage,
+        "missing_clusters": missing_labels,
+    }
+
+
+def _serialize_external_analysis(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    root_dir: Path,
+) -> dict[str, object]:
+    entries: list[dict[str, object]] = []
+    counts: dict[str, int] = {}
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
+        status = artifact.status.value
+        counts[status] = counts.get(status, 0) + 1
+        entries.append(
+            {
+                "tool_name": artifact.tool_name,
+                "cluster_label": artifact.cluster_label,
+                "status": status,
+                "summary": artifact.summary,
+                "findings": list(artifact.findings),
+                "suggested_next_checks": list(artifact.suggested_next_checks),
+                "timestamp": artifact.timestamp.isoformat(),
+                "artifact_path": _relative_path(root_dir, artifact.artifact_path),
+            }
+        )
+    status_counts: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for status in _ANALYSIS_STATUS_ORDER:
+        if status in counts:
+            status_counts.append({"status": status, "count": counts[status]})
+            seen.add(status)
+    for status, count in sorted(counts.items()):
+        if status in seen:
+            continue
+        status_counts.append({"status": status, "count": count})
+    return {"count": len(entries), "status_counts": status_counts, "artifacts": entries}
+
+
+def _serialize_notification_history(
+    records: Sequence[NotificationRecord],
+    root_dir: Path,
+    limit: int = _NOTIFICATION_HISTORY_LIMIT,
+) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    sorted_records = sorted(records, key=lambda item: item[0].timestamp, reverse=True)
+    for artifact, path in sorted_records[:limit]:
+        detail_entries = [
+            {"label": str(key), "value": _stringify_notification_value(value)}
+            for key, value in sorted(artifact.details.items())
+        ]
+        entries.append(
+            {
+                "kind": artifact.kind,
+                "summary": artifact.summary,
+                "timestamp": artifact.timestamp,
+                "run_id": artifact.run_id,
+                "cluster_label": artifact.cluster_label,
+                "context": artifact.context,
+                "details": detail_entries,
+                "artifact_path": _relative_path(root_dir, path),
+            }
+        )
+    return entries
+
+
+def _stringify_notification_value(value: object | None) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except TypeError:
+        return str(value)

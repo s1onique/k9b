@@ -230,6 +230,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         help="Request a drilldown artifact for the given context even without automated triggers.",
     )
+    health_parser.add_argument(
+        "--external-analysis",
+        "-x",
+        action="append",
+        help="Manual external analysis trigger in the format tool:cluster_label.",
+    )
     health_parser.add_argument("--quiet", action="store_true", help="Suppress summary output.")
     health_parser.add_argument(
         "--once",

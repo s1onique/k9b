@@ -53,5 +53,15 @@
     "warning_event_threshold": 5
   },
   "manual_pairs": [],
+  "external_analysis": {
+    "policy": {
+      "manual": true,
+      "degraded_health": false,
+      "suspicious_comparison": false
+    },
+    "adapters": [
+      { "name": "k8sgpt", "enabled": true, "command": ["k8sgpt", "analysis"] }
+    ]
+  },
   "baseline_policy_path": "health-baseline.example.json"
 }

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..external_analysis.artifact import ExternalAnalysisArtifact
 from .adaptation import HealthProposal, ProposalEvaluation
 
 if TYPE_CHECKING:
@@ -128,4 +129,22 @@ def build_proposal_checked_notification(
             "outcome": status,
         },
         run_id=proposal.source_run_id or proposal.proposal_id,
+    )
+
+
+def build_external_analysis_notification(
+    artifact: ExternalAnalysisArtifact,
+) -> NotificationArtifact:
+    return NotificationArtifact(
+        kind="external-analysis",
+        summary=f"External analysis {artifact.tool_name} for {artifact.cluster_label}: {artifact.status.value}",
+        details={
+            "tool": artifact.tool_name,
+            "cluster": artifact.cluster_label,
+            "status": artifact.status.value,
+            "summary": artifact.summary,
+        },
+        run_id=artifact.run_id,
+        cluster_label=artifact.cluster_label,
+        context=artifact.cluster_label,
     )

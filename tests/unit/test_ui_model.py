@@ -15,6 +15,8 @@ class UIViewModelTests(unittest.TestCase):
                 "cluster_count": 1,
                 "drilldown_count": 1,
                 "proposal_count": 1,
+                "external_analysis_count": 1,
+                "notification_count": 1,
             },
             "clusters": [
                 {
@@ -75,6 +77,49 @@ class UIViewModelTests(unittest.TestCase):
                 "pattern_details": {"pattern": "noise"},
                 "artifact_path": "drilldowns/cluster-a.json",
             },
+            "drilldown_availability": {
+                "total_clusters": 1,
+                "available": 1,
+                "missing": 0,
+                "coverage": [
+                    {
+                        "label": "cluster-a",
+                        "context": "cluster-a",
+                        "available": True,
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "artifact_path": "drilldowns/cluster-a.json",
+                    }
+                ],
+                "missing_clusters": [],
+            },
+            "notification_history": [
+                {
+                    "kind": "degraded-health",
+                    "summary": "cluster degraded",
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "run_id": "run-1",
+                    "cluster_label": "cluster-a",
+                    "context": "cluster-a",
+                    "details": [{"label": "warnings", "value": "[1, 2]"}],
+                    "artifact_path": "notifications/degraded-health.json",
+                }
+            ],
+            "external_analysis": {
+                "count": 1,
+                "status_counts": [{"status": "success", "count": 1}],
+                "artifacts": [
+                    {
+                        "tool_name": "k8sgpt",
+                        "cluster_label": "cluster-a",
+                        "status": "success",
+                        "summary": "analysis",
+                        "findings": ["f1"],
+                        "suggested_next_checks": ["next"],
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "artifact_path": "external-analysis/cluster-a.json",
+                    }
+                ],
+            },
         }
         context = build_ui_context(index)
         self.assertEqual(context.run.run_id, "run-1")
@@ -96,3 +141,8 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(context.fleet_status.degraded_clusters, ("cluster-a",))
         self.assertEqual(context.proposal_status_summary.status_counts[0][0], "pending")
         self.assertEqual(findings.artifact_path, "drilldowns/cluster-a.json")
+        self.assertEqual(context.drilldown_availability.available, 1)
+        self.assertEqual(context.notification_history[0].kind, "degraded-health")
+        self.assertEqual(context.external_analysis.count, 1)
+        self.assertEqual(context.run.external_analysis_count, 1)
+        self.assertEqual(context.run.notification_count, 1)

@@ -441,7 +441,7 @@ def handle_health_loop(args: argparse.Namespace, default_config: Path = HEALTH_C
     manual_drilldowns = args.drilldown or []
     run_once_mode = args.once or args.every_seconds is None
     if run_once_mode:
-        exit_code, _, _, _ = run_health_loop(
+        exit_code, _, _, _, _ = run_health_loop(
             config_path,
             manual_triggers=manual,
             manual_drilldown_contexts=manual_drilldowns,
@@ -499,7 +499,7 @@ def handle_deliver_notifications(args: argparse.Namespace) -> int:
             print(f"Skipping {path.name}: {exc}", file=sys.stderr)
             continue
         digest = artifact_digest(artifact)
-        if journal.is_delivered(path.name, digest):
+        if not journal.needs_delivery(path.name, digest):
             print(f"Skipping {path.name}: already delivered")
             continue
         payload = render_mattermost_payload(artifact)

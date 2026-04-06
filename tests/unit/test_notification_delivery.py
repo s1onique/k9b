@@ -28,3 +28,20 @@ class NotificationDeliveryTests(unittest.TestCase):
             self.assertTrue(reloaded.is_delivered("alert.json", digest))
             # Different digest should not be treated as delivered
             self.assertFalse(reloaded.is_delivered("alert.json", "other"))
+
+    def test_needs_delivery_tracks_status_and_hash(self) -> None:
+        artifact = NotificationArtifact(
+            kind="proposal-created",
+            summary="proposal",
+            details={},
+            run_id="run-1",
+        )
+        digest = artifact_digest(artifact)
+        with TemporaryDirectory() as tempdir:
+            journal = DeliveryJournal.load(Path(tempdir))
+            self.assertTrue(journal.needs_delivery("proposal.json", digest))
+            journal.record_result("proposal.json", digest, "failed", "timeout")
+            self.assertTrue(journal.needs_delivery("proposal.json", digest))
+            journal.record_result("proposal.json", digest, "sent")
+            self.assertFalse(journal.needs_delivery("proposal.json", digest))
+            self.assertTrue(journal.needs_delivery("proposal.json", "newhash"))

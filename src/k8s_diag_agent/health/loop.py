@@ -16,6 +16,13 @@ from typing import Any
 from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
+from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters
+from ..external_analysis.artifact import (
+    ExternalAnalysisArtifact,
+    ExternalAnalysisStatus,
+    write_external_analysis_artifact,
+)
+from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..models import (
     Assessment,
     ConfidenceLevel,
@@ -47,7 +54,9 @@ from .image_pull_secret import (
     ImagePullSecretInspector,
 )
 from .notifications import (
+    NotificationArtifact,
     build_degraded_health_notification,
+    build_external_analysis_notification,
     build_proposal_created_notification,
     build_suspicious_comparison_notification,
     write_notification_artifact,
@@ -255,6 +264,12 @@ class ComparisonIntent(StrEnum):
 class ManualComparison:
     primary: str
     secondary: str
+
+
+@dataclass(frozen=True)
+class ManualExternalAnalysisRequest:
+    tool: str
+    target: str
 
 
 @dataclass(frozen=True)
@@ -530,6 +545,7 @@ class HealthRunConfig:
     baseline_policy_path: Path | None = None
     cohort_baselines: dict[str, tuple[BaselinePolicy, Path]] = field(default_factory=dict)
     target_baselines: dict[str, tuple[BaselinePolicy, Path | None]] = field(default_factory=dict)
+    external_analysis: ExternalAnalysisSettings = field(default_factory=ExternalAnalysisSettings)
 
     @classmethod
     def load(cls, path: Path) -> HealthRunConfig:
@@ -718,6 +734,8 @@ class HealthRunConfig:
             warning_event_threshold=_parse_threshold(trigger_raw.get("warning_event_threshold")),
         )
 
+        external_analysis_settings = parse_external_analysis_settings(raw.get("external_analysis"))
+
         target_baselines: dict[str, tuple[BaselinePolicy, Path | None]] = {}
         for target in targets:
             policy, resolved_path = _policy_for_target(
@@ -744,6 +762,7 @@ class HealthRunConfig:
             target_baselines=target_baselines,
             baseline_policy=baseline_policy,
             baseline_policy_path=baseline_policy_path,
+            external_analysis=external_analysis_settings,
         )
 
     def baseline_for_target(self, target: HealthTarget) -> tuple[BaselinePolicy, Path | None]:
@@ -1933,6 +1952,7 @@ class HealthLoopRunner:
         available_contexts: Iterable[str],
         manual_overrides: Sequence[ManualComparison] | None = None,
         manual_drilldown_contexts: Sequence[str] | None = None,
+        manual_external_analysis: Sequence[ManualExternalAnalysisRequest] | None = None,
         snapshot_collector: Callable[[str], ClusterSnapshot] = collect_cluster_snapshot,
         comparison_fn: Callable[[ClusterSnapshot, ClusterSnapshot], ClusterComparison] = compare_snapshots,
         drilldown_collector: DrilldownCollector | None = None,
@@ -1963,6 +1983,12 @@ class HealthLoopRunner:
         self._drilldown_collector = drilldown_collector
         self._image_pull_secret_inspector = image_pull_secret_inspector or ImagePullSecretInspector()
         self._log_path = config.output_dir / "health" / "health.log"
+        self._analysis_policy = config.external_analysis.policy
+        self._analysis_adapters = build_external_analysis_adapters(config.external_analysis.adapters)
+        manual_analysis = manual_external_analysis or []
+        self._manual_external_analysis_requests = tuple(manual_analysis)
+        self._latest_external_artifacts: list[ExternalAnalysisArtifact] = []
+        self._notification_records: list[tuple[NotificationArtifact, Path]] = []
 
     def _log_event(self, component: str, severity: str, message: str, **metadata: Any) -> None:
         emit_structured_log(
@@ -1975,6 +2001,15 @@ class HealthLoopRunner:
             metadata=metadata or None,
         )
 
+    def _record_notification(self, directory: Path, artifact: NotificationArtifact) -> Path:
+        artifact_path = write_notification_artifact(directory, artifact)
+        self._notification_records.append((artifact, artifact_path))
+        return artifact_path
+
+    @property
+    def latest_external_artifacts(self) -> list[ExternalAnalysisArtifact]:
+        return list(self._latest_external_artifacts)
+
     def execute(
         self,
     ) -> tuple[
@@ -1983,15 +2018,21 @@ class HealthLoopRunner:
         list[DrilldownArtifact],
     ]:
         self._log_event("health-loop", "INFO", "Health run started", event="start")
+        self._notification_records = []
         directories = self._ensure_directories()
         history = self._load_history(directories["history"])
         previous_history = {key: entry for key, entry in history.items()}
         records = self._collect_snapshots(directories["snapshots"])
         assessments = self._build_assessments(
-            records, history, directories["assessments"], directories["root"]
+            records,
+            history,
+            directories["assessments"],
+            directories["root"],
+            directories["notifications"],
         )
         triggers = self._evaluate_triggers(records, previous_history, directories)
         drilldowns = self._build_drilldowns(records, previous_history, directories["drilldowns"])
+        external_artifacts = self._run_external_analysis(records, directories)
         self._persist_history(history, directories["history"])
         review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
         if not self.quiet:
@@ -2008,6 +2049,7 @@ class HealthLoopRunner:
             assessment_count=len(assessments),
             trigger_count=len(triggers),
             drilldown_count=len(drilldowns),
+            external_analysis_count=len(external_artifacts),
         )
         try:
             write_health_ui_index(
@@ -2019,6 +2061,8 @@ class HealthLoopRunner:
                 assessments,
                 drilldowns,
                 proposals,
+                external_artifacts,
+                self._notification_records,
             )
         except Exception as exc:
             self._collection_messages.append(f"UI index generation failed: {exc}")
@@ -2029,6 +2073,7 @@ class HealthLoopRunner:
                 severity_reason=str(exc),
                 event="ui-index-failed",
             )
+        self._latest_external_artifacts = external_artifacts
         return assessments, triggers, drilldowns
 
     def _ensure_directories(self) -> dict[str, Path]:
@@ -2042,7 +2087,9 @@ class HealthLoopRunner:
             "drilldowns": root / "drilldowns",
             "reviews": root / "reviews",
             "proposals": root / "proposals",
+            "notifications": root / "notifications",
             "history": root / _HISTORY_FILENAME,
+            "external_analysis": root / "external-analysis",
         }
         for key, path in subdirs.items():
             if key == "history":
@@ -2111,6 +2158,7 @@ class HealthLoopRunner:
         history: dict[str, HealthHistoryEntry],
         assessment_dir: Path,
         root_dir: Path,
+        notification_dir: Path,
     ) -> list[HealthAssessmentArtifact]:
         artifacts: list[HealthAssessmentArtifact] = []
         for record in records:
@@ -2169,7 +2217,7 @@ class HealthLoopRunner:
                     notification = build_degraded_health_notification(
                         self.run_id, record, artifact
                     )
-                    write_notification_artifact(root_dir / "notifications", notification)
+                    self._record_notification(notification_dir, notification)
             history[cluster_id] = HealthHistoryEntry(
                 cluster_id=cluster_id,
                 node_count=record.snapshot.metadata.node_count,
@@ -2254,6 +2302,81 @@ class HealthLoopRunner:
             )
         return artifacts
 
+    def _run_external_analysis(
+        self, records: list[HealthSnapshotRecord], directories: dict[str, Path]
+    ) -> list[ExternalAnalysisArtifact]:
+        artifacts: list[ExternalAnalysisArtifact] = []
+        if not self._analysis_adapters:
+            return artifacts
+        if not self._manual_external_analysis_requests:
+            return artifacts
+        if not self._analysis_policy.manual:
+            self._log_event(
+                "external-analysis",
+                "INFO",
+                "Manual external analysis ignored",
+                event="manual-disabled",
+                manual_request_count=len(self._manual_external_analysis_requests),
+            )
+            return artifacts
+        record_lookup = {
+            normalize_ref(record.target.label): record for record in records
+        }
+        for request in self._manual_external_analysis_requests:
+            adapter = self._analysis_adapters.get(request.tool)
+            if not adapter:
+                self._log_event(
+                    "external-analysis",
+                    "WARNING",
+                    "External analysis adapter unavailable",
+                    tool=request.tool,
+                    cluster_label=request.target,
+                )
+                continue
+            record = record_lookup.get(request.target)
+            if not record:
+                self._log_event(
+                    "external-analysis",
+                    "WARNING",
+                    "External analysis target missing",
+                    tool=request.tool,
+                    cluster_label=request.target,
+                )
+                continue
+            source_artifact = (
+                record.assessment.artifact_path if record.assessment else str(record.path)
+            )
+            analysis_request = ExternalAnalysisRequest(
+                run_id=self.run_id,
+                cluster_label=record.target.label,
+                source_artifact=source_artifact,
+            )
+            artifact = adapter.run(analysis_request)
+            artifact_path = directories["external_analysis"] / (
+                f"{self.run_id}-{record.target.label}-{adapter.name}.json"
+            )
+            artifact_with_path = replace(artifact, artifact_path=str(artifact_path))
+            write_external_analysis_artifact(artifact_path, artifact_with_path)
+            if artifact_with_path.status == ExternalAnalysisStatus.SUCCESS:
+                severity = "INFO"
+            elif artifact_with_path.status == ExternalAnalysisStatus.FAILED:
+                severity = "ERROR"
+            else:
+                severity = "WARNING"
+            self._log_event(
+                "external-analysis",
+                severity,
+                "External analysis result recorded",
+                tool=adapter.name,
+                cluster_label=record.target.label,
+                status=artifact_with_path.status.value,
+                artifact_path=str(artifact_path),
+            )
+            notification = build_external_analysis_notification(artifact_with_path)
+            self._record_notification(directories["notifications"], notification)
+            artifacts.append(artifact_with_path)
+        return artifacts
+
     def _write_review_artifact(
         self,
         assessments: list[HealthAssessmentArtifact],
@@ -2317,9 +2440,7 @@ class HealthLoopRunner:
                 proposal_with_path = replace(proposal, artifact_path=str(proposal_path))
                 proposal_records.append(proposal_with_path)
                 notification = build_proposal_created_notification(self.run_id, proposal)
-                write_notification_artifact(
-                    directories["root"] / "notifications", notification
-                )
+                self._record_notification(directories["notifications"], notification)
         except Exception as exc:
             self._collection_messages.append(f"Health proposal generation failed: {exc}")
             self._log_event(
@@ -2513,9 +2634,7 @@ class HealthLoopRunner:
             )
             if triggered and peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
                 notification = build_suspicious_comparison_notification(artifact)
-                write_notification_artifact(
-                    directories["root"] / "notifications", notification
-                )
+                self._record_notification(directories["notifications"], notification)
         decision_path = directories["root"] / f"{self.run_id}-comparison-decisions.json"
         for decision in decisions:
             ComparisonDecisionValidator.validate(decision.to_dict())
@@ -2670,6 +2789,20 @@ def _parse_manual_triggers(values: Sequence[str]) -> list[ManualComparison]:
     return manual
 
 
+def _parse_manual_external_analysis_requests(values: Sequence[str]) -> list[ManualExternalAnalysisRequest]:
+    manual: list[ManualExternalAnalysisRequest] = []
+    for raw_value in values:
+        if ":" not in raw_value:
+            continue
+        tool_raw, target_raw = raw_value.split(":", 1)
+        tool = tool_raw.strip().lower()
+        target = normalize_ref(target_raw)
+        if not tool or not target:
+            continue
+        manual.append(ManualExternalAnalysisRequest(tool=tool, target=target))
+    return manual
+
+
 def _validate_suspicious_pairs(
     peers: Sequence[ComparisonPeer],
     target_lookup: dict[str, HealthTarget],
@@ -2715,6 +2848,7 @@ def run_health_loop(
     config_path: Path,
     manual_triggers: Sequence[str] | None = None,
     manual_drilldown_contexts: Sequence[str] | None = None,
+    manual_external_analysis: Sequence[str] | None = None,
     quiet: bool = False,
     drilldown_collector: DrilldownCollector | None = None,
 ) -> tuple[
@@ -2722,6 +2856,7 @@ def run_health_loop(
     list[HealthAssessmentArtifact],
     list[ComparisonTriggerArtifact],
     list[DrilldownArtifact],
+    list[ExternalAnalysisArtifact],
 ] :
     try:
         config = HealthRunConfig.load(config_path)
@@ -2735,7 +2870,7 @@ def run_health_loop(
             metadata={"config_path": str(config_path), "severity_reason": str(exc)},
         )
         print(f"Unable to load health config {config_path}: {exc}")
-        return 1, [], [], []
+        return 1, [], [], [], []
     try:
         contexts = list_kube_contexts()
     except RuntimeError as exc:
@@ -2748,18 +2883,23 @@ def run_health_loop(
             metadata={"severity_reason": str(exc)},
         )
         print(f"Unable to discover kube contexts: {exc}")
-        return 1, [], [], []
+        return 1, [], [], [], []
     manual_overrides = _parse_manual_triggers(manual_triggers or [])
+    manual_analysis_requests = _parse_manual_external_analysis_requests(
+        manual_external_analysis or []
+    )
     runner = HealthLoopRunner(
         config,
         contexts,
         manual_overrides=manual_overrides,
         manual_drilldown_contexts=manual_drilldown_contexts,
+        manual_external_analysis=manual_analysis_requests,
         quiet=quiet,
         drilldown_collector=drilldown_collector,
     )
     assessments, triggers, drilldowns = runner.execute()
-    return 0, assessments, triggers, drilldowns
+    external_artifacts = runner.latest_external_artifacts
+    return 0, assessments, triggers, drilldowns, external_artifacts
 
 
 _HEALTH_LOCK_FILENAME = ".health-loop.lock"
@@ -2772,6 +2912,7 @@ class HealthLoopScheduler:
         config_path: Path,
         manual_triggers: Sequence[str],
         manual_drilldown_contexts: Sequence[str] | None,
+        manual_external_analysis: Sequence[str] | None,
         quiet: bool,
         interval_seconds: int | None,
         max_runs: int | None,
@@ -2782,6 +2923,7 @@ class HealthLoopScheduler:
         self._config_path = config_path
         self._manual_triggers = tuple(manual_triggers)
         self._manual_drilldown_contexts = tuple(manual_drilldown_contexts or [])
+        self._manual_external_analysis = tuple(manual_external_analysis or [])
         self._quiet = quiet
         self._interval_seconds = interval_seconds
         self._max_runs = max_runs
@@ -2839,10 +2981,17 @@ class HealthLoopScheduler:
                     )
                 else:
                     try:
-                        exit_code, assessments, triggers, drilldowns = run_health_loop(
+                        (
+                            exit_code,
+                            assessments,
+                            triggers,
+                            drilldowns,
+                            external_artifacts,
+                        ) = run_health_loop(
                             self._config_path,
                             manual_triggers=self._manual_triggers,
                             manual_drilldown_contexts=self._manual_drilldown_contexts,
+                            manual_external_analysis=self._manual_external_analysis,
                             quiet=self._quiet,
                         )
                         run_id = self._resolve_run_id(assessments, triggers)
@@ -2858,7 +3007,7 @@ class HealthLoopScheduler:
                             )
                             return exit_code
                         executed_runs += 1
-                        self._print_summary(assessments, triggers, drilldowns)
+                        self._print_summary(assessments, triggers, drilldowns, external_artifacts)
                     finally:
                         self._release_lock()
                 if not run_executed and self._run_once:
@@ -2910,6 +3059,7 @@ class HealthLoopScheduler:
         assessments: list[HealthAssessmentArtifact],
         triggers: list[ComparisonTriggerArtifact],
         drilldowns: list[DrilldownArtifact],
+        external_analysis: list[ExternalAnalysisArtifact],
     ) -> None:
         run_id = "<unknown>"
         if assessments:
@@ -2923,7 +3073,8 @@ class HealthLoopScheduler:
         timestamp = datetime.now(UTC).isoformat()
         print(
             f"[{timestamp}] Health run {run_id}: {len(assessments)} assessments "
-            f"({healthy} healthy, {degraded} degraded), {len(triggers)} triggered comparison(s), {len(drilldowns)} drilldown artifact(s)."
+            f"({healthy} healthy, {degraded} degraded), {len(triggers)} triggered comparison(s), {len(drilldowns)} drilldown artifact(s), "
+            f"{len(external_analysis)} external analysis artifact(s)."
         )
         self._log_event(
             "INFO",
@@ -2932,6 +3083,7 @@ class HealthLoopScheduler:
             assessment_count=len(assessments),
             trigger_count=len(triggers),
             drilldown_count=len(drilldowns),
+            external_analysis_count=len(external_analysis),
             event="run-summary",
         )
 
@@ -2940,6 +3092,7 @@ def schedule_health_loop(
     config_path: Path,
     manual_triggers: Sequence[str] | None = None,
     manual_drilldown_contexts: Sequence[str] | None = None,
+    manual_external_analysis: Sequence[str] | None = None,
     quiet: bool = False,
     *,
     interval_seconds: int | None = None,
@@ -2955,6 +3108,7 @@ def schedule_health_loop(
         config_path=config_path,
         manual_triggers=manual_triggers or [],
         manual_drilldown_contexts=manual_drilldown_contexts or [],
+        manual_external_analysis=manual_external_analysis or [],
         quiet=quiet,
         interval_seconds=interval_seconds,
         max_runs=max_runs,

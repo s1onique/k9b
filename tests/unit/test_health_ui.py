@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
+from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from k8s_diag_agent.health.adaptation import HealthProposal
 from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
@@ -14,6 +15,7 @@ from k8s_diag_agent.health.loop import (
     HealthSnapshotRecord,
     HealthTarget,
 )
+from k8s_diag_agent.health.notifications import NotificationArtifact
 from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.models import ConfidenceLevel
 
@@ -101,7 +103,31 @@ class HealthUITests(unittest.TestCase):
             expected_benefit="test",
             rollback_note="test",
         )
+        external_path = self.tmpdir / "runs" / "health" / "external-analysis" / "analysis.json"
+        external_path.parent.mkdir(parents=True, exist_ok=True)
+        external_artifact = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="health-run-1",
+            cluster_label=target.label,
+            source_artifact="assessments/cluster-alpha.json",
+            summary="analysis complete",
+            findings=("finding1",),
+            suggested_next_checks=("check1",),
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=str(external_path),
+        )
+        notification = NotificationArtifact(
+            kind="degraded-health",
+            summary="threshold exceeded",
+            details={"missing": ["event"]},
+            run_id="health-run-1",
+            cluster_label=target.label,
+            context=target.context,
+        )
         output_dir = self.tmpdir / "runs" / "health"
+        notification_path = output_dir / "notifications" / "20260101-degraded-health.json"
+        notification_path.parent.mkdir(parents=True, exist_ok=True)
+        notification_record = (notification, notification_path)
         result_path = write_health_ui_index(
             output_dir,
             run_id="health-run-1",
@@ -111,6 +137,8 @@ class HealthUITests(unittest.TestCase):
             assessments=[artifact],
             drilldowns=[drilldown],
             proposals=[proposal],
+            external_analysis=[external_artifact],
+            notifications=[notification_record],
         )
         self.assertTrue(result_path.exists())
         data = json.loads(result_path.read_text(encoding="utf-8"))
@@ -130,3 +158,10 @@ class HealthUITests(unittest.TestCase):
         self.assertIn("proposal_status_summary", data)
         self.assertIn("artifact_path", data["latest_drilldown"])
         self.assertIn("artifact_path", data["proposals"][0])
+        self.assertIn("drilldown_availability", data)
+        self.assertEqual(data["drilldown_availability"]["available"], 1)
+        self.assertIn("notification_history", data)
+        self.assertEqual(data["notification_history"][0]["kind"], "degraded-health")
+        self.assertIn("external_analysis", data)
+        self.assertEqual(data["external_analysis"]["count"], 1)
+        self.assertEqual(data["run"]["notification_count"], 1)
