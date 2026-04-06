@@ -29,6 +29,7 @@ class ClusterSummary:
     cluster_class: str | None
     cluster_role: str | None
     baseline_cohort: str | None
+    baseline_policy_path: str | None
 
 
 @dataclass(frozen=True)
@@ -154,7 +155,10 @@ def format_health_summary(summary: HealthSummary) -> str:
             pods = entry.non_running_pods if entry.non_running_pods is not None else "n/a"
             rating = _sanitize_text(entry.health_rating) or "unknown"
             metadata = _format_cluster_metadata(
-                entry.cluster_class, entry.cluster_role, entry.baseline_cohort
+                entry.cluster_class,
+                entry.cluster_role,
+                entry.baseline_cohort,
+                entry.baseline_policy_path,
             )
             label = _sanitize_text(entry.label) or "unknown"
             lines.append(
@@ -331,6 +335,7 @@ def _build_cluster_summaries(
             cluster_class=_lookup_history_field(history, label, "cluster_class"),
             cluster_role=_lookup_history_field(history, label, "cluster_role"),
             baseline_cohort=_lookup_history_field(history, label, "baseline_cohort"),
+            baseline_policy_path=_lookup_history_field(history, label, "baseline_policy_path"),
         )
         summaries.append(summary_entry)
     return summaries
@@ -397,7 +402,10 @@ def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> 
 
 
 def _format_cluster_metadata(
-    cluster_class: str | None, cluster_role: str | None, baseline_cohort: str | None
+    cluster_class: str | None,
+    cluster_role: str | None,
+    baseline_cohort: str | None,
+    baseline_policy_path: str | None = None,
 ) -> str:
     class_role_parts: list[str] = []
     sanitized_class = _sanitize_text(cluster_class)
@@ -412,6 +420,9 @@ def _format_cluster_metadata(
     sanitized_cohort = _sanitize_text(baseline_cohort)
     if sanitized_cohort:
         parts.append(f"cohort {sanitized_cohort}")
+    if baseline_policy_path:
+        path_label = _sanitize_text(Path(baseline_policy_path).name) or Path(baseline_policy_path).name
+        parts.append(f"policy {path_label}")
     if not parts:
         return ""
     return f" ({'; '.join(parts)})"

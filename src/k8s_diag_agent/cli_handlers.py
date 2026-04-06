@@ -25,6 +25,10 @@ from .health.adaptation import (
     render_proposal_patch,
     with_lifecycle_status,
 )
+from .health.notifications import (
+    build_proposal_checked_notification,
+    write_notification_artifact,
+)
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
 from .health.summary import format_health_summary, gather_health_summary
@@ -37,6 +41,10 @@ from .reason.diagnoser import build_findings_and_hypotheses
 from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .structured_logging import emit_structured_log
+from .health.notifications import (
+    build_proposal_checked_notification,
+    write_notification_artifact,
+)
 
 DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
 BATCH_CONFIG_FALLBACK = Path("snapshots/targets.local.example.json")
@@ -484,6 +492,11 @@ def handle_check_proposal(args: argparse.Namespace) -> int:
     print(f"  Likely noise reduction: {evaluation.noise_reduction}")
     print(f"  Possible signal loss: {evaluation.signal_loss}")
     print(f"  Test/eval outcome: {evaluation.test_outcome}")
+    notification = build_proposal_checked_notification(proposal, evaluation)
+    write_notification_artifact(
+        args.proposal.parent / "notifications",
+        notification,
+    )
     evaluated_proposal = replace(proposal, promotion_evaluation=evaluation)
     promoted = with_lifecycle_status(
         evaluated_proposal,

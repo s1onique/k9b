@@ -10,7 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
+from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
+    BaselineRegistry,
     ComparisonIntent,
     HealthRunConfig,
     HealthSnapshotRecord,
@@ -61,13 +63,23 @@ def resolve_runs_dir(config_path: Path) -> str:
     return str(Path(output_dir) / "health")
 
 
-def _print_targets(config: HealthRunConfig) -> None:
+def _print_targets(config: HealthRunConfig, baseline_map: dict[str, tuple[BaselinePolicy, Path | None]]) -> None:
     print("Declared targets:")
     for target in config.targets:
+        _, target_baseline_path = baseline_map.get(target.label, (None, None))
         print(
             f"- {target.label} ({target.context}): class={target.cluster_class}, "
-            f"role={target.cluster_role}, cohort={target.baseline_cohort}"
+            f"role={target.cluster_role}, cohort={target.baseline_cohort}, "
+            f"policy={target_baseline_path or 'default'}"
         )
+
+
+def _print_baseline_map(config: HealthRunConfig) -> None:
+    if not config.cohort_baselines:
+        return
+    print("Cohort baseline policies:")
+    for cohort, (_policy, path) in sorted(config.cohort_baselines.items()):
+        print(f"  - {cohort}: {path}")
 
 
 def _collect_missing_metadata(config: HealthRunConfig) -> list[tuple[str, tuple[str, ...]]]:
@@ -112,7 +124,9 @@ class PeerComparisonReport:
 
 
 def _collect_peer_reports(
-    config: HealthRunConfig, records: dict[str, HealthSnapshotRecord]
+    config: HealthRunConfig,
+    records: dict[str, HealthSnapshotRecord],
+    registry: BaselineRegistry,
 ) -> tuple[list[PeerComparisonReport], dict[str, int]]:
     status_counts = {"eligible": 0, "skipped": 0, "unsafe": 0}
     reports: list[PeerComparisonReport] = []
@@ -157,7 +171,7 @@ def _collect_peer_reports(
             primary_cohort,
             secondary_cohort,
         ) = _policy_eligible_pair(
-            primary, secondary, peer.intent, config.baseline_policy
+            primary, secondary, peer.intent, registry
         )
         if policy_eligible:
             status = "eligible"
@@ -330,10 +344,14 @@ def main() -> None:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"Unable to load config: {exc}")
         sys.exit(1)
+    registry = BaselineRegistry([config.baseline_policy])
+    for policy, _ in config.target_baselines.values():
+        registry.add(policy)
     records = _build_records(config)
     runs_dir = resolve_runs_dir(args.config)
-    _print_targets(config)
-    reports, status_counts = _collect_peer_reports(config, records)
+    _print_targets(config, config.target_baselines)
+    _print_baseline_map(config)
+    reports, status_counts = _collect_peer_reports(config, records, registry)
     release_issues = _check_release_coverage(config)
     metadata_issues = _collect_missing_metadata(config)
     _print_preflight_summary(

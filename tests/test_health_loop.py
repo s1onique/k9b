@@ -45,6 +45,7 @@ from k8s_diag_agent.health.loop import (
     HealthTarget,
     TriggerPolicy,
     build_health_assessment,
+    BaselineRegistry,
     determine_pair_trigger_reasons,
 )
 
@@ -437,6 +438,7 @@ class HealthLoopTests(unittest.TestCase):
         )
         baseline = self._baseline_policy(ignored=[BaselineDriftCategory.WATCHED_HELM_RELEASE])
         policy = TriggerPolicy(True, True, True, True, True, True)
+        registry = BaselineRegistry([baseline])
         details = determine_pair_trigger_reasons(
             primary_record,
             secondary_record,
@@ -444,6 +446,7 @@ class HealthLoopTests(unittest.TestCase):
             {},
             set(),
             baseline,
+            registry,
             ComparisonIntent.SUSPICIOUS_DRIFT.label(),
         )
         self.assertFalse(
@@ -500,6 +503,7 @@ class HealthLoopTests(unittest.TestCase):
             assessment=build_health_assessment(secondary_snapshot, secondary_target, None, BaselinePolicy.empty()),
         )
         policy = TriggerPolicy(True, True, True, True, True, True)
+        registry = BaselineRegistry([BaselinePolicy.empty()])
         details = determine_pair_trigger_reasons(
             primary_record,
             secondary_record,
@@ -507,6 +511,7 @@ class HealthLoopTests(unittest.TestCase):
             {},
             set(),
             BaselinePolicy.empty(),
+            registry,
             ComparisonIntent.SUSPICIOUS_DRIFT.label(),
         )
         self.assertTrue(

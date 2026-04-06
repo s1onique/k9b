@@ -6,7 +6,7 @@ import os
 import re
 import time
 import warnings
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -42,7 +42,14 @@ from .image_pull_secret import (
     ImagePullSecretInsight,
     ImagePullSecretInspector,
 )
+from .notifications import (
+    build_degraded_health_notification,
+    build_proposal_created_notification,
+    build_suspicious_comparison_notification,
+    write_notification_artifact,
+)
 from .review_feedback import build_health_review
+from .ui import write_health_ui_index
 from .utils import normalize_ref
 from .validators import (
     ComparisonDecisionValidator,
@@ -128,6 +135,76 @@ def _normalize_category_list(value: Any | None) -> tuple[str, ...]:
     return ()
 
 
+def _load_baseline_policy_from_path(
+    path: Path, cache: dict[Path, BaselinePolicy]
+) -> BaselinePolicy:
+    if path in cache:
+        return cache[path]
+    policy = BaselinePolicy.load_from_file(path)
+    cache[path] = policy
+    return policy
+
+
+def _parse_cohort_baselines(
+    raw: Any | None,
+    directory: Path,
+    cache: dict[Path, BaselinePolicy],
+) -> dict[str, tuple[BaselinePolicy, Path]]:
+    cohort_map: dict[str, tuple[BaselinePolicy, Path]] = {}
+    if not raw:
+        return cohort_map
+    entries: list[tuple[str, str]] = []
+    if isinstance(raw, Mapping):
+        for cohort, value in raw.items():
+            cohort_name = _str_or_none(cohort if isinstance(cohort, str) else str(cohort))
+            path_value = _str_or_none(value if isinstance(value, str) else str(value))
+            if cohort_name and path_value:
+                entries.append((cohort_name, path_value))
+    elif isinstance(raw, Sequence):
+        for item in raw:
+            if not isinstance(item, Mapping):
+                continue
+            cohort_name = _str_or_none(item.get("cohort")) or _str_or_none(item.get("name"))
+            path_value = _str_or_none(item.get("path")) or _str_or_none(item.get("baseline_policy_path"))
+            if cohort_name and path_value:
+                entries.append((cohort_name, path_value))
+    for cohort_name, path_value in entries:
+        resolved = resolve_baseline_policy_path(directory, path_value)
+        policy = _load_baseline_policy_from_path(resolved, cache)
+        cohort_map[cohort_name] = (policy, resolved)
+    return cohort_map
+
+
+def _resolve_target_baseline_path(
+    directory: Path,
+    explicit: str | None,
+    cohort: str | None,
+    cohort_map: dict[str, tuple[BaselinePolicy, Path]],
+    default_path: Path | None,
+) -> Path | None:
+    if explicit:
+        return resolve_baseline_policy_path(directory, explicit)
+    if cohort and cohort in cohort_map:
+        return cohort_map[cohort][1]
+    return default_path
+
+
+def _policy_for_target(
+    baseline_path_str: str | None,
+    cohort: str | None,
+    default_policy: BaselinePolicy,
+    default_path: Path | None,
+    cohort_map: dict[str, tuple[BaselinePolicy, Path]],
+    cache: dict[Path, BaselinePolicy],
+) -> tuple[BaselinePolicy, Path | None]:
+    if baseline_path_str:
+        resolved_path = Path(baseline_path_str)
+        policy = _load_baseline_policy_from_path(resolved_path, cache)
+        return policy, resolved_path
+    if cohort and cohort in cohort_map:
+        return cohort_map[cohort]
+    return default_policy, default_path
+
 class HealthRating(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
@@ -143,6 +220,7 @@ class HealthTarget:
     cluster_class: str | None = None
     cluster_role: str | None = None
     baseline_cohort: str | None = None
+    baseline_policy_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +281,7 @@ class HealthHistoryEntry:
     cluster_class: str | None = None
     cluster_role: str | None = None
     baseline_cohort: str | None = None
+    baseline_policy_path: str | None = None
 
     @classmethod
     def from_dict(cls, cluster_id: str, data: dict[str, Any]) -> HealthHistoryEntry:
@@ -258,6 +337,7 @@ class HealthHistoryEntry:
             cluster_class=_str_or_none(data.get("cluster_class")),
             cluster_role=_str_or_none(data.get("cluster_role")),
             baseline_cohort=_str_or_none(data.get("baseline_cohort") or data.get("platform_generation")),
+            baseline_policy_path=_str_or_none(data.get("baseline_policy_path")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -276,6 +356,7 @@ class HealthHistoryEntry:
             "cluster_class": self.cluster_class,
             "cluster_role": self.cluster_role,
             "baseline_cohort": self.baseline_cohort,
+            "baseline_policy_path": self.baseline_policy_path,
         }
 
 
@@ -437,6 +518,8 @@ class HealthRunConfig:
     peers: tuple[ComparisonPeer, ...]
     trigger_policy: TriggerPolicy
     manual_pairs: tuple[ManualComparison, ...]
+    cohort_baselines: dict[str, tuple[BaselinePolicy, Path]] = field(default_factory=dict)
+    target_baselines: dict[str, tuple[BaselinePolicy, Path | None]] = field(default_factory=dict)
     baseline_policy: BaselinePolicy
     baseline_policy_path: Path | None = None
 
@@ -460,6 +543,23 @@ class HealthRunConfig:
         run_label = _safe_label(label_source)
         output_dir = Path(str(raw.get("output_dir") or "runs"))
         collector_version = str(raw.get("collector_version") or "dev")
+
+        base_dir = path.parent
+        policy_cache: dict[Path, BaselinePolicy] = {}
+        baseline_policy_path: Path | None = None
+        baseline_policy: BaselinePolicy = BaselinePolicy.empty()
+        baseline_raw = raw.get("baseline_policy_path")
+        explicit_baseline = str(baseline_raw) if baseline_raw else None
+        try:
+            resolved_default = resolve_baseline_policy_path(base_dir, explicit_baseline)
+        except FileNotFoundError as exc:
+            if explicit_baseline:
+                raise ValueError(f"Unable to locate baseline policy near {base_dir}: {exc}")
+        else:
+            baseline_policy_path = resolved_default
+            baseline_policy = _load_baseline_policy_from_path(resolved_default, policy_cache)
+
+        cohort_baselines = _parse_cohort_baselines(raw.get("baseline_policies"), base_dir, policy_cache)
 
         targets_raw = raw.get("targets")
         if not isinstance(targets_raw, list):
@@ -498,6 +598,23 @@ class HealthRunConfig:
                 raise ValueError(
                     f"Target '{label}' missing required metadata: {', '.join(missing_metadata)}"
                 )
+            baseline_override = _str_or_none(entry.get("baseline_policy_path"))
+            try:
+                resolved_path = _resolve_target_baseline_path(
+                    base_dir,
+                    baseline_override,
+                    baseline_cohort,
+                    cohort_baselines,
+                    baseline_policy_path,
+                )
+            except FileNotFoundError as exc:
+                raise ValueError(
+                    f"Unable to locate baseline policy for target '{label}': {exc}"
+                )
+            if resolved_path is None:
+                raise ValueError(
+                    f"Target '{label}' cannot resolve a baseline policy; declare baseline_policy_path or register its cohort in baseline_policies."
+                )
             targets.append(
                 HealthTarget(
                     context=str(context),
@@ -508,6 +625,7 @@ class HealthRunConfig:
                     cluster_class=cluster_class,
                     cluster_role=cluster_role,
                     baseline_cohort=baseline_cohort,
+                    baseline_policy_path=str(resolved_path),
                 )
             )
         if not targets:
@@ -592,16 +710,17 @@ class HealthRunConfig:
             warning_event_threshold=_parse_threshold(trigger_raw.get("warning_event_threshold")),
         )
 
-        baseline_raw = raw.get("baseline_policy_path")
-        explicit_path = str(baseline_raw) if baseline_raw else None
-        try:
-            baseline_path = resolve_baseline_policy_path(path.parent, explicit_path)
-        except FileNotFoundError as exc:
-            raise ValueError(f"Unable to locate baseline policy near {path.parent}: {exc}")
-        try:
-            baseline_policy = BaselinePolicy.load_from_file(baseline_path)
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
-            raise ValueError(f"Unable to load baseline policy {baseline_path}: {exc}")
+        target_baselines: dict[str, tuple[BaselinePolicy, Path | None]] = {}
+        for target in targets:
+            policy, resolved_path = _policy_for_target(
+                target.baseline_policy_path,
+                target.baseline_cohort,
+                baseline_policy,
+                baseline_policy_path,
+                cohort_baselines,
+                policy_cache,
+            )
+            target_baselines[target.label] = (policy, resolved_path)
 
         _validate_suspicious_pairs(peers, target_lookup, baseline_policy)
 
@@ -613,8 +732,15 @@ class HealthRunConfig:
             peers=tuple(peers),
             trigger_policy=trigger_policy,
             manual_pairs=tuple(manual_pairs),
+            cohort_baselines=cohort_baselines,
+            target_baselines=target_baselines,
             baseline_policy=baseline_policy,
-            baseline_policy_path=baseline_path,
+            baseline_policy_path=baseline_policy_path,
+        )
+
+    def baseline_for_target(self, target: HealthTarget) -> tuple[BaselinePolicy, Path | None]:
+        return self.target_baselines.get(
+            target.label, (self.baseline_policy, self.baseline_policy_path)
         )
 
 
@@ -1502,6 +1628,8 @@ class HealthSnapshotRecord:
     target: HealthTarget
     snapshot: ClusterSnapshot
     path: Path
+    baseline_policy: BaselinePolicy
+    baseline_policy_path: str | None = None
     assessment: HealthAssessmentResult | None = None
     pattern_reasons: tuple[str, ...] = field(default_factory=tuple)
     pattern_metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -1517,7 +1645,8 @@ def determine_pair_trigger_reasons(
     policy: TriggerPolicy,
     history: dict[str, HealthHistoryEntry],
     manual_keys: set[tuple[str, str]],
-    baseline: BaselinePolicy,
+    baseline_policy: BaselinePolicy,
+    baseline_registry: BaselineRegistry | None,
     classification: str | None = None,
 ) -> list[TriggerDetail]:
     details: list[TriggerDetail] = []
@@ -1526,8 +1655,12 @@ def determine_pair_trigger_reasons(
     pair_key = (primary_ref, secondary_ref)
 
     def _peer_role_summary() -> str | None:
-        primary_role = baseline.role_for(primary_ref) or baseline.role_for(primary.target.label)
-        secondary_role = baseline.role_for(secondary_ref) or baseline.role_for(secondary.target.label)
+        primary_role = baseline_registry.role_for(primary_ref) if baseline_registry else None
+        if not primary_role:
+            primary_role = baseline_registry.role_for(primary.target.label) if baseline_registry else None
+        secondary_role = baseline_registry.role_for(secondary_ref) if baseline_registry else None
+        if not secondary_role:
+            secondary_role = baseline_registry.role_for(secondary.target.label) if baseline_registry else None
         if not primary_role and not secondary_role:
             return None
         summary_parts: list[str] = []
@@ -1540,6 +1673,30 @@ def determine_pair_trigger_reasons(
         return " vs ".join(summary_parts)
 
     role_summary = _peer_role_summary()
+    def _path_label(record: HealthSnapshotRecord) -> str:
+        return record.baseline_policy_path or "<default>"
+    primary_path = _path_label(primary)
+    secondary_path = _path_label(secondary)
+    if primary_path != secondary_path:
+        details.append(
+            TriggerDetail(
+                type="baseline_mismatch",
+                reason=(
+                    f"baseline mismatch ({primary_path} vs {secondary_path})"
+                    if primary_path and secondary_path
+                    else "baseline mismatch"
+                ),
+                baseline_expectation=None,
+                actual_value=f"{primary_path} vs {secondary_path}",
+                previous_run_value=None,
+                why=(
+                    "Targets rely on different baseline policies, so expected parity between them may not hold."
+                ),
+                next_check="Confirm the cohorts and baseline policies align before treating drift as actionable.",
+                peer_roles=role_summary,
+                classification=classification,
+            )
+        )
 
     def _format_previous_control_plane(cluster_id: str) -> str:
         prev = history.get(cluster_id)
@@ -1573,13 +1730,13 @@ def determine_pair_trigger_reasons(
                 classification=classification,
             )
         )
-    if policy.control_plane_version and not baseline.is_drift_allowed(
+    if policy.control_plane_version and not baseline_policy.is_drift_allowed(
         BaselineDriftCategory.CONTROL_PLANE_VERSION
     ):
         primary_version = primary.snapshot.metadata.control_plane_version or "unknown"
         secondary_version = secondary.snapshot.metadata.control_plane_version or "unknown"
         if primary_version != secondary_version:
-            expectation = baseline.control_plane_expectation
+            expectation = baseline_policy.control_plane_expectation
             expectation_desc = expectation.describe() if expectation else None
             reason = f"control plane version drift ({primary_version} vs {secondary_version})"
             previous_value = (
@@ -1606,7 +1763,7 @@ def determine_pair_trigger_reasons(
                     classification=classification,
                 )
             )
-    if policy.watched_helm_release and not baseline.is_drift_allowed(
+    if policy.watched_helm_release and not baseline_policy.is_drift_allowed(
         BaselineDriftCategory.WATCHED_HELM_RELEASE
     ):
         watched_releases = (
@@ -1621,7 +1778,7 @@ def determine_pair_trigger_reasons(
             secondary_version = secondary_release.chart_version if secondary_release else "missing"
             if primary_version == secondary_version:
                 continue
-            release_policy = baseline.release_policy(release_key)
+            release_policy = baseline_policy.release_policy(release_key)
             expectation_desc = release_policy.describe() if release_policy else None
             next_check_value = release_policy.next_check if release_policy else None
             reason = f"watched Helm release {release_key} drift ({primary_version} vs {secondary_version})"
@@ -1652,7 +1809,7 @@ def determine_pair_trigger_reasons(
                     classification=classification,
                 )
             )
-    if policy.watched_crd and not baseline.is_drift_allowed(
+    if policy.watched_crd and not baseline_policy.is_drift_allowed(
         BaselineDriftCategory.WATCHED_CRD
     ):
         watched_crds = set(primary.target.watched_crd_families) | set(secondary.target.watched_crd_families)
@@ -1665,7 +1822,7 @@ def determine_pair_trigger_reasons(
             secondary_storage = secondary_crd.storage_version if secondary_crd else "missing"
             if primary_storage == secondary_storage:
                 continue
-            crd_policy = baseline.crd_policy(crd_name)
+            crd_policy = baseline_policy.crd_policy(crd_name)
             expectation_desc = f"CRD {crd_name} must exist" if crd_policy else None
             next_crd_check = crd_policy.next_check if crd_policy else None
             reason = f"watched CRD {crd_name} storage drift ({primary_storage} vs {secondary_storage})"
@@ -1792,6 +1949,9 @@ class HealthLoopRunner:
         self.run_label = config.run_label
         self.run_id = _build_runtime_run_id(self.run_label)
         self.baseline_policy = config.baseline_policy
+        self.baseline_registry = BaselineRegistry([self.baseline_policy])
+        for policy, _ in config.target_baselines.values():
+            self.baseline_registry.add(policy)
         self._drilldown_collector = drilldown_collector
         self._image_pull_secret_inspector = image_pull_secret_inspector or ImagePullSecretInspector()
         self._log_path = config.output_dir / "health" / "health.log"
@@ -1823,7 +1983,7 @@ class HealthLoopRunner:
         triggers = self._evaluate_triggers(records, previous_history, directories)
         drilldowns = self._build_drilldowns(records, previous_history, directories["drilldowns"])
         self._persist_history(history, directories["history"])
-        self._write_review_artifact(assessments, drilldowns, directories)
+        review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
         if not self.quiet:
             print(
                 f"Health run '{self.run_label}' ({self.run_id}) produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
@@ -1839,6 +1999,26 @@ class HealthLoopRunner:
             trigger_count=len(triggers),
             drilldown_count=len(drilldowns),
         )
+        try:
+            write_health_ui_index(
+                directories["root"],
+                self.run_id,
+                self.run_label,
+                self.config.collector_version,
+                records,
+                assessments,
+                drilldowns,
+                proposals,
+            )
+        except Exception as exc:
+            self._collection_messages.append(f"UI index generation failed: {exc}")
+            self._log_event(
+                "health-loop",
+                "ERROR",
+                "UI artifact generation failed",
+                severity_reason=str(exc),
+                event="ui-index-failed",
+            )
         return assessments, triggers, drilldowns
 
     def _ensure_directories(self) -> dict[str, Path]:
@@ -1903,7 +2083,16 @@ class HealthLoopRunner:
                 event="snapshot",
             )
             self._collection_messages.append(f"Collected snapshot for '{target.context}' -> {path}")
-            records.append(HealthSnapshotRecord(target=target, snapshot=snapshot, path=path))
+            baseline_policy, baseline_path = self.config.baseline_for_target(target)
+            records.append(
+                HealthSnapshotRecord(
+                    target=target,
+                    snapshot=snapshot,
+                    path=path,
+                    baseline_policy=baseline_policy,
+                    baseline_policy_path=str(baseline_path) if baseline_path else None,
+                )
+            )
         return records
 
     def _build_assessments(
@@ -1941,7 +2130,7 @@ class HealthLoopRunner:
                     record.snapshot,
                     record.target,
                     previous,
-                    self.config.baseline_policy,
+                    record.baseline_policy,
                     self.config.trigger_policy.warning_event_threshold,
                     image_pull_secret_insight=insight,
                 )
@@ -1964,6 +2153,13 @@ class HealthLoopRunner:
                 HealthAssessmentValidator.validate(artifact.to_dict())
                 _write_json(artifact.to_dict(), assessment_path)
                 artifacts.append(artifact)
+                if artifact.health_rating == HealthRating.DEGRADED:
+                    notification = build_degraded_health_notification(
+                        self.run_id, record, artifact
+                    )
+                    write_notification_artifact(
+                        directories["root"] / "notifications", notification
+                    )
             history[cluster_id] = HealthHistoryEntry(
                 cluster_id=cluster_id,
                 node_count=record.snapshot.metadata.node_count,
@@ -1980,6 +2176,7 @@ class HealthLoopRunner:
                 cluster_class=record.target.cluster_class,
                 cluster_role=record.target.cluster_role,
                 baseline_cohort=record.target.baseline_cohort,
+                baseline_policy_path=record.baseline_policy_path,
             )
             record.image_pull_secret_insight = insight
         return artifacts
@@ -2051,8 +2248,9 @@ class HealthLoopRunner:
         assessments: list[HealthAssessmentArtifact],
         drilldowns: list[DrilldownArtifact],
         directories: dict[str, Path],
-    ) -> None:
+    ) -> tuple[Path | None, tuple[HealthProposal, ...]]:
         directory = directories["reviews"]
+        proposal_records: list[HealthProposal] = []
         try:
             review = build_health_review(
                 run_id=self.run_id,
@@ -2069,7 +2267,7 @@ class HealthLoopRunner:
                 severity_reason=str(exc),
                 event="review-failed",
             )
-            return
+            return None, ()
         path = directory / f"{self.run_id}-review.json"
         _write_json(review.to_dict(), path)
         self._log_event(
@@ -2105,6 +2303,11 @@ class HealthLoopRunner:
                     event="proposal-generated",
                 )
                 self._collection_messages.append(f"Health proposal written to '{proposal_path}'")
+                proposal_records.append(proposal)
+                notification = build_proposal_created_notification(self.run_id, proposal)
+                write_notification_artifact(
+                    directories["root"] / "notifications", notification
+                )
         except Exception as exc:
             self._collection_messages.append(f"Health proposal generation failed: {exc}")
             self._log_event(
@@ -2114,6 +2317,7 @@ class HealthLoopRunner:
                 severity_reason=str(exc),
                 event="proposal-failed",
             )
+        return path, tuple(proposal_records)
 
     def _determine_drilldown_reasons(
         self,
@@ -2180,7 +2384,10 @@ class HealthLoopRunner:
                 continue
             expected_categories = tuple(sorted(peer.expected_drift_categories))
             ignored_categories = tuple(
-                sorted(cat.value for cat in self.baseline_policy.ignored_drift_categories)
+                sorted(
+                    set(primary_record.baseline_policy.ignored_drift_categories)
+                    | set(secondary_record.baseline_policy.ignored_drift_categories)
+                )
             )
             peer_notes = peer.notes
             (
@@ -2196,7 +2403,7 @@ class HealthLoopRunner:
                 primary_record,
                 secondary_record,
                 peer.intent,
-                self.baseline_policy,
+                self.baseline_registry,
             )
             classification_label = peer.intent.label()
             trigger_details: list[TriggerDetail] = []
@@ -2207,7 +2414,8 @@ class HealthLoopRunner:
                     self.config.trigger_policy,
                     history,
                     self._manual_keys,
-                    self.baseline_policy,
+                    primary_record.baseline_policy,
+                    self.baseline_registry,
                     classification_label,
                 )
             triggered = bool(trigger_details)
@@ -2288,11 +2496,14 @@ class HealthLoopRunner:
                 severity_reason="; ".join(detail.reason for detail in trigger_details),
             )
             self._collection_messages.append(
-                
-                    f"Triggered comparison {primary_record.target.label} vs {secondary_record.target.label}: "
-                    f"{', '.join(detail.reason for detail in trigger_details)}"
-                
+                f"Triggered comparison {primary_record.target.label} vs {secondary_record.target.label}: "
+                f"{', '.join(detail.reason for detail in trigger_details)}"
             )
+            if triggered and peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
+                notification = build_suspicious_comparison_notification(artifact)
+                write_notification_artifact(
+                    directories["root"] / "notifications", notification
+                )
         decision_path = directories["root"] / f"{self.run_id}-comparison-decisions.json"
         for decision in decisions:
             ComparisonDecisionValidator.validate(decision.to_dict())
@@ -2313,14 +2524,35 @@ class HealthLoopRunner:
         data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
         _write_json(data, history_path)
 
-def _resolve_peer_role(record: HealthSnapshotRecord, baseline: BaselinePolicy) -> str | None:
+class BaselineRegistry:
+    def __init__(self, policies: Iterable[BaselinePolicy] | None = None) -> None:
+        self._policies: list[BaselinePolicy] = []
+        if policies:
+            for policy in policies:
+                self.add(policy)
+
+    def add(self, policy: BaselinePolicy) -> None:
+        if policy in self._policies:
+            return
+        self._policies.append(policy)
+
+    def role_for(self, reference: str) -> str | None:
+        for policy in self._policies:
+            role = policy.role_for(reference)
+            if role:
+                return role
+        return None
+
+
+def _resolve_peer_role(record: HealthSnapshotRecord, registry: BaselineRegistry | None) -> str | None:
     explicit_role = record.target.cluster_role
     if explicit_role:
         return explicit_role.strip() or None
-    for reference in record.refs():
-        role = baseline.role_for(reference)
-        if role:
-            return role
+    if registry:
+        for reference in record.refs():
+            role = registry.role_for(reference)
+            if role:
+                return role
     return None
 
 
@@ -2328,7 +2560,7 @@ def _policy_eligible_pair(
     primary: HealthSnapshotRecord,
     secondary: HealthSnapshotRecord,
     intent: ComparisonIntent,
-    baseline: BaselinePolicy,
+    baseline_registry: BaselineRegistry | None,
 ) -> tuple[
     bool,
     str,
@@ -2341,8 +2573,8 @@ def _policy_eligible_pair(
 ]:
     primary_class = primary.target.cluster_class
     secondary_class = secondary.target.cluster_class
-    primary_role = _resolve_peer_role(primary, baseline)
-    secondary_role = _resolve_peer_role(secondary, baseline)
+    primary_role = _resolve_peer_role(primary, baseline_registry)
+    secondary_role = _resolve_peer_role(secondary, baseline_registry)
     primary_cohort = primary.target.baseline_cohort
     secondary_cohort = secondary.target.baseline_cohort
     reasons: list[str] = []

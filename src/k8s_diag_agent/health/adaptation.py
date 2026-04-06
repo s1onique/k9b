@@ -348,6 +348,13 @@ def _noise_reason_proposal(
     )
 
 
+def _has_baseline_mismatch(details: Sequence[Mapping[str, Any]]) -> bool:
+    for detail in details:
+        if isinstance(detail, Mapping) and detail.get("type") == "baseline_mismatch":
+            return True
+    return False
+
+
 def _baseline_release_proposals(
     run_id: str,
     review_path: str,
@@ -356,6 +363,8 @@ def _baseline_release_proposals(
     details: Sequence[Mapping[str, Any]],
 ) -> list[HealthProposal]:
     proposals: list[HealthProposal] = []
+    if _has_baseline_mismatch(details):
+        return proposals
     seen = set()
     for detail in details:
         reason = str(detail.get("reason") or "")

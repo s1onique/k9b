@@ -4,6 +4,7 @@ from pathlib import Path
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
+    BaselineRegistry,
     ComparisonIntent,
     HealthSnapshotRecord,
     HealthTarget,
@@ -61,8 +62,9 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline({"alpha": "primary", "beta": "primary"})
         primary = self._record("alpha", "alpha", "prod", "primary")
         secondary = self._record("beta", "beta", "prod", "primary")
+        registry = BaselineRegistry([baseline])
         eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
-            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, registry
         )
         self.assertTrue(eligible)
         self.assertEqual(reason, "policy compatible")
@@ -73,8 +75,9 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline()
         primary = self._record("alpha", "alpha", "prod", "primary")
         secondary = self._record("beta", "beta", "prod", "canary")
+        registry = BaselineRegistry([baseline])
         eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
-            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, registry
         )
         self.assertFalse(eligible)
         self.assertIn("peer roles differ", reason)
@@ -83,8 +86,9 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline()
         primary = self._record("alpha", "alpha", None, "primary")
         secondary = self._record("beta", "beta", "prod", "primary")
+        registry = BaselineRegistry([baseline])
         eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
-            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, registry
         )
         self.assertFalse(eligible)
         self.assertIn("cluster class metadata missing", reason)
@@ -93,8 +97,9 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline({"alpha": "primary", "beta": "primary"})
         primary = self._record("alpha", "alpha", "prod", "primary", "cohort-1")
         secondary = self._record("beta", "beta", "prod", "primary", "cohort-2")
+        registry = BaselineRegistry([baseline])
         eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
-            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, registry
         )
         self.assertFalse(eligible)
         self.assertIn("baseline cohorts differ", reason)
@@ -105,8 +110,9 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline({"alpha": "primary", "beta": "primary"})
         primary = self._record("alpha", "alpha", "prod", "primary", None)
         secondary = self._record("beta", "beta", "prod", "primary", "cohort-1")
+        registry = BaselineRegistry([baseline])
         eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
-            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, baseline
+            primary, secondary, ComparisonIntent.SUSPICIOUS_DRIFT, registry
         )
         self.assertFalse(eligible)
         self.assertIn("baseline cohort metadata missing", reason)
@@ -117,8 +123,9 @@ class ComparisonPolicyTest(unittest.TestCase):
         baseline = self._baseline({"alpha": "primary", "beta": "primary"})
         primary = self._record("alpha", "alpha", "prod", "primary", "cohort-a")
         secondary = self._record("beta", "beta", "prod", "primary", "cohort-b")
+        registry = BaselineRegistry([baseline])
         eligible, reason, *_rest, primary_cohort, secondary_cohort = _policy_eligible_pair(
-            primary, secondary, ComparisonIntent.EXPECTED_DRIFT, baseline
+            primary, secondary, ComparisonIntent.EXPECTED_DRIFT, registry
         )
         self.assertTrue(eligible)
         self.assertEqual(reason, "policy compatible")
