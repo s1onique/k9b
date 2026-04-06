@@ -1,17 +1,17 @@
 import unittest
-from datetime import datetime, timezone
-from typing import Dict
+from datetime import UTC, datetime
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from tests.path_helper import ensure_src_in_path
 
 ensure_src_in_path()
 
 from k8s_diag_agent.collect.cluster_snapshot import (
-    CollectionStatus,
     ClusterSnapshot,
     ClusterSnapshotMetadata,
+    CollectionStatus,
     CRDRecord,
     HelmReleaseRecord,
 )
@@ -28,7 +28,7 @@ from k8s_diag_agent.feedback.runner import _serialize_run_artifact
 from k8s_diag_agent.models import ConfidenceLevel
 
 
-def _text_dict_strategy() -> st.SearchStrategy[Dict[str, str]]:
+def _text_dict_strategy() -> st.SearchStrategy[dict[str, str]]:
     return st.dictionaries(st.text(min_size=1), st.text(min_size=1), max_size=3)
 
 
@@ -37,7 +37,7 @@ def _metadata_strategy(draw: st.DrawFn) -> ClusterSnapshotMetadata:
     labels = draw(st.dictionaries(st.text(min_size=1), st.text(min_size=1), max_size=2))
     return ClusterSnapshotMetadata(
         cluster_id=draw(st.text(min_size=1)),
-        captured_at=draw(st.datetimes(timezones=st.just(timezone.utc))),
+        captured_at=draw(st.datetimes(timezones=st.just(UTC))),
         control_plane_version=draw(st.text(min_size=1)),
         node_count=draw(st.integers(min_value=0, max_value=10)),
         pod_count=draw(st.one_of(st.none(), st.integers(min_value=0, max_value=50))),
@@ -47,8 +47,8 @@ def _metadata_strategy(draw: st.DrawFn) -> ClusterSnapshotMetadata:
 
 
 @st.composite
-def _helm_releases_strategy(draw: st.DrawFn) -> Dict[str, HelmReleaseRecord]:
-    releases: Dict[str, HelmReleaseRecord] = {}
+def _helm_releases_strategy(draw: st.DrawFn) -> dict[str, HelmReleaseRecord]:
+    releases: dict[str, HelmReleaseRecord] = {}
     for _ in range(draw(st.integers(min_value=0, max_value=3))):
         name = draw(st.text(min_size=1))
         namespace = draw(st.text(min_size=1))
@@ -66,8 +66,8 @@ def _helm_releases_strategy(draw: st.DrawFn) -> Dict[str, HelmReleaseRecord]:
 
 
 @st.composite
-def _crd_strategy(draw: st.DrawFn) -> Dict[str, CRDRecord]:
-    crds: Dict[str, CRDRecord] = {}
+def _crd_strategy(draw: st.DrawFn) -> dict[str, CRDRecord]:
+    crds: dict[str, CRDRecord] = {}
     for _ in range(draw(st.integers(min_value=0, max_value=3))):
         name = draw(st.text(min_size=1))
         served = tuple(draw(st.lists(st.text(min_size=1), min_size=1, max_size=3)))
@@ -87,12 +87,12 @@ def _collection_status_strategy(draw: st.DrawFn) -> CollectionStatus:
 
 
 @st.composite
-def _workloads_strategy(draw: st.DrawFn) -> Dict[str, object]:
+def _workloads_strategy(draw: st.DrawFn) -> dict[str, object]:
     return draw(st.dictionaries(st.text(min_size=1), st.one_of(st.text(), st.integers(), st.booleans()), max_size=3))
 
 
 @st.composite
-def _metrics_strategy(draw: st.DrawFn) -> Dict[str, float]:
+def _metrics_strategy(draw: st.DrawFn) -> dict[str, float]:
     return draw(
         st.dictionaries(
             st.text(min_size=1),
@@ -144,7 +144,7 @@ def _validation_result_strategy(draw: st.DrawFn) -> ValidationResult:
         name=draw(st.text(min_size=1)),
         passed=draw(st.booleans()),
         errors=draw(st.lists(st.text(min_size=1), max_size=3)),
-        checked_at=draw(st.datetimes(timezones=st.just(timezone.utc))),
+        checked_at=draw(st.datetimes(timezones=st.just(UTC))),
         failure_mode=failure,
     )
 
@@ -166,7 +166,7 @@ def _improvement_strategy(draw: st.DrawFn) -> ProposedImprovement:
 def _run_artifact_strategy(draw: st.DrawFn) -> RunArtifact:
     return RunArtifact(
         run_id=draw(st.text(min_size=1)),
-        timestamp=draw(st.datetimes(timezones=st.just(timezone.utc))),
+        timestamp=draw(st.datetimes(timezones=st.just(UTC))),
         context_name=draw(st.one_of(st.none(), st.text(min_size=1))),
         comparison_intent=draw(st.one_of(st.none(), st.text(min_size=1))),
         comparison_notes=draw(st.one_of(st.none(), st.text(min_size=1))),
@@ -221,7 +221,7 @@ class FeedbackArtifactPropertyTests(unittest.TestCase):
 class ComparisonPropertyTests(unittest.TestCase):
     BASE_METADATA = ClusterSnapshotMetadata(
         cluster_id="base",
-        captured_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        captured_at=datetime(2025, 1, 1, tzinfo=UTC),
         control_plane_version="v1.25",
         node_count=1,
     )
@@ -237,12 +237,12 @@ class ComparisonPropertyTests(unittest.TestCase):
     )
     def test_comparison_only_reports_actual_differences(
         self,
-        primary_metrics: Dict[str, float],
-        secondary_metrics: Dict[str, float],
-        primary_helm: Dict[str, HelmReleaseRecord],
-        secondary_helm: Dict[str, HelmReleaseRecord],
-        primary_crds: Dict[str, CRDRecord],
-        secondary_crds: Dict[str, CRDRecord],
+        primary_metrics: dict[str, float],
+        secondary_metrics: dict[str, float],
+        primary_helm: dict[str, HelmReleaseRecord],
+        secondary_helm: dict[str, HelmReleaseRecord],
+        primary_crds: dict[str, CRDRecord],
+        secondary_crds: dict[str, CRDRecord],
     ) -> None:
         primary = ClusterSnapshot(
             metadata=self.BASE_METADATA,

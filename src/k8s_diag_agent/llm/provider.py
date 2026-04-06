@@ -1,11 +1,12 @@
 """Provider-agnostic seam for LLM assessments."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
 from ..compare.two_cluster import ClusterComparison
 from ..models import ConfidenceLevel, SafetyLevel
+from ..security import sanitize_payload
 from .assessor_schema import (
     AssessorAssessment,
     AssessorFinding,
@@ -16,13 +17,12 @@ from .assessor_schema import (
 )
 from .base import LLMAssessmentInput, LLMProvider
 from .llamacpp_provider import LlamaCppProvider
-from ..security import sanitize_payload
 
 
 class DefaultLLMProvider(LLMProvider):
     """Simple deterministic provider that summarizes snapshot diffs."""
 
-    def assess(self, prompt: str, payload: LLMAssessmentInput) -> Dict[str, Any]:
+    def assess(self, prompt: str, payload: LLMAssessmentInput) -> dict[str, Any]:
         differences = payload.comparison.get("differences") or {}
         diff_keys = sorted(differences)
         has_diff = bool(diff_keys)
@@ -97,7 +97,7 @@ class DefaultLLMProvider(LLMProvider):
         )
         return assessment.to_dict()
 
-PROVIDERS: Dict[str, LLMProvider] = {"default": DefaultLLMProvider()}
+PROVIDERS: dict[str, LLMProvider] = {"default": DefaultLLMProvider()}
 PROVIDERS["llamacpp"] = LlamaCppProvider()
 DEFAULT_PROVIDER_NAME = "default"
 AVAILABLE_PROVIDERS = tuple(PROVIDERS.keys())
@@ -113,7 +113,7 @@ def get_provider(name: str | None = None) -> LLMProvider:
 def build_assessment_input(
     primary: ClusterSnapshot, secondary: ClusterSnapshot, comparison: ClusterComparison
 ) -> LLMAssessmentInput:
-    metadata_payload: Optional[Dict[str, Any]]
+    metadata_payload: dict[str, Any] | None
     if comparison.metadata:
         metadata_payload = comparison.metadata.to_dict()
     else:

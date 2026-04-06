@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class ConfidenceLevel(str, Enum):
@@ -34,7 +34,7 @@ class EvidenceRecord:
     kind: str
     layer: Layer
     timestamp: datetime
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
 
 
 @dataclass
@@ -50,7 +50,7 @@ class Signal:
 class Finding:
     id: str
     description: str
-    supporting_signals: List[str]
+    supporting_signals: list[str]
     layer: Layer
 
 
@@ -68,25 +68,25 @@ class NextCheck:
     description: str
     owner: str
     method: str
-    evidence_needed: List[str] = field(default_factory=list)
+    evidence_needed: list[str] = field(default_factory=list)
 
 
 @dataclass
 class RecommendedAction:
     type: str
     description: str
-    references: List[str]
+    references: list[str]
     safety_level: SafetyLevel
 
 
 @dataclass
 class Assessment:
-    observed_signals: List[Signal]
-    findings: List[Finding]
-    hypotheses: List[Hypothesis]
-    next_evidence_to_collect: List[NextCheck]
+    observed_signals: list[Signal]
+    findings: list[Finding]
+    hypotheses: list[Hypothesis]
+    next_evidence_to_collect: list[NextCheck]
     recommended_action: RecommendedAction
     safety_level: SafetyLevel
-    probable_layer_of_origin: Optional[Layer] = None
-    impact_estimate: Optional[Dict[str, Any]] = None
-    overall_confidence: Optional[ConfidenceLevel] = None
+    probable_layer_of_origin: Layer | None = None
+    impact_estimate: dict[str, Any] | None = None
+    overall_confidence: ConfidenceLevel | None = None

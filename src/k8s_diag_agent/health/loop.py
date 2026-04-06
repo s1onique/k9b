@@ -6,11 +6,12 @@ import os
 import re
 import time
 import warnings
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
@@ -28,28 +29,27 @@ from ..models import (
 )
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
+from .adaptation import collect_trigger_details, generate_proposals_from_review
 from .baseline import (
     BaselineDriftCategory,
     BaselinePolicy,
-    resolve_baseline_policy_path,
     _str_or_none,
+    resolve_baseline_policy_path,
 )
 from .drilldown import DrilldownArtifact, DrilldownCollector
-from .utils import normalize_ref
 from .image_pull_secret import (
     BROKEN_IMAGE_PULL_SECRET_REASON,
     ImagePullSecretInsight,
     ImagePullSecretInspector,
 )
-from .adaptation import collect_trigger_details, generate_proposals_from_review
 from .review_feedback import build_health_review
+from .utils import normalize_ref
 from .validators import (
     ComparisonDecisionValidator,
     DrilldownArtifactValidator,
     HealthAssessmentValidator,
     HealthProposalValidator,
 )
-
 
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 _HISTORY_FILENAME = "history.json"
@@ -88,14 +88,14 @@ def _format_snapshot_filename(run_id: str, label: str, captured_at: datetime) ->
 
 def _build_runtime_run_id(label: str) -> str:
     component = _safe_label(label)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"{component}-{timestamp}"
 
 
 def _watched_release_versions(
     snapshot: ClusterSnapshot, watched: Iterable[str]
-) -> Dict[str, Optional[str]]:
-    versions: Dict[str, Optional[str]] = {}
+) -> dict[str, str | None]:
+    versions: dict[str, str | None] = {}
     for release_key in watched:
         release = snapshot.helm_releases.get(release_key)
         versions[release_key] = release.chart_version if release else None
@@ -104,22 +104,22 @@ def _watched_release_versions(
 
 def _watched_crd_versions(
     snapshot: ClusterSnapshot, watched: Iterable[str]
-) -> Dict[str, Optional[str]]:
-    versions: Dict[str, Optional[str]] = {}
+) -> dict[str, str | None]:
+    versions: dict[str, str | None] = {}
     for crd_name in watched:
         crd = snapshot.crds.get(crd_name)
         versions[crd_name] = crd.storage_version if crd else None
     return versions
 
 
-def _normalize_category_list(value: Any | None) -> Tuple[str, ...]:
+def _normalize_category_list(value: Any | None) -> tuple[str, ...]:
     if value is None:
         return ()
     if isinstance(value, str):
         normalized = _str_or_none(value)
         return (normalized,) if normalized else ()
     if isinstance(value, Sequence):
-        categories: List[str] = []
+        categories: list[str] = []
         for item in value:
             normalized = _str_or_none(item)
             if normalized:
@@ -138,20 +138,20 @@ class HealthTarget:
     context: str
     label: str
     monitor_health: bool
-    watched_helm_releases: Tuple[str, ...]
-    watched_crd_families: Tuple[str, ...]
-    cluster_class: Optional[str] = None
-    cluster_role: Optional[str] = None
-    baseline_cohort: Optional[str] = None
+    watched_helm_releases: tuple[str, ...]
+    watched_crd_families: tuple[str, ...]
+    cluster_class: str | None = None
+    cluster_role: str | None = None
+    baseline_cohort: str | None = None
 
 
 @dataclass(frozen=True)
 class ComparisonPeer:
     primary: str
     secondary: str
-    intent: "ComparisonIntent"
-    expected_drift_categories: Tuple[str, ...] = field(default_factory=tuple)
-    notes: Optional[str] = None
+    intent: ComparisonIntent
+    expected_drift_categories: tuple[str, ...] = field(default_factory=tuple)
+    notes: str | None = None
 
 
 class ComparisonIntent(str, Enum):
@@ -190,22 +190,22 @@ class TriggerPolicy:
 class HealthHistoryEntry:
     cluster_id: str
     node_count: int
-    pod_count: Optional[int]
+    pod_count: int | None
     control_plane_version: str
     health_rating: HealthRating
-    missing_evidence: Tuple[str, ...]
-    watched_helm_releases: Dict[str, Optional[str]] = field(default_factory=dict)
-    watched_crd_families: Dict[str, Optional[str]] = field(default_factory=dict)
-    node_conditions: Dict[str, int] = field(default_factory=dict)
-    pod_counts: Dict[str, int] = field(default_factory=dict)
+    missing_evidence: tuple[str, ...]
+    watched_helm_releases: dict[str, str | None] = field(default_factory=dict)
+    watched_crd_families: dict[str, str | None] = field(default_factory=dict)
+    node_conditions: dict[str, int] = field(default_factory=dict)
+    pod_counts: dict[str, int] = field(default_factory=dict)
     job_failures: int = 0
     warning_event_count: int = 0
-    cluster_class: Optional[str] = None
-    cluster_role: Optional[str] = None
-    baseline_cohort: Optional[str] = None
+    cluster_class: str | None = None
+    cluster_role: str | None = None
+    baseline_cohort: str | None = None
 
     @classmethod
-    def from_dict(cls, cluster_id: str, data: Dict[str, Any]) -> "HealthHistoryEntry":
+    def from_dict(cls, cluster_id: str, data: dict[str, Any]) -> HealthHistoryEntry:
         raw_helm = data.get("watched_helm_releases")
         if isinstance(raw_helm, dict):
             watched_helm = {
@@ -260,7 +260,7 @@ class HealthHistoryEntry:
             baseline_cohort=_str_or_none(data.get("baseline_cohort") or data.get("platform_generation")),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "node_count": self.node_count,
             "pod_count": self.pod_count,
@@ -283,12 +283,12 @@ class HealthHistoryEntry:
 class HealthAssessmentResult:
     assessment: Assessment
     rating: HealthRating
-    missing_evidence: Tuple[str, ...]
+    missing_evidence: tuple[str, ...]
     node_count: int
-    pod_count: Optional[int]
+    pod_count: int | None
     control_plane_version: str
-    pattern_reasons: Tuple[str, ...] = field(default_factory=tuple)
-    pattern_metadata: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+    pattern_reasons: tuple[str, ...] = field(default_factory=tuple)
+    pattern_metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass
@@ -300,12 +300,12 @@ class HealthAssessmentArtifact:
     label: str
     cluster_id: str
     snapshot_path: str
-    assessment: Dict[str, Any]
-    missing_evidence: Tuple[str, ...]
+    assessment: dict[str, Any]
+    missing_evidence: tuple[str, ...]
     health_rating: HealthRating
-    notes: Optional[str] = None
+    notes: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "run_label": self.run_label,
             "run_id": self.run_id,
@@ -325,15 +325,15 @@ class HealthAssessmentArtifact:
 class TriggerDetail:
     type: str
     reason: str
-    baseline_expectation: Optional[str]
+    baseline_expectation: str | None
     actual_value: str
-    previous_run_value: Optional[str]
+    previous_run_value: str | None
     why: str
-    next_check: Optional[str]
-    peer_roles: Optional[str] = None
-    classification: Optional[str] = None
+    next_check: str | None
+    peer_roles: str | None = None
+    classification: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         data = {
             "type": self.type,
             "reason": self.reason,
@@ -359,17 +359,17 @@ class ComparisonTriggerArtifact:
     secondary: str
     primary_label: str
     secondary_label: str
-    trigger_reasons: Tuple[str, ...]
-    comparison_summary: Dict[str, int]
-    differences: Dict[str, Dict[str, Any]]
-    trigger_details: Tuple[TriggerDetail, ...]
+    trigger_reasons: tuple[str, ...]
+    comparison_summary: dict[str, int]
+    differences: dict[str, dict[str, Any]]
+    trigger_details: tuple[TriggerDetail, ...]
     comparison_intent: str
-    expected_drift_categories: Tuple[str, ...]
-    ignored_drift_categories: Tuple[str, ...]
-    peer_notes: Optional[str] = None
-    notes: Optional[str] = None
+    expected_drift_categories: tuple[str, ...]
+    ignored_drift_categories: tuple[str, ...]
+    peer_notes: str | None = None
+    notes: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "run_label": self.run_label,
             "run_id": self.run_id,
@@ -398,17 +398,17 @@ class ComparisonDecision:
     triggered: bool
     comparison_intent: str
     reason: str
-    primary_class: Optional[str]
-    secondary_class: Optional[str]
-    primary_role: Optional[str]
-    secondary_role: Optional[str]
-    primary_cohort: Optional[str]
-    secondary_cohort: Optional[str]
-    expected_drift_categories: Tuple[str, ...]
-    ignored_drift_categories: Tuple[str, ...]
-    notes: Optional[str]
+    primary_class: str | None
+    secondary_class: str | None
+    primary_role: str | None
+    secondary_role: str | None
+    primary_cohort: str | None
+    secondary_cohort: str | None
+    expected_drift_categories: tuple[str, ...]
+    ignored_drift_categories: tuple[str, ...]
+    notes: str | None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "primary_label": self.primary_label,
             "secondary_label": self.secondary_label,
@@ -433,14 +433,15 @@ class HealthRunConfig:
     run_label: str
     output_dir: Path
     collector_version: str
-    targets: Tuple[HealthTarget, ...]
-    peers: Tuple[ComparisonPeer, ...]
+    targets: tuple[HealthTarget, ...]
+    peers: tuple[ComparisonPeer, ...]
     trigger_policy: TriggerPolicy
-    manual_pairs: Tuple[ManualComparison, ...]
+    manual_pairs: tuple[ManualComparison, ...]
     baseline_policy: BaselinePolicy
+    baseline_policy_path: Path | None = None
 
     @classmethod
-    def load(cls, path: Path) -> "HealthRunConfig":
+    def load(cls, path: Path) -> HealthRunConfig:
         raw = json.loads(path.read_text(encoding="utf-8"))
         raw_label = raw.get("run_label")
         legacy_run_id = raw.get("run_id")
@@ -463,7 +464,7 @@ class HealthRunConfig:
         targets_raw = raw.get("targets")
         if not isinstance(targets_raw, list):
             raise ValueError("`targets` must be a list")
-        targets: List[HealthTarget] = []
+        targets: list[HealthTarget] = []
         for entry in targets_raw:
             if not isinstance(entry, dict):
                 continue
@@ -486,7 +487,7 @@ class HealthRunConfig:
             cluster_role = _str_or_none(entry.get("cluster_role"))
             cohort_value = entry.get("baseline_cohort") or entry.get("platform_generation")
             baseline_cohort = _str_or_none(cohort_value)
-            missing_metadata: List[str] = []
+            missing_metadata: list[str] = []
             if not cluster_class:
                 missing_metadata.append("cluster_class")
             if not cluster_role:
@@ -512,14 +513,14 @@ class HealthRunConfig:
         if not targets:
             raise ValueError("`targets` must include at least one entry")
 
-        target_lookup: Dict[str, HealthTarget] = {}
+        target_lookup: dict[str, HealthTarget] = {}
         for target in targets:
             target_lookup[normalize_ref(target.context)] = target
             target_lookup[normalize_ref(target.label)] = target
-        references: Set[str] = set(target_lookup.keys())
+        references: set[str] = set(target_lookup.keys())
 
         manual_raw = raw.get("manual_pairs") or []
-        manual_pairs: List[ManualComparison] = []
+        manual_pairs: list[ManualComparison] = []
         for entry in manual_raw:
             if not isinstance(entry, dict):
                 continue
@@ -540,7 +541,7 @@ class HealthRunConfig:
             peers_raw = []
         if not isinstance(peers_raw, list):
             raise ValueError("`peer_mappings` must be a list")
-        peers: List[ComparisonPeer] = []
+        peers: list[ComparisonPeer] = []
         for entry in peers_raw:
             if not isinstance(entry, dict):
                 continue
@@ -549,7 +550,7 @@ class HealthRunConfig:
             peer_list = entry.get("peers")
             if not primary_value:
                 continue
-            candidates: List[str] = []
+            candidates: list[str] = []
             if secondary_value:
                 candidates.append(secondary_value)
             if isinstance(peer_list, list):
@@ -613,6 +614,7 @@ class HealthRunConfig:
             trigger_policy=trigger_policy,
             manual_pairs=tuple(manual_pairs),
             baseline_policy=baseline_policy,
+            baseline_policy_path=baseline_path,
         )
 
 
@@ -629,18 +631,18 @@ class _SignalIdGenerator:
 def build_health_assessment(
     snapshot: ClusterSnapshot,
     target: HealthTarget,
-    previous: Optional[HealthHistoryEntry],
+    previous: HealthHistoryEntry | None,
     baseline: BaselinePolicy,
     warning_event_threshold: int = 0,
     image_pull_secret_insight: ImagePullSecretInsight | None = None,
 ) -> HealthAssessmentResult:
     generator = _SignalIdGenerator(target.label)
-    signals: List[Signal] = []
+    signals: list[Signal] = []
     evidence_id = snapshot.metadata.cluster_id
     status = snapshot.collection_status
     missing = tuple(status.missing_evidence)
     issues_detected = False
-    issue_findings: List[Finding] = []
+    issue_findings: list[Finding] = []
     health_signals = snapshot.health_signals
     node_conditions = health_signals.node_conditions
     pod_counts = health_signals.pod_counts
@@ -688,19 +690,19 @@ def build_health_assessment(
             Layer.OBSERVABILITY,
             [signal.id],
         )
-    missing_signal_ids: List[str] = []
-    missing_signal_map: Dict[str, str] = {}
-    baseline_next_checks: List[NextCheck] = []
-    baseline_reasons: List[str] = []
-    image_pull_secret_next_checks: List[NextCheck] = []
-    references: List[str] = []
+    missing_signal_ids: list[str] = []
+    missing_signal_map: dict[str, str] = {}
+    baseline_next_checks: list[NextCheck] = []
+    baseline_reasons: list[str] = []
+    image_pull_secret_next_checks: list[NextCheck] = []
+    references: list[str] = []
     insight_hypothesis: Hypothesis | None = None
-    pattern_reasons: List[str] = []
-    pattern_metadata: Dict[str, Tuple[str, ...]] = {}
-    pattern_next_checks: List[NextCheck] = []
-    pattern_refs: List[str] = []
-    pattern_hypotheses: List[Hypothesis] = []
-    matched_event_ids: Set[int] = set()
+    pattern_reasons: list[str] = []
+    pattern_metadata: dict[str, tuple[str, ...]] = {}
+    pattern_next_checks: list[NextCheck] = []
+    pattern_refs: list[str] = []
+    pattern_hypotheses: list[Hypothesis] = []
+    matched_event_ids: set[int] = set()
     for missing_item in missing:
         issues_detected = True
         signal = add_signal(
@@ -900,8 +902,8 @@ def build_health_assessment(
         for release_key in sorted(
             set(watched_release_versions) | set(previous_release_versions)
         ):
-            release_current_version: Optional[str] = watched_release_versions.get(release_key)
-            release_previous_version: Optional[str] = previous_release_versions.get(release_key)
+            release_current_version: str | None = watched_release_versions.get(release_key)
+            release_previous_version: str | None = previous_release_versions.get(release_key)
             if release_current_version == release_previous_version:
                 continue
             issues_detected = True
@@ -925,8 +927,8 @@ def build_health_assessment(
         for crd_key in sorted(
             set(watched_crd_versions) | set(previous_crd_versions)
         ):
-            crd_current_version: Optional[str] = watched_crd_versions.get(crd_key)
-            crd_previous_version: Optional[str] = previous_crd_versions.get(crd_key)
+            crd_current_version: str | None = watched_crd_versions.get(crd_key)
+            crd_previous_version: str | None = previous_crd_versions.get(crd_key)
             if crd_current_version == crd_previous_version:
                 continue
             issues_detected = True
@@ -956,7 +958,7 @@ def build_health_assessment(
         if warning_threshold <= 0
         else warning_event_count >= warning_threshold
     )
-    node_components: List[str] = []
+    node_components: list[str] = []
     node_severity = "medium"
     if node_conditions.not_ready > 0:
         node_components.append(f"{node_conditions.not_ready} nodes NotReady")
@@ -1141,11 +1143,11 @@ def build_health_assessment(
         Layer.OBSERVABILITY,
     )
 
-    def _unused_warning_events() -> List[WarningEventSummary]:
+    def _unused_warning_events() -> list[WarningEventSummary]:
         return [event for event in warning_events if id(event) not in matched_event_ids]
 
-    def _capture_namespaces(events: Sequence[WarningEventSummary]) -> Tuple[str, ...]:
-        seen: List[str] = []
+    def _capture_namespaces(events: Sequence[WarningEventSummary]) -> tuple[str, ...]:
+        seen: list[str] = []
         for event in events:
             namespace = (event.namespace or "").strip()
             if namespace and namespace not in seen:
@@ -1241,7 +1243,7 @@ def build_health_assessment(
                 return "resource shortage"
             return None
 
-        matches: List[tuple[WarningEventSummary, str]] = []
+        matches: list[tuple[WarningEventSummary, str]] = []
         for event in _unused_warning_events():
             if event.reason != "FailedScheduling":
                 continue
@@ -1404,7 +1406,7 @@ def build_health_assessment(
                 else "Telemetry gaps close and node/pod counts stabilize without Helm errors."
             ),
         )
-        detailed_hypotheses: List[Hypothesis] = []
+        detailed_hypotheses: list[Hypothesis] = []
         detailed_hypotheses.extend(pattern_hypotheses)
         if insight_hypothesis:
             detailed_hypotheses.append(insight_hypothesis)
@@ -1422,7 +1424,7 @@ def build_health_assessment(
         ]
         safety_level = SafetyLevel.OBSERVE_ONLY
 
-    next_checks: List[NextCheck] = []
+    next_checks: list[NextCheck] = []
     if missing:
         next_checks.append(
             NextCheck(
@@ -1500,12 +1502,12 @@ class HealthSnapshotRecord:
     target: HealthTarget
     snapshot: ClusterSnapshot
     path: Path
-    assessment: Optional[HealthAssessmentResult] = None
-    pattern_reasons: Tuple[str, ...] = field(default_factory=tuple)
-    pattern_metadata: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+    assessment: HealthAssessmentResult | None = None
+    pattern_reasons: tuple[str, ...] = field(default_factory=tuple)
+    pattern_metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
     image_pull_secret_insight: ImagePullSecretInsight | None = None
 
-    def refs(self) -> Tuple[str, str]:
+    def refs(self) -> tuple[str, str]:
         return (normalize_ref(self.target.context), normalize_ref(self.target.label))
 
 
@@ -1513,22 +1515,22 @@ def determine_pair_trigger_reasons(
     primary: HealthSnapshotRecord,
     secondary: HealthSnapshotRecord,
     policy: TriggerPolicy,
-    history: Dict[str, HealthHistoryEntry],
-    manual_keys: Set[Tuple[str, str]],
+    history: dict[str, HealthHistoryEntry],
+    manual_keys: set[tuple[str, str]],
     baseline: BaselinePolicy,
-    classification: Optional[str] = None,
-) -> List[TriggerDetail]:
-    details: List[TriggerDetail] = []
+    classification: str | None = None,
+) -> list[TriggerDetail]:
+    details: list[TriggerDetail] = []
     primary_ref, _ = primary.refs()
     secondary_ref, _ = secondary.refs()
     pair_key = (primary_ref, secondary_ref)
 
-    def _peer_role_summary() -> Optional[str]:
+    def _peer_role_summary() -> str | None:
         primary_role = baseline.role_for(primary_ref) or baseline.role_for(primary.target.label)
         secondary_role = baseline.role_for(secondary_ref) or baseline.role_for(secondary.target.label)
         if not primary_role and not secondary_role:
             return None
-        summary_parts: List[str] = []
+        summary_parts: list[str] = []
         summary_parts.append(
             f"{primary.target.label} ({primary_role})" if primary_role else primary.target.label
         )
@@ -1780,11 +1782,11 @@ class HealthLoopRunner:
         manual_items = list(config.manual_pairs)
         if manual_overrides:
             manual_items.extend(manual_overrides)
-        self._manual_keys: Set[Tuple[str, str]] = {
+        self._manual_keys: set[tuple[str, str]] = {
             (item.primary, item.secondary) for item in manual_items
         }
-        self._collection_messages: List[str] = []
-        self._manual_drilldown_contexts: Set[str] = {
+        self._collection_messages: list[str] = []
+        self._manual_drilldown_contexts: set[str] = {
             normalize_ref(value) for value in (manual_drilldown_contexts or []) if value
         }
         self.run_label = config.run_label
@@ -1807,10 +1809,10 @@ class HealthLoopRunner:
 
     def execute(
         self,
-    ) -> Tuple[
-        List[HealthAssessmentArtifact],
-        List[ComparisonTriggerArtifact],
-        List[DrilldownArtifact],
+    ) -> tuple[
+        list[HealthAssessmentArtifact],
+        list[ComparisonTriggerArtifact],
+        list[DrilldownArtifact],
     ]:
         self._log_event("health-loop", "INFO", "Health run started", event="start")
         directories = self._ensure_directories()
@@ -1839,7 +1841,7 @@ class HealthLoopRunner:
         )
         return assessments, triggers, drilldowns
 
-    def _ensure_directories(self) -> Dict[str, Path]:
+    def _ensure_directories(self) -> dict[str, Path]:
         root = self.config.output_dir / "health"
         subdirs = {
             "root": root,
@@ -1858,8 +1860,8 @@ class HealthLoopRunner:
             path.mkdir(parents=True, exist_ok=True)
         return subdirs
 
-    def _collect_snapshots(self, directory: Path) -> List[HealthSnapshotRecord]:
-        records: List[HealthSnapshotRecord] = []
+    def _collect_snapshots(self, directory: Path) -> list[HealthSnapshotRecord]:
+        records: list[HealthSnapshotRecord] = []
         for target in self.config.targets:
             if target.context not in self.available_contexts:
                 message = f"Context '{target.context}' not available; skipping {target.label}."
@@ -1906,11 +1908,11 @@ class HealthLoopRunner:
 
     def _build_assessments(
         self,
-        records: List[HealthSnapshotRecord],
-        history: Dict[str, HealthHistoryEntry],
+        records: list[HealthSnapshotRecord],
+        history: dict[str, HealthHistoryEntry],
         assessment_dir: Path,
-    ) -> List[HealthAssessmentArtifact]:
-        artifacts: List[HealthAssessmentArtifact] = []
+    ) -> list[HealthAssessmentArtifact]:
+        artifacts: list[HealthAssessmentArtifact] = []
         for record in records:
             cluster_id = record.snapshot.metadata.cluster_id
             previous = history.get(cluster_id)
@@ -1920,7 +1922,7 @@ class HealthLoopRunner:
             watched_crd_versions = _watched_crd_versions(
                 record.snapshot, record.target.watched_crd_families
             )
-            assessment_result: Optional[HealthAssessmentResult] = None
+            assessment_result: HealthAssessmentResult | None = None
             insight: ImagePullSecretInsight | None = None
             pod_counts = record.snapshot.health_signals.pod_counts
             if record.target.monitor_health and pod_counts.image_pull_backoff > 0:
@@ -1950,7 +1952,7 @@ class HealthLoopRunner:
                 artifact = HealthAssessmentArtifact(
                     run_label=self.run_label,
                     run_id=self.run_id,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                     context=record.target.context,
                     label=record.target.label,
                     cluster_id=cluster_id,
@@ -1984,12 +1986,12 @@ class HealthLoopRunner:
 
     def _build_drilldowns(
         self,
-        records: List[HealthSnapshotRecord],
-        previous_history: Dict[str, HealthHistoryEntry],
+        records: list[HealthSnapshotRecord],
+        previous_history: dict[str, HealthHistoryEntry],
         directory: Path,
-    ) -> List[DrilldownArtifact]:
+    ) -> list[DrilldownArtifact]:
         collector = self._drilldown_collector or DrilldownCollector()
-        artifacts: List[DrilldownArtifact] = []
+        artifacts: list[DrilldownArtifact] = []
         for record in records:
             reasons = self._determine_drilldown_reasons(record, previous_history)
             if not reasons:
@@ -2010,7 +2012,7 @@ class HealthLoopRunner:
             artifact = DrilldownArtifact(
                 run_label=self.run_label,
                 run_id=self.run_id,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 snapshot_timestamp=record.snapshot.metadata.captured_at,
                 context=record.target.context,
                 label=record.target.label,
@@ -2046,9 +2048,9 @@ class HealthLoopRunner:
 
     def _write_review_artifact(
         self,
-        assessments: List[HealthAssessmentArtifact],
-        drilldowns: List[DrilldownArtifact],
-        directories: Dict[str, Path],
+        assessments: list[HealthAssessmentArtifact],
+        drilldowns: list[DrilldownArtifact],
+        directories: dict[str, Path],
     ) -> None:
         directory = directories["reviews"]
         try:
@@ -2116,11 +2118,11 @@ class HealthLoopRunner:
     def _determine_drilldown_reasons(
         self,
         record: HealthSnapshotRecord,
-        previous_history: Dict[str, HealthHistoryEntry],
-    ) -> Tuple[str, ...]:
+        previous_history: dict[str, HealthHistoryEntry],
+    ) -> tuple[str, ...]:
         if not record.assessment:
             return ()
-        reasons: List[str] = []
+        reasons: list[str] = []
         normalized_context = normalize_ref(record.target.context)
         if normalized_context in self._manual_drilldown_contexts:
             reasons.append("manual_request")
@@ -2155,16 +2157,16 @@ class HealthLoopRunner:
 
     def _evaluate_triggers(
         self,
-        records: List[HealthSnapshotRecord],
-        history: Dict[str, HealthHistoryEntry],
-        directories: Dict[str, Path],
-    ) -> List[ComparisonTriggerArtifact]:
-        triggers: List[ComparisonTriggerArtifact] = []
-        decisions: List[ComparisonDecision] = []
+        records: list[HealthSnapshotRecord],
+        history: dict[str, HealthHistoryEntry],
+        directories: dict[str, Path],
+    ) -> list[ComparisonTriggerArtifact]:
+        triggers: list[ComparisonTriggerArtifact] = []
+        decisions: list[ComparisonDecision] = []
         if not self.config.peers:
             self._collection_messages.append(_HEALTH_ONLY_MESSAGE)
             return triggers
-        record_lookup: Dict[str, HealthSnapshotRecord] = {}
+        record_lookup: dict[str, HealthSnapshotRecord] = {}
         for record in records:
             primary_ref, label_ref = record.refs()
             record_lookup[primary_ref] = record
@@ -2197,7 +2199,7 @@ class HealthLoopRunner:
                 self.baseline_policy,
             )
             classification_label = peer.intent.label()
-            trigger_details: List[TriggerDetail] = []
+            trigger_details: list[TriggerDetail] = []
             if policy_eligible:
                 trigger_details = determine_pair_trigger_reasons(
                     primary_record,
@@ -2257,7 +2259,7 @@ class HealthLoopRunner:
             artifact = ComparisonTriggerArtifact(
                 run_label=self.run_label,
                 run_id=self.run_id,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 primary=primary_record.target.context,
                 secondary=secondary_record.target.context,
                 primary_label=primary_record.target.label,
@@ -2286,10 +2288,10 @@ class HealthLoopRunner:
                 severity_reason="; ".join(detail.reason for detail in trigger_details),
             )
             self._collection_messages.append(
-                (
+                
                     f"Triggered comparison {primary_record.target.label} vs {secondary_record.target.label}: "
                     f"{', '.join(detail.reason for detail in trigger_details)}"
-                )
+                
             )
         decision_path = directories["root"] / f"{self.run_id}-comparison-decisions.json"
         for decision in decisions:
@@ -2297,21 +2299,21 @@ class HealthLoopRunner:
         _write_json([decision.to_dict() for decision in decisions], decision_path)
         return triggers
 
-    def _load_history(self, history_path: Path) -> Dict[str, HealthHistoryEntry]:
+    def _load_history(self, history_path: Path) -> dict[str, HealthHistoryEntry]:
         if not history_path.exists():
             return {}
         raw = json.loads(history_path.read_text(encoding="utf-8"))
-        history: Dict[str, HealthHistoryEntry] = {}
+        history: dict[str, HealthHistoryEntry] = {}
         for cluster_id, entry in raw.items():
             if isinstance(entry, dict):
                 history[cluster_id] = HealthHistoryEntry.from_dict(cluster_id, entry)
         return history
 
-    def _persist_history(self, history: Dict[str, HealthHistoryEntry], history_path: Path) -> None:
+    def _persist_history(self, history: dict[str, HealthHistoryEntry], history_path: Path) -> None:
         data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
         _write_json(data, history_path)
 
-def _resolve_peer_role(record: HealthSnapshotRecord, baseline: BaselinePolicy) -> Optional[str]:
+def _resolve_peer_role(record: HealthSnapshotRecord, baseline: BaselinePolicy) -> str | None:
     explicit_role = record.target.cluster_role
     if explicit_role:
         return explicit_role.strip() or None
@@ -2327,15 +2329,15 @@ def _policy_eligible_pair(
     secondary: HealthSnapshotRecord,
     intent: ComparisonIntent,
     baseline: BaselinePolicy,
-) -> Tuple[
+) -> tuple[
     bool,
     str,
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[str],
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+    str | None,
 ]:
     primary_class = primary.target.cluster_class
     secondary_class = secondary.target.cluster_class
@@ -2343,7 +2345,7 @@ def _policy_eligible_pair(
     secondary_role = _resolve_peer_role(secondary, baseline)
     primary_cohort = primary.target.baseline_cohort
     secondary_cohort = secondary.target.baseline_cohort
-    reasons: List[str] = []
+    reasons: list[str] = []
     if not primary_class or not secondary_class:
         reasons.append("cluster class metadata missing")
     elif primary_class != secondary_class:
@@ -2384,7 +2386,7 @@ def _policy_eligible_pair(
     )
 
 
-def _safe_int(value: Any | None) -> Optional[int]:
+def _safe_int(value: Any | None) -> int | None:
     if value is None:
         return None
     try:
@@ -2412,8 +2414,8 @@ def _parse_comparison_intent(value: Any | None) -> ComparisonIntent:
         return ComparisonIntent.SUSPICIOUS_DRIFT
 
 
-def _parse_manual_triggers(values: Sequence[str]) -> List[ManualComparison]:
-    manual: List[ManualComparison] = []
+def _parse_manual_triggers(values: Sequence[str]) -> list[ManualComparison]:
+    manual: list[ManualComparison] = []
     for raw_value in values:
         if ":" not in raw_value:
             continue
@@ -2451,11 +2453,11 @@ def _validate_suspicious_pairs(
             )
         if problems:
             issues.append(
-                (
+                
                     f"Suspicious-drift pair {primary.label} ({primary.context}) vs "
                     f"{secondary.label} ({secondary.context}) invalid: "
                     + "; ".join(problems)
-                )
+                
             )
     if issues:
         raise ValueError(
@@ -2471,11 +2473,11 @@ def run_health_loop(
     manual_drilldown_contexts: Sequence[str] | None = None,
     quiet: bool = False,
     drilldown_collector: DrilldownCollector | None = None,
-) -> Tuple[
+) -> tuple[
     int,
-    List[HealthAssessmentArtifact],
-    List[ComparisonTriggerArtifact],
-    List[DrilldownArtifact],
+    list[HealthAssessmentArtifact],
+    list[ComparisonTriggerArtifact],
+    list[DrilldownArtifact],
 ] :
     try:
         config = HealthRunConfig.load(config_path)
@@ -2556,8 +2558,8 @@ class HealthLoopScheduler:
 
     def _resolve_run_id(
         self,
-        assessments: List[HealthAssessmentArtifact],
-        triggers: List[ComparisonTriggerArtifact],
+        assessments: list[HealthAssessmentArtifact],
+        triggers: list[ComparisonTriggerArtifact],
     ) -> str:
         if assessments:
             return assessments[0].run_id
@@ -2646,7 +2648,7 @@ class HealthLoopScheduler:
         try:
             with self._lock_path.open("x", encoding="utf-8") as handle:
                 handle.write(
-                    f"{datetime.now(timezone.utc).isoformat()} pid={os.getpid()}\n"
+                    f"{datetime.now(UTC).isoformat()} pid={os.getpid()}\n"
                 )
             return True
         except FileExistsError:
@@ -2661,9 +2663,9 @@ class HealthLoopScheduler:
 
     def _print_summary(
         self,
-        assessments: List[HealthAssessmentArtifact],
-        triggers: List[ComparisonTriggerArtifact],
-        drilldowns: List[DrilldownArtifact],
+        assessments: list[HealthAssessmentArtifact],
+        triggers: list[ComparisonTriggerArtifact],
+        drilldowns: list[DrilldownArtifact],
     ) -> None:
         run_id = "<unknown>"
         if assessments:
@@ -2674,7 +2676,7 @@ class HealthLoopScheduler:
             1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
         )
         degraded = len(assessments) - healthy
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         print(
             f"[{timestamp}] Health run {run_id}: {len(assessments)} assessments "
             f"({healthy} healthy, {degraded} degraded), {len(triggers)} triggered comparison(s), {len(drilldowns)} drilldown artifact(s)."

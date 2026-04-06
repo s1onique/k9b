@@ -7,9 +7,9 @@ ensure_src_in_path()
 
 from k8s_diag_agent.collect.fixture_loader import load_fixture
 from k8s_diag_agent.correlate.linkers import correlate_signals
+from k8s_diag_agent.models import ConfidenceLevel
 from k8s_diag_agent.normalize.evidence import normalize_signals
 from k8s_diag_agent.reason.diagnoser import build_findings_and_hypotheses
-from k8s_diag_agent.models import ConfidenceLevel
 
 
 class ReasonTest(unittest.TestCase):

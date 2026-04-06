@@ -1,5 +1,5 @@
 import json
-from typing import Sequence
+from collections.abc import Sequence
 
 from k8s_diag_agent.health.drilldown import DrilldownCollector
 

@@ -1,31 +1,30 @@
 import io
 import json
-import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, cast
+from typing import Any, cast
 from unittest.mock import patch
 
 import requests
 
 from k8s_diag_agent.cli import main
-from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
-from k8s_diag_agent.llm.provider import LLMAssessmentInput, LLMProvider
-from k8s_diag_agent.llm.llamacpp_provider import LlamaCppProvider, LlamaCppProviderConfig
-from k8s_diag_agent.llm.prompts import build_assessment_prompt
 from k8s_diag_agent.collect.cluster_snapshot import (
-    CollectionStatus,
     ClusterSnapshot,
     ClusterSnapshotMetadata,
+    CollectionStatus,
     CRDRecord,
     HelmReleaseRecord,
 )
 from k8s_diag_agent.compare.two_cluster import ComparisonIntentMetadata, compare_snapshots
+from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
+from k8s_diag_agent.llm.llamacpp_provider import LlamaCppProvider, LlamaCppProviderConfig
+from k8s_diag_agent.llm.prompts import build_assessment_prompt
+from k8s_diag_agent.llm.provider import LLMAssessmentInput, LLMProvider
 
 
-def _mock_assessment_payload() -> Dict[str, Any]:
+def _mock_assessment_payload() -> dict[str, Any]:
     return {
         "observed_signals": [
             {
@@ -85,9 +84,9 @@ class _FakeResponse:
 class _FakeSession:
     def __init__(self, response: Any) -> None:
         self.response = response
-        self.calls: list[tuple[str, Dict[str, Any], Dict[str, str], int]] = []
+        self.calls: list[tuple[str, dict[str, Any], dict[str, str], int]] = []
 
-    def post(self, url: str, json: Dict[str, Any], headers: Dict[str, str], timeout: int) -> Any:
+    def post(self, url: str, json: dict[str, Any], headers: dict[str, str], timeout: int) -> Any:
         self.calls.append((url, json, headers, timeout))
         return self.response
 
@@ -110,7 +109,7 @@ class _RaisingSession:
         self.error = error
         self.calls: list[str] = []
 
-    def post(self, url: str, json: Dict[str, Any], headers: Dict[str, str], timeout: int) -> Any:
+    def post(self, url: str, json: dict[str, Any], headers: dict[str, str], timeout: int) -> Any:
         self.calls.append(url)
         raise self.error
 
@@ -217,7 +216,7 @@ class PromptBuilderTest(unittest.TestCase):
     def setUp(self) -> None:
         metadata_primary = ClusterSnapshotMetadata(
             cluster_id="cluster-a",
-            captured_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 1, 1, tzinfo=UTC),
             control_plane_version="1.26.0",
             node_count=3,
             pod_count=20,
@@ -226,7 +225,7 @@ class PromptBuilderTest(unittest.TestCase):
         )
         metadata_secondary = ClusterSnapshotMetadata(
             cluster_id="cluster-a",
-            captured_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 1, 2, tzinfo=UTC),
             control_plane_version="1.26.0",
             node_count=4,
             pod_count=25,

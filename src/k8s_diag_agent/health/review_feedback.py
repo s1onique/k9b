@@ -1,9 +1,14 @@
 """Structured review generator for health runs and drilldown artifacts."""
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar
+from datetime import UTC, datetime
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    TypeVar,
+)
 
 from ..feedback.models import FailureMode, ProposedImprovement
 from ..models import ConfidenceLevel
@@ -14,7 +19,7 @@ if TYPE_CHECKING:
     from .loop import HealthAssessmentArtifact
 
 
-_REASON_PRIORITIES: Dict[str, int] = {
+_REASON_PRIORITIES: dict[str, int] = {
     BROKEN_IMAGE_PULL_SECRET_REASON.lower(): 0,
     "imagepullbackoff": 0,
     "crashloopbackoff": 1,
@@ -30,7 +35,7 @@ _REASON_PRIORITIES: Dict[str, int] = {
 _DEFAULT_PRIORITY = 5
 
 
-def _normalize_text(value: Any | None) -> Optional[str]:
+def _normalize_text(value: Any | None) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
@@ -59,12 +64,12 @@ class DrilldownSelection:
     context: str
     label: str
     severity: int
-    reasons: Tuple[str, ...]
-    missing_evidence: Tuple[str, ...]
+    reasons: tuple[str, ...]
+    missing_evidence: tuple[str, ...]
     warning_event_count: int
     non_running_pod_count: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "context": self.context,
             "label": self.label,
@@ -76,7 +81,7 @@ class DrilldownSelection:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "DrilldownSelection":
+    def from_dict(cls, raw: Mapping[str, Any]) -> DrilldownSelection:
         if not isinstance(raw, Mapping):
             raise ValueError("Drilldown selection must be a mapping")
         return cls(
@@ -97,7 +102,7 @@ class QualityMetric:
     score: int
     detail: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "dimension": self.dimension,
             "level": self.level,
@@ -106,7 +111,7 @@ class QualityMetric:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "QualityMetric":
+    def from_dict(cls, raw: Mapping[str, Any]) -> QualityMetric:
         if not isinstance(raw, Mapping):
             raise ValueError("Quality metric must be a mapping")
         return cls(
@@ -121,13 +126,13 @@ class QualityMetric:
 class HealthReviewArtifact:
     run_id: str
     timestamp: datetime
-    selected_drilldowns: Tuple[DrilldownSelection, ...]
-    quality_summary: Tuple[QualityMetric, ...]
-    failure_modes: Tuple[str, ...]
-    proposed_improvements: Tuple[ProposedImprovement, ...]
+    selected_drilldowns: tuple[DrilldownSelection, ...]
+    quality_summary: tuple[QualityMetric, ...]
+    failure_modes: tuple[str, ...]
+    proposed_improvements: tuple[ProposedImprovement, ...]
     review_version: str = "health-review:v1"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
@@ -150,10 +155,10 @@ class HealthReviewArtifact:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "HealthReviewArtifact":
+    def from_dict(cls, raw: Mapping[str, Any]) -> HealthReviewArtifact:
         if not isinstance(raw, Mapping):
             raise ValueError("Health review artifact must be a mapping")
-        def _parse_sequence(key: str, parser: Callable[[Mapping[str, Any]], T]) -> Tuple[T, ...]:
+        def _parse_sequence(key: str, parser: Callable[[Mapping[str, Any]], T]) -> tuple[T, ...]:
             values = raw.get(key) or []
             if not isinstance(values, Sequence):
                 return ()
@@ -164,7 +169,7 @@ class HealthReviewArtifact:
         metrics = _parse_sequence("quality_summary", QualityMetric.from_dict)
 
         improvements_raw = raw.get("proposed_improvements") or []
-        improvements: List[ProposedImprovement] = []
+        improvements: list[ProposedImprovement] = []
         for entry in improvements_raw:
             if not isinstance(entry, Mapping):
                 continue
@@ -197,7 +202,7 @@ class HealthReviewArtifact:
 
         return cls(
             run_id=str(raw.get("run_id") or ""),
-            timestamp=datetime.fromisoformat(str(raw.get("timestamp") or datetime.now(timezone.utc).isoformat())),
+            timestamp=datetime.fromisoformat(str(raw.get("timestamp") or datetime.now(UTC).isoformat())),
             selected_drilldowns=selections,
             quality_summary=metrics,
             failure_modes=failure_modes,
@@ -206,9 +211,9 @@ class HealthReviewArtifact:
         )
 
 
-def _summarize_drilldowns(drilldowns: Sequence[DrilldownArtifact], limit: int = 3) -> Tuple[DrilldownSelection, ...]:
+def _summarize_drilldowns(drilldowns: Sequence[DrilldownArtifact], limit: int = 3) -> tuple[DrilldownSelection, ...]:
     sorted_artifacts = sorted(drilldowns, key=lambda artifact: (_severity_bucket(artifact), len(artifact.warning_events), artifact.context))
-    selections: List[DrilldownSelection] = []
+    selections: list[DrilldownSelection] = []
     for artifact in sorted_artifacts[:limit]:
         warning_count = sum(int(event.count) for event in artifact.warning_events)
         selections.append(
@@ -225,7 +230,7 @@ def _summarize_drilldowns(drilldowns: Sequence[DrilldownArtifact], limit: int = 
     return tuple(selections)
 
 
-def _extract_assessment_data(artifact: HealthAssessmentArtifact | None) -> Dict[str, Any]:
+def _extract_assessment_data(artifact: HealthAssessmentArtifact | None) -> dict[str, Any]:
     if not artifact or not artifact.assessment:
         return {}
     return artifact.assessment
@@ -264,10 +269,10 @@ def _score_signal_quality(selection: DrilldownSelection | None) -> QualityMetric
 
 def _score_noise_baseline(
     assessment: HealthAssessmentArtifact | None, selection: DrilldownSelection | None
-) -> Tuple[QualityMetric, bool, bool]:
+) -> tuple[QualityMetric, bool, bool]:
     baseline_flag = False
     noise_flag = False
-    detail_parts: List[str] = []
+    detail_parts: list[str] = []
     score = 50
     assessment_data = _extract_assessment_data(assessment)
     for finding in assessment_data.get("findings", []):
@@ -324,7 +329,7 @@ def _parse_confidence(confidence_value: Any) -> ConfidenceLevel | None:
         return None
 
 
-def _score_hypothesis_confidence(assessment: HealthAssessmentArtifact | None) -> Tuple[QualityMetric, bool]:
+def _score_hypothesis_confidence(assessment: HealthAssessmentArtifact | None) -> tuple[QualityMetric, bool]:
     data = _extract_assessment_data(assessment)
     hypotheses = data.get("hypotheses", [])
     signals = data.get("observed_signals", [])
@@ -437,8 +442,8 @@ def _determine_failure_modes(
     baseline_flag: bool,
     noise_flag: bool,
     false_certainty: bool,
-) -> Tuple[FailureMode, ...]:
-    modes: List[FailureMode] = []
+) -> tuple[FailureMode, ...]:
+    modes: list[FailureMode] = []
     if baseline_flag:
         modes.append(FailureMode.OTHER)
     if noise_flag:
@@ -457,9 +462,9 @@ def _propose_improvements(
     selection: DrilldownSelection | None,
     baseline_flag: bool,
     noise_flag: bool,
-    failure_modes: Tuple[FailureMode, ...],
-) -> Tuple[ProposedImprovement, ...]:
-    proposals: List[ProposedImprovement] = []
+    failure_modes: tuple[FailureMode, ...],
+) -> tuple[ProposedImprovement, ...]:
+    proposals: list[ProposedImprovement] = []
     if noise_flag and selection and threshold is not None:
         current = threshold if threshold > 0 else 2
         candidate = max(3, current + 2)
@@ -548,7 +553,7 @@ def build_health_review(
     improvements = _propose_improvements(warning_threshold, top_selection, baseline_flag, noise_flag, failure_modes)
     return HealthReviewArtifact(
         run_id=run_id,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         selected_drilldowns=selections,
         quality_summary=metrics,
         failure_modes=tuple(mode.value for mode in failure_modes),

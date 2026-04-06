@@ -2,18 +2,17 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.feedback.runner import run_feedback_loop
 
-
 FIXTURE_SNAPSHOT = Path(__file__).resolve().parents[1] / "fixtures" / "snapshots" / "sanitized-alpha.json"
 
 
-def _load_fixture_snapshot() -> Dict[str, Any]:
-    return cast(Dict[str, Any], json.loads(FIXTURE_SNAPSHOT.read_text(encoding="utf-8")))
+def _load_fixture_snapshot() -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(FIXTURE_SNAPSHOT.read_text(encoding="utf-8")))
 
 
 class FeedbackRunnerTest(unittest.TestCase):
@@ -36,10 +35,10 @@ class FeedbackRunnerTest(unittest.TestCase):
     def _snapshot_for(self, context: str) -> ClusterSnapshot:
         data = _load_fixture_snapshot()
         if context == "beta":
-            metadata = cast(Dict[str, Any], data["metadata"])
+            metadata = cast(dict[str, Any], data["metadata"])
             metadata["node_count"] += 1
-            status = cast(Dict[str, Any], data["status"])
-            missing = cast(List[str], status["missing_evidence"])
+            status = cast(dict[str, Any], data["status"])
+            missing = cast(list[str], status["missing_evidence"])
             missing.append("events")
         return ClusterSnapshot.from_dict(data)
 
@@ -70,8 +69,8 @@ class FeedbackRunnerTest(unittest.TestCase):
         def collect(context: str) -> ClusterSnapshot:
             data = _load_fixture_snapshot()
             if context == "alpha":
-                status = cast(Dict[str, Any], data["status"])
-                missing = cast(List[str], status["missing_evidence"])
+                status = cast(dict[str, Any], data["status"])
+                missing = cast(list[str], status["missing_evidence"])
                 missing.append("logs")
             return ClusterSnapshot.from_dict(data)
 
@@ -101,7 +100,7 @@ class FeedbackRunnerTest(unittest.TestCase):
         collect_mock.side_effect = lambda ctx: self._snapshot_for(ctx)
 
         class BrokenProvider:
-            def assess(self, prompt: str, payload: Dict[str, object]) -> Dict[str, object]:
+            def assess(self, prompt: str, payload: dict[str, object]) -> dict[str, object]:
                 raise RuntimeError("provider down")
 
         with patch(

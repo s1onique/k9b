@@ -18,8 +18,8 @@ from .cli_handlers import (
     handle_fixture,
     handle_health_loop,
     handle_health_summary,
-    handle_run_feedback,
     handle_promote_proposal,
+    handle_run_feedback,
     handle_snapshot,
 )
 from .llm.provider import AVAILABLE_PROVIDERS

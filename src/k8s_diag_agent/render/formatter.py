@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import json
-from typing import Dict
 
-from ..models import Assessment, ConfidenceLevel
+from ..models import Assessment
 
 
-def assessment_to_dict(assessment: Assessment) -> Dict[str, object]:
+def assessment_to_dict(assessment: Assessment) -> dict[str, object]:
     serialized = {
         "observed_signals": [
             {

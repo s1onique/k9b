@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any
 
 from ..collect.cluster_snapshot import WarningEventSummary
 
@@ -37,7 +38,7 @@ def _kubectl(context: str, *args: str, runner: CommandRunner) -> str:
     return runner(("kubectl", *args, "--context", context))
 
 
-def _extract_items(payload: Any) -> List[Mapping[str, Any]]:
+def _extract_items(payload: Any) -> list[Mapping[str, Any]]:
     if isinstance(payload, Mapping):
         items = payload.get("items")
         if isinstance(items, list):
@@ -61,12 +62,12 @@ class ExternalSecretStatus:
     namespace: str
     name: str
     target_secret: str
-    secret_store_ref: Dict[str, str]
+    secret_store_ref: dict[str, str]
     status_reason: str | None
     status_message: str | None
     ready: bool | None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "namespace": self.namespace,
             "name": self.name,
@@ -78,7 +79,7 @@ class ExternalSecretStatus:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "ExternalSecretStatus":
+    def from_dict(cls, raw: Mapping[str, Any]) -> ExternalSecretStatus:
         return cls(
             namespace=str(raw.get("namespace") or ""),
             name=str(raw.get("name") or ""),
@@ -99,9 +100,9 @@ class TargetSecretStatus:
     namespace: str
     name: str
     exists: bool
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "namespace": self.namespace,
             "name": self.name,
@@ -110,7 +111,7 @@ class TargetSecretStatus:
         }
 
     @classmethod
-    def missing(cls, namespace: str, name: str, message: str) -> "TargetSecretStatus":
+    def missing(cls, namespace: str, name: str, message: str) -> TargetSecretStatus:
         return cls(
             namespace=namespace,
             name=name,
@@ -123,13 +124,13 @@ class TargetSecretStatus:
 class ImagePullSecretInsight:
     namespace: str
     secret_name: str
-    deployments: Tuple[Dict[str, str], ...]
-    external_secrets: Tuple[ExternalSecretStatus, ...]
-    secret_store_refs: Tuple[Dict[str, str], ...]
+    deployments: tuple[dict[str, str], ...]
+    external_secrets: tuple[ExternalSecretStatus, ...]
+    secret_store_refs: tuple[dict[str, str], ...]
     target_secret_status: TargetSecretStatus
-    events: Tuple[WarningEventSummary, ...]
+    events: tuple[WarningEventSummary, ...]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "namespace": self.namespace,
             "secret_name": self.secret_name,
@@ -141,7 +142,7 @@ class ImagePullSecretInsight:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "ImagePullSecretInsight":
+    def from_dict(cls, raw: Mapping[str, Any]) -> ImagePullSecretInsight:
         if not isinstance(raw, Mapping):
             raise ValueError("image pull secret insight must be a mapping")
         external = raw.get("external_secrets") or []
@@ -205,7 +206,7 @@ class ImagePullSecretInspector:
         warning_events: Iterable[WarningEventSummary],
     ) -> ImagePullSecretInsight | None:
         namespace_filter = set(namespaces)
-        candidates: List[Tuple[str, str, List[WarningEventSummary]]] = []
+        candidates: list[tuple[str, str, list[WarningEventSummary]]] = []
         for event in warning_events:
             if event.reason != "FailedToRetrieveImagePullSecret":
                 continue
@@ -248,7 +249,7 @@ class ImagePullSecretInspector:
 
     def _deployments_using_secret(
         self, context: str, namespace: str, secret_name: str
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         try:
             output = _kubectl(context, "get", "deployments", "-n", namespace, "-o", "json", runner=self._runner)
         except RuntimeError:
@@ -257,7 +258,7 @@ class ImagePullSecretInspector:
             payload = json.loads(output)
         except json.JSONDecodeError:
             return []
-        deployments: List[Dict[str, str]] = []
+        deployments: list[dict[str, str]] = []
         for entry in _extract_items(payload):
             spec = entry.get("spec", {})
             template = spec.get("template", {}).get("spec", {})
@@ -274,7 +275,7 @@ class ImagePullSecretInspector:
 
     def _external_secrets(
         self, context: str, namespace: str
-    ) -> Tuple[ExternalSecretStatus, ...]:
+    ) -> tuple[ExternalSecretStatus, ...]:
         try:
             output = _kubectl(
                 context,
@@ -292,7 +293,7 @@ class ImagePullSecretInspector:
             payload = json.loads(output)
         except json.JSONDecodeError:
             return ()
-        secrets: List[ExternalSecretStatus] = []
+        secrets: list[ExternalSecretStatus] = []
         for entry in _extract_items(payload):
             metadata = entry.get("metadata") or {}
             spec = entry.get("spec") or {}
@@ -366,9 +367,9 @@ class ImagePullSecretInspector:
 
     def _unique_store_refs(
         self, secrets: Iterable[ExternalSecretStatus]
-    ) -> Tuple[Dict[str, str], ...]:
-        seen: List[Tuple[str, str, str]] = []
-        refs: List[Dict[str, str]] = []
+    ) -> tuple[dict[str, str], ...]:
+        seen: list[tuple[str, str, str]] = []
+        refs: list[dict[str, str]] = []
         for entry in secrets:
             ref = entry.secret_store_ref
             key = (

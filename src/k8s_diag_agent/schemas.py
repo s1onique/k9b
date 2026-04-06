@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, Iterable, List
+from typing import Any, ClassVar
 
-
-FIXTURE_SCHEMA: Dict[str, Any] = {
+FIXTURE_SCHEMA: dict[str, Any] = {
     "required": ["id", "timestamp", "namespace", "workload", "signals"],
 }
 
-ASSESSMENT_SCHEMA: Dict[str, Any] = {
+ASSESSMENT_SCHEMA: dict[str, Any] = {
     "required": [
         "observed_signals",
         "findings",
@@ -22,7 +22,7 @@ ASSESSMENT_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _require_keys(data: Dict[str, Any], required: Iterable[str]) -> None:
+def _require_keys(data: dict[str, Any], required: Iterable[str]) -> None:
     missing = [key for key in required if key not in data]
     if missing:
         raise ValueError(f"Missing keys: {', '.join(missing)}")
@@ -30,10 +30,10 @@ def _require_keys(data: Dict[str, Any], required: Iterable[str]) -> None:
 
 @dataclass
 class FixtureValidator:
-    schema: ClassVar[Dict[str, Any]] = FIXTURE_SCHEMA
+    schema: ClassVar[dict[str, Any]] = FIXTURE_SCHEMA
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.schema["required"])
         workload = data.get("workload")
         if not isinstance(workload, dict) or "name" not in workload:
@@ -45,10 +45,10 @@ class FixtureValidator:
 
 @dataclass
 class AssessmentValidator:
-    schema: ClassVar[Dict[str, Any]] = ASSESSMENT_SCHEMA
+    schema: ClassVar[dict[str, Any]] = ASSESSMENT_SCHEMA
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.schema["required"])
         if not isinstance(data.get("observed_signals"), list):
             raise ValueError("observed_signals must be a list.")

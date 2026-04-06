@@ -1,8 +1,8 @@
 import json
 import unittest
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Sequence
 
 from tests.path_helper import ensure_src_in_path
 
@@ -43,7 +43,7 @@ def _make_health_artifact(
     return HealthAssessmentArtifact(
         run_label=run_label,
         run_id=run_id,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         context=target.context,
         label=target.label,
         cluster_id=snapshot.metadata.cluster_id,
@@ -64,7 +64,7 @@ def _make_drilldown_artifact(
     pods: Sequence[DrilldownPod],
     missing_evidence: Sequence[str],
 ) -> DrilldownArtifact:
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     namespace_candidates = tuple({pod.namespace for pod in pods if pod.namespace}) or ("default",)
     return DrilldownArtifact(
         run_label="review-run",
@@ -101,7 +101,7 @@ def _make_warning_events(namespace: str, reason: str, message: str, count: int) 
         reason=reason,
         message=message,
         count=count,
-        last_seen=datetime.now(timezone.utc).isoformat(),
+        last_seen=datetime.now(UTC).isoformat(),
     )
 
 
@@ -227,7 +227,7 @@ class HealthReviewFeedbackTest(unittest.TestCase):
             {
                 "metadata": {
                     "cluster_id": "live",
-                    "captured_at": fixture.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                    "captured_at": fixture.get("timestamp", datetime.now(UTC).isoformat()),
                     "control_plane_version": "v1",
                     "node_count": 3,
                     "pod_count": 5,

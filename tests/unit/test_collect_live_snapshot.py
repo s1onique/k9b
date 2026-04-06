@@ -1,7 +1,7 @@
 import json
-import subprocess
 import unittest
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 from unittest.mock import patch
 
 from k8s_diag_agent.collect.live_snapshot import _parse_server_version, collect_cluster_snapshot

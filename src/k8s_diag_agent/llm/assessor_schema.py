@@ -1,8 +1,9 @@
 """Structured schema for LLM assessments."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from ..models import ConfidenceLevel, SafetyLevel
 
@@ -22,20 +23,20 @@ def _require_str(value: Any, name: str) -> str:
     return stripped
 
 
-def _ensure_mapping(raw: Any, path: str) -> Dict[str, Any]:
+def _ensure_mapping(raw: Any, path: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"{path} expected an object but got {_type_name(raw)}")
     return raw
 
 
-def _ensure_list(raw: Any, path: str) -> List[Any]:
+def _ensure_list(raw: Any, path: str) -> list[Any]:
     if isinstance(raw, list):
         return raw
     raise ValueError(f"{path} expected a list but got {_type_name(raw)}")
 
 
-def _list_of_strings(raw: Iterable[Any], path: str) -> List[str]:
-    result: List[str] = []
+def _list_of_strings(raw: Iterable[Any], path: str) -> list[str]:
+    result: list[str] = []
     for index, item in enumerate(raw):
         if isinstance(item, str):
             trimmed = item.strip()
@@ -57,7 +58,7 @@ class AssessorSignal:
     severity: str
 
     @classmethod
-    def from_dict(cls, raw: Any, path: str) -> "AssessorSignal":
+    def from_dict(cls, raw: Any, path: str) -> AssessorSignal:
         payload = _ensure_mapping(raw, path)
         return cls(
             id=_require_str(payload.get("id"), f"{path}.id"),
@@ -67,7 +68,7 @@ class AssessorSignal:
             severity=_require_str(payload.get("severity"), f"{path}.severity"),
         )
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {
             "id": self.id,
             "description": self.description,
@@ -80,11 +81,11 @@ class AssessorSignal:
 @dataclass(frozen=True)
 class AssessorFinding:
     description: str
-    supporting_signals: List[str]
+    supporting_signals: list[str]
     layer: str
 
     @classmethod
-    def from_dict(cls, raw: Any, path: str) -> "AssessorFinding":
+    def from_dict(cls, raw: Any, path: str) -> AssessorFinding:
         payload = _ensure_mapping(raw, path)
         supporting_signals_raw = payload.get("supporting_signals", [])
         return cls(
@@ -96,7 +97,7 @@ class AssessorFinding:
             layer=_require_str(payload.get("layer"), f"{path}.layer"),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "description": self.description,
             "supporting_signals": self.supporting_signals,
@@ -112,7 +113,7 @@ class AssessorHypothesis:
     what_would_falsify: str
 
     @classmethod
-    def from_dict(cls, raw: Any, path: str) -> "AssessorHypothesis":
+    def from_dict(cls, raw: Any, path: str) -> AssessorHypothesis:
         payload = _ensure_mapping(raw, path)
         confidence_value = _require_str(payload.get("confidence"), f"{path}.confidence")
         return cls(
@@ -125,7 +126,7 @@ class AssessorHypothesis:
             ),
         )
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {
             "description": self.description,
             "confidence": self.confidence.value,
@@ -139,10 +140,10 @@ class AssessorNextCheck:
     description: str
     owner: str
     method: str
-    evidence_needed: List[str]
+    evidence_needed: list[str]
 
     @classmethod
-    def from_dict(cls, raw: Any, path: str) -> "AssessorNextCheck":
+    def from_dict(cls, raw: Any, path: str) -> AssessorNextCheck:
         payload = _ensure_mapping(raw, path)
         evidence_needed_raw = payload.get("evidence_needed", [])
         return cls(
@@ -155,7 +156,7 @@ class AssessorNextCheck:
             ),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "description": self.description,
             "owner": self.owner,
@@ -168,11 +169,11 @@ class AssessorNextCheck:
 class AssessorRecommendedAction:
     type: str
     description: str
-    references: List[str]
+    references: list[str]
     safety_level: SafetyLevel
 
     @classmethod
-    def from_dict(cls, raw: Any, path: str) -> "AssessorRecommendedAction":
+    def from_dict(cls, raw: Any, path: str) -> AssessorRecommendedAction:
         payload = _ensure_mapping(raw, path)
         references_raw = payload.get("references", [])
         references = _list_of_strings(
@@ -187,7 +188,7 @@ class AssessorRecommendedAction:
             safety_level=SafetyLevel(safety_value.lower()),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "type": self.type,
             "description": self.description,
@@ -198,17 +199,17 @@ class AssessorRecommendedAction:
 
 @dataclass(frozen=True)
 class AssessorAssessment:
-    observed_signals: List[AssessorSignal]
-    findings: List[AssessorFinding]
-    hypotheses: List[AssessorHypothesis]
-    next_evidence_to_collect: List[AssessorNextCheck]
+    observed_signals: list[AssessorSignal]
+    findings: list[AssessorFinding]
+    hypotheses: list[AssessorHypothesis]
+    next_evidence_to_collect: list[AssessorNextCheck]
     recommended_action: AssessorRecommendedAction
     safety_level: SafetyLevel
-    probable_layer_of_origin: Optional[str] = None
-    overall_confidence: Optional[ConfidenceLevel] = None
+    probable_layer_of_origin: str | None = None
+    overall_confidence: ConfidenceLevel | None = None
 
     @classmethod
-    def from_dict(cls, raw: Any, path: str = "assessment") -> "AssessorAssessment":
+    def from_dict(cls, raw: Any, path: str = "assessment") -> AssessorAssessment:
         payload = _ensure_mapping(raw, path)
         observed_signals_raw = _ensure_list(payload.get("observed_signals"), f"{path}.observed_signals")
         observed_signals = [
@@ -259,8 +260,8 @@ class AssessorAssessment:
             overall_confidence=overall,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
-        result: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "observed_signals": [signal.to_dict() for signal in self.observed_signals],
             "findings": [finding.to_dict() for finding in self.findings],
             "hypotheses": [hypothesis.to_dict() for hypothesis in self.hypotheses],

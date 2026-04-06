@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 import uuid
-from typing import Dict, Iterable, List, Tuple
+from collections.abc import Iterable
 
 from ..models import ConfidenceLevel, Finding, Hypothesis, Layer, Signal
 
 
 def build_findings_and_hypotheses(
-    signals: Iterable[Signal], correlated_layers: Dict[str, List[str]]
-) -> Tuple[List[Finding], List[Hypothesis]]:
-    findings: List[Finding] = []
-    hypotheses: List[Hypothesis] = []
+    signals: Iterable[Signal], correlated_layers: dict[str, list[str]]
+) -> tuple[list[Finding], list[Hypothesis]]:
+    findings: list[Finding] = []
+    hypotheses: list[Hypothesis] = []
     high_severity_signals = [sig for sig in signals if sig.severity == "high"]
 
     if high_severity_signals:

@@ -5,19 +5,20 @@ import difflib
 import json
 import re
 from collections import OrderedDict
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 from ..models import ConfidenceLevel
 from .baseline import (
-    BaselinePolicy,
-    BaselineDriftCategory,
     DEFAULT_CRD_NEXT_CHECK,
     DEFAULT_RELEASE_NEXT_CHECK,
+    BaselineDriftCategory,
+    BaselinePolicy,
     resolve_baseline_policy_path,
 )
 from .review_feedback import DrilldownSelection, HealthReviewArtifact, QualityMetric
@@ -39,10 +40,10 @@ class ProposalLifecycleStatus(str, Enum):
 class ProposalLifecycleEntry:
     status: ProposalLifecycleStatus
     timestamp: str
-    note: Optional[str] = None
+    note: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
             "status": self.status.value,
             "timestamp": self.timestamp,
         }
@@ -52,7 +53,7 @@ class ProposalLifecycleEntry:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _freeze_payload(value: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
@@ -64,7 +65,7 @@ def _empty_payload() -> Mapping[str, Any]:
     return MappingProxyType({})
 
 
-def _default_lifecycle_history() -> Tuple[ProposalLifecycleEntry, ...]:
+def _default_lifecycle_history() -> tuple[ProposalLifecycleEntry, ...]:
     return (ProposalLifecycleEntry(status=ProposalLifecycleStatus.PROPOSED, timestamp=_now_iso()),)
 
 
@@ -80,7 +81,7 @@ class HealthProposal:
     expected_benefit: str
     rollback_note: str
     promotion_payload: Mapping[str, Any] = field(default_factory=_empty_payload)
-    lifecycle_history: Tuple[ProposalLifecycleEntry, ...] = field(default_factory=_default_lifecycle_history)
+    lifecycle_history: tuple[ProposalLifecycleEntry, ...] = field(default_factory=_default_lifecycle_history)
     promotion_evaluation: ProposalEvaluation | None = None
 
     def __post_init__(self) -> None:
@@ -90,7 +91,7 @@ class HealthProposal:
             history = _default_lifecycle_history()
         object.__setattr__(self, "lifecycle_history", history)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "proposal_id": self.proposal_id,
             "source_run_id": self.source_run_id,
@@ -110,7 +111,7 @@ class HealthProposal:
         return hash((self.proposal_id, self.source_run_id, self.target, self.proposed_change))
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "HealthProposal":
+    def from_dict(cls, raw: Mapping[str, Any]) -> HealthProposal:
         if not isinstance(raw, Mapping):
             raise ValueError("Proposal must be a mapping")
         confidence_value = raw.get("confidence")
@@ -122,7 +123,7 @@ class HealthProposal:
             raise ValueError(f"Invalid confidence value: {confidence_value}") from exc
         payload_raw = raw.get("promotion_payload") or {}
         payload = _freeze_payload(payload_raw if isinstance(payload_raw, Mapping) else {})
-        history_entries: List[ProposalLifecycleEntry] = []
+        history_entries: list[ProposalLifecycleEntry] = []
         history_raw = raw.get("lifecycle_history")
         if isinstance(history_raw, Sequence):
             for entry_raw in history_raw:
@@ -170,7 +171,7 @@ class ProposalEvaluation:
     signal_loss: str
     test_outcome: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {
             "proposal_id": self.proposal_id,
             "noise_reduction": self.noise_reduction,
@@ -179,7 +180,7 @@ class ProposalEvaluation:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "ProposalEvaluation":
+    def from_dict(cls, raw: Mapping[str, Any]) -> ProposalEvaluation:
         if not isinstance(raw, Mapping):
             raise ValueError("promotion_evaluation must be a mapping")
         return cls(
@@ -190,17 +191,17 @@ class ProposalEvaluation:
         )
 
 
-def _metric(review: HealthReviewArtifact, dimension: str) -> Optional[QualityMetric]:
+def _metric(review: HealthReviewArtifact, dimension: str) -> QualityMetric | None:
     for metric in review.quality_summary:
         if metric.dimension == dimension:
             return metric
     return None
 
 
-def collect_trigger_details(triggers_dir: Path, run_id: str) -> Tuple[Mapping[str, Any], ...]:
+def collect_trigger_details(triggers_dir: Path, run_id: str) -> tuple[Mapping[str, Any], ...]:
     if not triggers_dir.exists():
         return ()
-    details: List[Mapping[str, Any]] = []
+    details: list[Mapping[str, Any]] = []
     pattern = f"{run_id}-*-trigger.json"
     for path in sorted(triggers_dir.glob(pattern)):
         try:
@@ -213,9 +214,9 @@ def collect_trigger_details(triggers_dir: Path, run_id: str) -> Tuple[Mapping[st
     return tuple(details)
 
 
-def _dedupe_by_key(items: Iterable[Tuple[str, Mapping[str, Any]]]) -> List[Tuple[str, Mapping[str, Any]]]:
+def _dedupe_by_key(items: Iterable[tuple[str, Mapping[str, Any]]]) -> list[tuple[str, Mapping[str, Any]]]:
     seen: set[str] = set()
-    unique: List[Tuple[str, Mapping[str, Any]]] = []
+    unique: list[tuple[str, Mapping[str, Any]]] = []
     for key, item in items:
         if key in seen:
             continue
@@ -224,21 +225,21 @@ def _dedupe_by_key(items: Iterable[Tuple[str, Mapping[str, Any]]]) -> List[Tuple
     return unique
 
 
-def _parse_release_key(reason: str) -> Optional[str]:
+def _parse_release_key(reason: str) -> str | None:
     match = _RELEASE_DRIFT_RE.search(reason)
     if not match:
         return None
     return match.group("release")
 
 
-def _parse_crd_family(reason: str) -> Optional[str]:
+def _parse_crd_family(reason: str) -> str | None:
     match = _CRD_DRIFT_RE.search(reason)
     if not match:
         return None
     return match.group("family")
 
 
-def _split_pair(value: str) -> Tuple[str, ...]:
+def _split_pair(value: str) -> tuple[str, ...]:
     if not value:
         return ()
     parts = [segment.strip() for segment in value.split("vs")]
@@ -256,10 +257,10 @@ def generate_proposals_from_review(
     warning_threshold: int,
     baseline_policy: BaselinePolicy,
     trigger_details: Sequence[Mapping[str, Any]] | None = None,
-) -> Tuple[HealthProposal, ...]:
+) -> tuple[HealthProposal, ...]:
     selection = review.selected_drilldowns[0] if review.selected_drilldowns else None
     base_path = str(review_path)
-    proposals: List[HealthProposal] = []
+    proposals: list[HealthProposal] = []
     if selection:
         proposal = _warning_threshold_proposal(
             run_id,
@@ -292,7 +293,7 @@ def _warning_threshold_proposal(
     current_threshold: int,
     selection: DrilldownSelection,
     source_run_id: str,
-) -> Optional[HealthProposal]:
+) -> HealthProposal | None:
     warnings = selection.warning_event_count
     if warnings < 2 or selection.non_running_pod_count * 2 >= warnings:
         return None
@@ -315,7 +316,7 @@ def _warning_threshold_proposal(
     )
 
 
-def _choose_noise_reason(selection: DrilldownSelection) -> Optional[str]:
+def _choose_noise_reason(selection: DrilldownSelection) -> str | None:
     for reason in selection.reasons:
         lowered = reason.lower()
         if lowered == "warning_event_threshold" or lowered == "health_regression" or not reason:
@@ -353,8 +354,8 @@ def _baseline_release_proposals(
     source_run_id: str,
     baseline_policy: BaselinePolicy,
     details: Sequence[Mapping[str, Any]],
-) -> List[HealthProposal]:
-    proposals: List[HealthProposal] = []
+) -> list[HealthProposal]:
+    proposals: list[HealthProposal] = []
     seen = set()
     for detail in details:
         reason = str(detail.get("reason") or "")
@@ -405,8 +406,8 @@ def _baseline_crd_proposals(
     source_run_id: str,
     baseline_policy: BaselinePolicy,
     details: Sequence[Mapping[str, Any]],
-) -> List[HealthProposal]:
-    proposals: List[HealthProposal] = []
+) -> list[HealthProposal]:
+    proposals: list[HealthProposal] = []
     seen = set()
     for detail in details:
         reason = str(detail.get("reason") or "")
@@ -440,8 +441,8 @@ def _drilldown_ranking_proposal(
     run_id: str,
     review_path: str,
     source_run_id: str,
-    metric: Optional[QualityMetric],
-) -> Optional[HealthProposal]:
+    metric: QualityMetric | None,
+) -> HealthProposal | None:
     if not metric:
         return None
     if metric.level != "low" and metric.score >= 40:
@@ -479,7 +480,7 @@ def evaluate_proposal(proposal: HealthProposal, fixture_path: Path) -> ProposalE
     )
 
 
-def _load_fixture_snapshot(path: Path) -> Dict[str, Any]:
+def _load_fixture_snapshot(path: Path) -> dict[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -491,7 +492,7 @@ def _load_fixture_snapshot(path: Path) -> Dict[str, Any]:
     return _extract_signals_from_snapshot(raw)
 
 
-def _extract_signals_from_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
+def _extract_signals_from_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     health = snapshot.get("health_signals") or {}
     pod_counts = health.get("pod_counts") or {}
     return {
@@ -519,7 +520,7 @@ def _describe_signal_loss(proposal: HealthProposal, pods: int) -> str:
 def with_lifecycle_status(
     proposal: HealthProposal,
     status: ProposalLifecycleStatus,
-    note: Optional[str] = None,
+    note: str | None = None,
 ) -> HealthProposal:
     history = proposal.lifecycle_history
     if history and history[-1].status == status:
@@ -625,7 +626,7 @@ def _apply_release_update(data: OrderedDict[str, Any], payload: Mapping[str, Any
     if not release_key or not versions:
         raise PromotionError("Promotion payload missing release key or versions")
     releases = data.setdefault("watched_releases", [])
-    target_entry: Optional[OrderedDict[str, Any]] = None
+    target_entry: OrderedDict[str, Any] | None = None
     for entry in releases:
         if isinstance(entry, Mapping) and str(entry.get("release")) == release_key:
             target_entry = OrderedDict(entry)

@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
+from typing import Any
 
 from .cluster_snapshot import (
     ClusterHealthSignals,
@@ -19,7 +20,7 @@ from .cluster_snapshot import (
 )
 
 
-def list_kube_contexts() -> List[str]:
+def list_kube_contexts() -> list[str]:
     output = _run_command(["kubectl", "config", "get-contexts", "-o", "name"])
     return [line.strip() for line in output.splitlines() if line.strip()]
 
@@ -27,15 +28,15 @@ def list_kube_contexts() -> List[str]:
 def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
     """Collect cluster data while recording Helm/CRD issues instead of crashing."""
     metadata, node_conditions, pod_counts = _collect_metadata(context)
-    helm_releases: Dict[str, HelmReleaseRecord] = {}
-    helm_error: Optional[str] = None
+    helm_releases: dict[str, HelmReleaseRecord] = {}
+    helm_error: str | None = None
     try:
         helm_releases = _collect_helm_releases(context)
     except RuntimeError as exc:
         helm_error = str(exc)
 
-    crds: Dict[str, CRDRecord] = {}
-    missing_evidence: List[str] = []
+    crds: dict[str, CRDRecord] = {}
+    missing_evidence: list[str] = []
     try:
         crds = _collect_crds(context)
     except RuntimeError:
@@ -72,7 +73,7 @@ def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
 
 def _collect_metadata(
     context: str,
-) -> Tuple[ClusterSnapshotMetadata, NodeConditionCounts, PodHealthCounts]:
+) -> tuple[ClusterSnapshotMetadata, NodeConditionCounts, PodHealthCounts]:
     version_output = _kubectl(context, "version", "--output", "json")
     control_plane_version = _parse_server_version(version_output)
     node_payload = json.loads(_kubectl(context, "get", "nodes", "-o", "json"))
@@ -83,7 +84,7 @@ def _collect_metadata(
     pod_items = _extract_items(pod_payload)
     metadata = ClusterSnapshotMetadata(
         cluster_id=context,
-        captured_at=datetime.now(timezone.utc),
+        captured_at=datetime.now(UTC),
         control_plane_version=control_plane_version,
         node_count=len(node_items),
         pod_count=len(pod_items),
@@ -91,13 +92,13 @@ def _collect_metadata(
     return metadata, _summarize_node_conditions(node_items), _summarize_pod_health(pod_items)
 
 
-def _collect_helm_releases(context: str) -> Dict[str, HelmReleaseRecord]:
+def _collect_helm_releases(context: str) -> dict[str, HelmReleaseRecord]:
     output = _run_helm_command(context, "list", "--all-namespaces", "--output", "json")
     if not output.strip():
         return {}
     payload = json.loads(output)
     entries = payload if isinstance(payload, list) else []
-    releases: Dict[str, HelmReleaseRecord] = {}
+    releases: dict[str, HelmReleaseRecord] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -109,13 +110,13 @@ def _collect_helm_releases(context: str) -> Dict[str, HelmReleaseRecord]:
     return releases
 
 
-def _collect_crds(context: str) -> Dict[str, CRDRecord]:
+def _collect_crds(context: str) -> dict[str, CRDRecord]:
     output = _kubectl(context, "get", "crds", "-o", "json")
     if not output.strip():
         return {}
     parsed = json.loads(output)
     items = parsed.get("items") if isinstance(parsed, dict) else []
-    results: Dict[str, CRDRecord] = {}
+    results: dict[str, CRDRecord] = {}
     for item in items or []:
         if not isinstance(item, dict):
             continue
@@ -131,7 +132,7 @@ def _collect_crds(context: str) -> Dict[str, CRDRecord]:
     return results
 
 
-def _collect_job_failures(context: str) -> Tuple[int, Tuple[str, ...]]:
+def _collect_job_failures(context: str) -> tuple[int, tuple[str, ...]]:
     try:
         output = _kubectl(context, "get", "jobs", "--all-namespaces", "-o", "json")
     except RuntimeError:
@@ -146,7 +147,7 @@ def _collect_job_failures(context: str) -> Tuple[int, Tuple[str, ...]]:
 
 def _collect_warning_events(
     context: str, limit: int = 6
-) -> Tuple[Tuple[WarningEventSummary, ...], Tuple[str, ...]]:
+) -> tuple[tuple[WarningEventSummary, ...], tuple[str, ...]]:
     try:
         output = _kubectl(
             context,
@@ -170,7 +171,7 @@ def _collect_warning_events(
         ),
         reverse=True,
     )
-    events: List[WarningEventSummary] = []
+    events: list[WarningEventSummary] = []
     for entry in sorted_items:
         if len(events) >= limit:
             break
@@ -304,7 +305,7 @@ def _summarize_pod_health(
     )
 
 
-def _extract_items(payload: Any) -> List[Mapping[str, Any]]:
+def _extract_items(payload: Any) -> list[Mapping[str, Any]]:
     if isinstance(payload, Mapping):
         items = payload.get("items")
         if isinstance(items, list):

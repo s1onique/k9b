@@ -1,8 +1,8 @@
 """Normalize fixture inputs into internal evidence structures."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Tuple
+from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from ..models import EvidenceRecord, Layer, Signal
 
@@ -14,14 +14,14 @@ def _parse_datetime(value: object | None) -> datetime:
         if value.endswith("Z"):
             value = value[:-1] + "+00:00"
         return datetime.fromisoformat(value)
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-def normalize_signals(input_data: Dict[str, object]) -> Tuple[List[EvidenceRecord], List[Signal]]:
-    scenario_ts = _parse_datetime(input_data.get("timestamp", datetime.now(timezone.utc).isoformat()))
+def normalize_signals(input_data: dict[str, object]) -> tuple[list[EvidenceRecord], list[Signal]]:
+    scenario_ts = _parse_datetime(input_data.get("timestamp", datetime.now(UTC).isoformat()))
     signals_section = input_data.get("signals", {})
-    evidence_records: List[EvidenceRecord] = []
-    signals: List[Signal] = []
+    evidence_records: list[EvidenceRecord] = []
+    signals: list[Signal] = []
 
     pod_items = signals_section.get("pods", [])
     for idx, pod in enumerate(_iter_dicts(pod_items)):
@@ -86,7 +86,7 @@ def _pod_severity(status: object) -> str:
     return "low"
 
 
-def _iter_dicts(items: Iterable[object]) -> Iterable[Dict[str, object]]:
+def _iter_dicts(items: Iterable[object]) -> Iterable[dict[str, object]]:
     for item in items or []:
         if isinstance(item, dict):
             yield item

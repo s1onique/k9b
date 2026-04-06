@@ -1,9 +1,10 @@
 """Helpers for representing real cluster snapshots."""
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -12,9 +13,9 @@ class ClusterSnapshotMetadata:
     captured_at: datetime
     control_plane_version: str
     node_count: int
-    pod_count: Optional[int] = None
-    region: Optional[str] = None
-    labels: Dict[str, str] = field(default_factory=dict)
+    pod_count: int | None = None
+    region: str | None = None
+    labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -28,10 +29,10 @@ class NodeConditionCounts:
     network_unavailable: int
 
     @classmethod
-    def empty(cls) -> "NodeConditionCounts":
+    def empty(cls) -> NodeConditionCounts:
         return cls(0, 0, 0, 0, 0, 0, 0)
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         return {
             "total": self.total,
             "ready": self.ready,
@@ -43,7 +44,7 @@ class NodeConditionCounts:
         }
 
     @classmethod
-    def from_dict(cls, source: Mapping[str, Any] | None) -> "NodeConditionCounts":
+    def from_dict(cls, source: Mapping[str, Any] | None) -> NodeConditionCounts:
         if not isinstance(source, Mapping):
             return cls.empty()
         return cls(
@@ -66,10 +67,10 @@ class PodHealthCounts:
     completed_job_pods: int
 
     @classmethod
-    def empty(cls) -> "PodHealthCounts":
+    def empty(cls) -> PodHealthCounts:
         return cls(0, 0, 0, 0, 0)
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         return {
             "non_running": self.non_running,
             "pending": self.pending,
@@ -79,7 +80,7 @@ class PodHealthCounts:
         }
 
     @classmethod
-    def from_dict(cls, source: Mapping[str, Any] | None) -> "PodHealthCounts":
+    def from_dict(cls, source: Mapping[str, Any] | None) -> PodHealthCounts:
         if not isinstance(source, Mapping):
             return cls.empty()
         return cls(
@@ -99,7 +100,7 @@ class WarningEventSummary:
     count: int
     last_seen: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "namespace": self.namespace,
             "reason": self.reason,
@@ -109,7 +110,7 @@ class WarningEventSummary:
         }
 
     @classmethod
-    def from_dict(cls, source: Mapping[str, Any]) -> "WarningEventSummary":
+    def from_dict(cls, source: Mapping[str, Any]) -> WarningEventSummary:
         return cls(
             namespace=str(source.get("namespace") or ""),
             reason=str(source.get("reason") or ""),
@@ -124,13 +125,13 @@ class ClusterHealthSignals:
     node_conditions: NodeConditionCounts
     pod_counts: PodHealthCounts
     job_failures: int
-    warning_events: Tuple[WarningEventSummary, ...]
+    warning_events: tuple[WarningEventSummary, ...]
 
     @classmethod
-    def empty(cls) -> "ClusterHealthSignals":
+    def empty(cls) -> ClusterHealthSignals:
         return cls(NodeConditionCounts.empty(), PodHealthCounts.empty(), 0, ())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "node_conditions": self.node_conditions.to_dict(),
             "pod_counts": self.pod_counts.to_dict(),
@@ -139,10 +140,10 @@ class ClusterHealthSignals:
         }
 
     @classmethod
-    def from_dict(cls, source: Mapping[str, Any] | None) -> "ClusterHealthSignals":
+    def from_dict(cls, source: Mapping[str, Any] | None) -> ClusterHealthSignals:
         if not isinstance(source, Mapping):
             return cls.empty()
-        events: List[WarningEventSummary] = []
+        events: list[WarningEventSummary] = []
         for entry in _iter_dicts(source.get("warning_events")):
             try:
                 events.append(WarningEventSummary.from_dict(entry))
@@ -161,13 +162,13 @@ class HelmReleaseRecord:
     namespace: str
     chart: str
     chart_version: str
-    app_version: Optional[str] = None
+    app_version: str | None = None
 
     @property
     def key(self) -> str:
         return f"{self.namespace}/{self.name}"
 
-    def to_dict(self) -> Dict[str, Optional[str]]:
+    def to_dict(self) -> dict[str, str | None]:
         return {
             "name": self.name,
             "namespace": self.namespace,
@@ -177,7 +178,7 @@ class HelmReleaseRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "HelmReleaseRecord":
+    def from_dict(cls, data: Mapping[str, Any]) -> HelmReleaseRecord:
         chart = str(data.get("chart") or "")
         return cls(
             name=str(data["name"]),
@@ -191,10 +192,10 @@ class HelmReleaseRecord:
 @dataclass(frozen=True)
 class CRDRecord:
     name: str
-    served_versions: Tuple[str, ...]
-    storage_version: Optional[str] = None
+    served_versions: tuple[str, ...]
+    storage_version: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "served_versions": list(self.served_versions),
@@ -202,7 +203,7 @@ class CRDRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "CRDRecord":
+    def from_dict(cls, data: Mapping[str, Any]) -> CRDRecord:
         served_versions = _extract_served_versions(data)
         storage_version = _extract_storage_version(data)
         return cls(
@@ -215,15 +216,15 @@ class CRDRecord:
 @dataclass(frozen=True)
 class ClusterSnapshot:
     metadata: ClusterSnapshotMetadata
-    workloads: Dict[str, Any] = field(default_factory=dict)
-    metrics: Dict[str, float] = field(default_factory=dict)
-    helm_releases: Dict[str, HelmReleaseRecord] = field(default_factory=dict)
-    crds: Dict[str, CRDRecord] = field(default_factory=dict)
-    collection_status: "CollectionStatus" = field(default_factory=lambda: CollectionStatus())
-    health_signals: "ClusterHealthSignals" = field(default_factory=ClusterHealthSignals.empty)
+    workloads: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, float] = field(default_factory=dict)
+    helm_releases: dict[str, HelmReleaseRecord] = field(default_factory=dict)
+    crds: dict[str, CRDRecord] = field(default_factory=dict)
+    collection_status: CollectionStatus = field(default_factory=lambda: CollectionStatus())
+    health_signals: ClusterHealthSignals = field(default_factory=ClusterHealthSignals.empty)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ClusterSnapshot":
+    def from_dict(cls, data: Mapping[str, Any]) -> ClusterSnapshot:
         metadata_source = data.get("metadata") if isinstance(data, Mapping) else {}
         if not metadata_source:
             metadata_source = data
@@ -262,7 +263,7 @@ class ClusterSnapshot:
             health_signals=signals,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "metadata": {
                 "cluster_id": self.metadata.cluster_id,
@@ -282,11 +283,11 @@ class ClusterSnapshot:
         }
 
 
-def extract_cluster_snapshots(fixture: Mapping[str, Any]) -> List[ClusterSnapshot]:
+def extract_cluster_snapshots(fixture: Mapping[str, Any]) -> list[ClusterSnapshot]:
     raw = fixture.get("cluster_snapshots")
     if not raw:
         return []
-    snapshots: List[ClusterSnapshot] = []
+    snapshots: list[ClusterSnapshot] = []
     items: Iterable[Mapping[str, Any]]
     if isinstance(raw, Mapping):
         items = cast_iterable(raw.values())
@@ -306,8 +307,8 @@ def cast_iterable(iterable: Iterable[Any]) -> Iterable[Mapping[str, Any]]:
             yield item
 
 
-def _build_helm_releases(source: Any) -> Dict[str, HelmReleaseRecord]:
-    releases: Dict[str, HelmReleaseRecord] = {}
+def _build_helm_releases(source: Any) -> dict[str, HelmReleaseRecord]:
+    releases: dict[str, HelmReleaseRecord] = {}
     for entry in _iter_dicts(source):
         try:
             release = HelmReleaseRecord.from_dict(entry)
@@ -317,8 +318,8 @@ def _build_helm_releases(source: Any) -> Dict[str, HelmReleaseRecord]:
     return releases
 
 
-def _build_crds(source: Any) -> Dict[str, CRDRecord]:
-    crds: Dict[str, CRDRecord] = {}
+def _build_crds(source: Any) -> dict[str, CRDRecord]:
+    crds: dict[str, CRDRecord] = {}
     for entry in _iter_dicts(source):
         try:
             crd = CRDRecord.from_dict(entry)
@@ -338,22 +339,22 @@ def _iter_dicts(items: Any) -> Iterable[Mapping[str, Any]]:
             yield item
 
 
-def _parse_timestamp(value: Optional[str]) -> datetime:
+def _parse_timestamp(value: str | None) -> datetime:
     if not value:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
     if value.endswith("Z"):
         value = f"{value[:-1]}+00:00"
     return datetime.fromisoformat(value)
 
 
-def _safe_int(value: Any) -> Optional[int]:
+def _safe_int(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
 
 
-def _truthy(value: Any) -> Optional[str]:
+def _truthy(value: Any) -> str | None:
     if value in {None, ""}:
         return None
     return str(value)
@@ -375,13 +376,13 @@ def _extract_chart_version(chart: str) -> str:
     return chart.rsplit("-", 1)[-1]
 
 
-def _optional_str(value: Any) -> Optional[str]:
+def _optional_str(value: Any) -> str | None:
     if value in {None, ""}:
         return None
     return str(value)
 
 
-def _extract_served_versions(source: Mapping[str, Any]) -> Tuple[str, ...]:
+def _extract_served_versions(source: Mapping[str, Any]) -> tuple[str, ...]:
     served = source.get("served_versions")
     if isinstance(served, Iterable):
         items = tuple(str(item) for item in served if str(item))
@@ -398,7 +399,7 @@ def _extract_served_versions(source: Mapping[str, Any]) -> Tuple[str, ...]:
     return ()
 
 
-def _extract_storage_version(source: Mapping[str, Any]) -> Optional[str]:
+def _extract_storage_version(source: Mapping[str, Any]) -> str | None:
     storage = source.get("storage_version")
     if _truthy(storage):
         return str(storage)
@@ -433,10 +434,10 @@ def _build_health_signals(source: Any) -> ClusterHealthSignals:
 class CollectionStatus:
     """Records collection issues so later reasoning can treat missing evidence explicitly."""
 
-    helm_error: Optional[str] = None
-    missing_evidence: Tuple[str, ...] = field(default_factory=tuple)
+    helm_error: str | None = None
+    missing_evidence: tuple[str, ...] = field(default_factory=tuple)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "helm_error": self.helm_error,
             "missing_evidence": list(self.missing_evidence),

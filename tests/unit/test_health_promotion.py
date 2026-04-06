@@ -5,7 +5,6 @@ import unittest
 from argparse import Namespace
 from dataclasses import replace
 from pathlib import Path
-from typing import Optional
 
 from tests.path_helper import ensure_src_in_path
 
@@ -50,7 +49,7 @@ class HealthPromotionTest(unittest.TestCase):
             note="replayed for tests",
         )
 
-    def _invoke(self, note: Optional[str] = None) -> int:
+    def _invoke(self, note: str | None = None) -> int:
         args = Namespace(
             proposal=self.proposal_path,
             health_config=self.health_config,

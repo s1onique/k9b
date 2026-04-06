@@ -3,21 +3,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
 class LLMAssessmentInput:
-    primary_snapshot: Dict[str, Any]
-    secondary_snapshot: Dict[str, Any]
-    comparison: Dict[str, Any]
-    comparison_metadata: Optional[Dict[str, Any]]
-    collection_statuses: Dict[str, Dict[str, Any]]
+    primary_snapshot: dict[str, Any]
+    secondary_snapshot: dict[str, Any]
+    comparison: dict[str, Any]
+    comparison_metadata: dict[str, Any] | None
+    collection_statuses: dict[str, dict[str, Any]]
 
 
 class LLMProvider(ABC):
     """Provider contract for producing structured assessments."""
 
     @abstractmethod
-    def assess(self, prompt: str, payload: LLMAssessmentInput) -> Dict[str, Any]:
+    def assess(self, prompt: str, payload: LLMAssessmentInput) -> dict[str, Any]:
         ...

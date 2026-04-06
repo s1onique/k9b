@@ -1,6 +1,5 @@
-import json
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from k8s_diag_agent.health.adaptation import (
@@ -9,7 +8,11 @@ from k8s_diag_agent.health.adaptation import (
     generate_proposals_from_review,
 )
 from k8s_diag_agent.health.baseline import BaselinePolicy
-from k8s_diag_agent.health.review_feedback import DrilldownSelection, HealthReviewArtifact, QualityMetric
+from k8s_diag_agent.health.review_feedback import (
+    DrilldownSelection,
+    HealthReviewArtifact,
+    QualityMetric,
+)
 from k8s_diag_agent.models import ConfidenceLevel
 
 
@@ -26,7 +29,7 @@ class HealthAdaptationTest(unittest.TestCase):
         )
         review = HealthReviewArtifact(
             run_id="run-123",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             selected_drilldowns=(selection,),
             quality_summary=(
                 QualityMetric(

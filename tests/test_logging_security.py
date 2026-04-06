@@ -1,29 +1,29 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from k8s_diag_agent.collect.cluster_snapshot import (
+    ClusterHealthSignals,
+    ClusterSnapshot,
+    ClusterSnapshotMetadata,
+    CollectionStatus,
+    NodeConditionCounts,
+    PodHealthCounts,
+)
+from k8s_diag_agent.compare.two_cluster import compare_snapshots
+from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
     HealthLoopRunner,
     HealthRunConfig,
     HealthTarget,
     TriggerPolicy,
 )
-from k8s_diag_agent.health.baseline import BaselinePolicy
-from k8s_diag_agent.collect.cluster_snapshot import (
-    ClusterSnapshot,
-    ClusterSnapshotMetadata,
-    CollectionStatus,
-    ClusterHealthSignals,
-    NodeConditionCounts,
-    PodHealthCounts,
-)
+from k8s_diag_agent.llm.provider import build_assessment_input
 from k8s_diag_agent.security import sanitize_log_entry, sanitize_payload, sanitize_prompt
 from scripts import run_health_scheduler
-from k8s_diag_agent.compare.two_cluster import compare_snapshots
-from k8s_diag_agent.llm.provider import build_assessment_input
 
 
 class LoggingWorkflowTest(unittest.TestCase):
@@ -50,7 +50,7 @@ class LoggingWorkflowTest(unittest.TestCase):
         def collector(context: str) -> ClusterSnapshot:
             metadata = ClusterSnapshotMetadata(
                 cluster_id=context,
-                captured_at=datetime.now(timezone.utc),
+                captured_at=datetime.now(UTC),
                 control_plane_version="v1.26.0",
                 node_count=1,
             )

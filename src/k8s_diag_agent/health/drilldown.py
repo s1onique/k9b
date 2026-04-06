@@ -3,17 +3,18 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from textwrap import shorten
-from typing import Any, Callable, ClassVar, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, ClassVar
 
 from ..collect.cluster_snapshot import WarningEventSummary
 from .image_pull_secret import ImagePullSecretInsight
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _run_command(command: Sequence[str]) -> str:
@@ -32,7 +33,7 @@ def _run_command(command: Sequence[str]) -> str:
     return result.stdout
 
 
-def _extract_items(payload: Any) -> List[Mapping[str, Any]]:
+def _extract_items(payload: Any) -> list[Mapping[str, Any]]:
     if isinstance(payload, Mapping):
         items = payload.get("items")
         if isinstance(items, list):
@@ -56,7 +57,7 @@ class DrilldownPod:
     phase: str
     reason: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {
             "namespace": self.namespace,
             "name": self.name,
@@ -65,7 +66,7 @@ class DrilldownPod:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "DrilldownPod":
+    def from_dict(cls, raw: Mapping[str, Any]) -> DrilldownPod:
         if not isinstance(raw, Mapping):
             raise ValueError("pod entry must be a mapping")
         return cls(
@@ -87,9 +88,9 @@ class DrilldownRolloutStatus:
     updated_replicas: int
     generation: int
     observed_generation: int
-    conditions: Tuple[str, ...]
+    conditions: tuple[str, ...]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "kind": self.kind,
             "namespace": self.namespace,
@@ -104,7 +105,7 @@ class DrilldownRolloutStatus:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "DrilldownRolloutStatus":
+    def from_dict(cls, raw: Mapping[str, Any]) -> DrilldownRolloutStatus:
         if not isinstance(raw, Mapping):
             raise ValueError("rollout entry must be a mapping")
         def _to_int(key: str) -> int:
@@ -130,16 +131,16 @@ class DrilldownRolloutStatus:
 
 @dataclass(frozen=True)
 class DrilldownEvidence:
-    warning_events: Tuple[WarningEventSummary, ...]
-    non_running_pods: Tuple[DrilldownPod, ...]
-    pod_descriptions: Dict[str, str]
-    rollouts: Tuple[DrilldownRolloutStatus, ...]
-    affected_namespaces: Tuple[str, ...]
-    affected_workloads: Tuple[Dict[str, Any], ...]
-    summary: Dict[str, Any]
-    collection_timestamps: Dict[str, str]
-    pattern_details: Dict[str, str] = field(default_factory=dict)
-    image_pull_secret_insights: Tuple[Dict[str, Any], ...] = field(default_factory=tuple)
+    warning_events: tuple[WarningEventSummary, ...]
+    non_running_pods: tuple[DrilldownPod, ...]
+    pod_descriptions: dict[str, str]
+    rollouts: tuple[DrilldownRolloutStatus, ...]
+    affected_namespaces: tuple[str, ...]
+    affected_workloads: tuple[dict[str, Any], ...]
+    summary: dict[str, Any]
+    collection_timestamps: dict[str, str]
+    pattern_details: dict[str, str] = field(default_factory=dict)
+    image_pull_secret_insights: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -150,7 +151,7 @@ class DrilldownCollector:
     max_rollout_namespaces: int = 3
     max_rollouts: int = 8
     command_runner: Callable[[Sequence[str]], str] | None = None
-    _PATTERN_COMMAND_TEMPLATES: ClassVar[Dict[str, List[Sequence[str]]]] = {
+    _PATTERN_COMMAND_TEMPLATES: ClassVar[dict[str, list[Sequence[str]]]] = {
         "probe_failure": [
             ("get", "pods", "-n", "{namespace}", "-o", "wide"),
             ("describe", "pods", "-n", "{namespace}"),
@@ -175,7 +176,7 @@ class DrilldownCollector:
             ("describe", "svc", "-n", "{namespace}"),
         ],
     }
-    _PATTERN_DEFAULT_NAMESPACE: ClassVar[Dict[str, str]] = {
+    _PATTERN_DEFAULT_NAMESPACE: ClassVar[dict[str, str]] = {
         "probe_failure": "default",
         "failed_scheduling": "default",
         "missing_metrics": "kube-system",
@@ -246,7 +247,7 @@ class DrilldownCollector:
 
     def _collect_warning_events(
         self, context: str, limit: int
-    ) -> Tuple[WarningEventSummary, ...]:
+    ) -> tuple[WarningEventSummary, ...]:
         try:
             output = self._kubectl(
                 context,
@@ -270,7 +271,7 @@ class DrilldownCollector:
             key=lambda event: str((event.get("metadata") or {}).get("creationTimestamp") or ""),
             reverse=True,
         )
-        events: List[WarningEventSummary] = []
+        events: list[WarningEventSummary] = []
         for entry in items:
             if len(events) >= limit:
                 break
@@ -297,7 +298,7 @@ class DrilldownCollector:
 
     def _collect_non_running_pods(
         self, context: str, limit: int
-    ) -> Tuple[DrilldownPod, ...]:
+    ) -> tuple[DrilldownPod, ...]:
         try:
             output = self._kubectl(context, "get", "pods", "--all-namespaces", "-o", "json")
         except RuntimeError:
@@ -307,7 +308,7 @@ class DrilldownCollector:
         except json.JSONDecodeError:
             return ()
         items = _extract_items(payload)
-        pods: List[DrilldownPod] = []
+        pods: list[DrilldownPod] = []
         for entry in items:
             if len(pods) >= limit:
                 break
@@ -342,8 +343,8 @@ class DrilldownCollector:
 
     def _describe_pods(
         self, context: str, pods: Sequence[DrilldownPod]
-    ) -> Dict[str, str]:
-        descriptions: Dict[str, str] = {}
+    ) -> dict[str, str]:
+        descriptions: dict[str, str] = {}
         for pod in pods:
             try:
                 output = self._kubectl(
@@ -362,8 +363,8 @@ class DrilldownCollector:
 
     def _collect_rollout_status(
         self, context: str, namespaces: Sequence[str], limit: int
-    ) -> List[DrilldownRolloutStatus]:
-        entries: List[DrilldownRolloutStatus] = []
+    ) -> list[DrilldownRolloutStatus]:
+        entries: list[DrilldownRolloutStatus] = []
         for namespace in namespaces:
             if len(entries) >= limit:
                 break
@@ -377,7 +378,7 @@ class DrilldownCollector:
 
     def _collect_resource_status(
         self, context: str, namespace: str, resource: str, limit: int
-    ) -> List[DrilldownRolloutStatus]:
+    ) -> list[DrilldownRolloutStatus]:
         try:
             output = self._kubectl(context, "get", resource, "-n", namespace, "-o", "json")
         except RuntimeError:
@@ -387,7 +388,7 @@ class DrilldownCollector:
         except json.JSONDecodeError:
             return []
         items = _extract_items(payload)
-        results: List[DrilldownRolloutStatus] = []
+        results: list[DrilldownRolloutStatus] = []
         for entry in items:
             if len(results) >= limit:
                 break
@@ -402,7 +403,7 @@ class DrilldownCollector:
             updated = _int_or_zero(status.get("updatedReplicas"))
             generation = _int_or_zero(metadata.get("generation"))
             observed = _int_or_zero(status.get("observedGeneration"))
-            conditions: Tuple[str, ...] = ()
+            conditions: tuple[str, ...] = ()
             condition_items = status.get("conditions") or []
             if isinstance(condition_items, list):
                 conditions = tuple(
@@ -429,8 +430,8 @@ class DrilldownCollector:
         context: str,
         pattern_reasons: Sequence[str] | None,
         pattern_metadata: Mapping[str, Sequence[str]] | None,
-    ) -> Dict[str, str]:
-        details: Dict[str, str] = {}
+    ) -> dict[str, str]:
+        details: dict[str, str] = {}
         if not pattern_reasons:
             return details
         metadata = pattern_metadata or {}
@@ -438,7 +439,7 @@ class DrilldownCollector:
             commands = self._commands_for_reason(reason, metadata.get(reason))
             if not commands:
                 continue
-            outputs: List[str] = []
+            outputs: list[str] = []
             for command in commands:
                 try:
                     output = self._kubectl(context, *command)
@@ -452,12 +453,12 @@ class DrilldownCollector:
 
     def _commands_for_reason(
         self, reason: str, namespaces: Sequence[str] | None
-    ) -> List[Sequence[str]]:
+    ) -> list[Sequence[str]]:
         templates = self._PATTERN_COMMAND_TEMPLATES.get(reason)
         if not templates:
             return []
         namespace = self._namespace_for_reason(reason, namespaces)
-        commands: List[Sequence[str]] = []
+        commands: list[Sequence[str]] = []
         for template in templates:
             commands.append(
                 tuple(
@@ -481,7 +482,7 @@ class DrilldownCollector:
         namespaces: Sequence[str],
         events: Sequence[WarningEventSummary],
         pods: Sequence[DrilldownPod],
-    ) -> List[str]:
+    ) -> list[str]:
         candidates = []
         for ns in namespaces:
             if ns and ns not in candidates:
@@ -504,20 +505,20 @@ class DrilldownArtifact:
     context: str
     label: str
     cluster_id: str
-    trigger_reasons: Tuple[str, ...]
-    missing_evidence: Tuple[str, ...]
-    evidence_summary: Dict[str, Any]
-    affected_namespaces: Tuple[str, ...]
-    affected_workloads: Tuple[Dict[str, Any], ...]
-    warning_events: Tuple[WarningEventSummary, ...]
-    non_running_pods: Tuple[DrilldownPod, ...]
-    pod_descriptions: Dict[str, str]
-    rollout_status: Tuple[DrilldownRolloutStatus, ...]
-    collection_timestamps: Dict[str, str]
+    trigger_reasons: tuple[str, ...]
+    missing_evidence: tuple[str, ...]
+    evidence_summary: dict[str, Any]
+    affected_namespaces: tuple[str, ...]
+    affected_workloads: tuple[dict[str, Any], ...]
+    warning_events: tuple[WarningEventSummary, ...]
+    non_running_pods: tuple[DrilldownPod, ...]
+    pod_descriptions: dict[str, str]
+    rollout_status: tuple[DrilldownRolloutStatus, ...]
+    collection_timestamps: dict[str, str]
     image_pull_secret_insight: ImagePullSecretInsight | None = None
-    pattern_details: Dict[str, str] = field(default_factory=dict)
+    pattern_details: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "run_label": self.run_label,
             "run_id": self.run_id,
@@ -543,10 +544,10 @@ class DrilldownArtifact:
         }
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "DrilldownArtifact":
+    def from_dict(cls, raw: Mapping[str, Any]) -> DrilldownArtifact:
         if not isinstance(raw, Mapping):
             raise ValueError("drilldown artifact must be an object")
-        def _as_tuple(value: Any, path: str) -> Tuple[Any, ...]:
+        def _as_tuple(value: Any, path: str) -> tuple[Any, ...]:
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
                 return tuple(value)
             raise ValueError(f"{path} expected a list")
@@ -560,25 +561,25 @@ class DrilldownArtifact:
             return datetime.fromisoformat(text)
 
         warning_raw = raw.get("warning_events", [])
-        warnings: List[WarningEventSummary] = []
+        warnings: list[WarningEventSummary] = []
         if isinstance(warning_raw, Sequence):
             for entry in warning_raw:
                 if isinstance(entry, Mapping):
                     warnings.append(WarningEventSummary.from_dict(entry))
         pod_raw = raw.get("non_running_pods", [])
-        pods: List[DrilldownPod] = []
+        pods: list[DrilldownPod] = []
         if isinstance(pod_raw, Sequence):
             for entry in pod_raw:
                 if isinstance(entry, Mapping):
                     pods.append(DrilldownPod.from_dict(entry))
         rollout_raw = raw.get("rollout_status", [])
-        rollouts: List[DrilldownRolloutStatus] = []
+        rollouts: list[DrilldownRolloutStatus] = []
         if isinstance(rollout_raw, Sequence):
             for entry in rollout_raw:
                 if isinstance(entry, Mapping):
                     rollouts.append(DrilldownRolloutStatus.from_dict(entry))
         pattern_details_raw = raw.get("pattern_details", {})
-        pattern_details: Dict[str, str] = {}
+        pattern_details: dict[str, str] = {}
         if isinstance(pattern_details_raw, Mapping):
             for key, value in pattern_details_raw.items():
                 pattern_details[str(key)] = str(value)

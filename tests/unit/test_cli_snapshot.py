@@ -1,7 +1,8 @@
 import json
+import sys
 import tempfile
 import unittest
-import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -12,14 +13,13 @@ from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
     ClusterSnapshotMetadata,
 )
-from datetime import datetime, timezone
 
 
 class CliSnapshotTest(unittest.TestCase):
     def test_snapshot_writes_json(self) -> None:
         metadata = ClusterSnapshotMetadata(
             cluster_id="demo",
-            captured_at=datetime(2026, 4, 5, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 4, 5, tzinfo=UTC),
             control_plane_version="1.28.0",
             node_count=1,
         )
@@ -38,7 +38,7 @@ class CliSnapshotTest(unittest.TestCase):
     def test_batch_snapshot_collects_targets(self) -> None:
         metadata = ClusterSnapshotMetadata(
             cluster_id="demo",
-            captured_at=datetime(2026, 4, 5, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 4, 5, tzinfo=UTC),
             control_plane_version="1.28.0",
             node_count=1,
         )
@@ -68,7 +68,7 @@ class CliSnapshotTest(unittest.TestCase):
     def test_main_respects_sys_argv_when_no_explicit_arguments(self) -> None:
         metadata = ClusterSnapshotMetadata(
             cluster_id="demo",
-            captured_at=datetime(2026, 4, 5, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 4, 5, tzinfo=UTC),
             control_plane_version="1.28.0",
             node_count=1,
         )

@@ -4,9 +4,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any
 
 from .collect.cluster_snapshot import ClusterSnapshot, CollectionStatus
 from .collect.fixture_loader import load_fixture
@@ -17,27 +18,25 @@ from .feedback.runner import run_feedback_loop
 from .health import run_health_loop, schedule_health_loop
 from .health.adaptation import (
     HealthProposal,
-    ProposalLifecycleStatus,
     PromotionError,
     PromotionNotApplicable,
-    UnsupportedProposalTarget,
+    ProposalLifecycleStatus,
     evaluate_proposal,
     render_proposal_patch,
     with_lifecycle_status,
 )
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
+from .health.summary import format_health_summary, gather_health_summary
 from .llm.assessor_schema import AssessorAssessment
 from .llm.prompts import build_assessment_prompt
-from .llm.provider import AVAILABLE_PROVIDERS, build_assessment_input, get_provider
+from .llm.provider import build_assessment_input, get_provider
 from .models import Assessment
 from .normalize.evidence import normalize_signals
-from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .reason.diagnoser import build_findings_and_hypotheses
+from .recommend.next_steps import build_recommended_action, propose_next_steps
 from .render.formatter import assessment_to_dict, dump_json, format_summary
-from .health.summary import format_health_summary, gather_health_summary
 from .structured_logging import emit_structured_log
-
 
 DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
 BATCH_CONFIG_FALLBACK = Path("snapshots/targets.local.example.json")
@@ -50,13 +49,13 @@ HEALTH_CONFIG_FALLBACK = Path("runs/health-config.local.example.json")
 @dataclass(frozen=True)
 class SnapshotTarget:
     context: str
-    label: Optional[str] = None
-    output: Optional[str] = None
+    label: str | None = None
+    output: str | None = None
 
 
 @dataclass(frozen=True)
 class BatchSnapshotConfig:
-    targets: Tuple[SnapshotTarget, ...]
+    targets: tuple[SnapshotTarget, ...]
     output_dir: Path
 
 CLI_LOG_PATH: Path | None = None
@@ -233,7 +232,7 @@ def handle_batch_snapshot(args: argparse.Namespace, default_config: Path = DEFAU
         return 1
     available = set(contexts)
     successes = 0
-    issues: List[str] = []
+    issues: list[str] = []
     config.output_dir.mkdir(parents=True, exist_ok=True)
     for target in config.targets:
         label = target.label or target.context
@@ -566,7 +565,7 @@ def _load_batch_config(path: Path) -> BatchSnapshotConfig:
     targets_raw = raw.get("targets")
     if not isinstance(targets_raw, list):
         raise ValueError("`targets` must be a list")
-    targets: List[SnapshotTarget] = []
+    targets: list[SnapshotTarget] = []
     for raw_target in targets_raw:
         if not isinstance(raw_target, dict):
             continue
@@ -593,8 +592,8 @@ def _resolve_config_path(preferred: Path, fallback: Path, allow_fallback: bool) 
     raise RuntimeError(f"Config {preferred} not found; create it from {fallback} before running.")
 
 
-def _format_partial_status(status: CollectionStatus) -> Optional[str]:
-    issues: List[str] = []
+def _format_partial_status(status: CollectionStatus) -> str | None:
+    issues: list[str] = []
     if status.helm_error:
         issues.append(f"helm_error={status.helm_error}")
     if status.missing_evidence:
@@ -604,7 +603,7 @@ def _format_partial_status(status: CollectionStatus) -> Optional[str]:
     return "; ".join(issues)
 
 
-def _str_or_none(value: object | None) -> Optional[str]:
+def _str_or_none(value: object | None) -> str | None:
     if value is None:
         return None
     text = str(value).strip()

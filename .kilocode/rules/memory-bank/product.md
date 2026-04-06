@@ -83,8 +83,8 @@ The product is explicitly organized around:
 
 These loops keep the roadmap grounded, the guidance honest, and the reasoning assets evolvable only by reviewable, eval-gated cycles.
 
-Policy realism now enforces cohort-aware gating for suspicious-drift peer mappings, making the inspect script flag every comparison as eligible, skipped, or unsafe so operators can trust the evidence before the loop runs. Structured logging keeps the resulting artifacts auditable and aligned with the repo's security posture.
-Operators can run the inspect → health run → summary → digest workflow via `scripts/run_health_once.sh`, which reuses the existing commands while preserving the structured logs and policy metadata that guard adaptations.
+Policy realism now enforces cohort-aware gating plus release compatibility checks so the inspect script flags every suspicious-drift comparison as eligible, skipped, or unsafe and surfaces baseline mismatches before the loop runs; structured logging keeps those artifacts auditable and aligned with the repo’s security posture while the resulting health reviews, drilldowns, and proposals remain traceable to well-defined inputs.
+Operators can run the inspect → health run → summary → digest workflow via `scripts/run_health_once.sh`, which reuses the existing commands while preserving the structured logs and policy metadata that guard adaptations and makes the quick-run path feel as trustworthy as the scheduled loop.
 
 ## Expected outputs
 The product should usually produce:

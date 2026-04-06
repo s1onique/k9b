@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import Any
 
 from ..models import ConfidenceLevel
 from . import models
@@ -13,7 +14,7 @@ class ArtifactValidationError(ValueError):
     """Raised when an artifact fails structural validation."""
 
 
-def _require_keys(data: Dict[str, Any], required: Iterable[str]) -> None:
+def _require_keys(data: dict[str, Any], required: Iterable[str]) -> None:
     missing = [key for key in required if key not in data]
     if missing:
         raise ArtifactValidationError(f"Missing keys: {', '.join(missing)}")
@@ -56,7 +57,7 @@ class SnapshotPairArtifactValidator:
     required_keys = ["primary_snapshot_id", "primary_snapshot_path"]
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.required_keys)
         if not isinstance(data.get("comparison_summary", {}), dict):
             raise ArtifactValidationError("comparison_summary must be an object")
@@ -64,7 +65,7 @@ class SnapshotPairArtifactValidator:
             raise ArtifactValidationError("missing_evidence must be a list")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> models.SnapshotPairArtifact:
+    def from_dict(cls, data: dict[str, Any]) -> models.SnapshotPairArtifact:
         cls.validate(data)
         start_time = data.get("start_time")
         end_time = data.get("end_time")
@@ -87,13 +88,13 @@ class AssessmentArtifactValidator:
     required_keys = ["assessment_id", "schema_version", "assessment"]
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.required_keys)
         if not isinstance(data["assessment"], dict):
             raise ArtifactValidationError("assessment must be an object")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> models.AssessmentArtifact:
+    def from_dict(cls, data: dict[str, Any]) -> models.AssessmentArtifact:
         cls.validate(data)
         return models.AssessmentArtifact(
             assessment_id=str(data["assessment_id"]),
@@ -107,7 +108,7 @@ class ValidationResultValidator:
     required_keys = ["name", "passed"]
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.required_keys)
         if not isinstance(data["passed"], bool):
             raise ArtifactValidationError("passed must be a boolean")
@@ -115,14 +116,14 @@ class ValidationResultValidator:
             raise ArtifactValidationError("errors must be a list")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> models.ValidationResult:
+    def from_dict(cls, data: dict[str, Any]) -> models.ValidationResult:
         cls.validate(data)
         failure_mode = data.get("failure_mode")
         return models.ValidationResult(
             name=str(data["name"]),
             passed=data["passed"],
             errors=[str(item) for item in data.get("errors", [])],
-            checked_at=_parse_datetime(data.get("checked_at", datetime.now(timezone.utc))),
+            checked_at=_parse_datetime(data.get("checked_at", datetime.now(UTC))),
             failure_mode=_parse_failure_mode(failure_mode) if failure_mode else None,
         )
 
@@ -131,11 +132,11 @@ class ProposedImprovementValidator:
     required_keys = ["id", "description", "target"]
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.required_keys)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> models.ProposedImprovement:
+    def from_dict(cls, data: dict[str, Any]) -> models.ProposedImprovement:
         cls.validate(data)
         confidence = data.get("confidence")
         return models.ProposedImprovement(
@@ -155,7 +156,7 @@ class RunArtifactValidator:
     required_keys = ["run_id", "timestamp", "snapshot_pair"]
 
     @classmethod
-    def validate(cls, data: Dict[str, Any]) -> None:
+    def validate(cls, data: dict[str, Any]) -> None:
         _require_keys(data, cls.required_keys)
         if not isinstance(data.get("snapshot_pair"), dict):
             raise ArtifactValidationError("snapshot_pair must be an object")
@@ -170,7 +171,7 @@ class RunArtifactValidator:
             raise ArtifactValidationError("proposed_improvements must be a list")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> models.RunArtifact:
+    def from_dict(cls, data: dict[str, Any]) -> models.RunArtifact:
         cls.validate(data)
         timestamp = _parse_datetime(data["timestamp"])
         snapshot_pair = SnapshotPairArtifactValidator.from_dict(data["snapshot_pair"])

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence, Tuple
 
 from ..llm.assessor_schema import AssessorAssessment
 from .drilldown import DrilldownArtifact, DrilldownPod
@@ -22,10 +22,10 @@ class DrilldownCandidate:
 class LatestRunSelection:
     run_id: str
     run_timestamp: datetime
-    candidates: Tuple[DrilldownCandidate, ...]
+    candidates: tuple[DrilldownCandidate, ...]
 
 
-def collect_drilldown_candidates(drilldown_dir: Path) -> Tuple[DrilldownCandidate, ...]:
+def collect_drilldown_candidates(drilldown_dir: Path) -> tuple[DrilldownCandidate, ...]:
     if not drilldown_dir.exists():
         return ()
     candidates: list[DrilldownCandidate] = []
@@ -50,7 +50,7 @@ def select_latest_run(drilldown_dir: Path) -> LatestRunSelection:
     return LatestRunSelection(run_id=run_id, run_timestamp=latest.artifact.timestamp, candidates=ranked)
 
 
-def rank_drilldown_candidates(candidates: Iterable[DrilldownCandidate]) -> Tuple[DrilldownCandidate, ...]:
+def rank_drilldown_candidates(candidates: Iterable[DrilldownCandidate]) -> tuple[DrilldownCandidate, ...]:
     return tuple(sorted(candidates, key=_ranking_key))
 
 
@@ -76,7 +76,7 @@ def load_assessment(path: Path) -> AssessorAssessment | None:
         return None
 
 
-def _ranking_key(candidate: DrilldownCandidate) -> Tuple[int, float, str]:
+def _ranking_key(candidate: DrilldownCandidate) -> tuple[int, float, str]:
     severity = _priority_bucket(candidate.artifact)
     timestamp = candidate.artifact.timestamp.timestamp()
     label = candidate.artifact.label or candidate.path.name

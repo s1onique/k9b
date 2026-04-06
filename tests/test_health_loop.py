@@ -1,23 +1,24 @@
 import json
 import shutil
 import unittest
-from datetime import datetime, timezone
+from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple, cast
+from typing import Any, cast
 
 from tests.path_helper import ensure_src_in_path
 
 ensure_src_in_path()
 
-from k8s_diag_agent.compare.two_cluster import ClusterComparison, compare_snapshots
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
     WarningEventSummary,
     extract_cluster_snapshots,
 )
+from k8s_diag_agent.compare.two_cluster import ClusterComparison, compare_snapshots
 from k8s_diag_agent.health.baseline import (
-    BaselinePolicy,
     BaselineDriftCategory,
+    BaselinePolicy,
     ControlPlaneExpectation,
     CRDPolicy,
     ReleasePolicy,
@@ -29,12 +30,19 @@ from k8s_diag_agent.health.drilldown import (
     DrilldownPod,
     DrilldownRolloutStatus,
 )
+from k8s_diag_agent.health.image_pull_secret import (
+    BROKEN_IMAGE_PULL_SECRET_REASON,
+    ExternalSecretStatus,
+    ImagePullSecretInsight,
+    ImagePullSecretInspector,
+    TargetSecretStatus,
+)
 from k8s_diag_agent.health.loop import (
-    ComparisonPeer,
     ComparisonIntent,
+    ComparisonPeer,
     HealthAssessmentResult,
-    HealthLoopRunner,
     HealthHistoryEntry,
+    HealthLoopRunner,
     HealthRating,
     HealthRunConfig,
     HealthSnapshotRecord,
@@ -42,13 +50,6 @@ from k8s_diag_agent.health.loop import (
     TriggerPolicy,
     build_health_assessment,
     determine_pair_trigger_reasons,
-)
-from k8s_diag_agent.health.image_pull_secret import (
-    BROKEN_IMAGE_PULL_SECRET_REASON,
-    ExternalSecretStatus,
-    ImagePullSecretInsight,
-    ImagePullSecretInspector,
-    TargetSecretStatus,
 )
 
 
@@ -66,7 +67,7 @@ class HealthLoopTests(unittest.TestCase):
     class _StubDrilldownCollector(DrilldownCollector):
         def __init__(self) -> None:
             super().__init__(command_runner=lambda command: "{}")
-            self.calls: List[tuple[str, Tuple[str, ...]]] = []
+            self.calls: list[tuple[str, tuple[str, ...]]] = []
 
         def collect(
             self,
@@ -97,7 +98,7 @@ class HealthLoopTests(unittest.TestCase):
         def __init__(self, insight: ImagePullSecretInsight | None = None):
             super().__init__(command_runner=lambda command: "{}")
             self.insight = insight
-            self.calls: List[tuple[str, Tuple[str, ...], Tuple[WarningEventSummary, ...]]] = []
+            self.calls: list[tuple[str, tuple[str, ...], tuple[WarningEventSummary, ...]]] = []
 
         def inspect(
             self,
@@ -113,7 +114,7 @@ class HealthLoopTests(unittest.TestCase):
         files = list(decision_dir.glob("*-comparison-decisions.json"))
         self.assertEqual(len(files), 1, "Expected exactly one comparison decision artifact")
         raw = json.loads(files[0].read_text(encoding="utf-8"))
-        decisions = cast(List[Mapping[str, Any]], raw)
+        decisions = cast(list[Mapping[str, Any]], raw)
         self.assertEqual(len(decisions), 1, "Expected a single comparison decision entry")
         return decisions[0]
 
@@ -128,7 +129,7 @@ class HealthLoopTests(unittest.TestCase):
         status: dict[str, object] | None = None,
         health_signals: dict[str, object] | None = None,
     ) -> ClusterSnapshot:
-        payload: Dict[str, object] = {
+        payload: dict[str, object] = {
             "metadata": {
                 "cluster_id": cluster_id,
                 "captured_at": "2026-01-01T00:00:00Z",
@@ -175,7 +176,7 @@ class HealthLoopTests(unittest.TestCase):
             ),
         )
 
-    def _load_pattern_snapshots(self) -> Dict[str, ClusterSnapshot]:
+    def _load_pattern_snapshots(self) -> dict[str, ClusterSnapshot]:
         path = Path("tests/fixtures/snapshots/deterministic-patterns.json")
         raw = json.loads(path.read_text(encoding="utf-8"))
         snapshots = extract_cluster_snapshots(raw)
@@ -599,7 +600,7 @@ class HealthLoopTests(unittest.TestCase):
         def collector(context: str) -> ClusterSnapshot:
             return snapshots[context]
 
-        comparison_called: List[bool] = []
+        comparison_called: list[bool] = []
 
         def compare_stub(a: ClusterSnapshot, b: ClusterSnapshot) -> ClusterComparison:
             comparison_called.append(True)
@@ -1255,7 +1256,7 @@ class HealthLoopTests(unittest.TestCase):
         def collector(context: str) -> ClusterSnapshot:
             return snapshots[context]
 
-        comparison_called: List[bool] = []
+        comparison_called: list[bool] = []
 
         def compare_stub(a: ClusterSnapshot, b: ClusterSnapshot) -> ClusterComparison:
             comparison_called.append(True)
@@ -1332,7 +1333,7 @@ class HealthLoopTests(unittest.TestCase):
             HealthRunConfig.load(config_path)
 
     def test_drilldown_artifact_serialization(self) -> None:
-        timestamp = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        timestamp = datetime(2026, 1, 2, tzinfo=UTC)
         warning = WarningEventSummary(
             namespace="default",
             reason="TestReason",

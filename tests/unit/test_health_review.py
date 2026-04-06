@@ -1,13 +1,12 @@
 import importlib.util
 import io
 import json
-import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone, timedelta
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Sequence
 from unittest import mock
 
 from tests.path_helper import ensure_src_in_path
@@ -16,10 +15,9 @@ ensure_src_in_path()
 
 from k8s_diag_agent.health.drilldown import DrilldownArtifact, DrilldownPod
 from k8s_diag_agent.health.review import (
-    assessment_path_for_drilldown,
+    DrilldownCandidate,
     rank_drilldown_candidates,
     select_latest_run,
-    DrilldownCandidate,
 )
 from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
 
@@ -81,7 +79,7 @@ class HealthReviewLogicTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
             drilldowns = base / "drilldowns"
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             older = _make_artifact("run-alpha", now - timedelta(minutes=10), "alpha")
             newer = _make_artifact("run-beta", now, "beta")
             _write_artifact(drilldowns / "alpha.json", older)
@@ -92,7 +90,7 @@ class HealthReviewLogicTest(unittest.TestCase):
             self.assertEqual(selection.candidates[0].artifact.label, "beta")
 
     def test_top_drilldown_ranking_prefers_severity(self) -> None:
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
         pods = lambda phase, reason: [DrilldownPod(namespace="ns", name="pod", phase=phase, reason=reason)]
         candidates = [
             DrilldownCandidate(Path("image.json"), _make_artifact("run", ts, "image", ("ImagePullBackOff",), pods("pending", "ImagePullBackOff"))),
@@ -112,7 +110,7 @@ class HealthReviewScriptTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             health_dir = Path(tmpdir) / "health"
             drilldown_dir = health_dir / "drilldowns"
-            artifact = _make_artifact("run-1", datetime.now(timezone.utc), "ctx")
+            artifact = _make_artifact("run-1", datetime.now(UTC), "ctx")
             _write_artifact(drilldown_dir / "run-1-ctx-drilldown.json", artifact)
             with mock.patch.object(module, "assess_drilldown_artifact") as assess_mock:
                 with mock.patch("sys.stdout", new=io.StringIO()) as output:
@@ -135,7 +133,7 @@ class HealthReviewScriptTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             health_dir = Path(tmpdir) / "health"
             drilldown_dir = health_dir / "drilldowns"
-            artifact = _make_artifact("run-42", datetime.now(timezone.utc), "ctx")
+            artifact = _make_artifact("run-42", datetime.now(UTC), "ctx")
             _write_artifact(drilldown_dir / "run-42-ctx-drilldown.json", artifact)
             assessment_data = {
                 "observed_signals": [],

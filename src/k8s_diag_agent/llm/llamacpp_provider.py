@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, NoReturn, Optional, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import requests
 
@@ -31,7 +32,7 @@ _SYSTEM_INSTRUCTIONS = (
 class LlamaCppProviderConfig:
     base_url: str
     model: str
-    api_key: Optional[str] = None
+    api_key: str | None = None
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     @property
@@ -40,7 +41,7 @@ class LlamaCppProviderConfig:
         return f"{base}/v1/chat/completions"
 
     @classmethod
-    def from_env(cls, env: Optional[Dict[str, str]] = None) -> "LlamaCppProviderConfig":
+    def from_env(cls, env: dict[str, str] | None = None) -> LlamaCppProviderConfig:
         source = env or os.environ
         missing: list[str] = []
         base_raw = source.get("LLAMA_CPP_BASE_URL")
@@ -54,7 +55,7 @@ class LlamaCppProviderConfig:
         if missing:
             raise RuntimeError(f"Missing environment variables for llamacpp provider: {', '.join(missing)}")
         api_key_raw = source.get("LLAMA_CPP_API_KEY")
-        api_key: Optional[str] = None
+        api_key: str | None = None
         if api_key_raw is not None:
             stripped = api_key_raw.strip()
             if stripped:
@@ -68,7 +69,7 @@ class LlamaCppProviderConfig:
         )
 
     @staticmethod
-    def _parse_timeout(value: Optional[str]) -> int:
+    def _parse_timeout(value: str | None) -> int:
         if value is None:
             return DEFAULT_TIMEOUT_SECONDS
         trimmed = value.strip()
@@ -90,13 +91,13 @@ class LlamaCppProvider(LLMProvider):
 
     def __init__(
         self,
-        config: Optional[LlamaCppProviderConfig] = None,
-        session_factory: Optional[SessionFactory] = None,
+        config: LlamaCppProviderConfig | None = None,
+        session_factory: SessionFactory | None = None,
     ) -> None:
         self._config = config
         self._session_factory = session_factory or requests.Session
-        self._session: Optional[requests.Session] = None
-        self._endpoint: Optional[str] = None
+        self._session: requests.Session | None = None
+        self._endpoint: str | None = None
 
     def _ensure_ready(self) -> tuple[LlamaCppProviderConfig, requests.Session, str]:
         if self._config is None:
@@ -107,7 +108,7 @@ class LlamaCppProvider(LLMProvider):
             self._endpoint = self._config.endpoint
         return self._config, self._session, self._endpoint
 
-    def _build_payload(self, prompt: str, config: LlamaCppProviderConfig) -> Dict[str, Any]:
+    def _build_payload(self, prompt: str, config: LlamaCppProviderConfig) -> dict[str, Any]:
         return {
             "model": config.model,
             "temperature": 0.0,
@@ -117,8 +118,8 @@ class LlamaCppProvider(LLMProvider):
             ],
         }
 
-    def _request_headers(self, config: LlamaCppProviderConfig) -> Dict[str, str]:
-        headers: Dict[str, str] = {
+    def _request_headers(self, config: LlamaCppProviderConfig) -> dict[str, str]:
+        headers: dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -126,15 +127,15 @@ class LlamaCppProvider(LLMProvider):
             headers["Authorization"] = f"Bearer {config.api_key}"
         return headers
 
-    def _extract_assessment(self, data: Any) -> Dict[str, Any]:
+    def _extract_assessment(self, data: Any) -> dict[str, Any]:
         payload_snippet = self._payload_snippet(data)
         if not isinstance(data, dict):
             raise ValueError(
                 f"llama.cpp response expected an object but got {self._type_name(data)}; "
                 f"response snippet: {payload_snippet}"
             )
-        choices0_type: Optional[str] = None
-        message_type: Optional[str] = None
+        choices0_type: str | None = None
+        message_type: str | None = None
 
         def debug_context() -> str:
             parts = [f"response snippet: {payload_snippet}"]
@@ -155,7 +156,7 @@ class LlamaCppProvider(LLMProvider):
                 f"{debug_context()}"
             )
 
-        def extract_text_from_content(node: Any, path: str) -> Optional[str]:
+        def extract_text_from_content(node: Any, path: str) -> str | None:
             if node is None:
                 return None
             if isinstance(node, str):
@@ -183,7 +184,7 @@ class LlamaCppProvider(LLMProvider):
         if message is not None and not isinstance(message, (dict, str)):
             raise_shape_error("'choices[0]['message']'", "a dictionary or string", message)
 
-        content: Optional[str]
+        content: str | None
         if isinstance(message, str):
             content = message
         elif isinstance(message, dict):
@@ -216,14 +217,14 @@ class LlamaCppProvider(LLMProvider):
             ) from exc
         if not isinstance(parsed, dict):
             raise_shape_error("message JSON", "an object", parsed)
-        return cast(Dict[str, Any], parsed)
+        return cast(dict[str, Any], parsed)
 
     @staticmethod
     def _base_url_mutually_exclusive_v1(base_url: str) -> bool:
         return base_url.rstrip('/').endswith('/v1')
 
     @staticmethod
-    def _format_http_status(response: Any) -> Optional[str]:
+    def _format_http_status(response: Any) -> str | None:
         status_code = getattr(response, "status_code", None)
         if status_code is None:
             return None
@@ -232,7 +233,7 @@ class LlamaCppProvider(LLMProvider):
         return f"HTTP {status_code}{reason_text}"
 
     @staticmethod
-    def _response_body_snippet(response: Any, limit: int = 320) -> Optional[str]:
+    def _response_body_snippet(response: Any, limit: int = 320) -> str | None:
         raw = getattr(response, "text", None)
         if raw is None:
             return None
@@ -269,7 +270,7 @@ class LlamaCppProvider(LLMProvider):
         config: LlamaCppProviderConfig,
         endpoint: str,
         exc: requests.RequestException,
-        response: Optional[requests.Response],
+        response: requests.Response | None,
         timeout_seconds: int,
     ) -> str:
         context: list[str] = [f"Endpoint {endpoint} (LLAMA_CPP_BASE_URL={config.base_url})"]
@@ -287,10 +288,10 @@ class LlamaCppProvider(LLMProvider):
         context.append(f"timeout={timeout_seconds}s")
         return "llama.cpp request failed: " + "; ".join(context)
 
-    def assess(self, prompt: str, payload: "LLMAssessmentInput") -> Dict[str, Any]:
+    def assess(self, prompt: str, payload: LLMAssessmentInput) -> dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
         request_payload = self._build_payload(prompt, config)
-        response: Optional[requests.Response] = None
+        response: requests.Response | None = None
         timeout_seconds = config.timeout_seconds
         try:
             response = session.post(

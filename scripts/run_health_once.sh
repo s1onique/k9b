@@ -81,21 +81,49 @@ else
 fi
 
 echo "Inspecting health config: $CONFIG_PATH"
-"$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"
+if "$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"; then
+  echo "Config inspection result: PASS"
+else
+  echo "Config inspection failed; aborting health run." >&2
+  exit 1
+fi
 
 echo "Running one-shot health loop"
-"$PYTHON" -m k8s_diag_agent.cli run-health-loop --config "$CONFIG_PATH" --once
+if "$PYTHON" -m k8s_diag_agent.cli run-health-loop --config "$CONFIG_PATH" --once; then
+  echo "Health run result: PASS (exit 0)"
+else
+  exit_code=$?
+  echo "Health run result: FAIL (exit $exit_code)" >&2
+  echo "Skipping summary because the health run failed." >&2
+  exit "$exit_code"
+fi
 
-echo "Summarizing artifacts in $RUNS_DIR"
-"$PYTHON" -m k8s_diag_agent.cli health-summary --runs-dir "$RUNS_DIR"
+SUMMARY_OUTPUT="$RUNS_DIR/health-summary.txt"
+echo "Summarizing artifacts to $SUMMARY_OUTPUT"
+if "$PYTHON" -m k8s_diag_agent.cli health-summary --runs-dir "$RUNS_DIR" > "$SUMMARY_OUTPUT"; then
+  cat "$SUMMARY_OUTPUT"
+  echo "Health summary written to $SUMMARY_OUTPUT"
+else
+  echo "Health summary failed; inspect $RUNS_DIR for artifacts." >&2
+  exit 1
+fi
 
 if [[ $GENERATE_DIGEST -eq 1 ]]; then
-  echo "Generating health digest"
+  DIGEST_TARGET="stdout"
+  if [[ -n "$DIGEST_OUTPUT" ]]; then
+    DIGEST_TARGET="$DIGEST_OUTPUT"
+  fi
+  echo "Generating health digest (${DIGEST_TARGET})"
   DIGEST_CMD=("$ROOT/scripts/make_health_digest.sh" --runs-dir "$RUNS_DIR" --config "$CONFIG_PATH")
   if [[ -n "$DIGEST_OUTPUT" ]]; then
     DIGEST_CMD+=(--output "$DIGEST_OUTPUT")
   fi
   "${DIGEST_CMD[@]}"
+  if [[ -n "$DIGEST_OUTPUT" ]]; then
+    echo "Digest written to $DIGEST_OUTPUT"
+  else
+    echo "Digest emitted to stdout"
+  fi
 fi
 
 echo "Operator health snapshot complete"

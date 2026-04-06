@@ -3,14 +3,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any
 
+from ..security import sanitize_payload
 from .adaptation import HealthProposal, ProposalLifecycleStatus
 from .utils import normalize_ref
-from ..security import sanitize_payload
 
 _ASSESSMENT_PATTERN = re.compile(r"(?P<run_id>.+-\d{8}T\d{6}Z)-(?P<label>.+)-assessment\.json$")
 _TIMESTAMP_LENGTH = 16  # YYYYMMDDTHHMMSSZ
@@ -24,7 +25,7 @@ class ClusterSummary:
     health_rating: str | None
     warning_count: int | None
     non_running_pods: int | None
-    missing_evidence: Tuple[str, ...] | None
+    missing_evidence: tuple[str, ...] | None
     cluster_class: str | None
     cluster_role: str | None
     baseline_cohort: str | None
@@ -53,7 +54,7 @@ class TriggerSummary:
     secondary: str
     primary_label: str
     secondary_label: str
-    reasons: Tuple[str, ...]
+    reasons: tuple[str, ...]
     notes: str | None
     comparison_intent: str | None = None
     peer_notes: str | None = None
@@ -73,8 +74,8 @@ class ComparisonSummary:
     secondary_role: str | None
     primary_cohort: str | None
     secondary_cohort: str | None
-    expected_drift_categories: Tuple[str, ...]
-    ignored_drift_categories: Tuple[str, ...]
+    expected_drift_categories: tuple[str, ...]
+    ignored_drift_categories: tuple[str, ...]
     notes: str | None
 
 
@@ -95,11 +96,11 @@ class PromotedComparison:
 class HealthSummary:
     run_id: str
     run_timestamp: datetime | None
-    clusters: Tuple[ClusterSummary, ...]
-    proposals: Tuple[ProposalSummary, ...]
-    promoted: Tuple[PromotedComparison, ...]
-    triggers: Tuple[TriggerSummary, ...]
-    comparisons: Tuple["ComparisonSummary", ...]
+    clusters: tuple[ClusterSummary, ...]
+    proposals: tuple[ProposalSummary, ...]
+    promoted: tuple[PromotedComparison, ...]
+    triggers: tuple[TriggerSummary, ...]
+    comparisons: tuple[ComparisonSummary, ...]
 
 
 def _sanitize_text(value: str | None) -> str | None:
@@ -143,7 +144,7 @@ def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> Healt
 
 
 def format_health_summary(summary: HealthSummary) -> str:
-    lines: List[str] = []
+    lines: list[str] = []
     timestamp = summary.run_timestamp.isoformat() if summary.run_timestamp else "unknown"
     lines.append(f"Health run {summary.run_id} @ {timestamp}")
     lines.append("Status per cluster:")
@@ -255,7 +256,7 @@ def format_health_summary(summary: HealthSummary) -> str:
 def _discover_latest_run_id(assessments_dir: Path) -> str | None:
     if not assessments_dir.is_dir():
         return None
-    candidates: Dict[str, datetime] = {}
+    candidates: dict[str, datetime] = {}
     for path in assessments_dir.iterdir():
         if not path.is_file():
             continue
@@ -290,7 +291,7 @@ def _parse_run_timestamp(run_id: str) -> datetime | None:
         return None
 
 
-def _load_history(history_path: Path) -> Dict[str, Any]:
+def _load_history(history_path: Path) -> dict[str, Any]:
     if not history_path.exists():
         return {}
     try:
@@ -304,8 +305,8 @@ def _load_history(history_path: Path) -> Dict[str, Any]:
 
 def _build_cluster_summaries(
     assessments_dir: Path, run_id: str, history: Mapping[str, Any]
-) -> List[ClusterSummary]:
-    summaries: List[ClusterSummary] = []
+) -> list[ClusterSummary]:
+    summaries: list[ClusterSummary] = []
     if not assessments_dir.is_dir():
         return summaries
     for path in sorted(assessments_dir.glob(f"{run_id}-*-assessment.json")):
@@ -385,7 +386,7 @@ def _history_int(history: Mapping[str, Any], label: str | None, *fields: str) ->
     return None
 
 
-def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> Tuple[str, ...] | None:
+def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> tuple[str, ...] | None:
     entry = _history_entry_for_label(history, label)
     if not isinstance(entry, Mapping):
         return None
@@ -398,14 +399,14 @@ def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> 
 def _format_cluster_metadata(
     cluster_class: str | None, cluster_role: str | None, baseline_cohort: str | None
 ) -> str:
-    class_role_parts: List[str] = []
+    class_role_parts: list[str] = []
     sanitized_class = _sanitize_text(cluster_class)
     sanitized_role = _sanitize_text(cluster_role)
     if sanitized_class:
         class_role_parts.append(sanitized_class)
     if sanitized_role:
         class_role_parts.append(sanitized_role)
-    parts: List[str] = []
+    parts: list[str] = []
     if class_role_parts:
         parts.append("/".join(class_role_parts))
     sanitized_cohort = _sanitize_text(baseline_cohort)
@@ -416,10 +417,10 @@ def _format_cluster_metadata(
     return f" ({'; '.join(parts)})"
 
 
-def _describe_categories(categories: Tuple[str, ...]) -> str:
+def _describe_categories(categories: tuple[str, ...]) -> str:
     if not categories:
         return "none"
-    parts: List[str] = []
+    parts: list[str] = []
     for category in categories:
         sanitized = _sanitize_text(category)
         if sanitized:
@@ -429,8 +430,8 @@ def _describe_categories(categories: Tuple[str, ...]) -> str:
     return ", ".join(parts)
 
 
-def _load_all_proposals(proposals_dir: Path) -> List[HealthProposal]:
-    proposals: List[HealthProposal] = []
+def _load_all_proposals(proposals_dir: Path) -> list[HealthProposal]:
+    proposals: list[HealthProposal] = []
     if not proposals_dir.is_dir():
         return proposals
     for path in sorted(proposals_dir.glob("*.json")):
@@ -444,8 +445,8 @@ def _load_all_proposals(proposals_dir: Path) -> List[HealthProposal]:
     return proposals
 
 
-def _collect_proposals_for_run(proposals: Iterable[HealthProposal], run_id: str) -> List[ProposalSummary]:
-    summaries: List[ProposalSummary] = []
+def _collect_proposals_for_run(proposals: Iterable[HealthProposal], run_id: str) -> list[ProposalSummary]:
+    summaries: list[ProposalSummary] = []
     for proposal in proposals:
         if proposal.source_run_id != run_id:
             continue
@@ -463,8 +464,8 @@ def _collect_proposals_for_run(proposals: Iterable[HealthProposal], run_id: str)
     return summaries
 
 
-def _collect_triggers(triggers_dir: Path, run_id: str) -> List[TriggerSummary]:
-    triggers: List[TriggerSummary] = []
+def _collect_triggers(triggers_dir: Path, run_id: str) -> list[TriggerSummary]:
+    triggers: list[TriggerSummary] = []
     if not triggers_dir.is_dir():
         return triggers
     pattern = f"{run_id}-*-trigger.json"
@@ -493,7 +494,7 @@ def _collect_triggers(triggers_dir: Path, run_id: str) -> List[TriggerSummary]:
     return triggers
 
 
-def _collect_comparison_summaries(root: Path, run_id: str) -> List[ComparisonSummary]:
+def _collect_comparison_summaries(root: Path, run_id: str) -> list[ComparisonSummary]:
     path = root / f"{run_id}-comparison-decisions.json"
     if not path.exists():
         return []
@@ -503,7 +504,7 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> List[ComparisonSum
         return []
     if not isinstance(raw, Sequence):
         return []
-    summaries: List[ComparisonSummary] = []
+    summaries: list[ComparisonSummary] = []
     for entry in raw:
         if not isinstance(entry, Mapping):
             continue
@@ -535,8 +536,8 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> List[ComparisonSum
 
 def _collect_promoted_reports(
     proposals: Iterable[HealthProposal], reviews_dir: Path, after_run_id: str
-) -> List[PromotedComparison]:
-    promoted: List[PromotedComparison] = []
+) -> list[PromotedComparison]:
+    promoted: list[PromotedComparison] = []
     for proposal in proposals:
         if not _has_promoted_status(proposal):
             continue

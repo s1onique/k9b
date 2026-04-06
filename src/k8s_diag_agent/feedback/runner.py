@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot, CollectionStatus
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
@@ -34,7 +35,6 @@ from .models import (
     ValidationResult,
 )
 
-
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 
 
@@ -46,21 +46,21 @@ def _safe_label(value: str) -> str:
     return result
 
 
-def _normalize_text(value: object | None) -> Optional[str]:
+def _normalize_text(value: object | None) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
 
 
-def _parse_category_list(value: object | None) -> Tuple[str, ...]:
+def _parse_category_list(value: object | None) -> tuple[str, ...]:
     if value is None:
         return ()
     if isinstance(value, str):
         normalized = _normalize_text(value)
         return (normalized,) if normalized else ()
     if isinstance(value, (list, tuple)):
-        categories: List[str] = []
+        categories: list[str] = []
         for item in value:
             normalized = _normalize_text(item)
             if normalized:
@@ -90,7 +90,7 @@ def _serialize_value(value: Any) -> Any:
     return _to_iso(value)
 
 
-def _serialize_run_artifact(artifact: RunArtifact) -> Dict[str, Any]:
+def _serialize_run_artifact(artifact: RunArtifact) -> dict[str, Any]:
     data = asdict(artifact)
     return {key: _serialize_value(value) for key, value in data.items()}
 
@@ -99,7 +99,7 @@ def _serialize_run_artifact(artifact: RunArtifact) -> Dict[str, Any]:
 class FeedbackTarget:
     context: str
     label: str
-    output: Optional[Path]
+    output: Path | None
 
 
 _DEFAULT_COMPARISON_METADATA = ComparisonIntentMetadata(None, (), (), None)
@@ -117,19 +117,19 @@ class FeedbackPair:
 @dataclass(frozen=True)
 class FeedbackRunConfig:
     run_id: str
-    targets: Tuple[FeedbackTarget, ...]
-    pairs: Tuple[FeedbackPair, ...]
+    targets: tuple[FeedbackTarget, ...]
+    pairs: tuple[FeedbackPair, ...]
     output_dir: Path
-    provider: Optional[str]
+    provider: str | None
     collector_version: str
 
     @classmethod
-    def load(cls, path: Path) -> "FeedbackRunConfig":
+    def load(cls, path: Path) -> FeedbackRunConfig:
         raw = json.loads(path.read_text(encoding="utf-8"))
         run_id = str(raw.get("run_id") or _safe_label(path.stem))
         output_dir = Path(str(raw.get("output_dir") or "runs"))
         provider = raw.get("provider")
-        provider_value: Optional[str]
+        provider_value: str | None
         if provider is None:
             provider_value = DEFAULT_PROVIDER_NAME
         else:
@@ -139,7 +139,7 @@ class FeedbackRunConfig:
         targets_raw = raw.get("targets")
         if not isinstance(targets_raw, list):
             raise ValueError("`targets` must be a list")
-        targets: List[FeedbackTarget] = []
+        targets: list[FeedbackTarget] = []
         for entry in targets_raw:
             if not isinstance(entry, dict):
                 continue
@@ -157,7 +157,7 @@ class FeedbackRunConfig:
         pairs_raw = raw.get("pairs")
         if not isinstance(pairs_raw, list):
             raise ValueError("`pairs` must be a list")
-        pairs: List[FeedbackPair] = []
+        pairs: list[FeedbackPair] = []
         for entry in pairs_raw:
             if not isinstance(entry, dict):
                 continue
@@ -213,22 +213,22 @@ class FeedbackRunRunner:
         self,
         config: FeedbackRunConfig,
         available_contexts: Iterable[str],
-        probe_provider: Optional[str] = None,
+        probe_provider: str | None = None,
         quiet: bool = False,
     ) -> None:
         self.config = config
         self.available_contexts = set(available_contexts)
         self.provider_name = probe_provider or config.provider
         self.quiet = quiet
-        self._provider_instance: Optional[LLMProvider] = None
-        self._provider_error: Optional[str] = None
-        self._collection_messages: List[str] = []
-        self._collection_issues: List[str] = []
+        self._provider_instance: LLMProvider | None = None
+        self._provider_error: str | None = None
+        self._collection_messages: list[str] = []
+        self._collection_issues: list[str] = []
 
-    def execute(self) -> List[RunArtifact]:
+    def execute(self) -> list[RunArtifact]:
         directories = self._ensure_directories()
         records = self._collect_snapshots(directories["snapshots"])
-        artifacts: List[RunArtifact] = []
+        artifacts: list[RunArtifact] = []
         for pair in self.config.pairs:
             artifact = self._process_pair(pair, records, directories)
             if artifact:
@@ -241,16 +241,16 @@ class FeedbackRunRunner:
                 print(message)
         return artifacts
 
-    def _ensure_directories(self) -> Dict[str, Path]:
-        directories: Dict[str, Path] = {}
+    def _ensure_directories(self) -> dict[str, Path]:
+        directories: dict[str, Path] = {}
         for subdir in ("snapshots", "comparisons", "assessments", "feedback"):
             path = self.config.output_dir / subdir
             path.mkdir(parents=True, exist_ok=True)
             directories[subdir] = path
         return directories
 
-    def _collect_snapshots(self, snapshot_dir: Path) -> Dict[str, SnapshotRecord]:
-        records: Dict[str, SnapshotRecord] = {}
+    def _collect_snapshots(self, snapshot_dir: Path) -> dict[str, SnapshotRecord]:
+        records: dict[str, SnapshotRecord] = {}
         for target in self.config.targets:
             if target.context not in self.available_contexts:
                 message = f"Context '{target.context}' not available; skipping snapshot."
@@ -274,9 +274,9 @@ class FeedbackRunRunner:
     def _process_pair(
         self,
         pair: FeedbackPair,
-        records: Dict[str, SnapshotRecord],
-        directories: Dict[str, Path],
-    ) -> Optional[RunArtifact]:
+        records: dict[str, SnapshotRecord],
+        directories: dict[str, Path],
+    ) -> RunArtifact | None:
         primary = self._lookup_record(pair.primary, records)
         secondary = self._lookup_record(pair.secondary, records)
         if not primary or not secondary:
@@ -299,8 +299,8 @@ class FeedbackRunRunner:
         )
         assessment_data, assessment_issue = self._run_assessment(pair, primary, secondary, comparison)
         assessment_artifact = None
-        validation_results: List[ValidationResult] = []
-        failure_modes: List[FailureMode] = []
+        validation_results: list[ValidationResult] = []
+        failure_modes: list[FailureMode] = []
         if assessment_data is not None:
             assessment_artifact = AssessmentArtifact(
                 assessment_id=f"{self.config.run_id}-{pair.label}",
@@ -334,7 +334,7 @@ class FeedbackRunRunner:
             )
         run_artifact = RunArtifact(
             run_id=self.config.run_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             context_name=pair.label,
             comparison_intent=pair.comparison_metadata.intent,
             comparison_notes=pair.comparison_metadata.notes,
@@ -357,7 +357,7 @@ class FeedbackRunRunner:
             _write_json(assessment_artifact.assessment, assessment_path)
         return run_artifact
 
-    def _lookup_record(self, key: str, records: Dict[str, SnapshotRecord]) -> Optional[SnapshotRecord]:
+    def _lookup_record(self, key: str, records: dict[str, SnapshotRecord]) -> SnapshotRecord | None:
         if key in records:
             return records[key]
         for record in records.values():
@@ -365,8 +365,8 @@ class FeedbackRunRunner:
                 return record
         return None
 
-    def _collect_missing_evidence(self, primary: SnapshotRecord, secondary: SnapshotRecord) -> List[str]:
-        missing: List[str] = []
+    def _collect_missing_evidence(self, primary: SnapshotRecord, secondary: SnapshotRecord) -> list[str]:
+        missing: list[str] = []
         missing.extend(primary.status.missing_evidence)
         missing.extend(secondary.status.missing_evidence)
         return missing
@@ -377,8 +377,8 @@ class FeedbackRunRunner:
         return "complete"
 
     def _parse_assessment(
-        self, assessment_data: Dict[str, Any]
-    ) -> Tuple[Optional[AssessorAssessment], Optional[str]]:
+        self, assessment_data: dict[str, Any]
+    ) -> tuple[AssessorAssessment | None, str | None]:
         try:
             parsed = AssessorAssessment.from_dict(assessment_data)
             return parsed, None
@@ -386,9 +386,9 @@ class FeedbackRunRunner:
             return None, str(exc)
 
     def _score_assessment(
-        self, parsed: AssessorAssessment, raw: Dict[str, Any], snapshot_pair: SnapshotPairArtifact
-    ) -> List[ValidationResult]:
-        results: List[ValidationResult] = []
+        self, parsed: AssessorAssessment, raw: dict[str, Any], snapshot_pair: SnapshotPairArtifact
+    ) -> list[ValidationResult]:
+        results: list[ValidationResult] = []
         results.append(ValidationResult(name="schema-check", passed=True))
         missing_ok = len(snapshot_pair.missing_evidence) == 0
         results.append(
@@ -425,7 +425,7 @@ class FeedbackRunRunner:
         primary: SnapshotRecord,
         secondary: SnapshotRecord,
         comparison: ClusterComparison,
-    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    ) -> tuple[dict[str, Any] | None, str | None]:
         if not pair.assess:
             return None, None
         provider = self._get_provider_instance()
@@ -444,7 +444,7 @@ class FeedbackRunRunner:
         except Exception as exc:
             return None, str(exc)
 
-    def _get_provider_instance(self) -> Optional[LLMProvider]:
+    def _get_provider_instance(self) -> LLMProvider | None:
         if self.provider_name is None:
             return None
         if self._provider_instance is not None:
@@ -458,8 +458,8 @@ class FeedbackRunRunner:
 
 
 def run_feedback_loop(
-    config_path: Path, provider_override: Optional[str] = None, quiet: bool = False
-) -> Tuple[int, List[RunArtifact]]:
+    config_path: Path, provider_override: str | None = None, quiet: bool = False
+) -> tuple[int, list[RunArtifact]]:
     try:
         config = FeedbackRunConfig.load(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:

@@ -185,6 +185,8 @@ The architecture is composed around the same three feedback loops stated in doct
 
 These loops also safeguard the stable contracts: moving a schema field or adjusting a safety level now requires retracing the operational loop, rerunning the evaluation loop (including proposal replays), and securing the adaptation loop’s approval before deployment.
 
+The quick-run helper (`scripts/run_health_once.sh`) now mirrors that guardrail: it runs the policy preflight, one-shot health iteration, structured summary, and optional digest so operators get the same audit-ready evidence whether the scheduler or the helper invokes the loop.
+
 ## Architectural principles for this repo
 
 ### 1. Evidence before conclusion
@@ -195,6 +197,8 @@ The architecture should make it easy to preserve the distinction between:
 - confidence,
 - and action.
 
+Suspicious-drift comparisons additionally obey cohort-aware gating, so mismatched class, role, or baseline cohort metadata is detected and blocked before any cluster comparison occurs.
+
 ### 2. Observability is part of correctness
 The system should make internal reasoning inspectable.
 
@@ -204,6 +208,8 @@ Where practical, preserve visibility into:
 - what hypotheses were considered,
 - what uncertainty remains,
 - and why a recommendation was made.
+
+Structured logging now captures config inspection outcomes, health run exit codes, summary paths, and digest targets so the security posture stays auditable for both scheduled and quick-run executions.
 
 ### 3. Externalize volatile reasoning assets
 Keep volatile artifacts outside hard-coded core logic where practical.

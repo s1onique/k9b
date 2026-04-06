@@ -3,22 +3,21 @@ from __future__ import annotations
 
 import json
 from textwrap import dedent
-from typing import Dict, List
 
 from ..health.drilldown import DrilldownArtifact
 from ..security import sanitize_prompt
 
 
-def _format_table(items: List[str], header: str) -> str:
+def _format_table(items: list[str], header: str) -> str:
     if not items:
         return f"{header}: none"
     return f"{header}:\n" + "\n".join(f"- {line}" for line in items)
 
 
-def _summarize_descriptions(descriptions: Dict[str, str]) -> str:
+def _summarize_descriptions(descriptions: dict[str, str]) -> str:
     if not descriptions:
         return "No pod descriptions were captured."
-    lines: List[str] = []
+    lines: list[str] = []
     for index, (key, value) in enumerate(descriptions.items()):
         if index >= 3:
             lines.append("... (additional pod descriptions omitted)")

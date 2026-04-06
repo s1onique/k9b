@@ -2,11 +2,11 @@ import json
 import shutil
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from k8s_diag_agent.health.summary import format_health_summary, gather_health_summary
 from k8s_diag_agent.health.adaptation import ProposalLifecycleStatus
+from k8s_diag_agent.health.summary import format_health_summary, gather_health_summary
 
 
 class HealthSummaryTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class HealthSummaryTests(unittest.TestCase):
     def _write_review(self, run_id: str, warnings: int, non_running: int, score: int) -> None:
         review = {
             "run_id": run_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "selected_drilldowns": [
                 {
                     "context": "cluster-alpha",

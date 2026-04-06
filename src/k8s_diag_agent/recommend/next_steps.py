@@ -1,13 +1,13 @@
 """Recommendation logic for next evidence and actions."""
 from __future__ import annotations
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from ..models import Hypothesis, NextCheck, RecommendedAction, SafetyLevel
 
 
-def propose_next_steps(hypotheses: Iterable[Hypothesis]) -> List[NextCheck]:
-    checks: List[NextCheck] = []
+def propose_next_steps(hypotheses: Iterable[Hypothesis]) -> list[NextCheck]:
+    checks: list[NextCheck] = []
     for idx, hypothesis in enumerate(hypotheses):
         checks.append(
             NextCheck(

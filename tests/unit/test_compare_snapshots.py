@@ -1,6 +1,5 @@
 import unittest
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
@@ -15,7 +14,7 @@ class CompareSnapshotsTest(unittest.TestCase):
     def setUp(self) -> None:
         metadata = ClusterSnapshotMetadata(
             cluster_id="alpha",
-            captured_at=datetime(2026, 4, 5, 0, 0, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 4, 5, 0, 0, tzinfo=UTC),
             control_plane_version="1.28.0",
             node_count=3,
             pod_count=120,

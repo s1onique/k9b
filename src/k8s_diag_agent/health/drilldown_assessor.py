@@ -1,8 +1,6 @@
 """Evaluate a drilldown artifact with the shared LLM seam."""
 from __future__ import annotations
 
-from typing import Dict
-
 from ..llm.assessor_schema import AssessorAssessment
 from ..llm.base import LLMAssessmentInput
 from ..llm.drilldown_prompts import build_drilldown_prompt
@@ -16,7 +14,7 @@ def assess_drilldown_artifact(artifact: DrilldownArtifact, provider_name: str = 
 
     prompt = build_drilldown_prompt(artifact)
     provider = get_provider(provider_name)
-    differences: Dict[str, object] = {
+    differences: dict[str, object] = {
         reason: artifact.evidence_summary for reason in artifact.trigger_reasons
     }
     if not differences:

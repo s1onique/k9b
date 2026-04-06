@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from tests.path_helper import ensure_src_in_path
@@ -12,8 +12,7 @@ ensure_src_in_path()
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.feedback.runner import run_feedback_loop
 
-
-SANITIZED_ASSESSMENT: Dict[str, Any] = {
+SANITIZED_ASSESSMENT: dict[str, Any] = {
     "observed_signals": [
         {
             "id": "signal-1",
@@ -59,9 +58,9 @@ SANITIZED_ASSESSMENT: Dict[str, Any] = {
 
 
 class DummyProvider:
-    def assess(self, prompt: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def assess(self, prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
         del prompt, payload
-        return cast(Dict[str, Any], SANITIZED_ASSESSMENT.copy())
+        return cast(dict[str, Any], SANITIZED_ASSESSMENT.copy())
 
 
 class SanitizedReplayTest(unittest.TestCase):
@@ -70,10 +69,10 @@ class SanitizedReplayTest(unittest.TestCase):
         self.primary_path = self.fixture_dir / "snapshots" / "sanitized-alpha.json"
         self.diff_path = self.fixture_dir / "comparisons" / "sanitized-alpha-vs-beta.json"
 
-    def _load_primary(self) -> Dict[str, Any]:
-        return cast(Dict[str, Any], json.loads(self.primary_path.read_text(encoding="utf-8")))
+    def _load_primary(self) -> dict[str, Any]:
+        return cast(dict[str, Any], json.loads(self.primary_path.read_text(encoding="utf-8")))
 
-    def _load_secondary(self) -> Dict[str, Any]:
+    def _load_secondary(self) -> dict[str, Any]:
         data = self._load_primary()
         data["metadata"]["node_count"] = 4
         data["metadata"]["pod_count"] = 61

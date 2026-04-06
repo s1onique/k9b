@@ -2,7 +2,6 @@ import unittest
 
 from tests.path_helper import ensure_src_in_path
 
-
 ensure_src_in_path()
 
 from k8s_diag_agent.feedback import FailureMode

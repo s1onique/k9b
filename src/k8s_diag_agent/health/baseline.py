@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any
 
 from .utils import normalize_ref
 
@@ -30,7 +31,7 @@ BASELINE_LEGACY_NAME = "health-baseline.json"
 BASELINE_EXAMPLE_NAME = "health-baseline.example.json"
 
 
-def _parse_version_tuple(value: str) -> Tuple[int, ...]:
+def _parse_version_tuple(value: str) -> tuple[int, ...]:
     digits = [int(segment) for segment in re.findall(r"\d+", value)]
     while len(digits) < 3:
         digits.append(0)
@@ -46,12 +47,12 @@ def _normalize_chart_version(value: str) -> str:
 
 @dataclass(frozen=True)
 class ControlPlaneExpectation:
-    min_version: Optional[str]
-    max_version: Optional[str]
+    min_version: str | None
+    max_version: str | None
     why: str
     next_check: str
 
-    def allows(self, candidate: Optional[str]) -> bool:
+    def allows(self, candidate: str | None) -> bool:
         if not candidate:
             return False
         candidate_tuple = _parse_version_tuple(candidate)
@@ -78,11 +79,11 @@ class ControlPlaneExpectation:
 @dataclass(frozen=True)
 class ReleasePolicy:
     release_key: str
-    allowed_versions: Tuple[str, ...]
+    allowed_versions: tuple[str, ...]
     why: str
     next_check: str
 
-    def allows(self, candidate: Optional[str]) -> bool:
+    def allows(self, candidate: str | None) -> bool:
         if not candidate:
             return False
         candidate_norm = _normalize_chart_version(candidate)
@@ -103,15 +104,15 @@ class CRDPolicy:
 
 @dataclass(frozen=True)
 class BaselinePolicy:
-    control_plane_expectation: Optional[ControlPlaneExpectation]
-    release_policies: Dict[str, ReleasePolicy]
-    required_crds: Dict[str, CRDPolicy]
-    ignored_drift_categories: Set[BaselineDriftCategory]
-    expected_drift_categories: Set[BaselineDriftCategory]
-    peer_roles: Dict[str, str]
+    control_plane_expectation: ControlPlaneExpectation | None
+    release_policies: dict[str, ReleasePolicy]
+    required_crds: dict[str, CRDPolicy]
+    ignored_drift_categories: set[BaselineDriftCategory]
+    expected_drift_categories: set[BaselineDriftCategory]
+    peer_roles: dict[str, str]
 
     @staticmethod
-    def _parse_control_plane(raw: Mapping[str, Any]) -> Optional[ControlPlaneExpectation]:
+    def _parse_control_plane(raw: Mapping[str, Any]) -> ControlPlaneExpectation | None:
         if not raw:
             return None
         min_version = _str_or_none(raw.get("min_version"))
@@ -126,7 +127,7 @@ class BaselinePolicy:
         )
 
     @staticmethod
-    def _parse_release(raw: Mapping[str, Any]) -> Optional[ReleasePolicy]:
+    def _parse_release(raw: Mapping[str, Any]) -> ReleasePolicy | None:
         if not raw:
             return None
         release_key = _str_or_none(raw.get("release"))
@@ -147,7 +148,7 @@ class BaselinePolicy:
         )
 
     @staticmethod
-    def _parse_crd(raw: Mapping[str, Any]) -> Optional[CRDPolicy]:
+    def _parse_crd(raw: Mapping[str, Any]) -> CRDPolicy | None:
         if not raw:
             return None
         family = _str_or_none(raw.get("family"))
@@ -158,8 +159,8 @@ class BaselinePolicy:
         return CRDPolicy(family=family, why=why, next_check=next_check)
 
     @staticmethod
-    def _parse_drift_categories(values: Sequence[str]) -> Set[BaselineDriftCategory]:
-        cats: Set[BaselineDriftCategory] = set()
+    def _parse_drift_categories(values: Sequence[str]) -> set[BaselineDriftCategory]:
+        cats: set[BaselineDriftCategory] = set()
         for value in values:
             normalized = _str_or_none(value)
             if not normalized:
@@ -171,8 +172,8 @@ class BaselinePolicy:
         return cats
 
     @staticmethod
-    def _normalize_peer_roles(raw: Mapping[str, str]) -> Dict[str, str]:
-        roles: Dict[str, str] = {}
+    def _normalize_peer_roles(raw: Mapping[str, str]) -> dict[str, str]:
+        roles: dict[str, str] = {}
         for ref, role in raw.items():
             if not ref:
                 continue
@@ -187,7 +188,7 @@ class BaselinePolicy:
         cp_raw = raw.get("control_plane_version_range") or {}
         control_plane = cls._parse_control_plane(cp_raw)
         releases_raw = raw.get("watched_releases") or []
-        release_policies: Dict[str, ReleasePolicy] = {}
+        release_policies: dict[str, ReleasePolicy] = {}
         for entry in releases_raw:
             if not isinstance(entry, dict):
                 continue
@@ -195,7 +196,7 @@ class BaselinePolicy:
             if release_entry:
                 release_policies[release_entry.release_key] = release_entry
         crds_raw = raw.get("required_crd_families") or []
-        crd_policies: Dict[str, CRDPolicy] = {}
+        crd_policies: dict[str, CRDPolicy] = {}
         for entry in crds_raw:
             if not isinstance(entry, dict):
                 continue
@@ -228,17 +229,17 @@ class BaselinePolicy:
     def is_drift_allowed(self, category: BaselineDriftCategory) -> bool:
         return category in self.ignored_drift_categories
 
-    def release_policy(self, release_key: str) -> Optional[ReleasePolicy]:
+    def release_policy(self, release_key: str) -> ReleasePolicy | None:
         return self.release_policies.get(release_key)
 
-    def crd_policy(self, family: str) -> Optional[CRDPolicy]:
+    def crd_policy(self, family: str) -> CRDPolicy | None:
         return self.required_crds.get(family)
 
-    def role_for(self, reference: str) -> Optional[str]:
+    def role_for(self, reference: str) -> str | None:
         return self.peer_roles.get(normalize_ref(reference))
 
 
-def resolve_baseline_policy_path(directory: Path, explicit: Optional[str] = None) -> Path:
+def resolve_baseline_policy_path(directory: Path, explicit: str | None = None) -> Path:
     if explicit:
         explicit_path = Path(explicit)
         return explicit_path if explicit_path.is_absolute() else directory / explicit_path
@@ -255,7 +256,7 @@ def resolve_baseline_policy_path(directory: Path, explicit: Optional[str] = None
     )
 
 
-def _str_or_none(value: Optional[str]) -> Optional[str]:
+def _str_or_none(value: str | None) -> str | None:
     if value is None:
         return None
     text = str(value).strip()

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 REDACTION_PLACEHOLDER = "<scrubbed>"
 _SECRET_MANIFEST_RE = re.compile(r"kind\s*[:=]\s*Secret", re.IGNORECASE)
@@ -55,7 +56,7 @@ def _is_secret_manifest(value: Mapping[str, Any]) -> bool:
     return str(kind).strip().lower() == "secret"
 
 
-def _sanitize_mapping(value: Mapping[str, Any], *, parent_key: str | None = None) -> Dict[str, Any]:
+def _sanitize_mapping(value: Mapping[str, Any], *, parent_key: str | None = None) -> dict[str, Any]:
     if _is_secret_manifest(value):
         metadata = value.get("metadata")
         return {
@@ -63,7 +64,7 @@ def _sanitize_mapping(value: Mapping[str, Any], *, parent_key: str | None = None
             "metadata": sanitize_payload(metadata) if isinstance(metadata, Mapping) else {},
             "redacted": "secret manifest",
         }
-    sanitized: Dict[str, Any] = {}
+    sanitized: dict[str, Any] = {}
     for key, item in value.items():
         key_str = str(key)
         if _is_sensitive_key(key_str):
@@ -93,7 +94,7 @@ def sanitize_payload(value: Any, *, parent_key: str | None = None) -> Any:
     return value
 
 
-def sanitize_log_entry(entry: Mapping[str, Any]) -> Dict[str, Any]:
+def sanitize_log_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
     sanitized = sanitize_payload(entry)
     if isinstance(sanitized, Mapping):
         return dict(sanitized)

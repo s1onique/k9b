@@ -4,16 +4,16 @@ from __future__ import annotations
 import json
 import logging
 from textwrap import dedent
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
-from ..compare.two_cluster import ComparisonIntentMetadata, ClusterComparison
+from ..compare.two_cluster import ClusterComparison, ComparisonIntentMetadata
 from ..security import sanitize_prompt
 
 logger = logging.getLogger(__name__)
 
 
-def _metadata_summary(snapshot: ClusterSnapshot) -> Dict[str, object]:
+def _metadata_summary(snapshot: ClusterSnapshot) -> dict[str, object]:
     meta = snapshot.metadata
     return {
         "cluster_id": meta.cluster_id,
@@ -25,13 +25,13 @@ def _metadata_summary(snapshot: ClusterSnapshot) -> Dict[str, object]:
     }
 
 
-def _summarize_helm_diffs(helm_diffs: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    entries: List[Dict[str, Any]] = []
+def _summarize_helm_diffs(helm_diffs: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
     for release_key in sorted(helm_diffs):
         diff = helm_diffs[release_key]
         primary = diff.get("primary")
         secondary = diff.get("secondary")
-        entry: Dict[str, Any] = {"release": release_key}
+        entry: dict[str, Any] = {"release": release_key}
         if primary and secondary:
             entry["status"] = "version-mismatch"
             entry["primary_chart_version"] = primary.get("chart_version")
@@ -50,13 +50,13 @@ def _summarize_helm_diffs(helm_diffs: Dict[str, Dict[str, Any]]) -> List[Dict[st
     return entries
 
 
-def _summarize_crd_diffs(crd_diffs: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    entries: List[Dict[str, Any]] = []
+def _summarize_crd_diffs(crd_diffs: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
     for crd_name in sorted(crd_diffs):
         diff = crd_diffs[crd_name]
         primary = diff.get("primary")
         secondary = diff.get("secondary")
-        entry: Dict[str, Any] = {"name": crd_name}
+        entry: dict[str, Any] = {"name": crd_name}
         if primary and secondary:
             entry["status"] = "version-mismatch"
             entry["primary_storage_version"] = primary.get("storage_version")
@@ -73,16 +73,16 @@ def _summarize_crd_diffs(crd_diffs: Dict[str, Dict[str, Any]]) -> List[Dict[str,
     return entries
 
 
-def _format_categories(label: str, values: Tuple[str, ...]) -> str:
+def _format_categories(label: str, values: tuple[str, ...]) -> str:
     if not values:
         return f"{label}: none declared"
     return f"{label}: {', '.join(values)}"
 
 
-def _describe_comparison_context(metadata: Optional[ComparisonIntentMetadata]) -> str:
+def _describe_comparison_context(metadata: ComparisonIntentMetadata | None) -> str:
     if metadata is None:
         return "Comparison intent: unspecified (no metadata provided)\nNotes: none provided\nExpected drift categories: none declared\nSuspicious drift categories: none declared"
-    lines: List[str] = []
+    lines: list[str] = []
     intent = metadata.intent or "unspecified"
     lines.append(f"Comparison intent: {intent}")
     notes = metadata.notes or "none provided"
@@ -92,13 +92,13 @@ def _describe_comparison_context(metadata: Optional[ComparisonIntentMetadata]) -
     return "\n".join(lines)
 
 
-def _build_intent_guidance(metadata: Optional[ComparisonIntentMetadata]) -> str:
+def _build_intent_guidance(metadata: ComparisonIntentMetadata | None) -> str:
     if metadata is None or not metadata.intent:
         return (
             "No comparison intent was declared for this pair, so treat any detected drift as ambiguous and lower overall confidence. "
             "Mention the missing intent when describing hypotheses and next evidence, and avoid assuming the environments share a role."
         )
-    guidance_lines: List[str] = [f"Frame your assessment around the declared intent '{metadata.intent}'."]
+    guidance_lines: list[str] = [f"Frame your assessment around the declared intent '{metadata.intent}'."]
     if metadata.expected_drift_categories:
         guidance_lines.append(
             "Differences that match the expected drift categories "
@@ -120,7 +120,7 @@ def build_assessment_prompt(
     primary: ClusterSnapshot,
     secondary: ClusterSnapshot,
     comparison: ClusterComparison,
-    intent_metadata: Optional[ComparisonIntentMetadata] = None,
+    intent_metadata: ComparisonIntentMetadata | None = None,
 ) -> str:
     metadata_deltas = comparison.differences.get("metadata", {})
     helm_diffs = comparison.differences.get("helm_releases", {})

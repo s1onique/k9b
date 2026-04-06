@@ -2,19 +2,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
 
 
 @dataclass(frozen=True)
 class ComparisonIntentMetadata:
-    intent: Optional[str]
-    expected_drift_categories: Tuple[str, ...] = ()
-    unexpected_drift_categories: Tuple[str, ...] = ()
-    notes: Optional[str] = None
+    intent: str | None
+    expected_drift_categories: tuple[str, ...] = ()
+    unexpected_drift_categories: tuple[str, ...] = ()
+    notes: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "intent": self.intent,
             "expected_drift_categories": list(self.expected_drift_categories),
@@ -26,20 +26,20 @@ class ComparisonIntentMetadata:
 class ClusterComparison:
     primary_snapshot: ClusterSnapshot
     secondary_snapshot: ClusterSnapshot
-    differences: Dict[str, Dict[str, Any]]
-    metadata: Optional[ComparisonIntentMetadata] = None
+    differences: dict[str, dict[str, Any]]
+    metadata: ComparisonIntentMetadata | None = None
 
 
 def compare_snapshots(
     primary: ClusterSnapshot,
     secondary: ClusterSnapshot,
-    metadata: Optional[ComparisonIntentMetadata] = None,
+    metadata: ComparisonIntentMetadata | None = None,
 ) -> ClusterComparison:
     metadata_diffs = _compare_metadata(primary, secondary)
     metric_diffs = _compare_metrics(primary, secondary)
     helm_diffs = _compare_helm_releases(primary, secondary)
     crd_diffs = _compare_crds(primary, secondary)
-    differences: Dict[str, Dict[str, Any]] = {}
+    differences: dict[str, dict[str, Any]] = {}
     if metadata_diffs:
         differences["metadata"] = metadata_diffs
     if metric_diffs:
@@ -58,8 +58,8 @@ def compare_snapshots(
 
 def _compare_metadata(
     primary: ClusterSnapshot, secondary: ClusterSnapshot
-) -> Dict[str, Dict[str, Any]]:
-    diffs: Dict[str, Dict[str, Any]] = {}
+) -> dict[str, dict[str, Any]]:
+    diffs: dict[str, dict[str, Any]] = {}
     fields = [
         "node_count",
         "pod_count",
@@ -79,8 +79,8 @@ def _compare_metadata(
 
 def _compare_metrics(
     primary: ClusterSnapshot, secondary: ClusterSnapshot
-) -> Dict[str, Dict[str, Any]]:
-    diffs: Dict[str, Dict[str, Any]] = {}
+) -> dict[str, dict[str, Any]]:
+    diffs: dict[str, dict[str, Any]] = {}
     keys = set(primary.metrics) | set(secondary.metrics)
     for key in keys:
         primary_value = primary.metrics.get(key)
@@ -95,8 +95,8 @@ def _compare_metrics(
 
 def _compare_helm_releases(
     primary: ClusterSnapshot, secondary: ClusterSnapshot
-) -> Dict[str, Dict[str, Any]]:
-    diffs: Dict[str, Dict[str, Any]] = {}
+) -> dict[str, dict[str, Any]]:
+    diffs: dict[str, dict[str, Any]] = {}
     keys = sorted(set(primary.helm_releases) | set(secondary.helm_releases))
     for key in keys:
         primary_release = primary.helm_releases.get(key)
@@ -125,8 +125,8 @@ def _compare_helm_releases(
 
 def _compare_crds(
     primary: ClusterSnapshot, secondary: ClusterSnapshot
-) -> Dict[str, Dict[str, Any]]:
-    diffs: Dict[str, Dict[str, Any]] = {}
+) -> dict[str, dict[str, Any]]:
+    diffs: dict[str, dict[str, Any]] = {}
     keys = sorted(set(primary.crds) | set(secondary.crds))
     for key in keys:
         primary_crd = primary.crds.get(key)
