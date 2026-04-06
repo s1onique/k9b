@@ -2830,11 +2830,11 @@ def _validate_suspicious_pairs(
             )
         if problems:
             issues.append(
-                
+
                     f"Suspicious-drift pair {primary.label} ({primary.context}) vs "
                     f"{secondary.label} ({secondary.context}) invalid: "
                     + "; ".join(problems)
-                
+
             )
     if issues:
         raise ValueError(

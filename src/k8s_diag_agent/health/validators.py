@@ -19,7 +19,7 @@ def _require_keys(data: Mapping[str, Any], required: Iterable[str]) -> None:
 
 
 def _is_sequence(value: Any) -> bool:
-    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
+    return isinstance(value, Sequence) and not isinstance(value, str | bytes)
 
 
 class HealthAssessmentValidator:

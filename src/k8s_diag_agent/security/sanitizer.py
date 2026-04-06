@@ -89,7 +89,7 @@ def sanitize_payload(value: Any, *, parent_key: str | None = None) -> Any:
         return _sanitize_string(value)
     if isinstance(value, Mapping):
         return _sanitize_mapping(value, parent_key=parent_key)
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
         return _sanitize_sequence(value)
     return value
 

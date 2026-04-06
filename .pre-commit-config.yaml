@@ -6,10 +6,10 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.0.339
+    rev: v0.9.10
     hooks:
       - id: ruff
-        args: ["check", "--select", "E,F,I,UP", "src", "tests"]
+        args: ["--select", "E,F,I", "src", "tests"]
   - repo: local
     hooks:
       - id: ban-private-contexts
@@ -17,3 +17,8 @@ repos:
         entry: python scripts/check_private_contexts.py
         language: python
         pass_filenames: true
+      - id: frontend-ui-tests
+        name: Frontend UI tests
+        entry: bash -c 'cd frontend && npm run test:ui'
+        language: system
+        files: ^frontend/

@@ -552,7 +552,7 @@ class DrilldownArtifact:
         if not isinstance(raw, Mapping):
             raise ValueError("drilldown artifact must be an object")
         def _as_tuple(value: Any, path: str) -> tuple[Any, ...]:
-            if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            if isinstance(value, Sequence) and not isinstance(value, str | bytes):
                 return tuple(value)
             raise ValueError(f"{path} expected a list")
 

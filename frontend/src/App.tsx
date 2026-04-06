@@ -12,6 +12,7 @@ import {
 import type {
   ClusterDetailPayload,
   FleetPayload,
+  NotificationDetail,
   NotificationEntry,
   NotificationsPayload,
   ProposalEntry,
@@ -53,7 +54,42 @@ const artifactUrl = (path: string | null) => {
   return `/artifact?path=${encodeURIComponent(path)}`;
 };
 
-const ProposalList = ({
+const priorityLabel = (confidence: string) => {
+  const normalized = confidence.toLowerCase();
+  if (normalized.includes("critical")) return "critical";
+  if (normalized.includes("high")) return "high";
+  if (normalized.includes("medium")) return "medium";
+  if (normalized.includes("low")) return "low";
+  return "default";
+};
+
+const EvidenceDetails = ({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: NotificationDetail[];
+}) => {
+  if (!entries.length) {
+    return null;
+  }
+  return (
+    <details className="evidence-details">
+      <summary>
+        {title} · {entries.length} evidence point{entries.length === 1 ? "" : "s"}
+      </summary>
+      <ul>
+        {entries.map((entry) => (
+          <li key={`${entry.label}-${entry.value}`}>
+            <strong>{entry.label}:</strong> {entry.value}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+};
+
+export const ProposalList = ({
   proposals,
   filter,
   sortKey,
@@ -111,7 +147,11 @@ const ProposalList = ({
               </div>
               <div className="proposal-meta">
                 <span className={statusClass(proposal.status)}>{proposal.status}</span>
-                <span className="small">Confidence: {proposal.confidence}</span>
+                <span
+                  className={`confidence-badge level-${priorityLabel(proposal.confidence)}`}
+                >
+                  {proposal.confidence} confidence
+                </span>
               </div>
             </header>
             <p className="proposal-rationale">{rationale}</p>
@@ -235,7 +275,14 @@ const App = () => {
   };
 
   if (!run || !fleet || !proposals || !notifications || !clusterDetail) {
-    return <div className="app-shell loading">Loading operator data…</div>;
+    return (
+      <div className="app-shell loading">
+        <div>
+          <p>Loading operator data…</p>
+          {error && <div className="alert">{error}</div>}
+        </div>
+      </div>
+    );
   }
 
   const runRecency = dayjs(run.timestamp).fromNow();
@@ -384,76 +431,128 @@ const App = () => {
             ))}
           </div>
         </div>
+        <div className="cluster-assessment">
+          <div>
+            <p className="eyebrow">Selected cluster</p>
+            <h3>{clusterDetail.selectedClusterLabel || "Cluster"}</h3>
+            {clusterDetail.selectedClusterContext ? (
+              <p className="small">{clusterDetail.selectedClusterContext}</p>
+            ) : null}
+          </div>
+          {clusterDetail.assessment ? (
+            <div className="assessment-meta">
+              <span className={statusClass(clusterDetail.assessment.healthRating)}>
+                {clusterDetail.assessment.healthRating}
+              </span>
+              <p className="small">
+                Missing evidence: {clusterDetail.assessment.missingEvidence.join(", ") || "none"}
+              </p>
+              <p className="small">
+                Confidence: {clusterDetail.assessment.overallConfidence || "unknown"}
+              </p>
+              {clusterDetail.assessment.artifactPath ? (
+                <a
+                  className="link"
+                  href={artifactUrl(clusterDetail.assessment.artifactPath)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View assessment artifact
+                </a>
+              ) : null}
+            </div>
+          ) : (
+            <p className="muted">No assessment data is available yet.</p>
+          )}
+          {clusterDetail.artifacts.length ? (
+            <div className="artifact-strip cluster-artifacts">
+              {clusterDetail.artifacts.map((artifact) => {
+                const url = artifactUrl(artifact.path);
+                return (
+                  url && (
+                    <a
+                      key={artifact.label}
+                      className="artifact-link"
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {artifact.label}
+                    </a>
+                  )
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
         <article className="tab-panel">
           {activeTab === "findings" && (
-            <ul>
+            <div className="finding-list">
               {clusterDetail.findings.map((finding) => (
-                <li key={`${finding.label}-${finding.context}`}>
-                  <strong>
-                    {finding.label || "cluster"} · {finding.context || "n/a"}
-                  </strong>
-                  <p className="small">Triggers: {finding.triggerReasons.join(", ") || "none"}</p>
-                  <p className="small">
-                    Warnings: {finding.warningEvents} · Non-running pods: {finding.nonRunningPods}
-                  </p>
-                  <div className="detail-grid">
+                <article className="finding-card" key={`${finding.label}-${finding.context}`}>
+                  <header>
                     <div>
-                      <p className="small">Summary</p>
-                      <ul>
-                        {finding.summaryEntries.map((entry) => (
-                          <li key={`${entry.label}-${entry.value}`}>
-                            <strong>{entry.label}:</strong> {entry.value}
-                          </li>
-                        ))}
-                      </ul>
+                      <strong>
+                        {finding.label || "cluster"} · {finding.context || "n/a"}
+                      </strong>
+                      <p className="muted">Triggers: {finding.triggerReasons.join(", ") || "none"}</p>
+                      <p className="small">
+                        Warnings: {finding.warningEvents} · Non-running pods: {finding.nonRunningPods}
+                      </p>
                     </div>
-                    <div>
-                      <p className="small">Patterns</p>
-                      <ul>
-                        {finding.patternDetails.map((entry) => (
-                          <li key={`${entry.label}-${entry.value}`}>
-                            <strong>{entry.label}:</strong> {entry.value}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </li>
+                    {finding.artifactPath ? (
+                      <a
+                        className="link"
+                        href={artifactUrl(finding.artifactPath)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View raw evidence
+                      </a>
+                    ) : null}
+                  </header>
+                  <EvidenceDetails title="Summary" entries={finding.summaryEntries} />
+                  <EvidenceDetails title="Patterns" entries={finding.patternDetails} />
+                  {finding.rolloutStatus.length ? (
+                    <p className="small">Rollout status: {finding.rolloutStatus.join(", ")}</p>
+                  ) : null}
+                </article>
               ))}
-            </ul>
+            </div>
           )}
           {activeTab === "hypotheses" && (
-            <ul>
+            <div className="finding-list">
               {clusterDetail.hypotheses.map((hypothesis) => (
-                <li key={hypothesis.description}>
+                <article className="finding-card compact" key={hypothesis.description}>
                   <strong>{hypothesis.description}</strong>
                   <p className="small">
                     Confidence: {hypothesis.confidence} · Layer: {hypothesis.probableLayer}
                   </p>
                   <p className="small">Falsifier: {hypothesis.falsifier}</p>
-                </li>
+                </article>
               ))}
-            </ul>
+            </div>
           )}
           {activeTab === "checks" && (
-            <ul>
+            <div className="finding-list">
               {clusterDetail.nextChecks.map((check) => (
-                <li key={check.description}>
+                <article className="finding-card compact" key={check.description}>
                   <strong>{check.description}</strong>
                   <p className="small">
                     Owner: {check.owner} · Method: {check.method}
                   </p>
                   <p className="small">Evidence: {check.evidenceNeeded.join(", ") || "n/a"}</p>
-                </li>
+                </article>
               ))}
-            </ul>
+            </div>
           )}
         </article>
         <div className="cluster-lists">
           <div className="drilldown-summary">
             <h3>Drilldown summary</h3>
             <p className="small">
-              {clusterDetail.drilldownAvailability.available}/{clusterDetail.drilldownAvailability.totalClusters} ready ·
+              {clusterDetail.drilldownAvailability.available}/{
+                clusterDetail.drilldownAvailability.totalClusters} ready ·
               Missing: {clusterDetail.drilldownAvailability.missingClusters.join(", ") || "none"}
             </p>
             <div className="drilldown-grid">

@@ -181,7 +181,7 @@ class LlamaCppProvider(LLMProvider):
         message = top_choice.get("message")
         if message is not None:
             message_type = self._type_name(message)
-        if message is not None and not isinstance(message, (dict, str)):
+        if message is not None and not isinstance(message, dict | str):
             raise_shape_error("'choices[0]['message']'", "a dictionary or string", message)
 
         content: str | None

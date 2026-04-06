@@ -342,7 +342,7 @@ def _coerce_int(value: object | None) -> int:
 
 
 def _coerce_sequence(value: object | None) -> tuple[str, ...]:
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
         return tuple(str(item) for item in value)
     if value is None:
         return ()

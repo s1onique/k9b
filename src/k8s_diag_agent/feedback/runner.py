@@ -59,7 +59,7 @@ def _parse_category_list(value: object | None) -> tuple[str, ...]:
     if isinstance(value, str):
         normalized = _normalize_text(value)
         return (normalized,) if normalized else ()
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         categories: list[str] = []
         for item in value:
             normalized = _normalize_text(item)

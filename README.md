@@ -38,8 +38,11 @@ k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixtur
 
 ## Development
 
+- `scripts/verify_all.sh` (canonical acceptance gate; runs Ruff, unittest, mypy, and the frontend `npm run test:ui` + `npm run build` steps after `npm ci`)
 - `.venv/bin/python -m unittest discover tests` (active verification path)
 - `.venv/bin/python -m mypy src tests` (type checker; see [typing guidance](docs/typing.md))
+- Frontend UI smoke: `cd frontend && npm run test:ui`
+- Frontend build check: `cd frontend && npm run build`
 - Logs from the health loop, drilldown collectors, review/scoring flows, and scheduler/operator helpers must follow the standards defined in [docs/logging-policy.md](docs/logging-policy.md).
 - Follow [docs/security-policy.md](docs/security-policy.md) for secrets handling, live evidence boundaries, provider/environment rules, and proposal-gated adaptation hygiene.
 
@@ -47,9 +50,12 @@ k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixtur
 
 Use these quick guards before the full verification pipeline settles in:
 
+- `scripts/verify_all.sh`
 - `.venv/bin/python -m ruff check src tests`
 - `.venv/bin/python -m unittest tests/unit/test_fast_feedback_smoke.py`
 - `.venv/bin/python -m pytest tests/unit/test_cli_smoke.py`
+- `cd frontend && npm run test:ui`
+- `cd frontend && npm run build`
 - `pre-commit run --all-files`
 
 The `test_fast_feedback_smoke.py` regression exercises the config loader, structured logging, and sanitization-aware CLI path so you can trust the fast feedback loop before you commit.
