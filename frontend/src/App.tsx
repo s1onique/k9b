@@ -52,6 +52,42 @@ const statusClass = (value: string) => {
 
 const formatTimestamp = (value: string) => dayjs(value).format("MMM D, YYYY HH:mm [UTC]");
 
+export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
+const DEFAULT_AUTOREFRESH_SECONDS = 5;
+const AUTOREFRESH_OPTIONS = [
+  { label: "Off", value: "off" },
+  { label: "5s", value: "5" },
+  { label: "10s", value: "10" },
+  { label: "30s", value: "30" },
+  { label: "1m", value: "60" },
+  { label: "5m", value: "300" },
+];
+
+const readStoredAutoRefreshInterval = () => {
+  if (typeof window === "undefined") {
+    return DEFAULT_AUTOREFRESH_SECONDS;
+  }
+  const stored = window.localStorage.getItem(AUTOREFRESH_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_AUTOREFRESH_SECONDS;
+  }
+  if (stored === "off") {
+    return null;
+  }
+  const parsed = Number(stored);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return DEFAULT_AUTOREFRESH_SECONDS;
+  }
+  return parsed;
+};
+
+const persistAutoRefreshInterval = (value: string) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
+};
+
 const artifactUrl = (path: string | null) => {
   if (!path) {
     return null;
@@ -258,6 +294,9 @@ const App = () => {
   const [lastRefresh, setLastRefresh] = useState(() => dayjs());
   const [selectedClusterLabel, setSelectedClusterLabel] = useState<string | null>(null);
   const [clusterDetailExpanded, setClusterDetailExpanded] = useState(false);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(() => {
+    return readStoredAutoRefreshInterval();
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -286,8 +325,32 @@ const App = () => {
 
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, 30_000);
-    return () => clearInterval(timer);
+  }, [refresh]);
+
+  useEffect(() => {
+    let timerId: ReturnType<typeof setInterval> | null = null;
+    if (autoRefreshInterval) {
+      timerId = setInterval(() => {
+        refresh();
+      }, autoRefreshInterval * 1000);
+    }
+    return () => {
+      if (timerId !== null) {
+        clearInterval(timerId);
+      }
+    };
+  }, [autoRefreshInterval, refresh]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -339,6 +402,19 @@ const App = () => {
     setClusterDetailExpanded(false);
   };
 
+  const handleAutoRefreshChange = (value: string) => {
+    if (value === "off") {
+      persistAutoRefreshInterval("off");
+      setAutoRefreshInterval(null);
+      return;
+    }
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      persistAutoRefreshInterval(value);
+      setAutoRefreshInterval(parsed);
+    }
+  };
+
   if (!run || !fleet || !proposals || !notifications) {
     return (
       <div className="app-shell loading">
@@ -353,8 +429,11 @@ const App = () => {
   const runRecency = relativeRecency(run.timestamp);
   const runFresh = !isStaleTimestamp(run.timestamp);
   const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
-  const runMetrics = [
+  const degradedCount =
+    fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
+  const runStats = [
     { label: "Clusters", value: run.clusterCount },
+    { label: "Degraded", value: degradedCount },
     { label: "Proposals", value: run.proposalCount },
     { label: "Notifications", value: run.notificationCount },
     { label: "Drilldowns", value: run.drilldownCount },
@@ -364,6 +443,10 @@ const App = () => {
     ? relativeRecency(selectedCluster.latestRunTimestamp)
     : null;
   const clusterFresh = selectedCluster ? !isStaleTimestamp(selectedCluster.latestRunTimestamp) : true;
+  const autoRefreshSelectValue = autoRefreshInterval ? String(autoRefreshInterval) : "off";
+  const autoRefreshStatusText = autoRefreshInterval
+    ? `Auto refresh every ${autoRefreshInterval}s`
+    : "Auto refresh is off";
 
   return (
     <div className="app-shell">
@@ -380,9 +463,26 @@ const App = () => {
           <p className="muted">Collector {run.collectorVersion}</p>
         </div>
         <div className="hero-actions">
-          <button type="button" onClick={refresh}>
-            Refresh data
-          </button>
+          <div className="refresh-controls">
+            <button type="button" onClick={refresh}>
+              Refresh data
+            </button>
+            <div className="autorefresh-control">
+              <label htmlFor="auto-refresh-interval">Auto refresh</label>
+              <select
+                id="auto-refresh-interval"
+                value={autoRefreshSelectValue}
+                onChange={(event) => handleAutoRefreshChange(event.target.value)}
+              >
+                {AUTOREFRESH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="autorefresh-status muted small">{autoRefreshStatusText}</span>
+            </div>
+          </div>
           <span className="small">Updated {dayjs(lastRefresh).fromNow()}</span>
         </div>
       </header>
@@ -407,12 +507,12 @@ const App = () => {
             <p className="muted small">{formatTimestamp(run.timestamp)}</p>
           </div>
         </div>
-        <div className="run-metric-grid">
-          {runMetrics.map((metric) => (
-            <article className="metric-chip" key={metric.label}>
-              <p className="eyebrow">{metric.label}</p>
-              <strong>{metric.value}</strong>
-            </article>
+        <div className="run-summary-stats">
+          {runStats.map((stat) => (
+            <span className="run-stat-pill" key={stat.label} aria-label={`${stat.label}: ${stat.value}`}>
+              <span className="run-stat-label">{stat.label}: </span>
+              <strong>{stat.value}</strong>
+            </span>
           ))}
         </div>
         <div className="artifact-strip run-artifacts">
