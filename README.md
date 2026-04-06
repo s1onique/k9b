@@ -60,6 +60,23 @@ Use these quick guards before the full verification pipeline settles in:
 
 The `test_fast_feedback_smoke.py` regression exercises the config loader, structured logging, and sanitization-aware CLI path so you can trust the fast feedback loop before you commit.
 
+## Run the UI locally
+
+### Backend startup
+
+- `scripts/start_backend.sh` validates `.venv/bin/python`, optionally runs `scripts/run_health_once.sh`, and launches `python -m k8s_diag_agent.cli health-ui` with the collected artifacts.
+- Override the configuration file with `HEALTH_CONFIG_PATH`, the artifact directories with `HEALTH_RUNS_DIR` or `HEALTH_UI_RUNS_DIR`, and the listening address with `HEALTH_UI_HOST`/`HEALTH_UI_PORT`.
+- Emit the health digest via `HEALTH_RUN_DIGEST=1` (stdout) or `HEALTH_DIGEST_OUTPUT=path` while still seeding the UI with `run_health_once.sh`.
+
+### Frontend startup
+
+- `scripts/start_frontend.sh` confirms `npm` is available, runs `npm ci` whenever `frontend/node_modules` is absent, and starts the Vite dev server with `FRONTEND_HOST`/`FRONTEND_PORT` (defaults to `127.0.0.1:5173`).
+- The Vite dev server proxies `/api` and `/artifact` requests to `http://127.0.0.1:8080`, so run `scripts/start_backend.sh` (or otherwise keep the backend listening on that port) before opening the UI to avoid HTML responses from Vite.
+
+### Optional refresh-less backend mode
+
+- Set `HEALTH_SKIP_REFRESH=1` when invoking `scripts/start_backend.sh` to reuse the last health artifacts without rerunning the snapshot step, which keeps the UI up while new backend runs are unnecessary.
+
 ## Optional LLM assessment path
 
 ```bash
