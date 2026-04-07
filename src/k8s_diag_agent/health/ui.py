@@ -15,6 +15,7 @@ from ..external_analysis.artifact import (
     ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
 )
+from ..external_analysis.config import ExternalAnalysisSettings
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 
@@ -115,6 +116,7 @@ def write_health_ui_index(
     proposals: Sequence[HealthProposal],
     external_analysis: Sequence[ExternalAnalysisArtifact] = (),
     notifications: Sequence[NotificationRecord] = (),
+    external_analysis_settings: ExternalAnalysisSettings | None = None,
 ) -> Path:
     assessment_map = {artifact.label: artifact for artifact in assessments}
     drilldown_map = _latest_drilldown_map(drilldowns)
@@ -130,6 +132,7 @@ def write_health_ui_index(
     proposals_data = [_serialize_proposal(proposal, output_dir) for proposal in proposals]
     drilldown_availability = _serialize_drilldown_availability(records, drilldown_map, output_dir)
     external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
+    historical_entries = _collect_historical_external_analysis_entries(output_dir / "external-analysis")
     auto_drilldown_data = _serialize_auto_drilldown_interpretations(
         external_analysis_data.get("artifacts"), output_dir
     )
@@ -146,7 +149,15 @@ def write_health_ui_index(
         "external_analysis_count": external_analysis_data.get("count", 0),
         "notification_count": len(notifications),
         "llm_stats": _build_llm_stats(external_analysis_data),
-        "historical_llm_stats": _build_historical_llm_stats(output_dir / "external-analysis"),
+        "historical_llm_stats": _build_historical_llm_stats(
+            output_dir / "external-analysis", historical_entries
+        ),
+        "llm_activity": _serialize_llm_activity(historical_entries, output_dir),
+        "llm_policy": _build_llm_policy(
+            external_analysis_settings,
+            external_analysis,
+            len(drilldowns),
+        ),
     }
     index = {
         "run": run_entry,
@@ -198,6 +209,7 @@ _PROPOSAL_STATUS_ORDER = (
     "promoted",
 )
 _ANALYSIS_STATUS_ORDER = tuple(status.value for status in ExternalAnalysisStatus)
+_LLM_ACTIVITY_LIMIT = 20
 _NOTIFICATION_HISTORY_LIMIT = 20
 _SCOPE_CURRENT_RUN = "current_run"
 _SCOPE_RETAINED_HISTORY = "retained_history"
@@ -294,6 +306,8 @@ def _serialize_external_analysis(
             {
                 "tool_name": artifact.tool_name,
                 "cluster_label": artifact.cluster_label,
+                "run_id": artifact.run_id,
+                "run_label": artifact.run_label,
                 "status": status,
                 "summary": artifact.summary,
                 "findings": list(artifact.findings),
@@ -319,6 +333,84 @@ def _serialize_external_analysis(
             continue
         status_counts.append({"status": status, "count": count})
     return {"count": len(entries), "status_counts": status_counts, "artifacts": entries}
+
+
+def _build_llm_policy(
+    settings: ExternalAnalysisSettings | None,
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    drilldown_count: int,
+) -> dict[str, object]:
+    config = settings or ExternalAnalysisSettings()
+    policy = config.auto_drilldown
+    auto_artifacts = [
+        artifact
+        for artifact in artifacts
+        if artifact.purpose == ExternalAnalysisPurpose.AUTO_DRILLDOWN
+    ]
+    used_statuses = {ExternalAnalysisStatus.SUCCESS, ExternalAnalysisStatus.FAILED}
+    used_calls = sum(1 for artifact in auto_artifacts if artifact.status in used_statuses)
+    successful_calls = sum(1 for artifact in auto_artifacts if artifact.status == ExternalAnalysisStatus.SUCCESS)
+    failed_calls = sum(1 for artifact in auto_artifacts if artifact.status == ExternalAnalysisStatus.FAILED)
+    skipped_calls = sum(1 for artifact in auto_artifacts if artifact.status == ExternalAnalysisStatus.SKIPPED)
+    budget_exhausted: bool | None = None
+    if policy.enabled and policy.max_per_run > 0:
+        if len(auto_artifacts) >= policy.max_per_run and drilldown_count > len(auto_artifacts):
+            budget_exhausted = True
+        elif drilldown_count <= len(auto_artifacts):
+            budget_exhausted = False
+    return {
+        "auto_drilldown": {
+            "enabled": policy.enabled,
+            "provider": policy.provider or "default",
+            "maxPerRun": policy.max_per_run,
+            "usedThisRun": used_calls,
+            "successfulThisRun": successful_calls,
+            "failedThisRun": failed_calls,
+            "skippedThisRun": skipped_calls,
+            "budgetExhausted": budget_exhausted,
+        }
+    }
+
+
+def _serialize_llm_activity(entries: Sequence[Mapping[str, object]], root_dir: Path, limit: int = _LLM_ACTIVITY_LIMIT) -> dict[str, object]:
+    normalized: list[tuple[datetime | None, dict[str, object]]] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        timestamp_value = entry.get("timestamp")
+        timestamp = _parse_timestamp(timestamp_value)
+        if isinstance(timestamp_value, str):
+            timestamp_str = timestamp_value
+        elif timestamp:
+            timestamp_str = timestamp.isoformat()
+        else:
+            timestamp_str = None
+        activity_entry: dict[str, object] = {
+            "timestamp": timestamp_str,
+            "run_id": _coerce_optional_str(entry.get("run_id")),
+            "run_label": _coerce_optional_str(entry.get("run_label")),
+            "cluster_label": _coerce_optional_str(entry.get("cluster_label")),
+            "tool_name": _coerce_optional_str(entry.get("tool_name")),
+            "provider": _coerce_optional_str(entry.get("provider")),
+            "purpose": _coerce_optional_str(entry.get("purpose")),
+            "status": _coerce_optional_str(entry.get("status")),
+            "latency_ms": _parse_optional_int(entry.get("duration_ms")),
+            "artifact_path": _relative_path(root_dir, entry.get("artifact_path")),
+            "summary": _coerce_optional_str(entry.get("summary")),
+            "error_summary": _coerce_optional_str(entry.get("error_summary")),
+            "skip_reason": _coerce_optional_str(entry.get("skip_reason")),
+        }
+        normalized.append((timestamp, activity_entry))
+    sorted_entries = sorted(
+        normalized,
+        key=lambda item: item[0] or datetime.min,
+        reverse=True,
+    )
+    trimmed_entries = [payload for _, payload in sorted_entries[:limit]]
+    return {
+        "entries": trimmed_entries,
+        "summary": {"retained_entries": len(normalized)},
+    }
 
 
 def _serialize_auto_drilldown_interpretations(
@@ -376,6 +468,14 @@ def _parse_timestamp(value: object | None) -> datetime | None:
         return None
 
 
+def _coerce_optional_str(value: object | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
 def _build_llm_stats(external_analysis: dict[str, object], scope: str = _SCOPE_CURRENT_RUN) -> dict[str, object]:
     artifacts = external_analysis.get("artifacts") or ()
     if not isinstance(artifacts, Sequence):
@@ -383,9 +483,12 @@ def _build_llm_stats(external_analysis: dict[str, object], scope: str = _SCOPE_C
     return _compute_llm_stats(artifacts, scope)
 
 
-def _build_historical_llm_stats(external_analysis_dir: Path) -> dict[str, object]:
-    entries = _collect_historical_external_analysis_entries(external_analysis_dir)
-    return _compute_llm_stats(entries, _SCOPE_RETAINED_HISTORY)
+def _build_historical_llm_stats(
+    external_analysis_dir: Path,
+    entries: Sequence[Mapping[str, object]] | None = None,
+) -> dict[str, object]:
+    historical_entries = entries or _collect_historical_external_analysis_entries(external_analysis_dir)
+    return _compute_llm_stats(historical_entries, _SCOPE_RETAINED_HISTORY)
 
 
 def _collect_historical_external_analysis_entries(

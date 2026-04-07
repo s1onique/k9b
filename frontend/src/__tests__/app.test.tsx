@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { AUTOREFRESH_STORAGE_KEY } from "../App";
@@ -115,6 +115,35 @@ describe("App", () => {
     expect(screen.getByText(/Run LLM calls:/i)).toBeInTheDocument();
     expect(screen.getByText(/Historical LLM calls:/i)).toBeInTheDocument();
     expect(screen.getByText(/Providers: k8sgpt 3 \(1 failed\)/i)).toBeInTheDocument();
+  });
+
+  test("renders llm policy block with budget details", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /LLM policy/i });
+    expect(heading).toBeInTheDocument();
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+    const scoped = within(panel!);
+    expect(scoped.getByText(/Provider/i)).toBeInTheDocument();
+    expect(scoped.getByText(/Budget status/i)).toBeInTheDocument();
+    expect(scoped.getByText(/Within budget/i)).toBeInTheDocument();
+    expect(scoped.getByText(/Used this run/i)).toBeInTheDocument();
+  });
+
+  test("renders llm activity panel and filters entries", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const panelHeading = await screen.findByRole("heading", { name: /LLM activity/i });
+    expect(screen.getByText(/Retained entries: 18/i)).toBeInTheDocument();
+    const panelSection = panelHeading.closest("section");
+    expect(panelSection).not.toBeNull();
+    const statusSelect = within(panelSection!).getByLabelText(/Status/i);
+    await user.selectOptions(statusSelect, "failed");
+    expect(within(panelSection!).getByText(/timeout/i)).toBeInTheDocument();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {

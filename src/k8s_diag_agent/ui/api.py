@@ -13,6 +13,8 @@ from .model import (
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
     FindingsView,
+    LLMActivityView,
+    LLMPolicyView,
     LLMStatsView,
     NotificationView,
     ProposalView,
@@ -46,6 +48,8 @@ class RunPayload(TypedDict):
     runStats: RunStatsPayload
     llmStats: LLMStatsPayload
     historicalLlmStats: LLMStatsPayload | None
+    llmActivity: LLMActivityPayload
+    llmPolicy: LLMPolicyPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -72,6 +76,46 @@ class LLMStatsPayload(TypedDict):
     p99LatencyMs: int | None
     providerBreakdown: list[LLMProviderEntry]
     scope: str
+
+
+class AutoDrilldownPolicyPayload(TypedDict):
+    enabled: bool
+    provider: str
+    maxPerRun: int
+    usedThisRun: int
+    successfulThisRun: int
+    failedThisRun: int
+    skippedThisRun: int
+    budgetExhausted: bool | None
+
+
+class LLMPolicyPayload(TypedDict):
+    autoDrilldown: AutoDrilldownPolicyPayload
+
+
+class LLMActivityEntryPayload(TypedDict, total=False):
+    timestamp: str | None
+    runId: str | None
+    runLabel: str | None
+    clusterLabel: str | None
+    toolName: str | None
+    provider: str | None
+    purpose: str | None
+    status: str | None
+    latencyMs: int | None
+    artifactPath: str | None
+    summary: str | None
+    errorSummary: str | None
+    skipReason: str | None
+
+
+class LLMActivitySummaryPayload(TypedDict):
+    retainedEntries: int
+
+
+class LLMActivityPayload(TypedDict):
+    entries: list[LLMActivityEntryPayload]
+    summary: LLMActivitySummaryPayload
 
 
 class RatingCount(TypedDict):
@@ -272,6 +316,8 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
             if context.run.historical_llm_stats
             else None
         ),
+        "llmActivity": _serialize_llm_activity(context.run.llm_activity),
+        "llmPolicy": _serialize_llm_policy(context.run.llm_policy),
     }
 
 
@@ -383,6 +429,48 @@ def _serialize_llm_stats(stats: LLMStatsView) -> LLMStatsPayload:
             for entry in stats.provider_breakdown
         ],
         "scope": stats.scope,
+    }
+
+
+def _serialize_llm_activity(activity: LLMActivityView) -> LLMActivityPayload:
+    return {
+        "entries": [
+            {
+                "timestamp": entry.timestamp,
+                "runId": entry.run_id,
+                "runLabel": entry.run_label,
+                "clusterLabel": entry.cluster_label,
+                "toolName": entry.tool_name,
+                "provider": entry.provider,
+                "purpose": entry.purpose,
+                "status": entry.status,
+                "latencyMs": entry.latency_ms,
+                "artifactPath": entry.artifact_path,
+                "summary": entry.summary,
+                "errorSummary": entry.error_summary,
+                "skipReason": entry.skip_reason,
+            }
+            for entry in activity.entries
+        ],
+        "summary": {"retainedEntries": activity.summary.retained_entries},
+    }
+
+
+def _serialize_llm_policy(policy: LLMPolicyView | None) -> LLMPolicyPayload | None:
+    if not policy or not policy.auto_drilldown:
+        return None
+    auto = policy.auto_drilldown
+    return {
+        "autoDrilldown": {
+            "enabled": auto.enabled,
+            "provider": auto.provider,
+            "maxPerRun": auto.max_per_run,
+            "usedThisRun": auto.used_this_run,
+            "successfulThisRun": auto.successful_this_run,
+            "failedThisRun": auto.failed_this_run,
+            "skippedThisRun": auto.skipped_this_run,
+            "budgetExhausted": auto.budget_exhausted,
+        }
     }
 
 

@@ -2064,8 +2064,9 @@ class HealthLoopRunner:
                 assessments,
                 drilldowns,
                 proposals,
-            external_artifacts,
+                external_artifacts,
                 self._notification_records,
+                external_analysis_settings=self.config.external_analysis,
             )
         except Exception as exc:
             self._log_event(

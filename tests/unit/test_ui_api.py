@@ -42,6 +42,17 @@ class UIApiTests(unittest.TestCase):
         assert historical is not None
         self.assertEqual(historical["totalCalls"], 5)
         self.assertEqual(historical["scope"], "retained_history")
+        activity = payload["llmActivity"]
+        self.assertEqual(activity["summary"]["retainedEntries"], 2)
+        self.assertEqual(activity["entries"][0]["status"], "success")
+        llm_policy = payload["llmPolicy"]
+        self.assertIsNotNone(llm_policy)
+        assert llm_policy is not None
+        auto_policy = llm_policy["autoDrilldown"]
+        self.assertEqual(auto_policy["provider"], "default")
+        self.assertEqual(auto_policy["usedThisRun"], 1)
+        self.assertEqual(auto_policy["failedThisRun"], 1)
+        self.assertFalse(auto_policy["budgetExhausted"])
 
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)

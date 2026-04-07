@@ -56,3 +56,18 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(historical.successful_calls, 4)
         self.assertEqual(historical.failed_calls, 1)
         self.assertEqual(historical.scope, "retained_history")
+        activity = context.llm_activity
+        self.assertEqual(activity.summary.retained_entries, 2)
+        self.assertEqual(activity.entries[0].status, "success")
+        llm_policy = context.run.llm_policy
+        self.assertIsNotNone(llm_policy)
+        assert llm_policy is not None
+        auto_policy = llm_policy.auto_drilldown
+        self.assertIsNotNone(auto_policy)
+        assert auto_policy is not None
+        self.assertEqual(auto_policy.provider, "default")
+        self.assertEqual(auto_policy.max_per_run, 3)
+        self.assertEqual(auto_policy.used_this_run, 1)
+        self.assertEqual(auto_policy.successful_this_run, 0)
+        self.assertEqual(auto_policy.failed_this_run, 1)
+        self.assertEqual(auto_policy.skipped_this_run, 0)

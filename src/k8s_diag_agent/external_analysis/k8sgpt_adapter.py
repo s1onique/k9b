@@ -21,7 +21,10 @@ class K8sGptAdapter(ExternalAnalysisAdapter):
 
     def __init__(self, command: Sequence[str] | None = None) -> None:
         default_command = ("k8sgpt", "analysis")
-        super().__init__(command=tuple(command) if command else default_command)
+        if command is None:
+            super().__init__(command=default_command)
+        else:
+            super().__init__(command=tuple(command) if command else None)
 
     def run(self, request: ExternalAnalysisRequest) -> ExternalAnalysisArtifact:
         if not self._command:

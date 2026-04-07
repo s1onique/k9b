@@ -33,6 +33,8 @@ export type RunPayload = {
   runStats: RunStats;
   llmStats: LLMStats;
   historicalLlmStats?: LLMStats | null;
+  llmActivity: LLMActivity;
+  llmPolicy?: LLMPolicy | null;
 };
 
 export type RunStats = {
@@ -59,6 +61,46 @@ export type LLMStats = {
   p99LatencyMs: number | null;
   providerBreakdown: LLMProviderBreakdown[];
   scope?: string;
+};
+
+export type AutoDrilldownPolicy = {
+  enabled: boolean;
+  provider: string;
+  maxPerRun: number;
+  usedThisRun: number;
+  successfulThisRun: number;
+  failedThisRun: number;
+  skippedThisRun: number;
+  budgetExhausted: boolean | null;
+};
+
+export type LLMPolicy = {
+  autoDrilldown?: AutoDrilldownPolicy | null;
+};
+
+export type LLMActivityEntry = {
+  timestamp: string | null;
+  runId: string | null;
+  runLabel: string | null;
+  clusterLabel: string | null;
+  toolName: string | null;
+  provider: string | null;
+  purpose: string | null;
+  status: string | null;
+  latencyMs: number | null;
+  artifactPath: string | null;
+  summary: string | null;
+  errorSummary: string | null;
+  skipReason: string | null;
+};
+
+export type LLMActivitySummary = {
+  retainedEntries: number;
+};
+
+export type LLMActivity = {
+  entries: LLMActivityEntry[];
+  summary: LLMActivitySummary;
 };
 
 export type ClusterSummary = {

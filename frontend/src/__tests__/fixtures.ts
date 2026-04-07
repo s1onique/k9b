@@ -53,6 +53,55 @@ export const sampleRun: RunPayload = {
     ],
     scope: "retained_history",
   },
+  llmActivity: {
+    entries: [
+      {
+        timestamp: "2026-04-06T11:58:00Z",
+        runId: "run-123",
+        runLabel: "Daily sweep",
+        clusterLabel: "cluster-a",
+        toolName: "k8sgpt",
+        provider: "k8sgpt",
+        purpose: "manual",
+        status: "success",
+        latencyMs: 120,
+        artifactPath: "/artifacts/llm-1.json",
+        summary: "analysis ready",
+        errorSummary: null,
+        skipReason: null,
+      },
+      {
+        timestamp: "2026-04-06T11:57:00Z",
+        runId: "run-123",
+        runLabel: "Daily sweep",
+        clusterLabel: "cluster-b",
+        toolName: "llm-autodrilldown",
+        provider: "default",
+        purpose: "auto-drilldown",
+        status: "failed",
+        latencyMs: 200,
+        artifactPath: "/artifacts/llm-2.json",
+        summary: "timeout",
+        errorSummary: "provider timeout",
+        skipReason: null,
+      },
+    ],
+    summary: {
+      retainedEntries: 18,
+    },
+  },
+  llmPolicy: {
+    autoDrilldown: {
+      enabled: true,
+      provider: "default",
+      maxPerRun: 3,
+      usedThisRun: 1,
+      successfulThisRun: 0,
+      failedThisRun: 1,
+      skippedThisRun: 0,
+      budgetExhausted: false,
+    },
+  },
 };
 
 export const sampleFleet: FleetPayload = {
