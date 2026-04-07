@@ -10,11 +10,8 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 cd "$FRONTEND_DIR"
-
-if [[ ! -d "node_modules" ]]; then
-  echo "Installing frontend dependencies via npm ci"
-  npm ci
-fi
+echo "Installing frontend dependencies via npm ci"
+npm ci
 
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
