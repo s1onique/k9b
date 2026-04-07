@@ -128,18 +128,20 @@ def write_health_ui_index(
     external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
     notification_history = _serialize_notification_history(notifications, output_dir)
     latest_assessment = _serialize_latest_assessment(assessments, output_dir)
+    run_entry = {
+        "run_id": run_id,
+        "run_label": run_label,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "collector_version": collector_version,
+        "cluster_count": len(clusters),
+        "drilldown_count": len(drilldowns),
+        "proposal_count": len(proposals_data),
+        "external_analysis_count": external_analysis_data.get("count", 0),
+        "notification_count": len(notifications),
+        "llm_stats": _build_llm_stats(external_analysis_data),
+    }
     index = {
-        "run": {
-            "run_id": run_id,
-            "run_label": run_label,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "collector_version": collector_version,
-            "cluster_count": len(clusters),
-            "drilldown_count": len(drilldowns),
-            "proposal_count": len(proposals_data),
-            "external_analysis_count": external_analysis_data.get("count", 0),
-            "notification_count": len(notifications),
-        },
+        "run": run_entry,
         "fleet_status": _serialize_fleet_status(clusters),
         "clusters": clusters,
         "drilldowns": drilldown_entries,
@@ -287,6 +289,8 @@ def _serialize_external_analysis(
                 "suggested_next_checks": list(artifact.suggested_next_checks),
                 "timestamp": artifact.timestamp.isoformat(),
                 "artifact_path": _relative_path(root_dir, artifact.artifact_path),
+                "duration_ms": artifact.duration_ms,
+                "provider": artifact.provider,
             }
         )
     status_counts: list[dict[str, object]] = []
@@ -300,6 +304,93 @@ def _serialize_external_analysis(
             continue
         status_counts.append({"status": status, "count": count})
     return {"count": len(entries), "status_counts": status_counts, "artifacts": entries}
+
+
+def _parse_optional_int(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int,)):  # keep ints as is
+        return int(value)
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_timestamp(value: object | None) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _build_llm_stats(external_analysis: dict[str, object]) -> dict[str, object]:
+    artifacts = external_analysis.get("artifacts") or ()
+    if not isinstance(artifacts, Sequence):
+        artifacts = ()
+    total_calls = 0
+    successful_calls = 0
+    failed_calls = 0
+    durations: list[int] = []
+    latest_timestamp: datetime | None = None
+    latest_timestamp_str: str | None = None
+    provider_counts: dict[str, dict[str, int]] = {}
+    for entry in artifacts:
+        if not isinstance(entry, Mapping):
+            continue
+        status = str(entry.get("status") or "").lower()
+        if status not in ("success", "failed"):
+            continue
+        total_calls += 1
+        if status == "success":
+            successful_calls += 1
+        if status == "failed":
+            failed_calls += 1
+        raw_timestamp = entry.get("timestamp")
+        timestamp = _parse_timestamp(raw_timestamp)
+        if timestamp:
+            if latest_timestamp is None or timestamp > latest_timestamp:
+                latest_timestamp = timestamp
+                latest_timestamp_str = raw_timestamp if isinstance(raw_timestamp, str) else latest_timestamp_str
+        duration = _parse_optional_int(entry.get("duration_ms"))
+        if duration is not None:
+            durations.append(duration)
+        provider = str(entry.get("tool_name") or "unknown")
+        counter = provider_counts.setdefault(provider, {"calls": 0, "failedCalls": 0})
+        counter["calls"] += 1
+        if status == "failed":
+            counter["failedCalls"] += 1
+    percentile_values: dict[str, int | None] = {
+        "p50": None,
+        "p95": None,
+        "p99": None,
+    }
+    if durations:
+        float_durations = [float(value) for value in durations]
+        float_durations.sort()
+        percentile_values["p50"] = _percentile_value(float_durations, 50)
+        percentile_values["p95"] = _percentile_value(float_durations, 95)
+        percentile_values["p99"] = _percentile_value(float_durations, 99)
+    provider_breakdown = [
+        {"provider": provider, "calls": data["calls"], "failedCalls": data["failedCalls"]}
+        for provider, data in sorted(provider_counts.items())
+    ]
+    return {
+        "totalCalls": total_calls,
+        "successfulCalls": successful_calls,
+        "failedCalls": failed_calls,
+        "lastCallTimestamp": latest_timestamp_str,
+        "p50LatencyMs": percentile_values["p50"],
+        "p95LatencyMs": percentile_values["p95"],
+        "p99LatencyMs": percentile_values["p99"],
+        "providerBreakdown": provider_breakdown,
+    }
 
 
 def _serialize_notification_history(

@@ -31,6 +31,7 @@ export type RunPayload = {
   notificationCount: number;
   artifacts: ArtifactLink[];
   runStats: RunStats;
+  llmStats: LLMStats;
 };
 
 export type RunStats = {
@@ -39,6 +40,23 @@ export type RunStats = {
   p50RunDurationSeconds: number | null;
   p95RunDurationSeconds: number | null;
   p99RunDurationSeconds: number | null;
+};
+
+export type LLMProviderBreakdown = {
+  provider: string;
+  calls: number;
+  failedCalls: number;
+};
+
+export type LLMStats = {
+  totalCalls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  lastCallTimestamp: string | null;
+  p50LatencyMs: number | null;
+  p95LatencyMs: number | null;
+  p99LatencyMs: number | null;
+  providerBreakdown: LLMProviderBreakdown[];
 };
 
 export type ClusterSummary = {

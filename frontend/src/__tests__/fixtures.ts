@@ -26,6 +26,18 @@ export const sampleRun: RunPayload = {
     p95RunDurationSeconds: 48,
     p99RunDurationSeconds: 64,
   },
+  llmStats: {
+    totalCalls: 3,
+    successfulCalls: 2,
+    failedCalls: 1,
+    lastCallTimestamp: "2026-04-06T11:59:00Z",
+    p50LatencyMs: 110,
+    p95LatencyMs: 220,
+    p99LatencyMs: 300,
+    providerBreakdown: [
+      { provider: "k8sgpt", calls: 3, failedCalls: 1 },
+    ],
+  },
 };
 
 export const sampleFleet: FleetPayload = {

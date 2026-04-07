@@ -21,6 +21,7 @@ class RunView:
     external_analysis_count: int
     notification_count: int
     run_stats: RunStatsView
+    llm_stats: LLMStatsView
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,25 @@ class RunStatsView:
     p50_run_duration_seconds: int | None = None
     p95_run_duration_seconds: int | None = None
     p99_run_duration_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class ProviderBreakdownEntry:
+    provider: str
+    calls: int
+    failed_calls: int
+
+
+@dataclass(frozen=True)
+class LLMStatsView:
+    total_calls: int
+    successful_calls: int
+    failed_calls: int
+    last_call_timestamp: str | None
+    p50_latency_ms: int | None
+    p95_latency_ms: int | None
+    p99_latency_ms: int | None
+    provider_breakdown: tuple[ProviderBreakdownEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -224,6 +244,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         external_analysis_count=_coerce_int(run_data.get("external_analysis_count")),
         notification_count=_coerce_int(run_data.get("notification_count")),
         run_stats=_build_run_stats_view(index.get("run_stats")),
+        llm_stats=_build_llm_stats_view(run_data.get("llm_stats")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -266,6 +287,40 @@ def _build_run_stats_view(raw: object | None) -> RunStatsView:
         p50_run_duration_seconds=_coerce_optional_int(raw.get("p50_run_duration_seconds")),
         p95_run_duration_seconds=_coerce_optional_int(raw.get("p95_run_duration_seconds")),
         p99_run_duration_seconds=_coerce_optional_int(raw.get("p99_run_duration_seconds")),
+    )
+
+
+def _build_llm_stats_view(raw: object | None) -> LLMStatsView:
+    if not isinstance(raw, Mapping):
+        return LLMStatsView(
+            total_calls=0,
+            successful_calls=0,
+            failed_calls=0,
+            last_call_timestamp=None,
+            p50_latency_ms=None,
+            p95_latency_ms=None,
+            p99_latency_ms=None,
+            provider_breakdown=(),
+        )
+    breakdown_raw = raw.get("providerBreakdown") or ()
+    breakdown = tuple(
+        ProviderBreakdownEntry(
+            provider=_coerce_str(entry.get("provider")),
+            calls=_coerce_int(entry.get("calls")),
+            failed_calls=_coerce_int(entry.get("failedCalls")),
+        )
+        for entry in breakdown_raw
+        if isinstance(entry, Mapping)
+    )
+    return LLMStatsView(
+        total_calls=_coerce_int(raw.get("totalCalls")),
+        successful_calls=_coerce_int(raw.get("successfulCalls")),
+        failed_calls=_coerce_int(raw.get("failedCalls")),
+        last_call_timestamp=_coerce_optional_str(raw.get("lastCallTimestamp")),
+        p50_latency_ms=_coerce_optional_int(raw.get("p50LatencyMs")),
+        p95_latency_ms=_coerce_optional_int(raw.get("p95LatencyMs")),
+        p99_latency_ms=_coerce_optional_int(raw.get("p99LatencyMs")),
+        provider_breakdown=breakdown,
     )
 
 

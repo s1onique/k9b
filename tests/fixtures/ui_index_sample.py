@@ -13,6 +13,18 @@ def sample_ui_index() -> Mapping[str, object]:
             "proposal_count": 1,
             "external_analysis_count": 1,
             "notification_count": 1,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:00Z",
+                "p50LatencyMs": 120,
+                "p95LatencyMs": 120,
+                "p99LatencyMs": 120,
+                "providerBreakdown": [
+                    {"provider": "k8sgpt", "calls": 1, "failedCalls": 0},
+                ],
+            },
         },
         "run_stats": {
             "last_run_duration_seconds": 42,

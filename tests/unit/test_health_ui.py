@@ -116,6 +116,8 @@ class HealthUITests(unittest.TestCase):
             suggested_next_checks=("check1",),
             status=ExternalAnalysisStatus.SUCCESS,
             artifact_path=str(external_path),
+            provider="k8sgpt",
+            duration_ms=150,
         )
         notification = NotificationArtifact(
             kind="degraded-health",
@@ -169,6 +171,13 @@ class HealthUITests(unittest.TestCase):
         self.assertIn("latest_assessment", data)
         self.assertEqual(data["latest_assessment"]["cluster_label"], "cluster-alpha")
         self.assertIn("artifact_path", data["latest_assessment"])
+        llm_stats = data["run"].get("llm_stats")
+        self.assertIsNotNone(llm_stats)
+        self.assertEqual(llm_stats["totalCalls"], 1)
+        self.assertEqual(llm_stats["successfulCalls"], 1)
+        self.assertEqual(llm_stats["failedCalls"], 0)
+        self.assertEqual(llm_stats["p50LatencyMs"], 150)
+        self.assertEqual(llm_stats["providerBreakdown"][0]["provider"], "k8sgpt")
 
     def test_run_stats_include_durations_from_reviews(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"

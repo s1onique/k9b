@@ -42,3 +42,5 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(assessment.next_checks[0].owner, "platform")
         self.assertEqual(context.run.run_stats.total_runs, 3)
         self.assertEqual(context.run.run_stats.last_run_duration_seconds, 42)
+        self.assertEqual(context.run.llm_stats.total_calls, 1)
+        self.assertEqual(context.run.llm_stats.provider_breakdown[0].provider, "k8sgpt")

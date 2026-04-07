@@ -29,6 +29,13 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(stats["totalRuns"], 3)
         self.assertEqual(stats["lastRunDurationSeconds"], 42)
 
+    def test_run_payload_includes_llm_stats(self) -> None:
+        payload = build_run_payload(self.context)
+        llm_stats = payload["llmStats"]
+        self.assertEqual(llm_stats["totalCalls"], 1)
+        self.assertEqual(llm_stats["successfulCalls"], 1)
+        self.assertEqual(llm_stats["providerBreakdown"][0]["provider"], "k8sgpt")
+
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)
         self.assertEqual(payload["clusters"][0]["label"], "cluster-a")

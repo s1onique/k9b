@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 
 from .adapter import (
@@ -31,6 +32,7 @@ class K8sGptAdapter(ExternalAnalysisAdapter):
                 source_artifact=request.source_artifact,
                 summary="Adapter is not configured",
                 status=ExternalAnalysisStatus.SKIPPED,
+                provider=self.name,
             )
             return artifact
 
@@ -40,8 +42,10 @@ class K8sGptAdapter(ExternalAnalysisAdapter):
         else:
             invocation.extend(["--cluster", request.cluster_label])
 
+        start = time.perf_counter()
         try:
             raw_output = _run_subprocess(invocation)
+            duration_ms = int((time.perf_counter() - start) * 1000)
             summary = raw_output.splitlines()[0] if raw_output else "analysis completed"
             artifact = ExternalAnalysisArtifact(
                 tool_name=self.name,
@@ -53,9 +57,12 @@ class K8sGptAdapter(ExternalAnalysisAdapter):
                 suggested_next_checks=(),
                 status=ExternalAnalysisStatus.SUCCESS,
                 raw_output=raw_output,
+                provider=self.name,
+                duration_ms=duration_ms,
             )
             return artifact
         except ExternalAnalysisExecutionError as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
             artifact = ExternalAnalysisArtifact(
                 tool_name=self.name,
                 run_id=request.run_id,
@@ -66,6 +73,8 @@ class K8sGptAdapter(ExternalAnalysisAdapter):
                 suggested_next_checks=(),
                 status=ExternalAnalysisStatus.FAILED,
                 raw_output=str(exc),
+                provider=self.name,
+                duration_ms=duration_ms,
             )
             return artifact
 

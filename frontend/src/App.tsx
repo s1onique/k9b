@@ -65,6 +65,13 @@ const formatDuration = (value: number | null | undefined) => {
   return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`;
 };
 
+const formatLatency = (value: number | null | undefined) => {
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `${Math.round(value)}ms`;
+};
+
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
 const AUTOREFRESH_OPTIONS = [
@@ -469,6 +476,23 @@ const App = () => {
     ? `Auto refresh every ${autoRefreshInterval}s`
     : "Auto refresh is off";
 
+  const llmStats = run.llmStats;
+  const lastCallValue = llmStats.lastCallTimestamp
+    ? relativeRecency(llmStats.lastCallTimestamp)
+    : "—";
+  const llmStatEntries = [
+    { label: "LLM calls", value: String(llmStats.totalCalls) },
+    { label: "OK", value: String(llmStats.successfulCalls) },
+    { label: "Failed", value: String(llmStats.failedCalls) },
+    { label: "P50", value: formatLatency(llmStats.p50LatencyMs) },
+    { label: "P95", value: formatLatency(llmStats.p95LatencyMs) },
+    { label: "P99", value: formatLatency(llmStats.p99LatencyMs) },
+    { label: "Last call", value: lastCallValue },
+  ];
+  const providerBreakdown = llmStats.providerBreakdown
+    .map((entry) => `${entry.provider} ${entry.calls} (${entry.failedCalls} failed)`)
+    .join(" · ");
+
   return (
     <div className="app-shell">
       <header className="panel hero compact">
@@ -482,6 +506,17 @@ const App = () => {
             </span>
           </div>
           <p className="run-header-inline-stats muted small">{runStatsSummary}</p>
+          <p className="run-header-inline-stats llm-stats-line muted small">
+            {llmStatEntries.map((stat) => (
+              <span key={stat.label}>
+                <span className="run-stat-label">{stat.label}: </span>
+                <strong>{stat.value}</strong>
+              </span>
+            ))}
+          </p>
+          {providerBreakdown && (
+            <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
+          )}
           <p className="muted">Collector {run.collectorVersion}</p>
         </div>
         <div className="hero-actions">

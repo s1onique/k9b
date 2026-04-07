@@ -17,6 +17,19 @@ class ExternalAnalysisStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+def _coerce_optional_int(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
 @dataclass(frozen=True)
 class ExternalAnalysisArtifact:
     tool_name: str
@@ -30,6 +43,8 @@ class ExternalAnalysisArtifact:
     raw_output: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     artifact_path: str | None = None
+    provider: str | None = None
+    duration_ms: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -44,6 +59,8 @@ class ExternalAnalysisArtifact:
             "raw_output": self.raw_output,
             "timestamp": self.timestamp.isoformat(),
             "artifact_path": self.artifact_path,
+            "provider": self.provider,
+            "duration_ms": self.duration_ms,
         }
 
     @classmethod
@@ -62,6 +79,8 @@ class ExternalAnalysisArtifact:
             raw_output=str(raw.get("raw_output")) if raw.get("raw_output") else None,
             timestamp=datetime.fromisoformat(str(raw.get("timestamp"))) if raw.get("timestamp") else datetime.now(UTC),
             artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
+            provider=str(raw.get("provider")) if raw.get("provider") else None,
+            duration_ms=_coerce_optional_int(raw.get("duration_ms")),
         )
 
 

@@ -12,6 +12,7 @@ from .model import (
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
     FindingsView,
+    LLMStatsView,
     NotificationView,
     ProposalView,
     RecommendedActionView,
@@ -42,6 +43,7 @@ class RunPayload(TypedDict):
     notificationCount: int
     artifacts: list[ArtifactLink]
     runStats: RunStatsPayload
+    llmStats: LLMStatsPayload
 
 
 class RunStatsPayload(TypedDict):
@@ -50,6 +52,23 @@ class RunStatsPayload(TypedDict):
     p50RunDurationSeconds: int | None
     p95RunDurationSeconds: int | None
     p99RunDurationSeconds: int | None
+
+
+class LLMProviderEntry(TypedDict):
+    provider: str
+    calls: int
+    failedCalls: int
+
+
+class LLMStatsPayload(TypedDict):
+    totalCalls: int
+    successfulCalls: int
+    failedCalls: int
+    lastCallTimestamp: str | None
+    p50LatencyMs: int | None
+    p95LatencyMs: int | None
+    p99LatencyMs: int | None
+    providerBreakdown: list[LLMProviderEntry]
 
 
 class RatingCount(TypedDict):
@@ -230,6 +249,7 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         "notificationCount": context.run.notification_count,
         "artifacts": _collect_run_artifacts(context),
         "runStats": _serialize_run_stats(context.run.run_stats),
+        "llmStats": _serialize_llm_stats(context.run.llm_stats),
     }
 
 
@@ -316,6 +336,26 @@ def _serialize_run_stats(stats: RunStatsView) -> RunStatsPayload:
         "p50RunDurationSeconds": stats.p50_run_duration_seconds,
         "p95RunDurationSeconds": stats.p95_run_duration_seconds,
         "p99RunDurationSeconds": stats.p99_run_duration_seconds,
+    }
+
+
+def _serialize_llm_stats(stats: LLMStatsView) -> LLMStatsPayload:
+    return {
+        "totalCalls": stats.total_calls,
+        "successfulCalls": stats.successful_calls,
+        "failedCalls": stats.failed_calls,
+        "lastCallTimestamp": stats.last_call_timestamp,
+        "p50LatencyMs": stats.p50_latency_ms,
+        "p95LatencyMs": stats.p95_latency_ms,
+        "p99LatencyMs": stats.p99_latency_ms,
+        "providerBreakdown": [
+            {
+                "provider": entry.provider,
+                "calls": entry.calls,
+                "failedCalls": entry.failed_calls,
+            }
+            for entry in stats.provider_breakdown
+        ],
     }
 
 

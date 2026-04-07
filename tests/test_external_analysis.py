@@ -97,6 +97,8 @@ def test_k8sgpt_adapter_success(monkeypatch: Any) -> None:
     art = adapter.run(req)
     assert art.status == ExternalAnalysisStatus.SUCCESS
     assert art.summary == "line1"
+    assert art.provider == "k8sgpt"
+    assert isinstance(art.duration_ms, int)
 
 
 def test_k8sgpt_adapter_failure(monkeypatch: Any) -> None:
@@ -110,6 +112,8 @@ def test_k8sgpt_adapter_failure(monkeypatch: Any) -> None:
     assert art.status == ExternalAnalysisStatus.FAILED
     raw_output = art.raw_output or ""
     assert "exited 2" in raw_output or "Command not found" in raw_output
+    assert art.provider == "k8sgpt"
+    assert isinstance(art.duration_ms, int)
 
 
 def test_external_analysis_adapter_persists_artifact(tmp_path: Path, monkeypatch: Any) -> None:

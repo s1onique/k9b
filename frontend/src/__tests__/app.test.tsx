@@ -112,6 +112,8 @@ describe("App", () => {
     expect(
       screen.getByText("Last 32s · Runs 12 · P50 24s · P95 48s · P99 1m 4s")
     ).toBeInTheDocument();
+    expect(screen.getByText(/LLM calls:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Providers: k8sgpt 3 \(1 failed\)/i)).toBeInTheDocument();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {

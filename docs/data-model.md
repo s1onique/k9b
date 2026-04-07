@@ -66,6 +66,7 @@
 - **Source of truth:** `runs/health/` (snapshots, assessments, comparisons, triggers, drilldowns, reviews, proposals, notifications, history, and the UI index) is the canonical persisted record.
 - **Structured logs (stdout/stderr):** `scripts/run_health_scheduler.py` and `run-health-loop` emit JSON into the console so operators can stream progress, but those streams are not considered durable—consult the artifacts to reconstruct the run.
 - **Optional mirrors:** Files such as `runs/health/scheduler.log` or `/runs/health/*.log` may duplicate entries for legacy tooling, but they are derived from the same console stream and not treated as the single source of truth.
+- **LLM call artifacts:** Every completed provider invocation—success or failure—is persisted as an `ExternalAnalysisArtifact` under `runs/health/external-analysis/`. The UI aggregates those artifacts when building `llmStats`, so operators can inspect how many LLM calls actually ran, which adapters they used, and what latencies were observed without relying on loose logs. Skipped adapters (status `skipped`) do not count as LLM calls.
 
 ## Run lifecycle (implicit stages)
 
@@ -77,6 +78,8 @@
 4. **Assessments written:** Health assessments for every cluster are written to `runs/health/assessments/` along with the confidence, findings, missing evidence, and references to the snapshot that produced them.
 5. **Comparisons triggered:** When peer mappings flag suspicious drift or a manual `--trigger` is supplied, the comparator runs, stores its summary under `runs/health/comparisons/`, and emits the corresponding trigger record under `runs/health/triggers/`.
 6. **Drilldowns gathered:** Triggered clusters collect drilldown evidence, which is stored under `runs/health/drilldowns/` and later surfaced to `assess-drilldown` or the UI as “drilldown availability.”
+
+> **Optional LLM-assisted analysis:** The health loop can optionally hand a cluster artifact to an LLM adapter whenever `external_analysis.manual` is enabled or a manual `--external-analysis` / `--provider` request lands in `run-health-loop`. The same provider seam backs the standalone CLI entry points `assess-drilldown` (run against `runs/health/drilldowns/*.json`) and `assess-snapshots` (run against two sanitized snapshot files). Each provider invocation that completes (success or failure) writes a durable `runs/health/external-analysis/{run_id}-{cluster}-{tool}.json` artifact, and those artifacts feed the `llmStats` slice described further below. These LLM stages are opt-in branches, not part of the mandatory harvest-compare-review path; if no provider is configured or no manual flag is set, the run simply skips them.
 7. **Review created:** The health review aggregates snapshots, assessments, comparisons, triggers, and drilldowns into `runs/health/reviews/{run_id}-review.json`; this review is the document proposals read when deciding on candidate adjustments.
 8. **Proposals generated:** `generate_proposals_from_review` (called inside the same loop) emits typed proposals into `runs/health/proposals/` with lifecycle history entries that are logged and persisted.
 9. **Notifications / summary derived:** The loop writes notification artifacts (degraded health, suspicious comparisons, proposals created/checked, external analysis) into `runs/health/notifications/`. The `health-summary` command and UI build their human-friendly reports from the artifacts listed above.
@@ -88,6 +91,7 @@
 - `ui/model.build_ui_context` loads that index, and `ui/api.build_*` serializes the context into the payloads the frontend consumes (`RunPayload`, `FleetPayload`, `ClusterDetailPayload`, `ProposalsPayload`, `NotificationsPayload`).
 - Artifact links (snapshots, assessments, drilldowns, proposals, notification payloads) are surfaced on the UI so operators can open the same durable files that produced the view.
 - Any additional summaries (fleet ratings, proposal lifecycle, drilldown coverage, notification history) are recalculated on the fly from the durable artifacts—no derived view is treated as a persistence boundary.
+- The run payload now includes an `llmStats` slice that is computed from the `runs/health/external-analysis` artifacts so operators can see how many provider calls were made, how many succeeded/failed, their latencies, and which adapters supplied them.
 
 ## Evolution guidance
 
