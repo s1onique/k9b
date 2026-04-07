@@ -87,3 +87,4 @@ frontend/.cache/
 # Optional coverage output
 frontend/coverage/
 frontend/tsconfig.tsbuildinfo
+podman/
