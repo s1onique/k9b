@@ -211,7 +211,7 @@ Configure the environment before invoking `assess-snapshots` so the `llamacpp` p
 
 Because the provider appends `/v1/chat/completions`, ensure `LLAMA_CPP_BASE_URL` does not already include `/v1` so that the final endpoint resolves correctly.
 
-The `llamacpp` provider sends the prompt and sanitized cluster evidence to `/v1/chat/completions` and validates the JSON response with `AssessorAssessment.from_dict`. If you need deterministic fallback behavior, keep using `--provider default`.
+The `llamacpp` provider sends the prompt and sanitized cluster evidence to `/v1/chat/completions`. Assessment-style flows such as `assess-snapshots`, `assess-drilldown`, and any path that produces an `Assessment` validate the response with `AssessorAssessment.from_dict`, while review enrichment uses the bounded advisory schema checked by `ReviewEnrichmentPayload.from_dict` so the payload stays limited to `summary`, `triageOrder`/`triage_order`, `topConcerns`/`top_concerns`, `evidenceGaps`/`evidence_gaps`, `nextChecks`/`next_checks`, and `focusNotes`/`focus_notes`. If you need deterministic fallback behavior, keep using `--provider default`.
 
 Example usage:
 

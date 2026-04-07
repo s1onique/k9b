@@ -19,6 +19,8 @@ import type {
   NotificationsPayload,
   ProposalEntry,
   ProposalsPayload,
+  ProviderExecution,
+  ProviderExecutionBranch,
   ReviewEnrichmentStatus,
   RunPayload,
   LLMStats,
@@ -360,7 +362,7 @@ const LLMActivityPanel = ({
                     <td>
                       {artifactLink ? (
                         <a className="artifact-link" href={artifactLink} target="_blank" rel="noreferrer">
-                          View artifact
+                          View
                         </a>
                       ) : (
                         "—"
@@ -471,9 +473,20 @@ const reviewEnrichmentStatusMessage = (status?: ReviewEnrichmentStatus) => {
       return reason || "No provider is configured for review enrichment.";
     case "adapter-unavailable":
       return reason || "The configured adapter is not registered for review enrichment.";
-    case "pending":
+    case "awaiting-next-run":
+      return (
+        reason || "Review enrichment is enabled now, but the latest recorded run predates this setting."
+      );
+    case "not-attempted":
+      return (
+        reason || "Review enrichment was enabled for this run, but no artifact was recorded."
+      );
+    case "unknown":
+      return reason || "Review enrichment status cannot be determined for this run.";
     default:
-      return reason || "Review enrichment will run once the deterministic review artifact is available.";
+      return (
+        reason || "Review enrichment will run once the deterministic review artifact is available."
+      );
   }
 };
 
@@ -487,6 +500,24 @@ const ReviewEnrichmentPanel = ({
   const status =
     enrichment?.status || reviewEnrichmentStatus?.status || "pending";
   const artifactLink = enrichment?.artifactPath ? artifactUrl(enrichment.artifactPath) : null;
+  const runConfigDescription = () => {
+    if (!reviewEnrichmentStatus) {
+      return null;
+    }
+    if (reviewEnrichmentStatus.runEnabled === null) {
+      return "Run metadata unavailable";
+    }
+    if (!reviewEnrichmentStatus.runEnabled) {
+      return "Run configuration disabled review enrichment";
+    }
+    const runProvider = reviewEnrichmentStatus.runProvider
+      ? ` (${reviewEnrichmentStatus.runProvider})`
+      : "";
+    return `Run configuration enabled${runProvider}`;
+  };
+  const providerLabel =
+    reviewEnrichmentStatus?.provider ?? reviewEnrichmentStatus?.runProvider;
+  const providerDisplay = providerLabel ? `Provider ${providerLabel}` : "Provider unspecified";
   return (
     <section className="panel review-enrichment" id="review-enrichment">
       <div className="section-head">
@@ -530,15 +561,71 @@ const ReviewEnrichmentPanel = ({
             {reviewEnrichmentStatusMessage(reviewEnrichmentStatus)}
           </p>
           <p className="small muted">
-            {reviewEnrichmentStatus?.provider
-              ? `Provider ${reviewEnrichmentStatus.provider}`
-              : "Provider unspecified"}
+            {providerDisplay}
+            {runConfigDescription() ? ` · ${runConfigDescription()}` : ""}
           </p>
         </div>
       )}
     </section>
   );
 };
+
+const ExecutionLine = ({
+  title,
+  data,
+}: {
+  title: string;
+  data: ProviderExecutionBranch | undefined | null;
+}) => {
+  if (!data) {
+    return (
+      <div className="provider-execution-line">
+        <strong>{title}</strong>
+        <p className="small muted">Execution data unavailable for this branch.</p>
+      </div>
+    );
+  }
+  const segments = [
+    data.eligible != null && `eligible ${data.eligible}`,
+    `attempted ${data.attempted}`,
+    `ok ${data.succeeded}`,
+    `failed ${data.failed}`,
+    `skipped ${data.skipped}`,
+    data.unattempted != null && `unattempted ${data.unattempted}`,
+    data.budgetLimited != null && data.budgetLimited > 0 && `budget-limited ${data.budgetLimited}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="provider-execution-line">
+      <strong>{title}</strong>
+      <p className="muted tiny provider-execution-summary">{segments || "No counts yet."}</p>
+      {data.notes ? <p className="muted tiny provider-execution-note">{data.notes}</p> : null}
+    </div>
+  );
+};
+
+const ProviderExecutionPanel = ({
+  execution,
+}: {
+  execution: ProviderExecution | undefined | null;
+}) => (
+  <section className="panel provider-execution" id="provider-execution">
+    <div className="section-head">
+      <div>
+        <p className="eyebrow">Provider execution</p>
+        <h2>Provider-assisted branches</h2>
+      </div>
+      <p className="muted small">
+        Counts derived from deterministic artifacts and run-config provenance for each branch.
+      </p>
+    </div>
+    <div className="provider-execution-body">
+      <ExecutionLine title="Auto drilldown" data={execution?.autoDrilldown} />
+      <ExecutionLine title="Review enrichment" data={execution?.reviewEnrichment} />
+    </div>
+  </section>
+);
 
 export const ProposalList = ({
   proposals,
@@ -682,7 +769,7 @@ const NotificationCard = ({ entry }: { entry: NotificationEntry }) => (
       </ul>
       {entry.artifactPath ? (
         <a className="link" href={artifactUrl(entry.artifactPath)!} target="_blank" rel="noreferrer">
-          View artifact
+          View
         </a>
       ) : null}
     </div>
@@ -973,6 +1060,7 @@ const App = () => {
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}
       />
+      <ProviderExecutionPanel execution={run.providerExecution} />
       <section className="panel llm-activity-panel" id="llm-activity">
         <LLMActivityPanel activity={run.llmActivity} />
       </section>

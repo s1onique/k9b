@@ -288,7 +288,13 @@ class LlamaCppProvider(LLMProvider):
         context.append(f"timeout={timeout_seconds}s")
         return "llama.cpp request failed: " + "; ".join(context)
 
-    def assess(self, prompt: str, payload: LLMAssessmentInput) -> dict[str, Any]:
+    def assess(
+        self,
+        prompt: str,
+        payload: LLMAssessmentInput,
+        *,
+        validate_schema: bool = True,
+    ) -> dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
         request_payload = self._build_payload(prompt, config)
         response: requests.Response | None = None
@@ -308,14 +314,16 @@ class LlamaCppProvider(LLMProvider):
         assert response is not None
         raw = response.json()
         assessment = self._extract_assessment(raw)
-        try:
-            validated = AssessorAssessment.from_dict(assessment)
-        except ValueError as exc:
-            snippet = self._payload_snippet(assessment)
-            raise ValueError(
-                f"Assessor schema validation failed: {exc}; assessment snippet: {snippet}"
-            ) from exc
-        return validated.to_dict()
+        if validate_schema:
+            try:
+                validated = AssessorAssessment.from_dict(assessment)
+            except ValueError as exc:
+                snippet = self._payload_snippet(assessment)
+                raise ValueError(
+                    f"Assessor schema validation failed: {exc}; assessment snippet: {snippet}"
+                ) from exc
+            return validated.to_dict()
+        return assessment
 
 
 __all__ = ["LlamaCppProvider", "LlamaCppProviderConfig"]

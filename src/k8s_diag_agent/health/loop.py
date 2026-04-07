@@ -64,7 +64,11 @@ from .notifications import (
     write_notification_artifact,
 )
 from .review_feedback import build_health_review
-from .ui import write_health_ui_index
+from .ui import (
+    _build_provider_execution,
+    _serialize_review_enrichment_policy,
+    write_health_ui_index,
+)
 from .utils import normalize_ref
 from .validators import (
     ComparisonDecisionValidator,
@@ -3067,6 +3071,7 @@ def run_health_loop(
     list[ComparisonTriggerArtifact],
     list[DrilldownArtifact],
     list[ExternalAnalysisArtifact],
+    ExternalAnalysisSettings,
 ]:
     try:
         config = HealthRunConfig.load(config_path)
@@ -3079,7 +3084,7 @@ def run_health_loop(
             log_path=DEFAULT_HEALTH_LOG,
             metadata={"config_path": str(config_path), "severity_reason": str(exc)},
         )
-        return 1, [], [], [], []
+        return 1, [], [], [], [], ExternalAnalysisSettings()
     try:
         contexts = list_kube_contexts()
     except RuntimeError as exc:
@@ -3091,7 +3096,7 @@ def run_health_loop(
             log_path=DEFAULT_HEALTH_LOG,
             metadata={"severity_reason": str(exc)},
         )
-        return 1, [], [], [], []
+        return 1, [], [], [], [], ExternalAnalysisSettings()
     manual_overrides = _parse_manual_triggers(manual_triggers or [])
     manual_analysis_requests = _parse_manual_external_analysis_requests(
         manual_external_analysis or []
@@ -3107,7 +3112,7 @@ def run_health_loop(
     )
     assessments, triggers, drilldowns = runner.execute()
     external_artifacts = runner.latest_external_artifacts
-    return 0, assessments, triggers, drilldowns, external_artifacts
+    return 0, assessments, triggers, drilldowns, external_artifacts, runner.config.external_analysis
 
 
 _HEALTH_LOCK_FILENAME = ".health-loop.lock"
@@ -3194,6 +3199,7 @@ class HealthLoopScheduler:
                             triggers,
                             drilldowns,
                             external_artifacts,
+                            settings,
                         ) = run_health_loop(
                             self._config_path,
                             manual_triggers=self._manual_triggers,
@@ -3214,7 +3220,13 @@ class HealthLoopScheduler:
                             )
                             return exit_code
                         executed_runs += 1
-                        self._log_run_summary(assessments, triggers, drilldowns, external_artifacts)
+                        self._log_run_summary(
+                            assessments,
+                            triggers,
+                            drilldowns,
+                            external_artifacts,
+                            settings,
+                        )
                     finally:
                         self._release_lock()
                 if not run_executed and self._run_once:
@@ -3244,14 +3256,17 @@ class HealthLoopScheduler:
 
     def _acquire_lock(self) -> bool:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with self._lock_path.open("x", encoding="utf-8") as handle:
-                handle.write(
-                    f"{datetime.now(UTC).isoformat()} pid={os.getpid()}\n"
-                )
-            return True
-        except FileExistsError:
-            return False
+        while True:
+            try:
+                with self._lock_path.open("x", encoding="utf-8") as handle:
+                    handle.write(
+                        f"{datetime.now(UTC).isoformat()} pid={os.getpid()}\n"
+                    )
+                return True
+            except FileExistsError:
+                if self._cleanup_stale_lock():
+                    continue
+                return False
 
     def _release_lock(self) -> None:
         try:
@@ -3260,18 +3275,80 @@ class HealthLoopScheduler:
         except OSError:
             pass
 
+    def _cleanup_stale_lock(self) -> bool:
+        if not self._lock_path.exists():
+            return False
+        try:
+            contents = self._lock_path.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        timestamp, pid = self._parse_lock_metadata(contents)
+        if pid is None:
+            reason = "malformed"
+        elif self._pid_is_alive(pid):
+            return False
+        else:
+            reason = "pid-not-running"
+        try:
+            self._lock_path.unlink()
+        except OSError:
+            return False
+        self._log_event(
+            "WARNING",
+            "Removed stale lock file",
+            lock_file=str(self._lock_path),
+            lock_timestamp=timestamp,
+            lock_pid=pid,
+            reason=reason,
+            event="lock-stale",
+        )
+        return True
+
+    def _parse_lock_metadata(self, contents: str) -> tuple[str | None, int | None]:
+        line = contents.splitlines()[0] if contents else ""
+        parts = line.split()
+        timestamp: str | None = parts[0] if parts else None
+        pid: int | None = None
+        for part in parts:
+            if part.startswith("pid="):
+                try:
+                    pid = int(part.split("=", 1)[1])
+                except ValueError:
+                    pid = None
+                break
+        return timestamp, pid
+
+    def _pid_is_alive(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return True
+        return True
+
     def _log_run_summary(
         self,
         assessments: list[HealthAssessmentArtifact],
         triggers: list[ComparisonTriggerArtifact],
         drilldowns: list[DrilldownArtifact],
         external_analysis: list[ExternalAnalysisArtifact],
+        settings: ExternalAnalysisSettings,
     ) -> None:
         run_id = self._resolve_run_id(assessments, triggers)
         healthy_count = sum(
             1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
         )
         degraded_count = len(assessments) - healthy_count
+        review_config = _serialize_review_enrichment_policy(settings.review_enrichment)
+        provider_execution = _build_provider_execution(
+            settings,
+            external_analysis,
+            drilldowns,
+            review_config,
+        )
         self._log_event(
             "INFO",
             "Health run summary",
@@ -3282,6 +3359,7 @@ class HealthLoopScheduler:
             trigger_count=len(triggers),
             drilldown_count=len(drilldowns),
             external_analysis_count=len(external_analysis),
+            provider_execution=provider_execution,
             event="run-summary",
         )
 

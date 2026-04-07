@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 # Import adapters to ensure they register themselves.
-from . import k8sgpt_adapter  # noqa: F401
+from . import (
+    k8sgpt_adapter,  # noqa: F401
+    llamacpp_adapter,  # noqa: F401
+)
 from .adapter import (
     ExternalAnalysisAdapter,
     ExternalAnalysisExecutionError,

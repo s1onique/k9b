@@ -79,3 +79,22 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(review_enrichment.triage_order, ("cluster-b", "cluster-a"))
         self.assertEqual(review_enrichment.top_concerns[0], "ingress latency")
         self.assertIsNone(context.run.review_enrichment_status)
+
+        provider_execution = context.run.provider_execution
+        self.assertIsNotNone(provider_execution)
+        assert provider_execution is not None
+        auto_branch = provider_execution.auto_drilldown
+        self.assertIsNotNone(auto_branch)
+        assert auto_branch is not None
+        self.assertEqual(auto_branch.provider, "default")
+        self.assertEqual(auto_branch.eligible, 2)
+        self.assertEqual(auto_branch.attempted, 1)
+        self.assertEqual(auto_branch.failed, 1)
+        self.assertEqual(auto_branch.unattempted, 1)
+        self.assertEqual(auto_branch.budget_limited, 1)
+        review_branch = provider_execution.review_enrichment
+        self.assertIsNotNone(review_branch)
+        assert review_branch is not None
+        self.assertEqual(review_branch.eligible, 1)
+        self.assertEqual(review_branch.attempted, 1)
+        self.assertEqual(review_branch.succeeded, 1)

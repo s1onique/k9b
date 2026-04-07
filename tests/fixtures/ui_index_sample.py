@@ -103,6 +103,41 @@ def sample_ui_index() -> Mapping[str, object]:
                     "budgetExhausted": False,
                 }
             },
+            "provider_execution": {
+                "auto_drilldown": {
+                    "enabled": True,
+                    "provider": "default",
+                    "maxPerRun": 3,
+                    "eligible": 2,
+                    "attempted": 1,
+                    "succeeded": 0,
+                    "failed": 1,
+                    "skipped": 0,
+                    "unattempted": 1,
+                    "budgetLimited": 1,
+                    "notes": "Reached max per run (3) before the 2nd eligible drilldown.",
+                },
+                "review_enrichment": {
+                    "enabled": True,
+                    "eligible": 1,
+                    "attempted": 1,
+                    "succeeded": 1,
+                    "failed": 0,
+                    "skipped": 0,
+                    "unattempted": 0,
+                    "budgetLimited": None,
+                    "notes": "Review enrichment artifact recorded for the run.",
+                },
+            },
+            "auto_drilldown_config": {
+                "enabled": True,
+                "provider": "default",
+                "maxPerRun": 3,
+            },
+            "review_enrichment_config": {
+                "enabled": True,
+                "provider": "k8sgpt",
+            },
             "review_enrichment": {
                 "status": "success",
                 "provider": "k8sgpt",

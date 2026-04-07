@@ -60,6 +60,18 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(review_enrichment["triageOrder"], ["cluster-b", "cluster-a"])
         self.assertIsNone(payload.get("reviewEnrichmentStatus"))
 
+        provider_execution = payload.get("providerExecution")
+        self.assertIsNotNone(provider_execution)
+        assert provider_execution is not None
+        auto_exec = provider_execution.get("autoDrilldown") or {}
+        self.assertEqual(auto_exec.get("eligible"), 2)
+        self.assertEqual(auto_exec.get("attempted"), 1)
+        self.assertEqual(auto_exec.get("failed"), 1)
+        self.assertEqual(auto_exec.get("budgetLimited"), 1)
+        review_exec = provider_execution.get("reviewEnrichment") or {}
+        self.assertEqual(review_exec.get("eligible"), 1)
+        self.assertEqual(review_exec.get("attempted"), 1)
+
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)
         self.assertEqual(payload["clusters"][0]["label"], "cluster-a")

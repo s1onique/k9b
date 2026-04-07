@@ -71,6 +71,7 @@ Additional helpful fields include `collector_version`, `target_labels` (comma-de
 ## Implementation notes (current reality)
 
 - `scripts/run_health_scheduler.py` streams scheduler entries to stdout/stderr as the canonical sink and only mirrors them into `runs/health/scheduler.log` when `K9B_HEALTH_SCHEDULER_LOG_PATH` points at that file. Each entry carries `component`, `severity`, `message`, `run_label`, `target_labels`, `command`, `event`, and `config_path`. This document is the source of truth for how we expect structured scheduler logs to look.
+  Scheduler run-summary entries also emit a `provider_execution` map so operators can see auto-drilldown and review-enrichment counts even when the artifacts themselves are missing.
 - Other modules that eventually adopt logging should follow the same schema: keep the JSON payload lean, include the required fields, and add artifact correlation keys when the log references a specific cluster, proposal, or artifact.
 
 Follow this policy when you touch logging in any component of the observability pipeline. When the policy does not cover an edge case, prefer the minimally sufficient change that keeps the logs actionable, private, and correlatable.

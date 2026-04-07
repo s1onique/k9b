@@ -18,6 +18,8 @@ from .model import (
     LLMStatsView,
     NotificationView,
     ProposalView,
+    ProviderExecutionBranchView,
+    ProviderExecutionView,
     RecommendedActionView,
     ReviewEnrichmentStatusView,
     ReviewEnrichmentView,
@@ -54,6 +56,7 @@ class RunPayload(TypedDict):
     llmPolicy: LLMPolicyPayload | None
     reviewEnrichment: ReviewEnrichmentPayload | None
     reviewEnrichmentStatus: ReviewEnrichmentStatusPayload | None
+    providerExecution: ProviderExecutionPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -144,6 +147,27 @@ class ReviewEnrichmentStatusPayload(TypedDict, total=False):
     policyEnabled: bool
     providerConfigured: bool
     adapterAvailable: bool | None
+    runEnabled: bool | None
+    runProvider: str | None
+
+
+class ProviderExecutionBranchPayload(TypedDict, total=False):
+    enabled: bool | None
+    provider: str | None
+    maxPerRun: int | None
+    eligible: int | None
+    attempted: int
+    succeeded: int
+    failed: int
+    skipped: int
+    unattempted: int | None
+    budgetLimited: int | None
+    notes: str | None
+
+
+class ProviderExecutionPayload(TypedDict, total=False):
+    autoDrilldown: ProviderExecutionBranchPayload
+    reviewEnrichment: ProviderExecutionBranchPayload
 
 
 class RatingCount(TypedDict):
@@ -350,6 +374,7 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         "reviewEnrichmentStatus": _serialize_review_enrichment_status(
             context.run.review_enrichment_status
         ),
+        "providerExecution": _serialize_provider_execution(context.run.provider_execution),
     }
 
 
@@ -729,6 +754,39 @@ def _serialize_review_enrichment_status(
         "policyEnabled": view.policy_enabled,
         "providerConfigured": view.provider_configured,
         "adapterAvailable": view.adapter_available,
+        "runEnabled": view.run_enabled,
+        "runProvider": view.run_provider,
+    }
+
+
+def _serialize_provider_execution(view: ProviderExecutionView | None) -> ProviderExecutionPayload | None:
+    if not view:
+        return None
+    payload: ProviderExecutionPayload = {}
+    if view.auto_drilldown:
+        payload["autoDrilldown"] = _serialize_provider_execution_branch(view.auto_drilldown)
+    if view.review_enrichment:
+        payload["reviewEnrichment"] = _serialize_provider_execution_branch(
+            view.review_enrichment
+        )
+    return payload or None
+
+
+def _serialize_provider_execution_branch(
+    branch: ProviderExecutionBranchView,
+) -> ProviderExecutionBranchPayload:
+    return {
+        "enabled": branch.enabled,
+        "provider": branch.provider,
+        "maxPerRun": branch.max_per_run,
+        "eligible": branch.eligible,
+        "attempted": branch.attempted,
+        "succeeded": branch.succeeded,
+        "failed": branch.failed,
+        "skipped": branch.skipped,
+        "unattempted": branch.unattempted,
+        "budgetLimited": branch.budget_limited,
+        "notes": branch.notes,
     }
 
 

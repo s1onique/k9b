@@ -37,6 +37,7 @@ export type RunPayload = {
   llmPolicy?: LLMPolicy | null;
   reviewEnrichment?: ReviewEnrichment | null;
   reviewEnrichmentStatus?: ReviewEnrichmentStatus | null;
+  providerExecution?: ProviderExecution | null;
 };
 
 export type RunStats = {
@@ -78,6 +79,25 @@ export type AutoDrilldownPolicy = {
 
 export type LLMPolicy = {
   autoDrilldown?: AutoDrilldownPolicy | null;
+};
+
+export type ProviderExecutionBranch = {
+  enabled: boolean | null;
+  provider?: string | null;
+  maxPerRun?: number | null;
+  eligible: number | null;
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  unattempted: number | null;
+  budgetLimited: number | null;
+  notes: string | null;
+};
+
+export type ProviderExecution = {
+  autoDrilldown?: ProviderExecutionBranch | null;
+  reviewEnrichment?: ProviderExecutionBranch | null;
 };
 
 export type LLMActivityEntry = {
@@ -288,4 +308,6 @@ export type ReviewEnrichmentStatus = {
   policyEnabled: boolean;
   providerConfigured: boolean;
   adapterAvailable: boolean | null;
+  runEnabled: boolean | null;
+  runProvider: string | null;
 };

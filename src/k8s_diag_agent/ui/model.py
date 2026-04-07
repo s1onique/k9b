@@ -27,6 +27,7 @@ class RunView:
     llm_policy: LLMPolicyView | None
     review_enrichment: ReviewEnrichmentView | None
     review_enrichment_status: ReviewEnrichmentStatusView | None
+    provider_execution: ProviderExecutionView | None
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,27 @@ class AutoDrilldownPolicyView:
 @dataclass(frozen=True)
 class LLMPolicyView:
     auto_drilldown: AutoDrilldownPolicyView | None
+
+
+@dataclass(frozen=True)
+class ProviderExecutionBranchView:
+    enabled: bool | None
+    eligible: int | None
+    provider: str | None
+    max_per_run: int | None
+    attempted: int
+    succeeded: int
+    failed: int
+    skipped: int
+    unattempted: int | None
+    budget_limited: int | None
+    notes: str | None
+
+
+@dataclass(frozen=True)
+class ProviderExecutionView:
+    auto_drilldown: ProviderExecutionBranchView | None
+    review_enrichment: ProviderExecutionBranchView | None
 
 
 @dataclass(frozen=True)
@@ -205,6 +227,8 @@ class ReviewEnrichmentStatusView:
     policy_enabled: bool
     provider_configured: bool
     adapter_available: bool | None
+    run_enabled: bool | None = None
+    run_provider: str | None = None
 
 
 @dataclass(frozen=True)
@@ -318,6 +342,7 @@ class UIIndexContext:
     llm_activity: LLMActivityView
     review_enrichment: ReviewEnrichmentView | None
     review_enrichment_status: ReviewEnrichmentStatusView | None
+    provider_execution: ProviderExecutionView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -350,6 +375,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         llm_policy=_build_llm_policy_view(run_data.get("llm_policy")),
         review_enrichment=review_enrichment,
         review_enrichment_status=review_enrichment_status,
+        provider_execution=_build_provider_execution_view(run_data.get("provider_execution")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -387,6 +413,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         llm_activity=llm_activity,
         review_enrichment=review_enrichment,
         review_enrichment_status=review_enrichment_status,
+        provider_execution=run.provider_execution,
     )
 
 
@@ -768,6 +795,33 @@ def _build_auto_drilldown_policy_view(raw: object | None) -> AutoDrilldownPolicy
     )
 
 
+def _build_provider_execution_view(raw: object | None) -> ProviderExecutionView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return ProviderExecutionView(
+        auto_drilldown=_build_execution_branch_view(raw.get("auto_drilldown")),
+        review_enrichment=_build_execution_branch_view(raw.get("review_enrichment")),
+    )
+
+
+def _build_execution_branch_view(raw: object | None) -> ProviderExecutionBranchView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return ProviderExecutionBranchView(
+        enabled=_coerce_optional_bool(raw.get("enabled")),
+        eligible=_coerce_optional_int(raw.get("eligible")),
+        provider=_coerce_optional_str(raw.get("provider")),
+        max_per_run=_coerce_optional_int(raw.get("maxPerRun")),
+        attempted=_coerce_int(raw.get("attempted")),
+        succeeded=_coerce_int(raw.get("succeeded")),
+        failed=_coerce_int(raw.get("failed")),
+        skipped=_coerce_int(raw.get("skipped")),
+        unattempted=_coerce_optional_int(raw.get("unattempted")),
+        budget_limited=_coerce_optional_int(raw.get("budgetLimited")),
+        notes=_coerce_optional_str(raw.get("notes")),
+    )
+
+
 def _build_llm_activity_entry(raw: Mapping[str, object]) -> LLMActivityEntryView:
     return LLMActivityEntryView(
         timestamp=_coerce_optional_str(raw.get("timestamp")),
@@ -850,6 +904,8 @@ def _build_review_enrichment_status_view(raw: object | None) -> ReviewEnrichment
         policy_enabled=bool(raw.get("policyEnabled")),
         provider_configured=bool(raw.get("providerConfigured")),
         adapter_available=_coerce_optional_bool(raw.get("adapterAvailable")),
+        run_enabled=_coerce_optional_bool(raw.get("runEnabled")),
+        run_provider=_coerce_optional_str(raw.get("runProvider")),
     )
 
 

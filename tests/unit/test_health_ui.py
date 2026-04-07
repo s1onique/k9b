@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import cast
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
-from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose, ExternalAnalysisStatus
+from k8s_diag_agent.external_analysis.artifact import (
+    ExternalAnalysisArtifact,
+    ExternalAnalysisPurpose,
+    ExternalAnalysisStatus,
+    write_external_analysis_artifact,
+)
 from k8s_diag_agent.external_analysis.config import (
     AutoDrilldownPolicy,
     ExternalAnalysisSettings,
@@ -23,7 +28,12 @@ from k8s_diag_agent.health.loop import (
     HealthTarget,
 )
 from k8s_diag_agent.health.notifications import NotificationArtifact
-from k8s_diag_agent.health.ui import write_health_ui_index
+from k8s_diag_agent.health.ui import (
+    _build_provider_execution,
+    _build_review_enrichment_status,
+    _serialize_review_enrichment,
+    write_health_ui_index,
+)
 from k8s_diag_agent.models import ConfidenceLevel
 
 
@@ -55,6 +65,42 @@ class HealthUITests(unittest.TestCase):
             available_adapters=adapters,
         )
         return cast(dict[str, object], json.loads(status_path.read_text(encoding="utf-8")))
+
+    def _auto_drilldown_artifact(self, status: ExternalAnalysisStatus) -> ExternalAnalysisArtifact:
+        return ExternalAnalysisArtifact(
+            tool_name="auto",
+            run_id="status-run",
+            cluster_label="cluster-a",
+            status=status,
+            provider="default",
+            purpose=ExternalAnalysisPurpose.AUTO_DRILLDOWN,
+        )
+
+    def _dummy_drilldown(self) -> DrilldownArtifact:
+        timestamp = datetime.now(UTC)
+        return DrilldownArtifact(
+            run_label="status-run",
+            run_id="status-run-1",
+            timestamp=timestamp,
+            snapshot_timestamp=timestamp,
+            context="cluster-a",
+            label="cluster-a",
+            cluster_id="cluster-a",
+            trigger_reasons=(),
+            missing_evidence=(),
+            evidence_summary={},
+            affected_namespaces=(),
+            affected_workloads=(),
+            warning_events=(),
+            non_running_pods=(),
+            pod_descriptions={},
+            rollout_status=(),
+            collection_timestamps={
+                "warning_events": timestamp.isoformat(),
+                "pods": timestamp.isoformat(),
+                "rollouts": timestamp.isoformat(),
+            },
+        )
 
     def test_ui_index_contains_expected_keys(self) -> None:
         target = HealthTarget(
@@ -306,6 +352,51 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(entries[0]["status"], "success")
         self.assertEqual(entries[1]["status"], "success")
         self.assertEqual(entries[2]["status"], "failed")
+        status_entry = data["run"].get("review_enrichment_status")
+        self.assertIsNone(status_entry)
+
+    def test_failed_review_enrichment_artifact_still_exposed(self) -> None:
+        output_dir = self.tmpdir / "runs" / "health"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        artifact = ExternalAnalysisArtifact(
+            tool_name="reviewer",
+            run_id="failed-run",
+            cluster_label="cluster-a",
+            source_artifact="runs/health/reviews/failed-run-review.json",
+            summary="Failure insight",
+            findings=(),
+            suggested_next_checks=(),
+            status=ExternalAnalysisStatus.FAILED,
+            artifact_path="external-analysis/failed-run-review-enrichment.json",
+            provider="reviewer",
+            duration_ms=100,
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            payload={
+                "topConcerns": ["latency"],
+                "nextChecks": ["examine"],
+            },
+        )
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="reviewer")
+        )
+        result_path = write_health_ui_index(
+            output_dir,
+            run_id="failed-run",
+            run_label="failed-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[artifact],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+        enrichment = data["run"].get("review_enrichment")
+        self.assertIsNotNone(enrichment)
+        self.assertEqual(enrichment["status"], "failed")
+        self.assertEqual(enrichment.get("provider"), "reviewer")
         status_entry = data["run"].get("review_enrichment_status")
         self.assertIsNone(status_entry)
 
@@ -568,6 +659,31 @@ class HealthUITests(unittest.TestCase):
         auto_policy = llm_policy["auto_drilldown"]
         self.assertTrue(auto_policy["budgetExhausted"])
 
+    def test_run_entry_preserves_review_enrichment_config_without_artifact(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        data = self._write_status_index(settings, adapters=("llamacpp",))
+        run_entry = cast(dict[str, object], data["run"])
+        config = run_entry.get("review_enrichment_config")
+        self.assertIsNotNone(config)
+        assert isinstance(config, dict)
+        self.assertTrue(config.get("enabled"))
+        self.assertEqual(config.get("provider"), "llamacpp")
+
+    def test_run_entry_records_auto_drilldown_config(self) -> None:
+        settings = ExternalAnalysisSettings(
+            auto_drilldown=AutoDrilldownPolicy(enabled=True, provider="llm-provider", max_per_run=2)
+        )
+        data = self._write_status_index(settings)
+        run_entry = cast(dict[str, object], data["run"])
+        config = run_entry.get("auto_drilldown_config")
+        self.assertIsNotNone(config)
+        assert isinstance(config, dict)
+        self.assertTrue(config.get("enabled"))
+        self.assertEqual(config.get("provider"), "llm-provider")
+        self.assertEqual(config.get("maxPerRun"), 2)
+
     def test_review_enrichment_status_disabled_by_policy(self) -> None:
         settings = ExternalAnalysisSettings(
             review_enrichment=ReviewEnrichmentPolicy(enabled=False, provider="llamacpp")
@@ -597,3 +713,204 @@ class HealthUITests(unittest.TestCase):
         status = cast(dict[str, object], run_entry["review_enrichment_status"])
         self.assertEqual(status["status"], "adapter-unavailable")
         self.assertFalse(status["adapterAvailable"])
+
+    def test_review_enrichment_status_awaiting_next_run(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        status = _build_review_enrichment_status(
+            settings,
+            adapters=("llamacpp",),
+            has_artifact=False,
+            run_config={"enabled": False, "provider": None},
+        )
+        self.assertIsNotNone(status)
+        status_dict = cast(dict[str, object], status)
+        self.assertEqual(status_dict["status"], "awaiting-next-run")
+        self.assertFalse(bool(status_dict.get("runEnabled")))
+
+    def test_review_enrichment_status_not_attempted(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        status = _build_review_enrichment_status(
+            settings,
+            adapters=("llamacpp",),
+            has_artifact=False,
+            run_config={"enabled": True, "provider": "llamacpp"},
+        )
+        self.assertIsNotNone(status)
+        status_dict = cast(dict[str, object], status)
+        self.assertEqual(status_dict["status"], "not-attempted")
+        self.assertTrue(bool(status_dict.get("runEnabled")))
+        self.assertEqual(status_dict.get("runProvider"), "llamacpp")
+        self.assertEqual(status_dict.get("provider"), "llamacpp")
+
+    def test_review_enrichment_status_unknown_when_missing_metadata(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        status = _build_review_enrichment_status(
+            settings,
+            adapters=("llamacpp",),
+            has_artifact=False,
+            run_config=None,
+        )
+        self.assertIsNotNone(status)
+        status_dict = cast(dict[str, object], status)
+        self.assertEqual(status_dict["status"], "unknown")
+
+    def test_review_enrichment_reflects_persisted_artifact(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="status-run",
+            cluster_label="status-run",
+            run_label="status-run",
+            source_artifact="reviews/status-run-review.json",
+            summary="Adapter missing",
+            status=ExternalAnalysisStatus.SKIPPED,
+            artifact_path="external-analysis/status-run-review-enrichment-llamacpp.json",
+            provider="llamacpp",
+            timestamp=datetime.now(UTC),
+            duration_ms=0,
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            skip_reason="Adapter missing",
+        )
+        artifact_path = output_dir / "external-analysis" / "status-run-review-enrichment-llamacpp.json"
+        write_external_analysis_artifact(artifact_path, artifact)
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="status-run",
+            run_label="status-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = cast(dict[str, object], json.loads(index_path.read_text(encoding="utf-8")))
+        run_entry = cast(dict[str, object], data["run"])
+        enrichment = cast(dict[str, object], run_entry["review_enrichment"])
+        self.assertIsNotNone(enrichment)
+        self.assertEqual(enrichment["status"], "skipped")
+        self.assertEqual(enrichment["skipReason"], "Adapter missing")
+        self.assertEqual(enrichment.get("provider"), "llamacpp")
+
+    def test_review_enrichment_reflects_failed_artifact(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        output_dir = self.tmpdir / "runs" / "health"
+        failed_artifact = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="status-run",
+            cluster_label="status-run",
+            run_label="status-run",
+            source_artifact="reviews/status-run-review.json",
+            summary="Error occurred",
+            findings=(),
+            suggested_next_checks=(),
+            status=ExternalAnalysisStatus.FAILED,
+            artifact_path="external-analysis/status-run-review-enrichment-llamacpp.json",
+            provider="llamacpp",
+            duration_ms=100,
+            timestamp=datetime.now(UTC),
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            error_summary="Error occurred",
+        )
+        failed_path = output_dir / "external-analysis" / "status-run-review-enrichment-llamacpp.json"
+        write_external_analysis_artifact(failed_path, failed_artifact)
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="status-run",
+            run_label="status-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = cast(dict[str, object], json.loads(index_path.read_text(encoding="utf-8")))
+        run_entry = cast(dict[str, object], data["run"])
+        enrichment = cast(dict[str, object], run_entry["review_enrichment"])
+        self.assertIsNotNone(enrichment)
+        self.assertEqual(enrichment["status"], "failed")
+        self.assertEqual(enrichment.get("errorSummary"), "Error occurred")
+        self.assertEqual(enrichment.get("provider"), "llamacpp")
+
+    def test_review_enrichment_serialization_handles_snake_case_payload(self) -> None:
+        root = self.tmpdir / "runs" / "health"
+        artifact_path = root / "external-analysis" / "snake.json"
+        artifact = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="status-run",
+            cluster_label="status-run",
+            summary="serialized",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=str(artifact_path),
+            provider="llamacpp",
+            timestamp=datetime.now(UTC),
+            duration_ms=120,
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            payload={
+                "triage_order": ["cluster-a"],
+                "top_concerns": ("latency",),
+                "evidenceGaps": ["metrics"],
+                "next_checks": "check logs",
+                "focusNotes": ("note",),
+            },
+        )
+        serialized = _serialize_review_enrichment((artifact,), root, run_id="status-run")
+        self.assertEqual(serialized["triageOrder"], ["cluster-a"])
+        self.assertEqual(serialized["topConcerns"], ["latency"])
+        self.assertEqual(serialized["evidenceGaps"], ["metrics"])
+        self.assertEqual(serialized["nextChecks"], ["check logs"])
+        self.assertEqual(serialized["focusNotes"], ["note"])
+
+    def test_provider_execution_auto_drilldown_budget_exhausted(self) -> None:
+        settings = ExternalAnalysisSettings(
+            auto_drilldown=AutoDrilldownPolicy(enabled=True, provider="default", max_per_run=2)
+        )
+        artifacts = [
+            self._auto_drilldown_artifact(ExternalAnalysisStatus.SUCCESS),
+            self._auto_drilldown_artifact(ExternalAnalysisStatus.FAILED),
+        ]
+        execution = _build_provider_execution(
+            settings,
+            artifacts,
+            [self._dummy_drilldown() for _ in range(4)],
+            {"enabled": False, "provider": None},
+        )
+        auto = cast(dict[str, object], execution.get("auto_drilldown"))
+        self.assertEqual(auto.get("eligible"), 4)
+        self.assertEqual(auto.get("attempted"), 2)
+        self.assertEqual(auto.get("succeeded"), 1)
+        self.assertEqual(auto.get("failed"), 1)
+        self.assertEqual(auto.get("budgetLimited"), 2)
+        self.assertIn("Reached max per run", str(auto.get("notes")))
+
+    def test_provider_execution_review_unattempted(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="k8sgpt")
+        )
+        execution = _build_provider_execution(
+            settings,
+            (),
+            (),
+            {"enabled": True, "provider": "k8sgpt"},
+        )
+        review = cast(dict[str, object], execution.get("review_enrichment"))
+        self.assertEqual(review.get("eligible"), 1)
+        self.assertEqual(review.get("attempted"), 0)
+        self.assertEqual(review.get("unattempted"), 1)
+        self.assertIn("no artifact", str(review.get("notes")))

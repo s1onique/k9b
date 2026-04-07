@@ -160,6 +160,8 @@ describe("App", () => {
         policyEnabled: false,
         providerConfigured: false,
         adapterAvailable: null,
+        runEnabled: false,
+        runProvider: null,
       },
     };
     vi.stubGlobal(
@@ -179,6 +181,88 @@ describe("App", () => {
       screen.getByText(/Review enrichment is disabled in the current configuration/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/Provider unspecified/i)).toBeInTheDocument();
+  });
+
+  test("renders awaiting-next-run status when run metadata lags", async () => {
+    const awaitingRun = {
+      ...sampleRun,
+      reviewEnrichment: undefined,
+      reviewEnrichmentStatus: {
+        status: "awaiting-next-run",
+        reason: "Awaiting a run that has enrichment enabled.",
+        provider: "k8sgpt",
+        policyEnabled: true,
+        providerConfigured: true,
+        adapterAvailable: true,
+        runEnabled: false,
+        runProvider: "old-provider",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultPayloads,
+        "/api/run": awaitingRun,
+      })
+    );
+    render(<App />);
+
+    await screen.findByRole("heading", {
+      name: /Provider-assisted advisory/i,
+    });
+    expect(
+      screen.getByText(/Awaiting a run that has enrichment enabled./i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Provider k8sgpt/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run configuration disabled review enrichment/i)).toBeInTheDocument();
+  });
+
+  test("shows provider name when run config enabled review enrichment", async () => {
+    const providerRun = {
+      ...sampleRun,
+      reviewEnrichment: undefined,
+      reviewEnrichmentStatus: {
+        status: "not-attempted",
+        reason: "Review enrichment has not yet run for this run.",
+        provider: null,
+        policyEnabled: true,
+        providerConfigured: true,
+        adapterAvailable: true,
+        runEnabled: true,
+        runProvider: "llamacpp",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultPayloads,
+        "/api/run": providerRun,
+      })
+    );
+    render(<App />);
+
+    await screen.findByRole("heading", {
+      name: /Provider-assisted advisory/i,
+    });
+    expect(screen.getByText(/Provider llamacpp/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run configuration enabled \(llamacpp\)/i)).toBeInTheDocument();
+  });
+
+  test("renders provider execution panel", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Provider-assisted advisory/i });
+    const executionHeading = await screen.findByText(/Provider execution/i);
+    const executionPanel = executionHeading.closest("section");
+    const scoped = within(executionPanel!);
+    expect(scoped.getByText(/Provider execution/i)).toBeInTheDocument();
+    expect(scoped.getByText(/Auto drilldown/i)).toBeInTheDocument();
+    expect(scoped.getByText(/eligible 2/i)).toBeInTheDocument();
+    const attemptedMatches = scoped.getAllByText(/attempted 1/i);
+    expect(attemptedMatches.length).toBeGreaterThanOrEqual(1);
+    const reviewMatches = scoped.getAllByText(/Review enrichment/i);
+    expect(reviewMatches[0]).toBeInTheDocument();
   });
 
   test("renders llm activity panel and filters entries", async () => {

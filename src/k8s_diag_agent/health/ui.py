@@ -15,7 +15,11 @@ from ..external_analysis.artifact import (
     ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
 )
-from ..external_analysis.config import ExternalAnalysisSettings
+from ..external_analysis.config import (
+    AutoDrilldownPolicy,
+    ExternalAnalysisSettings,
+    ReviewEnrichmentPolicy,
+)
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 
@@ -102,6 +106,23 @@ def _serialize_proposal(proposal: HealthProposal, root_dir: Path) -> dict[str, o
     }
 
 
+def _serialize_review_enrichment_policy(policy: ReviewEnrichmentPolicy) -> dict[str, object]:
+    provider = (policy.provider or "").strip()
+    return {
+        "enabled": policy.enabled,
+        "provider": provider or None,
+    }
+
+
+def _serialize_auto_drilldown_policy(policy: AutoDrilldownPolicy) -> dict[str, object]:
+    provider = (policy.provider or "").strip()
+    return {
+        "enabled": policy.enabled,
+        "provider": provider or None,
+        "maxPerRun": policy.max_per_run,
+    }
+
+
 NotificationRecord = tuple[NotificationArtifact, Path]
 
 
@@ -139,12 +160,21 @@ def write_health_ui_index(
     )
     notification_history = _serialize_notification_history(notifications, output_dir)
     latest_assessment = _serialize_latest_assessment(assessments, output_dir)
-    review_enrichment_entry = _serialize_review_enrichment(external_analysis, output_dir)
+    review_enrichment_entry = _serialize_review_enrichment(
+        external_analysis,
+        output_dir,
+        run_id,
+        historical_entries,
+    )
+    settings = external_analysis_settings or ExternalAnalysisSettings()
+    review_config = _serialize_review_enrichment_policy(settings.review_enrichment)
     review_status = _build_review_enrichment_status(
         external_analysis_settings,
         available_adapters,
         bool(review_enrichment_entry),
+        review_config,
     )
+    auto_config = _serialize_auto_drilldown_policy(settings.auto_drilldown)
     run_entry = {
         "run_id": run_id,
         "run_label": run_label,
@@ -161,11 +191,19 @@ def write_health_ui_index(
         ),
         "llm_activity": _serialize_llm_activity(historical_entries, output_dir),
         "llm_policy": _build_llm_policy(
-            external_analysis_settings,
+            settings,
             external_analysis,
             len(drilldowns),
         ),
+        "provider_execution": _build_provider_execution(
+            settings,
+            external_analysis,
+            drilldowns,
+            review_config,
+        ),
+        "auto_drilldown_config": auto_config,
         "review_enrichment": review_enrichment_entry,
+        "review_enrichment_config": review_config,
         "review_enrichment_status": review_status,
     }
     index = {
@@ -347,15 +385,31 @@ def _serialize_external_analysis(
 def _serialize_review_enrichment(
     artifacts: Sequence[ExternalAnalysisArtifact],
     root_dir: Path,
+    run_id: str,
+    fallback: Sequence[Mapping[str, object]] | None = None,
 ) -> dict[str, object] | None:
-    entries = [
-        artifact
-        for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True)
-        if artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
-    ]
-    if not entries:
+    artifact = _find_review_enrichment_artifact(artifacts, run_id)
+    if not artifact and fallback:
+        fallback_entries: list[ExternalAnalysisArtifact] = []
+        for raw in fallback:
+            if not isinstance(raw, Mapping):
+                continue
+            try:
+                candidate = ExternalAnalysisArtifact.from_dict(raw)
+            except Exception:
+                continue
+            if candidate.run_id != run_id:
+                continue
+            if candidate.purpose != ExternalAnalysisPurpose.REVIEW_ENRICHMENT:
+                continue
+            fallback_entries.append(candidate)
+        if fallback_entries:
+            artifact = sorted(
+                fallback_entries, key=lambda item: item.timestamp, reverse=True
+            )[0]
+    if not artifact:
         return None
-    artifact = entries[0]
+    payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
     payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
 
     def _list_from(*keys: str) -> list[str]:
@@ -383,10 +437,23 @@ def _serialize_review_enrichment(
     }
 
 
+def _find_review_enrichment_artifact(
+    artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
+) -> ExternalAnalysisArtifact | None:
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
+        if (
+            artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+            and artifact.run_id == run_id
+        ):
+            return artifact
+    return None
+
+
 def _build_review_enrichment_status(
     settings: ExternalAnalysisSettings | None,
     adapters: Iterable[str] | None,
     has_artifact: bool,
+    run_config: Mapping[str, object] | None,
 ) -> dict[str, object] | None:
     policy = (settings or ExternalAnalysisSettings()).review_enrichment
     provider_raw = policy.provider or ""
@@ -395,6 +462,16 @@ def _build_review_enrichment_status(
     if has_artifact:
         return None
     adapter_available = _adapter_registered(provider, adapters) if provider else None
+    status = "unknown"
+    reason: str | None = None
+    run_enabled: bool | None = None
+    run_provider: str | None = None
+    if isinstance(run_config, Mapping):
+        if "enabled" in run_config:
+            run_enabled = bool(run_config.get("enabled"))
+        value = run_config.get("provider")
+        run_provider_raw = str(value).strip() if value else ""
+        run_provider = run_provider_raw or None
     if not policy.enabled:
         status = "policy-disabled"
         reason = "Review enrichment is disabled in the current configuration."
@@ -404,9 +481,27 @@ def _build_review_enrichment_status(
     elif adapter_available is False:
         status = "adapter-unavailable"
         reason = f"Adapter '{provider}' is not registered for review enrichment."
+    elif not run_config or "enabled" not in run_config or "provider" not in run_config:
+        status = "unknown"
+        reason = reason or "Review enrichment metadata is incomplete for this run."
+    elif run_enabled is False or not run_provider:
+        status = "awaiting-next-run"
+        if run_provider:
+            reason = (
+                "Review enrichment is enabled now, but the latest run was produced before "
+                f"'{run_provider}' was active."
+            )
+        else:
+            reason = "Review enrichment is enabled now, but the latest run predates this setting."
     else:
-        status = "pending"
-        reason = "Review enrichment will run once the next review artifact is available."
+        status = "not-attempted"
+        if run_provider:
+            reason = (
+                f"Review enrichment was enabled for '{run_provider}' in this run, "
+                "but no artifact was recorded."
+            )
+        else:
+            reason = "Review enrichment was enabled for this run, but no artifact was recorded."
     return {
         "status": status,
         "reason": reason,
@@ -414,6 +509,8 @@ def _build_review_enrichment_status(
         "policyEnabled": policy.enabled,
         "providerConfigured": bool(provider),
         "adapterAvailable": adapter_available,
+        "runEnabled": run_enabled,
+        "runProvider": run_provider,
     }
 
 
@@ -461,6 +558,142 @@ def _build_llm_policy(
             "skippedThisRun": skipped_calls,
             "budgetExhausted": budget_exhausted,
         }
+    }
+
+
+def _build_provider_execution(
+    settings: ExternalAnalysisSettings | None,
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    drilldowns: Sequence[DrilldownArtifact],
+    review_config: Mapping[str, object] | None,
+) -> dict[str, object]:
+    config = settings or ExternalAnalysisSettings()
+    auto_policy = config.auto_drilldown
+    return {
+        "auto_drilldown": _build_auto_drilldown_execution(
+            auto_policy, artifacts, len(drilldowns)
+        ),
+        "review_enrichment": _build_review_enrichment_execution(
+            artifacts, review_config
+        ),
+    }
+
+
+def _execution_counts_for_purpose(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    purpose: ExternalAnalysisPurpose,
+) -> tuple[int, int, int]:
+    success = 0
+    failed = 0
+    skipped = 0
+    for artifact in artifacts:
+        if artifact.purpose != purpose:
+            continue
+        status = artifact.status
+        if status == ExternalAnalysisStatus.SUCCESS:
+            success += 1
+        elif status == ExternalAnalysisStatus.FAILED:
+            failed += 1
+        elif status == ExternalAnalysisStatus.SKIPPED:
+            skipped += 1
+    return success, failed, skipped
+
+
+def _build_auto_drilldown_execution(
+    policy: AutoDrilldownPolicy,
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    eligible_count: int,
+) -> dict[str, object]:
+    succeeded, failed, skipped = _execution_counts_for_purpose(
+        artifacts, ExternalAnalysisPurpose.AUTO_DRILLDOWN
+    )
+    attempted = succeeded + failed + skipped
+    eligible: int | None = eligible_count if policy.enabled else None
+    unattempted: int | None = None
+    if eligible is not None and eligible > attempted:
+        unattempted = eligible - attempted
+    budget_limited: int | None = None
+    if (
+        eligible is not None
+        and policy.max_per_run > 0
+        and attempted >= policy.max_per_run
+        and eligible > attempted
+    ):
+        budget_limited = eligible - attempted
+    notes_parts: list[str] = []
+    if budget_limited:
+        notes_parts.append(
+            f"Reached max per run ({policy.max_per_run}) before processing {budget_limited} eligible drilldown(s)."
+        )
+    elif unattempted:
+        notes_parts.append(
+            f"{unattempted} eligible drilldown(s) were not processed by the provider log."  # noqa: E501
+        )
+    notes = " ".join(notes_parts) if notes_parts else None
+    return {
+        "enabled": policy.enabled,
+        "provider": policy.provider or "default",
+        "maxPerRun": policy.max_per_run,
+        "eligible": eligible,
+        "attempted": attempted,
+        "succeeded": succeeded,
+        "failed": failed,
+        "skipped": skipped,
+        "unattempted": unattempted,
+        "budgetLimited": budget_limited,
+        "notes": notes,
+    }
+
+
+def _extract_review_run_config(run_config: Mapping[str, object] | None) -> tuple[bool | None, str | None]:
+    run_enabled: bool | None = None
+    run_provider: str | None = None
+    if isinstance(run_config, Mapping):
+        if "enabled" in run_config:
+            run_enabled = bool(run_config.get("enabled"))
+        if "provider" in run_config:
+            provider_raw = str(run_config.get("provider") or "").strip()
+            run_provider = provider_raw or None
+    return run_enabled, run_provider
+
+
+def _build_review_enrichment_execution(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    run_config: Mapping[str, object] | None,
+) -> dict[str, object]:
+    succeeded, failed, skipped = _execution_counts_for_purpose(
+        artifacts, ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+    )
+    attempted = succeeded + failed + skipped
+    run_enabled, run_provider = _extract_review_run_config(run_config)
+    if run_enabled is None:
+        eligible: int | None = None
+    elif not run_enabled:
+        eligible = 0
+    elif run_provider:
+        eligible = 1
+    else:
+        eligible = 0
+    unattempted: int | None = None
+    if eligible is not None and eligible > attempted:
+        unattempted = eligible - attempted
+    notes = None
+    if unattempted and run_provider:
+        notes = (
+            f"Run configuration enabled review enrichment for '{run_provider}', but no artifact was recorded."
+        )
+    elif unattempted:
+        notes = "Run configuration enabled review enrichment, but no artifact was recorded."
+    return {
+        "enabled": run_enabled,
+        "eligible": eligible,
+        "attempted": attempted,
+        "succeeded": succeeded,
+        "failed": failed,
+        "skipped": skipped,
+        "unattempted": unattempted,
+        "budgetLimited": None,
+        "notes": notes,
     }
 
 

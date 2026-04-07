@@ -19,5 +19,11 @@ class LLMProvider(ABC):
     """Provider contract for producing structured assessments."""
 
     @abstractmethod
-    def assess(self, prompt: str, payload: LLMAssessmentInput) -> dict[str, Any]:
+    def assess(
+        self,
+        prompt: str,
+        payload: LLMAssessmentInput,
+        *,
+        validate_schema: bool = True,
+    ) -> dict[str, Any]:
         ...

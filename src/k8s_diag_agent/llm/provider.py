@@ -22,7 +22,13 @@ from .llamacpp_provider import LlamaCppProvider
 class DefaultLLMProvider(LLMProvider):
     """Simple deterministic provider that summarizes snapshot diffs."""
 
-    def assess(self, prompt: str, payload: LLMAssessmentInput) -> dict[str, Any]:
+    def assess(
+        self,
+        prompt: str,
+        payload: LLMAssessmentInput,
+        *,
+        validate_schema: bool = True,
+    ) -> dict[str, Any]:
         differences = payload.comparison.get("differences") or {}
         diff_keys = sorted(differences)
         has_diff = bool(diff_keys)
