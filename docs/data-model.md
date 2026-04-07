@@ -18,6 +18,7 @@
 - **Review** – `build_health_review` aggregates the current run’s assessments, the comparisons/triggers that fired, the available drilldowns, and any proposals generated during the run into `runs/health/reviews/{run_id}-review.json`. The review is the single source of truth for adaptation inputs.
 - **Proposal** – typed `HealthProposal` records (see `docs/schemas/health-proposal-schema.md`) describing suggested tuning to warning thresholds, noise filters, baseline releases/CRDs, or review ordering. They live under `runs/health/proposals/{proposal_id}.json`, reference their source review, document expected benefit/confidence, and include a promotion payload for `check-proposal`/`render_proposal_patch` to exercise.
 - **External analysis artifact** – any provider invocation (manual and opt-in) writes `runs/health/external-analysis/{run_id}-{cluster_label}-{adapter}.json` with `ExternalAnalysisArtifact` metadata so the UI’s `llmStats` slice can report success/failure counts and latencies.
+  The artifact now also records the `run_label`, `purpose` (e.g., `manual` vs `auto-drilldown`), the provider/adapter used, and any structured interpretation payload, error summary, or skip reason so each invocation can be audited regardless of outcome.
 - **History and notifications** – `runs/health/history.json` keeps per-target history used for regression detection, while notifications under `runs/health/notifications/` record events from the loop, proposals, and external analysis adapters.
 
 ## Durable artifacts vs operational streams
@@ -40,6 +41,7 @@
 ### Optional provider-assisted branches
 
 - External analysis adapters (LLM or other tools) are an opt-in branch implemented in `external_analysis.adapter`/`artifact`. They only run when the config enables adapters, `TriggerPolicy.manual` is true, and a manual request (`--external-analysis`, `manual_external_analysis`, `assess-drilldown`, `assess-snapshots`) explicitly names the target. No provider output is injected into the default `Assessment`; the health loop simply persists each `ExternalAnalysisArtifact`, logs the outcome, pushes a notification, and surfaces the stats to the UI.
+  When `external_analysis.auto_drilldown` is enabled, the loop additionally runs an optional provider-assisted interpretation for each triggered drilldown (bounded by `max_per_run` and the configured provider name). Each auto interpretation writes its own `ExternalAnalysisArtifact` with `purpose: auto-drilldown` under the same `external-analysis` directory, logs a structured event, and surfaces the success/failed/skipped status beside the cluster’s detail page so the deterministic data remains the primary source of truth while optionally highlighting the provider’s advisory guidance.
 - The same adapters drive the standalone CLI commands `assess-drilldown` (runs against `runs/health/drilldowns/*.json`) and `assess-snapshots` (pairs sanitized snapshots) so maintainers can exercise LLM reasoning without altering the deterministic run. Each provider invocation writes an artifact, which also records `status`/`findings`/`suggested_next_checks` for audit or future review.
 
 ## Stage-by-stage lifecycle

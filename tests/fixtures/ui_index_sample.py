@@ -11,19 +11,20 @@ def sample_ui_index() -> Mapping[str, object]:
             "cluster_count": 1,
             "drilldown_count": 1,
             "proposal_count": 1,
-            "external_analysis_count": 1,
+        "external_analysis_count": 2,
             "notification_count": 1,
             "llm_stats": {
-                "totalCalls": 1,
-                "successfulCalls": 1,
-                "failedCalls": 0,
-                "lastCallTimestamp": "2026-01-01T00:00:00Z",
-                "p50LatencyMs": 120,
-                "p95LatencyMs": 120,
-                "p99LatencyMs": 120,
-                "providerBreakdown": [
-                    {"provider": "k8sgpt", "calls": 1, "failedCalls": 0},
-                ],
+            "totalCalls": 2,
+            "successfulCalls": 2,
+            "failedCalls": 0,
+            "lastCallTimestamp": "2026-01-01T00:00:00Z",
+            "p50LatencyMs": 120,
+            "p95LatencyMs": 120,
+            "p99LatencyMs": 120,
+            "providerBreakdown": [
+                {"provider": "k8sgpt", "calls": 1, "failedCalls": 0},
+                {"provider": "llm-autodrilldown", "calls": 1, "failedCalls": 0},
+            ],
             },
         },
         "run_stats": {
@@ -156,8 +157,8 @@ def sample_ui_index() -> Mapping[str, object]:
             }
         ],
         "external_analysis": {
-            "count": 1,
-            "status_counts": [{"status": "success", "count": 1}],
+            "count": 2,
+            "status_counts": [{"status": "success", "count": 2}],
             "artifacts": [
                 {
                     "tool_name": "k8sgpt",
@@ -168,7 +169,43 @@ def sample_ui_index() -> Mapping[str, object]:
                     "suggested_next_checks": ["next"],
                     "timestamp": "2026-01-01T00:00:00Z",
                     "artifact_path": "external-analysis/cluster-a.json",
-                }
+                    "duration_ms": 120,
+                    "provider": "k8sgpt",
+                    "purpose": "manual",
+                    "payload": None,
+                    "error_summary": None,
+                    "skip_reason": None,
+                },
+                {
+                    "tool_name": "llm-autodrilldown",
+                    "cluster_label": "cluster-a",
+                    "status": "success",
+                    "summary": "LLM drilldown insight",
+                    "findings": ["auto-f1"],
+                    "suggested_next_checks": ["auto-check"],
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "external-analysis/run-1-cluster-a-auto-default.json",
+                    "duration_ms": 150,
+                    "provider": "default",
+                    "purpose": "auto-drilldown",
+                    "payload": {"hypotheses": []},
+                    "error_summary": None,
+                    "skip_reason": None,
+                },
             ],
+        },
+        "auto_drilldown_interpretations": {
+            "cluster-a": {
+                "adapter": "llm-autodrilldown",
+                "status": "success",
+                "summary": "LLM drilldown insight",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "artifact_path": "external-analysis/run-1-cluster-a-auto-default.json",
+                "provider": "default",
+                "duration_ms": 150,
+                "payload": {"hypotheses": []},
+                "error_summary": None,
+                "skip_reason": None,
+            }
         },
     }

@@ -28,6 +28,8 @@ services:
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
     environment:
+      LLAMA_CPP_BASE_URL: http://192.168.99.134:32597
+      LLAMA_CPP_MODEL: "openai/qwen"
       HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
       HEALTH_RUNS_DIR: /app/runs/health
       KUBECONFIG: /app/kubeconfig/config

@@ -13,6 +13,11 @@ from k8s_diag_agent.collect.cluster_snapshot import (
     extract_cluster_snapshots,
 )
 from k8s_diag_agent.compare.two_cluster import ClusterComparison, compare_snapshots
+from k8s_diag_agent.external_analysis.artifact import (
+    ExternalAnalysisPurpose,
+    ExternalAnalysisStatus,
+)
+from k8s_diag_agent.external_analysis.config import AutoDrilldownPolicy, ExternalAnalysisSettings
 from k8s_diag_agent.health.baseline import (
     BaselineDriftCategory,
     BaselinePolicy,
@@ -181,6 +186,11 @@ class HealthLoopTests(unittest.TestCase):
         raw = json.loads(path.read_text(encoding="utf-8"))
         snapshots = extract_cluster_snapshots(raw)
         return {snapshot.metadata.cluster_id: snapshot for snapshot in snapshots}
+
+    def _auto_analysis_settings(self, provider: str | None = None) -> ExternalAnalysisSettings:
+        return ExternalAnalysisSettings(
+            auto_drilldown=AutoDrilldownPolicy(enabled=True, provider=provider, max_per_run=1)
+        )
 
     def _pattern_assessment(self, cluster_id: str) -> HealthAssessmentResult:
         snapshot = self.pattern_snapshots[cluster_id]
@@ -1039,6 +1049,139 @@ class HealthLoopTests(unittest.TestCase):
         self.assertEqual(payload["run"]["drilldown_count"], 1)
         drilldown_entry = payload["drilldowns"][0]
         self.assertEqual(drilldown_entry["non_running_pods"][0]["name"], "app-ui")
+
+    def _build_auto_runner(self, snapshots: dict[str, ClusterSnapshot]) -> HealthLoopRunner:
+        target = HealthTarget(
+            context="cluster-ui",
+            label="cluster-ui",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        config = HealthRunConfig(
+            run_label="auto-analysis",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+            external_analysis=self._auto_analysis_settings(provider="default"),
+        )
+        collector = self._StubDrilldownCollector()
+        return HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=lambda context: snapshots[context],
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=collector,
+        )
+
+    def test_auto_drilldown_analysis_records_success(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-ui",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 1,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+        runner = self._build_auto_runner(snapshots)
+        runner.execute()
+        auto_artifacts = [
+            art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.AUTO_DRILLDOWN
+        ]
+        self.assertEqual(len(auto_artifacts), 1)
+        artifact = auto_artifacts[0]
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.SUCCESS)
+        self.assertIsNotNone(artifact.artifact_path)
+        assert artifact.artifact_path is not None
+        self.assertTrue(Path(artifact.artifact_path).exists())
+
+    def test_auto_drilldown_analysis_records_skip_when_provider_missing(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-ui",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 1,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+        config = HealthRunConfig(
+            run_label="auto-analysis",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(HealthTarget(
+                context="cluster-ui",
+                label="cluster-ui",
+                monitor_health=True,
+                watched_helm_releases=(),
+                watched_crd_families=(),
+            ),),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+            external_analysis=self._auto_analysis_settings(provider="missing"),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=lambda context: snapshots[context],
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+        runner.execute()
+        auto_artifacts = [
+            art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.AUTO_DRILLDOWN
+        ]
+        self.assertEqual(len(auto_artifacts), 1)
+        artifact = auto_artifacts[0]
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.SKIPPED)
+        self.assertIsNotNone(artifact.skip_reason)
+
+    def test_auto_drilldown_analysis_records_failure(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-ui",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 1,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+        runner = self._build_auto_runner(snapshots)
+        with patch("k8s_diag_agent.health.loop.assess_drilldown_artifact", side_effect=RuntimeError("boom")):
+            runner.execute()
+        auto_artifacts = [
+            art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.AUTO_DRILLDOWN
+        ]
+        self.assertEqual(len(auto_artifacts), 1)
+        artifact = auto_artifacts[0]
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
+        self.assertEqual(artifact.error_summary, "boom")
 
     def test_build_health_assessment_crashloop_backoff_degrades(self) -> None:
         snapshot = self._make_snapshot(

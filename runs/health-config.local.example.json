@@ -60,8 +60,13 @@
       "suspicious_comparison": false
     },
     "adapters": [
-      { "name": "k8sgpt", "enabled": true, "command": ["k8sgpt", "analysis"] }
-    ]
+      { "name": "llamacpp", "enabled": true }
+    ],
+    "auto_drilldown": {
+      "enabled": true,
+      "provider": "llamacpp",
+      "max_per_run": 3
+    }
   },
   "baseline_policy_path": "health-baseline.example.json"
 }

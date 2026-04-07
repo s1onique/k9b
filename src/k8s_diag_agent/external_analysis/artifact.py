@@ -17,6 +17,11 @@ class ExternalAnalysisStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class ExternalAnalysisPurpose(StrEnum):
+    MANUAL = "manual"
+    AUTO_DRILLDOWN = "auto-drilldown"
+
+
 def _coerce_optional_int(value: object | None) -> int | None:
     if value is None:
         return None
@@ -35,8 +40,9 @@ class ExternalAnalysisArtifact:
     tool_name: str
     run_id: str
     cluster_label: str
-    source_artifact: str | None
-    summary: str | None
+    run_label: str = ""
+    source_artifact: str | None = None
+    summary: str | None = None
     findings: tuple[str, ...] = field(default_factory=tuple)
     suggested_next_checks: tuple[str, ...] = field(default_factory=tuple)
     status: ExternalAnalysisStatus = ExternalAnalysisStatus.PENDING
@@ -45,32 +51,46 @@ class ExternalAnalysisArtifact:
     artifact_path: str | None = None
     provider: str | None = None
     duration_ms: int | None = None
+    purpose: ExternalAnalysisPurpose = ExternalAnalysisPurpose.MANUAL
+    payload: dict[str, object] | None = None
+    error_summary: str | None = None
+    skip_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "tool_name": self.tool_name,
-            "run_id": self.run_id,
-            "cluster_label": self.cluster_label,
-            "source_artifact": self.source_artifact,
-            "summary": self.summary,
-            "findings": list(self.findings),
-            "suggested_next_checks": list(self.suggested_next_checks),
-            "status": self.status.value,
-            "raw_output": self.raw_output,
-            "timestamp": self.timestamp.isoformat(),
-            "artifact_path": self.artifact_path,
-            "provider": self.provider,
-            "duration_ms": self.duration_ms,
+        "tool_name": self.tool_name,
+        "run_label": self.run_label,
+        "run_id": self.run_id,
+        "cluster_label": self.cluster_label,
+        "source_artifact": self.source_artifact,
+        "summary": self.summary,
+        "findings": list(self.findings),
+        "suggested_next_checks": list(self.suggested_next_checks),
+        "status": self.status.value,
+        "raw_output": self.raw_output,
+        "timestamp": self.timestamp.isoformat(),
+        "artifact_path": self.artifact_path,
+        "provider": self.provider,
+        "duration_ms": self.duration_ms,
+        "purpose": self.purpose.value,
+        "payload": self.payload,
+        "error_summary": self.error_summary,
+        "skip_reason": self.skip_reason,
         }
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ExternalAnalysisArtifact:
         status_raw = str(raw.get("status") or ExternalAnalysisStatus.PENDING.value)
         status = ExternalAnalysisStatus(status_raw)
+        purpose_raw = str(raw.get("purpose") or ExternalAnalysisPurpose.MANUAL.value)
+        purpose = ExternalAnalysisPurpose(purpose_raw)
+        payload_raw = raw.get("payload")
+        payload = dict(payload_raw) if isinstance(payload_raw, Mapping) else None
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
             cluster_label=str(raw.get("cluster_label") or ""),
+            run_label=str(raw.get("run_label") or ""),
             source_artifact=str(raw.get("source_artifact")) if raw.get("source_artifact") else None,
             summary=str(raw.get("summary")) if raw.get("summary") else None,
             findings=tuple(str(item) for item in raw.get("findings") or []),
@@ -81,6 +101,10 @@ class ExternalAnalysisArtifact:
             artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
             provider=str(raw.get("provider")) if raw.get("provider") else None,
             duration_ms=_coerce_optional_int(raw.get("duration_ms")),
+            purpose=purpose,
+            payload=payload,
+            error_summary=str(raw.get("error_summary")) if raw.get("error_summary") else None,
+            skip_reason=str(raw.get("skip_reason")) if raw.get("skip_reason") else None,
         )
 
 

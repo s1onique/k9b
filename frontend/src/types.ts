@@ -203,5 +203,19 @@ export type ClusterDetailPayload = {
   relatedProposals: ProposalEntry[];
   relatedNotifications: NotificationEntry[];
   artifacts: ArtifactLink[];
+  autoInterpretation: AutoInterpretation | null;
   topProblem: ProblemSummary;
+};
+
+export type AutoInterpretation = {
+  adapter: string;
+  status: string;
+  summary: string | null;
+  timestamp: string;
+  artifactPath: string | null;
+  provider: string | null;
+  durationMs: number | null;
+  payload: Record<string, unknown> | null;
+  errorSummary: string | null;
+  skipReason: string | null;
 };

@@ -10,6 +10,7 @@ import {
   fetchRun,
 } from "./api";
 import type {
+  AutoInterpretation,
   ClusterDetailPayload,
   FleetPayload,
   NotificationDetail,
@@ -475,6 +476,7 @@ const App = () => {
   const autoRefreshStatusText = autoRefreshInterval
     ? `Auto refresh every ${autoRefreshInterval}s`
     : "Auto refresh is off";
+  const interpretation: AutoInterpretation | null = clusterDetail?.autoInterpretation || null;
 
   const llmStats = run.llmStats;
   const lastCallValue = llmStats.lastCallTimestamp
@@ -785,6 +787,30 @@ const App = () => {
                       })}
                     </div>
                   ) : null}
+                  {interpretation ? (
+                    <div className="llm-interpretation-card">
+                      <h3>LLM drilldown interpretation</h3>
+                      <p className="small">
+                        Adapter: {interpretation.adapter} · Status:
+                        <span className={statusClass(interpretation.status)}>{interpretation.status}</span>
+                      </p>
+                      <p className="small">Captured: {formatTimestamp(interpretation.timestamp)}</p>
+                      {interpretation.summary ? <p className="small">{interpretation.summary}</p> : null}
+                      {interpretation.artifactPath ? (
+                        <a className="link" href={artifactUrl(interpretation.artifactPath)!} target="_blank" rel="noreferrer">
+                          View interpretation artifact
+                        </a>
+                      ) : null}
+                      {interpretation.errorSummary ? (
+                        <p className="small muted">Error: {interpretation.errorSummary}</p>
+                      ) : null}
+                      {interpretation.skipReason ? (
+                        <p className="small muted">Skipped because {interpretation.skipReason}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="muted small">LLM drilldown interpretation not available.</p>
+                  )}
                 </div>
                 <div className="tab-list">
                   {[

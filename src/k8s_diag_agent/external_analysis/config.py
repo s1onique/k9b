@@ -15,6 +15,13 @@ class ExternalAnalysisPolicy:
 
 
 @dataclass(frozen=True)
+class AutoDrilldownPolicy:
+    enabled: bool = False
+    provider: str | None = None
+    max_per_run: int = 1
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisAdapterConfig:
     name: str
     enabled: bool = True
@@ -24,6 +31,7 @@ class ExternalAnalysisAdapterConfig:
 @dataclass(frozen=True)
 class ExternalAnalysisSettings:
     policy: ExternalAnalysisPolicy = field(default_factory=ExternalAnalysisPolicy)
+    auto_drilldown: AutoDrilldownPolicy = field(default_factory=AutoDrilldownPolicy)
     adapters: tuple[ExternalAnalysisAdapterConfig, ...] = field(default_factory=tuple)
 
 
@@ -35,6 +43,22 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
         manual=bool(policy_raw.get("manual", True)),
         degraded_health=bool(policy_raw.get("degraded_health", False)),
         suspicious_comparison=bool(policy_raw.get("suspicious_comparison", False)),
+    )
+    auto_raw = raw.get("auto_drilldown") or {}
+    max_raw = auto_raw.get("max_per_run")
+    max_per_run = 1
+    if isinstance(max_raw, (int, float)):
+        max_per_run = max(1, int(max_raw))
+    elif isinstance(max_raw, str):
+        try:
+            parsed = int(max_raw)
+        except ValueError:
+            parsed = 1
+        max_per_run = max(1, parsed)
+    auto_drilldown = AutoDrilldownPolicy(
+        enabled=bool(auto_raw.get("enabled", False)),
+        provider=str(auto_raw.get("provider")) if auto_raw.get("provider") else None,
+        max_per_run=max_per_run,
     )
     adapters_raw = raw.get("adapters") or []
     configs: list[ExternalAnalysisAdapterConfig] = []
@@ -58,4 +82,6 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
             configs.append(
                 ExternalAnalysisAdapterConfig(name=name, enabled=enabled, command=command)
             )
-    return ExternalAnalysisSettings(policy=policy, adapters=tuple(configs))
+    return ExternalAnalysisSettings(
+        policy=policy, auto_drilldown=auto_drilldown, adapters=tuple(configs)
+    )

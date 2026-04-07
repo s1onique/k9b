@@ -8,6 +8,7 @@ from .model import (
     AssessmentHypothesisView,
     AssessmentNextCheckView,
     AssessmentView,
+    AutoDrilldownInterpretationView,
     ClusterView,
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
@@ -171,6 +172,19 @@ class DrilldownCoveragePayload(TypedDict):
     artifactPath: str | None
 
 
+class DrilldownInterpretationPayload(TypedDict, total=False):
+    adapter: str
+    status: str
+    summary: str | None
+    timestamp: str
+    artifactPath: str | None
+    provider: str | None
+    durationMs: int | None
+    payload: dict[str, object] | None
+    errorSummary: str | None
+    skipReason: str | None
+
+
 class DrilldownSummaryPayload(TypedDict):
     totalClusters: int
     available: int
@@ -233,6 +247,7 @@ class ClusterDetailPayload(TypedDict):
     relatedProposals: list[ProposalEntry]
     relatedNotifications: list[NotificationEntry]
     artifacts: list[ArtifactLink]
+    autoInterpretation: DrilldownInterpretationPayload | None
     topProblem: ProblemSummary
 
 
@@ -293,6 +308,9 @@ def build_cluster_detail_payload(
         else None
     )
     artifacts = _collect_run_artifacts(context)
+    interpretation_view = (
+        context.auto_drilldown_interpretations.get(label) if label else None
+    )
     return {
         "selectedClusterLabel": label,
         "selectedClusterContext": cluster_context,
@@ -306,6 +324,7 @@ def build_cluster_detail_payload(
         "relatedProposals": _filter_related_proposals(label, context.proposals),
         "relatedNotifications": _filter_related_notifications(label, context.notification_history),
         "artifacts": artifacts,
+        "autoInterpretation": _serialize_auto_interpretation(interpretation_view),
         "topProblem": _build_problem_summary(context),
     }
 
@@ -528,6 +547,26 @@ def _serialize_assessment_summary(assessment: AssessmentView | None) -> Assessme
         "overallConfidence": assessment.overall_confidence,
         "artifactPath": assessment.artifact_path,
         "snapshotPath": assessment.snapshot_path,
+    }
+
+
+def _serialize_auto_interpretation(
+    interpretation: AutoDrilldownInterpretationView | None
+) -> DrilldownInterpretationPayload | None:
+    if not interpretation:
+        return None
+    payload = dict(interpretation.payload) if interpretation.payload else None
+    return {
+        "adapter": interpretation.adapter,
+        "status": interpretation.status,
+        "summary": interpretation.summary,
+        "timestamp": interpretation.timestamp,
+        "artifactPath": interpretation.artifact_path,
+        "provider": interpretation.provider,
+        "durationMs": interpretation.duration_ms,
+        "payload": payload,
+        "errorSummary": interpretation.error_summary,
+        "skipReason": interpretation.skip_reason,
     }
 
 

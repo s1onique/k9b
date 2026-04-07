@@ -19,6 +19,7 @@ from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
+    ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
     write_external_analysis_artifact,
 )
@@ -48,6 +49,7 @@ from .baseline import (
     resolve_baseline_policy_path,
 )
 from .drilldown import DrilldownArtifact, DrilldownCollector
+from .drilldown_assessor import assess_drilldown_artifact
 from .image_pull_secret import (
     BROKEN_IMAGE_PULL_SECRET_REASON,
     ImagePullSecretInsight,
@@ -2031,7 +2033,9 @@ class HealthLoopRunner:
         )
         triggers = self._evaluate_triggers(records, previous_history, directories)
         drilldowns = self._build_drilldowns(records, previous_history, directories["drilldowns"])
-        external_artifacts = self._run_external_analysis(records, directories)
+        auto_artifacts = self._run_auto_drilldown_analysis(drilldowns, directories)
+        manual_artifacts = self._run_external_analysis(records, directories)
+        external_artifacts = [*auto_artifacts, *manual_artifacts]
         self._persist_history(history, directories["history"])
         review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
         healthy_count = sum(
@@ -2060,7 +2064,7 @@ class HealthLoopRunner:
                 assessments,
                 drilldowns,
                 proposals,
-                external_artifacts,
+            external_artifacts,
                 self._notification_records,
             )
         except Exception as exc:
@@ -2379,6 +2383,96 @@ class HealthLoopRunner:
             notification = build_external_analysis_notification(artifact_with_path)
             self._record_notification(directories["notifications"], notification)
             artifacts.append(artifact_with_path)
+        return artifacts
+
+    def _run_auto_drilldown_analysis(
+        self, drilldowns: list[DrilldownArtifact], directories: dict[str, Path]
+    ) -> list[ExternalAnalysisArtifact]:
+        policy = self.config.external_analysis.auto_drilldown
+        if not policy.enabled or policy.max_per_run <= 0 or not drilldowns:
+            return []
+        provider_name = policy.provider or "default"
+        artifacts: list[ExternalAnalysisArtifact] = []
+        attempts = 0
+        for drilldown in drilldowns:
+            if attempts >= policy.max_per_run:
+                break
+            attempts += 1
+            artifact_path = directories["external_analysis"] / (
+                f"{self.run_id}-{drilldown.label}-auto-{provider_name}.json"
+            )
+            start = time.perf_counter()
+            status = ExternalAnalysisStatus.FAILED
+            summary: str | None = None
+            findings: tuple[str, ...] = ()
+            next_checks: tuple[str, ...] = ()
+            payload: dict[str, object] | None = None
+            error_summary: str | None = None
+            skip_reason: str | None = None
+            try:
+                assessment = assess_drilldown_artifact(drilldown, provider_name=provider_name)
+                payload = assessment.to_dict()
+                summary = (
+                    assessment.recommended_action.description
+                    if assessment.recommended_action
+                    else (assessment.hypotheses[0].description if assessment.hypotheses else "Auto drilldown interpretation")
+                )
+                findings = tuple(entry.description for entry in assessment.findings)
+                next_checks = tuple(entry.description for entry in assessment.next_evidence_to_collect)
+                status = ExternalAnalysisStatus.SUCCESS
+            except ValueError as exc:
+                status = ExternalAnalysisStatus.SKIPPED
+                summary = str(exc)
+                skip_reason = str(exc)
+                error_summary = None
+                payload = None
+            except Exception as exc:
+                status = ExternalAnalysisStatus.FAILED
+                summary = str(exc)
+                error_summary = str(exc)
+                payload = None
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            artifact = ExternalAnalysisArtifact(
+                tool_name="llm-autodrilldown",
+                run_id=self.run_id,
+                cluster_label=drilldown.label,
+                run_label=self.run_label,
+                source_artifact=drilldown.artifact_path,
+                summary=summary,
+                findings=findings,
+                suggested_next_checks=next_checks,
+                status=status,
+                raw_output=None,
+                timestamp=datetime.now(UTC),
+                artifact_path=str(artifact_path),
+                provider=provider_name,
+                duration_ms=duration_ms,
+                purpose=ExternalAnalysisPurpose.AUTO_DRILLDOWN,
+                payload=payload,
+                error_summary=error_summary,
+                skip_reason=skip_reason,
+            )
+            write_external_analysis_artifact(artifact_path, artifact)
+            severity = (
+                "INFO"
+                if status == ExternalAnalysisStatus.SUCCESS
+                else "WARNING"
+                if status == ExternalAnalysisStatus.SKIPPED
+                else "ERROR"
+            )
+            self._log_event(
+                "external-analysis",
+                severity,
+                "Auto drilldown interpretation recorded",
+                tool=provider_name,
+                cluster_label=drilldown.label,
+                status=status.value,
+                artifact_path=str(artifact_path),
+                event="auto-drilldown",
+            )
+            artifacts.append(artifact)
+            if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
+                break
         return artifacts
 
     def _write_review_artifact(

@@ -133,6 +133,20 @@ class ExternalAnalysisView:
 
 
 @dataclass(frozen=True)
+class AutoDrilldownInterpretationView:
+    adapter: str
+    status: str
+    summary: str | None
+    timestamp: str
+    artifact_path: str | None
+    provider: str | None
+    duration_ms: int | None
+    payload: Mapping[str, object] | None
+    error_summary: str | None
+    skip_reason: str | None
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisSummary:
     count: int
     status_counts: tuple[tuple[str, int], ...]
@@ -223,6 +237,7 @@ class UIIndexContext:
     drilldown_availability: DrilldownAvailabilityView
     notification_history: tuple[NotificationView, ...]
     external_analysis: ExternalAnalysisSummary
+    auto_drilldown_interpretations: Mapping[str, AutoDrilldownInterpretationView]
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -264,6 +279,9 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     drilldown_availability = _build_drilldown_availability(index.get("drilldown_availability"))
     notification_history = _build_notification_history(index.get("notification_history"))
     external_analysis = _build_external_analysis(index.get("external_analysis"))
+    auto_drilldown_interpretations = _build_auto_drilldown_interpretations(
+        index.get("auto_drilldown_interpretations")
+    )
     return UIIndexContext(
         run=run,
         clusters=clusters,
@@ -275,6 +293,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         drilldown_availability=drilldown_availability,
         notification_history=notification_history,
         external_analysis=external_analysis,
+        auto_drilldown_interpretations=auto_drilldown_interpretations,
     )
 
 
@@ -596,6 +615,30 @@ def _build_external_analysis(raw: object | None) -> ExternalAnalysisSummary:
         status_counts=status_counts,
         artifacts=artifacts,
     )
+
+
+def _build_auto_drilldown_interpretations(
+    raw: object | None,
+) -> Mapping[str, AutoDrilldownInterpretationView]:
+    if not isinstance(raw, Mapping):
+        return {}
+    interpretations: dict[str, AutoDrilldownInterpretationView] = {}
+    for label, entry in raw.items():
+        if not isinstance(label, str) or not isinstance(entry, Mapping):
+            continue
+        interpretations[label] = AutoDrilldownInterpretationView(
+            adapter=_coerce_str(entry.get("adapter")),
+            status=_coerce_str(entry.get("status")),
+            summary=_coerce_optional_str(entry.get("summary")),
+            timestamp=_coerce_str(entry.get("timestamp")),
+            artifact_path=_coerce_optional_str(entry.get("artifact_path")),
+            provider=_coerce_optional_str(entry.get("provider")),
+            duration_ms=_coerce_optional_int(entry.get("duration_ms")),
+            payload=entry.get("payload") if isinstance(entry.get("payload"), Mapping) else None,
+            error_summary=_coerce_optional_str(entry.get("error_summary")),
+            skip_reason=_coerce_optional_str(entry.get("skip_reason")),
+        )
+    return interpretations
 
 
 def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysisView:

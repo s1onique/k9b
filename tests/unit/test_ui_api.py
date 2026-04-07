@@ -32,9 +32,11 @@ class UIApiTests(unittest.TestCase):
     def test_run_payload_includes_llm_stats(self) -> None:
         payload = build_run_payload(self.context)
         llm_stats = payload["llmStats"]
-        self.assertEqual(llm_stats["totalCalls"], 1)
-        self.assertEqual(llm_stats["successfulCalls"], 1)
-        self.assertEqual(llm_stats["providerBreakdown"][0]["provider"], "k8sgpt")
+        self.assertEqual(llm_stats["totalCalls"], 2)
+        self.assertEqual(llm_stats["successfulCalls"], 2)
+        providers = {entry["provider"] for entry in llm_stats["providerBreakdown"]}
+        self.assertIn("k8sgpt", providers)
+        self.assertIn("llm-autodrilldown", providers)
 
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)
@@ -57,3 +59,11 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(payload["selectedClusterLabel"], "cluster-a")
         self.assertGreaterEqual(len(payload["artifacts"]), 2)
         self.assertGreaterEqual(len(payload["drilldownCoverage"]), 1)
+
+    def test_cluster_detail_payload_includes_auto_interpretation(self) -> None:
+        payload = build_cluster_detail_payload(self.context)
+        interpretation = payload.get("autoInterpretation")
+        self.assertIsNotNone(interpretation)
+        assert interpretation is not None
+        self.assertEqual(interpretation["status"], "success")
+        self.assertEqual(interpretation["adapter"], "llm-autodrilldown")
