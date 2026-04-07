@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,6 +12,8 @@ from typing import Any, TextIO
 from .security import sanitize_log_entry
 
 DEFAULT_HEALTH_LOG = Path("runs") / "health" / "health.log"
+
+DEFAULT_LOG_STREAM: TextIO = sys.stdout
 
 
 def _current_timestamp() -> str:
@@ -44,14 +47,13 @@ def emit_structured_log(
         entry.update(extra_metadata)
     sanitized = sanitize_log_entry(entry)
     line = json.dumps(sanitized, separators=(",", ":"), ensure_ascii=False)
-    if writer is not None:
-        writer.write(line + "\n")
-        writer.flush()
-        return sanitized
-    target = log_path or DEFAULT_HEALTH_LOG
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+    stream = writer or DEFAULT_LOG_STREAM
+    stream.write(line + "\n")
+    stream.flush()
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
     return sanitized
 
 

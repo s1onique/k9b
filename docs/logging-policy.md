@@ -38,8 +38,14 @@ Other metadata fields should be present when they help correlate artifacts (see 
 
 ## Structured vs human logs
 
-- **Structured logs**: use JSON lines or stable key-value payloads so downstream analysis can `grep key=value` instead of re-parsing transcripts. Always emit `timestamp`, `component`, `severity`, `message`, `run_label`, and any available artifact correlation keys. Example: the scheduler now writes JSON entries into `runs/health/scheduler.log`.
+- **Structured logs**: use JSON lines or stable key-value payloads so downstream analysis can `grep key=value` instead of re-parsing transcripts. Always emit `timestamp`, `component`, `severity`, `message`, `run_label`, and any available artifact correlation keys. Example: the scheduler now writes JSON entries into `runs/health/scheduler.log`, although stdout/stderr has become the primary stream for those entries.
 - **Human logs**: CLI output and `print()` statements stay terse, summary-focused, and optional (`--quiet`). Do not convert CLI summaries into source-of-truth logs; keep them as aids for live operators. When you add new CLI output, favor the existing `format_summary`/`format_health_summary` helpers so reviewers can parse the results by reading the artifact files instead of relying on transient text.
+
+## Log destinations
+
+- **Streams first**: operational logs flow to stdout/stderr by default. Treat them as event streams, and do not rely on repo-local log files as the primary sink. When `emit_structured_log` is invoked without an explicit `log_path`, the output should go straight to the process streams; components may optionally duplicate entries into `runs/health/*.log` when downstream consumers still expect those files.
+- **Files remain durable artifacts**: snapshots, assessments, drilldowns, proposals, reviews, and history records stay in `runs/health/...` as file-backed artifacts. The console stream is the live signal, and the files are the durable records that help auditors replay what happened.
+- **Exceptions must be explicit**: any component still writing primarily to a repo-local log file must document the compatibility reason and confirm that stdout/stderr remains the main operational stream.
 
 ## Privacy and redaction rules
 
@@ -63,7 +69,7 @@ Additional helpful fields include `collector_version`, `target_labels` (comma-de
 
 ## Implementation notes (current reality)
 
-- `scripts/run_health_scheduler.py` now writes JSON logs into `runs/health/scheduler.log`. Each entry carries `component`, `severity`, `message`, `run_label`, `target_labels`, `command`, `event`, and `config_path`. This document is the source of truth for how we expect structured scheduler logs to look.
+- `scripts/run_health_scheduler.py` streams scheduler entries to stdout/stderr as the canonical sink and only mirrors them into `runs/health/scheduler.log` when `K9B_HEALTH_SCHEDULER_LOG_PATH` points at that file. Each entry carries `component`, `severity`, `message`, `run_label`, `target_labels`, `command`, `event`, and `config_path`. This document is the source of truth for how we expect structured scheduler logs to look.
 - Other modules that eventually adopt logging should follow the same schema: keep the JSON payload lean, include the required fields, and add artifact correlation keys when the log references a specific cluster, proposal, or artifact.
 
 Follow this policy when you touch logging in any component of the observability pipeline. When the policy does not cover an edge case, prefer the minimally sufficient change that keeps the logs actionable, private, and correlatable.

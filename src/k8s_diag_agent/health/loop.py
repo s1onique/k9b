@@ -83,6 +83,10 @@ def _safe_label(value: str) -> str:
 
 
 
+def _timestamped_console_line(message: str) -> str:
+    return f"[{datetime.now(UTC).isoformat()}] {message}"
+
+
 def _serialize_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _serialize_value(item) for key, item in value.items()}
@@ -2036,11 +2040,12 @@ class HealthLoopRunner:
         self._persist_history(history, directories["history"])
         review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
         if not self.quiet:
-            print(
+            summary = (
                 f"Health run '{self.run_label}' ({self.run_id}) produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
             )
+            print(_timestamped_console_line(summary))
             for message in self._collection_messages:
-                print(message)
+                print(_timestamped_console_line(message))
         self._log_event(
             "health-loop",
             "INFO",
@@ -2869,7 +2874,7 @@ def run_health_loop(
             log_path=DEFAULT_HEALTH_LOG,
             metadata={"config_path": str(config_path), "severity_reason": str(exc)},
         )
-        print(f"Unable to load health config {config_path}: {exc}")
+        print(_timestamped_console_line(f"Unable to load health config {config_path}: {exc}"))
         return 1, [], [], [], []
     try:
         contexts = list_kube_contexts()
@@ -2882,7 +2887,7 @@ def run_health_loop(
             log_path=DEFAULT_HEALTH_LOG,
             metadata={"severity_reason": str(exc)},
         )
-        print(f"Unable to discover kube contexts: {exc}")
+        print(_timestamped_console_line(f"Unable to discover kube contexts: {exc}"))
         return 1, [], [], [], []
     manual_overrides = _parse_manual_triggers(manual_triggers or [])
     manual_analysis_requests = _parse_manual_external_analysis_requests(
@@ -2971,7 +2976,7 @@ class HealthLoopScheduler:
                     break
                 run_executed = False
                 if not self._acquire_lock():
-                    print(f"Health run skipped because {self._lock_path} is locked.")
+                    print(_timestamped_console_line(f"Health run skipped because {self._lock_path} is locked."))
                     self._log_event(
                         "WARNING",
                         "Health run skipped because lock is held",
@@ -3026,7 +3031,7 @@ class HealthLoopScheduler:
                 event="interrupted",
                 reason="keyboard",
             )
-            print("Health scheduler interrupted; exiting.")
+            print(_timestamped_console_line("Health scheduler interrupted; exiting."))
             return 1
         self._log_event(
             "INFO",
@@ -3102,7 +3107,7 @@ def schedule_health_loop(
     try:
         config = HealthRunConfig.load(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        print(f"Unable to load health config {config_path}: {exc}")
+        print(_timestamped_console_line(f"Unable to load health config {config_path}: {exc}"))
         return 1
     scheduler = HealthLoopScheduler(
         config_path=config_path,

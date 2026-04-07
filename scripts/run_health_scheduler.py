@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_BIN = ROOT / ".venv" / "bin" / "python"
 DEFAULT_CONFIG = Path("runs/health-config.local.json")
-DEFAULT_LOG = ROOT / "runs" / "health" / "scheduler.log"
+SCHEDULER_LOG_ENV = "K9B_HEALTH_SCHEDULER_LOG_PATH"
 
 
 def _ensure_src_path_in_sys_path() -> None:
@@ -70,14 +70,17 @@ def _append_log(
 
     extra = dict(metadata or {})
     label = str(extra.pop("run_label", extra.get("run_id") or "health-scheduler"))
-    run_id = extra.pop("run_id", None)
+    raw_run_id = extra.pop("run_id", None)
+    run_id = str(raw_run_id) if raw_run_id is not None else None
+    log_path_value = os.environ.get(SCHEDULER_LOG_ENV)
+    log_path = Path(log_path_value) if log_path_value else None
     emit_structured_log(
         component="health-scheduler",
         message=message,
         severity=severity,
         run_label=label,
         run_id=run_id,
-        log_path=DEFAULT_LOG,
+        log_path=log_path,
         metadata=extra,
     )
 

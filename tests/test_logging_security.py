@@ -1,4 +1,6 @@
+import io
 import json
+import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -23,6 +25,7 @@ from k8s_diag_agent.health.loop import (
 )
 from k8s_diag_agent.llm.provider import build_assessment_input
 from k8s_diag_agent.security import sanitize_log_entry, sanitize_payload, sanitize_prompt
+from k8s_diag_agent.structured_logging import emit_structured_log
 from scripts import run_health_scheduler
 
 
@@ -47,6 +50,7 @@ class LoggingWorkflowTest(unittest.TestCase):
             manual_pairs=(),
             baseline_policy=baseline,
         )
+
         def collector(context: str) -> ClusterSnapshot:
             metadata = ClusterSnapshotMetadata(
                 cluster_id=context,
@@ -64,6 +68,7 @@ class LoggingWorkflowTest(unittest.TestCase):
                     (),
                 ),
             )
+
         runner = HealthLoopRunner(
             config,
             ("test-context",),
@@ -79,12 +84,28 @@ class LoggingWorkflowTest(unittest.TestCase):
         components = {entry["component"] for entry in entries}
         self.assertIn("health-loop", components)
 
+    def test_emit_structured_log_streams_to_stdout(self) -> None:
+        stream = io.StringIO()
+        with patch("k8s_diag_agent.structured_logging.DEFAULT_LOG_STREAM", stream):
+            emit_structured_log(
+                component="stream-test",
+                message="stdout check",
+                run_label="test-run",
+            )
+        lines = [line for line in stream.getvalue().splitlines() if line]
+        self.assertEqual(len(lines), 1)
+        entry = json.loads(lines[0])
+        self.assertEqual(entry["component"], "stream-test")
+        self.assertEqual(entry["message"], "stdout check")
+
 
 class SchedulerLoggingTest(unittest.TestCase):
-    def test_scheduler_uses_structured_schema(self) -> None:
-        tmp_dir = Path(tempfile.mkdtemp())
-        log_path = tmp_dir / "scheduler.log"
-        with patch.object(run_health_scheduler, "DEFAULT_LOG", log_path):
+    def test_scheduler_logs_stream_by_default(self) -> None:
+        stream = io.StringIO()
+        env_key = run_health_scheduler.SCHEDULER_LOG_ENV
+        with patch("k8s_diag_agent.structured_logging.DEFAULT_LOG_STREAM", stream), patch.dict(
+            os.environ, {env_key: ""}
+        ):
             run_health_scheduler._append_log(
                 "Scheduler test",
                 severity="WARNING",
@@ -94,12 +115,35 @@ class SchedulerLoggingTest(unittest.TestCase):
                     "authorization": "Bearer secret",
                 },
             )
-        self.assertTrue(log_path.exists())
-        entry = json.loads(log_path.read_text())
+        lines = [line for line in stream.getvalue().splitlines() if line]
+        self.assertEqual(len(lines), 1)
+        entry = json.loads(lines[0])
         self.assertEqual(entry["component"], "health-scheduler")
         self.assertEqual(entry["severity"], "WARNING")
         self.assertEqual(entry["run_label"], "scheduler-run")
         self.assertEqual(entry["run_id"], "run-123")
+        self.assertEqual(entry.get("authorization"), "<scrubbed>")
+
+    def test_scheduler_can_mirror_to_file_when_env_set(self) -> None:
+        tmp_dir = Path(tempfile.mkdtemp())
+        log_path = tmp_dir / "scheduler.log"
+        env_key = run_health_scheduler.SCHEDULER_LOG_ENV
+        with patch.dict(os.environ, {env_key: str(log_path)}):
+            run_health_scheduler._append_log(
+                "Scheduler test",
+                severity="INFO",
+                metadata={
+                    "run_label": "scheduler-run-2",
+                    "run_id": "run-456",
+                    "authorization": "Bearer secret",
+                },
+            )
+        self.assertTrue(log_path.exists())
+        entry = json.loads(log_path.read_text())
+        self.assertEqual(entry["component"], "health-scheduler")
+        self.assertEqual(entry["severity"], "INFO")
+        self.assertEqual(entry["run_label"], "scheduler-run-2")
+        self.assertEqual(entry["run_id"], "run-456")
         self.assertEqual(entry.get("authorization"), "<scrubbed>")
 
 
