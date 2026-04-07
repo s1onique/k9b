@@ -69,6 +69,7 @@ from .ui import (
     _serialize_review_enrichment_policy,
     write_health_ui_index,
 )
+from .freshness import freshness_status
 from .utils import normalize_ref
 from .validators import (
     ComparisonDecisionValidator,
@@ -1964,6 +1965,7 @@ class HealthLoopRunner:
         drilldown_collector: DrilldownCollector | None = None,
         image_pull_secret_inspector: ImagePullSecretInspector | None = None,
         quiet: bool = False,
+        expected_scheduler_interval_seconds: int | None = None,
     ) -> None:
         self.config = config
         self.available_contexts = set(available_contexts)
@@ -1994,6 +1996,7 @@ class HealthLoopRunner:
         self._manual_external_analysis_requests = tuple(manual_analysis)
         self._latest_external_artifacts: list[ExternalAnalysisArtifact] = []
         self._notification_records: list[tuple[NotificationArtifact, Path]] = []
+        self._expected_scheduler_interval_seconds = expected_scheduler_interval_seconds
 
     def _log_event(self, component: str, severity: str, message: str, **metadata: Any) -> None:
         emit_structured_log(
@@ -2061,6 +2064,7 @@ class HealthLoopRunner:
             drilldown_count=len(drilldowns),
             external_analysis_count=len(external_artifacts),
         )
+        self._prune_external_analysis_history(directories["external_analysis"])
         try:
             write_health_ui_index(
                 directories["root"],
@@ -2075,6 +2079,7 @@ class HealthLoopRunner:
                 self._notification_records,
                 external_analysis_settings=self.config.external_analysis,
                 available_adapters=self._analysis_adapters.keys(),
+                expected_scheduler_interval_seconds=self._expected_scheduler_interval_seconds,
             )
         except Exception as exc:
             self._log_event(
@@ -2107,6 +2112,71 @@ class HealthLoopRunner:
                 continue
             path.mkdir(parents=True, exist_ok=True)
         return subdirs
+
+    def _prune_external_analysis_history(self, directory: Path) -> None:
+        retention = self.config.external_analysis.retention
+        if retention.max_artifacts is None and retention.max_age_days is None:
+            return
+        files: list[tuple[Path, float]] = []
+        prefix = f"{self.run_id}-"
+        for path in directory.glob("*.json"):
+            if not path.is_file() or path.name.startswith(prefix):
+                continue
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            files.append((path, mtime))
+        if not files:
+            return
+        files.sort(key=lambda item: item[1])
+        now = datetime.now(UTC)
+        candidates = files.copy()
+        to_delete: list[Path] = []
+        if retention.max_age_days is not None:
+            threshold_seconds = retention.max_age_days * 86400
+            survivors: list[tuple[Path, float]] = []
+            for path, mtime in candidates:
+                age_seconds = (now - datetime.fromtimestamp(mtime, UTC)).total_seconds()
+                if age_seconds > threshold_seconds:
+                    to_delete.append(path)
+                else:
+                    survivors.append((path, mtime))
+            candidates = survivors
+        if retention.max_artifacts is not None and len(candidates) > retention.max_artifacts:
+            excess = len(candidates) - retention.max_artifacts
+            to_delete.extend(path for path, _ in candidates[:excess])
+            candidates = candidates[excess:]
+        deleted: list[str] = []
+        for path in to_delete:
+            try:
+                path.unlink()
+                deleted.append(path.name)
+            except OSError as exc:
+                self._log_event(
+                    "health-loop",
+                    "WARNING",
+                    "Failed to remove retained external analysis artifact",
+                    artifact_path=str(path),
+                    severity_reason=str(exc),
+                    event="external-analysis-retention-failed",
+                )
+        if deleted:
+            metadata = {
+                "deleted_count": len(deleted),
+                "deleted_paths": deleted[:5],
+                "retention_policy": {
+                    "max_artifacts": retention.max_artifacts,
+                    "max_age_days": retention.max_age_days,
+                },
+            }
+            self._log_event(
+                "health-loop",
+                "INFO",
+                "External analysis retention pruned old artifacts",
+                event="external-analysis-retention",
+                **metadata,
+            )
 
     def _collect_snapshots(self, directory: Path) -> list[HealthSnapshotRecord]:
         records: list[HealthSnapshotRecord] = []
@@ -2513,6 +2583,7 @@ class HealthLoopRunner:
             duration_ms = int((time.perf_counter() - start) * 1000)
             artifact = replace(
                 artifact,
+                run_id=self.run_id,
                 artifact_path=str(artifact_path),
                 provider=provider,
                 duration_ms=duration_ms,
@@ -3065,6 +3136,7 @@ def run_health_loop(
     manual_external_analysis: Sequence[str] | None = None,
     quiet: bool = False,
     drilldown_collector: DrilldownCollector | None = None,
+    expected_scheduler_interval_seconds: int | None = None,
 ) -> tuple[
     int,
     list[HealthAssessmentArtifact],
@@ -3109,6 +3181,7 @@ def run_health_loop(
         manual_external_analysis=manual_analysis_requests,
         quiet=quiet,
         drilldown_collector=drilldown_collector,
+        expected_scheduler_interval_seconds=expected_scheduler_interval_seconds,
     )
     assessments, triggers, drilldowns = runner.execute()
     external_artifacts = runner.latest_external_artifacts
@@ -3144,6 +3217,7 @@ class HealthLoopScheduler:
         self._lock_path = output_dir / "health" / _HEALTH_LOCK_FILENAME
         self._run_label = run_label or "health-scheduler"
         self._log_path = output_dir / "health" / "scheduler.log"
+        self._last_run_finish_time: float | None = None
 
     def _log_event(self, severity: str, message: str, **metadata: Any) -> None:
         emit_structured_log(
@@ -3193,6 +3267,12 @@ class HealthLoopScheduler:
                     )
                 else:
                     try:
+                        run_start_time = time.time()
+                        freshness_age_seconds = (
+                            run_start_time - self._last_run_finish_time
+                            if self._last_run_finish_time is not None
+                            else None
+                        )
                         (
                             exit_code,
                             assessments,
@@ -3206,6 +3286,7 @@ class HealthLoopScheduler:
                             manual_drilldown_contexts=self._manual_drilldown_contexts,
                             manual_external_analysis=self._manual_external_analysis,
                             quiet=self._quiet,
+                            expected_scheduler_interval_seconds=self._interval_seconds,
                         )
                         run_id = self._resolve_run_id(assessments, triggers)
                         run_executed = True
@@ -3226,7 +3307,10 @@ class HealthLoopScheduler:
                             drilldowns,
                             external_artifacts,
                             settings,
+                            freshness_age_seconds=freshness_age_seconds,
+                            expected_interval_seconds=self._interval_seconds,
                         )
+                        self._last_run_finish_time = time.time()
                     finally:
                         self._release_lock()
                 if not run_executed and self._run_once:
@@ -3336,6 +3420,8 @@ class HealthLoopScheduler:
         drilldowns: list[DrilldownArtifact],
         external_analysis: list[ExternalAnalysisArtifact],
         settings: ExternalAnalysisSettings,
+        freshness_age_seconds: float | None = None,
+        expected_interval_seconds: int | None = None,
     ) -> None:
         run_id = self._resolve_run_id(assessments, triggers)
         healthy_count = sum(
@@ -3349,18 +3435,29 @@ class HealthLoopScheduler:
             drilldowns,
             review_config,
         )
+        metadata: dict[str, object] = {
+            "run_id": run_id,
+            "assessment_count": len(assessments),
+            "healthy_count": healthy_count,
+            "degraded_count": degraded_count,
+            "trigger_count": len(triggers),
+            "drilldown_count": len(drilldowns),
+            "external_analysis_count": len(external_analysis),
+            "provider_execution": provider_execution,
+            "event": "run-summary",
+        }
+        if expected_interval_seconds is not None:
+            metadata["expected_interval_seconds"] = expected_interval_seconds
+            if freshness_age_seconds is not None:
+                age_value = int(max(0.0, freshness_age_seconds))
+                metadata["freshness_age_seconds"] = age_value
+                status = freshness_status(age_value, expected_interval_seconds)
+                if status:
+                    metadata["freshness_status"] = status
         self._log_event(
             "INFO",
             "Health run summary",
-            run_id=run_id,
-            assessment_count=len(assessments),
-            healthy_count=healthy_count,
-            degraded_count=degraded_count,
-            trigger_count=len(triggers),
-            drilldown_count=len(drilldowns),
-            external_analysis_count=len(external_analysis),
-            provider_execution=provider_execution,
-            event="run-summary",
+            **metadata,
         )
 
 

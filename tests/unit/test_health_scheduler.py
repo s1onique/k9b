@@ -134,3 +134,20 @@ class HealthSchedulerTests(unittest.TestCase):
         self.assertIsInstance(provider_execution, dict)
         self.assertIn("auto_drilldown", provider_execution)
         self.assertIn("review_enrichment", provider_execution)
+
+    def test_log_run_summary_reports_freshness_status(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=10, max_runs=1, run_once=False)
+        with patch.object(scheduler, "_log_event") as log_mock:
+            scheduler._log_run_summary(
+                assessments=[],
+                triggers=[],
+                drilldowns=[],
+                external_analysis=[],
+                settings=ExternalAnalysisSettings(),
+                freshness_age_seconds=25,
+                expected_interval_seconds=10,
+            )
+        metadata = log_mock.call_args.kwargs
+        self.assertEqual(metadata.get("freshness_age_seconds"), 25)
+        self.assertEqual(metadata.get("expected_interval_seconds"), 10)
+        self.assertEqual(metadata.get("freshness_status"), "stale")

@@ -1,6 +1,23 @@
-import unittest
+from datetime import datetime, timedelta, timezone
 
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from k8s_diag_agent.external_analysis.artifact import (
+    ExternalAnalysisArtifact,
+    ExternalAnalysisPurpose,
+    ExternalAnalysisStatus,
+    write_external_analysis_artifact,
+)
+from k8s_diag_agent.external_analysis.config import (
+    ExternalAnalysisSettings,
+    ReviewEnrichmentPolicy,
+)
+from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.ui.api import (
+    _build_freshness_payload,
     build_cluster_detail_payload,
     build_fleet_payload,
     build_notifications_payload,
@@ -71,6 +88,115 @@ class UIApiTests(unittest.TestCase):
         review_exec = provider_execution.get("reviewEnrichment") or {}
         self.assertEqual(review_exec.get("eligible"), 1)
         self.assertEqual(review_exec.get("attempted"), 1)
+
+    def test_run_payload_includes_freshness(self) -> None:
+        payload = build_run_payload(self.context)
+        freshness = payload.get("freshness")
+        self.assertIsNotNone(freshness)
+        assert freshness is not None
+        self.assertEqual(freshness.get("expectedIntervalSeconds"), 300)
+        self.assertIsInstance(freshness.get("ageSeconds"), int)
+        self.assertIn(freshness.get("status"), ("fresh", "delayed", "stale", None))
+
+    def test_run_payload_reconstructs_review_enrichment_from_artifact_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs" / "health"
+            runs_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = runs_dir / "external-analysis" / "status-run-review-enrichment-llamacpp.json"
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            artifact = ExternalAnalysisArtifact(
+                tool_name="llamacpp",
+                run_id="",
+                cluster_label="status-run",
+                run_label="status-run",
+                summary="Path match",
+                status=ExternalAnalysisStatus.SUCCESS,
+                artifact_path=str(artifact_path),
+                provider="llamacpp",
+                timestamp=datetime.now(timezone.utc),
+                duration_ms=120,
+                purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            )
+            write_external_analysis_artifact(artifact_path, artifact)
+            settings = ExternalAnalysisSettings(
+                review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+            )
+            index_path = write_health_ui_index(
+                runs_dir,
+                run_id="status-run",
+                run_label="status-run",
+                collector_version="tests",
+                records=(),
+                assessments=(),
+                drilldowns=(),
+                proposals=(),
+                external_analysis=(artifact,),
+                notifications=(),
+                external_analysis_settings=settings,
+            )
+            raw_index = json.loads(index_path.read_text(encoding="utf-8"))
+            context = build_ui_context(raw_index)
+            payload = build_run_payload(context)
+            review_enrichment = payload.get("reviewEnrichment")
+            self.assertIsNotNone(review_enrichment)
+            assert isinstance(review_enrichment, dict)
+            self.assertEqual(review_enrichment["status"], "success")
+            self.assertIsNone(payload.get("reviewEnrichmentStatus"))
+
+    def test_run_payload_prefers_run_id_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs" / "health"
+            runs_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = runs_dir / "external-analysis" / "odd-path.json"
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            artifact = ExternalAnalysisArtifact(
+                tool_name="llamacpp",
+                run_id="status-run",
+                cluster_label="status-run",
+                run_label="status-run",
+                summary="Run ID match",
+                status=ExternalAnalysisStatus.SUCCESS,
+                artifact_path=str(artifact_path),
+                provider="llamacpp",
+                timestamp=datetime.now(timezone.utc),
+                duration_ms=130,
+                purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            )
+            write_external_analysis_artifact(artifact_path, artifact)
+            settings = ExternalAnalysisSettings(
+                review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+            )
+            index_path = write_health_ui_index(
+                runs_dir,
+                run_id="status-run",
+                run_label="status-run",
+                collector_version="tests",
+                records=(),
+                assessments=(),
+                drilldowns=(),
+                proposals=(),
+                external_analysis=(artifact,),
+                notifications=(),
+                external_analysis_settings=settings,
+            )
+            raw_index = json.loads(index_path.read_text(encoding="utf-8"))
+            context = build_ui_context(raw_index)
+            payload = build_run_payload(context)
+            review_enrichment = payload.get("reviewEnrichment")
+            self.assertIsNotNone(review_enrichment)
+            assert isinstance(review_enrichment, dict)
+            self.assertEqual(review_enrichment.get("status"), "success")
+            self.assertEqual(review_enrichment.get("summary"), "Run ID match")
+            self.assertIsNone(payload.get("reviewEnrichmentStatus"))
+
+    def test_freshness_helper_computes_statuses(self) -> None:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        payload = _build_freshness_payload("2026-01-01T00:00:00+00:00", 300, now=base + timedelta(seconds=200))
+        self.assertEqual(payload["status"], "fresh")
+        payload = _build_freshness_payload("2026-01-01T00:00:00+00:00", 300, now=base + timedelta(seconds=500))
+        self.assertEqual(payload["status"], "delayed")
+        payload = _build_freshness_payload("2026-01-01T00:00:00+00:00", 300, now=base + timedelta(seconds=1300))
+        self.assertEqual(payload["status"], "stale")
 
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)

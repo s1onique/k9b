@@ -20,6 +20,7 @@ class RunView:
     proposal_count: int
     external_analysis_count: int
     notification_count: int
+    scheduler_interval_seconds: int | None
     run_stats: RunStatsView
     llm_stats: LLMStatsView
     historical_llm_stats: LLMStatsView | None
@@ -368,6 +369,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         proposal_count=_coerce_int(run_data.get("proposal_count")),
         external_analysis_count=_coerce_int(run_data.get("external_analysis_count")),
         notification_count=_coerce_int(run_data.get("notification_count")),
+        scheduler_interval_seconds=_coerce_optional_int(run_data.get("scheduler_interval_seconds")),
         run_stats=_build_run_stats_view(index.get("run_stats")),
         llm_stats=_build_llm_stats_view(run_data.get("llm_stats")),
         historical_llm_stats=_build_optional_llm_stats_view(run_data.get("historical_llm_stats")),

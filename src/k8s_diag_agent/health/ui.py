@@ -139,6 +139,7 @@ def write_health_ui_index(
     notifications: Sequence[NotificationRecord] = (),
     external_analysis_settings: ExternalAnalysisSettings | None = None,
     available_adapters: Iterable[str] | None = None,
+    expected_scheduler_interval_seconds: int | None = None,
 ) -> Path:
     assessment_map = {artifact.label: artifact for artifact in assessments}
     drilldown_map = _latest_drilldown_map(drilldowns)
@@ -205,6 +206,7 @@ def write_health_ui_index(
         "review_enrichment": review_enrichment_entry,
         "review_enrichment_config": review_config,
         "review_enrichment_status": review_status,
+        "scheduler_interval_seconds": expected_scheduler_interval_seconds,
     }
     index = {
         "run": run_entry,
@@ -443,10 +445,23 @@ def _find_review_enrichment_artifact(
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         if (
             artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
-            and artifact.run_id == run_id
+            and _artifact_matches_run(artifact, run_id)
         ):
             return artifact
     return None
+
+
+def _artifact_matches_run(artifact: ExternalAnalysisArtifact, run_id: str) -> bool:
+    if artifact.run_id == run_id:
+        return True
+    artifact_path = artifact.artifact_path
+    if not artifact_path:
+        return False
+    try:
+        candidate = Path(str(artifact_path)).name
+    except Exception:
+        return False
+    return candidate.startswith(f"{run_id}-")
 
 
 def _build_review_enrichment_status(

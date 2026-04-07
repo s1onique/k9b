@@ -13,6 +13,7 @@ def sample_ui_index() -> Mapping[str, object]:
             "proposal_count": 1,
             "external_analysis_count": 3,
             "notification_count": 1,
+            "scheduler_interval_seconds": 300,
             "llm_stats": {
                 "totalCalls": 3,
                 "successfulCalls": 2,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TypedDict
 
 from .model import (
@@ -26,6 +27,7 @@ from .model import (
     RunStatsView,
     UIIndexContext,
 )
+from ..health.freshness import freshness_status
 
 
 class ArtifactLink(TypedDict):
@@ -36,6 +38,12 @@ class ArtifactLink(TypedDict):
 class ProblemSummary(TypedDict):
     title: str
     detail: str
+
+
+class FreshnessPayload(TypedDict, total=False):
+    ageSeconds: int | None
+    expectedIntervalSeconds: int | None
+    status: str | None
 
 
 class RunPayload(TypedDict):
@@ -57,6 +65,7 @@ class RunPayload(TypedDict):
     reviewEnrichment: ReviewEnrichmentPayload | None
     reviewEnrichmentStatus: ReviewEnrichmentStatusPayload | None
     providerExecution: ProviderExecutionPayload | None
+    freshness: FreshnessPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -375,6 +384,9 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
             context.run.review_enrichment_status
         ),
         "providerExecution": _serialize_provider_execution(context.run.provider_execution),
+        "freshness": _build_freshness_payload(
+            context.run.timestamp, context.run.scheduler_interval_seconds
+        ),
     }
 
 
@@ -456,6 +468,29 @@ def _collect_run_artifacts(context: UIIndexContext) -> list[ArtifactLink]:
             if entry.artifact_path:
                 artifacts.append({"label": f"Drilldown: {entry.label}", "path": entry.artifact_path})
     return artifacts
+
+
+def _build_freshness_payload(
+    timestamp_value: str | None,
+    expected_interval_seconds: int | None,
+    *,
+    now: datetime | None = None,
+) -> FreshnessPayload | None:
+    if not timestamp_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(timestamp_value)
+    except ValueError:
+        return None
+    now_value = now or datetime.now(timezone.utc)
+    age_seconds = int(max(0, (now_value - parsed).total_seconds()))
+    status = freshness_status(age_seconds, expected_interval_seconds)
+    payload: FreshnessPayload = {
+        "ageSeconds": age_seconds,
+        "expectedIntervalSeconds": expected_interval_seconds,
+        "status": status,
+    }
+    return payload
 
 
 def _serialize_run_stats(stats: RunStatsView) -> RunStatsPayload:

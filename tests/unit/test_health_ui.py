@@ -803,6 +803,87 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(enrichment["skipReason"], "Adapter missing")
         self.assertEqual(enrichment.get("provider"), "llamacpp")
 
+    def test_review_enrichment_matches_artifact_path_when_run_id_missing(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_path = output_dir / "external-analysis" / "status-run-review-enrichment-llamacpp.json"
+        artifact = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="",
+            cluster_label="status-run",
+            run_label="status-run",
+            summary="Path match",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=str(artifact_path),
+            provider="llamacpp",
+            timestamp=datetime.now(UTC),
+            duration_ms=100,
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+        )
+        write_external_analysis_artifact(artifact_path, artifact)
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="status-run",
+            run_label="status-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=(artifact,),
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = cast(dict[str, object], json.loads(index_path.read_text(encoding="utf-8")))
+        run_entry = cast(dict[str, object], data["run"])
+        enrichment = run_entry.get("review_enrichment")
+        self.assertIsNotNone(enrichment)
+        self.assertIsNone(run_entry.get("review_enrichment_status"))
+
+    def test_review_enrichment_prefers_run_id_when_present(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_path = output_dir / "external-analysis" / "odd-path.json"
+        artifact = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="status-run",
+            cluster_label="status-run",
+            run_label="status-run",
+            summary="Run ID match",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=str(artifact_path),
+            provider="llamacpp",
+            timestamp=datetime.now(UTC),
+            duration_ms=120,
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+        )
+        write_external_analysis_artifact(artifact_path, artifact)
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="status-run",
+            run_label="status-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=(artifact,),
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = cast(dict[str, object], json.loads(index_path.read_text(encoding="utf-8")))
+        run_entry = cast(dict[str, object], data["run"])
+        enrichment = run_entry.get("review_enrichment")
+        self.assertIsNotNone(enrichment)
+        self.assertEqual(enrichment.get("status"), "success")
+        self.assertEqual(enrichment.get("summary"), "Run ID match")
+        self.assertEqual(enrichment.get("artifactPath"), "external-analysis/odd-path.json")
+        self.assertIsNone(run_entry.get("review_enrichment_status"))
+
     def test_review_enrichment_reflects_failed_artifact(self) -> None:
         settings = ExternalAnalysisSettings(
             review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")

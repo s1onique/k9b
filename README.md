@@ -131,6 +131,8 @@ Every run also gathers lightweight health signals (node readiness/pressure count
 
  Keeping the scheduler, backend, and frontend running together gives you a shifting production-like loop: the scheduler continuously collects evidence, the backend serves the updated artifacts, and the frontend renders the compact fleet dashboard plus selection-driven cluster detail without introducing a new persistence layer.
 
+The scheduler's run-summary entries now emit `freshness_age_seconds`, `expected_interval_seconds`, and `freshness_status` so you can see whether runs are keeping up with the configured cadence, and the UI surfaces a matching `freshness` field derived from the scheduler interval and the last run timestamp.
+
 
 ### One-shot health run workflow
 
@@ -234,3 +236,5 @@ The health loop can optionally run an advisory provider-assisted review enrichme
 Enable it by extending `runs/health-config.local.json` with the `external_analysis.review_enrichment` block (the bundled example already declares `auto_drilldown` and `review_enrichment` alongside `external_analysis.adapters`). Flip `review_enrichment.enabled` to `true` and point `review_enrichment.provider` at the same adapter you enabled in `external_analysis.adapters` (for example `llamacpp`). The same `LLAMA_CPP_*` environment variables described above secure the llama.cpp adapter you register.
 
 When enabled, each run writes `runs/health/external-analysis/{run_id}-review-enrichment-{provider}.json` with the enrichment payload and records success/failure/skipped status in the UI. The Review enrichment panel highlights the status pill, surfaces `skipReason` when the provider is unavailable, and reports `errorSummary` when the request fails. Skipped or failed enrichment runs do not block the deterministic health review or proposal flow.
+
+To keep the external-analysis archive from growing without bounds, the `external_analysis` block accepts an optional `retention` object. Specify `max_artifacts` to keep only the most recent N JSON artifacts and/or `max_age_days` to drop any file older than the given window; retention only prunes historical files so the current run stays intact, and the `llmStats`/`llmActivity` slices simply reflect whatever artifacts remain on disk.

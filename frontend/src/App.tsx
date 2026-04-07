@@ -491,15 +491,17 @@ const reviewEnrichmentStatusMessage = (status?: ReviewEnrichmentStatus) => {
 };
 
 const ReviewEnrichmentPanel = ({
-  enrichment,
+  reviewEnrichment,
   reviewEnrichmentStatus,
 }: {
-  enrichment: RunPayload["reviewEnrichment"] | undefined;
+  reviewEnrichment: RunPayload["reviewEnrichment"] | undefined;
   reviewEnrichmentStatus: RunPayload["reviewEnrichmentStatus"] | undefined;
 }) => {
   const status =
-    enrichment?.status || reviewEnrichmentStatus?.status || "pending";
-  const artifactLink = enrichment?.artifactPath ? artifactUrl(enrichment.artifactPath) : null;
+    reviewEnrichment?.status || reviewEnrichmentStatus?.status || "pending";
+  const artifactLink = reviewEnrichment?.artifactPath
+    ? artifactUrl(reviewEnrichment.artifactPath)
+    : null;
   const runConfigDescription = () => {
     if (!reviewEnrichmentStatus) {
       return null;
@@ -527,27 +529,32 @@ const ReviewEnrichmentPanel = ({
         </div>
         <span className={`status-pill ${statusClass(status)}`}>{status}</span>
       </div>
-      {enrichment ? (
+      {reviewEnrichment ? (
         <div className="review-enrichment-body">
           <p className="small">
-            {enrichment.provider ? `Provider ${enrichment.provider}` : "Provider unspecified"} ·{' '}
-            {enrichment.timestamp ? formatTimestamp(enrichment.timestamp) : "Timestamp unavailable"}
+            {reviewEnrichment.provider
+              ? `Provider ${reviewEnrichment.provider}`
+              : "Provider unspecified"}{' '}
+            ·{' '}
+            {reviewEnrichment.timestamp
+              ? formatTimestamp(reviewEnrichment.timestamp)
+              : "Timestamp unavailable"}
           </p>
           <p className="review-enrichment-summary">
-            {enrichment.summary || "No advisory summary was generated."}
+            {reviewEnrichment.summary || "No advisory summary was generated."}
           </p>
           <div className="review-enrichment-grid">
-            <ReviewEnrichmentList title="Triage order" entries={enrichment.triageOrder} />
-            <ReviewEnrichmentList title="Top concerns" entries={enrichment.topConcerns} />
-            <ReviewEnrichmentList title="Evidence gaps" entries={enrichment.evidenceGaps} />
-            <ReviewEnrichmentList title="Next checks" entries={enrichment.nextChecks} />
-            <ReviewEnrichmentList title="Focus notes" entries={enrichment.focusNotes} />
+            <ReviewEnrichmentList title="Triage order" entries={reviewEnrichment.triageOrder} />
+            <ReviewEnrichmentList title="Top concerns" entries={reviewEnrichment.topConcerns} />
+            <ReviewEnrichmentList title="Evidence gaps" entries={reviewEnrichment.evidenceGaps} />
+            <ReviewEnrichmentList title="Next checks" entries={reviewEnrichment.nextChecks} />
+            <ReviewEnrichmentList title="Focus notes" entries={reviewEnrichment.focusNotes} />
           </div>
-          {enrichment.errorSummary ? (
-            <p className="small muted">Error: {enrichment.errorSummary}</p>
+          {reviewEnrichment.errorSummary ? (
+            <p className="small muted">Error: {reviewEnrichment.errorSummary}</p>
           ) : null}
-          {enrichment.skipReason ? (
-            <p className="small muted">Skipped because {enrichment.skipReason}</p>
+          {reviewEnrichment.skipReason ? (
+            <p className="small muted">Skipped because {reviewEnrichment.skipReason}</p>
           ) : null}
           {artifactLink ? (
             <a className="link" href={artifactLink} target="_blank" rel="noreferrer">

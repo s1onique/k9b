@@ -1,8 +1,9 @@
 import json
+import os
 import shutil
 import unittest
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
@@ -21,6 +22,7 @@ from k8s_diag_agent.external_analysis.artifact import (
 )
 from k8s_diag_agent.external_analysis.config import (
     AutoDrilldownPolicy,
+    ExternalAnalysisRetention,
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
@@ -1756,3 +1758,89 @@ class HealthLoopTests(unittest.TestCase):
         self.assertEqual(round_trip.warning_events[0].reason, warning.reason)
         self.assertEqual(round_trip.non_running_pods[0].name, pod.name)
         self.assertEqual(round_trip.rollout_status[0].name, rollout.name)
+
+    def test_external_analysis_retention_prunes_by_age(self) -> None:
+        config = HealthRunConfig(
+            run_label="retention-age",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(HealthTarget(
+                context="cluster-a",
+                label="cluster-a",
+                monitor_health=True,
+                watched_helm_releases=(),
+                watched_crd_families=(),
+                cluster_class="prod",
+                cluster_role="primary",
+                baseline_cohort="fleet",
+            ),),
+            peers=(),
+            trigger_policy=TriggerPolicy(False, False, False, False, False, False),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+            external_analysis=ExternalAnalysisSettings(
+                retention=ExternalAnalysisRetention(max_age_days=1)
+            ),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=("cluster-a",),
+            quiet=True,
+        )
+        directory = self.tmp_dir / "health" / "external-analysis"
+        directory.mkdir(parents=True, exist_ok=True)
+        old = directory / "old.json"
+        old.write_text("{}", encoding="utf-8")
+        old_time = (datetime.now(UTC) - timedelta(days=5)).timestamp()
+        os.utime(old, (old_time, old_time))
+        recent = directory / "recent.json"
+        recent.write_text("{}", encoding="utf-8")
+        os.utime(recent, (datetime.now(UTC).timestamp(),) * 2)
+        runner._prune_external_analysis_history(directory)
+        self.assertFalse(old.exists())
+        self.assertTrue(recent.exists())
+
+    def test_external_analysis_retention_limits_count_and_preserves_current_run(self) -> None:
+        config = HealthRunConfig(
+            run_label="retention-count",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(HealthTarget(
+                context="cluster-a",
+                label="cluster-a",
+                monitor_health=True,
+                watched_helm_releases=(),
+                watched_crd_families=(),
+                cluster_class="prod",
+                cluster_role="primary",
+                baseline_cohort="fleet",
+            ),),
+            peers=(),
+            trigger_policy=TriggerPolicy(False, False, False, False, False, False),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+            external_analysis=ExternalAnalysisSettings(
+                retention=ExternalAnalysisRetention(max_artifacts=2)
+            ),
+        )
+        runner = HealthLoopRunner(
+            config,
+            available_contexts=("cluster-a",),
+            quiet=True,
+        )
+        directory = self.tmp_dir / "health" / "external-analysis"
+        directory.mkdir(parents=True, exist_ok=True)
+        for idx, seconds_ago in enumerate((30, 20, 10), start=1):
+            path = directory / f"history-{idx}.json"
+            path.write_text("{}", encoding="utf-8")
+            timestamp = (datetime.now(UTC) - timedelta(seconds=seconds_ago)).timestamp()
+            os.utime(path, (timestamp, timestamp))
+        current = directory / f"{runner.run_id}-protected.json"
+        current.write_text("{}", encoding="utf-8")
+        now_timestamp = datetime.now(UTC).timestamp()
+        os.utime(current, (now_timestamp, now_timestamp))
+        runner._prune_external_analysis_history(directory)
+        remaining = list(directory.glob("*.json"))
+        self.assertIn(current, remaining)
+        non_run_files = [p for p in remaining if not p.name.startswith(f"{runner.run_id}-")]
+        self.assertEqual(len(non_run_files), 2)

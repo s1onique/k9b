@@ -33,6 +33,7 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(context.external_analysis.count, 3)
         self.assertEqual(context.run.external_analysis_count, 3)
         self.assertEqual(context.run.notification_count, 1)
+        self.assertEqual(context.run.scheduler_interval_seconds, 300)
         self.assertIsNotNone(context.latest_assessment)
         assessment = cast(AssessmentView, context.latest_assessment)
         self.assertEqual(assessment.cluster_label, "cluster-a")

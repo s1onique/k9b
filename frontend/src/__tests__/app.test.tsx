@@ -135,7 +135,18 @@ describe("App", () => {
   });
 
   test("renders review enrichment panel status message", async () => {
-    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const pendingRun = {
+      ...sampleRun,
+      reviewEnrichment: undefined,
+      reviewEnrichmentStatus: undefined,
+    };
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultPayloads,
+        "/api/run": pendingRun,
+      })
+    );
     render(<App />);
 
     const heading = await screen.findByRole("heading", {
@@ -246,6 +257,24 @@ describe("App", () => {
     });
     expect(screen.getByText(/Provider llamacpp/i)).toBeInTheDocument();
     expect(screen.getByText(/Run configuration enabled \(llamacpp\)/i)).toBeInTheDocument();
+  });
+
+  test("renders review enrichment details when enrichment data exists", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", {
+      name: /Provider-assisted advisory/i,
+    });
+    expect(screen.getByText(/Review enrichment reshaped the triage order/i)).toBeInTheDocument();
+    expect(screen.getByText(/Provider k8sgpt/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /View enrichment artifact/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Provider-assisted review enrichment is not configured/i)
+    ).toBeNull();
+    expect(screen.queryByText(/Provider unspecified/i)).toBeNull();
   });
 
   test("renders provider execution panel", async () => {

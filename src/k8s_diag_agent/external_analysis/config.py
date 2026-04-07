@@ -28,6 +28,12 @@ class ReviewEnrichmentPolicy:
 
 
 @dataclass(frozen=True)
+class ExternalAnalysisRetention:
+    max_artifacts: int | None = None
+    max_age_days: float | None = None
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisAdapterConfig:
     name: str
     enabled: bool = True
@@ -40,6 +46,7 @@ class ExternalAnalysisSettings:
     auto_drilldown: AutoDrilldownPolicy = field(default_factory=AutoDrilldownPolicy)
     review_enrichment: ReviewEnrichmentPolicy = field(default_factory=ReviewEnrichmentPolicy)
     adapters: tuple[ExternalAnalysisAdapterConfig, ...] = field(default_factory=tuple)
+    retention: ExternalAnalysisRetention = field(default_factory=ExternalAnalysisRetention)
 
 
 def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalAnalysisSettings:
@@ -72,6 +79,29 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
         enabled=bool(review_raw.get("enabled", False)),
         provider=str(review_raw.get("provider")) if review_raw.get("provider") else None,
     )
+    retention_raw = raw.get("retention") or {}
+    max_artifacts: int | None = None
+    max_artifacts_raw = retention_raw.get("max_artifacts")
+    if max_artifacts_raw is not None:
+        try:
+            candidate = int(max_artifacts_raw)
+        except (ValueError, TypeError):
+            candidate = 0
+        if candidate >= 0:
+            max_artifacts = candidate
+    max_age_days: float | None = None
+    max_age_raw = retention_raw.get("max_age_days")
+    if max_age_raw is not None:
+        try:
+            parsed_age = float(max_age_raw)
+        except (ValueError, TypeError):
+            parsed_age = 0.0
+        if parsed_age >= 0:
+            max_age_days = parsed_age
+    retention = ExternalAnalysisRetention(
+        max_artifacts=max_artifacts,
+        max_age_days=max_age_days,
+    )
     adapters_raw = raw.get("adapters") or []
     configs: list[ExternalAnalysisAdapterConfig] = []
     if isinstance(adapters_raw, Sequence):
@@ -99,4 +129,5 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
         auto_drilldown=auto_drilldown,
         review_enrichment=review_enrichment,
         adapters=tuple(configs),
+        retention=retention,
     )
