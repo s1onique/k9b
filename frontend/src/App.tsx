@@ -19,6 +19,7 @@ import type {
   ProposalEntry,
   ProposalsPayload,
   RunPayload,
+  LLMStats,
 } from "./types";
 import "./index.css";
 
@@ -71,6 +72,46 @@ const formatLatency = (value: number | null | undefined) => {
     return "—";
   }
   return `${Math.round(value)}ms`;
+};
+
+const getLlmScopeLabel = (scope?: string | null) =>
+  scope === "retained_history" ? "Historical LLM" : "Run LLM";
+
+const buildLlmStatEntries = (stats: LLMStats) => {
+  const scopeLabel = getLlmScopeLabel(stats.scope ?? null);
+  const lastCallValue = stats.lastCallTimestamp ? relativeRecency(stats.lastCallTimestamp) : "—";
+  return [
+    { label: `${scopeLabel} calls`, value: String(stats.totalCalls) },
+    { label: "OK", value: String(stats.successfulCalls) },
+    { label: "Failed", value: String(stats.failedCalls) },
+    { label: "P50", value: formatLatency(stats.p50LatencyMs) },
+    { label: "P95", value: formatLatency(stats.p95LatencyMs) },
+    { label: "P99", value: formatLatency(stats.p99LatencyMs) },
+    { label: "Last call", value: lastCallValue },
+  ];
+};
+
+const renderLlmStatsLine = (stats: LLMStats, modifier?: string) => {
+  const entries = buildLlmStatEntries(stats);
+  const classNames = [
+    "run-header-inline-stats",
+    "llm-stats-line",
+    "muted",
+    "small",
+    modifier,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <p className={classNames}>
+      {entries.map((stat) => (
+        <span key={`${stat.label}-${stat.value}`}>
+          <span className="run-stat-label">{stat.label}: </span>
+          <strong>{stat.value}</strong>
+        </span>
+      ))}
+    </p>
+  );
 };
 
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
@@ -478,20 +519,11 @@ const App = () => {
     : "Auto refresh is off";
   const interpretation: AutoInterpretation | null = clusterDetail?.autoInterpretation || null;
 
-  const llmStats = run.llmStats;
-  const lastCallValue = llmStats.lastCallTimestamp
-    ? relativeRecency(llmStats.lastCallTimestamp)
-    : "—";
-  const llmStatEntries = [
-    { label: "LLM calls", value: String(llmStats.totalCalls) },
-    { label: "OK", value: String(llmStats.successfulCalls) },
-    { label: "Failed", value: String(llmStats.failedCalls) },
-    { label: "P50", value: formatLatency(llmStats.p50LatencyMs) },
-    { label: "P95", value: formatLatency(llmStats.p95LatencyMs) },
-    { label: "P99", value: formatLatency(llmStats.p99LatencyMs) },
-    { label: "Last call", value: lastCallValue },
-  ];
-  const providerBreakdown = llmStats.providerBreakdown
+  const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
+  const historicalLlmStatsLine = run.historicalLlmStats
+    ? renderLlmStatsLine(run.historicalLlmStats, "llm-stats-line-historical")
+    : null;
+  const providerBreakdown = run.llmStats.providerBreakdown
     .map((entry) => `${entry.provider} ${entry.calls} (${entry.failedCalls} failed)`)
     .join(" · ");
 
@@ -508,17 +540,11 @@ const App = () => {
             </span>
           </div>
           <p className="run-header-inline-stats muted small">{runStatsSummary}</p>
-          <p className="run-header-inline-stats llm-stats-line muted small">
-            {llmStatEntries.map((stat) => (
-              <span key={stat.label}>
-                <span className="run-stat-label">{stat.label}: </span>
-                <strong>{stat.value}</strong>
-              </span>
-            ))}
-          </p>
+          {runLlmStatsLine}
           {providerBreakdown && (
             <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
           )}
+          {historicalLlmStatsLine}
           <p className="muted">Collector {run.collectorVersion}</p>
         </div>
         <div className="hero-actions">

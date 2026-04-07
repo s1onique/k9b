@@ -27,6 +27,7 @@
 - **Structured logs:** the scheduler (`scripts/run_health_scheduler.py`) and `run-health-loop` emit JSON to stdout/stderr as the canonical operational stream; legacy `runs/health/*.log` files only mirror these events and are never the ground truth.
 - **Derived UI/API projections:** `write_health_ui_index` re-reads the current run’s artifacts and produces `runs/health/ui-index.json`; `ui/model.py`/`ui/api.py` expose read-only payloads derived from that index so the backend never stores another copy.
 - **LLM/provider artifacts:** each completed provider call is captured as an `ExternalAnalysisArtifact`; skipped adapters log a `status: skipped` entry but do not count as invocations. The UI computes `llmStats` from these artifacts so operators can inspect which optional LLM work actually ran.
+- `llmStats` in the UI index is derived strictly from the latest run’s `external-analysis` artifacts, while `historicalLlmStats` is recomputed by re-scanning every retained JSON under `runs/health/external-analysis/*.json` when `write_health_ui_index` runs. Each statistic carries a `scope` (`current_run` vs `retained_history`) so the UI can present per-run totals alongside the accumulated, artifact-backed history that only reflects whatever artifacts remain on disk.
 
 ## Execution model
 

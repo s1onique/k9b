@@ -37,6 +37,11 @@ class UIApiTests(unittest.TestCase):
         providers = {entry["provider"] for entry in llm_stats["providerBreakdown"]}
         self.assertIn("k8sgpt", providers)
         self.assertIn("llm-autodrilldown", providers)
+        historical = payload["historicalLlmStats"]
+        self.assertIsNotNone(historical)
+        assert historical is not None
+        self.assertEqual(historical["totalCalls"], 5)
+        self.assertEqual(historical["scope"], "retained_history")
 
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)

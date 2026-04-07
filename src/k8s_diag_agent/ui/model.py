@@ -22,6 +22,7 @@ class RunView:
     notification_count: int
     run_stats: RunStatsView
     llm_stats: LLMStatsView
+    historical_llm_stats: LLMStatsView | None
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class LLMStatsView:
     p95_latency_ms: int | None
     p99_latency_ms: int | None
     provider_breakdown: tuple[ProviderBreakdownEntry, ...]
+    scope: str = "current_run"
 
 
 @dataclass(frozen=True)
@@ -260,6 +262,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         notification_count=_coerce_int(run_data.get("notification_count")),
         run_stats=_build_run_stats_view(index.get("run_stats")),
         llm_stats=_build_llm_stats_view(run_data.get("llm_stats")),
+        historical_llm_stats=_build_optional_llm_stats_view(run_data.get("historical_llm_stats")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -331,6 +334,7 @@ def _build_llm_stats_view(raw: object | None) -> LLMStatsView:
         for entry in breakdown_raw
         if isinstance(entry, Mapping)
     )
+    scope_value = _coerce_optional_str(raw.get("scope")) or "current_run"
     return LLMStatsView(
         total_calls=_coerce_int(raw.get("totalCalls")),
         successful_calls=_coerce_int(raw.get("successfulCalls")),
@@ -340,7 +344,14 @@ def _build_llm_stats_view(raw: object | None) -> LLMStatsView:
         p95_latency_ms=_coerce_optional_int(raw.get("p95LatencyMs")),
         p99_latency_ms=_coerce_optional_int(raw.get("p99LatencyMs")),
         provider_breakdown=breakdown,
+        scope=scope_value,
     )
+
+
+def _build_optional_llm_stats_view(raw: object | None) -> LLMStatsView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return _build_llm_stats_view(raw)
 
 
 def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:

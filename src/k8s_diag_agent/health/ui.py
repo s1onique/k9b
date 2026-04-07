@@ -146,6 +146,7 @@ def write_health_ui_index(
         "external_analysis_count": external_analysis_data.get("count", 0),
         "notification_count": len(notifications),
         "llm_stats": _build_llm_stats(external_analysis_data),
+        "historical_llm_stats": _build_historical_llm_stats(output_dir / "external-analysis"),
     }
     index = {
         "run": run_entry,
@@ -198,6 +199,8 @@ _PROPOSAL_STATUS_ORDER = (
 )
 _ANALYSIS_STATUS_ORDER = tuple(status.value for status in ExternalAnalysisStatus)
 _NOTIFICATION_HISTORY_LIMIT = 20
+_SCOPE_CURRENT_RUN = "current_run"
+_SCOPE_RETAINED_HISTORY = "retained_history"
 
 
 def _serialize_fleet_status(clusters: Sequence[dict[str, object]]) -> dict[str, object]:
@@ -373,10 +376,35 @@ def _parse_timestamp(value: object | None) -> datetime | None:
         return None
 
 
-def _build_llm_stats(external_analysis: dict[str, object]) -> dict[str, object]:
+def _build_llm_stats(external_analysis: dict[str, object], scope: str = _SCOPE_CURRENT_RUN) -> dict[str, object]:
     artifacts = external_analysis.get("artifacts") or ()
     if not isinstance(artifacts, Sequence):
         artifacts = ()
+    return _compute_llm_stats(artifacts, scope)
+
+
+def _build_historical_llm_stats(external_analysis_dir: Path) -> dict[str, object]:
+    entries = _collect_historical_external_analysis_entries(external_analysis_dir)
+    return _compute_llm_stats(entries, _SCOPE_RETAINED_HISTORY)
+
+
+def _collect_historical_external_analysis_entries(
+    directory: Path,
+) -> list[Mapping[str, object]]:
+    entries: list[Mapping[str, object]] = []
+    if not directory.is_dir():
+        return entries
+    for path in sorted(directory.glob("*.json")):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(raw, Mapping):
+            entries.append(raw)
+    return entries
+
+
+def _compute_llm_stats(entries: Sequence[object], scope: str) -> dict[str, object]:
     total_calls = 0
     successful_calls = 0
     failed_calls = 0
@@ -384,7 +412,7 @@ def _build_llm_stats(external_analysis: dict[str, object]) -> dict[str, object]:
     latest_timestamp: datetime | None = None
     latest_timestamp_str: str | None = None
     provider_counts: dict[str, dict[str, int]] = {}
-    for entry in artifacts:
+    for entry in entries:
         if not isinstance(entry, Mapping):
             continue
         status = str(entry.get("status") or "").lower()
@@ -433,6 +461,7 @@ def _build_llm_stats(external_analysis: dict[str, object]) -> dict[str, object]:
         "p95LatencyMs": percentile_values["p95"],
         "p99LatencyMs": percentile_values["p99"],
         "providerBreakdown": provider_breakdown,
+        "scope": scope,
     }
 
 

@@ -32,6 +32,7 @@ export type RunPayload = {
   artifacts: ArtifactLink[];
   runStats: RunStats;
   llmStats: LLMStats;
+  historicalLlmStats?: LLMStats | null;
 };
 
 export type RunStats = {
@@ -57,6 +58,7 @@ export type LLMStats = {
   p95LatencyMs: number | null;
   p99LatencyMs: number | null;
   providerBreakdown: LLMProviderBreakdown[];
+  scope?: string;
 };
 
 export type ClusterSummary = {

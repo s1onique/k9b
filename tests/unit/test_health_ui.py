@@ -131,6 +131,31 @@ class HealthUITests(unittest.TestCase):
         notification_path = output_dir / "notifications" / "20260101-degraded-health.json"
         notification_path.parent.mkdir(parents=True, exist_ok=True)
         notification_record = (notification, notification_path)
+        history_entries = [
+            {
+                "tool_name": "k8sgpt",
+                "status": "success",
+                "timestamp": "2025-12-31T23:58:00Z",
+                "duration_ms": 150,
+            },
+            {
+                "tool_name": "llm-autodrilldown",
+                "status": "success",
+                "timestamp": "2025-12-31T23:57:00Z",
+                "duration_ms": 180,
+            },
+            {
+                "tool_name": "k8sgpt",
+                "status": "failed",
+                "timestamp": "2025-12-31T23:56:00Z",
+                "duration_ms": 220,
+            },
+        ]
+        history_dir = output_dir / "external-analysis"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        for idx, entry in enumerate(history_entries, start=1):
+            path = history_dir / f"history-{idx}.json"
+            path.write_text(json.dumps(entry), encoding="utf-8")
         result_path = write_health_ui_index(
             output_dir,
             run_id="health-run-1",
@@ -178,6 +203,53 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(llm_stats["failedCalls"], 0)
         self.assertEqual(llm_stats["p50LatencyMs"], 150)
         self.assertEqual(llm_stats["providerBreakdown"][0]["provider"], "k8sgpt")
+        self.assertEqual(llm_stats["scope"], "current_run")
+        historical_stats = data["run"].get("historical_llm_stats")
+        self.assertIsNotNone(historical_stats)
+        self.assertEqual(historical_stats["totalCalls"], 3)
+        self.assertEqual(historical_stats["successfulCalls"], 2)
+        self.assertEqual(historical_stats["failedCalls"], 1)
+        self.assertEqual(historical_stats["lastCallTimestamp"], "2025-12-31T23:58:00Z")
+        self.assertEqual(historical_stats["p50LatencyMs"], 180)
+        self.assertEqual(historical_stats["p95LatencyMs"], 220)
+        self.assertEqual(historical_stats["p99LatencyMs"], 220)
+        self.assertEqual(historical_stats["scope"], "retained_history")
+        self.assertEqual(historical_stats["providerBreakdown"][0]["provider"], "k8sgpt")
+        self.assertEqual(historical_stats["providerBreakdown"][1]["provider"], "llm-autodrilldown")
+
+    def test_historical_llm_stats_handles_missing_durations(self) -> None:
+        output_dir = self.tmpdir / "runs" / "health"
+        history_dir = output_dir / "external-analysis"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "tool_name": "k8sgpt",
+            "status": "success",
+            "timestamp": "2025-12-31T23:50:00Z",
+        }
+        (history_dir / "missing-duration.json").write_text(json.dumps(entry), encoding="utf-8")
+        result_path = write_health_ui_index(
+            output_dir,
+            run_id="health-run-missing",
+            run_label="health-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+        )
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+        historical_stats = data["run"].get("historical_llm_stats")
+        self.assertIsNotNone(historical_stats)
+        self.assertEqual(historical_stats["totalCalls"], 1)
+        self.assertEqual(historical_stats["successfulCalls"], 1)
+        self.assertEqual(historical_stats["failedCalls"], 0)
+        self.assertEqual(historical_stats["lastCallTimestamp"], "2025-12-31T23:50:00Z")
+        self.assertIsNone(historical_stats["p50LatencyMs"])
+        self.assertIsNone(historical_stats["p95LatencyMs"])
+        self.assertIsNone(historical_stats["p99LatencyMs"])
+        self.assertEqual(historical_stats["scope"], "retained_history")
 
     def test_run_stats_include_durations_from_reviews(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"

@@ -45,6 +45,7 @@ class RunPayload(TypedDict):
     artifacts: list[ArtifactLink]
     runStats: RunStatsPayload
     llmStats: LLMStatsPayload
+    historicalLlmStats: LLMStatsPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -70,6 +71,7 @@ class LLMStatsPayload(TypedDict):
     p95LatencyMs: int | None
     p99LatencyMs: int | None
     providerBreakdown: list[LLMProviderEntry]
+    scope: str
 
 
 class RatingCount(TypedDict):
@@ -265,6 +267,11 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         "artifacts": _collect_run_artifacts(context),
         "runStats": _serialize_run_stats(context.run.run_stats),
         "llmStats": _serialize_llm_stats(context.run.llm_stats),
+        "historicalLlmStats": (
+            _serialize_llm_stats(context.run.historical_llm_stats)
+            if context.run.historical_llm_stats
+            else None
+        ),
     }
 
 
@@ -375,6 +382,7 @@ def _serialize_llm_stats(stats: LLMStatsView) -> LLMStatsPayload:
             }
             for entry in stats.provider_breakdown
         ],
+        "scope": stats.scope,
     }
 
 

@@ -37,6 +37,21 @@ export const sampleRun: RunPayload = {
     providerBreakdown: [
       { provider: "k8sgpt", calls: 3, failedCalls: 1 },
     ],
+    scope: "current_run",
+  },
+  historicalLlmStats: {
+    totalCalls: 18,
+    successfulCalls: 15,
+    failedCalls: 3,
+    lastCallTimestamp: "2026-04-06T11:58:00Z",
+    p50LatencyMs: 140,
+    p95LatencyMs: 280,
+    p99LatencyMs: 350,
+    providerBreakdown: [
+      { provider: "k8sgpt", calls: 10, failedCalls: 2 },
+      { provider: "llm-autodrilldown", calls: 8, failedCalls: 1 },
+    ],
+    scope: "retained_history",
   },
 };
 

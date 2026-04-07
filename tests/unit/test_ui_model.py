@@ -49,3 +49,10 @@ class UIViewModelTests(unittest.TestCase):
         self.assertIn("cluster-a", context.auto_drilldown_interpretations)
         interpretation = context.auto_drilldown_interpretations["cluster-a"]
         self.assertEqual(interpretation.status, "success")
+        self.assertIsNotNone(context.run.historical_llm_stats)
+        historical = context.run.historical_llm_stats
+        assert historical is not None
+        self.assertEqual(historical.total_calls, 5)
+        self.assertEqual(historical.successful_calls, 4)
+        self.assertEqual(historical.failed_calls, 1)
+        self.assertEqual(historical.scope, "retained_history")
