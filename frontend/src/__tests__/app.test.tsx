@@ -104,14 +104,14 @@ describe("App", () => {
     expect(screen.getByText(sampleClusterDetail.nextChecks[0].description)).toBeInTheDocument();
   });
 
-  test("renders compact run stats", async () => {
+  test("renders compact run stats string", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
-    expect(screen.getByLabelText(/Clusters/i)).toHaveAccessibleName("Clusters: 2");
-    expect(screen.getByLabelText(/Degraded/i)).toHaveAccessibleName("Degraded: 2");
-    expect(screen.getByLabelText(/Notifications/i)).toHaveAccessibleName("Notifications: 2");
+    expect(
+      screen.getByText("Last 32s · Runs 12 · P50 24s · P95 48s · P99 1m 4s")
+    ).toBeInTheDocument();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {

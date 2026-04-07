@@ -23,6 +23,12 @@ class UIApiTests(unittest.TestCase):
         self.assertIn("Assessment JSON", labels)
         self.assertIn("Drilldown JSON", labels)
 
+    def test_run_payload_includes_stats(self) -> None:
+        payload = build_run_payload(self.context)
+        stats = payload["runStats"]
+        self.assertEqual(stats["totalRuns"], 3)
+        self.assertEqual(stats["lastRunDurationSeconds"], 42)
+
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)
         self.assertEqual(payload["clusters"][0]["label"], "cluster-a")

@@ -20,6 +20,16 @@ class RunView:
     proposal_count: int
     external_analysis_count: int
     notification_count: int
+    run_stats: RunStatsView
+
+
+@dataclass(frozen=True)
+class RunStatsView:
+    last_run_duration_seconds: int | None = None
+    total_runs: int = 0
+    p50_run_duration_seconds: int | None = None
+    p95_run_duration_seconds: int | None = None
+    p99_run_duration_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -213,6 +223,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         proposal_count=_coerce_int(run_data.get("proposal_count")),
         external_analysis_count=_coerce_int(run_data.get("external_analysis_count")),
         notification_count=_coerce_int(run_data.get("notification_count")),
+        run_stats=_build_run_stats_view(index.get("run_stats")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -243,6 +254,18 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         drilldown_availability=drilldown_availability,
         notification_history=notification_history,
         external_analysis=external_analysis,
+    )
+
+
+def _build_run_stats_view(raw: object | None) -> RunStatsView:
+    if not isinstance(raw, Mapping):
+        return RunStatsView()
+    return RunStatsView(
+        last_run_duration_seconds=_coerce_optional_int(raw.get("last_run_duration_seconds")),
+        total_runs=_coerce_int(raw.get("total_runs")),
+        p50_run_duration_seconds=_coerce_optional_int(raw.get("p50_run_duration_seconds")),
+        p95_run_duration_seconds=_coerce_optional_int(raw.get("p95_run_duration_seconds")),
+        p99_run_duration_seconds=_coerce_optional_int(raw.get("p99_run_duration_seconds")),
     )
 
 
@@ -339,6 +362,19 @@ def _coerce_int(value: object | None) -> int:
         except ValueError:
             return 0
     return 0
+
+
+def _coerce_optional_int(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, SupportsInt):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _coerce_sequence(value: object | None) -> tuple[str, ...]:

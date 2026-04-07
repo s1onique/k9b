@@ -19,12 +19,6 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
-COPY src ./src
-COPY scripts ./scripts
-
-RUN python -m venv .venv \
-    && .venv/bin/pip install --upgrade pip setuptools wheel \
-    && .venv/bin/pip install --no-cache-dir .
 
 RUN set -eux; \
     case "${TARGETARCH}" in \
@@ -32,11 +26,19 @@ RUN set -eux; \
         arm64) ARCH=arm64 ;; \
         *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
+    # Download kubectl and helm before copying the app source so the layer stays cached across code edits
     curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" -o /usr/local/bin/kubectl; \
     chmod +x /usr/local/bin/kubectl; \
     curl -fsSL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" | tar xz -C /tmp; \
     install -m 0755 /tmp/linux-${ARCH}/helm /usr/local/bin/helm; \
     rm -rf /tmp/linux-${ARCH}
+
+COPY src ./src
+COPY scripts ./scripts
+
+RUN python -m venv .venv \
+    && .venv/bin/pip install --upgrade pip setuptools wheel \
+    && .venv/bin/pip install --no-cache-dir .
 
 COPY docker/python-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh

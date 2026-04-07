@@ -15,6 +15,7 @@ from .model import (
     NotificationView,
     ProposalView,
     RecommendedActionView,
+    RunStatsView,
     UIIndexContext,
 )
 
@@ -40,6 +41,15 @@ class RunPayload(TypedDict):
     externalAnalysisCount: int
     notificationCount: int
     artifacts: list[ArtifactLink]
+    runStats: RunStatsPayload
+
+
+class RunStatsPayload(TypedDict):
+    lastRunDurationSeconds: int | None
+    totalRuns: int
+    p50RunDurationSeconds: int | None
+    p95RunDurationSeconds: int | None
+    p99RunDurationSeconds: int | None
 
 
 class RatingCount(TypedDict):
@@ -219,6 +229,7 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         "externalAnalysisCount": context.run.external_analysis_count,
         "notificationCount": context.run.notification_count,
         "artifacts": _collect_run_artifacts(context),
+        "runStats": _serialize_run_stats(context.run.run_stats),
     }
 
 
@@ -296,6 +307,16 @@ def _collect_run_artifacts(context: UIIndexContext) -> list[ArtifactLink]:
             if entry.artifact_path:
                 artifacts.append({"label": f"Drilldown: {entry.label}", "path": entry.artifact_path})
     return artifacts
+
+
+def _serialize_run_stats(stats: RunStatsView) -> RunStatsPayload:
+    return {
+        "lastRunDurationSeconds": stats.last_run_duration_seconds,
+        "totalRuns": stats.total_runs,
+        "p50RunDurationSeconds": stats.p50_run_duration_seconds,
+        "p95RunDurationSeconds": stats.p95_run_duration_seconds,
+        "p99RunDurationSeconds": stats.p99_run_duration_seconds,
+    }
 
 
 def _build_problem_summary(context: UIIndexContext) -> ProblemSummary:

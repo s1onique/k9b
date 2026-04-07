@@ -14,6 +14,13 @@ def sample_ui_index() -> Mapping[str, object]:
             "external_analysis_count": 1,
             "notification_count": 1,
         },
+        "run_stats": {
+            "last_run_duration_seconds": 42,
+            "total_runs": 3,
+            "p50_run_duration_seconds": 30,
+            "p95_run_duration_seconds": 40,
+            "p99_run_duration_seconds": 50,
+        },
         "clusters": [
             {
                 "label": "cluster-a",

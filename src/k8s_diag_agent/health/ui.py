@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -149,6 +151,7 @@ def write_health_ui_index(
         "external_analysis": external_analysis_data,
         "latest_assessment": latest_assessment,
     }
+    index["run_stats"] = _build_run_stats(output_dir / "reviews")
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -345,6 +348,88 @@ def _serialize_latest_assessment(
         return None
     latest = max(assessments, key=lambda artifact: artifact.timestamp)
     return _serialize_assessment(latest, root_dir)
+
+
+_RUN_ID_TIMESTAMP_PATTERN = re.compile(r"(\d{8}T\d{6}Z)$")
+
+
+def _build_run_stats(reviews_dir: Path) -> dict[str, object]:
+    review_timestamps = _collect_review_timestamps(reviews_dir)
+    total_runs = len(review_timestamps)
+    measured: list[tuple[datetime, float]] = []
+    durations: list[float] = []
+    for run_id, finish in review_timestamps.items():
+        start = _parse_run_start(run_id)
+        if start is None:
+            continue
+        duration = (finish - start).total_seconds()
+        if duration <= 0:
+            continue
+        measured.append((finish, duration))
+        durations.append(duration)
+    last_run_duration_seconds: int | None = None
+    if measured:
+        latest_entry = max(measured, key=lambda entry: entry[0])
+        last_run_duration_seconds = int(latest_entry[1])
+    percentile_values: dict[str, int | None] = {
+        "p50": None,
+        "p95": None,
+        "p99": None,
+    }
+    if len(durations) >= 5:
+        durations.sort()
+        percentile_values["p50"] = _percentile_value(durations, 50)
+        percentile_values["p95"] = _percentile_value(durations, 95)
+        percentile_values["p99"] = _percentile_value(durations, 99)
+    return {
+        "last_run_duration_seconds": last_run_duration_seconds,
+        "total_runs": total_runs,
+        "p50_run_duration_seconds": percentile_values["p50"],
+        "p95_run_duration_seconds": percentile_values["p95"],
+        "p99_run_duration_seconds": percentile_values["p99"],
+    }
+
+
+def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
+    timestamps: dict[str, datetime] = {}
+    if not reviews_dir.is_dir():
+        return timestamps
+    for path in reviews_dir.glob("*-review.json"):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        run_id = raw.get("run_id")
+        timestamp = raw.get("timestamp")
+        if not isinstance(run_id, str) or not isinstance(timestamp, str):
+            continue
+        try:
+            finish = datetime.fromisoformat(timestamp)
+        except ValueError:
+            continue
+        existing = timestamps.get(run_id)
+        if existing is None or finish > existing:
+            timestamps[run_id] = finish
+    return timestamps
+
+
+def _parse_run_start(run_id: str) -> datetime | None:
+    match = _RUN_ID_TIMESTAMP_PATTERN.search(run_id or "")
+    if not match:
+        return None
+    try:
+        parsed = datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ")
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC)
+
+
+def _percentile_value(values: list[float], percentile: float) -> int:
+    if not values:
+        return 0
+    idx = math.ceil((percentile / 100) * len(values)) - 1
+    idx = max(0, min(idx, len(values) - 1))
+    return int(values[idx])
 
 
 def _serialize_assessment(artifact: HealthAssessmentArtifact, root_dir: Path) -> dict[str, object]:

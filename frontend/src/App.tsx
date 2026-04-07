@@ -52,6 +52,19 @@ const statusClass = (value: string) => {
 
 const formatTimestamp = (value: string) => dayjs(value).format("MMM D, YYYY HH:mm [UTC]");
 
+const formatDuration = (value: number | null | undefined) => {
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+  const seconds = Math.max(0, Math.round(value));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`;
+};
+
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
 const AUTOREFRESH_OPTIONS = [
@@ -431,7 +444,15 @@ const App = () => {
   const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
-  const runStats = [
+  const headerStats = [
+    { label: "Last", value: formatDuration(run.runStats.lastRunDurationSeconds) },
+    { label: "Runs", value: String(run.runStats.totalRuns) },
+    { label: "P50", value: formatDuration(run.runStats.p50RunDurationSeconds) },
+    { label: "P95", value: formatDuration(run.runStats.p95RunDurationSeconds) },
+    { label: "P99", value: formatDuration(run.runStats.p99RunDurationSeconds) },
+  ];
+  const runStatsSummary = headerStats.map((stat) => `${stat.label} ${stat.value}`).join(" · ");
+  const runSummaryStats = [
     { label: "Clusters", value: run.clusterCount },
     { label: "Degraded", value: degradedCount },
     { label: "Proposals", value: run.proposalCount },
@@ -451,7 +472,7 @@ const App = () => {
   return (
     <div className="app-shell">
       <header className="panel hero compact">
-        <div>
+        <div className="hero-content">
           <p className="eyebrow">Operator console</p>
           <h1>Fleet triage cockpit</h1>
           <div className="hero-meta">
@@ -460,6 +481,7 @@ const App = () => {
               {runFresh ? "Fresh data" : "Stale data"} · {runRecency}
             </span>
           </div>
+          <p className="run-header-inline-stats muted small">{runStatsSummary}</p>
           <p className="muted">Collector {run.collectorVersion}</p>
         </div>
         <div className="hero-actions">
@@ -508,7 +530,7 @@ const App = () => {
           </div>
         </div>
         <div className="run-summary-stats">
-          {runStats.map((stat) => (
+          {runSummaryStats.map((stat) => (
             <span className="run-stat-pill" key={stat.label} aria-label={`${stat.label}: ${stat.value}`}>
               <span className="run-stat-label">{stat.label}: </span>
               <strong>{stat.value}</strong>

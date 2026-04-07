@@ -40,3 +40,5 @@ class UIViewModelTests(unittest.TestCase):
         recommended_action = cast(RecommendedActionView, assessment.recommended_action)
         self.assertEqual(recommended_action.action_type, "observation")
         self.assertEqual(assessment.next_checks[0].owner, "platform")
+        self.assertEqual(context.run.run_stats.total_runs, 3)
+        self.assertEqual(context.run.run_stats.last_run_duration_seconds, 42)

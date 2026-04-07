@@ -19,6 +19,13 @@ export const sampleRun: RunPayload = {
   artifacts: [
     { label: "run manifest", path: "/artifacts/run-manifest.json" },
   ],
+  runStats: {
+    lastRunDurationSeconds: 32,
+    totalRuns: 12,
+    p50RunDurationSeconds: 24,
+    p95RunDurationSeconds: 48,
+    p99RunDurationSeconds: 64,
+  },
 };
 
 export const sampleFleet: FleetPayload = {

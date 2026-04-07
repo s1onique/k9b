@@ -30,6 +30,15 @@ export type RunPayload = {
   externalAnalysisCount: number;
   notificationCount: number;
   artifacts: ArtifactLink[];
+  runStats: RunStats;
+};
+
+export type RunStats = {
+  lastRunDurationSeconds: number | null;
+  totalRuns: number;
+  p50RunDurationSeconds: number | null;
+  p95RunDurationSeconds: number | null;
+  p99RunDurationSeconds: number | null;
 };
 
 export type ClusterSummary = {

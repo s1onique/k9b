@@ -2,6 +2,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
@@ -168,3 +169,80 @@ class HealthUITests(unittest.TestCase):
         self.assertIn("latest_assessment", data)
         self.assertEqual(data["latest_assessment"]["cluster_label"], "cluster-alpha")
         self.assertIn("artifact_path", data["latest_assessment"])
+
+    def test_run_stats_include_durations_from_reviews(self) -> None:
+        output_dir = self.tmpdir / "runs" / "health"
+        reviews_dir = output_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        durations = [8, 11, 15, 18, 30]
+        for idx, seconds in enumerate(durations, start=1):
+            run_id = f"health-run-20260101T00000{idx}Z"
+            start = datetime.strptime(run_id[-16:], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+            finish = start + timedelta(seconds=seconds)
+            review_path = reviews_dir / f"{run_id}-review.json"
+            review_path.write_text(
+                json.dumps({"run_id": run_id, "timestamp": finish.isoformat()}),
+                encoding="utf-8",
+            )
+        target = HealthTarget(
+            context="cluster-alpha",
+            label="cluster-alpha",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        snapshot = ClusterSnapshot.from_dict(
+            {
+                "metadata": {
+                    "cluster_id": "cluster-alpha",
+                    "captured_at": "2026-01-01T00:00:00Z",
+                    "control_plane_version": "v1.26.0",
+                    "node_count": 2,
+                },
+                "health_signals": {
+                    "node_conditions": {"ready": 2},
+                    "pod_counts": {"non_running": 0},
+                    "warning_events": (),
+                    "job_failures": 0,
+                },
+            }
+        )
+        record = HealthSnapshotRecord(
+            target=target,
+            snapshot=snapshot,
+            path=self.tmpdir / "snapshot.json",
+            baseline_policy=BaselinePolicy.empty(),
+            baseline_policy_path="baseline.json",
+        )
+        artifact = HealthAssessmentArtifact(
+            run_label="health-run",
+            run_id="health-run-1",
+            timestamp=snapshot.metadata.captured_at,
+            context=target.context,
+            label=target.label,
+            cluster_id="cluster-alpha",
+            snapshot_path=str(record.path),
+            assessment={"observed_signals": [], "findings": []},
+            missing_evidence=(),
+            health_rating=HealthRating.HEALTHY,
+        )
+        result_path = write_health_ui_index(
+            output_dir,
+            run_id="health-run-1",
+            run_label="health-run",
+            collector_version="1.0",
+            records=[record],
+            assessments=[artifact],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+        )
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+        stats = data.get("run_stats")
+        self.assertIsInstance(stats, dict)
+        self.assertEqual(stats.get("total_runs"), len(durations))
+        self.assertEqual(stats.get("last_run_duration_seconds"), durations[-1])
+        self.assertEqual(stats.get("p50_run_duration_seconds"), 15)
+        self.assertEqual(stats.get("p95_run_duration_seconds"), 30)
+        self.assertEqual(stats.get("p99_run_duration_seconds"), 30)

@@ -44,12 +44,25 @@ body {
   align-items: center;
 }
 
+.hero-content {
+  flex: 1 1 320px;
+  min-width: 240px;
+}
+
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
   margin-bottom: 0.25rem;
+}
+
+.run-header-inline-stats {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: rgba(248, 250, 252, 0.6);
+  text-transform: none;
 }
 
 .hero h1 {
@@ -70,6 +83,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
 }
+
 
 .autorefresh-control {
   display: flex;
