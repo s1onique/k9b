@@ -2,100 +2,115 @@
 
 ## Purpose
 
-- Capture the current artifact-first contracts that tie the scheduler, backend, and UI together.
-- Show how the durable JSON blobs under `runs/health/…` remain the source of truth while the UI and API layers derive their projections from them.
-- Describe the implicit lifecycle stages `run-health-loop` already follows so future work can target those transitions without assuming a formal state machine beyond what is currently implemented.
+- Describe the current artifact-first execution contracts that tie the scheduler, backend, and UI together so future contributors do not infer behavior from implementation guesses.
+- Make the per-run flow and extension seams explicit: which parts are deterministic, which are optional provider-assisted branches, and where assessments/drilldowns/reviews/proposals live.
+- Highlight the policy boundaries that keep this agent evidence-centric, artifact-driven, and incapable of autonomous cluster mutation without operator review.
 
 ## Core entities (current reality)
 
-### `run_label`
-- Declared in `runs/health-config*.json` and treated as the stable fleet label for every iteration.
-- Recorded verbatim in each artifact so runs can be tied back to the policy that spawned them (the deprecated per-run `run_id` field is now interpreted as this label if present).
-
-### `run_id`
-- Generated on every invocation of `run-health-loop` (and anything that drives it, such as `scripts/run_health_scheduler.py`).
-- Timestamp-based, unique per execution, and used to name files under `runs/health/{snapshots,assessments,…}` plus in the `RunArtifact` `run_id` field.
-
-### Target cluster / cluster label / context
-- Each entry in the health config supplies a `cluster_label` (human-friendly key), a `context` (kubeconfig identifier), `cluster_class`, `cluster_role`, and `baseline_cohort` metadata.
-- These values appear in every snapshot, assessment, drilldown, notification, and history row, so they are the stable identity used throughout the run.
-
-### Snapshot
-- Sanitized `ClusterSnapshot` JSON per target, written under `runs/health/snapshots/{run_id}-{cluster_label}.json`.
-- Captures raw evidence (`node_count`, control plane version, events, pods, etc.) and feeds both the comparator and the health assessment logic.
-
-### Assessment
-- Per-cluster health assessment stored at `runs/health/assessments/{run_id}-{cluster_label}.json` (see `docs/schemas/assessment-schema.md`).
-- Contains health rating, missing evidence, findings, hypotheses, next checks, recommended actions, confidence, and links back to the snapshot used.
-
-### Comparison
-- Triggered comparisons live under `runs/health/comparisons/{run_id}-{primary_label}-vs-{secondary_label}.json` and summarize resource additions/removals plus any drift notes.
-- Produced when `run-health-loop` detects a policy trigger (`peer_mappings`, `--trigger`, or suspicious drift) and stores the comparator output referenced by both the review and the notification artifacts.
-
-### Trigger
-- Each comparison writes a `runs/health/triggers/{run_id}-{primary_label}.json` entry containing the `ComparisonTriggerArtifact`—the why behind the comparison (intent, reasons, comparison summary, eligibility status).
-- The trigger record is the authoritative list of policies or metadata conditions that caused the comparator to run.
-
-### Drilldown
-- When a trigger fires, the health loop collects additional drilldown evidence (non-running pods, warning events, sectioned summaries) and writes it as `runs/health/drilldowns/{run_id}-{cluster_label}.json`.
-- Drilldowns feed `assess-drilldown`, provide human-oriented context for reviewers, and are surfaced to the UI as “drilldown availability.”
-
-### Review
-- `run-health-loop` writes a review artifact per fleet run under `runs/health/reviews/{run_id}-review.json`.
-- Reviews aggregate the per-cluster assessments, comparisons, triggers, drilldowns, and generated proposals so the adaptation loop has a single JSON document to reference.
-
-### Proposal
-- Typed adaptation suggestions live under `runs/health/proposals/{proposal_id}.json` (see `docs/schemas/health-proposal-schema.md`).
-- Each proposal references its `source_run_id`, the triggering review path, expected benefit, confidence, and rationale for tuning thresholds, watched releases, or other policy artifacts.
-
-### History entry
-- `runs/health/history.json` keeps the persisted per-cluster history (previous node/pod counts, control plane version, watched Helm releases/CRDs, and missing-evidence markers).
-- The loop reads this history before every run so “changed since previous run” findings can be generated deterministically.
-
-### Notification
-- Notification artifacts are durable JSON files written to `runs/health/notifications/{timestamp}-{kind}.json` whenever the loop or downstream helpers (proposal checkers, external analysis, etc.) wants to signal an event.
-- The CLI command `deliver-notifications` and any future Mattermost/pager integrations hydrate these artifacts via `notification.Artifact` before dispatching.
-
-### Derived UI/API projection
-- The backend produces `runs/health/ui-index.json` for every run via `health.ui.write_health_ui_index()`.
-- `src/k8s_diag_agent/ui/model.py` builds a `UIIndexContext` from that index, and `src/k8s_diag_agent/ui/api.py` turns the context into `RunPayload`, `FleetPayload`, `ClusterDetailPayload`, `ProposalsPayload`, and `NotificationsPayload` objects that the HTTP API exposes.
-- This view model is read-only and derived fully from the durable artifacts; it is not part of the persistence layer but is regenerated whenever a new run finishes.
+- **run_label** – declared in `runs/health-config*.json`, recorded verbatim inside every artifact, and treated as the stable fleet identifier that links a series of runs to the same policy. The deprecated per-run `run_id` field is now interpreted as `run_label` when present so legacy configs continue to work.
+- **run_id** – generated by `HealthLoopRunner` via `_build_runtime_run_id`, timestamped, unique per execution, reflected in directory names (`runs/health/{run_id}-…`) and inside every `RunArtifact` payload.
+- **HealthTarget metadata** – the config supplies `cluster_label`, `context`, `cluster_class`, `cluster_role`, `baseline_cohort`, `watched_helm_releases`, and `watched_crd_families`. Labels and refs appear in snapshots, assessments, drilldowns, triggers, reviews, and proposals so every artifact carries the same identity chain.
+- **ClusterSnapshot** – sanitized evidence captured via `collect_cluster_snapshot`, contains node/pod counts, control plane version, health signals, Helm releases/CRDs, and feeds both comparator and assessment logic. Snapshots land at `runs/health/snapshots/{run_id}-{cluster_label}-{timestamp}.json`.
+- **Assessment** – built by `build_health_assessment` (health loop) from the snapshot, baseline policy, and persisted history. It populates `observed_signals`, `findings`, `hypotheses`, `next_evidence_to_collect`, `recommended_action`, `safety_level`, and `overall_confidence` before being serialized under `runs/health/assessments/{run_id}-{cluster_label}.json` (see `docs/schemas/assessment-schema.md`).
+- **Comparison + Trigger** – triggered comparisons write `runs/health/comparisons/{run_id}-{primary}-vs-{secondary}-comparison.json`; their `ComparisonTriggerArtifact` lives under `runs/health/triggers/{run_id}-{primary}.json` and documents why the comparator ran (policy eligibility, baseline drift, manual request, missing evidence regression, etc.).
+- **Drilldown** – `DrilldownCollector` gathers warning events, non-running pods, pod descriptions, rollouts, image pull secret insights, and pattern-specific kubectl outputs whenever a trigger (health regression, warning threshold, manual request, etc.) fires. Drilldowns are deterministic, per-target artifacts stored in `runs/health/drilldowns/{run_id}-{cluster_label}.json` and feed both the UI and the standalone `assess-drilldown` command.
+- **Review** – `build_health_review` aggregates the current run’s assessments, the comparisons/triggers that fired, the available drilldowns, and any proposals generated during the run into `runs/health/reviews/{run_id}-review.json`. The review is the single source of truth for adaptation inputs.
+- **Proposal** – typed `HealthProposal` records (see `docs/schemas/health-proposal-schema.md`) describing suggested tuning to warning thresholds, noise filters, baseline releases/CRDs, or review ordering. They live under `runs/health/proposals/{proposal_id}.json`, reference their source review, document expected benefit/confidence, and include a promotion payload for `check-proposal`/`render_proposal_patch` to exercise.
+- **External analysis artifact** – any provider invocation (manual and opt-in) writes `runs/health/external-analysis/{run_id}-{cluster_label}-{adapter}.json` with `ExternalAnalysisArtifact` metadata so the UI’s `llmStats` slice can report success/failure counts and latencies.
+- **History and notifications** – `runs/health/history.json` keeps per-target history used for regression detection, while notifications under `runs/health/notifications/` record events from the loop, proposals, and external analysis adapters.
 
 ## Durable artifacts vs operational streams
 
-- **Source of truth:** `runs/health/` (snapshots, assessments, comparisons, triggers, drilldowns, reviews, proposals, notifications, history, and the UI index) is the canonical persisted record.
-- **Structured logs (stdout/stderr):** `scripts/run_health_scheduler.py` and `run-health-loop` emit JSON into the console so operators can stream progress, but those streams are not considered durable—consult the artifacts to reconstruct the run.
-- **Optional mirrors:** Files such as `runs/health/scheduler.log` or `/runs/health/*.log` may duplicate entries for legacy tooling, but they are derived from the same console stream and not treated as the single source of truth.
-- **LLM call artifacts:** Every completed provider invocation—success or failure—is persisted as an `ExternalAnalysisArtifact` under `runs/health/external-analysis/`. The UI aggregates those artifacts when building `llmStats`, so operators can inspect how many LLM calls actually ran, which adapters they used, and what latencies were observed without relying on loose logs. Skipped adapters (status `skipped`) do not count as LLM calls.
+- **Source of truth:** every component rebuilds state from the file-backed `runs/health` tree (`snapshots`, `assessments`, `comparisons`, `triggers`, `drilldowns`, `reviews`, `proposals`, `external-analysis`, `notifications`, `history`, `ui-index`). Nothing upstream depends on an in-memory cache that cannot be rebuilt from these artifacts.
+- **Structured logs:** the scheduler (`scripts/run_health_scheduler.py`) and `run-health-loop` emit JSON to stdout/stderr as the canonical operational stream; legacy `runs/health/*.log` files only mirror these events and are never the ground truth.
+- **Derived UI/API projections:** `write_health_ui_index` re-reads the current run’s artifacts and produces `runs/health/ui-index.json`; `ui/model.py`/`ui/api.py` expose read-only payloads derived from that index so the backend never stores another copy.
+- **LLM/provider artifacts:** each completed provider call is captured as an `ExternalAnalysisArtifact`; skipped adapters log a `status: skipped` entry but do not count as invocations. The UI computes `llmStats` from these artifacts so operators can inspect which optional LLM work actually ran.
 
-## Run lifecycle (implicit stages)
+## Execution model
 
-> There is no explicit enum-based state machine today; `run-health-loop` implements a predictable sequence of stages while recording `collection_status` (complete/partial/failed) in each `RunArtifact`.
+- `run-health-loop` (plus `scripts/run_health_scheduler.py` when scheduled) implements a deterministic sequence of stages inside `HealthLoopRunner.execute`. Every stage writes durable artifacts and emits structured logs so replay or debugging can always trace what happened.
 
-1. **Scheduled / invoked:** Either the scheduler (`scripts/run_health_scheduler.py`) or an operator invokes `run-health-loop`. A lock file under `runs/health/.health-loop.lock` prevents overlap, and the `run_label` from the config is paired with a freshly minted `run_id`.
-2. **Run started:** The loop records the start event, creates per-run directories, and emits a structured log entry with `clusterCount`, `run_id`, `run_label`, and the desired rhythm parameters (`--once`, `--every-seconds`).
-3. **Snapshots collected:** Each target cluster snapshot is sanitized and persisted under `runs/health/snapshots/`. The run metadata (`RunArtifact.snapshot_pair`) notes collection status and missing telemetry.
-4. **Assessments written:** Health assessments for every cluster are written to `runs/health/assessments/` along with the confidence, findings, missing evidence, and references to the snapshot that produced them.
-5. **Comparisons triggered:** When peer mappings flag suspicious drift or a manual `--trigger` is supplied, the comparator runs, stores its summary under `runs/health/comparisons/`, and emits the corresponding trigger record under `runs/health/triggers/`.
-6. **Drilldowns gathered:** Triggered clusters collect drilldown evidence, which is stored under `runs/health/drilldowns/` and later surfaced to `assess-drilldown` or the UI as “drilldown availability.”
+### Deterministic core path
 
-> **Optional LLM-assisted analysis:** The health loop can optionally hand a cluster artifact to an LLM adapter whenever `external_analysis.manual` is enabled or a manual `--external-analysis` / `--provider` request lands in `run-health-loop`. The same provider seam backs the standalone CLI entry points `assess-drilldown` (run against `runs/health/drilldowns/*.json`) and `assess-snapshots` (run against two sanitized snapshot files). Each provider invocation that completes (success or failure) writes a durable `runs/health/external-analysis/{run_id}-{cluster}-{tool}.json` artifact, and those artifacts feed the `llmStats` slice described further below. These LLM stages are opt-in branches, not part of the mandatory harvest-compare-review path; if no provider is configured or no manual flag is set, the run simply skips them.
-7. **Review created:** The health review aggregates snapshots, assessments, comparisons, triggers, and drilldowns into `runs/health/reviews/{run_id}-review.json`; this review is the document proposals read when deciding on candidate adjustments.
-8. **Proposals generated:** `generate_proposals_from_review` (called inside the same loop) emits typed proposals into `runs/health/proposals/` with lifecycle history entries that are logged and persisted.
-9. **Notifications / summary derived:** The loop writes notification artifacts (degraded health, suspicious comparisons, proposals created/checked, external analysis) into `runs/health/notifications/`. The `health-summary` command and UI build their human-friendly reports from the artifacts listed above.
-10. **Run completed / partial / failed:** A successful run populates all directories and appends a history entry in `runs/health/history.json`. Partial runs mark missing evidence, and failures leave structured logs plus a `RunArtifact.collection_status` of `failed` so future tooling can spot gaps.
+- Snapshot collection, `build_health_assessment`, peer comparisons, drilldown collection, review assembly, and proposal generation form the mandatory harvest-compare-review loop. All logic is deterministic: it replays identically when fed the same inputs because it only depends on snapshots, history, baseline policies, and configuration.
+- Assessment logic produces explicit `Signal`, `Finding`, `Hypothesis`, `NextCheck`, and `RecommendedAction` objects without calling any external reasoning engine. It knows how to detect missing evidence, version drift, node/pod regressions, warning-event patterns, and baseline violations (see `reason/diagnoser.py` and `recommend/next_steps.py` for the heuristics that influence the findings and suggestions).
+- Proposal generation runs inside the same loop via `generate_proposals_from_review`; it reads the deterministic review, trigger details, and baseline policies to create the limited set of allowed proposals (warning threshold, noise reason ignores, baseline releases/CRDs, drilldown ranking). The loop writes each `HealthProposal` artifact before writing notifications and the UI index.
 
-## Derived UI/API projections
+### Optional provider-assisted branches
 
-- The backend does not store a separate database; instead it rebuilds the UI index after every run via `health.ui.write_health_ui_index()` (outputs `runs/health/ui-index.json`).
-- `ui/model.build_ui_context` loads that index, and `ui/api.build_*` serializes the context into the payloads the frontend consumes (`RunPayload`, `FleetPayload`, `ClusterDetailPayload`, `ProposalsPayload`, `NotificationsPayload`).
-- Artifact links (snapshots, assessments, drilldowns, proposals, notification payloads) are surfaced on the UI so operators can open the same durable files that produced the view.
-- Any additional summaries (fleet ratings, proposal lifecycle, drilldown coverage, notification history) are recalculated on the fly from the durable artifacts—no derived view is treated as a persistence boundary.
-- The run payload now includes an `llmStats` slice that is computed from the `runs/health/external-analysis` artifacts so operators can see how many provider calls were made, how many succeeded/failed, their latencies, and which adapters supplied them.
+- External analysis adapters (LLM or other tools) are an opt-in branch implemented in `external_analysis.adapter`/`artifact`. They only run when the config enables adapters, `TriggerPolicy.manual` is true, and a manual request (`--external-analysis`, `manual_external_analysis`, `assess-drilldown`, `assess-snapshots`) explicitly names the target. No provider output is injected into the default `Assessment`; the health loop simply persists each `ExternalAnalysisArtifact`, logs the outcome, pushes a notification, and surfaces the stats to the UI.
+- The same adapters drive the standalone CLI commands `assess-drilldown` (runs against `runs/health/drilldowns/*.json`) and `assess-snapshots` (pairs sanitized snapshots) so maintainers can exercise LLM reasoning without altering the deterministic run. Each provider invocation writes an artifact, which also records `status`/`findings`/`suggested_next_checks` for audit or future review.
+
+## Stage-by-stage lifecycle
+
+1. **Invocation & scheduling:** the scheduler or an operator starts `run-health-loop`. A lock file under `runs/health/.health-loop.lock` guards overlaps. `run_label` from the config is paired with a new `run_id`; this metadata is logged and carried into every artifact.
+2. **Collection:** sanitize snapshots per target, write them to `runs/health/snapshots`, and emit `RunArtifact.collection_status`. Mandatory stage for every monitored cluster.
+3. **Health assessment:** `build_health_assessment` runs for every target that opted into monitoring. It is deterministic, mandatory when `monitor_health` is true, and stores the result under `runs/health/assessments`. No provider interaction happens here.
+4. **Comparison triggers:** policy-driven comparisons between peers only occur when `peer_mappings`/manual triggers fire and baseline/trigger heuristics indicate suspicious drift. Comparisons and their `trigger` artifacts are mandatory when triggered but skipped otherwise.
+5. **Drilldown collection:** deterministic `DrilldownCollector` gathers kubectl evidence for any target whose assessment produced a trigger reason (health regression, pending pods, warning threshold, manual request). Drilldowns are deterministic and saved under `runs/health/drilldowns`; absence means no trigger reason fired.
+6. **Optional provider-assisted analysis:** adapters run only when manually requested; no part of the default loop depends on this stage. This branch can be disabled by setting `external_analysis.manual` false or by leaving `--external-analysis`/`manual_external_analysis` empty.
+7. **Review creation:** `build_health_review` aggregates assessments, drilldowns, comparisons, and trigger details into a single artifact under `runs/health/reviews/{run_id}-review.json` and exposes the quality metrics that `generate_proposals_from_review` reads.
+8. **Proposal generation:** proposals (warning thresholds, noise filters, baseline releases/CRDs, drilldown ranking) are derived from the review and persisted to `runs/health/proposals`. Generation is deterministic and limited to the allowed target set.
+9. **Notifications & UI index:** notifications capture degraded health, suspicious comparisons, provider results, and proposal creations. `write_health_ui_index` rebuilds `runs/health/ui-index.json` so the backend/UI can stay read-only on the artifact tree.
+10. **Completion:** history is updated, `collection_status` is annotated (complete/partial/failed), and structured logs note whether the run succeeded, was partial, or failed.
+
+## Assessment logic
+
+- **What “assessment” means:** the assessment bundle (`Assessment` model) is the deterministic synthesis of signals, findings, hypotheses, confidence, next checks, and the recommended action that `build_health_assessment` emits. It represents the loop’s view of the cluster’s health before any provider-assisted reasoning.
+- **Inputs:** each assessment consumes the ClusterSnapshot, the `HealthTarget` metadata, the persisted `HealthHistoryEntry`, a baseline policy, the configured warning-event threshold, and the optional `ImagePullSecretInsight`.
+- **Deterministic pieces:** it enumerates telemetry gaps, version drifts, node/pod counts, warning-event patterns, baseline violations, regressions versus history, and image pull secret failures; each datum results in a deterministic `Signal`, `Finding`, and `Hypothesis` (with help from `reason/diagnoser.py` and pattern matching). Recommended actions and next checks are also derived here (see `recommend/next_steps.py`).
+- **LLM/provider output:** there is no provider call inside `build_health_assessment`. LLMs only participate via explicit manual requests (`--provider`, `manual_external_analysis`, `assess-drilldown`, `assess-snapshots`), and their artifacts are kept separate. The default assessment path remains deterministic and read-only.
+- **Reasoning & recommendation seams:** maintainers who adjust `Assessment` logic should update `build_health_assessment`, the `Signal`/`Finding`/`Hypothesis` text builders, and the `NextCheck`/`RecommendedAction` lists while leaving the schema in `docs/schemas/assessment-schema.md` stable. Changes that add/rename fields, re-label layers, or expose new metrics also require updates to any tests/fixtures referencing specific signal IDs, review quality metrics, or UI expectations.
+
+## Drilldown construction
+
+- **Triggering:** drilldowns are built whenever `_determine_drilldown_reasons` finds health regressions, crashloop/image pull events, warning thresholds, job failures, manual requests, or pattern-specific flags based on the current assessment and persisted history.
+- **Inventoried evidence:** the deterministic `DrilldownCollector` captures warning events, non-running pods, pod descriptions, rollout status for a limited set of namespaces, image-pull-secret insights, pattern-specific kubectl digest output, and a brief evidence summary/namespace list. The collector never depends on LLMs; it shells out to `kubectl` and always writes the same fields when given the same inputs.
+- **`assess-drilldown` relationship:** the digest saved as `runs/health/drilldowns/*.json` is the raw artifact `assess-drilldown` ingests when operators request an optional LLM review. That CLI does not mutate the artifact; it only produces provider output that is stored separately if requested.
+- **Extending drilldowns:** add new collection logic inside `DrilldownCollector.collect` (or a subclass) and update `DrilldownArtifact` so the new sections serialize cleanly. Document the new evidence in this file and add fixture coverage for the new JSON shape.
+- **Stability contracts:** keep fields such as `trigger_reasons`, `evidence_summary`, `warning_events`, `non_running_pods`, `rollout_status`, `collection_timestamps`, and `pattern_details` stable so downstream review code can parse them deterministically.
+
+## Review assembly
+
+- **Aggregation role:** `build_health_review` (see `.review_feedback`) assembles the assessments (per-cluster health views), triggered comparisons/triggers, available drilldowns, and proposal generation inputs into `runs/health/reviews/{run_id}-review.json`. It also records the `quality_summary` and `selected_drilldowns` that drive prioritization.
+- **No new reasoning:** the review mostly re-indexes the results of earlier stages; it does not recompute assessments. Its job is to document the state of the run plus the trigger reasons so proposals can be deterministic and so the UI can display the same artifacts that a reviewer would inspect manually.
+- **Stable review inputs vs internals:** future changes should treat the review’s `assessments`, `drilldowns`, `selected_drilldowns`, `quality_summary`, and `run_metadata` as the stable inputs. Internal helper functions/metrics (ranking heuristics, scoring thresholds) can evolve, but when they affect the review schema, update the review artifacts, UI expectations, and any tests that introspect them.
+
+## Proposal generation and adaptation boundary
+
+- **Derivation from the review:** `generate_proposals_from_review` reads the review’s selected drilldowns, trigger details, and `quality_summary` to produce proposals for warning thresholds, noise filters, baseline releases/CRDs, and drilldown ordering. Each proposal references its source review, carries a `promotion_payload`, and is persisted to `runs/health/proposals/{proposal_id}.json`.
+- **Determinism today:** proposals are deterministic: the same review always produces the same set of proposals because the logic only touches the review artifact, the baseline policy, and the target trigger details (no randomness or LLM output is involved).
+- **Allowed changes:** proposals are limited to the predefined config targets (`health.trigger_policy.warning_event_threshold`, `health.noise_filters.ignored_reasons`, baseline release/CRD lists, drilldown ranking). The adaptation helpers in `health/adaptation.py` enforce this constraint and also back the CLI helpers (`render_proposal_patch`, `check-proposal`).
+- **Forbidden proposals:** the system never proposes arbitrary Kubernetes manifests, raw configuration snippets outside the allowed targets, or live cluster mutations. `check-proposal` must always be run manually to simulate the change (noise reduction/signal loss) before an operator accepts and applies the adjustment.
+- **Safe evolution:** when adding a new proposal type, update `generate_proposals_from_review`, the `HealthProposal` schema (if necessary), the promo target set, and the CLI helpers that render patches/check proposals. Any extension that touches production config also requires new fixture-based checks to guard regression and documentation updates describing the policy impact.
+
+## Autonomous operations: allowed vs forbidden
+
+- **Allowed autonomous work (observation-only):**
+  - Evidence collection (`run-health-loop`, scheduler) which only reads from Kubernetes and writes sanitized snapshots.
+  - Comparisons/triggers that decide whether peer comparisons should run.
+  - Drilldown collection, which shells out to `kubectl` but only writes structured evidence into `runs/health/drilldowns`.
+  - Optional provider-assisted analysis (`assess-drilldown`, `assess-snapshots`, manual external analysis requests) that only produces additional artifacts and notifications.
+  - Proposal drafting and notification generation inside the same loop.
+- **Forbidden autonomous work (requires operator approval per `docs/security-policy.md`):**
+  - Any live cluster mutation (the agent never runs `kubectl apply`, `helm upgrade`, etc.).
+  - Auto-applying proposals; only operators should run `check-proposal` and accept a patch.
+  - Changing policy, baseline, or safety config without filing/approving a proposal and evaluating it via fixtures or tests.
+
+## Extension seams for maintainers
+
+1. **Adding a new health signal:** update `build_health_assessment` to emit the new `Signal`, `Finding`, or `Hypothesis`, extend the `Assessment` schema if new fields appear, add fixture coverage referencing the signals, and document the new reasoning in this file.
+2. **Adding a new drilldown section:** expand `DrilldownCollector.collect` (or subclass it) to capture the new evidence, add serialization/deserialization support in `DrilldownArtifact`, and note the new JSON fields in this doc plus update any fixtures that the UI or `assess-drilldown` expects.
+3. **Adding a provider-assisted analysis path:** register the adapter via `external_analysis.adapter.register_external_analysis_adapter`, wire it up in `external_analysis.config`, and document the new provider in `docs/data-model.md`. Confirm that every invocation writes an `ExternalAnalysisArtifact` and update relevant security guidance if it introduces new credential handling.
+4. **Adding a review input:** if the review needs a new slice (e.g., a new quality metric), update `review_feedback.build_health_review`, record the new data inside `runs/health/reviews`, and update any UI/back-end code that reads the review artifact so the schema stays consistent.
+5. **Adding a proposal type:** extend `generate_proposals_from_review`, add the new target to the allowed set in `health/adaptation.py`, write tests for `render_proposal_patch`/`check-proposal`, and update `docs/schemas/health-proposal-schema.md` if the payload grows.
+
+Each extension that affects a durable artifact also requires updating the relevant schema in `docs/schemas/` plus any fixtures/evals that assert the artifact shape or logic (e.g., `tests/fixtures/...`, evals that replay proposals, etc.).
 
 ## Evolution guidance
 
-1. **Artifact-first stays the source of truth.** Future indexing, searchable caches, or persistence layers must read from the JSON artifacts under `runs/` and write back only after confirming they can rebuild from those files.
-2. **Keep rebuildability.** If a future index (SQLite, Postgres, or Elastic) is introduced, it should be derived deterministically from the artifacts. Operators and tests should still be able to point at a `runs/health/` directory and reconstruct a previous run.
-3. **Do not replace the current file-backed layout.** Any persistence change should sit beside the existing artifacts, not inside them, so the inspectable JSON dir structure remains valid while experimentation continues.
-4. **Document before changing.** Add new sections to this doc whenever an entity or lifecycle stage mutates so future developers can reason about the artifact-first contracts before touching runtime behavior.
+1. **Artifact-first remains the source of truth.** Any new persistence layer or index must be derived from `runs/health` and able to rebuild state deterministically.
+2. **Document before changing.** Update this file (and the schema docs) whenever you touch an artifact, review metric, or proposal contract so future maintainers do not have to reverse-engineer behavior from code.
+3. **Preserve replayability.** If a future index (SQLite/PostgreSQL/Elastic) is introduced, it should sit alongside the JSON artifacts, and every run should still be reconstructible from the file tree.
+4. **Safety posture stays intact.** The no-autonomous-mutation principle and the requirement to gate proposals through `check-proposal`/`render_proposal_patch` remain unchanged.
