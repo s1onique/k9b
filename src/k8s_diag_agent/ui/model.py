@@ -25,6 +25,8 @@ class RunView:
     historical_llm_stats: LLMStatsView | None
     llm_activity: LLMActivityView
     llm_policy: LLMPolicyView | None
+    review_enrichment: ReviewEnrichmentView | None
+    review_enrichment_status: ReviewEnrichmentStatusView | None
 
 
 @dataclass(frozen=True)
@@ -196,6 +198,32 @@ class AutoDrilldownInterpretationView:
 
 
 @dataclass(frozen=True)
+class ReviewEnrichmentStatusView:
+    status: str
+    reason: str | None
+    provider: str | None
+    policy_enabled: bool
+    provider_configured: bool
+    adapter_available: bool | None
+
+
+@dataclass(frozen=True)
+class ReviewEnrichmentView:
+    status: str
+    provider: str | None
+    timestamp: str | None
+    summary: str | None
+    triage_order: tuple[str, ...]
+    top_concerns: tuple[str, ...]
+    evidence_gaps: tuple[str, ...]
+    next_checks: tuple[str, ...]
+    focus_notes: tuple[str, ...]
+    artifact_path: str | None
+    error_summary: str | None
+    skip_reason: str | None
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisSummary:
     count: int
     status_counts: tuple[tuple[str, int], ...]
@@ -288,6 +316,8 @@ class UIIndexContext:
     external_analysis: ExternalAnalysisSummary
     auto_drilldown_interpretations: Mapping[str, AutoDrilldownInterpretationView]
     llm_activity: LLMActivityView
+    review_enrichment: ReviewEnrichmentView | None
+    review_enrichment_status: ReviewEnrichmentStatusView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -299,6 +329,10 @@ def load_ui_index(directory: Path) -> Mapping[str, object]:
 def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     run_data = index.get("run") or {}
     llm_activity = _build_llm_activity(run_data.get("llm_activity"))
+    review_enrichment = _build_review_enrichment_view(run_data.get("review_enrichment"))
+    review_enrichment_status = _build_review_enrichment_status_view(
+        run_data.get("review_enrichment_status")
+    )
     run = RunView(
         run_id=_coerce_str(run_data.get("run_id")),
         run_label=_coerce_str(run_data.get("run_label")),
@@ -314,6 +348,8 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         historical_llm_stats=_build_optional_llm_stats_view(run_data.get("historical_llm_stats")),
         llm_activity=llm_activity,
         llm_policy=_build_llm_policy_view(run_data.get("llm_policy")),
+        review_enrichment=review_enrichment,
+        review_enrichment_status=review_enrichment_status,
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -349,6 +385,8 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         external_analysis=external_analysis,
         auto_drilldown_interpretations=auto_drilldown_interpretations,
         llm_activity=llm_activity,
+        review_enrichment=review_enrichment,
+        review_enrichment_status=review_enrichment_status,
     )
 
 
@@ -776,6 +814,43 @@ def _build_auto_drilldown_interpretations(
             skip_reason=_coerce_optional_str(entry.get("skip_reason")),
         )
     return interpretations
+
+
+def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    triage = raw.get("triageOrder") or raw.get("triage_order")
+    concerns = raw.get("topConcerns") or raw.get("top_concerns")
+    gaps = raw.get("evidenceGaps") or raw.get("evidence_gaps")
+    checks = raw.get("nextChecks") or raw.get("next_checks")
+    focus = raw.get("focusNotes") or raw.get("focus_notes")
+    return ReviewEnrichmentView(
+        status=_coerce_str(raw.get("status")),
+        provider=_coerce_optional_str(raw.get("provider")),
+        timestamp=_coerce_optional_str(raw.get("timestamp")),
+        summary=_coerce_optional_str(raw.get("summary")),
+        triage_order=_coerce_sequence(triage),
+        top_concerns=_coerce_sequence(concerns),
+        evidence_gaps=_coerce_sequence(gaps),
+        next_checks=_coerce_sequence(checks),
+        focus_notes=_coerce_sequence(focus),
+        artifact_path=_coerce_optional_str(raw.get("artifactPath")),
+        error_summary=_coerce_optional_str(raw.get("errorSummary")),
+        skip_reason=_coerce_optional_str(raw.get("skipReason")),
+    )
+
+
+def _build_review_enrichment_status_view(raw: object | None) -> ReviewEnrichmentStatusView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return ReviewEnrichmentStatusView(
+        status=_coerce_str(raw.get("status")),
+        reason=_coerce_optional_str(raw.get("reason")),
+        provider=_coerce_optional_str(raw.get("provider")),
+        policy_enabled=bool(raw.get("policyEnabled")),
+        provider_configured=bool(raw.get("providerConfigured")),
+        adapter_available=_coerce_optional_bool(raw.get("adapterAvailable")),
+    )
 
 
 def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysisView:

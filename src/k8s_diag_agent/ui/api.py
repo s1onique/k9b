@@ -19,6 +19,8 @@ from .model import (
     NotificationView,
     ProposalView,
     RecommendedActionView,
+    ReviewEnrichmentStatusView,
+    ReviewEnrichmentView,
     RunStatsView,
     UIIndexContext,
 )
@@ -50,6 +52,8 @@ class RunPayload(TypedDict):
     historicalLlmStats: LLMStatsPayload | None
     llmActivity: LLMActivityPayload
     llmPolicy: LLMPolicyPayload | None
+    reviewEnrichment: ReviewEnrichmentPayload | None
+    reviewEnrichmentStatus: ReviewEnrichmentStatusPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -116,6 +120,30 @@ class LLMActivitySummaryPayload(TypedDict):
 class LLMActivityPayload(TypedDict):
     entries: list[LLMActivityEntryPayload]
     summary: LLMActivitySummaryPayload
+
+
+class ReviewEnrichmentPayload(TypedDict, total=False):
+    status: str
+    provider: str | None
+    timestamp: str | None
+    summary: str | None
+    triageOrder: list[str]
+    topConcerns: list[str]
+    evidenceGaps: list[str]
+    nextChecks: list[str]
+    focusNotes: list[str]
+    artifactPath: str | None
+    errorSummary: str | None
+    skipReason: str | None
+
+
+class ReviewEnrichmentStatusPayload(TypedDict, total=False):
+    status: str
+    reason: str | None
+    provider: str | None
+    policyEnabled: bool
+    providerConfigured: bool
+    adapterAvailable: bool | None
 
 
 class RatingCount(TypedDict):
@@ -318,6 +346,10 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         ),
         "llmActivity": _serialize_llm_activity(context.run.llm_activity),
         "llmPolicy": _serialize_llm_policy(context.run.llm_policy),
+        "reviewEnrichment": _serialize_review_enrichment(context.run.review_enrichment),
+        "reviewEnrichmentStatus": _serialize_review_enrichment_status(
+            context.run.review_enrichment_status
+        ),
     }
 
 
@@ -663,6 +695,40 @@ def _serialize_auto_interpretation(
         "payload": payload,
         "errorSummary": interpretation.error_summary,
         "skipReason": interpretation.skip_reason,
+    }
+
+
+def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnrichmentPayload | None:
+    if not view:
+        return None
+    return {
+        "status": view.status,
+        "provider": view.provider,
+        "timestamp": view.timestamp,
+        "summary": view.summary,
+        "triageOrder": list(view.triage_order),
+        "topConcerns": list(view.top_concerns),
+        "evidenceGaps": list(view.evidence_gaps),
+        "nextChecks": list(view.next_checks),
+        "focusNotes": list(view.focus_notes),
+        "artifactPath": view.artifact_path,
+        "errorSummary": view.error_summary,
+        "skipReason": view.skip_reason,
+    }
+
+
+def _serialize_review_enrichment_status(
+    view: ReviewEnrichmentStatusView | None,
+) -> ReviewEnrichmentStatusPayload | None:
+    if not view:
+        return None
+    return {
+        "status": view.status,
+        "reason": view.reason,
+        "provider": view.provider,
+        "policyEnabled": view.policy_enabled,
+        "providerConfigured": view.provider_configured,
+        "adapterAvailable": view.adapter_available,
     }
 
 

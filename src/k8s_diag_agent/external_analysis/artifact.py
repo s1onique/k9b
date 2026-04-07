@@ -20,6 +20,7 @@ class ExternalAnalysisStatus(StrEnum):
 class ExternalAnalysisPurpose(StrEnum):
     MANUAL = "manual"
     AUTO_DRILLDOWN = "auto-drilldown"
+    REVIEW_ENRICHMENT = "review-enrichment"
 
 
 def _coerce_optional_int(value: object | None) -> int | None:

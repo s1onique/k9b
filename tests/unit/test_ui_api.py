@@ -32,7 +32,7 @@ class UIApiTests(unittest.TestCase):
     def test_run_payload_includes_llm_stats(self) -> None:
         payload = build_run_payload(self.context)
         llm_stats = payload["llmStats"]
-        self.assertEqual(llm_stats["totalCalls"], 2)
+        self.assertEqual(llm_stats["totalCalls"], 3)
         self.assertEqual(llm_stats["successfulCalls"], 2)
         providers = {entry["provider"] for entry in llm_stats["providerBreakdown"]}
         self.assertIn("k8sgpt", providers)
@@ -43,7 +43,7 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(historical["totalCalls"], 5)
         self.assertEqual(historical["scope"], "retained_history")
         activity = payload["llmActivity"]
-        self.assertEqual(activity["summary"]["retainedEntries"], 2)
+        self.assertEqual(activity["summary"]["retainedEntries"], 3)
         self.assertEqual(activity["entries"][0]["status"], "success")
         llm_policy = payload["llmPolicy"]
         self.assertIsNotNone(llm_policy)
@@ -53,6 +53,12 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(auto_policy["usedThisRun"], 1)
         self.assertEqual(auto_policy["failedThisRun"], 1)
         self.assertFalse(auto_policy["budgetExhausted"])
+        review_enrichment = payload.get("reviewEnrichment")
+        self.assertIsNotNone(review_enrichment)
+        assert review_enrichment is not None
+        self.assertEqual(review_enrichment["status"], "success")
+        self.assertEqual(review_enrichment["triageOrder"], ["cluster-b", "cluster-a"])
+        self.assertIsNone(payload.get("reviewEnrichmentStatus"))
 
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)

@@ -11,19 +11,19 @@ def sample_ui_index() -> Mapping[str, object]:
             "cluster_count": 1,
             "drilldown_count": 1,
             "proposal_count": 1,
-            "external_analysis_count": 2,
+            "external_analysis_count": 3,
             "notification_count": 1,
             "llm_stats": {
-                "totalCalls": 2,
+                "totalCalls": 3,
                 "successfulCalls": 2,
-                "failedCalls": 0,
+                "failedCalls": 1,
                 "lastCallTimestamp": "2026-01-01T00:00:00Z",
                 "p50LatencyMs": 120,
-                "p95LatencyMs": 120,
-                "p99LatencyMs": 120,
+                "p95LatencyMs": 220,
+                "p99LatencyMs": 300,
                 "providerBreakdown": [
-                    {"provider": "k8sgpt", "calls": 1, "failedCalls": 0},
-                    {"provider": "llm-autodrilldown", "calls": 1, "failedCalls": 0},
+                    {"provider": "k8sgpt", "calls": 2, "failedCalls": 0},
+                    {"provider": "llm-autodrilldown", "calls": 1, "failedCalls": 1},
                 ],
                 "scope": "current_run",
             },
@@ -43,6 +43,21 @@ def sample_ui_index() -> Mapping[str, object]:
             },
             "llm_activity": {
                 "entries": [
+                    {
+                        "timestamp": "2026-01-01T00:10:00Z",
+                        "run_id": "run-1",
+                        "run_label": "health-run",
+                        "cluster_label": "review",
+                        "tool_name": "k8sgpt",
+                        "provider": "k8sgpt",
+                        "purpose": "review-enrichment",
+                        "status": "success",
+                        "latency_ms": 210,
+                        "artifact_path": "external-analysis/run-1-review-enrichment-k8sgpt.json",
+                        "summary": "Review enrichment prioritized clusters",
+                        "error_summary": None,
+                        "skip_reason": None,
+                    },
                     {
                         "timestamp": "2026-01-01T00:00:00Z",
                         "run_id": "run-1",
@@ -74,7 +89,7 @@ def sample_ui_index() -> Mapping[str, object]:
                         "skip_reason": None,
                     },
                 ],
-                "summary": {"retained_entries": 2},
+                "summary": {"retained_entries": 3},
             },
             "llm_policy": {
                 "auto_drilldown": {
@@ -88,6 +103,24 @@ def sample_ui_index() -> Mapping[str, object]:
                     "budgetExhausted": False,
                 }
             },
+            "review_enrichment": {
+                "status": "success",
+                "provider": "k8sgpt",
+                "timestamp": "2026-01-01T00:10:00Z",
+                "summary": "Review enrichment prioritized clusters.",
+                "triageOrder": ["cluster-b", "cluster-a"],
+                "topConcerns": ["ingress latency", "storage delays"],
+                "evidenceGaps": ["metrics at CDN edge"],
+                "nextChecks": [
+                    "Validate ingress timeouts",
+                    "Collect storage metrics",
+                ],
+                "focusNotes": ["Prioritize cluster-b first"],
+                "artifactPath": "external-analysis/run-1-review-enrichment-k8sgpt.json",
+                "errorSummary": None,
+                "skipReason": None,
+            },
+            "review_enrichment_status": None,
         },
         "run_stats": {
             "last_run_duration_seconds": 42,
@@ -219,9 +252,37 @@ def sample_ui_index() -> Mapping[str, object]:
             }
         ],
         "external_analysis": {
-            "count": 2,
-            "status_counts": [{"status": "success", "count": 2}],
+            "count": 3,
+            "status_counts": [
+                {"status": "success", "count": 2},
+                {"status": "failed", "count": 1},
+            ],
             "artifacts": [
+                {
+                    "tool_name": "k8sgpt",
+                    "cluster_label": "review",
+                    "status": "success",
+                    "summary": "Review enrichment prioritized clusters",
+                    "findings": [],
+                    "suggested_next_checks": [],
+                    "timestamp": "2026-01-01T00:10:00Z",
+                    "artifact_path": "external-analysis/run-1-review-enrichment-k8sgpt.json",
+                    "duration_ms": 210,
+                    "provider": "k8sgpt",
+                    "purpose": "review-enrichment",
+                    "payload": {
+                        "triageOrder": ["cluster-b", "cluster-a"],
+                        "topConcerns": ["ingress latency", "storage delays"],
+                        "evidenceGaps": ["metrics at CDN edge"],
+                        "nextChecks": [
+                            "Validate ingress timeouts",
+                            "Collect storage metrics",
+                        ],
+                        "focusNotes": ["Prioritize cluster-b first"],
+                    },
+                    "error_summary": None,
+                    "skip_reason": None,
+                },
                 {
                     "tool_name": "k8sgpt",
                     "cluster_label": "cluster-a",
@@ -241,7 +302,7 @@ def sample_ui_index() -> Mapping[str, object]:
                 {
                     "tool_name": "llm-autodrilldown",
                     "cluster_label": "cluster-a",
-                    "status": "success",
+                    "status": "failed",
                     "summary": "LLM drilldown insight",
                     "findings": ["auto-f1"],
                     "suggested_next_checks": ["auto-check"],

@@ -30,8 +30,8 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(findings.artifact_path, "drilldowns/cluster-a.json")
         self.assertEqual(context.drilldown_availability.available, 1)
         self.assertEqual(context.notification_history[0].kind, "degraded-health")
-        self.assertEqual(context.external_analysis.count, 2)
-        self.assertEqual(context.run.external_analysis_count, 2)
+        self.assertEqual(context.external_analysis.count, 3)
+        self.assertEqual(context.run.external_analysis_count, 3)
         self.assertEqual(context.run.notification_count, 1)
         self.assertIsNotNone(context.latest_assessment)
         assessment = cast(AssessmentView, context.latest_assessment)
@@ -42,7 +42,7 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(assessment.next_checks[0].owner, "platform")
         self.assertEqual(context.run.run_stats.total_runs, 3)
         self.assertEqual(context.run.run_stats.last_run_duration_seconds, 42)
-        self.assertEqual(context.run.llm_stats.total_calls, 2)
+        self.assertEqual(context.run.llm_stats.total_calls, 3)
         provider_names = {entry.provider for entry in context.run.llm_stats.provider_breakdown}
         self.assertIn("k8sgpt", provider_names)
         self.assertIn("llm-autodrilldown", provider_names)
@@ -57,7 +57,7 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(historical.failed_calls, 1)
         self.assertEqual(historical.scope, "retained_history")
         activity = context.llm_activity
-        self.assertEqual(activity.summary.retained_entries, 2)
+        self.assertEqual(activity.summary.retained_entries, 3)
         self.assertEqual(activity.entries[0].status, "success")
         llm_policy = context.run.llm_policy
         self.assertIsNotNone(llm_policy)
@@ -71,3 +71,11 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(auto_policy.successful_this_run, 0)
         self.assertEqual(auto_policy.failed_this_run, 1)
         self.assertEqual(auto_policy.skipped_this_run, 0)
+
+        review_enrichment = context.run.review_enrichment
+        self.assertIsNotNone(review_enrichment)
+        assert review_enrichment is not None
+        self.assertEqual(review_enrichment.status, "success")
+        self.assertEqual(review_enrichment.triage_order, ("cluster-b", "cluster-a"))
+        self.assertEqual(review_enrichment.top_concerns[0], "ingress latency")
+        self.assertIsNone(context.run.review_enrichment_status)

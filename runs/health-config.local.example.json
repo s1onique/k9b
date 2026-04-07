@@ -63,9 +63,13 @@
       { "name": "llamacpp", "enabled": true }
     ],
     "auto_drilldown": {
-      "enabled": true,
+      "enabled": false,
       "provider": "llamacpp",
       "max_per_run": 3
+    },
+    "review_enrichment": {
+      "enabled": false,
+      "provider": "llamacpp"
     }
   },
   "baseline_policy_path": "health-baseline.example.json"

@@ -4,10 +4,15 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose, ExternalAnalysisStatus
-from k8s_diag_agent.external_analysis.config import AutoDrilldownPolicy, ExternalAnalysisSettings
+from k8s_diag_agent.external_analysis.config import (
+    AutoDrilldownPolicy,
+    ExternalAnalysisSettings,
+    ReviewEnrichmentPolicy,
+)
 from k8s_diag_agent.health.adaptation import HealthProposal
 from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
@@ -28,6 +33,28 @@ class HealthUITests(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write_status_index(
+        self,
+        settings: ExternalAnalysisSettings,
+        adapters: tuple[str, ...] | None = None,
+    ) -> dict[str, object]:
+        output_dir = self.tmpdir / "runs" / "health"
+        status_path = write_health_ui_index(
+            output_dir,
+            run_id="status-run",
+            run_label="status-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+            external_analysis_settings=settings,
+            available_adapters=adapters,
+        )
+        return cast(dict[str, object], json.loads(status_path.read_text(encoding="utf-8")))
 
     def test_ui_index_contains_expected_keys(self) -> None:
         target = HealthTarget(
@@ -120,6 +147,27 @@ class HealthUITests(unittest.TestCase):
             provider="k8sgpt",
             duration_ms=150,
         )
+        review_artifact = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="health-run-1",
+            cluster_label="review",
+            source_artifact="runs/health/reviews/health-run-1-review.json",
+            summary="Review enrichment summary",
+            findings=(),
+            suggested_next_checks=(),
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-1-review-enrichment-k8sgpt.json",
+            provider="k8sgpt",
+            duration_ms=210,
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            payload={
+                "triageOrder": ["cluster-b", "cluster-a"],
+                "topConcerns": ["ingress latency", "storage delays"],
+                "evidenceGaps": ["CDN metrics"],
+                "nextChecks": ["Inspect ingress logs"],
+                "focusNotes": ["Prioritize cluster-b"],
+            },
+        )
         auto_path = external_path.parent / "auto-drilldown.json"
         auto_artifact = ExternalAnalysisArtifact(
             tool_name="llm-autodrilldown",
@@ -184,7 +232,7 @@ class HealthUITests(unittest.TestCase):
             assessments=[artifact],
             drilldowns=[drilldown],
             proposals=[proposal],
-            external_analysis=[external_artifact, auto_artifact],
+            external_analysis=[review_artifact, external_artifact, auto_artifact],
             notifications=[notification_record],
             external_analysis_settings=settings,
         )
@@ -211,17 +259,17 @@ class HealthUITests(unittest.TestCase):
         self.assertIn("notification_history", data)
         self.assertEqual(data["notification_history"][0]["kind"], "degraded-health")
         self.assertIn("external_analysis", data)
-        self.assertEqual(data["external_analysis"]["count"], 2)
+        self.assertEqual(data["external_analysis"]["count"], 3)
         self.assertEqual(data["run"]["notification_count"], 1)
         self.assertIn("latest_assessment", data)
         self.assertEqual(data["latest_assessment"]["cluster_label"], "cluster-alpha")
         self.assertIn("artifact_path", data["latest_assessment"])
         llm_stats = data["run"].get("llm_stats")
         self.assertIsNotNone(llm_stats)
-        self.assertEqual(llm_stats["totalCalls"], 2)
-        self.assertEqual(llm_stats["successfulCalls"], 2)
+        self.assertEqual(llm_stats["totalCalls"], 3)
+        self.assertEqual(llm_stats["successfulCalls"], 3)
         self.assertEqual(llm_stats["failedCalls"], 0)
-        self.assertEqual(llm_stats["p50LatencyMs"], 150)
+        self.assertEqual(llm_stats["p50LatencyMs"], 180)
         self.assertEqual(llm_stats["providerBreakdown"][0]["provider"], "k8sgpt")
         self.assertEqual(llm_stats["scope"], "current_run")
         historical_stats = data["run"].get("historical_llm_stats")
@@ -247,6 +295,10 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(auto_policy["failedThisRun"], 0)
         self.assertEqual(auto_policy["skippedThisRun"], 0)
         self.assertFalse(auto_policy["budgetExhausted"])
+        enrichment = data["run"].get("review_enrichment")
+        self.assertIsNotNone(enrichment)
+        self.assertEqual(enrichment["status"], "success")
+        self.assertEqual(enrichment["triageOrder"], ["cluster-b", "cluster-a"])
         llm_activity = data["run"].get("llm_activity")
         self.assertIsNotNone(llm_activity)
         self.assertEqual(llm_activity["summary"]["retained_entries"], 3)
@@ -254,6 +306,8 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(entries[0]["status"], "success")
         self.assertEqual(entries[1]["status"], "success")
         self.assertEqual(entries[2]["status"], "failed")
+        status_entry = data["run"].get("review_enrichment_status")
+        self.assertIsNone(status_entry)
 
     def test_historical_llm_stats_handles_missing_durations(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"
@@ -513,3 +567,33 @@ class HealthUITests(unittest.TestCase):
         assert llm_policy is not None
         auto_policy = llm_policy["auto_drilldown"]
         self.assertTrue(auto_policy["budgetExhausted"])
+
+    def test_review_enrichment_status_disabled_by_policy(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=False, provider="llamacpp")
+        )
+        data = self._write_status_index(settings)
+        status = data["run"].get("review_enrichment_status")
+        self.assertIsNotNone(status)
+        assert isinstance(status, dict)
+        self.assertEqual(status["status"], "policy-disabled")
+        self.assertFalse(status["policyEnabled"])
+        self.assertEqual(status["adapterAvailable"], None)
+
+    def test_review_enrichment_status_requires_provider_configuration(self) -> None:
+        settings = ExternalAnalysisSettings(review_enrichment=ReviewEnrichmentPolicy(enabled=True))
+        data = self._write_status_index(settings)
+        run_entry = cast(dict[str, object], data["run"])
+        status = cast(dict[str, object], run_entry["review_enrichment_status"])
+        self.assertEqual(status["status"], "provider-missing")
+        self.assertFalse(status["providerConfigured"])
+
+    def test_review_enrichment_status_detects_missing_adapter(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        data = self._write_status_index(settings, adapters=("k8sgpt",))
+        run_entry = cast(dict[str, object], data["run"])
+        status = cast(dict[str, object], run_entry["review_enrichment_status"])
+        self.assertEqual(status["status"], "adapter-unavailable")
+        self.assertFalse(status["adapterAvailable"])

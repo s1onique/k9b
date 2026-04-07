@@ -35,7 +35,8 @@ export const sampleRun: RunPayload = {
     p95LatencyMs: 220,
     p99LatencyMs: 300,
     providerBreakdown: [
-      { provider: "k8sgpt", calls: 3, failedCalls: 1 },
+      { provider: "k8sgpt", calls: 2, failedCalls: 0 },
+      { provider: "default", calls: 1, failedCalls: 1 },
     ],
     scope: "current_run",
   },
@@ -55,6 +56,21 @@ export const sampleRun: RunPayload = {
   },
   llmActivity: {
     entries: [
+      {
+        timestamp: "2026-04-06T12:00:00Z",
+        runId: "run-123",
+        runLabel: "Daily sweep",
+        clusterLabel: "review",
+        toolName: "k8sgpt",
+        provider: "k8sgpt",
+        purpose: "review-enrichment",
+        status: "success",
+        latencyMs: 180,
+        artifactPath: "/artifacts/review-enrichment.json",
+        summary: "Review enrichment insight",
+        errorSummary: null,
+        skipReason: null,
+      },
       {
         timestamp: "2026-04-06T11:58:00Z",
         runId: "run-123",
@@ -87,7 +103,7 @@ export const sampleRun: RunPayload = {
       },
     ],
     summary: {
-      retainedEntries: 18,
+      retainedEntries: 19,
     },
   },
   llmPolicy: {
@@ -101,6 +117,20 @@ export const sampleRun: RunPayload = {
       skippedThisRun: 0,
       budgetExhausted: false,
     },
+  },
+  reviewEnrichment: {
+    status: "success",
+    provider: "k8sgpt",
+    timestamp: "2026-04-06T12:00:00Z",
+    summary: "Review enrichment reshaped the triage order.",
+    triageOrder: ["cluster-b", "cluster-a"],
+    topConcerns: ["ingress latency", "storage delays"],
+    evidenceGaps: ["logs from edge"],
+    nextChecks: ["Validate ingress timeouts", "Collect storage metrics"],
+    focusNotes: ["Prioritize cluster-b"],
+    artifactPath: "/artifacts/review-enrichment.json",
+    errorSummary: null,
+    skipReason: null,
   },
 };
 
@@ -159,8 +189,8 @@ export const sampleFleet: FleetPayload = {
     statusCounts: [
       { status: "pending", count: 3 },
       { status: "review", count: 2 },
-    ],
-  },
+        ],
+    },
 };
 
 export const sampleProposals: ProposalsPayload = {

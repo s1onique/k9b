@@ -22,6 +22,12 @@ class AutoDrilldownPolicy:
 
 
 @dataclass(frozen=True)
+class ReviewEnrichmentPolicy:
+    enabled: bool = False
+    provider: str | None = None
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisAdapterConfig:
     name: str
     enabled: bool = True
@@ -32,6 +38,7 @@ class ExternalAnalysisAdapterConfig:
 class ExternalAnalysisSettings:
     policy: ExternalAnalysisPolicy = field(default_factory=ExternalAnalysisPolicy)
     auto_drilldown: AutoDrilldownPolicy = field(default_factory=AutoDrilldownPolicy)
+    review_enrichment: ReviewEnrichmentPolicy = field(default_factory=ReviewEnrichmentPolicy)
     adapters: tuple[ExternalAnalysisAdapterConfig, ...] = field(default_factory=tuple)
 
 
@@ -60,6 +67,11 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
         provider=str(auto_raw.get("provider")) if auto_raw.get("provider") else None,
         max_per_run=max_per_run,
     )
+    review_raw = raw.get("review_enrichment") or {}
+    review_enrichment = ReviewEnrichmentPolicy(
+        enabled=bool(review_raw.get("enabled", False)),
+        provider=str(review_raw.get("provider")) if review_raw.get("provider") else None,
+    )
     adapters_raw = raw.get("adapters") or []
     configs: list[ExternalAnalysisAdapterConfig] = []
     if isinstance(adapters_raw, Sequence):
@@ -83,5 +95,8 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
                 ExternalAnalysisAdapterConfig(name=name, enabled=enabled, command=command)
             )
     return ExternalAnalysisSettings(
-        policy=policy, auto_drilldown=auto_drilldown, adapters=tuple(configs)
+        policy=policy,
+        auto_drilldown=auto_drilldown,
+        review_enrichment=review_enrichment,
+        adapters=tuple(configs),
     )

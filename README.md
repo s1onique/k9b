@@ -226,3 +226,11 @@ k8s-diag-agent assess-snapshots \
 ```
 
 If your llama.cpp endpoint does not require authentication, drop the `LLAMA_CPP_API_KEY` assignment (or set it to an empty string) and the provider will send the request without an `Authorization` header.
+
+## Provider-assisted review enrichment
+
+The health loop can optionally run an advisory provider-assisted review enrichment *after* it builds the deterministic review artifact. Enrichment adds triage order, top concerns, evidence gaps, and suggested next checks without changing the deterministic review or proposal generation.
+
+Enable it by extending `runs/health-config.local.json` with the `external_analysis.review_enrichment` block (the bundled example already declares `auto_drilldown` and `review_enrichment` alongside `external_analysis.adapters`). Flip `review_enrichment.enabled` to `true` and point `review_enrichment.provider` at the same adapter you enabled in `external_analysis.adapters` (for example `llamacpp`). The same `LLAMA_CPP_*` environment variables described above secure the llama.cpp adapter you register.
+
+When enabled, each run writes `runs/health/external-analysis/{run_id}-review-enrichment-{provider}.json` with the enrichment payload and records success/failure/skipped status in the UI. The Review enrichment panel highlights the status pill, surfaces `skipReason` when the provider is unavailable, and reports `errorSummary` when the request fails. Skipped or failed enrichment runs do not block the deterministic health review or proposal flow.

@@ -114,7 +114,9 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Run LLM calls:/i)).toBeInTheDocument();
     expect(screen.getByText(/Historical LLM calls:/i)).toBeInTheDocument();
-    expect(screen.getByText(/Providers: k8sgpt 3 \(1 failed\)/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
+    ).toBeInTheDocument();
   });
 
   test("renders llm policy block with budget details", async () => {
@@ -132,13 +134,60 @@ describe("App", () => {
     expect(scoped.getByText(/Used this run/i)).toBeInTheDocument();
   });
 
+  test("renders review enrichment panel status message", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", {
+      name: /Provider-assisted advisory/i,
+    });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText(/Provider-assisted advisory/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Provider-assisted review enrichment is not configured for this run/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Provider unspecified/i)).toBeInTheDocument();
+  });
+
+  test("shows review enrichment status when enrichment is disabled", async () => {
+    const disabledRun = {
+      ...sampleRun,
+      reviewEnrichment: undefined,
+      reviewEnrichmentStatus: {
+        status: "policy-disabled",
+        reason: "Review enrichment is disabled in the current configuration.",
+        provider: null,
+        policyEnabled: false,
+        providerConfigured: false,
+        adapterAvailable: null,
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultPayloads,
+        "/api/run": disabledRun,
+      })
+    );
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", {
+      name: /Provider-assisted advisory/i,
+    });
+    expect(heading).toBeInTheDocument();
+    expect(
+      screen.getByText(/Review enrichment is disabled in the current configuration/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Provider unspecified/i)).toBeInTheDocument();
+  });
+
   test("renders llm activity panel and filters entries", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     const user = userEvent.setup();
     render(<App />);
 
     const panelHeading = await screen.findByRole("heading", { name: /LLM activity/i });
-    expect(screen.getByText(/Retained entries: 18/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retained entries: 19/i)).toBeInTheDocument();
     const panelSection = panelHeading.closest("section");
     expect(panelSection).not.toBeNull();
     const statusSelect = within(panelSection!).getByLabelText(/Status/i);

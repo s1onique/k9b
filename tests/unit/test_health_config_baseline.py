@@ -94,3 +94,19 @@ class HealthConfigBaselineTests(unittest.TestCase):
         self.assertIs(alpha_policy, config.cohort_baselines["cohort-a"][0])
         self.assertIs(beta_policy, config.cohort_baselines["cohort-b"][0])
         self.assertIs(gamma_policy, config.cohort_baselines["cohort-a"][0])
+
+    def test_example_health_config_documents_review_enrichment(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        example_path = root / "runs" / "health-config.local.example.json"
+        content = json.loads(example_path.read_text(encoding="utf-8"))
+        external_analysis = content.get("external_analysis") or {}
+        self.assertIn("adapters", external_analysis)
+        adapters = external_analysis["adapters"]
+        self.assertIsInstance(adapters, list)
+        self.assertGreater(len(adapters), 0)
+        auto_drilldown = external_analysis.get("auto_drilldown") or {}
+        self.assertIn("enabled", auto_drilldown)
+        self.assertIn("provider", auto_drilldown)
+        review_enrichment = external_analysis.get("review_enrichment") or {}
+        self.assertIn("enabled", review_enrichment)
+        self.assertIn("provider", review_enrichment)

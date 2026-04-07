@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -117,6 +117,7 @@ def write_health_ui_index(
     external_analysis: Sequence[ExternalAnalysisArtifact] = (),
     notifications: Sequence[NotificationRecord] = (),
     external_analysis_settings: ExternalAnalysisSettings | None = None,
+    available_adapters: Iterable[str] | None = None,
 ) -> Path:
     assessment_map = {artifact.label: artifact for artifact in assessments}
     drilldown_map = _latest_drilldown_map(drilldowns)
@@ -138,6 +139,12 @@ def write_health_ui_index(
     )
     notification_history = _serialize_notification_history(notifications, output_dir)
     latest_assessment = _serialize_latest_assessment(assessments, output_dir)
+    review_enrichment_entry = _serialize_review_enrichment(external_analysis, output_dir)
+    review_status = _build_review_enrichment_status(
+        external_analysis_settings,
+        available_adapters,
+        bool(review_enrichment_entry),
+    )
     run_entry = {
         "run_id": run_id,
         "run_label": run_label,
@@ -158,6 +165,8 @@ def write_health_ui_index(
             external_analysis,
             len(drilldowns),
         ),
+        "review_enrichment": review_enrichment_entry,
+        "review_enrichment_status": review_status,
     }
     index = {
         "run": run_entry,
@@ -333,6 +342,89 @@ def _serialize_external_analysis(
             continue
         status_counts.append({"status": status, "count": count})
     return {"count": len(entries), "status_counts": status_counts, "artifacts": entries}
+
+
+def _serialize_review_enrichment(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    root_dir: Path,
+) -> dict[str, object] | None:
+    entries = [
+        artifact
+        for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True)
+        if artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+    ]
+    if not entries:
+        return None
+    artifact = entries[0]
+    payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+
+    def _list_from(*keys: str) -> list[str]:
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+                return [str(item) for item in value]
+            if value is not None:
+                return [str(value)]
+        return []
+
+    return {
+        "status": artifact.status.value,
+        "provider": artifact.provider,
+        "timestamp": artifact.timestamp.isoformat(),
+        "summary": artifact.summary,
+        "triageOrder": _list_from("triageOrder", "triage_order"),
+        "topConcerns": _list_from("topConcerns", "top_concerns"),
+        "evidenceGaps": _list_from("evidenceGaps", "evidence_gaps"),
+        "nextChecks": _list_from("nextChecks", "next_checks"),
+        "focusNotes": _list_from("focusNotes", "focus_notes", "caveats", "proposal_caveats"),
+        "artifactPath": _relative_path(root_dir, artifact.artifact_path),
+        "errorSummary": artifact.error_summary,
+        "skipReason": artifact.skip_reason,
+    }
+
+
+def _build_review_enrichment_status(
+    settings: ExternalAnalysisSettings | None,
+    adapters: Iterable[str] | None,
+    has_artifact: bool,
+) -> dict[str, object] | None:
+    policy = (settings or ExternalAnalysisSettings()).review_enrichment
+    provider_raw = policy.provider or ""
+    provider = provider_raw.strip()
+    provider_name = provider or None
+    if has_artifact:
+        return None
+    adapter_available = _adapter_registered(provider, adapters) if provider else None
+    if not policy.enabled:
+        status = "policy-disabled"
+        reason = "Review enrichment is disabled in the current configuration."
+    elif not provider:
+        status = "provider-missing"
+        reason = "No provider is configured for review enrichment."
+    elif adapter_available is False:
+        status = "adapter-unavailable"
+        reason = f"Adapter '{provider}' is not registered for review enrichment."
+    else:
+        status = "pending"
+        reason = "Review enrichment will run once the next review artifact is available."
+    return {
+        "status": status,
+        "reason": reason,
+        "provider": provider_name,
+        "policyEnabled": policy.enabled,
+        "providerConfigured": bool(provider),
+        "adapterAvailable": adapter_available,
+    }
+
+
+def _adapter_registered(provider: str, adapters: Iterable[str] | None) -> bool | None:
+    if not adapters:
+        return None
+    normalized = provider.lower()
+    for adapter in adapters:
+        if adapter and adapter.lower() == normalized:
+            return True
+    return False
 
 
 def _build_llm_policy(

@@ -35,6 +35,8 @@ export type RunPayload = {
   historicalLlmStats?: LLMStats | null;
   llmActivity: LLMActivity;
   llmPolicy?: LLMPolicy | null;
+  reviewEnrichment?: ReviewEnrichment | null;
+  reviewEnrichmentStatus?: ReviewEnrichmentStatus | null;
 };
 
 export type RunStats = {
@@ -262,4 +264,28 @@ export type AutoInterpretation = {
   payload: Record<string, unknown> | null;
   errorSummary: string | null;
   skipReason: string | null;
+};
+
+export type ReviewEnrichment = {
+  status: string;
+  provider: string | null;
+  timestamp: string | null;
+  summary: string | null;
+  triageOrder: string[];
+  topConcerns: string[];
+  evidenceGaps: string[];
+  nextChecks: string[];
+  focusNotes: string[];
+  artifactPath: string | null;
+  errorSummary: string | null;
+  skipReason: string | null;
+};
+
+export type ReviewEnrichmentStatus = {
+  status: string;
+  reason: string | null;
+  provider: string | null;
+  policyEnabled: boolean;
+  providerConfigured: boolean;
+  adapterAvailable: boolean | null;
 };

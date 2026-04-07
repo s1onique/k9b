@@ -13,11 +13,17 @@ from k8s_diag_agent.collect.cluster_snapshot import (
     extract_cluster_snapshots,
 )
 from k8s_diag_agent.compare.two_cluster import ClusterComparison, compare_snapshots
+from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisAdapter, ExternalAnalysisRequest
 from k8s_diag_agent.external_analysis.artifact import (
+    ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
 )
-from k8s_diag_agent.external_analysis.config import AutoDrilldownPolicy, ExternalAnalysisSettings
+from k8s_diag_agent.external_analysis.config import (
+    AutoDrilldownPolicy,
+    ExternalAnalysisSettings,
+    ReviewEnrichmentPolicy,
+)
 from k8s_diag_agent.health.baseline import (
     BaselineDriftCategory,
     BaselinePolicy,
@@ -113,6 +119,36 @@ class HealthLoopTests(unittest.TestCase):
         ) -> ImagePullSecretInsight | None:
             self.calls.append((context, tuple(namespaces), tuple(warning_events)))
             return self.insight
+
+    class _StubReviewEnrichmentAdapter(ExternalAnalysisAdapter):
+        name = "stub-review"
+
+        def __init__(self, *, fail: bool = False, payload: Mapping[str, object] | None = None) -> None:
+            super().__init__(command=())
+            self.fail = fail
+            self.payload = dict(payload) if payload else {}
+            self.called = False
+
+        def run(self, request: ExternalAnalysisRequest) -> ExternalAnalysisArtifact:
+            self.called = True
+            if self.fail:
+                raise RuntimeError("boom")
+            return ExternalAnalysisArtifact(
+                tool_name=self.name,
+                run_id=request.run_id,
+                cluster_label=request.cluster_label,
+                run_label=self.name,
+                source_artifact=request.source_artifact,
+                summary="review enrichment",
+                findings=(),
+                suggested_next_checks=(),
+                status=ExternalAnalysisStatus.SUCCESS,
+                provider=self.name,
+                timestamp=datetime.now(UTC),
+                duration_ms=200,
+                purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+                payload=self.payload,
+            )
 
     def _read_comparison_decision(self) -> Mapping[str, Any]:
         decision_dir = self.tmp_dir / "health"
@@ -1080,6 +1116,39 @@ class HealthLoopTests(unittest.TestCase):
             drilldown_collector=collector,
         )
 
+    def _build_review_runner(self, snapshots: dict[str, ClusterSnapshot], provider: str = "stub-review") -> HealthLoopRunner:
+        target = HealthTarget(
+            context="cluster-ui",
+            label="cluster-ui",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+        )
+        settings = ExternalAnalysisSettings(
+            auto_drilldown=AutoDrilldownPolicy(enabled=False),
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider=provider),
+        )
+        config = HealthRunConfig(
+            run_label="review-enrichment",
+            output_dir=self.tmp_dir,
+            collector_version="0.1",
+            targets=(target,),
+            peers=(),
+            trigger_policy=TriggerPolicy(True, True, True, True, True, True),
+            manual_pairs=(),
+            baseline_policy=BaselinePolicy.empty(),
+            external_analysis=settings,
+        )
+        return HealthLoopRunner(
+            config,
+            available_contexts=snapshots.keys(),
+            snapshot_collector=lambda context: snapshots[context],
+            comparison_fn=compare_snapshots,
+            quiet=True,
+            manual_drilldown_contexts=(),
+            drilldown_collector=self._StubDrilldownCollector(),
+        )
+
     def test_auto_drilldown_analysis_records_success(self) -> None:
         snapshot = self._make_snapshot(
             "cluster-ui",
@@ -1180,6 +1249,89 @@ class HealthLoopTests(unittest.TestCase):
         ]
         self.assertEqual(len(auto_artifacts), 1)
         artifact = auto_artifacts[0]
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
+        self.assertEqual(artifact.error_summary, "boom")
+
+    def test_review_enrichment_records_success(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-review",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 0,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+        runner = self._build_review_runner(snapshots)
+        adapter = self._StubReviewEnrichmentAdapter(payload={"triageOrder": ["cluster-b"]})
+        runner._analysis_adapters = {adapter.name: adapter}
+        runner.execute()
+        enrichment_artifacts = [
+            art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+        ]
+        self.assertEqual(len(enrichment_artifacts), 1)
+        artifact = enrichment_artifacts[0]
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.SUCCESS)
+        self.assertIsNotNone(artifact.payload)
+        assert artifact.payload is not None
+        self.assertEqual(artifact.payload.get("triageOrder"), ["cluster-b"])
+        self.assertEqual(artifact.provider, adapter.name)
+
+    def test_review_enrichment_records_skip_when_adapter_missing(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-review",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 0,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+        runner = self._build_review_runner(snapshots, provider="missing")
+        runner._analysis_adapters = {}
+        runner.execute()
+        enrichment_artifacts = [
+            art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+        ]
+        self.assertEqual(len(enrichment_artifacts), 1)
+        artifact = enrichment_artifacts[0]
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.SKIPPED)
+        self.assertIsNotNone(artifact.skip_reason)
+
+    def test_review_enrichment_records_failure(self) -> None:
+        snapshot = self._make_snapshot(
+            "cluster-review",
+            health_signals={
+                "pod_counts": {
+                    "non_running": 1,
+                    "crash_loop_backoff": 0,
+                    "pending": 0,
+                    "image_pull_backoff": 0,
+                },
+                "job_failures": 0,
+                "warning_events": (),
+            },
+        )
+        snapshots = {"cluster-ui": snapshot}
+        runner = self._build_review_runner(snapshots)
+        adapter = self._StubReviewEnrichmentAdapter(fail=True)
+        runner._analysis_adapters = {adapter.name: adapter}
+        runner.execute()
+        enrichment_artifacts = [
+            art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+        ]
+        self.assertEqual(len(enrichment_artifacts), 1)
+        artifact = enrichment_artifacts[0]
         self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
         self.assertEqual(artifact.error_summary, "boom")
 

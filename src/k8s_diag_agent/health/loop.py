@@ -2038,6 +2038,9 @@ class HealthLoopRunner:
         external_artifacts = [*auto_artifacts, *manual_artifacts]
         self._persist_history(history, directories["history"])
         review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
+        enrichment_artifact = self._run_review_enrichment(review_path, directories)
+        if enrichment_artifact:
+            external_artifacts.append(enrichment_artifact)
         healthy_count = sum(
             1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
         )
@@ -2067,6 +2070,7 @@ class HealthLoopRunner:
                 external_artifacts,
                 self._notification_records,
                 external_analysis_settings=self.config.external_analysis,
+                available_adapters=self._analysis_adapters.keys(),
             )
         except Exception as exc:
             self._log_event(
@@ -2475,6 +2479,100 @@ class HealthLoopRunner:
             if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
                 break
         return artifacts
+
+    def _run_review_enrichment(
+        self, review_path: Path | None, directories: dict[str, Path]
+    ) -> ExternalAnalysisArtifact | None:
+        policy = self.config.external_analysis.review_enrichment
+        if not policy.enabled or not review_path:
+            return None
+        provider = (policy.provider or "").strip()
+        provider_segment = _safe_label(provider) if provider else "review-enrichment"
+        artifact_path = directories["external_analysis"] / (
+            f"{self.run_id}-review-enrichment-{provider_segment}.json"
+        )
+        start = time.perf_counter()
+        try:
+            if not provider:
+                raise ValueError("No review enrichment provider configured")
+            adapter = self._analysis_adapters.get(provider) or self._analysis_adapters.get(
+                provider.lower()
+            )
+            if not adapter:
+                raise ValueError(f"Adapter '{provider}' is not registered for review enrichment")
+            request = ExternalAnalysisRequest(
+                run_id=self.run_id,
+                cluster_label=self.run_label,
+                source_artifact=str(review_path),
+            )
+            artifact = adapter.run(request)
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            artifact = replace(
+                artifact,
+                artifact_path=str(artifact_path),
+                provider=provider,
+                duration_ms=duration_ms,
+                purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+            )
+        except ValueError as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            artifact = ExternalAnalysisArtifact(
+                tool_name=provider or "review-enrichment",
+                run_id=self.run_id,
+                cluster_label=self.run_label,
+                run_label=self.run_label,
+                source_artifact=str(review_path),
+                summary=str(exc),
+                status=ExternalAnalysisStatus.SKIPPED,
+                timestamp=datetime.now(UTC),
+                artifact_path=str(artifact_path),
+                provider=provider or None,
+                duration_ms=duration_ms,
+                purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+                skip_reason=str(exc),
+            )
+        except Exception as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            artifact = ExternalAnalysisArtifact(
+                tool_name=provider or "review-enrichment",
+                run_id=self.run_id,
+                cluster_label=self.run_label,
+                run_label=self.run_label,
+                source_artifact=str(review_path),
+                summary=str(exc),
+                status=ExternalAnalysisStatus.FAILED,
+                timestamp=datetime.now(UTC),
+                artifact_path=str(artifact_path),
+                provider=provider,
+                duration_ms=duration_ms,
+                purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+                error_summary=str(exc),
+            )
+        write_external_analysis_artifact(artifact_path, artifact)
+        severity = (
+            "INFO"
+            if artifact.status == ExternalAnalysisStatus.SUCCESS
+            else "WARNING"
+            if artifact.status == ExternalAnalysisStatus.SKIPPED
+            else "ERROR"
+        )
+        message = (
+            "Review enrichment recorded"
+            if artifact.status == ExternalAnalysisStatus.SUCCESS
+            else "Review enrichment skipped"
+            if artifact.status == ExternalAnalysisStatus.SKIPPED
+            else "Review enrichment failed"
+        )
+        self._log_event(
+            "review-enrichment",
+            severity,
+            message,
+            provider=provider or "unspecified",
+            status=artifact.status.value,
+            artifact_path=str(artifact_path),
+            event="review-enrichment",
+        )
+        return artifact
 
     def _write_review_artifact(
         self,

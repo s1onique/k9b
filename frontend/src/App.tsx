@@ -19,6 +19,7 @@ import type {
   NotificationsPayload,
   ProposalEntry,
   ProposalsPayload,
+  ReviewEnrichmentStatus,
   RunPayload,
   LLMStats,
 } from "./types";
@@ -436,6 +437,109 @@ const LLMPolicyPanel = ({ policy }: { policy?: LLMPolicy | null }) => {
   );
 };
 
+const ReviewEnrichmentList = ({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: string[];
+}) => {
+  if (!entries.length) {
+    return null;
+  }
+  return (
+    <div className="review-enrichment-item">
+      <p className="tiny">{title}</p>
+      <ul>
+        {entries.map((entry) => (
+          <li key={entry}>{entry}</li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const reviewEnrichmentStatusMessage = (status?: ReviewEnrichmentStatus) => {
+  if (!status) {
+    return "Provider-assisted review enrichment is not configured for this run.";
+  }
+  const reason = status.reason;
+  switch (status.status) {
+    case "policy-disabled":
+      return reason || "Review enrichment is disabled in the current configuration.";
+    case "provider-missing":
+      return reason || "No provider is configured for review enrichment.";
+    case "adapter-unavailable":
+      return reason || "The configured adapter is not registered for review enrichment.";
+    case "pending":
+    default:
+      return reason || "Review enrichment will run once the deterministic review artifact is available.";
+  }
+};
+
+const ReviewEnrichmentPanel = ({
+  enrichment,
+  reviewEnrichmentStatus,
+}: {
+  enrichment: RunPayload["reviewEnrichment"] | undefined;
+  reviewEnrichmentStatus: RunPayload["reviewEnrichmentStatus"] | undefined;
+}) => {
+  const status =
+    enrichment?.status || reviewEnrichmentStatus?.status || "pending";
+  const artifactLink = enrichment?.artifactPath ? artifactUrl(enrichment.artifactPath) : null;
+  return (
+    <section className="panel review-enrichment" id="review-enrichment">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Review enrichment</p>
+          <h2>Provider-assisted advisory</h2>
+        </div>
+        <span className={`status-pill ${statusClass(status)}`}>{status}</span>
+      </div>
+      {enrichment ? (
+        <div className="review-enrichment-body">
+          <p className="small">
+            {enrichment.provider ? `Provider ${enrichment.provider}` : "Provider unspecified"} ·{' '}
+            {enrichment.timestamp ? formatTimestamp(enrichment.timestamp) : "Timestamp unavailable"}
+          </p>
+          <p className="review-enrichment-summary">
+            {enrichment.summary || "No advisory summary was generated."}
+          </p>
+          <div className="review-enrichment-grid">
+            <ReviewEnrichmentList title="Triage order" entries={enrichment.triageOrder} />
+            <ReviewEnrichmentList title="Top concerns" entries={enrichment.topConcerns} />
+            <ReviewEnrichmentList title="Evidence gaps" entries={enrichment.evidenceGaps} />
+            <ReviewEnrichmentList title="Next checks" entries={enrichment.nextChecks} />
+            <ReviewEnrichmentList title="Focus notes" entries={enrichment.focusNotes} />
+          </div>
+          {enrichment.errorSummary ? (
+            <p className="small muted">Error: {enrichment.errorSummary}</p>
+          ) : null}
+          {enrichment.skipReason ? (
+            <p className="small muted">Skipped because {enrichment.skipReason}</p>
+          ) : null}
+          {artifactLink ? (
+            <a className="link" href={artifactLink} target="_blank" rel="noreferrer">
+              View enrichment artifact
+            </a>
+          ) : null}
+        </div>
+      ) : (
+        <div className="review-enrichment-body">
+          <p className="small">
+            {reviewEnrichmentStatusMessage(reviewEnrichmentStatus)}
+          </p>
+          <p className="small muted">
+            {reviewEnrichmentStatus?.provider
+              ? `Provider ${reviewEnrichmentStatus.provider}`
+              : "Provider unspecified"}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+};
+
 export const ProposalList = ({
   proposals,
   filter,
@@ -820,6 +924,7 @@ const App = () => {
         <a href="#cluster">Cluster detail</a>
         <a href="#proposals">Proposal queue</a>
         <a href="#run-detail">Run summary</a>
+        <a href="#review-enrichment">Review enrichment</a>
         <a href="#llm-activity">LLM activity</a>
         <a href="#llm-policy">LLM policy</a>
         <a href="#notifications">Notifications</a>
@@ -864,6 +969,10 @@ const App = () => {
           </div>
         )}
       </section>
+      <ReviewEnrichmentPanel
+        reviewEnrichment={run.reviewEnrichment}
+        reviewEnrichmentStatus={run.reviewEnrichmentStatus}
+      />
       <section className="panel llm-activity-panel" id="llm-activity">
         <LLMActivityPanel activity={run.llmActivity} />
       </section>
