@@ -1,12 +1,13 @@
 FROM python:3.12-slim
 
+ARG TARGETARCH=arm64
+ARG KUBECTL_VERSION=v1.29.6
+ARG HELM_VERSION=3.20.1
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/app/.venv/bin:${PATH}"
-
-ARG KUBECTL_VERSION=v1.29.6
-ARG HELM_VERSION=3.20.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -25,12 +26,17 @@ RUN python -m venv .venv \
     && .venv/bin/pip install --upgrade pip setuptools wheel \
     && .venv/bin/pip install --no-cache-dir .
 
-RUN curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
-    && chmod +x /usr/local/bin/kubectl
-
-RUN curl -fsSL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" | tar xz -C /tmp \
-    && install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm \
-    && rm -rf /tmp/linux-amd64
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) ARCH=amd64 ;; \
+        arm64) ARCH=arm64 ;; \
+        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" -o /usr/local/bin/kubectl; \
+    chmod +x /usr/local/bin/kubectl; \
+    curl -fsSL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" | tar xz -C /tmp; \
+    install -m 0755 /tmp/linux-${ARCH}/helm /usr/local/bin/helm; \
+    rm -rf /tmp/linux-${ARCH}
 
 COPY docker/python-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh

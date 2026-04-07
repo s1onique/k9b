@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.python
-    image: k8s-diag-python
     command: ["backend"]
+    platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
     environment:
       HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
@@ -20,8 +20,11 @@ services:
       - ./podman/kubeconfig:/app/kubeconfig:Z
 
   scheduler:
-    image: k8s-diag-python
+    build:
+      context: .
+      dockerfile: Dockerfile.python
     command: ["scheduler"]
+    platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
     environment:
       HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
@@ -35,6 +38,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    platform: ${DOCKER_PLATFORM:-linux/arm64}
     depends_on:
       - backend
     environment:
