@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/app/.venv/bin:${PATH}"
 
 ARG KUBECTL_VERSION=v1.29.6
-ARG HELM_VERSION=3.20.3
+ARG HELM_VERSION=3.20.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
