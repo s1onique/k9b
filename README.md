@@ -2,6 +2,10 @@
 
 Fixture-driven Kubernetes diagnostics agent that can ingest replayable snapshots or collect real cluster state. Prefer running commands through the project virtual environment (`.venv/bin/python`).
 
+## Data model and run lifecycle
+
+Artifact-first semantics, entity definitions, and the current run lifecycle are documented in [docs/data-model.md](docs/data-model.md). Refer to that page before making UI, persistence, or workflow changes so future work learns the current contracts instead of inferring them from code.
+
 ## CLI usage
 
 ### Diagnose a fixture (legacy interface)
