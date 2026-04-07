@@ -39,6 +39,7 @@ Other metadata fields should be present when they help correlate artifacts (see 
 ## Structured vs human logs
 
 - **Structured logs**: use JSON lines or stable key-value payloads so downstream analysis can `grep key=value` instead of re-parsing transcripts. Always emit `timestamp`, `component`, `severity`, `message`, `run_label`, and any available artifact correlation keys. Example: the scheduler now writes JSON entries into `runs/health/scheduler.log`, although stdout/stderr has become the primary stream for those entries.
+- **Runtime JSON-only stream**: the health scheduler and per-cluster health loop emit only structured JSON lines on stdout/stderr. Each iteration records creditable metadata (`assessment_count`, `healthy_count`, `degraded_count`, `trigger_count`, `drilldown_count`, `external_analysis_count`, `run_id`, `cluster_label`, etc.) so a reader can reconstruct the old text summaries without resorting to printed prose. Human-readable summaries belong to explicit review commands or UI surfaces that intentionally read the file-backed artifacts or `health-summary` results.
 - **Human logs**: CLI output and `print()` statements stay terse, summary-focused, and optional (`--quiet`). Do not convert CLI summaries into source-of-truth logs; keep them as aids for live operators. When you add new CLI output, favor the existing `format_summary`/`format_health_summary` helpers so reviewers can parse the results by reading the artifact files instead of relying on transient text.
 
 ## Log destinations

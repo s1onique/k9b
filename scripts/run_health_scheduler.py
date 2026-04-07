@@ -163,5 +163,9 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except RuntimeError as exc:
-        sys.stderr.write(f"{exc}\n")
+        _append_log(
+            "Scheduler startup failed",
+            severity="CRITICAL",
+            metadata={"event": "startup-failure", "severity_reason": str(exc)},
+        )
         raise SystemExit(1)

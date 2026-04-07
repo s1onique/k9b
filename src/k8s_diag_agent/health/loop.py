@@ -83,10 +83,6 @@ def _safe_label(value: str) -> str:
 
 
 
-def _timestamped_console_line(message: str) -> str:
-    return f"[{datetime.now(UTC).isoformat()}] {message}"
-
-
 def _serialize_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _serialize_value(item) for key, item in value.items()}
@@ -1974,7 +1970,6 @@ class HealthLoopRunner:
         self._manual_keys: set[tuple[str, str]] = {
             (item.primary, item.secondary) for item in manual_items
         }
-        self._collection_messages: list[str] = []
         self._manual_drilldown_contexts: set[str] = {
             normalize_ref(value) for value in (manual_drilldown_contexts or []) if value
         }
@@ -2039,19 +2034,18 @@ class HealthLoopRunner:
         external_artifacts = self._run_external_analysis(records, directories)
         self._persist_history(history, directories["history"])
         review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
-        if not self.quiet:
-            summary = (
-                f"Health run '{self.run_label}' ({self.run_id}) produced {len(assessments)} assessments and {len(triggers)} triggered comparison(s)."
-            )
-            print(_timestamped_console_line(summary))
-            for message in self._collection_messages:
-                print(_timestamped_console_line(message))
+        healthy_count = sum(
+            1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
+        )
+        degraded_count = len(assessments) - healthy_count
         self._log_event(
             "health-loop",
             "INFO",
             "Health run completed",
             event="complete",
             assessment_count=len(assessments),
+            healthy_count=healthy_count,
+            degraded_count=degraded_count,
             trigger_count=len(triggers),
             drilldown_count=len(drilldowns),
             external_analysis_count=len(external_artifacts),
@@ -2070,7 +2064,6 @@ class HealthLoopRunner:
                 self._notification_records,
             )
         except Exception as exc:
-            self._collection_messages.append(f"UI index generation failed: {exc}")
             self._log_event(
                 "health-loop",
                 "ERROR",
@@ -2106,8 +2099,6 @@ class HealthLoopRunner:
         records: list[HealthSnapshotRecord] = []
         for target in self.config.targets:
             if target.context not in self.available_contexts:
-                message = f"Context '{target.context}' not available; skipping {target.label}."
-                self._collection_messages.append(message)
                 self._log_event(
                     "health-loop",
                     "WARNING",
@@ -2120,8 +2111,6 @@ class HealthLoopRunner:
             try:
                 snapshot = self.snapshot_collector(target.context)
             except RuntimeError as exc:
-                message = f"Snapshot for '{target.context}' failed: {exc}"
-                self._collection_messages.append(message)
                 self._log_event(
                     "health-loop",
                     "WARNING",
@@ -2132,7 +2121,9 @@ class HealthLoopRunner:
                     reason="collection-error",
                 )
                 continue
-            filename = _format_snapshot_filename(self.run_id, target.label, snapshot.metadata.captured_at)
+            filename = _format_snapshot_filename(
+                self.run_id, target.label, snapshot.metadata.captured_at
+            )
             path = directory / filename
             _write_json(snapshot.to_dict(), path)
             self._log_event(
@@ -2144,7 +2135,6 @@ class HealthLoopRunner:
                 artifact_path=str(path),
                 event="snapshot",
             )
-            self._collection_messages.append(f"Collected snapshot for '{target.context}' -> {path}")
             baseline_policy, baseline_path = self.config.baseline_for_target(target)
             records.append(
                 HealthSnapshotRecord(
@@ -2186,8 +2176,14 @@ class HealthLoopRunner:
                         record.snapshot.health_signals.warning_events,
                     )
                 except Exception as exc:
-                    self._collection_messages.append(
-                        f"Image pull secret inspection failed for '{record.target.context}': {exc}"
+                    self._log_event(
+                        "health-loop",
+                        "WARNING",
+                        "Image pull secret inspection failed",
+                        cluster_label=record.target.label,
+                        cluster_context=record.target.context,
+                        severity_reason=str(exc),
+                        event="image-pull-secret-inspection",
                     )
             if record.target.monitor_health:
                 assessment_result = build_health_assessment(
@@ -2265,8 +2261,14 @@ class HealthLoopRunner:
                     pattern_metadata=record.pattern_metadata,
                 )
             except RuntimeError as exc:
-                self._collection_messages.append(
-                    f"Drilldown for '{record.target.context}' failed: {exc}"
+                self._log_event(
+                    "drilldown-collector",
+                    "WARNING",
+                    "Drilldown collection failed",
+                    cluster_label=record.target.label,
+                    cluster_context=record.target.context,
+                    severity_reason=str(exc),
+                    event="drilldown-failed",
                 )
                 continue
             path = directory / f"{self.run_id}-{record.target.label}-drilldown.json"
@@ -2301,9 +2303,6 @@ class HealthLoopRunner:
                 cluster_label=record.target.label,
                 artifact_path=str(path),
                 event="drilldown",
-            )
-            self._collection_messages.append(
-                f"Drilldown evidence collected for '{record.target.context}' -> {path}"
             )
         return artifacts
 
@@ -2398,7 +2397,6 @@ class HealthLoopRunner:
                 warning_threshold=self.config.trigger_policy.warning_event_threshold,
             )
         except Exception as exc:
-            self._collection_messages.append(f"Health review generation failed: {exc}")
             self._log_event(
                 "review-assessment",
                 "ERROR",
@@ -2418,7 +2416,6 @@ class HealthLoopRunner:
             drilldown_count=len(drilldowns),
             event="review-created",
         )
-        self._collection_messages.append(f"Health review written to '{path}'")
         try:
             trigger_details = collect_trigger_details(directories["triggers"], self.run_id)
             proposals = generate_proposals_from_review(
@@ -2441,13 +2438,11 @@ class HealthLoopRunner:
                     artifact_path=str(proposal_path),
                     event="proposal-generated",
                 )
-                self._collection_messages.append(f"Health proposal written to '{proposal_path}'")
                 proposal_with_path = replace(proposal, artifact_path=str(proposal_path))
                 proposal_records.append(proposal_with_path)
                 notification = build_proposal_created_notification(self.run_id, proposal)
                 self._record_notification(directories["notifications"], notification)
         except Exception as exc:
-            self._collection_messages.append(f"Health proposal generation failed: {exc}")
             self._log_event(
                 "proposal-promotion",
                 "ERROR",
@@ -2506,7 +2501,12 @@ class HealthLoopRunner:
         triggers: list[ComparisonTriggerArtifact] = []
         decisions: list[ComparisonDecision] = []
         if not self.config.peers:
-            self._collection_messages.append(_HEALTH_ONLY_MESSAGE)
+            self._log_event(
+                "health-loop",
+                "INFO",
+                _HEALTH_ONLY_MESSAGE,
+                event="health-only",
+            )
             return triggers
         record_lookup: dict[str, HealthSnapshotRecord] = {}
         for record in records:
@@ -2558,8 +2558,24 @@ class HealthLoopRunner:
                 )
             triggered = bool(trigger_details)
             if not policy_eligible:
-                self._collection_messages.append(
-                    f"Comparison {primary_record.target.label} vs {secondary_record.target.label} skipped: {policy_reason}"
+                self._log_event(
+                    "health-loop",
+                    "INFO",
+                    "Comparison skipped",
+                    cluster_label=primary_record.target.label,
+                    comparison_target=secondary_record.target.label,
+                    comparison_intent=classification_label,
+                    policy_eligible=False,
+                    severity_reason=policy_reason,
+                    primary_class=primary_class,
+                    secondary_class=secondary_class,
+                    primary_role=primary_role,
+                    secondary_role=secondary_role,
+                    primary_cohort=primary_cohort,
+                    secondary_cohort=secondary_cohort,
+                    expected_drift_categories=list(expected_categories),
+                    ignored_drift_categories=list(ignored_categories),
+                    event="comparison-skip",
                 )
             decision_reason = (
                 policy_reason
@@ -2632,10 +2648,6 @@ class HealthLoopRunner:
                 artifact_path=str(trigger_path),
                 event="comparison-trigger",
                 severity_reason="; ".join(detail.reason for detail in trigger_details),
-            )
-            self._collection_messages.append(
-                f"Triggered comparison {primary_record.target.label} vs {secondary_record.target.label}: "
-                f"{', '.join(detail.reason for detail in trigger_details)}"
             )
             if triggered and peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
                 notification = build_suspicious_comparison_notification(artifact)
@@ -2862,7 +2874,7 @@ def run_health_loop(
     list[ComparisonTriggerArtifact],
     list[DrilldownArtifact],
     list[ExternalAnalysisArtifact],
-] :
+]:
     try:
         config = HealthRunConfig.load(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -2874,7 +2886,6 @@ def run_health_loop(
             log_path=DEFAULT_HEALTH_LOG,
             metadata={"config_path": str(config_path), "severity_reason": str(exc)},
         )
-        print(_timestamped_console_line(f"Unable to load health config {config_path}: {exc}"))
         return 1, [], [], [], []
     try:
         contexts = list_kube_contexts()
@@ -2887,7 +2898,6 @@ def run_health_loop(
             log_path=DEFAULT_HEALTH_LOG,
             metadata={"severity_reason": str(exc)},
         )
-        print(_timestamped_console_line(f"Unable to discover kube contexts: {exc}"))
         return 1, [], [], [], []
     manual_overrides = _parse_manual_triggers(manual_triggers or [])
     manual_analysis_requests = _parse_manual_external_analysis_requests(
@@ -2976,7 +2986,6 @@ class HealthLoopScheduler:
                     break
                 run_executed = False
                 if not self._acquire_lock():
-                    print(_timestamped_console_line(f"Health run skipped because {self._lock_path} is locked."))
                     self._log_event(
                         "WARNING",
                         "Health run skipped because lock is held",
@@ -3012,7 +3021,7 @@ class HealthLoopScheduler:
                             )
                             return exit_code
                         executed_runs += 1
-                        self._print_summary(assessments, triggers, drilldowns, external_artifacts)
+                        self._log_run_summary(assessments, triggers, drilldowns, external_artifacts)
                     finally:
                         self._release_lock()
                 if not run_executed and self._run_once:
@@ -3031,7 +3040,6 @@ class HealthLoopScheduler:
                 event="interrupted",
                 reason="keyboard",
             )
-            print(_timestamped_console_line("Health scheduler interrupted; exiting."))
             return 1
         self._log_event(
             "INFO",
@@ -3059,33 +3067,25 @@ class HealthLoopScheduler:
         except OSError:
             pass
 
-    def _print_summary(
+    def _log_run_summary(
         self,
         assessments: list[HealthAssessmentArtifact],
         triggers: list[ComparisonTriggerArtifact],
         drilldowns: list[DrilldownArtifact],
         external_analysis: list[ExternalAnalysisArtifact],
     ) -> None:
-        run_id = "<unknown>"
-        if assessments:
-            run_id = assessments[0].run_id
-        elif triggers:
-            run_id = triggers[0].run_id
-        healthy = sum(
+        run_id = self._resolve_run_id(assessments, triggers)
+        healthy_count = sum(
             1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
         )
-        degraded = len(assessments) - healthy
-        timestamp = datetime.now(UTC).isoformat()
-        print(
-            f"[{timestamp}] Health run {run_id}: {len(assessments)} assessments "
-            f"({healthy} healthy, {degraded} degraded), {len(triggers)} triggered comparison(s), {len(drilldowns)} drilldown artifact(s), "
-            f"{len(external_analysis)} external analysis artifact(s)."
-        )
+        degraded_count = len(assessments) - healthy_count
         self._log_event(
             "INFO",
             "Health run summary",
             run_id=run_id,
             assessment_count=len(assessments),
+            healthy_count=healthy_count,
+            degraded_count=degraded_count,
             trigger_count=len(triggers),
             drilldown_count=len(drilldowns),
             external_analysis_count=len(external_analysis),
@@ -3107,7 +3107,13 @@ def schedule_health_loop(
     try:
         config = HealthRunConfig.load(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        print(_timestamped_console_line(f"Unable to load health config {config_path}: {exc}"))
+        emit_structured_log(
+            component="health-scheduler",
+            severity="ERROR",
+            message=f"Unable to load health config {config_path}: {exc}",
+            run_label=_safe_label(str(config_path.stem)),
+            metadata={"config_path": str(config_path), "severity_reason": str(exc), "event": "config-load-failed"},
+        )
         return 1
     scheduler = HealthLoopScheduler(
         config_path=config_path,

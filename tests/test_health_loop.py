@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
@@ -34,6 +35,7 @@ from k8s_diag_agent.health.image_pull_secret import (
     TargetSecretStatus,
 )
 from k8s_diag_agent.health.loop import (
+    _HEALTH_ONLY_MESSAGE,
     BaselineRegistry,
     ComparisonIntent,
     ComparisonPeer,
@@ -1356,10 +1358,12 @@ class HealthLoopTests(unittest.TestCase):
             manual_drilldown_contexts=(),
             drilldown_collector=self._StubDrilldownCollector(),
         )
-        _, triggers, _ = runner.execute()
+        with patch.object(runner, "_log_event") as log_mock:
+            _, triggers, _ = runner.execute()
         self.assertFalse(comparison_called)
         self.assertEqual(triggers, [])
-        self.assertIn("No peer mappings configured; running health-only mode.", runner._collection_messages)
+        summary_messages = [call.args[2] for call in log_mock.call_args_list]
+        self.assertIn(_HEALTH_ONLY_MESSAGE, summary_messages)
 
     def test_manual_pairs_reference_unknown_cluster_fails(self) -> None:
         self.tmp_dir.mkdir(parents=True, exist_ok=True)

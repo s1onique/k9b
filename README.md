@@ -111,7 +111,7 @@ k8s-diag-agent run-health-loop --config runs/health-config.local.json [--trigger
 
 The health config now declares a stable `run_label` instead of a fixed `run_id`. Every invocation of `run-health-loop` generates a unique `run_id` (timestamped and safe for filenames) while keeping the configured label in the produced artifacts so you can still correlate runs with your policy. Existing configs that still set `run_id` will continue to work for now, but that value is treated as the run label and a warning flags the deprecation.
 
-Scheduling is optional but the health loop now ships with built-in rhythm control: `--every-seconds` keeps re-running the loop at the requested interval, `--max-runs` caps the number of iterations, and `--once` forces a single collection even if you pass scheduling arguments. A lockfile under `runs/health/.health-loop.lock` prevents overlapping runs and each iteration emits a short summary of the generated artifacts so you can track progress without enabling the verbose collector output.
+ Scheduling is optional but the health loop now ships with built-in rhythm control: `--every-seconds` keeps re-running the loop at the requested interval, `--max-runs` caps the number of iterations, and `--once` forces a single collection even if you pass scheduling arguments. A lockfile under `runs/health/.health-loop.lock` prevents overlapping runs and each iteration emits a structured JSON summary event so you can track progress without flapping the verbose collector output.
 
 To operate the loop continuously, use `scripts/run_health_scheduler.py` with the cadence flags that match your shift cycle (for example `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 48`). The wrapper drives `run-health-loop`, emits scheduler events to stdout/stderr as the canonical operational stream, and maintains the deterministic file-backed artifacts that every review and adaptation run relies on. Set `K9B_HEALTH_SCHEDULER_LOG_PATH` if you still need a mirrored `runs/health/scheduler.log` for legacy tooling.
 
@@ -122,10 +122,10 @@ Every run also gathers lightweight health signals (node readiness/pressure count
 ### Continuous scheduler + UI workflow
 
 1. Start the backend (`scripts/start_backend.sh`) so the API serving the UI and artifact endpoints keeps the latest diagnostics in `runs/health`.
-2. Launch the scheduler alongside it via `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 0`. The helper keeps writing to the file-backed `runs/health` hierarchy (snapshots, assessments, proposals, digests) so the UI sees fresh artifacts without any database or job queue; scheduler events stream to stdout/stderr by default and can be mirrored into `scheduler.log` when `K9B_HEALTH_SCHEDULER_LOG_PATH` is set.
+2. Launch the scheduler alongside it via `.venv/bin/python scripts/run_health_scheduler.py --every-seconds 300 --max-runs 0`. The helper keeps writing to the file-backed `runs/health` hierarchy (snapshots, assessments, proposals, digests) so the UI sees fresh artifacts without any database or job queue; scheduler events stream to stdout/stderr as structured JSON lines by default and can be mirrored into `scheduler.log` when `K9B_HEALTH_SCHEDULER_LOG_PATH` is set.
 3. In a separate terminal, run `scripts/start_frontend.sh` (or `cd frontend && npm run dev`) to keep the React UI pointed at the backend; the UI will poll `/api` and surface fleet/cluster states as each periodic run completes.
 
-Keeping the scheduler, backend, and frontend running together gives you a shifting production-like loop: the scheduler continuously collects evidence, the backend serves the updated artifacts, and the frontend renders the compact fleet dashboard plus selection-driven cluster detail without introducing a new persistence layer.
+ Keeping the scheduler, backend, and frontend running together gives you a shifting production-like loop: the scheduler continuously collects evidence, the backend serves the updated artifacts, and the frontend renders the compact fleet dashboard plus selection-driven cluster detail without introducing a new persistence layer.
 
 
 ### One-shot health run workflow
@@ -134,6 +134,7 @@ Keeping the scheduler, backend, and frontend running together gives you a shifti
     The bundled example policy highlights how to declare the fleet metadata you actually care about: watched Helm releases and CRDs, cluster class/role annotations, and an intentional same-role peer mapping where expected drift categories are spelled out. The baseline file in the same directory now captures a realistic control-plane version window, curated release targets, required CRD families, and the drift categories you choose to ignore versus the ones you expect to change.
     Refer to `docs/baseline_watch_practices.md` for platform-level advice about pruning the baseline and keeping watched releases aligned with the policy.
 2. Run `.venv/bin/python -m k8s_diag_agent.cli run-health-loop --config runs/health-config.local.json` (or `k8s-diag-agent run-health-loop --config runs/health-config.local.json`). Each invocation still emits a unique `run_id` but reuses the stable `run_label` you configured so the artifacts stay correlated across runs.
+    The runtime stream is now structured JSON only, so rely on the generated artifacts, `k8s-diag-agent health-summary`, or the UI when you need a human-readable recap.
 3. Inspect the generated artifacts if you want a reviewable record of the execution:
    - `runs/health/snapshots/` for raw cluster evidence captured during this run
    - `runs/health/assessments/` for the serialized `Assessment` objects that include the new deterministic findings about collection quality, watched resources, and regression-aware signals
