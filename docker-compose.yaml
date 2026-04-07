@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.python
+    image: localhost/k9b_python:latest
     command: ["backend"]
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
@@ -22,9 +23,7 @@ services:
       - ./podman/kubeconfig:/app/kubeconfig:Z
 
   scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.python
+    image: localhost/k9b_python:latest
     command: ["scheduler"]
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
