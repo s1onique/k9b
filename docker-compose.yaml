@@ -7,6 +7,7 @@ services:
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
     environment:
+      HEALTH_SKIP_REFRESH: 1
       HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
       HEALTH_RUNS_DIR: /app/runs/health
       HEALTH_UI_RUNS_DIR: /app/runs/health
