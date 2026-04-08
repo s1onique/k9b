@@ -3602,6 +3602,7 @@ class HealthLoopScheduler:
         snapshot = self._load_lock_snapshot()
         now = datetime.now(UTC)
         lock_age = snapshot.age_seconds(now) if snapshot else None
+        current_pid = os.getpid()
         pid_alive: bool | None = None
         current_identity: ProcessIdentity | None = None
         identity_match: bool | None = None
@@ -3676,13 +3677,62 @@ class HealthLoopScheduler:
                 self._write_lock_status(evaluation)
                 return evaluation
             if identity_match is False:
-                cleanup_due_to_identity = lock_age is not None and lock_age >= threshold
-                stale_decision = (
-                    "identity-mismatch-old"
-                    if cleanup_due_to_identity
-                    else "identity-mismatch-young"
+                has_scheduler_provenance = bool(
+                    snapshot.scheduler_instance_id and snapshot.attempted_run_id
                 )
-                cleanup_reason = "identity-mismatch-old" if cleanup_due_to_identity else None
+                scheduler_mismatch = (
+                    has_scheduler_provenance
+                    and self._pending_run_id is not None
+                    and (
+                        snapshot.scheduler_instance_id != self._instance_id
+                        or snapshot.attempted_run_id != self._pending_run_id
+                    )
+                )
+                strong_identity = snapshot.identity is not None and current_identity is not None
+                if scheduler_mismatch and strong_identity:
+                    pid_collision = any(
+                        pid == current_pid
+                        for pid in (
+                            snapshot.pid,
+                            snapshot.scheduler_pid,
+                            snapshot.child_pid,
+                        )
+                        if pid is not None
+                    )
+                    stale_decision = "pid-reuse-stale" if pid_collision else "scheduler-instance-mismatch"
+                    evaluation = LockEvaluation(
+                        snapshot=snapshot,
+                        lock_age_seconds=lock_age,
+                        pid_alive=pid_alive,
+                        current_identity=current_identity,
+                        identity_match=identity_match,
+                        provenance_match=provenance_match,
+                        should_cleanup=True,
+                        stale_decision=stale_decision,
+                        cleanup_reason=stale_decision,
+                    )
+                    self._write_lock_status(evaluation)
+                    return evaluation
+                cleanup_due_to_identity = lock_age is not None and lock_age >= threshold
+                if cleanup_due_to_identity:
+                    evaluation = LockEvaluation(
+                        snapshot=snapshot,
+                        lock_age_seconds=lock_age,
+                        pid_alive=pid_alive,
+                        current_identity=current_identity,
+                        identity_match=identity_match,
+                        provenance_match=provenance_match,
+                        should_cleanup=True,
+                        stale_decision="identity-mismatch-old",
+                        cleanup_reason="identity-mismatch-old",
+                    )
+                    self._write_lock_status(evaluation)
+                    return evaluation
+                stale_decision = (
+                    "foreign-live-lock"
+                    if snapshot.identity is None or current_identity is None
+                    else "identity-mismatch-young-foreign"
+                )
                 evaluation = LockEvaluation(
                     snapshot=snapshot,
                     lock_age_seconds=lock_age,
@@ -3690,9 +3740,9 @@ class HealthLoopScheduler:
                     current_identity=current_identity,
                     identity_match=identity_match,
                     provenance_match=provenance_match,
-                    should_cleanup=cleanup_due_to_identity,
+                    should_cleanup=False,
                     stale_decision=stale_decision,
-                    cleanup_reason=cleanup_reason,
+                    cleanup_reason=None,
                 )
                 self._write_lock_status(evaluation)
                 return evaluation
@@ -3704,7 +3754,7 @@ class HealthLoopScheduler:
                 identity_match=identity_match,
                 provenance_match=provenance_match,
                 should_cleanup=False,
-                stale_decision="identity-unknown",
+                stale_decision="foreign-live-lock",
                 cleanup_reason=None,
             )
             self._write_lock_status(evaluation)

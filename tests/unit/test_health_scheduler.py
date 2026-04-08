@@ -181,6 +181,126 @@ class HealthSchedulerTests(unittest.TestCase):
         self.assertFalse(evaluation.identity_match)
         scheduler._release_lock()
 
+    def test_scheduler_instance_mismatch_cleanup_with_different_pid(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
+        lock_path = scheduler._lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        hostname = scheduler._identity_hostname or "test-host"
+        stored_identity = {
+            "start_time": "1000",
+            "cmdline": "python3 scheduler",
+            "hostname": hostname,
+        }
+        payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "pid": os.getpid() + 10,
+            "identity": stored_identity,
+            "scheduler_instance_id": "old-instance",
+            "attempted_run_id": "old-run",
+        }
+        lock_path.write_text(json.dumps(payload), encoding="utf-8")
+        scheduler._pending_run_id = "new-run"
+        with patch.object(scheduler, "_pid_is_alive", return_value=True), patch.object(
+            scheduler,
+            "_read_process_identity",
+            return_value=ProcessIdentity(
+                "2000", "python3 new-run", hostname
+            ),
+        ):
+            evaluation = scheduler._evaluate_lock_state()
+        self.assertTrue(evaluation.should_cleanup)
+        self.assertEqual(evaluation.stale_decision, "scheduler-instance-mismatch")
+        self.assertEqual(evaluation.cleanup_reason, "scheduler-instance-mismatch")
+        scheduler._release_lock()
+
+    def test_scheduler_provenance_cleanup_on_pid_reuse(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
+        lock_path = scheduler._lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        hostname = scheduler._identity_hostname or "test-host"
+        stored_identity = {
+            "start_time": "1000",
+            "cmdline": "python3 scheduler",
+            "hostname": hostname,
+        }
+        payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "pid": os.getpid(),
+            "identity": stored_identity,
+            "scheduler_pid": os.getpid(),
+            "child_pid": os.getpid(),
+            "scheduler_instance_id": "old-instance",
+            "attempted_run_id": "old-run",
+        }
+        lock_path.write_text(json.dumps(payload), encoding="utf-8")
+        scheduler._pending_run_id = "new-run"
+        with patch.object(scheduler, "_pid_is_alive", return_value=True), patch.object(
+            scheduler,
+            "_read_process_identity",
+            return_value=ProcessIdentity(
+                "2000", "python3 new-run", hostname
+            ),
+        ):
+            evaluation = scheduler._evaluate_lock_state()
+        self.assertTrue(evaluation.should_cleanup)
+        self.assertEqual(evaluation.stale_decision, "pid-reuse-stale")
+        self.assertEqual(evaluation.cleanup_reason, "pid-reuse-stale")
+        scheduler._release_lock()
+
+    def test_scheduler_provenance_pid_reuse_via_scheduler_fields(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
+        lock_path = scheduler._lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        hostname = scheduler._identity_hostname or "test-host"
+        stored_identity = {
+            "start_time": "1000",
+            "cmdline": "python3 scheduler",
+            "hostname": hostname,
+        }
+        payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "pid": os.getpid() + 5,
+            "identity": stored_identity,
+            "scheduler_pid": os.getpid(),
+            "child_pid": os.getpid(),
+            "scheduler_instance_id": "old-instance",
+            "attempted_run_id": "old-run",
+        }
+        lock_path.write_text(json.dumps(payload), encoding="utf-8")
+        scheduler._pending_run_id = "new-run"
+        with patch.object(scheduler, "_pid_is_alive", return_value=True), patch.object(
+            scheduler,
+            "_read_process_identity",
+            return_value=ProcessIdentity(
+                "2000", "python3 new-run", hostname
+            ),
+        ):
+            evaluation = scheduler._evaluate_lock_state()
+        self.assertTrue(evaluation.should_cleanup)
+        self.assertEqual(evaluation.stale_decision, "pid-reuse-stale")
+        self.assertEqual(evaluation.cleanup_reason, "pid-reuse-stale")
+        scheduler._release_lock()
+
+    def test_foreign_live_lock_preserves_when_identity_missing(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
+        lock_path = scheduler._lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "pid": os.getpid(),
+        }
+        lock_path.write_text(json.dumps(payload), encoding="utf-8")
+        with patch.object(scheduler, "_pid_is_alive", return_value=True), patch.object(
+            scheduler,
+            "_read_process_identity",
+            return_value=None,
+        ):
+            evaluation = scheduler._evaluate_lock_state()
+        self.assertFalse(evaluation.should_cleanup)
+        self.assertEqual(evaluation.stale_decision, "foreign-live-lock")
+        self.assertIsNone(evaluation.cleanup_reason)
+        scheduler._release_lock()
+
     def test_lock_skip_emits_single_structured_event(self) -> None:
         scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
         lock_path = scheduler._lock_path
@@ -209,7 +329,7 @@ class HealthSchedulerTests(unittest.TestCase):
         self.assertEqual(severity, "WARNING")
         self.assertEqual(message, "Health run skipped because lock is held")
         metadata = log_mock.call_args.kwargs
-        self.assertEqual(metadata["stale_decision"], "identity-mismatch-young")
+        self.assertEqual(metadata["stale_decision"], "identity-mismatch-young-foreign")
         scheduler._release_lock()
 
     def test_log_lock_held_includes_expected_fields(self) -> None:
