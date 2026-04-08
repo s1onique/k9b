@@ -31,7 +31,7 @@ class ManualNextCheckTests(unittest.TestCase):
             "requiresOperatorApproval": False,
             "duplicateOfExistingEvidence": False,
             "gatingReason": None,
-            "candidateId": "",
+            "candidateId": "candidate-get",
         }
 
     def _runner(self, returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
@@ -59,6 +59,7 @@ class ManualNextCheckTests(unittest.TestCase):
         self.assertEqual(payload["candidateIndex"], 0)
         self.assertEqual(payload["targetContext"], "prod")
         self.assertEqual(payload["command"][-2:], ["--context", "prod"])
+        self.assertEqual(payload["candidateId"], candidate["candidateId"])
 
     def test_records_failed_execution_and_exposes_error_summary(self) -> None:
         candidate = self._base_candidate()

@@ -130,6 +130,31 @@ def test_duplicate_check_is_flagged(tmp_path: Path) -> None:
     assert "Matches deterministic next check" in (candidate.gating_reason or "")
 
 
+def test_candidate_id_is_stable(tmp_path: Path) -> None:
+    run_id = "run-stable"
+    root = tmp_path / "runs" / "health"
+    review_path = _write_review(
+        root,
+        run_id,
+        [
+            {
+                "label": "cluster-stable",
+                "context": "cluster-stable",
+                "reasons": ["missing_metrics"],
+            }
+        ],
+    )
+    artifact = _build_enrichment_artifact(run_id, ("kubectl logs deployment/stable",))
+    ids: list[str | None] = []
+    for _ in range(2):
+        plan = plan_next_checks(review_path, run_id, artifact)
+        assert plan is not None
+        assert plan.candidates
+        ids.append(plan.candidates[0].candidate_id)
+    assert ids[0]
+    assert all(candidate_id == ids[0] for candidate_id in ids)
+
+
 def test_fixture_safe_command_classification(tmp_path: Path) -> None:
     run_id = "fixture-run"
     root = _copy_fixture_set(tmp_path)

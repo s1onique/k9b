@@ -225,6 +225,8 @@ class UIApiTests(unittest.TestCase):
         assert plan is not None
         self.assertEqual(plan.get("candidateCount"), 1)
         self.assertEqual(plan.get("artifactPath"), "external-analysis/plan.json")
+        candidate = plan["candidates"][0]
+        self.assertEqual(candidate.get("candidateId"), "candidate-logs")
 
     def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
         index = sample_ui_index()
@@ -260,6 +262,7 @@ class UIApiTests(unittest.TestCase):
         plan = payload["nextCheckPlan"]
         self.assertEqual(len(plan), 1)
         self.assertEqual(plan[0]["targetCluster"], "cluster-a")
+        self.assertEqual(plan[0].get("candidateId"), "candidate-logs")
 
     def test_run_payload_includes_execution_history(self) -> None:
         payload = build_run_payload(self.context)

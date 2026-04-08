@@ -233,6 +233,7 @@ class HealthUITests(unittest.TestCase):
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
+                    "candidateId": "candidate-control-plane",
                     "candidateIndex": 0,
                 }
             ],
