@@ -32,6 +32,7 @@ const defaultPayloads = {
   "/api/fleet": sampleFleet,
   "/api/proposals": sampleProposals,
   "/api/notifications": sampleNotifications,
+  "/api/notifications?limit=50&page=1": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
 };
 
@@ -361,13 +362,26 @@ describe("App", () => {
   });
 
   test("sorts notifications newest first", async () => {
-    const unsortedNotifications = [
-      buildNotificationEntry(1, { summary: "Older", timestamp: "2026-04-06T11:00:00Z" }),
+    const orderedNotifications = [
       buildNotificationEntry(0, { summary: "Newest", timestamp: "2026-04-06T12:00:00Z" }),
+      buildNotificationEntry(1, { summary: "Older", timestamp: "2026-04-06T11:00:00Z" }),
     ];
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: unsortedNotifications },
+      "/api/notifications": {
+        notifications: orderedNotifications,
+        total: orderedNotifications.length,
+        page: 1,
+        limit: 50,
+        total_pages: 1,
+      },
+      "/api/notifications?limit=50&page=1": {
+        notifications: orderedNotifications,
+        total: orderedNotifications.length,
+        page: 1,
+        limit: 50,
+        total_pages: 1,
+      },
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
@@ -379,24 +393,73 @@ describe("App", () => {
 
   test("paginates notification history after 50 rows", async () => {
     const manyNotifications = buildNotificationList(60);
+    const pageOne = {
+      notifications: manyNotifications.slice(0, 50),
+      total: manyNotifications.length,
+      page: 1,
+      limit: 50,
+      total_pages: 2,
+    };
+    const pageTwo = {
+      notifications: manyNotifications.slice(50),
+      total: manyNotifications.length,
+      page: 2,
+      limit: 50,
+      total_pages: 2,
+    };
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: manyNotifications.slice(0, 50), total: manyNotifications.length },
+      "/api/notifications": pageOne,
+      "/api/notifications?limit=50&page=1": pageOne,
+      "/api/notifications?limit=50&page=2": pageTwo,
     };
-    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const fetchMock = createFetchMock(payloads);
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
-    const rows = await screen.findAllByTestId("notification-row");
-    expect(rows).toHaveLength(50);
-    expect(screen.getAllByText(/Showing 1–50 of 60/i)).toHaveLength(2);
-    expect(screen.getByRole("button", { name: /Next notifications page/i })).toBeDisabled();
+    await waitFor(() => expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument());
+    expect(fetchMock.mock.calls.some(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("limit=50&page=1");
+    })).toBe(true);
+    const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
+    expect(nextButton).not.toBeDisabled();
+    await act(async () => {
+      await user.click(nextButton);
+    });
+    await waitFor(() => expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument());
+    expect(fetchMock.mock.calls.some(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("/api/notifications?limit=50&page=2");
+    })).toBe(true);
+    const pageTwoRows = await screen.findAllByTestId("notification-row");
+    expect(pageTwoRows).toHaveLength(10);
+    const prevButton = screen.getByRole("button", { name: /Previous notifications page/i });
+    expect(prevButton).not.toBeDisabled();
+    await act(async () => {
+      await user.click(prevButton);
+    });
+    await waitFor(() => expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument());
+    expect(fetchMock.mock.calls.filter(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("page=1");
+    }).length).toBeGreaterThanOrEqual(2);
   });
 
-  test("pagination remains single-page when server limits results", async () => {
-    const manyNotifications = buildNotificationList(60);
+  test("pagination remains single-page when server reports only one page", async () => {
+    const limitedNotifications = buildNotificationList(30);
+    const payload = {
+      notifications: limitedNotifications,
+      total: limitedNotifications.length,
+      page: 1,
+      limit: 50,
+      total_pages: 1,
+    };
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: manyNotifications.slice(0, 50), total: manyNotifications.length },
+      "/api/notifications": payload,
+      "/api/notifications?limit=50&page=1": payload,
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
@@ -432,25 +495,46 @@ describe("App", () => {
         details: [{ label: "Target", value: "db" }],
       }),
     ];
+    const basePayload = {
+      notifications: customNotifications,
+      total: 3,
+      page: 1,
+      limit: 50,
+      total_pages: 1,
+    };
+    const warningPayload = {
+      notifications: customNotifications.filter((entry) => entry.kind === "Warning"),
+      total: 2,
+      page: 1,
+      limit: 50,
+      total_pages: 1,
+    };
+    const clusterPayload = {
+      notifications: customNotifications.filter(
+        (entry) => entry.clusterLabel === "cluster-beta" && entry.kind === "Warning"
+      ),
+      total: 1,
+      page: 1,
+      limit: 50,
+      total_pages: 1,
+    };
+    const searchPayload = {
+      notifications: customNotifications.filter(
+        (entry) => entry.summary.includes("Memory") || entry.details.some((detail) => detail.value === "db")
+      ),
+      total: 1,
+      page: 1,
+      limit: 50,
+      total_pages: 1,
+    };
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: customNotifications, total: 3 },
-      "/api/notifications?kind=Warning": {
-        notifications: customNotifications.filter((entry) => entry.kind === "Warning"),
-        total: 2,
-      },
-      "/api/notifications?kind=Warning&cluster_label=cluster-beta": {
-        notifications: customNotifications.filter(
-          (entry) => entry.clusterLabel === "cluster-beta" && entry.kind === "Warning"
-        ),
-        total: 1,
-      },
-      "/api/notifications?kind=Warning&cluster_label=cluster-beta&search=memory": {
-        notifications: customNotifications.filter(
-          (entry) => entry.summary.includes("Memory") || entry.details.some((detail) => detail.value === "db")
-        ),
-        total: 1,
-      },
+      "/api/notifications": basePayload,
+      "/api/notifications?limit=50&page=1": basePayload,
+      "/api/notifications?kind=Warning&limit=50&page=1": warningPayload,
+      "/api/notifications?kind=Warning&cluster_label=cluster-beta&limit=50&page=1": clusterPayload,
+      "/api/notifications?kind=Warning&cluster_label=cluster-beta&search=memory&limit=50&page=1":
+        searchPayload,
     };
     const fetchMock = createFetchMock(payloads);
     vi.stubGlobal("fetch", fetchMock);
@@ -500,13 +584,24 @@ describe("App", () => {
 
   test("pagination summary updates when filters reduce the dataset", async () => {
     const manyNotifications = buildNotificationList(60);
+    const basePayload = {
+      notifications: manyNotifications.slice(0, 50),
+      total: manyNotifications.length,
+      page: 1,
+      limit: 50,
+      total_pages: 2,
+    };
+    const searchPayload = {
+      notifications: manyNotifications.slice(0, 30),
+      total: 30,
+      page: 1,
+      limit: 50,
+      total_pages: 1,
+    };
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: manyNotifications.slice(0, 50), total: manyNotifications.length },
-      "/api/notifications?search=Entry": {
-        notifications: manyNotifications.slice(0, 30),
-        total: 30,
-      },
+      "/api/notifications": basePayload,
+      "/api/notifications?search=Entry&limit=50&page=1": searchPayload,
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     const user = userEvent.setup();

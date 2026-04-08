@@ -780,15 +780,18 @@ const NotificationHistoryTable = () => {
   const [entries, setEntries] = useState<NotificationEntry[]>([]);
   const [totalResults, setTotalResults] = useState(0);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [perPage, setPerPage] = useState(NOTIFICATIONS_PER_PAGE);
   const [kindFilter, setKindFilter] = useState("all");
   const [clusterFilter, setClusterFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizedSearch = searchFilter.trim();
+
   useEffect(() => {
     let active = true;
-    setPage(1);
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -796,13 +799,27 @@ const NotificationHistoryTable = () => {
         const response = await fetchNotifications({
           kind: kindFilter !== "all" ? kindFilter : undefined,
           cluster_label: clusterFilter !== "all" ? clusterFilter : undefined,
-          search: searchFilter.trim() || undefined,
+          search: normalizedSearch || undefined,
+          limit: NOTIFICATIONS_PER_PAGE,
+          page,
         });
         if (!active) {
           return;
         }
+        const limitValue = Math.max(1, response.limit ?? NOTIFICATIONS_PER_PAGE);
+        const totalValue = response.total ?? response.notifications.length;
+        const pages = response.total_pages && response.total_pages >= 1
+          ? response.total_pages
+          : Math.max(1, Math.ceil(totalValue / limitValue));
+        const requestedPage = response.page ?? page;
+        if (requestedPage > pages) {
+          setPage(pages);
+          return;
+        }
         setEntries(response.notifications);
-        setTotalResults(response.total ?? response.notifications.length);
+        setTotalResults(totalValue);
+        setTotalPages(pages);
+        setPerPage(limitValue);
       } catch (err) {
         if (!active) {
           return;
@@ -818,17 +835,8 @@ const NotificationHistoryTable = () => {
     return () => {
       active = false;
     };
-  }, [kindFilter, clusterFilter, searchFilter]);
+  }, [kindFilter, clusterFilter, searchFilter, page]);
 
-  const sortedEntries = useMemo(() => {
-    return [...entries].sort((a, b) => {
-      const aStamp = dayjs(a.timestamp).valueOf();
-      const bStamp = dayjs(b.timestamp).valueOf();
-      const aValue = Number.isNaN(aStamp) ? 0 : aStamp;
-      const bValue = Number.isNaN(bStamp) ? 0 : bStamp;
-      return bValue - aValue;
-    });
-  }, [entries]);
   const kindOptions = useMemo(() => {
     const values = new Set<string>();
     entries.forEach((entry) => values.add(normalizeFilterValue(entry.kind)));
@@ -839,17 +847,8 @@ const NotificationHistoryTable = () => {
     entries.forEach((entry) => values.add(normalizeFilterValue(entry.clusterLabel)));
     return ["all", ...Array.from(values)];
   }, [entries]);
-  const totalLoaded = sortedEntries.length;
-  const totalPages = Math.max(1, Math.ceil(totalLoaded / NOTIFICATIONS_PER_PAGE));
-  useEffect(() => {
-    setPage((current) => Math.min(Math.max(current, 1), totalPages));
-  }, [totalPages]);
-  const currentPage = Math.min(Math.max(page, 1), totalPages);
-  const startIndex = (currentPage - 1) * NOTIFICATIONS_PER_PAGE;
-  const endIndex = Math.min(startIndex + NOTIFICATIONS_PER_PAGE, totalLoaded);
-  const pageEntries = sortedEntries.slice(startIndex, endIndex);
-  const displayStart = pageEntries.length ? startIndex + 1 : 0;
-  const displayEnd = pageEntries.length ? startIndex + pageEntries.length : 0;
+  const displayStart = entries.length ? (page - 1) * perPage + 1 : 0;
+  const displayEnd = entries.length ? (page - 1) * perPage + entries.length : 0;
   const handlePrev = () => setPage((current) => Math.max(1, current - 1));
   const handleNext = () => setPage((current) => Math.min(totalPages, current + 1));
   const formatFilterOption = (value: string) => {
@@ -878,7 +877,10 @@ const NotificationHistoryTable = () => {
             <select
               aria-label="Notification kind filter"
               value={kindFilter}
-              onChange={(event) => setKindFilter(event.target.value)}
+              onChange={(event) => {
+                setKindFilter(event.target.value);
+                setPage(1);
+              }}
             >
               {kindOptions.map((option) => (
                 <option key={option} value={option}>
@@ -892,7 +894,10 @@ const NotificationHistoryTable = () => {
             <select
               aria-label="Notification cluster filter"
               value={clusterFilter}
-              onChange={(event) => setClusterFilter(event.target.value)}
+              onChange={(event) => {
+                setClusterFilter(event.target.value);
+                setPage(1);
+              }}
             >
               {clusterOptions.map((option) => (
                 <option key={option} value={option}>
@@ -908,13 +913,16 @@ const NotificationHistoryTable = () => {
               aria-label="Notification text search"
               placeholder="Summary or detail"
               value={searchFilter}
-              onChange={(event) => setSearchFilter(event.target.value)}
+              onChange={(event) => {
+                setSearchFilter(event.target.value);
+                setPage(1);
+              }}
             />
           </label>
         </div>
         <p className="muted small notification-summary">
           {summaryText}
-          {summaryText.startsWith("Showing") ? ` · ${NOTIFICATIONS_PER_PAGE} per page` : ""}
+          {summaryText.startsWith("Showing") ? ` · ${perPage} per page` : ""}
         </p>
         <div className="notification-table-scroll">
           {loading ? (
@@ -922,11 +930,11 @@ const NotificationHistoryTable = () => {
           ) : error ? (
             <div className="alert alert-inline">{error}</div>
           ) : (
-            <table className="notification-table" aria-label="Notification history table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Kind</th>
+              <table className="notification-table" aria-label="Notification history table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Kind</th>
                   <th>Summary</th>
                   <th>Run / Cluster</th>
                   <th>Key detail</th>
@@ -934,7 +942,7 @@ const NotificationHistoryTable = () => {
                 </tr>
               </thead>
               <tbody>
-                {pageEntries.map((entry, index) => {
+                {entries.map((entry, index) => {
                   const detailText = getNotificationDetailText(entry);
                   const artifactLink = entry.artifactPath ? artifactUrl(entry.artifactPath) : null;
                   const runLabels: string[] = [];
@@ -980,7 +988,7 @@ const NotificationHistoryTable = () => {
                     </tr>
                   );
                 })}
-                {!pageEntries.length && (
+                {!entries.length && (
                   <tr>
                     <td colSpan={6} className="muted small">
                       No notifications match the current filters.
@@ -997,18 +1005,18 @@ const NotificationHistoryTable = () => {
           <button
             type="button"
             onClick={handlePrev}
-            disabled={loading || currentPage <= 1}
+            disabled={loading || page <= 1}
             aria-label="Previous notifications page"
           >
             Previous
           </button>
           <span>
-            Page {currentPage} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <button
             type="button"
             onClick={handleNext}
-            disabled={loading || currentPage >= totalPages}
+            disabled={loading || page >= totalPages}
             aria-label="Next notifications page"
           >
             Next

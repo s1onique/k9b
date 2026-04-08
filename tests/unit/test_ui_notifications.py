@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from k8s_diag_agent.health.notifications import NotificationArtifact, write_notification_artifact
-from k8s_diag_agent.ui.notifications import query_notifications
+from k8s_diag_agent.ui.notifications import DEFAULT_NOTIFICATION_LIMIT, query_notifications
 
 
 class UINotificationsTests(unittest.TestCase):
@@ -65,7 +65,7 @@ class UINotificationsTests(unittest.TestCase):
         )
         payload = query_notifications(self.runs_dir, kind="warning", cluster_label="cluster-b")
         notifications = payload["notifications"]
-        self.assertEqual(payload["total"], 2)
+        self.assertEqual(payload["total"], 1)
         self.assertEqual(len(notifications), 1)
         self.assertEqual(notifications[0]["summary"], "Memory pressure")
 
@@ -98,3 +98,26 @@ class UINotificationsTests(unittest.TestCase):
         payload = query_notifications(self.runs_dir)
         self.assertEqual(payload["total"], 55)
         self.assertEqual(len(payload["notifications"]), 50)
+        self.assertEqual(payload["page"], 1)
+        self.assertEqual(payload["limit"], DEFAULT_NOTIFICATION_LIMIT)
+        self.assertEqual(payload["total_pages"], 2)
+
+    def test_pagination_returns_expected_slice(self) -> None:
+        base_time = datetime(2026, 4, 7, 15, 0, 0, tzinfo=UTC)
+        total_items = 60
+        for idx in range(total_items):
+            self._write_notification(
+                kind="info",
+                cluster_label="cluster-y",
+                summary=f"Entry {idx}",
+                timestamp=base_time + timedelta(seconds=idx),
+                run_id=f"run-{idx}",
+            )
+        payload = query_notifications(self.runs_dir, limit=20, page=2)
+        self.assertEqual(payload["total"], total_items)
+        self.assertEqual(payload["page"], 2)
+        self.assertEqual(payload["limit"], 20)
+        self.assertEqual(payload["total_pages"], 3)
+        self.assertEqual(len(payload["notifications"]), 20)
+        self.assertEqual(payload["notifications"][0]["summary"], "Entry 39")
+        self.assertEqual(payload["notifications"][-1]["summary"], "Entry 20")

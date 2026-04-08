@@ -23,9 +23,10 @@ export type NotificationsQuery = {
   cluster_label?: string;
   search?: string;
   limit?: number;
+  page?: number;
 };
 
-export type NotificationsResponse = NotificationsPayload & { total?: number };
+export type NotificationsResponse = NotificationsPayload;
 
 export const fetchNotifications = (
   query?: NotificationsQuery
@@ -42,6 +43,9 @@ export const fetchNotifications = (
   }
   if (query?.limit) {
     params.append("limit", String(query.limit));
+  }
+  if (query?.page) {
+    params.append("page", String(query.page));
   }
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return fetchJson<NotificationsResponse>(`/api/notifications${suffix}`);

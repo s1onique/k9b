@@ -275,3 +275,31 @@ class RunApiServerTests(unittest.TestCase):
         self.assertIsInstance(notifications, list)
         self.assertEqual(len(notifications), 50)
         self.assertEqual(payload.get("total"), total_items)
+
+    def test_notifications_endpoint_supports_pagination_params(self) -> None:
+        artifact = self._build_artifact(run_id="paging-run", status=ExternalAnalysisStatus.SUCCESS)
+        self._write_index(artifact)
+        base_time = datetime(2026, 4, 7, 14, 0, 0, tzinfo=UTC)
+        total_items = 25
+        for idx in range(total_items):
+            self._create_notification(
+                kind="info",
+                cluster_label="cluster-page",
+                summary=f"Entry {idx}",
+                run_id=f"run-{idx}",
+                timestamp=(base_time + timedelta(seconds=idx)).strftime("%Y%m%dT%H%M%S"),
+            )
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_notifications_payload(server, "?limit=10&page=2")
+        finally:
+            self._shutdown_server(server, thread)
+        self.assertEqual(payload.get("total"), total_items)
+        self.assertEqual(payload.get("limit"), 10)
+        self.assertEqual(payload.get("page"), 2)
+        self.assertEqual(payload.get("total_pages"), 3)
+        notifications = payload.get("notifications")
+        self.assertIsInstance(notifications, list)
+        self.assertEqual(len(notifications), 10)
+        self.assertEqual(notifications[0].get("summary"), "Entry 14")
+        self.assertEqual(notifications[-1].get("summary"), "Entry 5")

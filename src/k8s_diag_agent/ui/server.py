@@ -86,6 +86,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 cluster_label=params.get("cluster_label", [None])[0],
                 search=params.get("search", [None])[0],
                 limit=self._parse_limit(params.get("limit", [None])[0]),
+                page=self._parse_page(params.get("page", [None])[0]),
             )
             self._send_json(payload)
             return
@@ -154,6 +155,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except ValueError:
             return None
         return parsed if parsed > 0 else None
+
+    def _parse_page(self, value: str | None) -> int:
+        parsed = self._parse_limit(value)
+        return parsed if parsed else 1
 
     def _send_json(self, body: object) -> None:
         payload = json.dumps(body, ensure_ascii=False)

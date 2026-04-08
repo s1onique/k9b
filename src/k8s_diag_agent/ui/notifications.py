@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ def query_notifications(
     cluster_label: str | None = None,
     search: str | None = None,
     limit: int | None = None,
+    page: int | None = None,
 ) -> dict[str, Any]:
     """Return a newest-first slice of retained notifications with filtering."""
 
@@ -41,12 +43,21 @@ def query_notifications(
 
     total = len(filtered)
     limit_value = limit if isinstance(limit, int) and limit > 0 else DEFAULT_NOTIFICATION_LIMIT
-    sliced = filtered[:limit_value]
+    page_value = page if isinstance(page, int) and page > 0 else 1
+    offset = (page_value - 1) * limit_value
+    sliced = filtered[offset : offset + limit_value]
     entries = [
         _build_notification_entry(root_dir, artifact, path)
         for artifact, path in sliced
     ]
-    return {"notifications": entries, "total": total}
+    total_pages = max(1, math.ceil(total / limit_value)) if total else 1
+    return {
+        "notifications": entries,
+        "total": total,
+        "limit": limit_value,
+        "page": page_value,
+        "total_pages": total_pages,
+    }
 
 
 def _load_notification_records(directory: Path) -> list[tuple[NotificationArtifact, Path]]:
