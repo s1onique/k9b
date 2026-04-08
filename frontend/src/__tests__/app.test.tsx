@@ -151,6 +151,207 @@ describe("App", () => {
     expect(screen.getAllByRole("link", { name: /diagnostic bundle/i }).length).toBeGreaterThan(0);
   });
 
+  test("renders next check plan section with planner candidates", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    const heading = await screen.findByRole("heading", { name: /Next check plan/i });
+    expect(heading).toBeInTheDocument();
+    const planPanel = heading.closest(".next-check-plan");
+    expect(planPanel).not.toBeNull();
+    expect(
+      within(planPanel!).getByText(/Collect kubelet logs for control-plane pods/i)
+    ).toBeInTheDocument();
+    expect(within(planPanel!).getByText(/kubectl-logs/i)).toBeInTheDocument();
+  });
+
+  test("next check plan calls out safe, approval, and duplicate candidates", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    expect(await screen.findByText(/Safe candidate/i)).toBeInTheDocument();
+    expect(screen.getByText(/Approval needed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Duplicate \/ already covered/i)).toBeInTheDocument();
+    expect(screen.getByText(/Command not recognized or too vague/i)).toBeInTheDocument();
+    expect(screen.getByText(/Matches deterministic next check: Collect kubelet metrics/i)).toBeInTheDocument();
+  });
+
+  test("displays run button only for allowed next-check candidates", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    const buttons = screen.getAllByRole("button", { name: /Run candidate/i });
+    expect(buttons.length).toBe(1);
+  });
+
+    test("manual execution button triggers API and shows artifact link", async () => {
+        const executionResponse = {
+            status: "success",
+            summary: "Manual execution recorded",
+      artifactPath: "external-analysis/run-123-next-check-execution-0.json",
+      durationMs: 150,
+      command: ["kubectl", "logs"],
+      targetCluster: "cluster-a",
+      planCandidateIndex: 0,
+      rawOutput: "logs output",
+      errorSummary: null,
+    };
+    const fetchMock = vi.fn((input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url === "/api/next-check-execution" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve(executionResponse),
+        });
+      }
+      const base = url.split("?")[0];
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    const runButton = await screen.findByRole("button", { name: /Run candidate/i });
+    await act(async () => {
+      await user.click(runButton);
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/next-check-execution",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(await screen.findByText(/Manual execution recorded/i)).toBeInTheDocument();
+        const successMessage = await screen.findByText(/Manual execution recorded/i);
+        const manualActions = successMessage.closest(".next-check-manual-actions");
+        expect(manualActions).not.toBeNull();
+        const artifactLink = within(manualActions!).getByRole("link", { name: /View artifact/i });
+        expect(artifactLink).toHaveAttribute(
+          "href",
+          expect.stringContaining(
+            encodeURIComponent("external-analysis/run-123-next-check-execution-0.json")
+          )
+        );
+    });
+
+    test("approve candidate button calls API and shows approval record", async () => {
+        const approvalResponse = {
+            status: "success",
+            summary: "Candidate approved",
+            artifactPath: "external-analysis/approval-0.json",
+            durationMs: 10,
+            candidateIndex: 1,
+            approvalTimestamp: "2026-04-06T12:01:00Z",
+        };
+        const fetchMock = vi.fn((input: RequestInfo, init?: RequestInit) => {
+            const url = typeof input === "string" ? input : input.url;
+            if (url === "/api/next-check-approval" && init?.method === "POST") {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    statusText: "OK",
+                    json: () => Promise.resolve(approvalResponse),
+                });
+            }
+            const base = url.split("?")[0];
+            const payload = defaultPayloads[url] ?? defaultPayloads[base];
+            if (!payload) {
+                return Promise.reject(new Error(`Unexpected fetch ${url}`));
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                statusText: "OK",
+                json: () => Promise.resolve(payload),
+            });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const user = userEvent.setup();
+        render(<App />);
+
+        await screen.findByRole("heading", { name: /Cluster detail/i });
+        const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+        await act(async () => {
+            await user.click(summaryToggle);
+        });
+        const approveButton = await screen.findByRole("button", { name: /Approve candidate/i });
+        await act(async () => {
+            await user.click(approveButton);
+        });
+        expect(fetchMock).toHaveBeenCalledWith(
+            "/api/next-check-approval",
+            expect.objectContaining({ method: "POST" })
+        );
+        expect(await screen.findByText(/Candidate approved/i)).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /View approval record/i })).toHaveAttribute(
+            "href",
+            expect.stringContaining("external-analysis/approval-0.json"),
+        );
+    });
+
+  test("renders execution history entries from the run payload", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const panel = await screen.findByRole("heading", { name: /Manual next-check runs/i });
+    expect(panel).toBeInTheDocument();
+    expect(screen.getByText(/Manual next-check runs/i)).toBeInTheDocument();
+    expect(screen.getByText(/Collect kubelet logs for control-plane pods/i)).toBeInTheDocument();
+    expect(screen.getByText(/Timed out/i, { selector: ".execution-history-badge" })).toBeInTheDocument();
+  });
+
+  test("hides next check plan section when planner data is absent", async () => {
+    const noPlanCluster = { ...sampleClusterDetail, nextCheckPlan: [] };
+    const runWithoutPlan = { ...sampleRun, nextCheckPlan: null };
+    const payloads = {
+      ...defaultPayloads,
+      "/api/cluster-detail": noPlanCluster,
+      "/api/run": runWithoutPlan,
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    expect(screen.queryByRole("heading", { name: /Next check plan/i })).toBeNull();
+  });
+
   test("renders compact run stats string", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
@@ -208,7 +409,6 @@ describe("App", () => {
       name: /Provider-assisted advisory/i,
     });
     expect(heading).toBeInTheDocument();
-    expect(screen.getByText(/Provider-assisted advisory/i)).toBeInTheDocument();
     expect(
       await screen.findByText(/Provider-assisted review enrichment is not configured for this run/i)
     ).toBeInTheDocument();

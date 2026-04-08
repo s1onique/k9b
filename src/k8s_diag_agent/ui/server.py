@@ -6,10 +6,19 @@ import functools
 import json
 import mimetypes
 import sys
+from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
+from ..external_analysis.manual_next_check import (
+    ManualNextCheckError,
+    execute_manual_next_check,
+)
+from ..external_analysis.next_check_approval import (
+    log_next_check_approval_event,
+    record_next_check_approval,
+)
 from .api import (
     build_cluster_detail_payload,
     build_fleet_payload,
@@ -62,6 +71,16 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         else:
             self._serve_static(route)
 
+    def do_POST(self) -> None:
+        route, _, _ = self.path.partition("?")
+        if route == "/api/next-check-execution":
+            self._handle_next_check_execution()
+            return
+        if route == "/api/next-check-approval":
+            self._handle_next_check_approval()
+            return
+        self._send_text(404, "Not Found")
+
     def log_message(self, format: str, *args: object) -> None:
         return
 
@@ -96,6 +115,244 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json(build_cluster_detail_payload(context, cluster_label=label))
             return
         self._send_text(404, "Not Found")
+
+    def _handle_next_check_execution(self) -> None:
+        context = self._load_context()
+        if context is None:
+            return
+        plan = context.run.next_check_plan
+        if not plan or not plan.artifact_path:
+            self._send_json({"error": "Next-check plan unavailable"}, 400)
+            return
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+        candidate_index = payload.get("candidateIndex")
+        if not isinstance(candidate_index, int):
+            self._send_json({"error": "candidateIndex must be an integer"}, 400)
+            return
+        request_cluster = payload.get("clusterLabel")
+        if not isinstance(request_cluster, str) or not request_cluster:
+            self._send_json({"error": "clusterLabel is required"}, 400)
+            return
+        plan_path = (self.runs_dir / plan.artifact_path).resolve()
+        if not str(plan_path).startswith(str(self.runs_dir.resolve())):
+            self._send_json({"error": "Invalid plan artifact path"}, 400)
+            return
+        if not plan_path.exists():
+            self._send_json({"error": "Plan artifact missing"}, 404)
+            return
+        try:
+            plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
+        except Exception:
+            self._send_json({"error": "Unable to read plan artifact"}, 500)
+            return
+        candidates = plan_data.get("candidates")
+        if not isinstance(candidates, Sequence):
+            self._send_json({"error": "Plan artifact missing candidates"}, 500)
+            return
+        if candidate_index < 0 or candidate_index >= len(candidates):
+            self._send_json({"error": "candidateIndex out of range"}, 400)
+            return
+        candidate = candidates[candidate_index]
+        candidate_view = None
+        plan_view = context.run.next_check_plan
+        if plan_view:
+            for entry in plan_view.candidates:
+                if entry.candidate_index == candidate_index:
+                    candidate_view = entry
+                    break
+        if candidate_view:
+            enriched_candidate = dict(candidate)
+            if candidate_view.approval_status:
+                enriched_candidate["approvalStatus"] = candidate_view.approval_status
+            if candidate_view.approval_artifact_path:
+                enriched_candidate["approvalArtifactPath"] = candidate_view.approval_artifact_path
+            if candidate_view.approval_timestamp:
+                enriched_candidate["approvalTimestamp"] = candidate_view.approval_timestamp
+            candidate = enriched_candidate
+        if not isinstance(candidate, Mapping):
+            self._send_json({"error": "Invalid candidate record"}, 500)
+            return
+        target_cluster = candidate.get("targetCluster")
+        if not isinstance(target_cluster, str) or not target_cluster:
+            self._send_json({"error": "Candidate target cluster missing"}, 400)
+            return
+        if target_cluster != request_cluster:
+            self._send_json({"error": "Candidate target cluster mismatch"}, 400)
+            return
+        cluster_context = None
+        for cluster in context.clusters:
+            if cluster.label == target_cluster:
+                cluster_context = cluster.context
+                break
+        if not cluster_context:
+            self._send_json({"error": "Cluster context unavailable"}, 400)
+            return
+        try:
+            artifact = execute_manual_next_check(
+                runs_dir=self.runs_dir,
+                run_id=context.run.run_id,
+                run_label=context.run.run_label,
+                plan_artifact_path=Path(plan.artifact_path),
+                candidate_index=candidate_index,
+                candidate=candidate,
+                target_context=cluster_context,
+                target_cluster=target_cluster,
+            )
+        except ManualNextCheckError as exc:
+            self._send_json({"error": str(exc)}, 400)
+            return
+        except Exception as exc:  # pragma: no cover - defensive guard
+            self._send_json({"error": f"Execution failed: {exc}"}, 500)
+            return
+        artifact_path = _relative_path(self.runs_dir, artifact.artifact_path)
+        payload = {
+            "status": artifact.status.value,
+            "summary": artifact.summary,
+            "artifactPath": artifact_path,
+            "durationMs": artifact.duration_ms,
+            "command": artifact.payload.get("command") if isinstance(artifact.payload, Mapping) else None,
+            "targetCluster": target_cluster,
+            "planCandidateIndex": candidate_index,
+            "rawOutput": artifact.raw_output,
+            "errorSummary": artifact.error_summary,
+            "timedOut": artifact.timed_out,
+            "stdoutTruncated": artifact.stdout_truncated,
+            "stderrTruncated": artifact.stderr_truncated,
+            "outputBytesCaptured": artifact.output_bytes_captured,
+        }
+        self._send_json(payload)
+
+    def _handle_next_check_approval(self) -> None:
+        context = self._load_context()
+        if context is None:
+            return
+        plan = context.run.next_check_plan
+        if not plan or not plan.artifact_path:
+            self._send_json({"error": "Next-check plan unavailable"}, 400)
+            return
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+        candidate_index = payload.get("candidateIndex")
+        if not isinstance(candidate_index, int):
+            self._send_json({"error": "candidateIndex must be an integer"}, 400)
+            return
+        request_cluster = payload.get("clusterLabel")
+        if not isinstance(request_cluster, str) or not request_cluster:
+            self._send_json({"error": "clusterLabel is required"}, 400)
+            return
+        plan_path = (self.runs_dir / plan.artifact_path).resolve()
+        if not str(plan_path).startswith(str(self.runs_dir.resolve())):
+            self._send_json({"error": "Invalid plan artifact path"}, 400)
+            return
+        if not plan_path.exists():
+            self._send_json({"error": "Plan artifact missing"}, 404)
+            return
+        try:
+            plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
+        except Exception:
+            self._send_json({"error": "Unable to read plan artifact"}, 500)
+            return
+        candidates = plan_data.get("candidates")
+        if not isinstance(candidates, Sequence):
+            self._send_json({"error": "Plan artifact missing candidates"}, 500)
+            return
+        if candidate_index < 0 or candidate_index >= len(candidates):
+            self._send_json({"error": "candidateIndex out of range"}, 400)
+            return
+        candidate = candidates[candidate_index]
+        if not isinstance(candidate, Mapping):
+            self._send_json({"error": "Invalid candidate record"}, 500)
+            return
+        target_cluster = candidate.get("targetCluster")
+        if target_cluster and target_cluster != request_cluster:
+            self._send_json({"error": "Candidate target cluster mismatch"}, 400)
+            return
+        requires_approval = bool(candidate.get("requiresOperatorApproval"))
+        if not requires_approval:
+            log_next_check_approval_event(
+                severity="WARNING",
+                message="Approval rejected because candidate does not require approval",
+                run_label=context.run.run_label,
+                run_id=context.run.run_id,
+                plan_artifact_path=plan.artifact_path,
+                candidate_index=candidate_index,
+                candidate_description=str(candidate.get("description") or ""),
+                target_cluster=request_cluster,
+                event="approval-rejected",
+            )
+            self._send_json({"error": "Candidate does not require approval"}, 400)
+            return
+        if candidate.get("duplicateOfExistingEvidence"):
+            log_next_check_approval_event(
+                severity="WARNING",
+                message="Approval rejected because candidate duplicates existing evidence",
+                run_label=context.run.run_label,
+                run_id=context.run.run_id,
+                plan_artifact_path=plan.artifact_path,
+                candidate_index=candidate_index,
+                candidate_description=str(candidate.get("description") or ""),
+                target_cluster=request_cluster,
+                event="approval-rejected",
+            )
+            self._send_json({"error": "Candidate duplicates deterministic evidence"}, 400)
+            return
+        if target_cluster is None and request_cluster and request_cluster not in {cluster.label for cluster in context.clusters}:
+            # allow request even if plan candidate lacks explicit target, as long as cluster exists
+            pass
+        plan_candidate_description = str(candidate.get("description") or "")
+        log_next_check_approval_event(
+            severity="INFO",
+            message="Operator requested approval for next-check candidate",
+            run_label=context.run.run_label,
+            run_id=context.run.run_id,
+            plan_artifact_path=plan.artifact_path,
+            candidate_index=candidate_index,
+            candidate_id=candidate.get("candidateId") if isinstance(candidate.get("candidateId"), str) else None,
+            candidate_description=plan_candidate_description,
+            target_cluster=request_cluster,
+            event="approval-requested",
+        )
+        try:
+            artifact = record_next_check_approval(
+                runs_dir=self.runs_dir,
+                run_id=context.run.run_id,
+                run_label=context.run.run_label,
+                plan_artifact_path=plan.artifact_path,
+                candidate_index=candidate_index,
+                candidate_id=candidate.get("candidateId") if isinstance(candidate.get("candidateId"), str) else None,
+                candidate_description=plan_candidate_description,
+                target_cluster=request_cluster,
+            )
+        except Exception as exc:  # pragma: no cover - fail safe
+            self._send_json({"error": f"Approval failed: {exc}"}, 500)
+            return
+        artifact_path = _relative_path(self.runs_dir, artifact.artifact_path)
+        response = {
+            "status": artifact.status.value,
+            "summary": artifact.summary,
+            "artifactPath": artifact_path,
+            "durationMs": artifact.duration_ms,
+            "candidateIndex": candidate_index,
+            "approvalTimestamp": artifact.timestamp.isoformat(),
+        }
+        self._send_json(response)
 
     def _serve_static(self, route: str) -> None:
         target = route or "/"
@@ -160,10 +417,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         parsed = self._parse_limit(value)
         return parsed if parsed else 1
 
-    def _send_json(self, body: object) -> None:
+    def _send_json(self, body: object, code: int = 200) -> None:
         payload = json.dumps(body, ensure_ascii=False)
         encoded = payload.encode("utf-8")
-        self.send_response(200)
+        self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
@@ -187,3 +444,13 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
         self.wfile.write(message.encode("utf-8"))
+
+
+def _relative_path(base: Path, target: object | None) -> str | None:
+    if target is None:
+        return None
+    candidate = Path(str(target))
+    try:
+        return str(candidate.relative_to(base))
+    except ValueError:
+        return str(candidate)

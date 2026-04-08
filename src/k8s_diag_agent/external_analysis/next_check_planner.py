@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from hashlib import sha256
 from pathlib import Path
 
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
@@ -127,6 +128,24 @@ def _normalize_description(value: str) -> str:
     return _normalize_text(value)
 
 
+def _derive_candidate_id(
+    description: str,
+    target_cluster: str | None,
+    source_reason: str | None,
+    family: CommandFamily,
+) -> str:
+    normalized_desc = _normalize_description(description or "")
+    components = "|".join(
+        (
+            normalized_desc,
+            target_cluster or "",
+            source_reason or "",
+            family.value,
+        )
+    )
+    return sha256(components.encode("utf-8")).hexdigest()
+
+
 def _collect_existing_evidence(context: ReviewEnrichmentInput) -> Mapping[str, str]:
     normalized: dict[str, str] = {}
     for selection in context.selections:
@@ -159,6 +178,7 @@ def _find_similar_description(candidate_key: str, evidence_map: Mapping[str, str
 
 @dataclass(frozen=True)
 class NextCheckCandidate:
+    candidate_id: str
     description: str
     target_cluster: str | None
     source_reason: str | None
@@ -184,11 +204,12 @@ class NextCheckCandidate:
             "requiresOperatorApproval": self.requires_operator_approval,
             "riskLevel": self.risk_level.value,
             "estimatedCost": self.estimated_cost.value,
-            "confidence": self.confidence,
-            "gatingReason": self.gating_reason,
-            "duplicateOfExistingEvidence": self.duplicate_of_existing_evidence,
-            "duplicateEvidenceDescription": self.duplicate_evidence_description,
-        }
+        "confidence": self.confidence,
+        "gatingReason": self.gating_reason,
+        "duplicateOfExistingEvidence": self.duplicate_of_existing_evidence,
+        "duplicateEvidenceDescription": self.duplicate_evidence_description,
+        "candidateId": self.candidate_id,
+    }
 
 
 @dataclass(frozen=True)
@@ -260,7 +281,14 @@ def plan_next_checks(
             gating_reason = "Command not recognized or too vague"
         cost = _cost_from_risk(risk)
         confidence = _confidence_level(safe, family)
+        candidate_id = _derive_candidate_id(
+            candidate_text,
+            target_cluster,
+            source_reason,
+            family,
+        )
         candidate = NextCheckCandidate(
+            candidate_id=candidate_id,
             description=candidate_text.strip(),
             target_cluster=target_cluster,
             source_reason=source_reason,

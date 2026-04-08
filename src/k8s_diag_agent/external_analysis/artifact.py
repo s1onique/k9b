@@ -22,6 +22,8 @@ class ExternalAnalysisPurpose(StrEnum):
     AUTO_DRILLDOWN = "auto-drilldown"
     REVIEW_ENRICHMENT = "review-enrichment"
     NEXT_CHECK_PLANNING = "next-check-planning"
+    NEXT_CHECK_APPROVAL = "next-check-approval"
+    NEXT_CHECK_EXECUTION = "next-check-execution"
 
 
 def _coerce_optional_int(value: object | None) -> int | None:
@@ -49,6 +51,9 @@ class ExternalAnalysisArtifact:
     suggested_next_checks: tuple[str, ...] = field(default_factory=tuple)
     status: ExternalAnalysisStatus = ExternalAnalysisStatus.PENDING
     raw_output: str | None = None
+    stdout_truncated: bool | None = None
+    stderr_truncated: bool | None = None
+    timed_out: bool | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     artifact_path: str | None = None
     provider: str | None = None
@@ -57,6 +62,7 @@ class ExternalAnalysisArtifact:
     payload: dict[str, object] | None = None
     error_summary: str | None = None
     skip_reason: str | None = None
+    output_bytes_captured: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -70,6 +76,9 @@ class ExternalAnalysisArtifact:
         "suggested_next_checks": list(self.suggested_next_checks),
         "status": self.status.value,
         "raw_output": self.raw_output,
+        "stdout_truncated": self.stdout_truncated,
+        "stderr_truncated": self.stderr_truncated,
+        "timed_out": self.timed_out,
         "timestamp": self.timestamp.isoformat(),
         "artifact_path": self.artifact_path,
         "provider": self.provider,
@@ -78,6 +87,7 @@ class ExternalAnalysisArtifact:
         "payload": self.payload,
         "error_summary": self.error_summary,
         "skip_reason": self.skip_reason,
+        "output_bytes_captured": self.output_bytes_captured,
         }
 
     @classmethod
@@ -107,6 +117,10 @@ class ExternalAnalysisArtifact:
             payload=payload,
             error_summary=str(raw.get("error_summary")) if raw.get("error_summary") else None,
             skip_reason=str(raw.get("skip_reason")) if raw.get("skip_reason") else None,
+            stdout_truncated=bool(raw.get("stdout_truncated")) if raw.get("stdout_truncated") is not None else None,
+            stderr_truncated=bool(raw.get("stderr_truncated")) if raw.get("stderr_truncated") is not None else None,
+            timed_out=bool(raw.get("timed_out")) if raw.get("timed_out") is not None else None,
+            output_bytes_captured=_coerce_optional_int(raw.get("output_bytes_captured")),
         )
 
 

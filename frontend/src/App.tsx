@@ -3,6 +3,8 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import {
+  approveNextCheckCandidate,
+  executeNextCheckCandidate,
   fetchClusterDetail,
   fetchFleet,
   fetchNotifications,
@@ -14,6 +16,10 @@ import type {
   ClusterDetailPayload,
   FleetPayload,
   LLMPolicy,
+  LLMStats,
+  NextCheckExecutionHistoryEntry,
+  NextCheckExecutionResponse,
+  NextCheckPlanCandidate,
   NotificationDetail,
   NotificationEntry,
   NotificationsPayload,
@@ -23,7 +29,7 @@ import type {
   ProviderExecutionBranch,
   ReviewEnrichmentStatus,
   RunPayload,
-  LLMStats,
+  NextCheckApprovalResponse,
 } from "./types";
 import "./index.css";
 
@@ -201,6 +207,54 @@ const priorityLabel = (confidence: string) => {
   if (normalized.includes("medium")) return "medium";
   if (normalized.includes("low")) return "low";
   return "default";
+};
+
+const ALLOWED_MANUAL_FAMILIES = new Set([
+  "kubectl-get",
+  "kubectl-describe",
+  "kubectl-logs",
+  "kubectl-get-crd",
+]);
+
+type ExecutionResult =
+  | NextCheckExecutionResponse
+  | {
+      status: "error";
+      summary: string;
+    };
+
+type ApprovalResult = {
+  status: "success" | "error";
+  summary: string;
+  artifactPath?: string | null;
+  approvalTimestamp?: string | null;
+};
+
+type NextCheckStatusVariant = "safe" | "approval" | "approved" | "duplicate";
+
+const determineNextCheckStatusVariant = (
+  candidate: NextCheckPlanCandidate
+): NextCheckStatusVariant => {
+  if (candidate.duplicateOfExistingEvidence) {
+    return "duplicate";
+  }
+  if (candidate.requiresOperatorApproval) {
+    return candidate.approvalStatus === "approved" ? "approved" : "approval";
+  }
+  return "safe";
+};
+
+const nextCheckStatusLabel = (variant: NextCheckStatusVariant) => {
+  switch (variant) {
+    case "approval":
+      return "Approval needed";
+    case "approved":
+      return "Approved candidate";
+    case "duplicate":
+      return "Duplicate / already covered";
+    default:
+      return "Safe candidate";
+  }
 };
 
 const EvidenceDetails = ({
@@ -667,6 +721,78 @@ const ProviderExecutionPanel = ({
   </section>
 );
 
+const ExecutionHistoryPanel = ({
+  history,
+}: {
+  history: NextCheckExecutionHistoryEntry[];
+}) => (
+  <section className="panel execution-history-panel" id="execution-history">
+    <div className="section-head">
+      <div>
+        <p className="eyebrow">Execution history</p>
+        <h2>Manual next-check runs</h2>
+        <p className="muted small">Bounded artifacts recorded after each manual execution.</p>
+      </div>
+    </div>
+    {history.length ? (
+      <div className="execution-history-grid">
+        {history.map((entry) => {
+          const key = `${entry.timestamp}-${entry.artifactPath ?? entry.candidateDescription ?? ""}`;
+          const badges = [
+            entry.timedOut ? "Timed out" : null,
+            entry.stdoutTruncated ? "stdout truncated" : null,
+            entry.stderrTruncated ? "stderr truncated" : null,
+          ].filter(Boolean) as string[];
+          const durationSeconds = entry.durationMs != null ? entry.durationMs / 1000 : null;
+          return (
+            <article className="execution-history-card" key={key}>
+              <header>
+                <div>
+                  <p className="tiny muted">{relativeRecency(entry.timestamp)}</p>
+                  <strong>{formatTimestamp(entry.timestamp)}</strong>
+                </div>
+                <span className={statusClass(entry.status)}>{entry.status}</span>
+              </header>
+              <p className="small">
+                {entry.candidateDescription || "Candidate description unavailable."}
+              </p>
+              <div className="execution-history-meta">
+                <span>Cluster: {entry.clusterLabel || "unknown"}</span>
+                <span>Command: {entry.commandFamily || "—"}</span>
+                <span>Duration: {formatDuration(durationSeconds)}</span>
+              </div>
+              <div className="execution-history-badges">
+                {badges.map((badge) => (
+                  <span key={badge} className="execution-history-badge">
+                    {badge}
+                  </span>
+                ))}
+                {entry.outputBytesCaptured != null && (
+                  <span className="execution-history-badge">
+                    Captured {entry.outputBytesCaptured} bytes
+                  </span>
+                )}
+              </div>
+              {entry.artifactPath ? (
+                <a
+                  className="link"
+                  href={artifactUrl(entry.artifactPath)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View artifact
+                </a>
+              ) : null}
+            </article>
+          );
+        })}
+      </div>
+    ) : (
+      <p className="muted">Manual next-check executions appear here once recorded.</p>
+    )}
+  </section>
+);
+
 export const ProposalList = ({
   proposals,
   filter,
@@ -1078,6 +1204,10 @@ const App = () => {
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(() => {
     return readStoredAutoRefreshInterval();
   });
+  const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
+  const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
+  const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
+  const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -1194,6 +1324,114 @@ const App = () => {
     }
   };
 
+  const buildCandidateKey = (candidate: NextCheckPlanCandidate, index: number) =>
+    `next-check-${candidate.candidateId ?? candidate.candidateIndex ?? index}-${
+      candidate.targetCluster ?? selectedClusterLabel ?? "global"
+    }`;
+
+  const isManualExecutionAllowed = (candidate: NextCheckPlanCandidate) => {
+    if (candidate.candidateIndex == null) {
+      return false;
+    }
+    if (!candidate.safeToAutomate) {
+      return false;
+    }
+    if (candidate.requiresOperatorApproval && candidate.approvalStatus !== "approved") {
+      return false;
+    }
+    if (candidate.duplicateOfExistingEvidence) {
+      return false;
+    }
+    if (!candidate.suggestedCommandFamily) {
+      return false;
+    }
+    if (!ALLOWED_MANUAL_FAMILIES.has(candidate.suggestedCommandFamily)) {
+      return false;
+    }
+    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
+    if (!targetLabel) {
+      return false;
+    }
+    if (selectedClusterLabel && candidate.targetCluster && candidate.targetCluster !== selectedClusterLabel) {
+      return false;
+    }
+    return true;
+  };
+
+  const handleManualExecution = async (candidate: NextCheckPlanCandidate, candidateKey: string) => {
+    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
+    if (!targetLabel || candidate.candidateIndex == null) {
+      setExecutionResults((prev) => ({
+        ...prev,
+        [candidateKey]: { status: "error", summary: "Unable to determine candidate target." },
+      }));
+      return;
+    }
+    setExecutingCandidate(candidateKey);
+    try {
+      const result = await executeNextCheckCandidate({
+        candidateIndex: candidate.candidateIndex,
+        clusterLabel: targetLabel,
+      });
+      setExecutionResults((prev) => ({
+        ...prev,
+        [candidateKey]: result,
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Manual execution failed";
+      setExecutionResults((prev) => ({
+        ...prev,
+        [candidateKey]: { status: "error", summary: message },
+      }));
+    } finally {
+      setExecutingCandidate((current) => (current === candidateKey ? null : current));
+    }
+  };
+
+  const handleApproveCandidate = async (
+    candidate: NextCheckPlanCandidate,
+    candidateKey: string
+  ) => {
+    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
+    if (!targetLabel || candidate.candidateIndex == null) {
+      setApprovalResults((prev) => ({
+        ...prev,
+        [candidateKey]: {
+          status: "error",
+          summary: "Unable to determine candidate target",
+        },
+      }));
+      return;
+    }
+    setApprovingCandidate(candidateKey);
+    try {
+      const result = await approveNextCheckCandidate({
+        candidateIndex: candidate.candidateIndex,
+        clusterLabel: targetLabel,
+      });
+      setApprovalResults((prev) => ({
+        ...prev,
+        [candidateKey]: {
+          status: result.status === "success" ? "success" : "error",
+          summary:
+            result.summary ||
+            (result.status === "success" ? "Candidate approved" : "Approval failed"),
+          artifactPath: result.artifactPath,
+          approvalTimestamp: result.approvalTimestamp,
+        },
+      }));
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Approval failed";
+      setApprovalResults((prev) => ({
+        ...prev,
+        [candidateKey]: { status: "error", summary: message },
+      }));
+    } finally {
+      setApprovingCandidate((current) => (current === candidateKey ? null : current));
+    }
+  };
+
   if (!run || !fleet || !proposals) {
     return (
       <div className="app-shell loading">
@@ -1251,6 +1489,20 @@ const App = () => {
   const recencyTimestamp = selectedCluster?.latestRunTimestamp
     ? formatTimestamp(selectedCluster.latestRunTimestamp)
     : "Awaiting run";
+  const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
+  const planArtifactLink = run.nextCheckPlan?.artifactPath
+    ? artifactUrl(run.nextCheckPlan.artifactPath)
+    : null;
+  const planSummaryText =
+    run.nextCheckPlan?.summary ?? "Provider-assisted next-check candidates are available.";
+  const planCandidateCountLabel =
+    run.nextCheckPlan?.candidateCount != null
+      ? `${run.nextCheckPlan.candidateCount} candidate${
+          run.nextCheckPlan.candidateCount === 1 ? "" : "s"
+        }`
+      : `${planCandidates.length} candidate${planCandidates.length === 1 ? "" : "s"}`;
+  const planStatusText = run.nextCheckPlan?.status ?? null;
+  const executionHistory: NextCheckExecutionHistoryEntry[] = run.nextCheckExecutionHistory ?? [];
 
   const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
   const historicalLlmStatsLine = run.historicalLlmStats
@@ -1311,6 +1563,7 @@ const App = () => {
         <a href="#cluster">Cluster detail</a>
         <a href="#proposals">Proposal queue</a>
         <a href="#run-detail">Run summary</a>
+        <a href="#execution-history">Execution history</a>
         <a href="#review-enrichment">Review enrichment</a>
         <a href="#llm-activity">LLM activity</a>
         <a href="#llm-policy">LLM policy</a>
@@ -1385,6 +1638,7 @@ const App = () => {
           </div>
         )}
       </section>
+      <ExecutionHistoryPanel history={executionHistory} />
       <ReviewEnrichmentPanel
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}
@@ -1691,10 +1945,196 @@ const App = () => {
                         <p className="small muted">Skipped because {interpretation.skipReason}</p>
                       ) : null}
                     </div>
-                  ) : (
-                    <p className="muted small">LLM drilldown interpretation not available.</p>
-                  )}
-                </div>
+                   ) : (
+                     <p className="muted small">LLM drilldown interpretation not available.</p>
+                   )}
+                 </div>
+                {planCandidates.length ? (
+                  <div className="next-check-plan">
+                    <div className="section-head next-check-plan-head">
+                      <div>
+                        <h3>Next check plan</h3>
+                        <p className="muted small">{planSummaryText}</p>
+                        <p className="muted tiny">
+                          {planCandidateCountLabel}
+                          {planStatusText ? ` · ${planStatusText}` : ""}
+                        </p>
+                      </div>
+                      {planArtifactLink ? (
+                        <a
+                          className="link"
+                          href={planArtifactLink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View planner artifact
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="next-check-plan-grid">
+                        {planCandidates.map((candidate, index) => {
+                          const variant = determineNextCheckStatusVariant(candidate);
+                          const statusLabel = nextCheckStatusLabel(variant);
+                          const statusClassName = `plan-status-pill plan-status-pill-${variant}`;
+                          const targetLabel =
+                            candidate.targetCluster ||
+                            clusterDetail?.selectedClusterLabel ||
+                            selectedClusterLabel ||
+                            "cluster";
+                          const candidateKey = buildCandidateKey(candidate, index);
+                          const manualAllowed = isManualExecutionAllowed(candidate);
+                          const executionResult = executionResults[candidateKey];
+                          const approvalResult = approvalResults[candidateKey];
+                          const approvalArtifactPath =
+                            approvalResult?.artifactPath ?? candidate.approvalArtifactPath;
+                          const approvalArtifactBaseLink =
+                            approvalArtifactPath && artifactUrl(approvalArtifactPath);
+                          const approvalArtifactLink =
+                            approvalArtifactBaseLink && approvalArtifactPath
+                              ? `${approvalArtifactBaseLink}#${approvalArtifactPath}`
+                              : null;
+                          const approvalTimestamp =
+                            candidate.approvalTimestamp ?? approvalResult?.approvalTimestamp;
+                          const approvalRecency = approvalTimestamp && relativeRecency(approvalTimestamp);
+                        return (
+                          <article
+                            className="next-check-plan-card"
+                            key={`${candidate.description}-${index}`}
+                          >
+                            <header className="next-check-plan-card-header">
+                              <div>
+                                <p className="tiny muted">
+                                  Source: {candidate.sourceReason || "Planner advisory"}
+                                </p>
+                                <strong>{candidate.description}</strong>
+                              </div>
+                              <span className={statusClassName}>{statusLabel}</span>
+                            </header>
+                            <div className="next-check-plan-meta">
+                              <div>
+                                <p className="tiny">Command family</p>
+                                <strong>{candidate.suggestedCommandFamily || "—"}</strong>
+                              </div>
+                              <div>
+                                <p className="tiny">Target</p>
+                                <strong>{targetLabel}</strong>
+                              </div>
+                              <div>
+                                <p className="tiny">Expected signal</p>
+                                <strong>{candidate.expectedSignal || "—"}</strong>
+                              </div>
+                              <div>
+                                <p className="tiny">Risk level</p>
+                                <strong>{candidate.riskLevel}</strong>
+                              </div>
+                              <div>
+                                <p className="tiny">Confidence</p>
+                                <strong>{candidate.confidence}</strong>
+                              </div>
+                            </div>
+                            <div className="next-check-plan-flags">
+                              <span>
+                                Safe to automate: <strong>{candidate.safeToAutomate ? "Yes" : "No"}</strong>
+                              </span>
+                              <span>
+                                Operator approval: <strong>{candidate.requiresOperatorApproval ? "Yes" : "No"}</strong>
+                              </span>
+                              <span>
+                                Estimated cost: <strong>{candidate.estimatedCost || "—"}</strong>
+                              </span>
+                            </div>
+                            {variant === "approval" && (
+                              <div className="next-check-approval-actions">
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  onClick={() => handleApproveCandidate(candidate, candidateKey)}
+                                  disabled={approvingCandidate === candidateKey}
+                                >
+                                  {approvingCandidate === candidateKey ? "Approving…" : "Approve candidate"}
+                                </button>
+                                {approvalResult ? (
+                                  <p
+                                    className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}
+                                  >
+                                    {approvalResult.summary}
+                                  </p>
+                                ) : null}
+                                {approvalArtifactLink ? (
+                                  <a
+                                    className="link"
+                                    href={approvalArtifactLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    View approval record
+                                  </a>
+                                ) : null}
+                              </div>
+                            )}
+                            {variant === "approved" && (
+                              <div className="next-check-approval-status">
+                                <p className="next-check-approval-note next-check-approval-note-success">
+                                  Approved {approvalRecency ?? "recently"}.
+                                </p>
+                                {approvalArtifactLink ? (
+                                  <a className="link" href={approvalArtifactLink} target="_blank" rel="noreferrer">
+                                    View approval record
+                                  </a>
+                                ) : null}
+                              </div>
+                            )}
+                            {manualAllowed && (
+                              <div className="next-check-manual-actions">
+                                <button
+                                  type="button"
+                                  className="button primary small"
+                                  onClick={() => handleManualExecution(candidate, candidateKey)}
+                                  disabled={executingCandidate === candidateKey}
+                                >
+                                  {executingCandidate === candidateKey ? "Running…" : "Run candidate"}
+                                </button>
+                                {executionResult ? (
+                                  <p
+                                    className={`next-check-execution next-check-execution-${
+                                      executionResult.status === "success" ? "success" : "error"
+                                    }`}
+                                  >
+                                    {executionResult.summary ||
+                                      (executionResult.status === "success"
+                                        ? "Execution recorded."
+                                        : "Execution failed.")}
+                                    {executionResult.artifactPath ? (
+                                      <>
+                                        {" "}
+                                        <a
+                                          className="link"
+                                          href={artifactUrl(executionResult.artifactPath)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          View artifact
+                                        </a>
+                                      </>
+                                    ) : null}
+                                  </p>
+                                ) : null}
+                              </div>
+                            )}
+                            {candidate.gatingReason ? (
+                              <p className="plan-gating">Gating reason: {candidate.gatingReason}</p>
+                            ) : null}
+                            {candidate.duplicateEvidenceDescription ? (
+                              <p className="plan-gating">
+                                Duplicate evidence: {candidate.duplicateEvidenceDescription}
+                              </p>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="tab-list">
                   {[
                     { id: "findings", label: "Findings" },

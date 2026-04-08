@@ -81,6 +81,25 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(review_enrichment.top_concerns[0], "ingress latency")
         self.assertIsNone(context.run.review_enrichment_status)
 
+        plan = context.run.next_check_plan
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        self.assertEqual(plan.candidate_count, 3)
+        self.assertEqual(
+            plan.candidates[0].description,
+            "Collect kubelet logs for control-plane pods",
+        )
+        self.assertEqual(plan.candidates[1].gating_reason, "Command not recognized or too vague")
+        self.assertTrue(plan.candidates[2].duplicate_of_existing_evidence)
+        self.assertEqual(
+            plan.candidates[2].duplicate_evidence_description,
+            "Collect kubelet metrics",
+        )
+        history_entries = context.run.next_check_execution_history
+        self.assertTrue(history_entries)
+        self.assertEqual(history_entries[0].status, "success")
+        self.assertFalse(history_entries[0].timed_out)
+
         provider_execution = context.run.provider_execution
         self.assertIsNotNone(provider_execution)
         assert provider_execution is not None

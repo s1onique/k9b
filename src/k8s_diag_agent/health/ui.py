@@ -20,6 +20,8 @@ from ..external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from ..external_analysis.next_check_approval import collect_next_check_approvals
+from ..external_analysis.utils import artifact_matches_run
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 
@@ -208,6 +210,9 @@ def write_health_ui_index(
         "review_enrichment_config": review_config,
         "review_enrichment_status": review_status,
         "next_check_plan": plan_entry,
+        "next_check_execution_history": _build_next_check_execution_history(
+            external_analysis, output_dir, run_id
+        ),
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
     }
     index = {
@@ -263,6 +268,7 @@ _PROPOSAL_STATUS_ORDER = (
 _ANALYSIS_STATUS_ORDER = tuple(status.value for status in ExternalAnalysisStatus)
 _LLM_ACTIVITY_LIMIT = 20
 _NOTIFICATION_HISTORY_LIMIT = 20
+_NEXT_CHECK_EXECUTION_HISTORY_LIMIT = 5
 _SCOPE_CURRENT_RUN = "current_run"
 _SCOPE_RETAINED_HISTORY = "retained_history"
 
@@ -448,7 +454,7 @@ def _find_review_enrichment_artifact(
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         if (
             artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
-            and _artifact_matches_run(artifact, run_id)
+            and artifact_matches_run(artifact, run_id)
         ):
             return artifact
     return None
@@ -463,8 +469,29 @@ def _serialize_next_check_plan(
     if not artifact:
         return None
     payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
-    candidates_raw = payload.get("candidates") or []
-    candidates = [entry for entry in candidates_raw if isinstance(entry, Mapping)]
+    raw_candidates = payload.get("candidates")
+    if isinstance(raw_candidates, Sequence) and not isinstance(raw_candidates, (str, bytes, bytearray)):
+        candidates_raw: Sequence[object] = raw_candidates
+    else:
+        candidates_raw = []
+    approvals = collect_next_check_approvals(artifacts, run_id)
+    candidates: list[dict[str, object]] = []
+    for index, entry in enumerate(candidates_raw):
+        if not isinstance(entry, Mapping):
+            continue
+        candidate = dict(entry)
+        # Prefer matching by stable candidateId, fallback to positional index
+        approval = None
+        cid = entry.get("candidateId")
+        if isinstance(cid, str) and cid in approvals.by_id:
+            approval = approvals.by_id[cid]
+        elif index in approvals.by_index:
+            approval = approvals.by_index[index]
+        if approval:
+            candidate["approvalStatus"] = "approved"
+            candidate["approvalArtifactPath"] = _relative_path(root_dir, approval.artifact_path)
+            candidate["approvalTimestamp"] = approval.timestamp.isoformat()
+        candidates.append(candidate)
     return {
         "status": artifact.status.value,
         "summary": artifact.summary,
@@ -476,29 +503,50 @@ def _serialize_next_check_plan(
     }
 
 
+def _build_next_check_execution_history(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    root_dir: Path,
+    run_id: str,
+    limit: int = _NEXT_CHECK_EXECUTION_HISTORY_LIMIT,
+) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
+        if (
+            artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION
+            or not artifact_matches_run(artifact, run_id)
+        ):
+            continue
+        payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+        entries.append(
+            {
+                "timestamp": artifact.timestamp.isoformat(),
+                "clusterLabel": artifact.cluster_label,
+                "candidateDescription": payload.get("candidateDescription"),
+                "commandFamily": payload.get("commandFamily"),
+                "status": artifact.status.value,
+                "durationMs": artifact.duration_ms,
+                "artifactPath": _relative_path(root_dir, artifact.artifact_path),
+                "timedOut": artifact.timed_out,
+                "stdoutTruncated": artifact.stdout_truncated,
+                "stderrTruncated": artifact.stderr_truncated,
+                "outputBytesCaptured": artifact.output_bytes_captured,
+            }
+        )
+        if len(entries) >= limit:
+            break
+    return entries
+
+
 def _find_next_check_plan_artifact(
     artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
 ) -> ExternalAnalysisArtifact | None:
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         if (
             artifact.purpose == ExternalAnalysisPurpose.NEXT_CHECK_PLANNING
-            and _artifact_matches_run(artifact, run_id)
+            and artifact_matches_run(artifact, run_id)
         ):
             return artifact
     return None
-
-
-def _artifact_matches_run(artifact: ExternalAnalysisArtifact, run_id: str) -> bool:
-    if artifact.run_id == run_id:
-        return True
-    artifact_path = artifact.artifact_path
-    if not artifact_path:
-        return False
-    try:
-        candidate = Path(str(artifact_path)).name
-    except Exception:
-        return False
-    return candidate.startswith(f"{run_id}-")
 
 
 def _build_review_enrichment_status(

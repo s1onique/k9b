@@ -8,6 +8,20 @@ export type ProblemSummary = {
   detail: string;
 };
 
+export type NextCheckExecutionHistoryEntry = {
+  timestamp: string;
+  clusterLabel: string | null;
+  candidateDescription: string | null;
+  commandFamily: string | null;
+  status: string;
+  durationMs: number | null;
+  artifactPath: string | null;
+  timedOut: boolean | null;
+  stdoutTruncated: boolean | null;
+  stderrTruncated: boolean | null;
+  outputBytesCaptured: number | null;
+};
+
 export type StatusCount = {
   status: string;
   count: number;
@@ -38,6 +52,7 @@ export type RunPayload = {
   reviewEnrichment?: ReviewEnrichment | null;
   reviewEnrichmentStatus?: ReviewEnrichmentStatus | null;
   providerExecution?: ProviderExecution | null;
+  nextCheckExecutionHistory?: NextCheckExecutionHistoryEntry[];
 };
 
 export type RunStats = {
@@ -229,6 +244,72 @@ export type NextCheckEntry = {
   evidenceNeeded: string[];
 };
 
+export type NextCheckPlanCandidate = {
+  description: string;
+  targetCluster: string | null;
+  sourceReason: string | null;
+  expectedSignal: string | null;
+  suggestedCommandFamily: string | null;
+  safeToAutomate: boolean;
+  requiresOperatorApproval: boolean;
+  riskLevel: string;
+  estimatedCost: string;
+  confidence: string;
+  gatingReason: string | null;
+  duplicateOfExistingEvidence: boolean;
+  duplicateEvidenceDescription: string | null;
+  approvalStatus?: string | null;
+  approvalArtifactPath?: string | null;
+  approvalTimestamp?: string | null;
+  candidateId?: string;
+  candidateIndex: number;
+};
+
+export type NextCheckPlan = {
+  status: string;
+  summary: string | null;
+  artifactPath: string | null;
+  reviewPath: string | null;
+  enrichmentArtifactPath: string | null;
+  candidateCount: number;
+  candidates: NextCheckPlanCandidate[];
+};
+
+export type NextCheckExecutionRequest = {
+  candidateIndex: number;
+  clusterLabel: string;
+};
+
+export type NextCheckExecutionResponse = {
+  status: string;
+  summary: string | null;
+  artifactPath: string | null;
+  durationMs: number | null;
+  command: string[] | null;
+  targetCluster: string | null;
+  planCandidateIndex: number;
+  rawOutput: string | null;
+  errorSummary: string | null;
+  timedOut: boolean | null;
+  stdoutTruncated: boolean | null;
+  stderrTruncated: boolean | null;
+  outputBytesCaptured: number | null;
+};
+
+export type NextCheckApprovalRequest = {
+  candidateIndex: number;
+  clusterLabel: string;
+};
+
+export type NextCheckApprovalResponse = {
+  status: string;
+  summary: string | null;
+  artifactPath: string | null;
+  durationMs: number | null;
+  candidateIndex: number;
+  approvalTimestamp: string | null;
+};
+
 export type RecommendedAction = {
   actionType: string;
   description: string;
@@ -275,6 +356,7 @@ export type ClusterDetailPayload = {
   artifacts: ArtifactLink[];
   autoInterpretation: AutoInterpretation | null;
   topProblem: ProblemSummary;
+  nextCheckPlan: NextCheckPlanCandidate[];
 };
 
 export type AutoInterpretation = {

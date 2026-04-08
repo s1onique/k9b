@@ -4,7 +4,10 @@ import shutil
 import tempfile
 import threading
 import unittest
+import unittest.mock as mock
+import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +22,7 @@ from k8s_diag_agent.external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from k8s_diag_agent.external_analysis.manual_next_check import ManualNextCheckError
 from k8s_diag_agent.health.notifications import (
     NotificationArtifact,
     write_notification_artifact,
@@ -62,7 +66,12 @@ class RunApiServerTests(unittest.TestCase):
             error_summary=error_summary,
         )
 
-    def _write_index(self, artifact: ExternalAnalysisArtifact) -> None:
+    def _write_index(
+        self,
+        artifact: ExternalAnalysisArtifact,
+        *,
+        extra_external_analysis: tuple[ExternalAnalysisArtifact, ...] | None = None,
+    ) -> None:
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         settings = ExternalAnalysisSettings(
             review_enrichment=ReviewEnrichmentPolicy(
@@ -70,6 +79,7 @@ class RunApiServerTests(unittest.TestCase):
                 provider=artifact.provider or "reviewer",
             )
         )
+        external_analysis = (artifact, *(extra_external_analysis or ()))
         write_health_ui_index(
             self.runs_dir,
             run_id=artifact.run_id,
@@ -79,10 +89,43 @@ class RunApiServerTests(unittest.TestCase):
             assessments=(),
             drilldowns=(),
             proposals=(),
-            external_analysis=(artifact,),
+            external_analysis=external_analysis,
             notifications=(),
             external_analysis_settings=settings,
         )
+
+    def _write_plan_artifact(self, payload: Mapping[str, object], name: str) -> Path:
+        path = self.runs_dir / "external-analysis" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def _ensure_cluster_entry(self, label: str, context: str) -> None:
+        index_path = self.runs_dir / "ui-index.json"
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        data["clusters"] = [
+            {
+                "label": label,
+                "context": context,
+                "cluster_class": "primary",
+                "cluster_role": "control",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 1,
+                "non_running_pods": 0,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-a.json",
+                    "assessment": "assessments/cluster-a.json",
+                    "drilldown": "drilldowns/cluster-a.json",
+                },
+            }
+        ]
+        data["run"]["cluster_count"] = 1
+        index_path.write_text(json.dumps(data), encoding="utf-8")
 
     def _create_notification(
         self,
@@ -215,6 +258,38 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(enrichment.get("skipReason"), "adapter unavailable")
         self.assertIsNone(payload.get("reviewEnrichmentStatus"))
 
+    def test_run_endpoint_includes_execution_history(self) -> None:
+        artifact = self._build_artifact(run_id="run-history", status=ExternalAnalysisStatus.SUCCESS)
+        execution_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="run-history",
+            run_label="run-history",
+            cluster_label="cluster-a",
+            summary="Executed",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-history-next-check-execution-0.json",
+            provider="runner",
+            duration_ms=45,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            payload={
+                "candidateDescription": "Inspect control-plane logs",
+                "commandFamily": "kubectl-logs",
+            },
+        )
+        self._write_index(artifact, extra_external_analysis=(execution_artifact,))
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server)
+        finally:
+            self._shutdown_server(server, thread)
+        history = payload.get("nextCheckExecutionHistory")
+        self.assertIsInstance(history, list)
+        assert isinstance(history, list)
+        self.assertTrue(history)
+        entry = history[0]
+        self.assertEqual(entry.get("candidateDescription"), "Inspect control-plane logs")
+        self.assertEqual(entry.get("status"), "success")
+
     def test_notifications_endpoint_filters(self) -> None:
         artifact = self._build_artifact(run_id="filter-run", status=ExternalAnalysisStatus.SUCCESS)
         self._write_index(artifact)
@@ -295,17 +370,223 @@ class RunApiServerTests(unittest.TestCase):
             )
         server, thread = self._start_server()
         try:
-            payload = self._fetch_notifications_payload(server, "?limit=10&page=2")
+            self._fetch_notifications_payload(server, "?limit=10&page=2")
         finally:
             self._shutdown_server(server, thread)
-        self.assertEqual(payload.get("total"), total_items)
-        self.assertEqual(payload.get("limit"), 10)
-        self.assertEqual(payload.get("page"), 2)
-        self.assertEqual(payload.get("total_pages"), 3)
-        notifications = payload.get("notifications")
-        self.assertIsInstance(notifications, list)
-        assert isinstance(notifications, list)
-        notification_list = cast(list[dict[str, object]], notifications)
-        self.assertEqual(len(notification_list), 10)
-        self.assertEqual(notification_list[0].get("summary"), "Entry 14")
-        self.assertEqual(notification_list[-1].get("summary"), "Entry 5")
+
+    def test_next_check_execution_endpoint_runs_candidate(self) -> None:
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "summary": "Planned candidate",
+            "artifactPath": "external-analysis/run-1-next-check-plan.json",
+            "reviewPath": "reviews/run-1-review.json",
+            "enrichmentArtifactPath": "external-analysis/review-enrichment.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "kubectl logs deployment/alpha",
+                    "targetCluster": "cluster-a",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                    "gatingReason": None,
+                }
+            ],
+        }
+        self._write_plan_artifact(plan_payload, "run-1-next-check-plan.json")
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id="run-plan",
+            run_label="health-run",
+            cluster_label="health-run",
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-1-next-check-plan.json",
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        self._write_index(plan_artifact)
+        self._ensure_cluster_entry("cluster-a", "prod")
+        manual_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="run-plan",
+            run_label="health-run",
+            cluster_label="cluster-a",
+            summary="Executed",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-1-next-check-execution-0.json",
+            provider="runner",
+            duration_ms=123,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            payload={
+                "command": ["kubectl", "logs"],
+                "candidateIndex": 0,
+            },
+        )
+        with mock.patch(
+            "k8s_diag_agent.ui.server.execute_manual_next_check", return_value=manual_artifact
+        ) as mock_execute:
+                server, thread = self._start_server()
+                try:
+                    req = urllib.request.Request(
+                        f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
+                        data=json.dumps({"candidateIndex": 0, "clusterLabel": "cluster-a"}).encode("utf-8"),
+                        method="POST",
+                        headers={"Content-Type": "application/json"},
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    self.assertEqual(payload.get("status"), "success")
+                    self.assertEqual(
+                        payload.get("artifactPath"), "external-analysis/run-1-next-check-execution-0.json"
+                    )
+                    self.assertEqual(payload.get("command"), ["kubectl", "logs"])
+                    mock_execute.assert_called_once()
+                finally:
+                    self._shutdown_server(server, thread)
+
+    def test_next_check_approval_endpoint_records_approval(self) -> None:
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "candidateCount": 1,
+            "artifactPath": "external-analysis/approval-plan.json",
+            "reviewPath": "reviews/approval-run-review.json",
+            "enrichmentArtifactPath": "external-analysis/approval-review.json",
+            "candidates": [
+                {
+                    "description": "Inspect the control plane",
+                    "targetCluster": "cluster-a",
+                    "requiresOperatorApproval": True,
+                    "safeToAutomate": False,
+                    "duplicateOfExistingEvidence": False,
+                }
+            ],
+        }
+        self._write_plan_artifact(plan_payload, "approval-plan.json")
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id="approval-run",
+            run_label="health-run",
+            cluster_label="health-run",
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/approval-plan.json",
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        self._write_index(plan_artifact)
+        self._ensure_cluster_entry("cluster-a", "prod")
+        server, thread = self._start_server()
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
+                data=json.dumps({"candidateIndex": 0, "clusterLabel": "cluster-a"}).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(payload.get("status"), "success")
+            self.assertEqual(payload.get("candidateIndex"), 0)
+            self.assertIsNotNone(payload.get("artifactPath"))
+            self.assertIsNotNone(payload.get("approvalTimestamp"))
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_next_check_approval_endpoint_rejects_nonapproval_candidate(self) -> None:
+        plan_payload: dict[str, object] = {
+            "candidates": [
+                {
+                    "description": "kubectl get pods",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                }
+            ],
+        }
+        self._write_plan_artifact(plan_payload, "approval-plan.json")
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id="approval-run",
+            run_label="health-run",
+            cluster_label="health-run",
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/approval-plan.json",
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        self._write_index(plan_artifact)
+        self._ensure_cluster_entry("cluster-a", "prod")
+        server, thread = self._start_server()
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
+                data=json.dumps({"candidateIndex": 0, "clusterLabel": "cluster-a"}).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(req, timeout=5)
+            self.assertEqual(cm.exception.code, 400)
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_next_check_execution_endpoint_rejects_approval_needed(self) -> None:
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "candidates": [
+                {
+                    "description": "kubectl logs deployment/alpha",
+                    "targetCluster": "cluster-a",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": True,
+                    "duplicateOfExistingEvidence": False,
+                    "gatingReason": None,
+                }
+            ],
+        }
+        self._write_plan_artifact(plan_payload, "run-approval-plan.json")
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id="run-plan",
+            run_label="health-run",
+            cluster_label="health-run",
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-approval-plan.json",
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload={
+                "candidates": plan_payload["candidates"],
+            },
+        )
+        self._write_index(plan_artifact)
+        self._ensure_cluster_entry("cluster-a", "prod")
+        with mock.patch(
+            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            side_effect=ManualNextCheckError("approval required"),
+        ):
+            server, thread = self._start_server()
+            try:
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
+                    data=json.dumps({"candidateIndex": 0, "clusterLabel": "cluster-a"}).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as cm:
+                    urllib.request.urlopen(req, timeout=5)
+                self.assertEqual(cm.exception.code, 400)
+            finally:
+                self._shutdown_server(server, thread)

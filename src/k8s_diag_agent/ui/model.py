@@ -30,6 +30,7 @@ class RunView:
     review_enrichment_status: ReviewEnrichmentStatusView | None
     provider_execution: ProviderExecutionView | None
     next_check_plan: NextCheckPlanView | None
+    next_check_execution_history: tuple[NextCheckExecutionHistoryEntryView, ...]
 
 
 @dataclass(frozen=True)
@@ -251,6 +252,7 @@ class ReviewEnrichmentView:
 
 @dataclass(frozen=True)
 class NextCheckCandidateView:
+    candidate_id: str | None
     description: str
     target_cluster: str | None
     source_reason: str | None
@@ -264,6 +266,10 @@ class NextCheckCandidateView:
     gating_reason: str | None
     duplicate_of_existing_evidence: bool
     duplicate_evidence_description: str | None
+    approval_status: str | None
+    approval_artifact_path: str | None
+    approval_timestamp: str | None
+    candidate_index: int | None
 
 
 @dataclass(frozen=True)
@@ -275,6 +281,21 @@ class NextCheckPlanView:
     enrichment_artifact_path: str | None
     candidate_count: int
     candidates: tuple[NextCheckCandidateView, ...]
+
+
+@dataclass(frozen=True)
+class NextCheckExecutionHistoryEntryView:
+    timestamp: str
+    cluster_label: str | None
+    candidate_description: str | None
+    command_family: str | None
+    status: str
+    duration_ms: int | None
+    artifact_path: str | None
+    timed_out: bool | None
+    stdout_truncated: bool | None
+    stderr_truncated: bool | None
+    output_bytes_captured: int | None
 
 
 @dataclass(frozen=True)
@@ -410,6 +431,9 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         review_enrichment_status=review_enrichment_status,
         provider_execution=_build_provider_execution_view(run_data.get("provider_execution")),
         next_check_plan=next_check_plan,
+        next_check_execution_history=_build_execution_history_view(
+            run_data.get("next_check_execution_history")
+        ),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -949,8 +973,34 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
     )
 
 
+def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutionHistoryEntryView, ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    entries: list[NextCheckExecutionHistoryEntryView] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append(
+            NextCheckExecutionHistoryEntryView(
+                timestamp=_coerce_str(entry.get("timestamp")),
+                cluster_label=_coerce_optional_str(entry.get("clusterLabel")),
+                candidate_description=_coerce_optional_str(entry.get("candidateDescription")),
+                command_family=_coerce_optional_str(entry.get("commandFamily")),
+                status=_coerce_str(entry.get("status")),
+                duration_ms=_coerce_optional_int(entry.get("durationMs")),
+                artifact_path=_coerce_optional_str(entry.get("artifactPath")),
+                timed_out=_coerce_optional_bool(entry.get("timedOut")),
+                stdout_truncated=_coerce_optional_bool(entry.get("stdoutTruncated")),
+                stderr_truncated=_coerce_optional_bool(entry.get("stderrTruncated")),
+                output_bytes_captured=_coerce_optional_int(entry.get("outputBytesCaptured")),
+            )
+        )
+    return tuple(entries)
+
+
 def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
     return NextCheckCandidateView(
+        candidate_id=_coerce_optional_str(raw.get("candidateId")),
         description=_coerce_str(raw.get("description")),
         target_cluster=_coerce_optional_str(raw.get("targetCluster")),
         source_reason=_coerce_optional_str(raw.get("sourceReason")),
@@ -966,6 +1016,10 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
         duplicate_evidence_description=_coerce_optional_str(
             raw.get("duplicateEvidenceDescription")
         ),
+        approval_status=_coerce_optional_str(raw.get("approvalStatus")),
+        approval_artifact_path=_coerce_optional_str(raw.get("approvalArtifactPath")),
+        approval_timestamp=_coerce_optional_str(raw.get("approvalTimestamp")),
+        candidate_index=_coerce_optional_int(raw.get("candidateIndex")),
     )
 
 

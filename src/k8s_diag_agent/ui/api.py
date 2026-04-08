@@ -19,6 +19,7 @@ from .model import (
     LLMPolicyView,
     LLMStatsView,
     NextCheckCandidateView,
+    NextCheckExecutionHistoryEntryView,
     NextCheckPlanView,
     NotificationView,
     ProposalView,
@@ -40,6 +41,20 @@ class ArtifactLink(TypedDict):
 class ProblemSummary(TypedDict):
     title: str
     detail: str
+
+
+class NextCheckExecutionHistoryEntry(TypedDict, total=False):
+    timestamp: str
+    clusterLabel: str | None
+    candidateDescription: str | None
+    commandFamily: str | None
+    status: str
+    durationMs: int | None
+    artifactPath: str | None
+    timedOut: bool | None
+    stdoutTruncated: bool | None
+    stderrTruncated: bool | None
+    outputBytesCaptured: int | None
 
 
 class FreshnessPayload(TypedDict, total=False):
@@ -67,6 +82,7 @@ class RunPayload(TypedDict):
     reviewEnrichment: ReviewEnrichmentPayload | None
     reviewEnrichmentStatus: ReviewEnrichmentStatusPayload | None
     providerExecution: ProviderExecutionPayload | None
+    nextCheckExecutionHistory: list[NextCheckExecutionHistoryEntry]
     freshness: FreshnessPayload | None
     nextCheckPlan: NextCheckPlanPayload | None
 
@@ -166,6 +182,11 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     gatingReason: str | None
     duplicateOfExistingEvidence: bool
     duplicateEvidenceDescription: str | None
+    approvalStatus: str | None
+    approvalArtifactPath: str | None
+    approvalTimestamp: str | None
+    candidateId: str
+    candidateIndex: int
 
 
 class NextCheckPlanPayload(TypedDict, total=False):
@@ -418,6 +439,9 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
             context.run.timestamp, context.run.scheduler_interval_seconds
         ),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
+        "nextCheckExecutionHistory": _serialize_execution_history(
+            context.run.next_check_execution_history
+        ),
     }
 
 
@@ -508,10 +532,12 @@ def _serialize_plan_candidates_for_cluster(
     if not plan:
         return []
     payloads: list[NextCheckCandidatePayload] = []
-    for candidate in plan.candidates:
+    for index, candidate in enumerate(plan.candidates):
         if label and candidate.target_cluster and candidate.target_cluster != label:
             continue
-        payloads.append(_serialize_next_check_candidate(candidate))
+        payload = _serialize_next_check_candidate(candidate)
+        payload["candidateIndex"] = index
+        payloads.append(payload)
     return payloads
 
 
@@ -836,8 +862,27 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
     }
 
 
+def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryView, ...]) -> list[NextCheckExecutionHistoryEntry]:
+    return [
+        {
+            "timestamp": entry.timestamp,
+            "clusterLabel": entry.cluster_label,
+            "candidateDescription": entry.candidate_description,
+            "commandFamily": entry.command_family,
+            "status": entry.status,
+            "durationMs": entry.duration_ms,
+            "artifactPath": entry.artifact_path,
+            "timedOut": entry.timed_out,
+            "stdoutTruncated": entry.stdout_truncated,
+            "stderrTruncated": entry.stderr_truncated,
+            "outputBytesCaptured": entry.output_bytes_captured,
+        }
+        for entry in entries
+    ]
+
+
 def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCandidatePayload:
-    return {
+    payload: NextCheckCandidatePayload = {
         "description": view.description,
         "targetCluster": view.target_cluster,
         "sourceReason": view.source_reason,
@@ -852,6 +897,11 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         "duplicateOfExistingEvidence": view.duplicate_of_existing_evidence,
         "duplicateEvidenceDescription": view.duplicate_evidence_description,
     }
+    if view.candidate_id is not None:
+        payload["candidateId"] = view.candidate_id
+    if view.candidate_index is not None:
+        payload["candidateIndex"] = view.candidate_index
+    return payload
 
 
 def _serialize_review_enrichment_status(

@@ -18,6 +18,7 @@ from k8s_diag_agent.external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from k8s_diag_agent.external_analysis.next_check_approval import record_next_check_approval
 from k8s_diag_agent.health.adaptation import HealthProposal
 from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.loop import (
@@ -232,6 +233,7 @@ class HealthUITests(unittest.TestCase):
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
+                    "candidateIndex": 0,
                 }
             ],
             "status": "success",
@@ -404,6 +406,76 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(candidate_entry["suggestedCommandFamily"], "kubectl-logs")
         self.assertTrue(candidate_entry["safeToAutomate"])
         self.assertEqual(data.get("next_check_plan"), plan_entry)
+
+    def test_next_check_plan_includes_approval_metadata(self) -> None:
+        run_id = "approval-run"
+        run_label = "approval-run"
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_dir = output_dir / "external-analysis"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        plan_artifact_path = "external-analysis/approval-plan.json"
+        candidate_description = "Inspect control plane pods"
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "summary": "Approval candidate",
+            "artifactPath": plan_artifact_path,
+            "review_path": "reviews/approval-run-review.json",
+            "enrichment_artifact_path": "external-analysis/approval-review.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": candidate_description,
+                    "targetCluster": "cluster-a",
+                    "requiresOperatorApproval": True,
+                    "safeToAutomate": False,
+                    "duplicateOfExistingEvidence": False,
+                }
+            ],
+        }
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label=run_label,
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/approval-plan.json",
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        write_external_analysis_artifact(artifact_dir / "approval-plan.json", plan_artifact)
+        approval_artifact = record_next_check_approval(
+            runs_dir=output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            plan_artifact_path=plan_artifact_path,
+            candidate_index=0,
+            candidate_description=candidate_description,
+            target_cluster="cluster-a",
+        )
+        settings = ExternalAnalysisSettings()
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[plan_artifact, approval_artifact],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        plan_entry = data["run"].get("next_check_plan")
+        self.assertIsNotNone(plan_entry)
+        candidate_entry = plan_entry["candidates"][0]
+        self.assertEqual(candidate_entry.get("approvalStatus"), "approved")
+        self.assertIsNotNone(candidate_entry.get("approvalArtifactPath"))
+        self.assertIsNotNone(candidate_entry.get("approvalTimestamp"))
 
     def test_failed_review_enrichment_artifact_still_exposed(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"

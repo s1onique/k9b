@@ -210,6 +210,7 @@ class UIApiTests(unittest.TestCase):
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
+                    "candidateIndex": 0,
                 }
             ],
         }
@@ -245,6 +246,7 @@ class UIApiTests(unittest.TestCase):
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
+                    "candidateIndex": 0,
                 }
             ],
         }
@@ -256,6 +258,16 @@ class UIApiTests(unittest.TestCase):
         plan = payload["nextCheckPlan"]
         self.assertEqual(len(plan), 1)
         self.assertEqual(plan[0]["targetCluster"], "cluster-a")
+
+    def test_run_payload_includes_execution_history(self) -> None:
+        payload = build_run_payload(self.context)
+        history = payload.get("nextCheckExecutionHistory")
+        self.assertIsNotNone(history)
+        assert history is not None
+        self.assertTrue(len(history) >= 1)
+        entry = history[0]
+        self.assertEqual(entry.get("status"), "success")
+        self.assertFalse(entry.get("timedOut"))
 
     def test_freshness_helper_computes_statuses(self) -> None:
         base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
