@@ -6,6 +6,7 @@ import type { NotificationEntry } from "../types";
 import {
   sampleClusterDetail,
   sampleFleet,
+  sampleNextCheckCandidates,
   sampleNotifications,
   sampleProposals,
   sampleRun,
@@ -181,11 +182,59 @@ describe("App", () => {
     await act(async () => {
       await user.click(summaryToggle);
     });
-    expect(await screen.findByText(/Safe candidate/i)).toBeInTheDocument();
+    const safeLabels = await screen.findAllByText(/Safe candidate/i);
+    expect(safeLabels.length).toBeGreaterThan(0);
     expect(screen.getByText(/Approval needed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Duplicate \/ already covered/i)).toBeInTheDocument();
     expect(screen.getByText(/Command not recognized or too vague/i)).toBeInTheDocument();
     expect(screen.getByText(/Matches deterministic next check: Collect kubelet metrics/i)).toBeInTheDocument();
+  });
+
+  test("renders stale and orphaned approvals", async () => {
+    const staleCandidates = sampleNextCheckCandidates.map((candidate) =>
+      candidate.candidateId === "candidate-describe"
+        ? { ...candidate, approvalStatus: "approval-stale" }
+        : candidate
+    );
+    const orphanedApprovals = [
+      {
+        approvalStatus: "approval-orphaned",
+        candidateId: "orphaned-candidate",
+        candidateIndex: 5,
+        candidateDescription: "Inspect orphaned candidate",
+        targetCluster: "cluster-b",
+        planArtifactPath: "/artifacts/old-plan.json",
+        approvalArtifactPath: "/artifacts/orphan-approval.json",
+        approvalTimestamp: "2026-04-06T11:30:00Z",
+      },
+    ];
+    const runWithOrphaned = {
+      ...sampleRun,
+      nextCheckPlan: {
+        ...sampleRun.nextCheckPlan,
+        candidates: staleCandidates,
+        orphanedApprovals,
+      },
+    };
+    const detailWithStale = {
+      ...sampleClusterDetail,
+      nextCheckPlan: staleCandidates,
+    };
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": runWithOrphaned,
+      "/api/cluster-detail": detailWithStale,
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    expect(screen.getByText(/Approval stale/i)).toBeInTheDocument();
+    expect(screen.getByText(/Orphaned approvals/i)).toBeInTheDocument();
   });
 
   test("displays run button only for allowed next-check candidates", async () => {
@@ -344,7 +393,7 @@ describe("App", () => {
     const panel = await screen.findByRole("heading", { name: /Manual next-check runs/i });
     expect(panel).toBeInTheDocument();
     expect(screen.getByText(/Manual next-check runs/i)).toBeInTheDocument();
-    expect(screen.getByText(/Collect kubelet logs for control-plane pods/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Collect kubelet logs for control-plane pods/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Timed out/i, { selector: ".execution-history-badge" })).toBeInTheDocument();
   });
 

@@ -255,7 +255,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 target_cluster=target_cluster,
             )
         except ManualNextCheckError as exc:
-            self._send_json({"error": str(exc)}, 400)
+            error_payload: dict[str, object] = {"error": str(exc)}
+            blocking_reason = getattr(exc, "blocking_reason", None)
+            if blocking_reason is not None:
+                error_payload["blockingReason"] = blocking_reason.value
+            self._send_json(error_payload, 400)
             return
         except Exception as exc:  # pragma: no cover - defensive guard
             self._send_json({"error": f"Execution failed: {exc}"}, 500)

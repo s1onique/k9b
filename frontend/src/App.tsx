@@ -209,6 +209,15 @@ const priorityLabel = (confidence: string) => {
   return "default";
 };
 
+const humanizeReason = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  return value
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+};
+
 const ALLOWED_MANUAL_FAMILIES = new Set([
   "kubectl-get",
   "kubectl-describe",
@@ -216,12 +225,13 @@ const ALLOWED_MANUAL_FAMILIES = new Set([
   "kubectl-get-crd",
 ]);
 
-type ExecutionResult =
-  | NextCheckExecutionResponse
-  | {
-      status: "error";
-      summary: string;
-    };
+type ExecutionErrorResult = {
+  status: "error";
+  summary: string;
+  blockingReason?: string | null;
+};
+
+type ExecutionResult = NextCheckExecutionResponse | ExecutionErrorResult;
 
 type ApprovalResult = {
   status: "success" | "error";
@@ -230,7 +240,15 @@ type ApprovalResult = {
   approvalTimestamp?: string | null;
 };
 
-type NextCheckStatusVariant = "safe" | "approval" | "approved" | "duplicate";
+const approvalStatusLabels: Record<string, string> = {
+  approved: "Approved candidate",
+  "approval-required": "Approval needed",
+  "approval-stale": "Approval stale",
+  "approval-orphaned": "Orphaned approval",
+  "not-required": "Safe candidate",
+};
+
+type NextCheckStatusVariant = "safe" | "approval" | "approved" | "duplicate" | "stale";
 
 const determineNextCheckStatusVariant = (
   candidate: NextCheckPlanCandidate
@@ -239,7 +257,13 @@ const determineNextCheckStatusVariant = (
     return "duplicate";
   }
   if (candidate.requiresOperatorApproval) {
-    return candidate.approvalStatus === "approved" ? "approved" : "approval";
+    if (candidate.approvalStatus === "approved") {
+      return "approved";
+    }
+    if (candidate.approvalStatus === "approval-stale") {
+      return "stale";
+    }
+    return "approval";
   }
   return "safe";
 };
@@ -252,9 +276,21 @@ const nextCheckStatusLabel = (variant: NextCheckStatusVariant) => {
       return "Approved candidate";
     case "duplicate":
       return "Duplicate / already covered";
+    case "stale":
+      return "Approval stale";
     default:
       return "Safe candidate";
   }
+};
+
+const getPlanStatusLabel = (variant: NextCheckStatusVariant, candidate: NextCheckPlanCandidate) => {
+  if (candidate.approvalStatus) {
+    const override = approvalStatusLabels[candidate.approvalStatus];
+    if (override) {
+      return override;
+    }
+  }
+  return nextCheckStatusLabel(variant);
 };
 
 const EvidenceDetails = ({
@@ -1383,9 +1419,17 @@ const App = () => {
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Manual execution failed";
+      const blockingReason =
+        err instanceof Error && "blockingReason" in err
+          ? (err as ExecutionErrorResult).blockingReason
+          : undefined;
       setExecutionResults((prev) => ({
         ...prev,
-        [candidateKey]: { status: "error", summary: message },
+        [candidateKey]: {
+          status: "error",
+          summary: message,
+          blockingReason: blockingReason ?? null,
+        },
       }));
     } finally {
       setExecutingCandidate((current) => (current === candidateKey ? null : current));
@@ -1497,18 +1541,15 @@ const App = () => {
     ? formatTimestamp(selectedCluster.latestRunTimestamp)
     : "Awaiting run";
   const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
-  const planArtifactLink = run.nextCheckPlan?.artifactPath
-    ? artifactUrl(run.nextCheckPlan.artifactPath)
-    : null;
-  const planSummaryText =
-    run.nextCheckPlan?.summary ?? "Provider-assisted next-check candidates are available.";
+  const runPlan = run.nextCheckPlan;
+  const orphanedApprovals = runPlan?.orphanedApprovals ?? [];
+  const planArtifactLink = runPlan?.artifactPath ? artifactUrl(runPlan.artifactPath) : null;
+  const planSummaryText = runPlan?.summary ?? "Provider-assisted next-check candidates are available.";
   const planCandidateCountLabel =
-    run.nextCheckPlan?.candidateCount != null
-      ? `${run.nextCheckPlan.candidateCount} candidate${
-          run.nextCheckPlan.candidateCount === 1 ? "" : "s"
-        }`
+    runPlan?.candidateCount != null
+      ? `${runPlan.candidateCount} candidate${runPlan.candidateCount === 1 ? "" : "s"}`
       : `${planCandidates.length} candidate${planCandidates.length === 1 ? "" : "s"}`;
-  const planStatusText = run.nextCheckPlan?.status ?? null;
+  const planStatusText = runPlan?.status ?? null;
   const executionHistory: NextCheckExecutionHistoryEntry[] = run.nextCheckExecutionHistory ?? [];
 
   const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
@@ -1957,8 +1998,8 @@ const App = () => {
                    )}
                  </div>
                 {planCandidates.length ? (
-                  <div className="next-check-plan">
-                    <div className="section-head next-check-plan-head">
+                    <div className="next-check-plan">
+                      <div className="section-head next-check-plan-head">
                       <div>
                         <h3>Next check plan</h3>
                         <p className="muted small">{planSummaryText}</p>
@@ -1976,12 +2017,49 @@ const App = () => {
                         >
                           View planner artifact
                         </a>
+                        ) : null}
+                      </div>
+                      {orphanedApprovals.length ? (
+                        <div className="next-check-orphaned">
+                          <p className="tiny muted">
+                            Orphaned approvals · {orphanedApprovals.length} record
+                            {orphanedApprovals.length === 1 ? "" : "s"}
+                          </p>
+                          <ul>
+                            {orphanedApprovals.map((approval, orphanIndex) => {
+                              const label =
+                                approval.candidateDescription || approval.candidateId || "Unknown approval";
+                              const recency = approval.approvalTimestamp
+                                ? ` · ${relativeRecency(approval.approvalTimestamp)}`
+                                : "";
+                              const target = approval.targetCluster
+                                ? ` · ${approval.targetCluster}`
+                                : "";
+                              const artifactLink =
+                                approval.approvalArtifactPath && artifactUrl(approval.approvalArtifactPath);
+                              return (
+                                <li key={`${label}-${orphanIndex}`}>
+                                  <strong>{label}</strong>
+                                  <p className="tiny muted">
+                                    {approvalStatusLabels[approval.approvalStatus ?? ""] ?? "Orphaned"}
+                                    {target}
+                                    {recency}
+                                  </p>
+                                  {artifactLink ? (
+                                    <a className="link" href={artifactLink} target="_blank" rel="noreferrer">
+                                      View approval record
+                                    </a>
+                                  ) : null}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
                       ) : null}
-                    </div>
-                    <div className="next-check-plan-grid">
+                      <div className="next-check-plan-grid">
                         {planCandidates.map((candidate, index) => {
                           const variant = determineNextCheckStatusVariant(candidate);
-                          const statusLabel = nextCheckStatusLabel(variant);
+                          const statusLabel = getPlanStatusLabel(variant, candidate);
                           const statusClassName = `plan-status-pill plan-status-pill-${variant}`;
                           const targetLabel =
                             candidate.targetCluster ||
@@ -1990,8 +2068,8 @@ const App = () => {
                             "cluster";
                           const candidateKey = buildCandidateKey(candidate, index);
                           const manualAllowed = isManualExecutionAllowed(candidate);
-                          const executionResult = executionResults[candidateKey];
-                          const approvalResult = approvalResults[candidateKey];
+                           const executionResult = executionResults[candidateKey];
+                           const approvalResult = approvalResults[candidateKey];
                           const approvalArtifactPath =
                             approvalResult?.artifactPath ?? candidate.approvalArtifactPath;
                           const approvalArtifactBaseLink =
@@ -2003,6 +2081,32 @@ const App = () => {
                           const approvalTimestamp =
                             candidate.approvalTimestamp ?? approvalResult?.approvalTimestamp;
                           const approvalRecency = approvalTimestamp && relativeRecency(approvalTimestamp);
+                          const executionBlockingReason =
+                            executionResult && executionResult.status !== "success"
+                              ? (executionResult as ExecutionErrorResult).blockingReason
+                              : null;
+                          const rationaleEntries = [
+                            {
+                              label: "Normalization",
+                              value: candidate.normalizationReason,
+                            },
+                            {
+                              label: "Safety",
+                              value: candidate.safetyReason,
+                            },
+                            {
+                              label: "Approval",
+                              value: candidate.approvalReason,
+                            },
+                            {
+                              label: "Duplicate",
+                              value: candidate.duplicateReason,
+                            },
+                            {
+                              label: "Block",
+                              value: candidate.blockingReason,
+                            },
+                          ].filter((entry) => entry.value);
                         return (
                           <article
                             className="next-check-plan-card"
@@ -2050,35 +2154,50 @@ const App = () => {
                                 Estimated cost: <strong>{candidate.estimatedCost || "—"}</strong>
                               </span>
                             </div>
-                            {variant === "approval" && (
-                              <div className="next-check-approval-actions">
-                                <button
-                                  type="button"
-                                  className="button secondary small"
-                                  onClick={() => handleApproveCandidate(candidate, candidateKey)}
-                                  disabled={approvingCandidate === candidateKey}
-                                >
-                                  {approvingCandidate === candidateKey ? "Approving…" : "Approve candidate"}
-                                </button>
-                                {approvalResult ? (
-                                  <p
-                                    className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}
-                                  >
-                                    {approvalResult.summary}
-                                  </p>
-                                ) : null}
-                                {approvalArtifactLink ? (
-                                  <a
-                                    className="link"
-                                    href={approvalArtifactLink}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    View approval record
-                                  </a>
-                                ) : null}
+                            {rationaleEntries.length ? (
+                              <div className="plan-rationale">
+                                {rationaleEntries.map((entry) => (
+                                  <span key={entry.label} className="plan-rationale-item">
+                                    <strong>{entry.label}:</strong> {humanizeReason(entry.value) || entry.value}
+                                  </span>
+                                ))}
                               </div>
-                            )}
+                            ) : null}
+                              {(variant === "approval" || variant === "stale") && (
+                                <div className="next-check-approval-actions">
+                                  <button
+                                    type="button"
+                                    className="button secondary small"
+                                    onClick={() => handleApproveCandidate(candidate, candidateKey)}
+                                    disabled={approvingCandidate === candidateKey}
+                                  >
+                                    {approvingCandidate === candidateKey ? "Approving…" : "Approve candidate"}
+                                  </button>
+                                  {approvalResult ? (
+                                    <p
+                                      className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}
+                                    >
+                                      {approvalResult.summary}
+                                    </p>
+                                  ) : null}
+                                  {approvalArtifactLink ? (
+                                    <a
+                                      className="link"
+                                      href={approvalArtifactLink}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      View approval record
+                                    </a>
+                                  ) : null}
+                                </div>
+                              )}
+                              {variant === "stale" && (
+                                <p className="plan-stale-note">
+                                  Recorded approval belongs to a prior plan. Request a fresh approval to
+                                  run this candidate.
+                                </p>
+                              )}
                             {variant === "approved" && (
                               <div className="next-check-approval-status">
                                 <p className="next-check-approval-note next-check-approval-note-success">
@@ -2124,6 +2243,11 @@ const App = () => {
                                         </a>
                                       </>
                                     ) : null}
+                                  </p>
+                                ) : null}
+                                {executionBlockingReason ? (
+                                  <p className="plan-blocking-reason">
+                                    Reason: {humanizeReason(executionBlockingReason)}
                                   </p>
                                 ) : null}
                               </div>

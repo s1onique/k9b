@@ -235,6 +235,11 @@ class HealthUITests(unittest.TestCase):
                     "duplicateEvidenceDescription": None,
                     "candidateId": "candidate-control-plane",
                     "candidateIndex": 0,
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
                 }
             ],
             "status": "success",
@@ -406,6 +411,9 @@ class HealthUITests(unittest.TestCase):
         candidate_entry = plan_entry["candidates"][0]
         self.assertEqual(candidate_entry["suggestedCommandFamily"], "kubectl-logs")
         self.assertTrue(candidate_entry["safeToAutomate"])
+        self.assertEqual(candidate_entry["normalizationReason"], "selection_label")
+        self.assertEqual(candidate_entry["safetyReason"], "known_command")
+        self.assertIn("blockingReason", candidate_entry)
         self.assertEqual(data.get("next_check_plan"), plan_entry)
 
     def test_next_check_plan_includes_approval_metadata(self) -> None:
@@ -432,6 +440,11 @@ class HealthUITests(unittest.TestCase):
                     "duplicateOfExistingEvidence": False,
                     "candidateId": "candidate-control-plane",
                     "candidateIndex": 0,
+                    "normalizationReason": "selection_default",
+                    "safetyReason": "unknown_command",
+                    "approvalReason": "unknown_command",
+                    "duplicateReason": None,
+                    "blockingReason": "unknown_command",
                 }
             ],
         }
@@ -479,6 +492,234 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(candidate_entry.get("approvalStatus"), "approved")
         self.assertIsNotNone(candidate_entry.get("approvalArtifactPath"))
         self.assertIsNotNone(candidate_entry.get("approvalTimestamp"))
+
+    def test_next_check_plan_marks_stale_approval_when_plan_changes(self) -> None:
+        run_id = "stale-run"
+        run_label = "stale-run"
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_dir = output_dir / "external-analysis"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        plan_path = "external-analysis/stale-plan-new.json"
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "summary": "Stale approval candidate",
+            "artifactPath": plan_path,
+            "review_path": "reviews/stale-run-review.json",
+            "enrichment_artifact_path": "external-analysis/stale-run-review.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "Inspect stale pods",
+                    "targetCluster": "cluster-a",
+                    "requiresOperatorApproval": True,
+                    "safeToAutomate": False,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "candidate-stale",
+                    "candidateIndex": 0,
+                    "normalizationReason": "selection_default",
+                    "safetyReason": "unknown_command",
+                    "approvalReason": "unknown_command",
+                    "duplicateReason": None,
+                    "blockingReason": "unknown_command",
+                }
+            ],
+        }
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label=run_label,
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=plan_path,
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        write_external_analysis_artifact(artifact_dir / "stale-plan-new.json", plan_artifact)
+        stale_plan_path = "external-analysis/stale-plan-old.json"
+        approval_artifact = record_next_check_approval(
+            runs_dir=output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            plan_artifact_path=stale_plan_path,
+            candidate_index=0,
+            candidate_id="candidate-stale",
+            candidate_description="Inspect stale pods",
+            target_cluster="cluster-a",
+        )
+        settings = ExternalAnalysisSettings()
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[plan_artifact, approval_artifact],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        plan_entry = data["run"].get("next_check_plan")
+        self.assertIsNotNone(plan_entry)
+        candidate_entry = plan_entry["candidates"][0]
+        self.assertEqual(candidate_entry.get("approvalStatus"), "approval-stale")
+
+    def test_next_check_plan_exports_orphaned_approvals(self) -> None:
+        run_id = "orphan-run"
+        run_label = "orphan-run"
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_dir = output_dir / "external-analysis"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        plan_path = "external-analysis/orphan-plan.json"
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "summary": "Orphaned approval",
+            "artifactPath": plan_path,
+            "review_path": "reviews/orphan-run-review.json",
+            "enrichment_artifact_path": "external-analysis/orphan-run-review.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "Inspect current pods",
+                    "targetCluster": "cluster-a",
+                    "requiresOperatorApproval": True,
+                    "safeToAutomate": False,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "candidate-present",
+                    "candidateIndex": 0,
+                    "normalizationReason": "selection_default",
+                    "safetyReason": "unknown_command",
+                    "approvalReason": "unknown_command",
+                    "duplicateReason": None,
+                    "blockingReason": "unknown_command",
+                }
+            ],
+        }
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label=run_label,
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=plan_path,
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        write_external_analysis_artifact(artifact_dir / "orphan-plan.json", plan_artifact)
+        orphan_artifact = record_next_check_approval(
+            runs_dir=output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            plan_artifact_path=plan_path,
+            candidate_index=1,
+            candidate_id="candidate-missing",
+            candidate_description="Inspect missing pods",
+            target_cluster="cluster-b",
+        )
+        settings = ExternalAnalysisSettings()
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[plan_artifact, orphan_artifact],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        plan_entry = data["run"].get("next_check_plan")
+        self.assertIsNotNone(plan_entry)
+        orphaned = plan_entry.get("orphanedApprovals") or []
+        self.assertEqual(len(orphaned), 1)
+        entry = orphaned[0]
+        self.assertEqual(entry.get("approvalStatus"), "approval-orphaned")
+        self.assertEqual(entry.get("candidateId"), "candidate-missing")
+
+    def test_next_check_plan_uses_index_fallback_for_legacy_approvals(self) -> None:
+        run_id = "legacy-run"
+        run_label = "legacy-run"
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_dir = output_dir / "external-analysis"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        plan_path = "external-analysis/legacy-plan.json"
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "summary": "Legacy index approval",
+            "artifactPath": plan_path,
+            "review_path": "reviews/legacy-run-review.json",
+            "enrichment_artifact_path": "external-analysis/legacy-run-review.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "Inspect legacy pods",
+                    "targetCluster": "cluster-a",
+                    "requiresOperatorApproval": True,
+                    "safeToAutomate": False,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateIndex": 0,
+                    "normalizationReason": "selection_default",
+                    "safetyReason": "unknown_command",
+                    "approvalReason": "unknown_command",
+                    "duplicateReason": None,
+                    "blockingReason": "unknown_command",
+                }
+            ],
+        }
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label=run_label,
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=plan_path,
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        write_external_analysis_artifact(artifact_dir / "legacy-plan.json", plan_artifact)
+        approval_artifact = record_next_check_approval(
+            runs_dir=output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            plan_artifact_path=plan_path,
+            candidate_index=0,
+            candidate_id=None,
+            candidate_description="Inspect legacy pods",
+            target_cluster="cluster-a",
+        )
+        settings = ExternalAnalysisSettings()
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[plan_artifact, approval_artifact],
+            notifications=[],
+            external_analysis_settings=settings,
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        plan_entry = data["run"].get("next_check_plan")
+        self.assertIsNotNone(plan_entry)
+        candidate_entry = plan_entry["candidates"][0]
+        self.assertEqual(candidate_entry.get("approvalStatus"), "approved")
 
     def test_failed_review_enrichment_artifact_still_exposed(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"

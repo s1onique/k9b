@@ -245,34 +245,51 @@ export type NextCheckEntry = {
 };
 
 export type NextCheckPlanCandidate = {
-  description: string;
-  targetCluster: string | null;
-  sourceReason: string | null;
-  expectedSignal: string | null;
-  suggestedCommandFamily: string | null;
-  safeToAutomate: boolean;
-  requiresOperatorApproval: boolean;
-  riskLevel: string;
-  estimatedCost: string;
-  confidence: string;
-  gatingReason: string | null;
-  duplicateOfExistingEvidence: boolean;
-  duplicateEvidenceDescription: string | null;
-  approvalStatus?: string | null;
-  approvalArtifactPath?: string | null;
-  approvalTimestamp?: string | null;
-  candidateId?: string;
-  candidateIndex?: number | null;
+    description: string;
+    targetCluster: string | null;
+    sourceReason: string | null;
+    expectedSignal: string | null;
+    suggestedCommandFamily: string | null;
+    safeToAutomate: boolean;
+    requiresOperatorApproval: boolean;
+    riskLevel: string;
+    estimatedCost: string;
+    confidence: string;
+    gatingReason: string | null;
+    duplicateOfExistingEvidence: boolean;
+    duplicateEvidenceDescription: string | null;
+    approvalStatus?: string | null;
+    approvalArtifactPath?: string | null;
+    approvalTimestamp?: string | null;
+    candidateId?: string;
+    candidateIndex?: number | null;
+    normalizationReason?: string | null;
+    safetyReason?: string | null;
+    approvalReason?: string | null;
+    duplicateReason?: string | null;
+    blockingReason?: string | null;
 };
 
 export type NextCheckPlan = {
-  status: string;
-  summary: string | null;
-  artifactPath: string | null;
-  reviewPath: string | null;
-  enrichmentArtifactPath: string | null;
-  candidateCount: number;
-  candidates: NextCheckPlanCandidate[];
+    status: string;
+    summary: string | null;
+    artifactPath: string | null;
+    reviewPath: string | null;
+    enrichmentArtifactPath: string | null;
+    candidateCount: number;
+    candidates: NextCheckPlanCandidate[];
+    orphanedApprovals: NextCheckOrphanedApproval[];
+};
+
+export type NextCheckOrphanedApproval = {
+    approvalStatus: string | null;
+    candidateId: string | null;
+    candidateIndex: number | null;
+    candidateDescription: string | null;
+    targetCluster: string | null;
+    planArtifactPath: string | null;
+    approvalArtifactPath: string | null;
+    approvalTimestamp: string | null;
 };
 
 export type NextCheckExecutionRequest = {

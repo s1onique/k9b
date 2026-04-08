@@ -20,6 +20,7 @@ from .model import (
     LLMStatsView,
     NextCheckCandidateView,
     NextCheckExecutionHistoryEntryView,
+    NextCheckOrphanedApprovalView,
     NextCheckPlanView,
     NotificationView,
     ProposalView,
@@ -182,11 +183,27 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     gatingReason: str | None
     duplicateOfExistingEvidence: bool
     duplicateEvidenceDescription: str | None
+    normalizationReason: str | None
+    safetyReason: str | None
+    approvalReason: str | None
+    duplicateReason: str | None
+    blockingReason: str | None
     approvalStatus: str | None
     approvalArtifactPath: str | None
     approvalTimestamp: str | None
     candidateId: str | None
     candidateIndex: int | None
+
+
+class NextCheckOrphanedApprovalPayload(TypedDict, total=False):
+    approvalStatus: str | None
+    candidateId: str | None
+    candidateIndex: int | None
+    candidateDescription: str | None
+    targetCluster: str | None
+    planArtifactPath: str | None
+    approvalArtifactPath: str | None
+    approvalTimestamp: str | None
 
 
 class NextCheckPlanPayload(TypedDict, total=False):
@@ -197,6 +214,7 @@ class NextCheckPlanPayload(TypedDict, total=False):
     enrichmentArtifactPath: str | None
     candidateCount: int
     candidates: list[NextCheckCandidatePayload]
+    orphanedApprovals: list[NextCheckOrphanedApprovalPayload]
 
 
 class ReviewEnrichmentStatusPayload(TypedDict, total=False):
@@ -859,7 +877,24 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
         "enrichmentArtifactPath": view.enrichment_artifact_path,
         "candidateCount": view.candidate_count,
         "candidates": [_serialize_next_check_candidate(entry) for entry in view.candidates],
+        "orphanedApprovals": [
+             _serialize_orphaned_approval(entry) for entry in view.orphaned_approvals
+        ],
     }
+
+
+def _serialize_orphaned_approval(view: NextCheckOrphanedApprovalView) -> NextCheckOrphanedApprovalPayload:
+    payload: NextCheckOrphanedApprovalPayload = {
+        "approvalStatus": view.approval_status,
+        "candidateId": view.candidate_id,
+        "candidateIndex": view.candidate_index,
+        "candidateDescription": view.candidate_description,
+        "targetCluster": view.target_cluster,
+        "planArtifactPath": view.plan_artifact_path,
+        "approvalArtifactPath": view.approval_artifact_path,
+        "approvalTimestamp": view.approval_timestamp,
+    }
+    return payload
 
 
 def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryView, ...]) -> list[NextCheckExecutionHistoryEntry]:
@@ -896,6 +931,11 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         "gatingReason": view.gating_reason,
         "duplicateOfExistingEvidence": view.duplicate_of_existing_evidence,
         "duplicateEvidenceDescription": view.duplicate_evidence_description,
+        "normalizationReason": view.normalization_reason,
+        "safetyReason": view.safety_reason,
+        "approvalReason": view.approval_reason,
+        "duplicateReason": view.duplicate_reason,
+        "blockingReason": view.blocking_reason,
     }
     if view.candidate_id is not None:
         payload["candidateId"] = view.candidate_id

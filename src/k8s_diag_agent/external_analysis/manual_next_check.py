@@ -16,7 +16,7 @@ from .artifact import (
     ExternalAnalysisStatus,
     write_external_analysis_artifact,
 )
-from .next_check_planner import MUTATION_KEYWORDS, CommandFamily
+from .next_check_planner import MUTATION_KEYWORDS, BlockingReason, CommandFamily
 
 CommandRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 
@@ -34,6 +34,10 @@ _LOG_COMPONENT = "manual-next-check"
 
 class ManualNextCheckError(RuntimeError):
     """Raised when a manual next-check execution is not allowed."""
+
+    def __init__(self, message: str, *, blocking_reason: BlockingReason | None = None) -> None:
+        super().__init__(message)
+        self.blocking_reason = blocking_reason
 
 
 def _default_runner(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
@@ -101,6 +105,16 @@ def _validate_command_tokens(family: CommandFamily, tokens: Sequence[str]) -> No
             raise ManualNextCheckError("Command references a potentially mutating keyword.")
         if any(danger in token for danger in _DANGEROUS_CHARS):
             raise ManualNextCheckError("Command contains unsupported punctuation for manual execution.")
+
+
+def _candidate_blocking_reason(candidate: Mapping[str, object]) -> BlockingReason | None:
+    raw = candidate.get("blockingReason")
+    if isinstance(raw, str) and raw:
+        try:
+            return BlockingReason(raw)
+        except ValueError:
+            return None
+    return None
 
 
 def _build_command(description: str, target_context: str, family: CommandFamily) -> list[str]:
@@ -178,6 +192,7 @@ def _log_execution_event(
     artifact_path: str | None = None,
     event: str | None = None,
     gating_reason: str | None = None,
+    blocking_reason: str | None = None,
     timed_out: bool | None = None,
     stdout_truncated: bool | None = None,
     stderr_truncated: bool | None = None,
@@ -207,6 +222,8 @@ def _log_execution_event(
         metadata["event"] = event
     if gating_reason:
         metadata["gatingReason"] = gating_reason
+    if blocking_reason:
+        metadata["blockingReason"] = blocking_reason
     if timed_out is not None:
         metadata["timedOut"] = timed_out
     if stdout_truncated is not None:
@@ -237,6 +254,7 @@ def _log_and_raise_gating(
     candidate_description: str | None,
     candidate_id: str | None,
     command_family: str | None,
+    blocking_reason: BlockingReason | None = None,
 ) -> None:
     _log_execution_event(
         message="Manual next-check execution rejected by gating",
@@ -254,8 +272,9 @@ def _log_and_raise_gating(
         status=None,
         event="gating-rejected",
         gating_reason=reason,
+        blocking_reason=blocking_reason.value if blocking_reason else None,
     )
-    raise ManualNextCheckError(reason)
+    raise ManualNextCheckError(reason, blocking_reason=blocking_reason)
 
 
 def _artifact_path_for_run(runs_dir: Path, run_id: str, candidate_index: int) -> Path:
@@ -282,6 +301,7 @@ def execute_manual_next_check(
     raw_candidate_id = candidate.get("candidateId")
     candidate_id_value = raw_candidate_id if isinstance(raw_candidate_id, str) and raw_candidate_id else None
     if not candidate.get("safeToAutomate"):
+        blocking_reason = _candidate_blocking_reason(candidate)
         _log_and_raise_gating(
             reason="Candidate is not marked safe to automate.",
             run_label=run_label,
@@ -293,10 +313,12 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=None,
+            blocking_reason=blocking_reason,
         )
     requires_approval = bool(candidate.get("requiresOperatorApproval"))
     approval_status = str(candidate.get("approvalStatus") or "").lower()
     if requires_approval and approval_status != "approved":
+        blocking_reason = _candidate_blocking_reason(candidate) or BlockingReason.REQUIRES_APPROVAL
         _log_and_raise_gating(
             reason="Candidate requires operator approval before execution.",
             run_label=run_label,
@@ -308,6 +330,7 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=None,
+            blocking_reason=blocking_reason,
         )
     if candidate.get("duplicateOfExistingEvidence"):
         _log_and_raise_gating(
@@ -321,6 +344,7 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=None,
+            blocking_reason=_candidate_blocking_reason(candidate) or BlockingReason.DUPLICATE,
         )
     family_raw = str(candidate.get("suggestedCommandFamily") or "").strip()
     if not family_raw:
@@ -335,6 +359,7 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=None,
+            blocking_reason=BlockingReason.UNKNOWN_COMMAND,
         )
     try:
         family = CommandFamily(family_raw)
@@ -350,6 +375,7 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=family_raw,
+            blocking_reason=BlockingReason.COMMAND_NOT_ALLOWED,
         )
     if family not in _ALLOWED_FAMILIES:
         _log_and_raise_gating(
@@ -363,6 +389,7 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=family.value,
+            blocking_reason=BlockingReason.COMMAND_NOT_ALLOWED,
         )
     if not description:
         _log_and_raise_gating(
@@ -376,6 +403,7 @@ def execute_manual_next_check(
             candidate_description="",
             candidate_id=candidate_id_value,
             command_family=family.value,
+            blocking_reason=BlockingReason.MISSING_DESCRIPTION,
         )
     if not target_context:
         _log_and_raise_gating(
@@ -389,6 +417,7 @@ def execute_manual_next_check(
             candidate_description=description,
             candidate_id=candidate_id_value,
             command_family=family.value,
+            blocking_reason=BlockingReason.MISSING_CONTEXT,
         )
     runner = command_runner or _default_runner
     command = _build_command(description, target_context, family)

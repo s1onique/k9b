@@ -1195,11 +1195,44 @@ body {
   color: #38bdf8;
 }
 
+.plan-status-pill-stale {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fb7185;
+}
+
 .plan-gating {
   margin: 0;
   font-size: 0.75rem;
   color: rgba(248, 250, 252, 0.75);
   font-style: italic;
+}
+
+.plan-stale-note {
+  margin: 0.4rem 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.65);
+  font-style: italic;
+}
+
+.next-check-orphaned {
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.next-check-orphaned ul {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.next-check-orphaned li {
+  font-size: 0.85rem;
 }
 
 .next-check-approval-actions {
@@ -1477,4 +1510,25 @@ body {
   .fleet-table td:nth-of-type(5)::before {
     content: "Drilldown";
   }
+}
+
+.plan-rationale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.plan-rationale-item {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.8);
+}
+
+.plan-blocking-reason {
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+  color: #fca5a5;
 }

@@ -7,7 +7,7 @@ import type {
   RunPayload,
 } from "../types";
 
-const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
+export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
   {
     description: "Collect kubelet logs for control-plane pods",
     targetCluster: "cluster-a",
@@ -24,6 +24,7 @@ const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     duplicateEvidenceDescription: null,
     candidateId: "candidate-logs",
     candidateIndex: 0,
+    approvalStatus: "not-required",
   },
   {
     description: "Describe diag CRD for control plane",
@@ -41,6 +42,7 @@ const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     duplicateEvidenceDescription: null,
     candidateId: "candidate-describe",
     candidateIndex: 1,
+    approvalStatus: "approval-required",
   },
   {
     description: "Capture kubelet metrics for control-plane nodes",
@@ -58,6 +60,7 @@ const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     duplicateEvidenceDescription: "Collect kubelet metrics",
     candidateId: "candidate-metrics",
     candidateIndex: 2,
+    approvalStatus: "not-required",
   },
 ];
 
@@ -221,6 +224,7 @@ export const sampleRun: RunPayload = {
     enrichmentArtifactPath: "/artifacts/review-enrichment.json",
     candidateCount: sampleNextCheckCandidates.length,
     candidates: sampleNextCheckCandidates,
+    orphanedApprovals: [],
   },
   nextCheckExecutionHistory: [
     {

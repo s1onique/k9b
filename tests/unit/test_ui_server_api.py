@@ -393,6 +393,11 @@ class RunApiServerTests(unittest.TestCase):
                     "gatingReason": None,
                     "candidateId": "candidate-logs",
                     "candidateIndex": 0,
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
                 }
             ],
         }
@@ -466,6 +471,11 @@ class RunApiServerTests(unittest.TestCase):
                     "duplicateOfExistingEvidence": False,
                     "candidateId": "candidate-control-plane",
                     "candidateIndex": 0,
+                    "normalizationReason": "selection_default",
+                    "safetyReason": "unknown_command",
+                    "approvalReason": "unknown_command",
+                    "duplicateReason": None,
+                    "blockingReason": "unknown_command",
                 }
             ],
         }
@@ -543,6 +553,9 @@ class RunApiServerTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as cm:
                 urllib.request.urlopen(req, timeout=5)
             self.assertEqual(cm.exception.code, 400)
+            body = cm.exception.read().decode("utf-8")
+            data = json.loads(body)
+            self.assertIsNone(data.get("blockingReason"))
         finally:
             self._shutdown_server(server, thread)
 
@@ -558,6 +571,11 @@ class RunApiServerTests(unittest.TestCase):
                     "requiresOperatorApproval": True,
                     "duplicateOfExistingEvidence": False,
                     "gatingReason": None,
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": "known_command",
+                    "duplicateReason": None,
+                    "blockingReason": "requires_approval",
                 }
             ],
         }
@@ -613,6 +631,11 @@ class RunApiServerTests(unittest.TestCase):
                     "duplicateOfExistingEvidence": False,
                     "candidateId": "candidate-approve",
                     "candidateIndex": 3,
+                    "normalizationReason": "selection_default",
+                    "safetyReason": "unknown_command",
+                    "approvalReason": "unknown_command",
+                    "duplicateReason": None,
+                    "blockingReason": "unknown_command",
                 }
             ],
         }
@@ -670,6 +693,11 @@ class RunApiServerTests(unittest.TestCase):
                     "gatingReason": None,
                     "candidateId": "candidate-id-5",
                     "candidateIndex": 5,
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
                 }
             ],
         }

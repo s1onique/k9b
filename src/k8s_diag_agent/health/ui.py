@@ -20,8 +20,12 @@ from ..external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
-from ..external_analysis.next_check_approval import collect_next_check_approvals
+from ..external_analysis.next_check_approval import (
+    NextCheckApprovalRecord,
+    collect_next_check_approvals,
+)
 from ..external_analysis.utils import artifact_matches_run
+from ..structured_logging import emit_structured_log
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 
@@ -460,6 +464,48 @@ def _find_review_enrichment_artifact(
     return None
 
 
+def _plan_paths_match(plan_path: str | None, approval_path: str | None) -> bool:
+    if not plan_path or not approval_path:
+        return False
+    if plan_path == approval_path:
+        return True
+    try:
+        return Path(plan_path).name == Path(approval_path).name
+    except Exception:
+        return False
+
+
+def _log_next_check_approval_freshness(
+    *,
+    run_label: str | None,
+    run_id: str,
+    candidate_id: str | None,
+    candidate_index: int | None,
+    plan_artifact_path: str | None,
+    approval_plan_path: str | None,
+    candidate_description: str | None,
+    status: str,
+) -> None:
+    if not run_label:
+        return
+    metadata: dict[str, object | None] = {
+        "candidateId": candidate_id,
+        "candidateIndex": candidate_index,
+        "planArtifactPath": plan_artifact_path,
+        "approvalPlanPath": approval_plan_path,
+        "candidateDescription": candidate_description,
+        "status": status,
+    }
+    emit_structured_log(
+        component="next-check-approval",
+        message=f"Next-check approval treated as {status}",
+        severity="INFO" if status in ("approval-stale", "approval-orphaned") else "DEBUG",
+        run_label=run_label,
+        run_id=run_id,
+        metadata=metadata,
+    )
+
+
 def _serialize_next_check_plan(
     artifacts: Sequence[ExternalAnalysisArtifact],
     root_dir: Path,
@@ -475,23 +521,73 @@ def _serialize_next_check_plan(
     else:
         candidates_raw = []
     approvals = collect_next_check_approvals(artifacts, run_id)
+    used_approvals: set[NextCheckApprovalRecord] = set()
+    plan_artifact_path = str(artifact.artifact_path) if artifact.artifact_path else None
     candidates: list[dict[str, object]] = []
     for index, entry in enumerate(candidates_raw):
         if not isinstance(entry, Mapping):
             continue
         candidate = dict(entry)
-        # Prefer matching by stable candidateId, fallback to positional index
-        approval = None
-        cid = entry.get("candidateId")
-        if isinstance(cid, str) and cid in approvals.by_id:
-            approval = approvals.by_id[cid]
-        elif index in approvals.by_index:
-            approval = approvals.by_index[index]
-        if approval:
-            candidate["approvalStatus"] = "approved"
-            candidate["approvalArtifactPath"] = _relative_path(root_dir, approval.artifact_path)
-            candidate["approvalTimestamp"] = approval.timestamp.isoformat()
+        requires_approval = bool(candidate.get("requiresOperatorApproval"))
+        candidate_id_value = candidate.get("candidateId")
+        candidate_id_key = candidate_id_value if isinstance(candidate_id_value, str) and candidate_id_value else None
+        explicit_index = candidate.get("candidateIndex")
+        candidate_index_key = explicit_index if isinstance(explicit_index, int) else index
+        approval_record: NextCheckApprovalRecord | None = None
+        if requires_approval:
+            if candidate_id_key and candidate_id_key in approvals.by_id:
+                approval_record = approvals.by_id[candidate_id_key]
+            elif candidate_index_key is not None and candidate_index_key in approvals.by_index:
+                approval_record = approvals.by_index[candidate_index_key]
+        approval_status = "not-required" if not requires_approval else "approval-required"
+        if approval_record:
+            used_approvals.add(approval_record)
+            if _plan_paths_match(plan_artifact_path, approval_record.plan_artifact_path):
+                approval_status = "approved"
+            else:
+                approval_status = "approval-stale"
+            candidate["approvalArtifactPath"] = _relative_path(root_dir, approval_record.artifact_path)
+            candidate["approvalTimestamp"] = approval_record.timestamp.isoformat()
+            if approval_status == "approval-stale":
+                _log_next_check_approval_freshness(
+                    run_label=artifact.run_label,
+                    run_id=run_id,
+                    candidate_id=candidate_id_key,
+                    candidate_index=candidate_index_key,
+                    plan_artifact_path=plan_artifact_path,
+                    approval_plan_path=approval_record.plan_artifact_path,
+                    candidate_description=candidate.get("description") if isinstance(candidate.get("description"), str) else None,
+                    status=approval_status,
+                )
+        candidate["approvalStatus"] = approval_status
         candidates.append(candidate)
+    orphaned: list[dict[str, object]] = []
+    all_records = set(approvals.by_id.values()) | set(approvals.by_index.values())
+    for record in all_records:
+        if record in used_approvals:
+            continue
+        orphaned.append(
+            {
+                "approvalStatus": "approval-orphaned",
+                "candidateId": record.candidate_id,
+                "candidateIndex": record.candidate_index,
+                "candidateDescription": record.candidate_description,
+                "targetCluster": record.cluster_label,
+                "planArtifactPath": record.plan_artifact_path,
+                "approvalArtifactPath": _relative_path(root_dir, record.artifact_path),
+                "approvalTimestamp": record.timestamp.isoformat(),
+            }
+        )
+        _log_next_check_approval_freshness(
+            run_label=artifact.run_label,
+            run_id=run_id,
+            candidate_id=record.candidate_id,
+            candidate_index=record.candidate_index,
+            plan_artifact_path=plan_artifact_path,
+            approval_plan_path=record.plan_artifact_path,
+            candidate_description=record.candidate_description,
+            status="approval-orphaned",
+        )
     return {
         "status": artifact.status.value,
         "summary": artifact.summary,
@@ -500,6 +596,7 @@ def _serialize_next_check_plan(
         "enrichmentArtifactPath": payload.get("enrichment_artifact_path"),
         "candidateCount": len(candidates),
         "candidates": candidates,
+        "orphanedApprovals": orphaned,
     }
 
 

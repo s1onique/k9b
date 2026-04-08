@@ -96,6 +96,10 @@ class UIViewModelTests(unittest.TestCase):
             plan.candidates[2].duplicate_evidence_description,
             "Collect kubelet metrics",
         )
+        self.assertEqual(plan.candidates[0].normalization_reason, "selection_label")
+        self.assertEqual(plan.candidates[0].safety_reason, "known_command")
+        self.assertEqual(plan.candidates[2].duplicate_reason, "exact_match")
+        self.assertEqual(plan.orphaned_approvals, ())
         history_entries = context.run.next_check_execution_history
         self.assertTrue(history_entries)
         self.assertEqual(history_entries[0].status, "success")

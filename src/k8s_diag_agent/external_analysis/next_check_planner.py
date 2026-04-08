@@ -32,6 +32,41 @@ class CostEstimate(StrEnum):
     HIGH = "high"
 
 
+class NormalizationReason(StrEnum):
+    SELECTION_LABEL = "selection_label"
+    SELECTION_CONTEXT = "selection_context"
+    SELECTION_DEFAULT = "selection_default"
+    SUMMARY_FALLBACK = "summary_fallback"
+    UNKNOWN = "unknown"
+
+
+class SafetyReason(StrEnum):
+    KNOWN_COMMAND = "known_command"
+    UNKNOWN_COMMAND = "unknown_command"
+    MUTATION_DETECTED = "mutation_detected"
+    DUPLICATE_EVIDENCE = "duplicate_evidence"
+
+
+class ApprovalReason(StrEnum):
+    UNKNOWN_COMMAND = "unknown_command"
+    MUTATION_DETECTED = "mutation_detected"
+    DUPLICATE_EVIDENCE = "duplicate_evidence"
+    GENERIC = "requires_operator_approval"
+
+
+class DuplicateReason(StrEnum):
+    EXACT_MATCH = "exact_match"
+    OVERLAP = "overlap"
+
+
+class BlockingReason(StrEnum):
+    UNKNOWN_COMMAND = "unknown_command"
+    MUTATION_DETECTED = "mutation_detected"
+    DUPLICATE = "duplicate"
+    REQUIRES_APPROVAL = "requires_approval"
+    COMMAND_NOT_ALLOWED = "command_not_allowed"
+    MISSING_DESCRIPTION = "missing_description"
+    MISSING_CONTEXT = "missing_context"
 def _normalize_text(value: str) -> str:
     return " ".join(value.lower().strip().split())
 
@@ -165,15 +200,32 @@ def _collect_existing_evidence(context: ReviewEnrichmentInput) -> Mapping[str, s
     return normalized
 
 
-def _find_similar_description(candidate_key: str, evidence_map: Mapping[str, str]) -> str | None:
+def _find_similar_description(candidate_key: str, evidence_map: Mapping[str, str]) -> tuple[DuplicateReason | None, str | None]:
     for normalized, original in evidence_map.items():
         if not normalized:
             continue
         if candidate_key == normalized:
-            return original
+            return DuplicateReason.EXACT_MATCH, original
         if candidate_key in normalized or normalized in candidate_key:
-            return original
-    return None
+            return DuplicateReason.OVERLAP, original
+    return None, None
+
+
+def _determine_normalization_reason(
+    text: str, selection: ReviewSelectionContext | None, summary: str | None
+) -> NormalizationReason:
+    normalized = _normalize_text(text)
+    if selection:
+        label = (selection.label or "").strip()
+        context = (selection.context or "").strip()
+        if label and label.lower() in normalized:
+            return NormalizationReason.SELECTION_LABEL
+        if context and context.lower() in normalized:
+            return NormalizationReason.SELECTION_CONTEXT
+        return NormalizationReason.SELECTION_DEFAULT
+    if summary:
+        return NormalizationReason.SUMMARY_FALLBACK
+    return NormalizationReason.UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -192,6 +244,11 @@ class NextCheckCandidate:
     gating_reason: str | None
     duplicate_of_existing_evidence: bool
     duplicate_evidence_description: str | None
+    normalization_reason: str | None
+    safety_reason: str | None
+    approval_reason: str | None
+    duplicate_reason: str | None
+    blocking_reason: str | None
 
     def to_dict(self) -> dict[str, object | str | bool]:
         return {
@@ -204,12 +261,17 @@ class NextCheckCandidate:
             "requiresOperatorApproval": self.requires_operator_approval,
             "riskLevel": self.risk_level.value,
             "estimatedCost": self.estimated_cost.value,
-        "confidence": self.confidence,
-        "gatingReason": self.gating_reason,
-        "duplicateOfExistingEvidence": self.duplicate_of_existing_evidence,
-        "duplicateEvidenceDescription": self.duplicate_evidence_description,
-        "candidateId": self.candidate_id,
-    }
+         "confidence": self.confidence,
+            "gatingReason": self.gating_reason,
+            "duplicateOfExistingEvidence": self.duplicate_of_existing_evidence,
+            "duplicateEvidenceDescription": self.duplicate_evidence_description,
+            "normalizationReason": self.normalization_reason,
+            "safetyReason": self.safety_reason,
+            "approvalReason": self.approval_reason,
+            "duplicateReason": self.duplicate_reason,
+            "blockingReason": self.blocking_reason,
+            "candidateId": self.candidate_id,
+        }
 
 
 @dataclass(frozen=True)
@@ -268,12 +330,42 @@ def plan_next_checks(
         risk = _risk_from_family(family)
         expected_signal = _detect_expected_signal(candidate_text)
         candidate_key = _normalize_description(candidate_text)
-        duplicate_description = _find_similar_description(candidate_key, evidence_map)
-        duplicate = bool(duplicate_description)
+        duplicate_reason_enum, duplicate_description = _find_similar_description(
+            candidate_key, evidence_map
+        )
+        duplicate = duplicate_reason_enum is not None
         mutation_flag = _mentions_mutation(candidate_text)
         safe = family != CommandFamily.UNKNOWN and not mutation_flag and not duplicate
         requires_approval = not safe or duplicate
         gating_reason: str | None = None
+        normalization_reason = _determine_normalization_reason(
+            candidate_text, selection, enrichment_artifact.summary
+        )
+        if duplicate:
+            safety_reason = SafetyReason.DUPLICATE_EVIDENCE
+        elif mutation_flag:
+            safety_reason = SafetyReason.MUTATION_DETECTED
+        elif family == CommandFamily.UNKNOWN:
+            safety_reason = SafetyReason.UNKNOWN_COMMAND
+        else:
+            safety_reason = SafetyReason.KNOWN_COMMAND
+        approval_reason: ApprovalReason | None = None
+        if requires_approval:
+            if duplicate:
+                approval_reason = ApprovalReason.DUPLICATE_EVIDENCE
+            elif mutation_flag:
+                approval_reason = ApprovalReason.MUTATION_DETECTED
+            elif family == CommandFamily.UNKNOWN:
+                approval_reason = ApprovalReason.UNKNOWN_COMMAND
+            else:
+                approval_reason = ApprovalReason.GENERIC
+        blocking_reason: BlockingReason | None = None
+        if duplicate:
+            blocking_reason = BlockingReason.DUPLICATE
+        elif mutation_flag:
+            blocking_reason = BlockingReason.MUTATION_DETECTED
+        elif not safe:
+            blocking_reason = BlockingReason.UNKNOWN_COMMAND
         if duplicate:
             gating_reason = (
                 f"Matches deterministic next check: {duplicate_description}"
@@ -307,6 +399,11 @@ def plan_next_checks(
             gating_reason=gating_reason,
             duplicate_of_existing_evidence=duplicate,
             duplicate_evidence_description=duplicate_description,
+            normalization_reason=normalization_reason.value,
+            safety_reason=safety_reason.value,
+            approval_reason=approval_reason.value if approval_reason else None,
+            duplicate_reason=duplicate_reason_enum.value if duplicate_reason_enum else None,
+            blocking_reason=blocking_reason.value if blocking_reason else None,
         )
         candidates.append(candidate)
     if not candidates:

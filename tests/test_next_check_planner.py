@@ -7,7 +7,12 @@ from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisStatus,
 )
 from k8s_diag_agent.external_analysis.next_check_planner import (
+    ApprovalReason,
+    BlockingReason,
     CommandFamily,
+    DuplicateReason,
+    NormalizationReason,
+    SafetyReason,
     plan_next_checks,
 )
 
@@ -73,6 +78,11 @@ def test_safe_read_only_check(tmp_path: Path) -> None:
     assert candidate.target_cluster == "cluster-a"
     assert candidate.safe_to_automate
     assert not candidate.requires_operator_approval
+    assert candidate.normalization_reason == NormalizationReason.SELECTION_DEFAULT.value
+    assert candidate.safety_reason == SafetyReason.KNOWN_COMMAND.value
+    assert candidate.approval_reason is None
+    assert candidate.duplicate_reason is None
+    assert candidate.blocking_reason is None
 
 
 def test_vague_check_is_rejected(tmp_path: Path) -> None:
@@ -90,6 +100,11 @@ def test_vague_check_is_rejected(tmp_path: Path) -> None:
     assert not candidate.safe_to_automate
     assert candidate.requires_operator_approval
     assert "Command not recognized" in (candidate.gating_reason or "")
+    assert candidate.safe_to_automate is False
+    assert candidate.safety_reason == SafetyReason.UNKNOWN_COMMAND.value
+    assert candidate.approval_reason == ApprovalReason.UNKNOWN_COMMAND.value
+    assert candidate.blocking_reason == BlockingReason.UNKNOWN_COMMAND.value
+    assert candidate.normalization_reason == NormalizationReason.SELECTION_DEFAULT.value
 
 
 def test_mutation_like_check_is_rejected(tmp_path: Path) -> None:
@@ -106,6 +121,9 @@ def test_mutation_like_check_is_rejected(tmp_path: Path) -> None:
     candidate = plan.candidates[0]
     assert not candidate.safe_to_automate
     assert "mutating" in (candidate.gating_reason or "").lower()
+    assert candidate.safety_reason == SafetyReason.MUTATION_DETECTED.value
+    assert candidate.approval_reason == ApprovalReason.MUTATION_DETECTED.value
+    assert candidate.blocking_reason == BlockingReason.MUTATION_DETECTED.value
 
 
 def test_duplicate_check_is_flagged(tmp_path: Path) -> None:
@@ -128,6 +146,10 @@ def test_duplicate_check_is_flagged(tmp_path: Path) -> None:
     candidate = plan.candidates[0]
     assert candidate.duplicate_of_existing_evidence
     assert "Matches deterministic next check" in (candidate.gating_reason or "")
+    assert candidate.duplicate_reason == DuplicateReason.EXACT_MATCH.value
+    assert candidate.blocking_reason == BlockingReason.DUPLICATE.value
+    assert candidate.safety_reason == SafetyReason.DUPLICATE_EVIDENCE.value
+    assert candidate.approval_reason == ApprovalReason.DUPLICATE_EVIDENCE.value
 
 
 def test_candidate_id_is_stable(tmp_path: Path) -> None:

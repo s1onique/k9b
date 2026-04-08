@@ -10,6 +10,8 @@ import type {
   RunPayload,
 } from "./types";
 
+type NextCheckExecutionError = Error & { blockingReason?: string | null };
+
 const fetchJson = async <T>(path: string): Promise<T> => {
   const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) {
@@ -72,15 +74,25 @@ export const executeNextCheckCandidate = async (
   });
   if (!response.ok) {
     let message = response.statusText;
+    let blockingReason: string | null | undefined;
     try {
       const payload = await response.json();
-      if (payload && typeof payload === "object" && "error" in payload) {
-        message = String((payload as Record<string, unknown>).error);
+      if (payload && typeof payload === "object") {
+        if ("error" in payload) {
+          message = String((payload as Record<string, unknown>).error);
+        }
+        if ("blockingReason" in payload) {
+          blockingReason = (payload as Record<string, unknown>).blockingReason as string | null;
+        }
       }
     } catch {
       // ignore
     }
-    throw new Error(message || "Failed to execute next-check candidate");
+    const error = new Error(
+      message || "Failed to execute next-check candidate"
+    ) as NextCheckExecutionError;
+    error.blockingReason = blockingReason ?? null;
+    throw error;
   }
   const data = await response.json();
   return data as NextCheckExecutionResponse;

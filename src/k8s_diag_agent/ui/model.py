@@ -270,6 +270,23 @@ class NextCheckCandidateView:
     approval_artifact_path: str | None
     approval_timestamp: str | None
     candidate_index: int | None
+    normalization_reason: str | None
+    safety_reason: str | None
+    approval_reason: str | None
+    duplicate_reason: str | None
+    blocking_reason: str | None
+
+
+@dataclass(frozen=True)
+class NextCheckOrphanedApprovalView:
+    approval_status: str | None
+    candidate_id: str | None
+    candidate_index: int | None
+    candidate_description: str | None
+    target_cluster: str | None
+    plan_artifact_path: str | None
+    approval_artifact_path: str | None
+    approval_timestamp: str | None
 
 
 @dataclass(frozen=True)
@@ -281,6 +298,7 @@ class NextCheckPlanView:
     enrichment_artifact_path: str | None
     candidate_count: int
     candidates: tuple[NextCheckCandidateView, ...]
+    orphaned_approvals: tuple[NextCheckOrphanedApprovalView, ...]
 
 
 @dataclass(frozen=True)
@@ -962,6 +980,12 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
         for entry in candidates_raw
         if isinstance(entry, Mapping)
     )
+    orphaned_raw = raw.get("orphanedApprovals") or ()
+    orphaned = tuple(
+        _build_orphaned_approval_view(entry)
+        for entry in orphaned_raw
+        if isinstance(entry, Mapping)
+    )
     return NextCheckPlanView(
         status=_coerce_str(raw.get("status")),
         summary=_coerce_optional_str(raw.get("summary")),
@@ -970,6 +994,7 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
         enrichment_artifact_path=_coerce_optional_str(raw.get("enrichmentArtifactPath")),
         candidate_count=_coerce_int(raw.get("candidateCount")),
         candidates=candidates,
+        orphaned_approvals=orphaned,
     )
 
 
@@ -998,6 +1023,19 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
     return tuple(entries)
 
 
+def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphanedApprovalView:
+    return NextCheckOrphanedApprovalView(
+        approval_status=_coerce_optional_str(raw.get("approvalStatus")),
+        candidate_id=_coerce_optional_str(raw.get("candidateId")),
+        candidate_index=_coerce_optional_int(raw.get("candidateIndex")),
+        candidate_description=_coerce_optional_str(raw.get("candidateDescription")),
+        target_cluster=_coerce_optional_str(raw.get("targetCluster")),
+        plan_artifact_path=_coerce_optional_str(raw.get("planArtifactPath")),
+        approval_artifact_path=_coerce_optional_str(raw.get("approvalArtifactPath")),
+        approval_timestamp=_coerce_optional_str(raw.get("approvalTimestamp")),
+    )
+
+
 def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
     return NextCheckCandidateView(
         candidate_id=_coerce_optional_str(raw.get("candidateId")),
@@ -1020,6 +1058,11 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
         approval_artifact_path=_coerce_optional_str(raw.get("approvalArtifactPath")),
         approval_timestamp=_coerce_optional_str(raw.get("approvalTimestamp")),
         candidate_index=_coerce_optional_int(raw.get("candidateIndex")),
+        normalization_reason=_coerce_optional_str(raw.get("normalizationReason")),
+        safety_reason=_coerce_optional_str(raw.get("safetyReason")),
+        approval_reason=_coerce_optional_str(raw.get("approvalReason")),
+        duplicate_reason=_coerce_optional_str(raw.get("duplicateReason")),
+        blocking_reason=_coerce_optional_str(raw.get("blockingReason")),
     )
 
 

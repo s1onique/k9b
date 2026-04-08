@@ -212,8 +212,14 @@ class UIApiTests(unittest.TestCase):
                     "duplicateEvidenceDescription": None,
                     "candidateId": "candidate-logs",
                     "candidateIndex": 0,
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
                 }
             ],
+            "orphanedApprovals": [],
         }
         run_entry = cast(dict[str, object], index["run"])
         run_entry["next_check_plan"] = plan_payload
@@ -251,8 +257,14 @@ class UIApiTests(unittest.TestCase):
                     "duplicateEvidenceDescription": None,
                     "candidateId": "candidate-logs",
                     "candidateIndex": 0,
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
                 }
             ],
+            "orphanedApprovals": [],
         }
         run_entry = cast(dict[str, object], index["run"])
         run_entry["next_check_plan"] = plan_payload

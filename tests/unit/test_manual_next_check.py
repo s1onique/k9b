@@ -12,6 +12,7 @@ from k8s_diag_agent.external_analysis.manual_next_check import (
     ManualNextCheckError,
     execute_manual_next_check,
 )
+from k8s_diag_agent.external_analysis.next_check_planner import BlockingReason
 
 
 class ManualNextCheckTests(unittest.TestCase):
@@ -83,7 +84,7 @@ class ManualNextCheckTests(unittest.TestCase):
     def test_rejects_candidate_requiring_approval(self) -> None:
         candidate = self._base_candidate()
         candidate["requiresOperatorApproval"] = True
-        with self.assertRaises(ManualNextCheckError):
+        with self.assertRaises(ManualNextCheckError) as cm:
             execute_manual_next_check(
                 runs_dir=self.runs_dir,
                 run_id="run-3",
@@ -95,6 +96,7 @@ class ManualNextCheckTests(unittest.TestCase):
                 target_cluster="cluster-a",
                 command_runner=lambda command: self._runner(0),
             )
+        self.assertEqual(cm.exception.blocking_reason, BlockingReason.REQUIRES_APPROVAL)
 
     def test_allows_candidate_with_recorded_approval(self) -> None:
         candidate = self._base_candidate()
@@ -116,7 +118,7 @@ class ManualNextCheckTests(unittest.TestCase):
     def test_rejects_duplicate_candidate(self) -> None:
         candidate = self._base_candidate()
         candidate["duplicateOfExistingEvidence"] = True
-        with self.assertRaises(ManualNextCheckError):
+        with self.assertRaises(ManualNextCheckError) as cm:
             execute_manual_next_check(
                 runs_dir=self.runs_dir,
                 run_id="run-4",
@@ -128,11 +130,12 @@ class ManualNextCheckTests(unittest.TestCase):
                 target_cluster="cluster-a",
                 command_runner=lambda command: self._runner(0),
             )
+        self.assertEqual(cm.exception.blocking_reason, BlockingReason.DUPLICATE)
 
     def test_rejects_unsupported_family(self) -> None:
         candidate = self._base_candidate()
         candidate["suggestedCommandFamily"] = "kubectl-apply"
-        with self.assertRaises(ManualNextCheckError):
+        with self.assertRaises(ManualNextCheckError) as cm:
             execute_manual_next_check(
                 runs_dir=self.runs_dir,
                 run_id="run-5",
@@ -144,6 +147,7 @@ class ManualNextCheckTests(unittest.TestCase):
                 target_cluster="cluster-a",
                 command_runner=lambda command: self._runner(0),
             )
+        self.assertEqual(cm.exception.blocking_reason, BlockingReason.COMMAND_NOT_ALLOWED)
 
     def test_timeout_records_timed_out_metadata(self) -> None:
         candidate = self._base_candidate()
