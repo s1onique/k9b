@@ -78,6 +78,8 @@ const formatLatency = (value: number | null | undefined) => {
   return `${Math.round(value)}ms`;
 };
 
+const NOTIFICATIONS_PER_PAGE = 50;
+
 const getLlmScopeLabel = (scope?: string | null) =>
   scope === "retained_history" ? "Historical LLM" : "Run LLM";
 
@@ -758,30 +760,125 @@ export const ProposalList = ({
   );
 };
 
-const NotificationCard = ({ entry }: { entry: NotificationEntry }) => (
-  <article className="notification-card">
-    <header>
-      <span className={statusClass(entry.kind)}>{entry.kind}</span>
-      <p className="eyebrow">{entry.summary}</p>
-      <span className="small">{formatTimestamp(entry.timestamp)}</span>
-    </header>
-    <div className="notification-body">
-      <p className="small">Run: {entry.runId || "-"} · Cluster: {entry.clusterLabel || "-"}</p>
-      <ul>
-        {entry.details.map((detail) => (
-          <li key={detail.label}>
-            <strong>{detail.label}:</strong> {detail.value}
-          </li>
-        ))}
-      </ul>
-      {entry.artifactPath ? (
-        <a className="link" href={artifactUrl(entry.artifactPath)!} target="_blank" rel="noreferrer">
-          View
-        </a>
-      ) : null}
-    </div>
-  </article>
-);
+const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] }) => {
+  const [page, setPage] = useState(1);
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      const aStamp = dayjs(a.timestamp).valueOf();
+      const bStamp = dayjs(b.timestamp).valueOf();
+      const aValue = Number.isNaN(aStamp) ? 0 : aStamp;
+      const bValue = Number.isNaN(bStamp) ? 0 : bStamp;
+      return bValue - aValue;
+    });
+  }, [entries]);
+  const total = sortedEntries.length;
+  const totalPages = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
+  useEffect(() => {
+    setPage((current) => {
+      if (current < 1) {
+        return 1;
+      }
+      if (current > totalPages) {
+        return totalPages;
+      }
+      return current;
+    });
+  }, [totalPages]);
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
+  const startIndex = (currentPage - 1) * NOTIFICATIONS_PER_PAGE;
+  const endIndex = Math.min(startIndex + NOTIFICATIONS_PER_PAGE, total);
+  const pageEntries = sortedEntries.slice(startIndex, endIndex);
+  const displayStart = total === 0 ? 0 : startIndex + 1;
+  const displayEnd = endIndex;
+  const handlePrev = () => setPage((current) => Math.max(1, current - 1));
+  const handleNext = () => setPage((current) => Math.min(totalPages, current + 1));
+
+  return (
+    <>
+      <div className="notification-table-wrapper">
+        <table className="notification-table" aria-label="Notification history table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Kind</th>
+              <th>Summary</th>
+              <th>Run / Cluster</th>
+              <th>Key detail</th>
+              <th>Artifact</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageEntries.map((entry, index) => {
+              const detailEntry = entry.details[0];
+              const detailText = detailEntry
+                ? `${detailEntry.label}: ${detailEntry.value}`
+                : entry.context || "—";
+              const artifactLink = entry.artifactPath ? artifactUrl(entry.artifactPath) : null;
+              return (
+                <tr key={`${entry.kind}-${entry.timestamp}-${index}`} data-testid="notification-row">
+                  <td>
+                    <strong>{formatTimestamp(entry.timestamp)}</strong>
+                    <p className="tiny compact">{relativeRecency(entry.timestamp)}</p>
+                  </td>
+                  <td>
+                    <span className={statusClass(entry.kind)}>{entry.kind}</span>
+                  </td>
+                  <td>
+                    <p className="notification-summary">{truncateText(entry.summary, 120)}</p>
+                  </td>
+                  <td>
+                    <p className="tiny compact">Run {entry.runId || "-"}</p>
+                    <p className="tiny compact">Cluster {entry.clusterLabel || "-"}</p>
+                  </td>
+                  <td>
+                    <p className="notification-detail">{truncateText(detailText, 100)}</p>
+                  </td>
+                  <td>
+                    {artifactLink ? (
+                      <a
+                        className="artifact-link"
+                        href={artifactLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {!pageEntries.length && (
+              <tr>
+                <td colSpan={6} className="muted small">
+                  No notifications available.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="notification-pagination">
+        <div className="notification-pagination-controls">
+          <button type="button" onClick={handlePrev} disabled={currentPage <= 1}>
+            Previous
+          </button>
+          <span>
+            Page {currentPage} of {totalPages}
+          </span>
+          <button type="button" onClick={handleNext} disabled={currentPage >= totalPages}>
+            Next
+          </button>
+        </div>
+        <p className="muted small">
+          Showing {displayStart}–{displayEnd} of {total}
+        </p>
+      </div>
+    </>
+  );
+};
 
 const App = () => {
   const [run, setRun] = useState<RunPayload | null>(null);
@@ -1478,13 +1575,11 @@ const App = () => {
       <section className="panel" id="notifications">
         <div className="section-head">
           <h2>Notification history</h2>
-          <p className="small">Showing {notifications.notifications.length} entries</p>
+          <p className="small">
+            Showing {notifications.notifications.length} entries · {NOTIFICATIONS_PER_PAGE} per page
+          </p>
         </div>
-        <div className="notification-grid">
-          {notifications.notifications.map((entry) => (
-            <NotificationCard entry={entry} key={`${entry.kind}-${entry.timestamp}`} />
-          ))}
-        </div>
+        <NotificationHistoryTable entries={notifications.notifications} />
       </section>
     </div>
   );

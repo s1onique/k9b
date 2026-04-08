@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { AUTOREFRESH_STORAGE_KEY } from "../App";
+import type { NotificationEntry } from "../types";
 import {
   sampleClusterDetail,
   sampleFleet,
@@ -33,6 +34,28 @@ const defaultPayloads = {
   "/api/notifications": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
 };
+
+const NOTIFICATION_BASE_TIME = Date.UTC(2026, 3, 7, 0, 0, 0);
+
+const buildNotificationEntry = (
+  index: number,
+  overrides: Partial<NotificationEntry> = {}
+): NotificationEntry => {
+  const defaultTimestamp = new Date(NOTIFICATION_BASE_TIME - index * 60000).toISOString();
+  return {
+    kind: overrides.kind ?? (index % 2 ? "Warning" : "Info"),
+    summary: overrides.summary ?? `Notification ${index + 1}`,
+    timestamp: overrides.timestamp ?? defaultTimestamp,
+    runId: overrides.runId ?? `run-${(index % 3) + 1}`,
+    clusterLabel: overrides.clusterLabel ?? `cluster-${(index % 2) + 1}`,
+    context: overrides.context ?? "test-context",
+    details: overrides.details ?? [{ label: "Pod", value: `pod-${index}` }],
+    artifactPath: overrides.artifactPath ?? (index % 4 === 0 ? null : `/artifacts/n-${index}.json`),
+  };
+};
+
+const buildNotificationList = (count: number) =>
+  Array.from({ length: count }, (_, index) => buildNotificationEntry(index));
 
 const createFetchMock = (payloads: Record<string, unknown>) =>
   vi.fn((input: RequestInfo) => {
@@ -310,7 +333,10 @@ describe("App", () => {
     render(<App />);
 
     const panelHeading = await screen.findByRole("heading", { name: /LLM activity/i });
-    await screen.findByText(sampleClusterDetail.relatedNotifications[0].summary);
+    const notificationMatches = await screen.findAllByText(
+      sampleClusterDetail.relatedNotifications[0].summary
+    );
+    expect(notificationMatches.length).toBeGreaterThan(0);
     expect(screen.getByText(/Retained entries: 19/i)).toBeInTheDocument();
     const panelSection = panelHeading.closest("section");
     expect(panelSection).not.toBeNull();
@@ -319,6 +345,68 @@ describe("App", () => {
       await user.selectOptions(statusSelect, "failed");
     });
     expect(await within(panelSection!).findByText(/timeout/i)).toBeInTheDocument();
+  });
+
+  test("renders notification history table and pagination summary", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+    const heading = await screen.findByRole("heading", { name: /Notification history/i });
+    expect(heading).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: /Notification history table/i });
+    expect(within(table).getByText(sampleNotifications.notifications[0].summary)).toBeInTheDocument();
+    expect(within(table).getAllByTestId("notification-row")).toHaveLength(1);
+    expect(screen.getByText(/Showing 1–1 of 1/i)).toBeInTheDocument();
+  });
+
+  test("sorts notifications newest first", async () => {
+    const unsortedNotifications = [
+      buildNotificationEntry(1, { summary: "Older", timestamp: "2026-04-06T11:00:00Z" }),
+      buildNotificationEntry(0, { summary: "Newest", timestamp: "2026-04-06T12:00:00Z" }),
+    ];
+    const payloads = {
+      ...defaultPayloads,
+      "/api/notifications": { notifications: unsortedNotifications },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+    const table = await screen.findByRole("table", { name: /Notification history table/i });
+    const rows = within(table).getAllByTestId("notification-row");
+    expect(within(rows[0]).getByText("Newest")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Older")).toBeInTheDocument();
+  });
+
+  test("paginates notification history after 50 rows", async () => {
+    const manyNotifications = buildNotificationList(60);
+    const payloads = {
+      ...defaultPayloads,
+      "/api/notifications": { notifications: manyNotifications },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+    await screen.findByRole("heading", { name: /Notification history/i });
+    const rows = await screen.findAllByTestId("notification-row");
+    expect(rows).toHaveLength(50);
+    expect(screen.getByText(/Showing 1–50 of 60/i)).toBeInTheDocument();
+  });
+
+  test("pagination controls advance pages", async () => {
+    const manyNotifications = buildNotificationList(60);
+    const payloads = {
+      ...defaultPayloads,
+      "/api/notifications": { notifications: manyNotifications },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: /Notification history/i });
+    const nextButton = screen.getByRole("button", { name: /Next/i });
+    await act(async () => {
+      await user.click(nextButton);
+    });
+    expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 51–60 of 60/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Previous/i })).not.toBeDisabled();
+    expect(nextButton).toBeDisabled();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {

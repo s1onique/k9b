@@ -879,30 +879,101 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
-.notification-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
+.notification-table-wrapper {
   margin-top: 1rem;
-}
-
-.notification-card {
   border-radius: 1rem;
-  padding: 1rem;
-  background: rgba(2, 6, 23, 0.85);
   border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(2, 6, 23, 0.85);
+  overflow-x: auto;
+  box-shadow: 0 30px 60px rgba(2, 6, 23, 0.35);
 }
 
-.notification-card header {
+.notification-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.notification-table th,
+.notification-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.notification-table th {
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.7);
+}
+
+.notification-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.notification-table td p {
+  margin: 0;
+}
+
+.notification-summary,
+.notification-detail {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notification-detail {
+  color: rgba(248, 250, 252, 0.75);
+  font-size: 0.8rem;
+}
+
+.notification-table td a.artifact-link {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.notification-pagination {
+  margin-top: 1rem;
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
-.notification-body ul {
-  margin: 0.25rem 0;
-  padding-left: 1rem;
-  color: rgba(248, 250, 252, 0.85);
+.notification-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.notification-pagination-controls button {
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: transparent;
+  color: #f8fafc;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notification-pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.notification-pagination-controls span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 110px;
+  text-align: center;
+  color: rgba(248, 250, 252, 0.8);
 }
 
 .alert {
