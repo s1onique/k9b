@@ -29,6 +29,7 @@ class RunView:
     review_enrichment: ReviewEnrichmentView | None
     review_enrichment_status: ReviewEnrichmentStatusView | None
     provider_execution: ProviderExecutionView | None
+    next_check_plan: NextCheckPlanView | None
 
 
 @dataclass(frozen=True)
@@ -249,6 +250,34 @@ class ReviewEnrichmentView:
 
 
 @dataclass(frozen=True)
+class NextCheckCandidateView:
+    description: str
+    target_cluster: str | None
+    source_reason: str | None
+    expected_signal: str | None
+    suggested_command_family: str | None
+    safe_to_automate: bool
+    requires_operator_approval: bool
+    risk_level: str
+    estimated_cost: str
+    confidence: str
+    gating_reason: str | None
+    duplicate_of_existing_evidence: bool
+    duplicate_evidence_description: str | None
+
+
+@dataclass(frozen=True)
+class NextCheckPlanView:
+    status: str
+    summary: str | None
+    artifact_path: str | None
+    review_path: str | None
+    enrichment_artifact_path: str | None
+    candidate_count: int
+    candidates: tuple[NextCheckCandidateView, ...]
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisSummary:
     count: int
     status_counts: tuple[tuple[str, int], ...]
@@ -344,6 +373,7 @@ class UIIndexContext:
     review_enrichment: ReviewEnrichmentView | None
     review_enrichment_status: ReviewEnrichmentStatusView | None
     provider_execution: ProviderExecutionView | None
+    next_check_plan: NextCheckPlanView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -359,6 +389,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     review_enrichment_status = _build_review_enrichment_status_view(
         run_data.get("review_enrichment_status")
     )
+    next_check_plan = _build_next_check_plan_view(run_data.get("next_check_plan"))
     run = RunView(
         run_id=_coerce_str(run_data.get("run_id")),
         run_label=_coerce_str(run_data.get("run_label")),
@@ -378,6 +409,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         review_enrichment=review_enrichment,
         review_enrichment_status=review_enrichment_status,
         provider_execution=_build_provider_execution_view(run_data.get("provider_execution")),
+        next_check_plan=next_check_plan,
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -416,6 +448,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         review_enrichment=review_enrichment,
         review_enrichment_status=review_enrichment_status,
         provider_execution=run.provider_execution,
+        next_check_plan=run.next_check_plan,
     )
 
 
@@ -893,6 +926,46 @@ def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | 
         artifact_path=_coerce_optional_str(raw.get("artifactPath")),
         error_summary=_coerce_optional_str(raw.get("errorSummary")),
         skip_reason=_coerce_optional_str(raw.get("skipReason")),
+    )
+
+
+def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    candidates_raw = raw.get("candidates") or ()
+    candidates = tuple(
+        _build_next_check_candidate_view(entry)
+        for entry in candidates_raw
+        if isinstance(entry, Mapping)
+    )
+    return NextCheckPlanView(
+        status=_coerce_str(raw.get("status")),
+        summary=_coerce_optional_str(raw.get("summary")),
+        artifact_path=_coerce_optional_str(raw.get("artifactPath")),
+        review_path=_coerce_optional_str(raw.get("reviewPath")),
+        enrichment_artifact_path=_coerce_optional_str(raw.get("enrichmentArtifactPath")),
+        candidate_count=_coerce_int(raw.get("candidateCount")),
+        candidates=candidates,
+    )
+
+
+def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
+    return NextCheckCandidateView(
+        description=_coerce_str(raw.get("description")),
+        target_cluster=_coerce_optional_str(raw.get("targetCluster")),
+        source_reason=_coerce_optional_str(raw.get("sourceReason")),
+        expected_signal=_coerce_optional_str(raw.get("expectedSignal")),
+        suggested_command_family=_coerce_optional_str(raw.get("suggestedCommandFamily")),
+        safe_to_automate=bool(raw.get("safeToAutomate")),
+        requires_operator_approval=bool(raw.get("requiresOperatorApproval")),
+        risk_level=_coerce_str(raw.get("riskLevel")),
+        estimated_cost=_coerce_str(raw.get("estimatedCost")),
+        confidence=_coerce_str(raw.get("confidence")),
+        gating_reason=_coerce_optional_str(raw.get("gatingReason")),
+        duplicate_of_existing_evidence=bool(raw.get("duplicateOfExistingEvidence")),
+        duplicate_evidence_description=_coerce_optional_str(
+            raw.get("duplicateEvidenceDescription")
+        ),
     )
 
 

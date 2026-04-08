@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -187,6 +188,74 @@ class UIApiTests(unittest.TestCase):
             self.assertEqual(review_enrichment.get("status"), "success")
             self.assertEqual(review_enrichment.get("summary"), "Run ID match")
             self.assertIsNone(payload.get("reviewEnrichmentStatus"))
+
+    def test_run_payload_includes_next_check_plan(self) -> None:
+        index = sample_ui_index()
+        plan_payload = {
+            "status": "success",
+            "summary": "Planned single check",
+            "artifactPath": "external-analysis/plan.json",
+            "reviewPath": "reviews/run-1-review.json",
+            "enrichmentArtifactPath": "external-analysis/run-1-review-enrichment-k8sgpt.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "kubectl logs deployment/alpha",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "low",
+                    "confidence": "high",
+                    "gatingReason": None,
+                    "duplicateOfExistingEvidence": False,
+                    "duplicateEvidenceDescription": None,
+                }
+            ],
+        }
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["next_check_plan"] = plan_payload
+        index["next_check_plan"] = plan_payload
+        context = build_ui_context(index)
+        payload = build_run_payload(context)
+        plan = payload.get("nextCheckPlan")
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        self.assertEqual(plan.get("candidateCount"), 1)
+        self.assertEqual(plan.get("artifactPath"), "external-analysis/plan.json")
+
+    def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
+        index = sample_ui_index()
+        plan_payload = {
+            "status": "success",
+            "summary": "Planned single check",
+            "artifactPath": "external-analysis/plan.json",
+            "reviewPath": "reviews/run-1-review.json",
+            "enrichmentArtifactPath": "external-analysis/run-1-review-enrichment-k8sgpt.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "kubectl logs deployment/alpha",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "low",
+                    "confidence": "high",
+                    "gatingReason": None,
+                    "duplicateOfExistingEvidence": False,
+                    "duplicateEvidenceDescription": None,
+                }
+            ],
+        }
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["next_check_plan"] = plan_payload
+        index["next_check_plan"] = plan_payload
+        context = build_ui_context(index)
+        payload = build_cluster_detail_payload(context)
+        plan = payload["nextCheckPlan"]
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]["targetCluster"], "cluster-a")
 
     def test_freshness_helper_computes_statuses(self) -> None:
         base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)

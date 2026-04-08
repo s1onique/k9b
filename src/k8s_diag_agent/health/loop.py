@@ -1,13 +1,13 @@
 """Per-cluster health assessment loop with trigger-aware comparisons."""
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
 import re
+import socket
 import time
 import warnings
-import socket
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -27,6 +27,7 @@ from ..external_analysis.artifact import (
     write_external_analysis_artifact,
 )
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
+from ..external_analysis.next_check_planner import plan_next_checks
 from ..models import (
     Assessment,
     ConfidenceLevel,
@@ -2052,6 +2053,9 @@ class HealthLoopRunner:
         enrichment_artifact = self._run_review_enrichment(review_path, directories)
         if enrichment_artifact:
             external_artifacts.append(enrichment_artifact)
+        plan_artifact = self._run_next_check_planning(review_path, enrichment_artifact, directories)
+        if plan_artifact:
+            external_artifacts.append(plan_artifact)
         healthy_count = sum(
             1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
         )
@@ -2650,6 +2654,55 @@ class HealthLoopRunner:
             status=artifact.status.value,
             artifact_path=str(artifact_path),
             event="review-enrichment",
+        )
+        return artifact
+
+    def _run_next_check_planning(
+        self,
+        review_path: Path | None,
+        enrichment_artifact: ExternalAnalysisArtifact | None,
+        directories: dict[str, Path],
+    ) -> ExternalAnalysisArtifact | None:
+        if not review_path or not enrichment_artifact:
+            return None
+        plan = plan_next_checks(review_path, self.run_id, enrichment_artifact)
+        if not plan:
+            return None
+        artifact_path = directories["external_analysis"] / (
+            f"{self.run_id}-next-check-plan.json"
+        )
+        candidate_count = len(plan.candidates)
+        summary = (
+            f"Planned {candidate_count} next-check candidate(s)"
+            if candidate_count
+            else "No actionable next checks"
+        )
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=self.run_id,
+            cluster_label=self.run_label,
+            run_label=self.run_label,
+            source_artifact=str(review_path),
+            summary=summary,
+            findings=(),
+            suggested_next_checks=(),
+            status=ExternalAnalysisStatus.SUCCESS,
+            raw_output=None,
+            timestamp=datetime.now(UTC),
+            artifact_path=str(artifact_path),
+            provider=enrichment_artifact.provider,
+            duration_ms=0,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan.to_payload(),
+        )
+        write_external_analysis_artifact(artifact_path, artifact)
+        self._log_event(
+            "next-check-planner",
+            "INFO",
+            "Next-check plan recorded",
+            artifact_path=str(artifact_path),
+            candidate_count=candidate_count,
+            event="next-check-planning",
         )
         return artifact
 
@@ -3506,9 +3559,12 @@ class HealthLoopScheduler:
     ) -> ProcessIdentity | None:
         if not raw:
             return None
-        start_time = _str_or_none(raw.get("start_time"))
-        cmdline = _str_or_none(raw.get("cmdline"))
-        hostname = _str_or_none(raw.get("hostname")) or self._identity_hostname
+        start_time_raw = raw.get("start_time")
+        start_time = _str_or_none(start_time_raw if isinstance(start_time_raw, str) else None)
+        cmdline_raw = raw.get("cmdline")
+        cmdline = _str_or_none(cmdline_raw if isinstance(cmdline_raw, str) else None)
+        hostname_raw = raw.get("hostname")
+        hostname = _str_or_none(hostname_raw if isinstance(hostname_raw, str) else None) or self._identity_hostname
         if start_time is None and cmdline is None and hostname is None:
             return None
         return ProcessIdentity(start_time, cmdline, hostname)
@@ -3531,12 +3587,16 @@ class HealthLoopScheduler:
     def _coerce_pid(self, raw: object | None) -> int | None:
         if raw is None:
             return None
-        if isinstance(raw, str) and raw.isdigit():
+        if isinstance(raw, str):
+            if raw.isdigit():
+                return int(raw)
+            try:
+                return int(raw)
+            except ValueError:
+                return None
+        if isinstance(raw, (int, float)):
             return int(raw)
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return None
+        return None
 
     def _evaluate_lock_state(self) -> LockEvaluation:
         snapshot = self._load_lock_snapshot()
@@ -3778,7 +3838,17 @@ class HealthLoopScheduler:
             try:
                 raw = json.loads(trimmed)
             except json.JSONDecodeError:
-                return None, None, None
+                return (
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
             timestamp = _str_or_none(raw.get("timestamp"))
             pid = self._coerce_pid(raw.get("pid"))
             identity_raw = raw.get("identity")
@@ -3806,16 +3876,26 @@ class HealthLoopScheduler:
             )
         line = contents.splitlines()[0] if contents else ""
         parts = line.split()
-        timestamp: str | None = parts[0] if parts else None
-        pid: int | None = None
+        legacy_timestamp: str | None = parts[0] if parts else None
+        legacy_pid: int | None = None
         for part in parts:
             if part.startswith("pid="):
                 try:
-                    pid = int(part.split("=", 1)[1])
+                    legacy_pid = int(part.split("=", 1)[1])
                 except ValueError:
-                    pid = None
+                    legacy_pid = None
                 break
-        return timestamp, pid, None, None, None, None, None, None, None
+        return (
+            legacy_timestamp,
+            legacy_pid,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
 
     def _pid_is_alive(self, pid: int) -> bool:
         try:

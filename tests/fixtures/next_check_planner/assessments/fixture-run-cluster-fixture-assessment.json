@@ -1,0 +1,12 @@
+{
+  "next_evidence_to_collect": [
+    {
+      "description": "Inspect ingress logs",
+      "owner": "platform",
+      "method": "kubectl",
+      "evidence_needed": [
+        "kubectl logs"
+      ]
+    }
+  ]
+}

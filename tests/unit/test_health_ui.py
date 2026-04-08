@@ -214,6 +214,44 @@ class HealthUITests(unittest.TestCase):
                 "focusNotes": ["Prioritize cluster-b"],
             },
         )
+        plan_payload = {
+            "review_path": "runs/health/reviews/health-run-1-review.json",
+            "enrichment_artifact_path": "external-analysis/run-1-review-enrichment-k8sgpt.json",
+            "candidates": [
+                {
+                    "description": "kubectl logs -n default deployment/alpha",
+                    "targetCluster": "cluster-alpha",
+                    "sourceReason": "warning_event_threshold",
+                    "expectedSignal": "logs",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "low",
+                    "confidence": "high",
+                    "gatingReason": None,
+                    "duplicateOfExistingEvidence": False,
+                    "duplicateEvidenceDescription": None,
+                }
+            ],
+            "status": "success",
+            "summary": "Planned 1 next-check candidate",
+            "candidateCount": 1,
+        }
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id="health-run-1",
+            cluster_label="health-run",
+            run_label="health-run",
+            source_artifact="runs/health/reviews/health-run-1-review.json",
+            summary="Planned 1 next-check candidate",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/health-run-1-next-check-plan.json",
+            provider="llamacpp",
+            duration_ms=25,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
         auto_path = external_path.parent / "auto-drilldown.json"
         auto_artifact = ExternalAnalysisArtifact(
             tool_name="llm-autodrilldown",
@@ -278,7 +316,12 @@ class HealthUITests(unittest.TestCase):
             assessments=[artifact],
             drilldowns=[drilldown],
             proposals=[proposal],
-            external_analysis=[review_artifact, external_artifact, auto_artifact],
+            external_analysis=[
+                review_artifact,
+                external_artifact,
+                auto_artifact,
+                plan_artifact,
+            ],
             notifications=[notification_record],
             external_analysis_settings=settings,
         )
@@ -305,7 +348,7 @@ class HealthUITests(unittest.TestCase):
         self.assertIn("notification_history", data)
         self.assertEqual(data["notification_history"][0]["kind"], "degraded-health")
         self.assertIn("external_analysis", data)
-        self.assertEqual(data["external_analysis"]["count"], 3)
+        self.assertEqual(data["external_analysis"]["count"], 4)
         self.assertEqual(data["run"]["notification_count"], 1)
         self.assertIn("latest_assessment", data)
         self.assertEqual(data["latest_assessment"]["cluster_label"], "cluster-alpha")
@@ -354,6 +397,13 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(entries[2]["status"], "failed")
         status_entry = data["run"].get("review_enrichment_status")
         self.assertIsNone(status_entry)
+        plan_entry = data["run"].get("next_check_plan")
+        self.assertIsNotNone(plan_entry)
+        self.assertEqual(plan_entry["candidateCount"], 1)
+        candidate_entry = plan_entry["candidates"][0]
+        self.assertEqual(candidate_entry["suggestedCommandFamily"], "kubectl-logs")
+        self.assertTrue(candidate_entry["safeToAutomate"])
+        self.assertEqual(data.get("next_check_plan"), plan_entry)
 
     def test_failed_review_enrichment_artifact_still_exposed(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"

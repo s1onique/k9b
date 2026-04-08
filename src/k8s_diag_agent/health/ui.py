@@ -167,6 +167,7 @@ def write_health_ui_index(
         run_id,
         historical_entries,
     )
+    plan_entry = _serialize_next_check_plan(external_analysis, output_dir, run_id)
     settings = external_analysis_settings or ExternalAnalysisSettings()
     review_config = _serialize_review_enrichment_policy(settings.review_enrichment)
     review_status = _build_review_enrichment_status(
@@ -206,6 +207,7 @@ def write_health_ui_index(
         "review_enrichment": review_enrichment_entry,
         "review_enrichment_config": review_config,
         "review_enrichment_status": review_status,
+        "next_check_plan": plan_entry,
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
     }
     index = {
@@ -221,6 +223,7 @@ def write_health_ui_index(
         "external_analysis": external_analysis_data,
         "auto_drilldown_interpretations": auto_drilldown_data,
         "latest_assessment": latest_assessment,
+        "next_check_plan": plan_entry,
     }
     index["run_stats"] = _build_run_stats(output_dir / "reviews")
     index_path = output_dir / "ui-index.json"
@@ -445,6 +448,40 @@ def _find_review_enrichment_artifact(
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         if (
             artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
+            and _artifact_matches_run(artifact, run_id)
+        ):
+            return artifact
+    return None
+
+
+def _serialize_next_check_plan(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    root_dir: Path,
+    run_id: str,
+) -> dict[str, object] | None:
+    artifact = _find_next_check_plan_artifact(artifacts, run_id)
+    if not artifact:
+        return None
+    payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+    candidates_raw = payload.get("candidates") or []
+    candidates = [entry for entry in candidates_raw if isinstance(entry, Mapping)]
+    return {
+        "status": artifact.status.value,
+        "summary": artifact.summary,
+        "artifactPath": _relative_path(root_dir, artifact.artifact_path),
+        "reviewPath": payload.get("review_path"),
+        "enrichmentArtifactPath": payload.get("enrichment_artifact_path"),
+        "candidateCount": len(candidates),
+        "candidates": candidates,
+    }
+
+
+def _find_next_check_plan_artifact(
+    artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
+) -> ExternalAnalysisArtifact | None:
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
+        if (
+            artifact.purpose == ExternalAnalysisPurpose.NEXT_CHECK_PLANNING
             and _artifact_matches_run(artifact, run_id)
         ):
             return artifact
@@ -820,7 +857,13 @@ def _build_llm_stats(external_analysis: dict[str, object], scope: str = _SCOPE_C
     artifacts = external_analysis.get("artifacts") or ()
     if not isinstance(artifacts, Sequence):
         artifacts = ()
-    return _compute_llm_stats(artifacts, scope)
+    filtered = [
+        entry
+        for entry in artifacts
+        if isinstance(entry, Mapping)
+        and entry.get("purpose") != ExternalAnalysisPurpose.NEXT_CHECK_PLANNING.value
+    ]
+    return _compute_llm_stats(filtered, scope)
 
 
 def _build_historical_llm_stats(

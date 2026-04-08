@@ -1,0 +1,6 @@
+{
+  "context": "cluster-fixture",
+  "trigger_reasons": [
+    "warning_event_threshold"
+  ]
+}

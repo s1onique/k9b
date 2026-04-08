@@ -1,7 +1,4 @@
-from collections.abc import Mapping
-
-
-def sample_ui_index() -> Mapping[str, object]:
+def sample_ui_index() -> dict[str, object]:
     return {
         "run": {
             "run_id": "run-1",

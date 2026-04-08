@@ -1,0 +1,12 @@
+{
+  "run_id": "fixture-run",
+  "selected_drilldowns": [
+    {
+      "label": "cluster-fixture",
+      "context": "cluster-fixture",
+      "reasons": [
+        "warning_event_threshold"
+      ]
+    }
+  ]
+}

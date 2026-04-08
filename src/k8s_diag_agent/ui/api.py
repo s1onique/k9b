@@ -18,6 +18,8 @@ from .model import (
     LLMActivityView,
     LLMPolicyView,
     LLMStatsView,
+    NextCheckCandidateView,
+    NextCheckPlanView,
     NotificationView,
     ProposalView,
     ProviderExecutionBranchView,
@@ -66,6 +68,7 @@ class RunPayload(TypedDict):
     reviewEnrichmentStatus: ReviewEnrichmentStatusPayload | None
     providerExecution: ProviderExecutionPayload | None
     freshness: FreshnessPayload | None
+    nextCheckPlan: NextCheckPlanPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -147,6 +150,32 @@ class ReviewEnrichmentPayload(TypedDict, total=False):
     artifactPath: str | None
     errorSummary: str | None
     skipReason: str | None
+
+
+class NextCheckCandidatePayload(TypedDict, total=False):
+    description: str
+    targetCluster: str | None
+    sourceReason: str | None
+    expectedSignal: str | None
+    suggestedCommandFamily: str | None
+    safeToAutomate: bool
+    requiresOperatorApproval: bool
+    riskLevel: str
+    estimatedCost: str
+    confidence: str
+    gatingReason: str | None
+    duplicateOfExistingEvidence: bool
+    duplicateEvidenceDescription: str | None
+
+
+class NextCheckPlanPayload(TypedDict, total=False):
+    status: str
+    summary: str | None
+    artifactPath: str | None
+    reviewPath: str | None
+    enrichmentArtifactPath: str | None
+    candidateCount: int
+    candidates: list[NextCheckCandidatePayload]
 
 
 class ReviewEnrichmentStatusPayload(TypedDict, total=False):
@@ -355,6 +384,7 @@ class ClusterDetailPayload(TypedDict):
     relatedNotifications: list[NotificationEntry]
     artifacts: list[ArtifactLink]
     autoInterpretation: DrilldownInterpretationPayload | None
+    nextCheckPlan: list[NextCheckCandidatePayload]
     topProblem: ProblemSummary
 
 
@@ -387,6 +417,7 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         "freshness": _build_freshness_payload(
             context.run.timestamp, context.run.scheduler_interval_seconds
         ),
+        "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
     }
 
 
@@ -448,6 +479,7 @@ def build_cluster_detail_payload(
         "artifacts": artifacts,
         "autoInterpretation": _serialize_auto_interpretation(interpretation_view),
         "topProblem": _build_problem_summary(context),
+        "nextCheckPlan": _serialize_plan_candidates_for_cluster(label, context.run.next_check_plan),
     }
 
 
@@ -468,6 +500,19 @@ def _collect_run_artifacts(context: UIIndexContext) -> list[ArtifactLink]:
             if entry.artifact_path:
                 artifacts.append({"label": f"Drilldown: {entry.label}", "path": entry.artifact_path})
     return artifacts
+
+
+def _serialize_plan_candidates_for_cluster(
+    label: str | None, plan: NextCheckPlanView | None
+) -> list[NextCheckCandidatePayload]:
+    if not plan:
+        return []
+    payloads: list[NextCheckCandidatePayload] = []
+    for candidate in plan.candidates:
+        if label and candidate.target_cluster and candidate.target_cluster != label:
+            continue
+        payloads.append(_serialize_next_check_candidate(candidate))
+    return payloads
 
 
 def _build_freshness_payload(
@@ -774,6 +819,38 @@ def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnr
         "artifactPath": view.artifact_path,
         "errorSummary": view.error_summary,
         "skipReason": view.skip_reason,
+    }
+
+
+def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanPayload | None:
+    if not view:
+        return None
+    return {
+        "status": view.status,
+        "summary": view.summary,
+        "artifactPath": view.artifact_path,
+        "reviewPath": view.review_path,
+        "enrichmentArtifactPath": view.enrichment_artifact_path,
+        "candidateCount": view.candidate_count,
+        "candidates": [_serialize_next_check_candidate(entry) for entry in view.candidates],
+    }
+
+
+def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCandidatePayload:
+    return {
+        "description": view.description,
+        "targetCluster": view.target_cluster,
+        "sourceReason": view.source_reason,
+        "expectedSignal": view.expected_signal,
+        "suggestedCommandFamily": view.suggested_command_family,
+        "safeToAutomate": view.safe_to_automate,
+        "requiresOperatorApproval": view.requires_operator_approval,
+        "riskLevel": view.risk_level,
+        "estimatedCost": view.estimated_cost,
+        "confidence": view.confidence,
+        "gatingReason": view.gating_reason,
+        "duplicateOfExistingEvidence": view.duplicate_of_existing_evidence,
+        "duplicateEvidenceDescription": view.duplicate_evidence_description,
     }
 
 

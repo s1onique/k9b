@@ -249,8 +249,10 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(payload.get("total"), 1)
         notifications = payload.get("notifications")
         self.assertIsInstance(notifications, list)
-        self.assertEqual(len(notifications), 1)
-        entry = notifications[0]
+        assert isinstance(notifications, list)
+        notification_list = cast(list[dict[str, object]], notifications)
+        self.assertEqual(len(notification_list), 1)
+        entry = notification_list[0]
         self.assertEqual(entry.get("summary"), "Memory pressure")
 
     def test_notifications_endpoint_enforces_limit(self) -> None:
@@ -273,7 +275,9 @@ class RunApiServerTests(unittest.TestCase):
             self._shutdown_server(server, thread)
         notifications = payload.get("notifications")
         self.assertIsInstance(notifications, list)
-        self.assertEqual(len(notifications), 50)
+        assert isinstance(notifications, list)
+        notification_list = cast(list[dict[str, object]], notifications)
+        self.assertEqual(len(notification_list), 50)
         self.assertEqual(payload.get("total"), total_items)
 
     def test_notifications_endpoint_supports_pagination_params(self) -> None:
@@ -300,6 +304,8 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(payload.get("total_pages"), 3)
         notifications = payload.get("notifications")
         self.assertIsInstance(notifications, list)
-        self.assertEqual(len(notifications), 10)
-        self.assertEqual(notifications[0].get("summary"), "Entry 14")
-        self.assertEqual(notifications[-1].get("summary"), "Entry 5")
+        assert isinstance(notifications, list)
+        notification_list = cast(list[dict[str, object]], notifications)
+        self.assertEqual(len(notification_list), 10)
+        self.assertEqual(notification_list[0].get("summary"), "Entry 14")
+        self.assertEqual(notification_list[-1].get("summary"), "Entry 5")
