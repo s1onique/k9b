@@ -760,8 +760,27 @@ export const ProposalList = ({
   );
 };
 
+const detailPreferenceKeys = ["confidence", "target"];
+
+const getNotificationDetailText = (entry: NotificationEntry) => {
+  const priorityDetail = entry.details.find((detail) =>
+    detailPreferenceKeys.some((keyword) => detail.label.toLowerCase().includes(keyword))
+  );
+  const detailEntry = priorityDetail ?? entry.details[0];
+  if (detailEntry) {
+    return `${detailEntry.label}: ${detailEntry.value}`;
+  }
+  if (entry.context) {
+    return entry.context;
+  }
+  return "—";
+};
+
 const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] }) => {
   const [page, setPage] = useState(1);
+  const [kindFilter, setKindFilter] = useState("all");
+  const [clusterFilter, setClusterFilter] = useState("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
       const aStamp = dayjs(a.timestamp).valueOf();
@@ -771,7 +790,39 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
       return bValue - aValue;
     });
   }, [entries]);
-  const total = sortedEntries.length;
+  const kindOptions = useMemo(() => {
+    const values = new Set<string>();
+    entries.forEach((entry) => values.add(normalizeFilterValue(entry.kind)));
+    return ["all", ...Array.from(values)];
+  }, [entries]);
+  const clusterOptions = useMemo(() => {
+    const values = new Set<string>();
+    entries.forEach((entry) => values.add(normalizeFilterValue(entry.clusterLabel)));
+    return ["all", ...Array.from(values)];
+  }, [entries]);
+  const searchTerm = searchFilter.trim().toLowerCase();
+  const filteredEntries = useMemo(() => {
+    return sortedEntries.filter((entry) => {
+      const kindValue = normalizeFilterValue(entry.kind);
+      const clusterValue = normalizeFilterValue(entry.clusterLabel);
+      if (kindFilter !== "all" && kindValue !== kindFilter) {
+        return false;
+      }
+      if (clusterFilter !== "all" && clusterValue !== clusterFilter) {
+        return false;
+      }
+      if (!searchTerm) {
+        return true;
+      }
+      const detailText = getNotificationDetailText(entry);
+      const haystack = `${entry.summary} ${detailText} ${entry.context || ""}`.toLowerCase();
+      return haystack.includes(searchTerm);
+    });
+  }, [sortedEntries, kindFilter, clusterFilter, searchTerm]);
+  useEffect(() => {
+    setPage(1);
+  }, [kindFilter, clusterFilter, searchFilter]);
+  const total = filteredEntries.length;
   const totalPages = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
   useEffect(() => {
     setPage((current) => {
@@ -787,16 +838,66 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
   const currentPage = Math.min(Math.max(page, 1), totalPages);
   const startIndex = (currentPage - 1) * NOTIFICATIONS_PER_PAGE;
   const endIndex = Math.min(startIndex + NOTIFICATIONS_PER_PAGE, total);
-  const pageEntries = sortedEntries.slice(startIndex, endIndex);
+  const pageEntries = filteredEntries.slice(startIndex, endIndex);
   const displayStart = total === 0 ? 0 : startIndex + 1;
-  const displayEnd = endIndex;
+  const displayEnd = total === 0 ? 0 : endIndex;
   const handlePrev = () => setPage((current) => Math.max(1, current - 1));
   const handleNext = () => setPage((current) => Math.min(totalPages, current + 1));
+  const formatFilterOption = (value: string) => {
+    if (value === "all") {
+      return "All";
+    }
+    if (value === "unknown") {
+      return "Unknown";
+    }
+    return value;
+  };
 
   return (
     <>
       <div className="notification-table-wrapper">
-        <table className="notification-table" aria-label="Notification history table">
+        <div className="notification-table-controls">
+          <label>
+            Kind
+            <select
+              aria-label="Notification kind filter"
+              value={kindFilter}
+              onChange={(event) => setKindFilter(event.target.value)}
+            >
+              {kindOptions.map((option) => (
+                <option key={option} value={option}>
+                  {formatFilterOption(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Cluster
+            <select
+              aria-label="Notification cluster filter"
+              value={clusterFilter}
+              onChange={(event) => setClusterFilter(event.target.value)}
+            >
+              {clusterOptions.map((option) => (
+                <option key={option} value={option}>
+                  {formatFilterOption(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Search
+            <input
+              type="search"
+              aria-label="Notification text search"
+              placeholder="Summary or detail"
+              value={searchFilter}
+              onChange={(event) => setSearchFilter(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="notification-table-scroll">
+          <table className="notification-table" aria-label="Notification history table">
           <thead>
             <tr>
               <th>Timestamp</th>
@@ -809,11 +910,16 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
           </thead>
           <tbody>
             {pageEntries.map((entry, index) => {
-              const detailEntry = entry.details[0];
-              const detailText = detailEntry
-                ? `${detailEntry.label}: ${detailEntry.value}`
-                : entry.context || "—";
+              const detailText = getNotificationDetailText(entry);
               const artifactLink = entry.artifactPath ? artifactUrl(entry.artifactPath) : null;
+              const runLabels: string[] = [];
+              if (entry.runId) {
+                runLabels.push(`Run ${entry.runId}`);
+              }
+              if (entry.clusterLabel) {
+                runLabels.push(`Cluster ${entry.clusterLabel}`);
+              }
+              const runClusterLabel = runLabels.length ? runLabels.join(" · ") : "—";
               return (
                 <tr key={`${entry.kind}-${entry.timestamp}-${index}`} data-testid="notification-row">
                   <td>
@@ -827,8 +933,7 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
                     <p className="notification-summary">{truncateText(entry.summary, 120)}</p>
                   </td>
                   <td>
-                    <p className="tiny compact">Run {entry.runId || "-"}</p>
-                    <p className="tiny compact">Cluster {entry.clusterLabel || "-"}</p>
+                    <p className="tiny compact notification-run-cluster">{runClusterLabel}</p>
                   </td>
                   <td>
                     <p className="notification-detail">{truncateText(detailText, 100)}</p>
@@ -858,17 +963,28 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
               </tr>
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
       <div className="notification-pagination">
         <div className="notification-pagination-controls">
-          <button type="button" onClick={handlePrev} disabled={currentPage <= 1}>
+          <button
+            type="button"
+            onClick={handlePrev}
+            disabled={currentPage <= 1}
+            aria-label="Previous notifications page"
+          >
             Previous
           </button>
           <span>
             Page {currentPage} of {totalPages}
           </span>
-          <button type="button" onClick={handleNext} disabled={currentPage >= totalPages}>
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={currentPage >= totalPages}
+            aria-label="Next notifications page"
+          >
             Next
           </button>
         </div>

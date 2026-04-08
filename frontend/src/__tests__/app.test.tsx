@@ -399,7 +399,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
-    const nextButton = screen.getByRole("button", { name: /Next/i });
+    const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
     await act(async () => {
       await user.click(nextButton);
     });
@@ -407,6 +407,89 @@ describe("App", () => {
     expect(screen.getByText(/Showing 51–60 of 60/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Previous/i })).not.toBeDisabled();
     expect(nextButton).toBeDisabled();
+  });
+
+  test("filters notification history table by kind, cluster, and search", async () => {
+    const customNotifications = [
+      buildNotificationEntry(0, {
+        kind: "Warning",
+        summary: "CPU spike on alpha",
+        runId: "run-alpha",
+        clusterLabel: "cluster-alpha",
+        details: [{ label: "Confidence", value: "High" }],
+      }),
+      buildNotificationEntry(1, {
+        kind: "Info",
+        summary: "Routine health report",
+        runId: "run-beta",
+        clusterLabel: "cluster-beta",
+      }),
+      buildNotificationEntry(2, {
+        kind: "Warning",
+        summary: "Memory pressure on beta",
+        runId: "run-zeta",
+        clusterLabel: "cluster-beta",
+        details: [{ label: "Target", value: "db" }],
+      }),
+    ];
+    const payloads = {
+      ...defaultPayloads,
+      "/api/notifications": { notifications: customNotifications },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: /Notification history/i });
+    expect(screen.getAllByTestId("notification-row")).toHaveLength(3);
+    const kindSelect = screen.getByRole("combobox", {
+      name: /Notification kind filter/i,
+    });
+    const clusterSelect = screen.getByRole("combobox", {
+      name: /Notification cluster filter/i,
+    });
+    const searchInput = screen.getByRole("searchbox", {
+      name: /Notification text search/i,
+    });
+    await act(async () => {
+      await user.selectOptions(kindSelect, "Warning");
+    });
+    await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(2));
+    await act(async () => {
+      await user.selectOptions(clusterSelect, "cluster-beta");
+    });
+    await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(1));
+    await act(async () => {
+      await user.type(searchInput, "memory");
+    });
+    await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(1));
+    expect(screen.getByText(/Showing 1–1 of 1/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Run run-zeta · Cluster cluster-beta/i)
+    ).toBeInTheDocument();
+  });
+
+  test("pagination updates when filters reduce the dataset", async () => {
+    const manyNotifications = buildNotificationList(60);
+    const payloads = {
+      ...defaultPayloads,
+      "/api/notifications": { notifications: manyNotifications },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: /Notification history/i });
+    expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
+    const kindSelect = screen.getByRole("combobox", {
+      name: /Notification kind filter/i,
+    });
+    const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
+    expect(nextButton).not.toBeDisabled();
+    await act(async () => {
+      await user.selectOptions(kindSelect, "Warning");
+    });
+    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1–30 of 30/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Next notifications page/i })).toBeDisabled();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {
