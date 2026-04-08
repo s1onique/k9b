@@ -197,6 +197,7 @@ export type NotificationEntry = {
 
 export type NotificationsPayload = {
   notifications: NotificationEntry[];
+  total?: number;
 };
 
 export type FindingEntry = {

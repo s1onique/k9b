@@ -5,6 +5,7 @@ import tempfile
 import threading
 import unittest
 import urllib.request
+from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
@@ -18,6 +19,10 @@ from k8s_diag_agent.external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from k8s_diag_agent.health.notifications import (
+    NotificationArtifact,
+    write_notification_artifact,
+)
 from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.ui.server import HealthUIRequestHandler
 
@@ -26,8 +31,10 @@ class RunApiServerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.mkdtemp())
         self.runs_dir = self.tmpdir / "runs" / "health"
+        self.notifications_dir = self.runs_dir / "notifications"
         self.static_dir = self.tmpdir / "static"
         self.static_dir.mkdir(parents=True, exist_ok=True)
+        self.notifications_dir.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
@@ -77,6 +84,30 @@ class RunApiServerTests(unittest.TestCase):
             external_analysis_settings=settings,
         )
 
+    def _create_notification(
+        self,
+        *,
+        kind: str,
+        cluster_label: str,
+        summary: str,
+        run_id: str,
+        timestamp: str,
+        context: str | None = None,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        write_notification_artifact(
+            self.notifications_dir,
+            NotificationArtifact(
+                kind=kind,
+                summary=summary,
+                details=details or {},
+                run_id=run_id,
+                cluster_label=cluster_label,
+                context=context,
+                timestamp=timestamp,
+            ),
+        )
+
     def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
         handler = functools.partial(
             HealthUIRequestHandler,
@@ -93,6 +124,16 @@ class RunApiServerTests(unittest.TestCase):
         host_address, port, *_ = address
         host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
         url = f"http://{host}:{port}/api/run"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            assert isinstance(payload, dict)
+            return cast(dict[str, object], payload)
+
+    def _fetch_notifications_payload(self, server: ThreadingHTTPServer, suffix: str = "") -> dict[str, object]:
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
+        url = f"http://{host}:{port}/api/notifications{suffix}"
         with urllib.request.urlopen(url, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
             assert isinstance(payload, dict)
@@ -173,3 +214,64 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(enrichment["status"], "skipped")
         self.assertEqual(enrichment.get("skipReason"), "adapter unavailable")
         self.assertIsNone(payload.get("reviewEnrichmentStatus"))
+
+    def test_notifications_endpoint_filters(self) -> None:
+        artifact = self._build_artifact(run_id="filter-run", status=ExternalAnalysisStatus.SUCCESS)
+        self._write_index(artifact)
+        base_time = datetime(2026, 4, 7, 12, 0, 0, tzinfo=UTC)
+        self._create_notification(
+            kind="warning",
+            cluster_label="cluster-a",
+            summary="CPU spike",
+            run_id="run-alpha",
+            timestamp=base_time.strftime("%Y%m%dT%H%M%S"),
+            context="prod",
+        )
+        self._create_notification(
+            kind="warning",
+            cluster_label="cluster-beta",
+            summary="Memory pressure",
+            run_id="run-beta",
+            timestamp=(base_time + timedelta(minutes=1)).strftime("%Y%m%dT%H%M%S"),
+        )
+        self._create_notification(
+            kind="info",
+            cluster_label="cluster-beta",
+            summary="Health check",
+            run_id="run-gamma",
+            timestamp=(base_time + timedelta(minutes=2)).strftime("%Y%m%dT%H%M%S"),
+        )
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_notifications_payload(server, "?kind=warning&cluster_label=cluster-beta")
+        finally:
+            self._shutdown_server(server, thread)
+        self.assertEqual(payload.get("total"), 1)
+        notifications = payload.get("notifications")
+        self.assertIsInstance(notifications, list)
+        self.assertEqual(len(notifications), 1)
+        entry = notifications[0]
+        self.assertEqual(entry.get("summary"), "Memory pressure")
+
+    def test_notifications_endpoint_enforces_limit(self) -> None:
+        artifact = self._build_artifact(run_id="limit-run", status=ExternalAnalysisStatus.SUCCESS)
+        self._write_index(artifact)
+        base_time = datetime(2026, 4, 7, 13, 0, 0, tzinfo=UTC)
+        total_items = 55
+        for idx in range(total_items):
+            self._create_notification(
+                kind="info",
+                cluster_label="cluster-limit",
+                summary=f"Entry {idx}",
+                run_id=f"run-{idx}",
+                timestamp=(base_time + timedelta(seconds=idx)).strftime("%Y%m%dT%H%M%S"),
+            )
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_notifications_payload(server)
+        finally:
+            self._shutdown_server(server, thread)
+        notifications = payload.get("notifications")
+        self.assertIsInstance(notifications, list)
+        self.assertEqual(len(notifications), 50)
+        self.assertEqual(payload.get("total"), total_items)

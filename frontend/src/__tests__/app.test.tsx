@@ -352,10 +352,12 @@ describe("App", () => {
     render(<App />);
     const heading = await screen.findByRole("heading", { name: /Notification history/i });
     expect(heading).toBeInTheDocument();
-    const table = screen.getByRole("table", { name: /Notification history table/i });
+    const table = await screen.findByRole("table", { name: /Notification history table/i });
     expect(within(table).getByText(sampleNotifications.notifications[0].summary)).toBeInTheDocument();
+    await screen.findAllByTestId("notification-row");
     expect(within(table).getAllByTestId("notification-row")).toHaveLength(1);
-    expect(screen.getByText(/Showing 1–1 of 1/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Showing 1–1 of 1/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/50 per page/i)).toBeInTheDocument();
   });
 
   test("sorts notifications newest first", async () => {
@@ -379,34 +381,32 @@ describe("App", () => {
     const manyNotifications = buildNotificationList(60);
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: manyNotifications },
+      "/api/notifications": { notifications: manyNotifications.slice(0, 50), total: manyNotifications.length },
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
     const rows = await screen.findAllByTestId("notification-row");
     expect(rows).toHaveLength(50);
-    expect(screen.getByText(/Showing 1–50 of 60/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Showing 1–50 of 60/i)).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /Next notifications page/i })).toBeDisabled();
   });
 
-  test("pagination controls advance pages", async () => {
+  test("pagination remains single-page when server limits results", async () => {
     const manyNotifications = buildNotificationList(60);
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: manyNotifications },
+      "/api/notifications": { notifications: manyNotifications.slice(0, 50), total: manyNotifications.length },
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
-    const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
+    await screen.findAllByTestId("notification-row");
+    await screen.findByRole("option", { name: /Warning/i });
+    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
     const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
-    await act(async () => {
-      await user.click(nextButton);
-    });
-    expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument();
-    expect(screen.getByText(/Showing 51–60 of 60/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Previous/i })).not.toBeDisabled();
     expect(nextButton).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Previous notifications page/i })).toBeDisabled();
   });
 
   test("filters notification history table by kind, cluster, and search", async () => {
@@ -434,16 +434,34 @@ describe("App", () => {
     ];
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: customNotifications },
+      "/api/notifications": { notifications: customNotifications, total: 3 },
+      "/api/notifications?kind=Warning": {
+        notifications: customNotifications.filter((entry) => entry.kind === "Warning"),
+        total: 2,
+      },
+      "/api/notifications?kind=Warning&cluster_label=cluster-beta": {
+        notifications: customNotifications.filter(
+          (entry) => entry.clusterLabel === "cluster-beta" && entry.kind === "Warning"
+        ),
+        total: 1,
+      },
+      "/api/notifications?kind=Warning&cluster_label=cluster-beta&search=memory": {
+        notifications: customNotifications.filter(
+          (entry) => entry.summary.includes("Memory") || entry.details.some((detail) => detail.value === "db")
+        ),
+        total: 1,
+      },
     };
-    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const fetchMock = createFetchMock(payloads);
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
-    expect(screen.getAllByTestId("notification-row")).toHaveLength(3);
+    await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(3));
     const kindSelect = screen.getByRole("combobox", {
       name: /Notification kind filter/i,
     });
+    await screen.findByRole("option", { name: /Warning/i });
     const clusterSelect = screen.getByRole("combobox", {
       name: /Notification cluster filter/i,
     });
@@ -454,41 +472,56 @@ describe("App", () => {
       await user.selectOptions(kindSelect, "Warning");
     });
     await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(2));
+    expect(fetchMock.mock.calls.some(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("/api/notifications?kind=Warning");
+    })).toBe(true);
     await act(async () => {
       await user.selectOptions(clusterSelect, "cluster-beta");
     });
     await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(1));
+    expect(fetchMock.mock.calls.some(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("cluster_label=cluster-beta");
+    })).toBe(true);
     await act(async () => {
       await user.type(searchInput, "memory");
     });
     await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(1));
-    expect(screen.getByText(/Showing 1–1 of 1/i)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("search=memory");
+    })).toBe(true);
+    expect(screen.getAllByText(/Showing 1–1 of 1/i).length).toBeGreaterThan(0);
     expect(
       await screen.findByText(/Run run-zeta · Cluster cluster-beta/i)
     ).toBeInTheDocument();
   });
 
-  test("pagination updates when filters reduce the dataset", async () => {
+  test("pagination summary updates when filters reduce the dataset", async () => {
     const manyNotifications = buildNotificationList(60);
     const payloads = {
       ...defaultPayloads,
-      "/api/notifications": { notifications: manyNotifications },
+      "/api/notifications": { notifications: manyNotifications.slice(0, 50), total: manyNotifications.length },
+      "/api/notifications?search=Entry": {
+        notifications: manyNotifications.slice(0, 30),
+        total: 30,
+      },
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
-    expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
-    const kindSelect = screen.getByRole("combobox", {
-      name: /Notification kind filter/i,
-    });
-    const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
-    expect(nextButton).not.toBeDisabled();
-    await act(async () => {
-      await user.selectOptions(kindSelect, "Warning");
-    });
     expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Showing 1–30 of 30/i)).toBeInTheDocument();
+    const searchInput = screen.getByRole("searchbox", {
+      name: /Notification text search/i,
+    });
+    await act(async () => {
+      await user.type(searchInput, "Entry");
+    });
+    await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(30));
+    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Showing 1–30 of 30/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Next notifications page/i })).toBeDisabled();
   });
 

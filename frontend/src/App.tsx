@@ -776,11 +776,50 @@ const getNotificationDetailText = (entry: NotificationEntry) => {
   return "—";
 };
 
-const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] }) => {
+const NotificationHistoryTable = () => {
+  const [entries, setEntries] = useState<NotificationEntry[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
   const [page, setPage] = useState(1);
   const [kindFilter, setKindFilter] = useState("all");
   const [clusterFilter, setClusterFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setPage(1);
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetchNotifications({
+          kind: kindFilter !== "all" ? kindFilter : undefined,
+          cluster_label: clusterFilter !== "all" ? clusterFilter : undefined,
+          search: searchFilter.trim() || undefined,
+        });
+        if (!active) {
+          return;
+        }
+        setEntries(response.notifications);
+        setTotalResults(response.total ?? response.notifications.length);
+      } catch (err) {
+        if (!active) {
+          return;
+        }
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [kindFilter, clusterFilter, searchFilter]);
+
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
       const aStamp = dayjs(a.timestamp).valueOf();
@@ -800,47 +839,17 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
     entries.forEach((entry) => values.add(normalizeFilterValue(entry.clusterLabel)));
     return ["all", ...Array.from(values)];
   }, [entries]);
-  const searchTerm = searchFilter.trim().toLowerCase();
-  const filteredEntries = useMemo(() => {
-    return sortedEntries.filter((entry) => {
-      const kindValue = normalizeFilterValue(entry.kind);
-      const clusterValue = normalizeFilterValue(entry.clusterLabel);
-      if (kindFilter !== "all" && kindValue !== kindFilter) {
-        return false;
-      }
-      if (clusterFilter !== "all" && clusterValue !== clusterFilter) {
-        return false;
-      }
-      if (!searchTerm) {
-        return true;
-      }
-      const detailText = getNotificationDetailText(entry);
-      const haystack = `${entry.summary} ${detailText} ${entry.context || ""}`.toLowerCase();
-      return haystack.includes(searchTerm);
-    });
-  }, [sortedEntries, kindFilter, clusterFilter, searchTerm]);
+  const totalLoaded = sortedEntries.length;
+  const totalPages = Math.max(1, Math.ceil(totalLoaded / NOTIFICATIONS_PER_PAGE));
   useEffect(() => {
-    setPage(1);
-  }, [kindFilter, clusterFilter, searchFilter]);
-  const total = filteredEntries.length;
-  const totalPages = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
-  useEffect(() => {
-    setPage((current) => {
-      if (current < 1) {
-        return 1;
-      }
-      if (current > totalPages) {
-        return totalPages;
-      }
-      return current;
-    });
+    setPage((current) => Math.min(Math.max(current, 1), totalPages));
   }, [totalPages]);
   const currentPage = Math.min(Math.max(page, 1), totalPages);
   const startIndex = (currentPage - 1) * NOTIFICATIONS_PER_PAGE;
-  const endIndex = Math.min(startIndex + NOTIFICATIONS_PER_PAGE, total);
-  const pageEntries = filteredEntries.slice(startIndex, endIndex);
-  const displayStart = total === 0 ? 0 : startIndex + 1;
-  const displayEnd = total === 0 ? 0 : endIndex;
+  const endIndex = Math.min(startIndex + NOTIFICATIONS_PER_PAGE, totalLoaded);
+  const pageEntries = sortedEntries.slice(startIndex, endIndex);
+  const displayStart = pageEntries.length ? startIndex + 1 : 0;
+  const displayEnd = pageEntries.length ? startIndex + pageEntries.length : 0;
   const handlePrev = () => setPage((current) => Math.max(1, current - 1));
   const handleNext = () => setPage((current) => Math.min(totalPages, current + 1));
   const formatFilterOption = (value: string) => {
@@ -852,6 +861,13 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
     }
     return value;
   };
+  const summaryText = loading
+    ? "Loading notifications…"
+    : error
+    ? error
+    : totalResults
+    ? `Showing ${displayStart}–${displayEnd} of ${totalResults}`
+    : "No notifications available.";
 
   return (
     <>
@@ -896,74 +912,84 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
             />
           </label>
         </div>
+        <p className="muted small notification-summary">
+          {summaryText}
+          {summaryText.startsWith("Showing") ? ` · ${NOTIFICATIONS_PER_PAGE} per page` : ""}
+        </p>
         <div className="notification-table-scroll">
-          <table className="notification-table" aria-label="Notification history table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Kind</th>
-              <th>Summary</th>
-              <th>Run / Cluster</th>
-              <th>Key detail</th>
-              <th>Artifact</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageEntries.map((entry, index) => {
-              const detailText = getNotificationDetailText(entry);
-              const artifactLink = entry.artifactPath ? artifactUrl(entry.artifactPath) : null;
-              const runLabels: string[] = [];
-              if (entry.runId) {
-                runLabels.push(`Run ${entry.runId}`);
-              }
-              if (entry.clusterLabel) {
-                runLabels.push(`Cluster ${entry.clusterLabel}`);
-              }
-              const runClusterLabel = runLabels.length ? runLabels.join(" · ") : "—";
-              return (
-                <tr key={`${entry.kind}-${entry.timestamp}-${index}`} data-testid="notification-row">
-                  <td>
-                    <strong>{formatTimestamp(entry.timestamp)}</strong>
-                    <p className="tiny compact">{relativeRecency(entry.timestamp)}</p>
-                  </td>
-                  <td>
-                    <span className={statusClass(entry.kind)}>{entry.kind}</span>
-                  </td>
-                  <td>
-                    <p className="notification-summary">{truncateText(entry.summary, 120)}</p>
-                  </td>
-                  <td>
-                    <p className="tiny compact notification-run-cluster">{runClusterLabel}</p>
-                  </td>
-                  <td>
-                    <p className="notification-detail">{truncateText(detailText, 100)}</p>
-                  </td>
-                  <td>
-                    {artifactLink ? (
-                      <a
-                        className="artifact-link"
-                        href={artifactLink}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
+          {loading ? (
+            <p className="muted small">Loading notifications…</p>
+          ) : error ? (
+            <div className="alert alert-inline">{error}</div>
+          ) : (
+            <table className="notification-table" aria-label="Notification history table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Kind</th>
+                  <th>Summary</th>
+                  <th>Run / Cluster</th>
+                  <th>Key detail</th>
+                  <th>Artifact</th>
                 </tr>
-              );
-            })}
-            {!pageEntries.length && (
-              <tr>
-                <td colSpan={6} className="muted small">
-                  No notifications available.
-                </td>
-              </tr>
-            )}
-          </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pageEntries.map((entry, index) => {
+                  const detailText = getNotificationDetailText(entry);
+                  const artifactLink = entry.artifactPath ? artifactUrl(entry.artifactPath) : null;
+                  const runLabels: string[] = [];
+                  if (entry.runId) {
+                    runLabels.push(`Run ${entry.runId}`);
+                  }
+                  if (entry.clusterLabel) {
+                    runLabels.push(`Cluster ${entry.clusterLabel}`);
+                  }
+                  const runClusterLabel = runLabels.length ? runLabels.join(" · ") : "—";
+                  return (
+                    <tr key={`${entry.kind}-${entry.timestamp}-${index}`} data-testid="notification-row">
+                      <td>
+                        <strong>{formatTimestamp(entry.timestamp)}</strong>
+                        <p className="tiny compact">{relativeRecency(entry.timestamp)}</p>
+                      </td>
+                      <td>
+                        <span className={statusClass(entry.kind)}>{entry.kind}</span>
+                      </td>
+                      <td>
+                        <p className="notification-summary">{truncateText(entry.summary, 120)}</p>
+                      </td>
+                      <td>
+                        <p className="tiny compact notification-run-cluster">{runClusterLabel}</p>
+                      </td>
+                      <td>
+                        <p className="notification-detail">{truncateText(detailText, 100)}</p>
+                      </td>
+                      <td>
+                        {artifactLink ? (
+                          <a
+                            className="artifact-link"
+                            href={artifactLink}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!pageEntries.length && (
+                  <tr>
+                    <td colSpan={6} className="muted small">
+                      No notifications match the current filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
       <div className="notification-pagination">
@@ -971,7 +997,7 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
           <button
             type="button"
             onClick={handlePrev}
-            disabled={currentPage <= 1}
+            disabled={loading || currentPage <= 1}
             aria-label="Previous notifications page"
           >
             Previous
@@ -982,14 +1008,14 @@ const NotificationHistoryTable = ({ entries }: { entries: NotificationEntry[] })
           <button
             type="button"
             onClick={handleNext}
-            disabled={currentPage >= totalPages}
+            disabled={loading || currentPage >= totalPages}
             aria-label="Next notifications page"
           >
             Next
           </button>
         </div>
         <p className="muted small">
-          Showing {displayStart}–{displayEnd} of {total}
+          Showing {displayStart}–{displayEnd} of {totalResults}
         </p>
       </div>
     </>
@@ -1000,7 +1026,6 @@ const App = () => {
   const [run, setRun] = useState<RunPayload | null>(null);
   const [fleet, setFleet] = useState<FleetPayload | null>(null);
   const [proposals, setProposals] = useState<ProposalsPayload | null>(null);
-  const [notifications, setNotifications] = useState<NotificationsPayload | null>(null);
   const [clusterDetail, setClusterDetail] = useState<ClusterDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1018,16 +1043,14 @@ const App = () => {
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      const [runPayload, fleetPayload, proposalsPayload, notificationsPayload] = await Promise.all([
+      const [runPayload, fleetPayload, proposalsPayload] = await Promise.all([
         fetchRun(),
         fetchFleet(),
         fetchProposals(),
-        fetchNotifications(),
       ]);
       setRun(runPayload);
       setFleet(fleetPayload);
       setProposals(proposalsPayload);
-      setNotifications(notificationsPayload);
       if (!selectedClusterLabel) {
         const fallbackLabel = fleetPayload.clusters[0]?.label ?? null;
         if (fallbackLabel) {
@@ -1132,7 +1155,7 @@ const App = () => {
     }
   };
 
-  if (!run || !fleet || !proposals || !notifications) {
+  if (!run || !fleet || !proposals) {
     return (
       <div className="app-shell loading">
         <div>
@@ -1691,11 +1714,9 @@ const App = () => {
       <section className="panel" id="notifications">
         <div className="section-head">
           <h2>Notification history</h2>
-          <p className="small">
-            Showing {notifications.notifications.length} entries · {NOTIFICATIONS_PER_PAGE} per page
-          </p>
+          <p className="small">Filtering applies to the entire retained archive.</p>
         </div>
-        <NotificationHistoryTable entries={notifications.notifications} />
+        <NotificationHistoryTable />
       </section>
     </div>
   );

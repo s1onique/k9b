@@ -288,6 +288,7 @@ export const sampleNotifications: NotificationsPayload = {
       artifactPath: "/artifacts/notification-1.json",
     },
   ],
+  total: 1,
 };
 
 export const sampleClusterDetail: ClusterDetailPayload = {

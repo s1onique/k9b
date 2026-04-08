@@ -13,11 +13,11 @@ from urllib.parse import parse_qs
 from .api import (
     build_cluster_detail_payload,
     build_fleet_payload,
-    build_notifications_payload,
     build_proposals_payload,
     build_run_payload,
 )
 from .model import UIIndexContext, build_ui_context, load_ui_index
+from .notifications import query_notifications
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_STATIC_DIR = PROJECT_ROOT / "frontend" / "dist"
@@ -79,7 +79,15 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json(build_proposals_payload(context))
             return
         if route == "/api/notifications":
-            self._send_json(build_notifications_payload(context))
+            params = parse_qs(query)
+            payload = query_notifications(
+                self.runs_dir,
+                kind=params.get("kind", [None])[0],
+                cluster_label=params.get("cluster_label", [None])[0],
+                search=params.get("search", [None])[0],
+                limit=self._parse_limit(params.get("limit", [None])[0]),
+            )
+            self._send_json(payload)
             return
         if route == "/api/cluster-detail":
             params = parse_qs(query)
@@ -137,6 +145,15 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:  # pragma: no cover - read-model may be malformed
             self._send_text(500, f"Unable to read ui-index.json: {exc}")
             return None
+
+    def _parse_limit(self, value: str | None) -> int | None:
+        if not value:
+            return None
+        try:
+            parsed = int(value)
+        except ValueError:
+            return None
+        return parsed if parsed > 0 else None
 
     def _send_json(self, body: object) -> None:
         payload = json.dumps(body, ensure_ascii=False)
