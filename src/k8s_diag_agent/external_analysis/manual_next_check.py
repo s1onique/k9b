@@ -129,9 +129,11 @@ def _build_payload(
     stderr_truncated: bool,
     output_bytes_captured: int,
 ) -> dict[str, object]:
+    raw_candidate_id = candidate.get("candidateId")
+    candidate_id_value = raw_candidate_id if isinstance(raw_candidate_id, str) and raw_candidate_id else None
     payload: dict[str, object] = {
         "candidateIndex": candidate_index,
-        "candidateId": candidate.get("candidateId") or "",
+        "candidateId": candidate_id_value,
         "candidateDescription": str(candidate.get("description") or ""),
         "commandFamily": str(candidate.get("suggestedCommandFamily") or ""),
         "command": command,
@@ -169,6 +171,7 @@ def _log_execution_event(
     target_cluster: str | None,
     target_context: str | None,
     candidate_description: str | None,
+    candidate_id: str | None,
     command: Sequence[str] | None,
     command_family: str | None,
     status: str | None = None,
@@ -190,6 +193,8 @@ def _log_execution_event(
         metadata["targetContext"] = target_context
     if candidate_description:
         metadata["candidateDescription"] = candidate_description
+    if candidate_id:
+        metadata["candidateId"] = candidate_id
     if command_family:
         metadata["commandFamily"] = command_family
     if command:
@@ -230,6 +235,7 @@ def _log_and_raise_gating(
     target_cluster: str | None,
     target_context: str | None,
     candidate_description: str | None,
+    candidate_id: str | None,
     command_family: str | None,
 ) -> None:
     _log_execution_event(
@@ -242,6 +248,7 @@ def _log_and_raise_gating(
         target_cluster=target_cluster,
         target_context=target_context,
         candidate_description=candidate_description,
+        candidate_id=candidate_id,
         command=None,
         command_family=command_family,
         status=None,
@@ -272,6 +279,8 @@ def execute_manual_next_check(
 ) -> ExternalAnalysisArtifact:
     plan_artifact_path_str = str(plan_artifact_path)
     description = str(candidate.get("description") or "").strip()
+    raw_candidate_id = candidate.get("candidateId")
+    candidate_id_value = raw_candidate_id if isinstance(raw_candidate_id, str) and raw_candidate_id else None
     if not candidate.get("safeToAutomate"):
         _log_and_raise_gating(
             reason="Candidate is not marked safe to automate.",
@@ -282,6 +291,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=None,
         )
     requires_approval = bool(candidate.get("requiresOperatorApproval"))
@@ -296,6 +306,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=None,
         )
     if candidate.get("duplicateOfExistingEvidence"):
@@ -308,6 +319,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=None,
         )
     family_raw = str(candidate.get("suggestedCommandFamily") or "").strip()
@@ -321,6 +333,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=None,
         )
     try:
@@ -335,6 +348,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=family_raw,
         )
     if family not in _ALLOWED_FAMILIES:
@@ -347,6 +361,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=family.value,
         )
     if not description:
@@ -359,6 +374,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description="",
+            candidate_id=candidate_id_value,
             command_family=family.value,
         )
     if not target_context:
@@ -371,6 +387,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster or run_label,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command_family=family.value,
         )
     runner = command_runner or _default_runner
@@ -385,6 +402,7 @@ def execute_manual_next_check(
         target_cluster=target_cluster,
         target_context=target_context,
         candidate_description=description,
+        candidate_id=candidate_id_value,
         command=command,
         command_family=family.value,
         status=None,
@@ -447,6 +465,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command=command,
             command_family=family.value,
             status=artifact.status.value,
@@ -500,6 +519,7 @@ def execute_manual_next_check(
             target_cluster=target_cluster,
             target_context=target_context,
             candidate_description=description,
+            candidate_id=candidate_id_value,
             command=command,
             command_family=family.value,
             status=artifact.status.value,
@@ -569,6 +589,7 @@ def execute_manual_next_check(
         target_cluster=target_cluster,
         target_context=target_context,
         candidate_description=description,
+        candidate_id=candidate_id_value,
         command=command,
         command_family=family.value,
         status=artifact.status.value,

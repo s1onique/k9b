@@ -22,6 +22,7 @@ const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     gatingReason: null,
     duplicateOfExistingEvidence: false,
     duplicateEvidenceDescription: null,
+    candidateId: "candidate-logs",
     candidateIndex: 0,
   },
   {
@@ -38,6 +39,7 @@ const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     gatingReason: "Command not recognized or too vague",
     duplicateOfExistingEvidence: false,
     duplicateEvidenceDescription: null,
+    candidateId: "candidate-describe",
     candidateIndex: 1,
   },
   {
@@ -54,6 +56,7 @@ const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     gatingReason: "Matches deterministic next check: Collect kubelet metrics",
     duplicateOfExistingEvidence: true,
     duplicateEvidenceDescription: "Collect kubelet metrics",
+    candidateId: "candidate-metrics",
     candidateIndex: 2,
   },
 ];

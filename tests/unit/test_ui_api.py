@@ -210,6 +210,7 @@ class UIApiTests(unittest.TestCase):
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
+                    "candidateId": "candidate-logs",
                     "candidateIndex": 0,
                 }
             ],
@@ -246,6 +247,7 @@ class UIApiTests(unittest.TestCase):
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
+                    "candidateId": "candidate-logs",
                     "candidateIndex": 0,
                 }
             ],

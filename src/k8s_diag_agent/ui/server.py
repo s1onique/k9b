@@ -116,6 +116,44 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             return
         self._send_text(404, "Not Found")
 
+    def _resolve_plan_candidate(
+        self,
+        candidates: Sequence[object],
+        requested_candidate_id: str | None,
+        requested_candidate_index: int | None,
+    ) -> tuple[Mapping[str, object] | None, int | None]:
+        if not isinstance(candidates, Sequence):
+            return None, None
+        entries = list(candidates)
+        found_entry: Mapping[str, object] | None = None
+        found_position: int | None = None
+        if requested_candidate_id:
+            for idx, entry in enumerate(entries):
+                if not isinstance(entry, Mapping):
+                    continue
+                entry_id = entry.get("candidateId")
+                if isinstance(entry_id, str) and entry_id == requested_candidate_id:
+                    found_entry = dict(entry)
+                    found_position = idx
+                    break
+        if found_entry is None and requested_candidate_index is not None:
+            if 0 <= requested_candidate_index < len(entries):
+                entry = entries[requested_candidate_index]
+                if isinstance(entry, Mapping):
+                    found_entry = dict(entry)
+                    found_position = requested_candidate_index
+        if found_entry is None:
+            return None, None
+        candidate_index_value: int | None = None
+        explicit_index = found_entry.get("candidateIndex")
+        if isinstance(explicit_index, int):
+            candidate_index_value = explicit_index
+        elif found_position is not None:
+            candidate_index_value = found_position
+        elif requested_candidate_index is not None:
+            candidate_index_value = requested_candidate_index
+        return found_entry, candidate_index_value
+
     def _handle_next_check_execution(self) -> None:
         context = self._load_context()
         if context is None:
@@ -134,8 +172,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json({"error": "Invalid JSON payload"}, 400)
             return
-        candidate_index = payload.get("candidateIndex")
-        if not isinstance(candidate_index, int):
+        candidate_index_raw = payload.get("candidateIndex")
+        candidate_index = candidate_index_raw if isinstance(candidate_index_raw, int) else None
+        if candidate_index_raw is not None and candidate_index is None:
             self._send_json({"error": "candidateIndex must be an integer"}, 400)
             return
         request_cluster = payload.get("clusterLabel")
@@ -154,14 +193,22 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json({"error": "Unable to read plan artifact"}, 500)
             return
+        candidate_id_raw = payload.get("candidateId")
+        candidate_id = candidate_id_raw if isinstance(candidate_id_raw, str) and candidate_id_raw else None
+        if candidate_id is None and candidate_index is None:
+            self._send_json({"error": "candidateId or candidateIndex is required"}, 400)
+            return
         candidates = plan_data.get("candidates")
-        if not isinstance(candidates, Sequence):
-            self._send_json({"error": "Plan artifact missing candidates"}, 500)
+        candidate_entry, resolved_index = self._resolve_plan_candidate(
+            candidates if isinstance(candidates, Sequence) else (),
+            candidate_id,
+            candidate_index,
+        )
+        if candidate_entry is None or resolved_index is None:
+            self._send_json({"error": "Candidate not found"}, 400)
             return
-        if candidate_index < 0 or candidate_index >= len(candidates):
-            self._send_json({"error": "candidateIndex out of range"}, 400)
-            return
-        candidate = candidates[candidate_index]
+        candidate = candidate_entry
+        candidate_index = resolved_index
         candidate_view = None
         plan_view = context.run.next_check_plan
         if plan_view:
@@ -249,8 +296,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json({"error": "Invalid JSON payload"}, 400)
             return
-        candidate_index = payload.get("candidateIndex")
-        if not isinstance(candidate_index, int):
+        candidate_index_raw = payload.get("candidateIndex")
+        candidate_index = candidate_index_raw if isinstance(candidate_index_raw, int) else None
+        if candidate_index_raw is not None and candidate_index is None:
             self._send_json({"error": "candidateIndex must be an integer"}, 400)
             return
         request_cluster = payload.get("clusterLabel")
@@ -269,17 +317,26 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json({"error": "Unable to read plan artifact"}, 500)
             return
+        candidate_id_raw = payload.get("candidateId")
+        candidate_id = candidate_id_raw if isinstance(candidate_id_raw, str) and candidate_id_raw else None
+        if candidate_id is None and candidate_index is None:
+            self._send_json({"error": "candidateId or candidateIndex is required"}, 400)
+            return
         candidates = plan_data.get("candidates")
-        if not isinstance(candidates, Sequence):
-            self._send_json({"error": "Plan artifact missing candidates"}, 500)
+        candidate_entry, resolved_index = self._resolve_plan_candidate(
+            candidates if isinstance(candidates, Sequence) else (),
+            candidate_id,
+            candidate_index,
+        )
+        if candidate_entry is None or resolved_index is None:
+            self._send_json({"error": "Candidate not found"}, 400)
             return
-        if candidate_index < 0 or candidate_index >= len(candidates):
-            self._send_json({"error": "candidateIndex out of range"}, 400)
-            return
-        candidate = candidates[candidate_index]
-        if not isinstance(candidate, Mapping):
-            self._send_json({"error": "Invalid candidate record"}, 500)
-            return
+        candidate = candidate_entry
+        raw_candidate_id_value = candidate.get("candidateId")
+        candidate_id_value = (
+            raw_candidate_id_value if isinstance(raw_candidate_id_value, str) else None
+        )
+        candidate_index = resolved_index
         target_cluster = candidate.get("targetCluster")
         if target_cluster and target_cluster != request_cluster:
             self._send_json({"error": "Candidate target cluster mismatch"}, 400)
@@ -324,7 +381,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             run_id=context.run.run_id,
             plan_artifact_path=plan.artifact_path,
             candidate_index=candidate_index,
-            candidate_id=candidate.get("candidateId") if isinstance(candidate.get("candidateId"), str) else None,
+            candidate_id=candidate_id_value,
             candidate_description=plan_candidate_description,
             target_cluster=request_cluster,
             event="approval-requested",
@@ -336,7 +393,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 run_label=context.run.run_label,
                 plan_artifact_path=plan.artifact_path,
                 candidate_index=candidate_index,
-                candidate_id=candidate.get("candidateId") if isinstance(candidate.get("candidateId"), str) else None,
+                candidate_id=candidate_id_value,
                 candidate_description=plan_candidate_description,
                 target_cluster=request_cluster,
             )

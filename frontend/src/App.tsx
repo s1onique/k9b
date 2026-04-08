@@ -1330,7 +1330,8 @@ const App = () => {
     }`;
 
   const isManualExecutionAllowed = (candidate: NextCheckPlanCandidate) => {
-    if (candidate.candidateIndex == null) {
+    const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
+    if (!hasCandidateIdentifier) {
       return false;
     }
     if (!candidate.safeToAutomate) {
@@ -1360,7 +1361,9 @@ const App = () => {
 
   const handleManualExecution = async (candidate: NextCheckPlanCandidate, candidateKey: string) => {
     const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
-    if (!targetLabel || candidate.candidateIndex == null) {
+    const candidateId = candidate.candidateId?.trim() ? candidate.candidateId : undefined;
+    const candidateIndex = candidate.candidateIndex;
+    if (!targetLabel || (candidateIndex == null && !candidateId)) {
       setExecutionResults((prev) => ({
         ...prev,
         [candidateKey]: { status: "error", summary: "Unable to determine candidate target." },
@@ -1370,7 +1373,8 @@ const App = () => {
     setExecutingCandidate(candidateKey);
     try {
       const result = await executeNextCheckCandidate({
-        candidateIndex: candidate.candidateIndex,
+        candidateId,
+        candidateIndex: candidateIndex ?? undefined,
         clusterLabel: targetLabel,
       });
       setExecutionResults((prev) => ({
@@ -1393,7 +1397,9 @@ const App = () => {
     candidateKey: string
   ) => {
     const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
-    if (!targetLabel || candidate.candidateIndex == null) {
+    const candidateId = candidate.candidateId?.trim() ? candidate.candidateId : undefined;
+    const candidateIndex = candidate.candidateIndex;
+    if (!targetLabel || (candidateIndex == null && !candidateId)) {
       setApprovalResults((prev) => ({
         ...prev,
         [candidateKey]: {
@@ -1406,7 +1412,8 @@ const App = () => {
     setApprovingCandidate(candidateKey);
     try {
       const result = await approveNextCheckCandidate({
-        candidateIndex: candidate.candidateIndex,
+        candidateId,
+        candidateIndex: candidateIndex ?? undefined,
         clusterLabel: targetLabel,
       });
       setApprovalResults((prev) => ({

@@ -185,8 +185,8 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     approvalStatus: str | None
     approvalArtifactPath: str | None
     approvalTimestamp: str | None
-    candidateId: str
-    candidateIndex: int
+    candidateId: str | None
+    candidateIndex: int | None
 
 
 class NextCheckPlanPayload(TypedDict, total=False):

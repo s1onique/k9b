@@ -253,6 +253,14 @@ describe("App", () => {
       "/api/next-check-execution",
       expect.objectContaining({ method: "POST" })
     );
+    const executionCall = fetchMock.mock.calls.find(
+      ([input]) => typeof input === "string" && input === "/api/next-check-execution"
+    );
+    expect(executionCall).toBeTruthy();
+    const executionInit = executionCall![1] as RequestInit;
+    const executionBody = JSON.parse(executionInit.body as string);
+    expect(executionBody.candidateId).toBe("candidate-logs");
+    expect(executionBody.candidateIndex).toBe(0);
     expect(await screen.findByText(/Manual execution recorded/i)).toBeInTheDocument();
         const successMessage = await screen.findByText(/Manual execution recorded/i);
         const manualActions = successMessage.closest(".next-check-manual-actions");
@@ -314,6 +322,14 @@ describe("App", () => {
             "/api/next-check-approval",
             expect.objectContaining({ method: "POST" })
         );
+        const approvalCall = fetchMock.mock.calls.find(
+            ([input]) => typeof input === "string" && input === "/api/next-check-approval"
+        );
+        expect(approvalCall).toBeTruthy();
+        const approvalInit = approvalCall![1] as RequestInit;
+        const approvalBody = JSON.parse(approvalInit.body as string);
+        expect(approvalBody.candidateId).toBe("candidate-describe");
+        expect(approvalBody.candidateIndex).toBe(1);
         expect(await screen.findByText(/Candidate approved/i)).toBeInTheDocument();
         expect(screen.getByRole("link", { name: /View approval record/i })).toHaveAttribute(
             "href",

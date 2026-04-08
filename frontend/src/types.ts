@@ -262,7 +262,7 @@ export type NextCheckPlanCandidate = {
   approvalArtifactPath?: string | null;
   approvalTimestamp?: string | null;
   candidateId?: string;
-  candidateIndex: number;
+  candidateIndex?: number | null;
 };
 
 export type NextCheckPlan = {
@@ -276,7 +276,8 @@ export type NextCheckPlan = {
 };
 
 export type NextCheckExecutionRequest = {
-  candidateIndex: number;
+  candidateId?: string;
+  candidateIndex?: number;
   clusterLabel: string;
 };
 
@@ -297,7 +298,8 @@ export type NextCheckExecutionResponse = {
 };
 
 export type NextCheckApprovalRequest = {
-  candidateIndex: number;
+  candidateId?: string;
+  candidateIndex?: number;
   clusterLabel: string;
 };
 

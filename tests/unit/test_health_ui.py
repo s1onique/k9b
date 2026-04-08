@@ -429,6 +429,8 @@ class HealthUITests(unittest.TestCase):
                     "requiresOperatorApproval": True,
                     "safeToAutomate": False,
                     "duplicateOfExistingEvidence": False,
+                    "candidateId": "candidate-control-plane",
+                    "candidateIndex": 0,
                 }
             ],
         }

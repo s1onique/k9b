@@ -220,10 +220,15 @@ class NextCheckPlan:
     candidates: tuple[NextCheckCandidate, ...]
 
     def to_payload(self) -> dict[str, object | None]:
+        candidates_payload: list[dict[str, object | None]] = []
+        for index, candidate in enumerate(self.candidates):
+            candidate_dict = candidate.to_dict()
+            candidate_dict.setdefault("candidateIndex", index)
+            candidates_payload.append(candidate_dict)
         return {
             "review_path": str(self.review_path),
             "enrichment_artifact_path": self.enrichment_artifact_path,
-            "candidates": [candidate.to_dict() for candidate in self.candidates],
+            "candidates": candidates_payload,
         }
 
 
