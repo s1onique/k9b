@@ -163,6 +163,37 @@ const artifactUrl = (path: string | null) => {
   return `/artifact?path=${encodeURIComponent(path)}`;
 };
 
+const buildClusterRecommendedArtifacts = (detail?: ClusterDetailPayload) => {
+  if (!detail) {
+    return [];
+  }
+  const seen = new Map<string, ArtifactLink>();
+  const add = (artifact: ArtifactLink | null | undefined) => {
+    if (!artifact || !artifact.path) {
+      return;
+    }
+    if (seen.has(artifact.path)) {
+      return;
+    }
+    seen.set(artifact.path, artifact);
+  };
+  if (detail.assessment?.artifactPath) {
+    add({ label: "Assessment artifact", path: detail.assessment.artifactPath });
+  }
+  detail.artifacts.forEach((artifact) => add(artifact));
+  detail.drilldownCoverage.forEach((entry) => {
+    if (entry.available && entry.artifactPath) {
+      add({ label: `${entry.label} drilldown`, path: entry.artifactPath });
+    }
+  });
+  return Array.from(seen.values()).slice(0, 3);
+};
+
+const safetyClass = (value?: string) => {
+  const normalized = value ? value.replace(/[^a-z0-9]+/gi, "-").toLowerCase() : "";
+  return `safety-pill ${normalized ? `safety-pill-${normalized}` : ""}`.trim();
+};
+
 const priorityLabel = (confidence: string) => {
   const normalized = confidence.toLowerCase();
   if (normalized.includes("critical")) return "critical";
@@ -1204,6 +1235,22 @@ const App = () => {
     ? `Auto refresh every ${autoRefreshInterval}s`
     : "Auto refresh is off";
   const interpretation: AutoInterpretation | null = clusterDetail?.autoInterpretation || null;
+  const recommendedArtifacts = buildClusterRecommendedArtifacts(clusterDetail);
+  const clusterTriggerReason =
+    selectedCluster?.topTriggerReason ||
+    clusterDetail?.findings?.[0]?.triggerReasons?.[0] ||
+    clusterDetail?.topProblem?.title ||
+    "Trigger reason pending";
+
+  const drilldownAvailability = clusterDetail?.drilldownAvailability;
+  const drilldownSummary = drilldownAvailability
+    ? `${drilldownAvailability.available}/${drilldownAvailability.totalClusters} drilldown${
+        drilldownAvailability.available === 1 ? "" : "s"
+      } ready`
+    : "Drilldown data pending";
+  const recencyTimestamp = selectedCluster?.latestRunTimestamp
+    ? formatTimestamp(selectedCluster.latestRunTimestamp)
+    : "Awaiting run";
 
   const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
   const historicalLlmStatsLine = run.historicalLlmStats
@@ -1301,11 +1348,18 @@ const App = () => {
             <p className="eyebrow">LLM telemetry</p>
             <span className="muted tiny">Provider call metrics from artifacts</span>
           </div>
-          {runLlmStatsLine}
-          {providerBreakdown && (
-            <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
+          <div className="llm-current-line">
+            {runLlmStatsLine}
+            {providerBreakdown && (
+              <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
+            )}
+          </div>
+          {historicalLlmStatsLine && (
+            <details className="llm-historical">
+              <summary>Retained history stats</summary>
+              {historicalLlmStatsLine}
+            </details>
           )}
-          {historicalLlmStatsLine}
         </div>
         <div className="artifact-strip run-artifacts">
           {run.artifacts.map((artifact) => {
@@ -1477,18 +1531,79 @@ const App = () => {
                 </span>
               </div>
             </div>
+            <div className="cluster-detail-summary-grid">
+              <article className="cluster-summary-card">
+                <p className="eyebrow">Current health state</p>
+                <span
+                  className={statusClass(
+                    clusterDetail?.assessment?.healthRating ?? selectedCluster?.healthRating ?? "pending"
+                  )}
+                >
+                  {clusterDetail?.assessment?.healthRating ?? selectedCluster?.healthRating ?? "Pending"}
+                </span>
+                <p className="small">
+                  Missing evidence: {clusterDetail?.assessment?.missingEvidence.join(", ") || "none"}
+                </p>
+              </article>
+              <article className="cluster-summary-card">
+                <p className="eyebrow">Top problem</p>
+                <strong>{clusterDetail?.topProblem?.title || "Awaiting problem"}</strong>
+                <p className="small">
+                  {clusterDetail?.topProblem?.detail || "Control plane assessments are still running."}
+                </p>
+              </article>
+              <article className="cluster-summary-card">
+                <p className="eyebrow">Trigger / drilldown reason</p>
+                <p className="small">{clusterTriggerReason}</p>
+                <p className="small">{drilldownSummary}</p>
+              </article>
+              <article className="cluster-summary-card">
+                <p className="eyebrow">Recency & freshness</p>
+                <span className={`recency-pill ${clusterFresh ? "fresh" : "stale"}`}>
+                  {clusterRecency ?? "Awaiting run"}
+                </span>
+                <p className="small">{recencyTimestamp}</p>
+              </article>
+            </div>
+            <div className="cluster-detail-summary-artifacts">
+              <p className="eyebrow">Recommended artifacts</p>
+              {recommendedArtifacts.length ? (
+                <div className="artifact-strip">
+                  {recommendedArtifacts.map((artifact) => {
+                    const url = artifactUrl(artifact.path);
+                    return (
+                      url && (
+                        <a
+                          key={`${artifact.label}-${artifact.path}`}
+                          className="artifact-link cluster-summary-artifact-link"
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {artifact.label}
+                        </a>
+                      )
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="small muted">Artifacts are being captured; check back once collection finishes.</p>
+              )}
+            </div>
             <p className="small muted">Tap to expand findings, hypotheses, and next checks</p>
           </summary>
           <div className="cluster-detail-body">
             {clusterDetail ? (
               <>
                 <div className="cluster-assessment">
-                  <div>
-                    <p className="eyebrow">Selected cluster</p>
-                    <h3>{clusterDetail.selectedClusterLabel || "Cluster"}</h3>
-                    {clusterDetail.selectedClusterContext ? (
-                      <p className="small">{clusterDetail.selectedClusterContext}</p>
-                    ) : null}
+                  <div className="cluster-assessment-heading">
+                    <div>
+                      <p className="eyebrow">Deterministic evidence</p>
+                      <h3>{clusterDetail.selectedClusterLabel || "Cluster"}</h3>
+                      {clusterDetail.selectedClusterContext ? (
+                        <p className="small">{clusterDetail.selectedClusterContext}</p>
+                      ) : null}
+                    </div>
                   </div>
                   {clusterDetail.assessment ? (
                     <div className="assessment-meta">
@@ -1535,6 +1650,26 @@ const App = () => {
                       })}
                     </div>
                   ) : null}
+                  {clusterDetail.recommendedAction ? (
+                    <div className="recommended-action">
+                      <p className="eyebrow">Recommended action</p>
+                      <strong>{clusterDetail.recommendedAction.description}</strong>
+                      <p className="small">
+                        Safety:
+                        <span className={safetyClass(clusterDetail.recommendedAction.safetyLevel)}>
+                          {clusterDetail.recommendedAction.safetyLevel}
+                        </span>
+                      </p>
+                      {clusterDetail.recommendedAction.references.length ? (
+                        <p className="small">
+                          References: {clusterDetail.recommendedAction.references.join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="provider-assisted-block">
+                  <p className="eyebrow">Provider-assisted advisory</p>
                   {interpretation ? (
                     <div className="llm-interpretation-card">
                       <h3>LLM drilldown interpretation</h3>

@@ -426,6 +426,27 @@ body {
   color: rgba(248, 250, 252, 0.55);
 }
 
+.llm-current-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.llm-historical {
+  margin-top: 0.65rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 0.6rem 0.9rem;
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.llm-historical summary {
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .review-enrichment {
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(248, 250, 252, 0.1);
@@ -666,6 +687,43 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+}
+
+.cluster-detail-summary-grid {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.cluster-summary-card {
+  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.75);
+  padding: 0.8rem;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cluster-summary-card strong {
+  font-size: 1rem;
+}
+
+.cluster-detail-summary-artifacts {
+  margin-top: 0.8rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.3);
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cluster-summary-artifact-link {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fef3c7;
 }
 
 .cluster-detail-summary-meta {
@@ -928,6 +986,44 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+}
+
+.cluster-assessment-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recommended-action {
+  border-radius: 0.85rem;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.safety-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+  margin-left: 0.35rem;
+}
+
+.provider-assisted-block {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .cluster-artifacts {

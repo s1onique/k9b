@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import time
 import warnings
+import socket
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
@@ -1966,6 +1969,7 @@ class HealthLoopRunner:
         image_pull_secret_inspector: ImagePullSecretInspector | None = None,
         quiet: bool = False,
         expected_scheduler_interval_seconds: int | None = None,
+        run_id: str | None = None,
     ) -> None:
         self.config = config
         self.available_contexts = set(available_contexts)
@@ -1982,7 +1986,7 @@ class HealthLoopRunner:
             normalize_ref(value) for value in (manual_drilldown_contexts or []) if value
         }
         self.run_label = config.run_label
-        self.run_id = _build_runtime_run_id(self.run_label)
+        self.run_id = run_id or _build_runtime_run_id(self.run_label)
         self.baseline_policy = config.baseline_policy
         self.baseline_registry = BaselineRegistry([self.baseline_policy])
         for policy, _ in config.target_baselines.values():
@@ -3137,6 +3141,7 @@ def run_health_loop(
     quiet: bool = False,
     drilldown_collector: DrilldownCollector | None = None,
     expected_scheduler_interval_seconds: int | None = None,
+    run_id: str | None = None,
 ) -> tuple[
     int,
     list[HealthAssessmentArtifact],
@@ -3192,7 +3197,60 @@ _HEALTH_LOCK_FILENAME = ".health-loop.lock"
 _HEALTH_ONLY_MESSAGE = "No peer mappings configured; running health-only mode."
 
 
+@dataclass(frozen=True)
+class ProcessIdentity:
+    start_time: str | None
+    cmdline: str | None
+    hostname: str | None
+
+    @property
+    def signature(self) -> str | None:
+        values = (self.start_time, self.cmdline, self.hostname)
+        if not any(values):
+            return None
+        payload = "|".join(value or "" for value in values)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+@dataclass(frozen=True)
+class LockFileSnapshot:
+    timestamp_value: str | None
+    timestamp: datetime | None
+    pid: int | None
+    mtime: float | None
+    identity: ProcessIdentity | None
+    scheduler_instance_id: str | None
+    attempted_run_id: str | None
+    scheduler_pid: int | None
+    child_pid: int | None
+    child_start_time: str | None
+    run_label: str | None
+
+    def age_seconds(self, reference: datetime) -> float | None:
+        if self.timestamp is not None:
+            return max(0.0, (reference - self.timestamp).total_seconds())
+        if self.mtime is not None:
+            return max(0.0, reference.timestamp() - self.mtime)
+        return None
+
+
+@dataclass(frozen=True)
+class LockEvaluation:
+    snapshot: LockFileSnapshot | None
+    lock_age_seconds: float | None
+    pid_alive: bool | None
+    current_identity: ProcessIdentity | None
+    identity_match: bool | None
+    provenance_match: bool | None
+    should_cleanup: bool
+    stale_decision: str
+    cleanup_reason: str | None
+
+
 class HealthLoopScheduler:
+    _LOCK_SKIP_ESCALATION_THRESHOLD = 3
+    _LOCK_STALE_MIN_SECONDS = 60
+    _LOCK_STALE_AGE_MULTIPLIER = 2
+
     def __init__(
         self,
         config_path: Path,
@@ -3219,6 +3277,17 @@ class HealthLoopScheduler:
         self._log_path = output_dir / "health" / "scheduler.log"
         self._last_run_finish_time: float | None = None
 
+        self._instance_id = uuid4().hex
+        self._pending_run_id: str | None = None
+        self._pending_run_start: datetime | None = None
+        self._lock_status_path = self._lock_path.parent / "lock-status.json"
+
+        self._identity_hostname = self._resolve_hostname()
+        self._proc_root = Path("/proc") if Path("/proc").exists() else None
+
+        self._lock_skip_streak = 0
+        self._lock_skip_escalation_threshold = self._LOCK_SKIP_ESCALATION_THRESHOLD
+
     def _log_event(self, severity: str, message: str, **metadata: Any) -> None:
         emit_structured_log(
             component="health-scheduler",
@@ -3228,6 +3297,12 @@ class HealthLoopScheduler:
             log_path=self._log_path,
             metadata=metadata or None,
         )
+
+    def _resolve_hostname(self) -> str | None:
+        try:
+            return socket.gethostname()
+        except OSError:
+            return None
 
     def _resolve_run_id(
         self,
@@ -3257,14 +3332,10 @@ class HealthLoopScheduler:
                 if self._max_runs is not None and executed_runs >= self._max_runs:
                     break
                 run_executed = False
+                self._pending_run_id = _build_runtime_run_id(self._run_label)
+                self._pending_run_start = datetime.now(UTC)
                 if not self._acquire_lock():
-                    self._log_event(
-                        "WARNING",
-                        "Health run skipped because lock is held",
-                        reason="lock-held",
-                        lock_file=str(self._lock_path),
-                        event="lock-skip",
-                    )
+                    run_executed = False
                 else:
                     try:
                         run_start_time = time.time()
@@ -3287,6 +3358,7 @@ class HealthLoopScheduler:
                             manual_external_analysis=self._manual_external_analysis,
                             quiet=self._quiet,
                             expected_scheduler_interval_seconds=self._interval_seconds,
+                            run_id=self._pending_run_id,
                         )
                         run_id = self._resolve_run_id(assessments, triggers)
                         run_executed = True
@@ -3312,6 +3384,8 @@ class HealthLoopScheduler:
                         )
                         self._last_run_finish_time = time.time()
                     finally:
+                        self._pending_run_id = None
+                        self._pending_run_start = None
                         self._release_lock()
                 if not run_executed and self._run_once:
                     break
@@ -3342,14 +3416,33 @@ class HealthLoopScheduler:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         while True:
             try:
+                payload = {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "pid": os.getpid(),
+                }
+                identity = self._current_process_identity()
+                identity_data = self._serialize_identity(identity)
+                if identity_data:
+                    payload["identity"] = identity_data
+                payload["scheduler_instance_id"] = self._instance_id
+                if self._pending_run_id:
+                    payload["attempted_run_id"] = self._pending_run_id
+                payload["scheduler_pid"] = os.getpid()
+                payload["child_pid"] = os.getpid()
+                if self._pending_run_start:
+                    payload["child_start_time"] = self._pending_run_start.isoformat()
+                payload["run_label"] = self._run_label
                 with self._lock_path.open("x", encoding="utf-8") as handle:
-                    handle.write(
-                        f"{datetime.now(UTC).isoformat()} pid={os.getpid()}\n"
-                    )
+                    handle.write(json.dumps(payload))
+                    handle.write("\n")
+                self._lock_skip_streak = 0
                 return True
             except FileExistsError:
-                if self._cleanup_stale_lock():
+                evaluation = self._evaluate_lock_state()
+                if evaluation.should_cleanup and self._remove_stale_lock(evaluation):
+                    self._lock_skip_streak = 0
                     continue
+                self._log_lock_held(evaluation)
                 return False
 
     def _release_lock(self) -> None:
@@ -3359,36 +3452,358 @@ class HealthLoopScheduler:
         except OSError:
             pass
 
-    def _cleanup_stale_lock(self) -> bool:
-        if not self._lock_path.exists():
+    def _current_process_identity(self) -> ProcessIdentity | None:
+        identity = self._read_process_identity(os.getpid())
+        if identity is not None:
+            return identity
+        if self._identity_hostname is None:
+            return None
+        return ProcessIdentity(None, None, self._identity_hostname)
+
+    def _read_process_identity(self, pid: int) -> ProcessIdentity | None:
+        if pid <= 0:
+            return None
+        hostname = self._identity_hostname
+        if self._proc_root is None:
+            return ProcessIdentity(None, None, hostname)
+        proc_dir = self._proc_root / str(pid)
+        if not proc_dir.exists():
+            # Process may have exited
+            return ProcessIdentity(None, None, hostname)
+        start_time: str | None = None
+        try:
+            stat_content = (proc_dir / "stat").read_text(encoding="utf-8")
+        except OSError:
+            stat_content = ""
+        if stat_content:
+            parts = stat_content.split()
+            if len(parts) > 21:
+                start_time = parts[21]
+        cmdline: str | None = None
+        try:
+            cmdline_bytes = (proc_dir / "cmdline").read_bytes()
+            if cmdline_bytes:
+                segments = [seg.decode("utf-8", "ignore") for seg in cmdline_bytes.split(b"\0") if seg]
+                cmdline = " ".join(segments)
+        except OSError:
+            pass
+        return ProcessIdentity(start_time, cmdline, hostname)
+
+    def _serialize_identity(self, identity: ProcessIdentity | None) -> dict[str, str] | None:
+        if identity is None:
+            return None
+        data: dict[str, str] = {}
+        if identity.start_time is not None:
+            data["start_time"] = identity.start_time
+        if identity.cmdline is not None:
+            data["cmdline"] = identity.cmdline
+        if identity.hostname is not None:
+            data["hostname"] = identity.hostname
+        return data or None
+
+    def _identity_from_mapping(
+        self, raw: Mapping[str, object] | None
+    ) -> ProcessIdentity | None:
+        if not raw:
+            return None
+        start_time = _str_or_none(raw.get("start_time"))
+        cmdline = _str_or_none(raw.get("cmdline"))
+        hostname = _str_or_none(raw.get("hostname")) or self._identity_hostname
+        if start_time is None and cmdline is None and hostname is None:
+            return None
+        return ProcessIdentity(start_time, cmdline, hostname)
+
+    def _identity_matches(
+        self,
+        stored: ProcessIdentity | None,
+        current: ProcessIdentity | None,
+    ) -> bool | None:
+        if stored is None or current is None:
+            return None
+        stored_sig = stored.signature
+        current_sig = current.signature
+        if stored_sig is not None and current_sig is not None:
+            return stored_sig == current_sig
+        if stored == current:
+            return True
+        return None
+
+    def _coerce_pid(self, raw: object | None) -> int | None:
+        if raw is None:
+            return None
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _evaluate_lock_state(self) -> LockEvaluation:
+        snapshot = self._load_lock_snapshot()
+        now = datetime.now(UTC)
+        lock_age = snapshot.age_seconds(now) if snapshot else None
+        pid_alive: bool | None = None
+        current_identity: ProcessIdentity | None = None
+        identity_match: bool | None = None
+        if snapshot and snapshot.pid is not None:
+            pid_alive = self._pid_is_alive(snapshot.pid)
+            if pid_alive:
+                current_identity = self._read_process_identity(snapshot.pid)
+                identity_match = self._identity_matches(snapshot.identity, current_identity)
+        provenance_match = self._provenance_matches(snapshot)
+        threshold = self._stale_lock_age_threshold()
+        if snapshot is None:
+            evaluation = LockEvaluation(
+                snapshot=None,
+                lock_age_seconds=lock_age,
+                pid_alive=pid_alive,
+                current_identity=current_identity,
+                identity_match=identity_match,
+                provenance_match=provenance_match,
+                should_cleanup=False,
+                stale_decision="unreadable",
+                cleanup_reason=None,
+            )
+            self._write_lock_status(evaluation)
+            return evaluation
+        if snapshot.pid is None:
+            stale_decision = "missing-pid"
+            cleanup_reason = None
+            should_cleanup = False
+            if lock_age is not None and lock_age >= threshold:
+                should_cleanup = True
+                cleanup_reason = "missing-pid-old"
+            evaluation = LockEvaluation(
+                snapshot=snapshot,
+                lock_age_seconds=lock_age,
+                pid_alive=pid_alive,
+                current_identity=current_identity,
+                identity_match=identity_match,
+                provenance_match=provenance_match,
+                should_cleanup=should_cleanup,
+                stale_decision=stale_decision,
+                cleanup_reason=cleanup_reason,
+            )
+            self._write_lock_status(evaluation)
+            return evaluation
+        if pid_alive:
+            if provenance_match:
+                evaluation = LockEvaluation(
+                    snapshot=snapshot,
+                    lock_age_seconds=lock_age,
+                    pid_alive=pid_alive,
+                    current_identity=current_identity,
+                    identity_match=identity_match,
+                    provenance_match=provenance_match,
+                    should_cleanup=False,
+                    stale_decision="provenance-match",
+                    cleanup_reason=None,
+                )
+                self._write_lock_status(evaluation)
+                return evaluation
+            if identity_match is True:
+                evaluation = LockEvaluation(
+                    snapshot=snapshot,
+                    lock_age_seconds=lock_age,
+                    pid_alive=pid_alive,
+                    current_identity=current_identity,
+                    identity_match=identity_match,
+                    provenance_match=provenance_match,
+                    should_cleanup=False,
+                    stale_decision="identity-match",
+                    cleanup_reason=None,
+                )
+                self._write_lock_status(evaluation)
+                return evaluation
+            if identity_match is False:
+                cleanup_due_to_identity = lock_age is not None and lock_age >= threshold
+                stale_decision = (
+                    "identity-mismatch-old"
+                    if cleanup_due_to_identity
+                    else "identity-mismatch-young"
+                )
+                cleanup_reason = "identity-mismatch-old" if cleanup_due_to_identity else None
+                evaluation = LockEvaluation(
+                    snapshot=snapshot,
+                    lock_age_seconds=lock_age,
+                    pid_alive=pid_alive,
+                    current_identity=current_identity,
+                    identity_match=identity_match,
+                    provenance_match=provenance_match,
+                    should_cleanup=cleanup_due_to_identity,
+                    stale_decision=stale_decision,
+                    cleanup_reason=cleanup_reason,
+                )
+                self._write_lock_status(evaluation)
+                return evaluation
+            evaluation = LockEvaluation(
+                snapshot=snapshot,
+                lock_age_seconds=lock_age,
+                pid_alive=pid_alive,
+                current_identity=current_identity,
+                identity_match=identity_match,
+                provenance_match=provenance_match,
+                should_cleanup=False,
+                stale_decision="identity-unknown",
+                cleanup_reason=None,
+            )
+            self._write_lock_status(evaluation)
+            return evaluation
+        if lock_age is None:
+            evaluation = LockEvaluation(
+                snapshot=snapshot,
+                lock_age_seconds=lock_age,
+                pid_alive=pid_alive,
+                current_identity=current_identity,
+                identity_match=identity_match,
+                provenance_match=provenance_match,
+                should_cleanup=False,
+                stale_decision="pid-dead-unknown-age",
+                cleanup_reason=None,
+            )
+            self._write_lock_status(evaluation)
+            return evaluation
+        if lock_age < threshold:
+            evaluation = LockEvaluation(
+                snapshot=snapshot,
+                lock_age_seconds=lock_age,
+                pid_alive=pid_alive,
+                current_identity=current_identity,
+                identity_match=identity_match,
+                provenance_match=provenance_match,
+                should_cleanup=False,
+                stale_decision="pid-dead-young",
+                cleanup_reason=None,
+            )
+            self._write_lock_status(evaluation)
+            return evaluation
+        evaluation = LockEvaluation(
+            snapshot=snapshot,
+            lock_age_seconds=lock_age,
+            pid_alive=pid_alive,
+            current_identity=current_identity,
+            identity_match=identity_match,
+            provenance_match=provenance_match,
+            should_cleanup=True,
+            stale_decision="pid-dead-old",
+            cleanup_reason="pid-not-running",
+        )
+        self._write_lock_status(evaluation)
+        return evaluation
+
+    def _provenance_matches(self, snapshot: LockFileSnapshot | None) -> bool:
+        if not snapshot or not self._pending_run_id:
             return False
+        return (
+            snapshot.scheduler_instance_id == self._instance_id
+            and snapshot.attempted_run_id == self._pending_run_id
+        )
+
+    def _write_lock_status(self, evaluation: LockEvaluation) -> None:
+        snapshot = evaluation.snapshot
+        data = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "lock_file": str(self._lock_path),
+            "lock_age_seconds": evaluation.lock_age_seconds,
+            "lock_pid": snapshot.pid if snapshot else None,
+            "lock_timestamp": snapshot.timestamp_value if snapshot else None,
+            "pid_alive": evaluation.pid_alive,
+            "identity_match": evaluation.identity_match,
+            "provenance_match": evaluation.provenance_match,
+            "stale_decision": evaluation.stale_decision,
+            "cleanup_reason": evaluation.cleanup_reason,
+            "scheduler_instance_id": snapshot.scheduler_instance_id if snapshot else None,
+            "attempted_run_id": snapshot.attempted_run_id if snapshot else None,
+            "scheduler_pid": snapshot.scheduler_pid if snapshot else None,
+            "child_pid": snapshot.child_pid if snapshot else None,
+            "child_start_time": snapshot.child_start_time if snapshot else None,
+            "run_label": snapshot.run_label if snapshot else None,
+        }
+        try:
+            self._lock_status_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(data, self._lock_status_path)
+        except OSError:
+            pass
+
+    def _load_lock_snapshot(self) -> LockFileSnapshot | None:
+        try:
+            stat_info = self._lock_path.stat()
+        except OSError:
+            return None
         try:
             contents = self._lock_path.read_text(encoding="utf-8")
         except OSError:
-            return False
-        timestamp, pid = self._parse_lock_metadata(contents)
-        if pid is None:
-            reason = "malformed"
-        elif self._pid_is_alive(pid):
-            return False
-        else:
-            reason = "pid-not-running"
-        try:
-            self._lock_path.unlink()
-        except OSError:
-            return False
-        self._log_event(
-            "WARNING",
-            "Removed stale lock file",
-            lock_file=str(self._lock_path),
-            lock_timestamp=timestamp,
-            lock_pid=pid,
-            reason=reason,
-            event="lock-stale",
+            contents = ""
+        (
+            timestamp_str,
+            pid,
+            identity,
+            scheduler_instance_id,
+            attempted_run_id,
+            scheduler_pid,
+            child_pid,
+            child_start_time,
+            run_label,
+        ) = self._parse_lock_metadata(contents)
+        timestamp = self._parse_lock_timestamp(timestamp_str)
+        return LockFileSnapshot(
+            timestamp_value=timestamp_str,
+            timestamp=timestamp,
+            pid=pid,
+            mtime=stat_info.st_mtime,
+            identity=identity,
+            scheduler_instance_id=scheduler_instance_id,
+            attempted_run_id=attempted_run_id,
+            scheduler_pid=scheduler_pid,
+            child_pid=child_pid,
+            child_start_time=child_start_time,
+            run_label=run_label,
         )
-        return True
 
-    def _parse_lock_metadata(self, contents: str) -> tuple[str | None, int | None]:
+    def _parse_lock_metadata(
+        self, contents: str
+    ) -> tuple[
+        str | None,
+        int | None,
+        ProcessIdentity | None,
+        str | None,
+        str | None,
+        int | None,
+        int | None,
+        str | None,
+        str | None,
+    ]:
+        trimmed = contents.strip()
+        if trimmed.startswith("{"):
+            try:
+                raw = json.loads(trimmed)
+            except json.JSONDecodeError:
+                return None, None, None
+            timestamp = _str_or_none(raw.get("timestamp"))
+            pid = self._coerce_pid(raw.get("pid"))
+            identity_raw = raw.get("identity")
+            identity = (
+                self._identity_from_mapping(identity_raw)
+                if isinstance(identity_raw, Mapping)
+                else None
+            )
+            scheduler_instance_id = _str_or_none(raw.get("scheduler_instance_id"))
+            attempted_run_id = _str_or_none(raw.get("attempted_run_id"))
+            scheduler_pid = self._coerce_pid(raw.get("scheduler_pid"))
+            child_pid = self._coerce_pid(raw.get("child_pid"))
+            child_start_time = _str_or_none(raw.get("child_start_time"))
+            run_label = _str_or_none(raw.get("run_label"))
+            return (
+                timestamp,
+                pid,
+                identity,
+                scheduler_instance_id,
+                attempted_run_id,
+                scheduler_pid,
+                child_pid,
+                child_start_time,
+                run_label,
+            )
         line = contents.splitlines()[0] if contents else ""
         parts = line.split()
         timestamp: str | None = parts[0] if parts else None
@@ -3400,7 +3815,7 @@ class HealthLoopScheduler:
                 except ValueError:
                     pid = None
                 break
-        return timestamp, pid
+        return timestamp, pid, None, None, None, None, None, None, None
 
     def _pid_is_alive(self, pid: int) -> bool:
         try:
@@ -3412,6 +3827,114 @@ class HealthLoopScheduler:
         except OSError:
             return True
         return True
+
+    def _parse_lock_timestamp(self, value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            if value.endswith("Z"):
+                try:
+                    iso_value = f"{value[:-1]}+00:00"
+                    return datetime.fromisoformat(iso_value)
+                except ValueError:
+                    return None
+            return None
+
+    def _stale_lock_age_threshold(self) -> float:
+        interval = self._interval_seconds or self._LOCK_STALE_MIN_SECONDS
+        base = max(interval, self._LOCK_STALE_MIN_SECONDS)
+        return base * self._LOCK_STALE_AGE_MULTIPLIER
+
+    def _format_last_run_timestamp(self) -> str | None:
+        if self._last_run_finish_time is None:
+            return None
+        return datetime.fromtimestamp(self._last_run_finish_time, UTC).isoformat()
+
+    def _remove_stale_lock(self, evaluation: LockEvaluation) -> bool:
+        try:
+            if self._lock_path.exists():
+                self._lock_path.unlink()
+        except OSError:
+            return False
+        snapshot = evaluation.snapshot
+        metadata: dict[str, object | None] = {
+            "lock_file": str(self._lock_path),
+            "lock_age_seconds": evaluation.lock_age_seconds,
+            "lock_pid": snapshot.pid if snapshot else None,
+            "pid_alive": evaluation.pid_alive,
+            "lock_timestamp": snapshot.timestamp_value if snapshot else None,
+            "expected_interval_seconds": self._interval_seconds,
+            "cleanup_reason": evaluation.cleanup_reason or evaluation.stale_decision,
+            "event": "lock-stale",
+            "identity_match": evaluation.identity_match,
+            "current_identity_signature": evaluation.current_identity.signature if evaluation.current_identity else None,
+            "scheduler_instance_id": snapshot.scheduler_instance_id if snapshot else None,
+            "attempted_run_id": snapshot.attempted_run_id if snapshot else None,
+            "scheduler_pid": snapshot.scheduler_pid if snapshot else None,
+            "child_pid": snapshot.child_pid if snapshot else None,
+            "child_start_time": snapshot.child_start_time if snapshot else None,
+            "run_label": snapshot.run_label if snapshot else None,
+            "provenance_match": evaluation.provenance_match,
+        }
+        last_run_ts = self._format_last_run_timestamp()
+        if last_run_ts is not None:
+            metadata["last_successful_run_timestamp"] = last_run_ts
+        if snapshot and snapshot.identity:
+            metadata["lock_identity_signature"] = snapshot.identity.signature
+            metadata["lock_identity_start_time"] = snapshot.identity.start_time
+            metadata["lock_identity_hostname"] = snapshot.identity.hostname
+        self._log_event(
+            "WARNING",
+            "Removed stale lock file",
+            **metadata,
+        )
+        return True
+
+    def _log_lock_held(self, evaluation: LockEvaluation) -> None:
+        self._lock_skip_streak += 1
+        escalated = self._lock_skip_streak >= self._lock_skip_escalation_threshold
+        severity = "ERROR" if escalated else "WARNING"
+        snapshot = evaluation.snapshot
+        metadata: dict[str, object | None] = {
+            "reason": "lock-held",
+            "lock_file": str(self._lock_path),
+            "event": "lock-skip",
+            "lock_age_seconds": evaluation.lock_age_seconds,
+            "lock_pid": snapshot.pid if snapshot else None,
+            "pid_alive": evaluation.pid_alive,
+            "lock_timestamp": snapshot.timestamp_value if snapshot else None,
+            "expected_interval_seconds": self._interval_seconds,
+            "stale_decision": evaluation.stale_decision,
+            "repeated_lock_skips": self._lock_skip_streak,
+            "identity_match": evaluation.identity_match,
+            "current_identity_signature": evaluation.current_identity.signature if evaluation.current_identity else None,
+            "scheduler_instance_id": snapshot.scheduler_instance_id if snapshot else None,
+            "attempted_run_id": snapshot.attempted_run_id if snapshot else None,
+            "scheduler_pid": snapshot.scheduler_pid if snapshot else None,
+            "child_pid": snapshot.child_pid if snapshot else None,
+            "child_start_time": snapshot.child_start_time if snapshot else None,
+            "run_label": snapshot.run_label if snapshot else None,
+            "provenance_match": evaluation.provenance_match,
+        }
+        last_run_ts = self._format_last_run_timestamp()
+        if last_run_ts is not None:
+            metadata["last_successful_run_timestamp"] = last_run_ts
+        if evaluation.identity_match is False:
+            metadata["identity_mismatch"] = True
+        if snapshot and snapshot.identity:
+            metadata["lock_identity_signature"] = snapshot.identity.signature
+            metadata["lock_identity_start_time"] = snapshot.identity.start_time
+            metadata["lock_identity_hostname"] = snapshot.identity.hostname
+        if escalated:
+            metadata["lock_skip_escalated"] = True
+            metadata["severity_reason"] = "repeated-lock-held"
+        self._log_event(
+            severity,
+            "Health run skipped because lock is held",
+            **metadata,
+        )
 
     def _log_run_summary(
         self,

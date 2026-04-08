@@ -103,9 +103,10 @@ describe("App", () => {
       screen.getByText(sampleFleet.topProblem.detail, { exact: false })
     ).toBeInTheDocument();
     expect(screen.getAllByText(sampleFleet.clusters[0].label).length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(sampleFleet.clusters[0].topTriggerReason!, { exact: false })
-    ).toBeInTheDocument();
+    const triggerMatches = screen.getAllByText(sampleFleet.clusters[0].topTriggerReason!, {
+      exact: false,
+    });
+    expect(triggerMatches.length).toBeGreaterThan(0);
   });
 
   test("switches cluster detail tabs to reveal hypotheses and checks", async () => {
@@ -138,6 +139,18 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  test("cluster detail summary highlights health cues and recommended artifacts", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    expect(await screen.findByText(/Control plane saturation/i)).toBeInTheDocument();
+    expect(await screen.findByText(/gRPC queues are growing/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/High CPU/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Recommended artifacts/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /diagnostic bundle/i }).length).toBeGreaterThan(0);
+  });
+
   test("renders compact run stats string", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
@@ -151,6 +164,7 @@ describe("App", () => {
     expect(
       screen.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/Retained history stats/i)).toBeInTheDocument();
     expect(screen.getByText(/Current run/i)).toBeInTheDocument();
     expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
     expect(
