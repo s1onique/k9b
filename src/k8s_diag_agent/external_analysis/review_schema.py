@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -67,7 +67,7 @@ class ReviewEnrichmentPayload:
     focus_notes: tuple[str, ...]
 
     @classmethod
-    def from_dict(cls, raw: Any) -> "ReviewEnrichmentPayload":
+    def from_dict(cls, raw: Any) -> ReviewEnrichmentPayload:
         if not isinstance(raw, Mapping):
             raise ReviewEnrichmentPayloadError(
                 f"review enrichment response expected an object but got {_type_name(raw)}"

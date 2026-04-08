@@ -952,6 +952,8 @@ class HealthUITests(unittest.TestCase):
             },
         )
         serialized = _serialize_review_enrichment((artifact,), root, run_id="status-run")
+        self.assertIsNotNone(serialized)
+        assert serialized is not None
         self.assertEqual(serialized["triageOrder"], ["cluster-a"])
         self.assertEqual(serialized["topConcerns"], ["latency"])
         self.assertEqual(serialized["evidenceGaps"], ["metrics"])

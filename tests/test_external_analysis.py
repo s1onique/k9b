@@ -1,9 +1,11 @@
 import json
 import subprocess
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from k8s_diag_agent.external_analysis import llamacpp_adapter as llamacpp_module
 from k8s_diag_agent.external_analysis.adapter import (
     ExternalAnalysisRequest,
     build_external_analysis_adapters,
@@ -20,7 +22,6 @@ from k8s_diag_agent.external_analysis.config import (
 )
 from k8s_diag_agent.external_analysis.k8sgpt_adapter import K8sGptAdapter
 from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
-from k8s_diag_agent.external_analysis import llamacpp_adapter as llamacpp_module
 from k8s_diag_agent.external_analysis.review_input import build_review_enrichment_input
 from k8s_diag_agent.external_analysis.review_schema import (
     ReviewEnrichmentPayload,

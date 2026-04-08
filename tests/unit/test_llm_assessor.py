@@ -600,9 +600,9 @@ class LlamaCppProviderConfigTest(unittest.TestCase):
 
 class RecordingProvider(LLMProvider):
     def __init__(self) -> None:
-        self.last_payload = None
+        self.last_payload: LLMAssessmentInput | None = None
 
-    def assess(self, prompt: str, payload: Any) -> dict:
+    def assess(self, prompt: str, payload: LLMAssessmentInput, *, validate_schema: bool = True) -> dict[str, Any]:
         self.last_payload = payload
         return _mock_assessment_payload()
 

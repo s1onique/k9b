@@ -118,9 +118,9 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
             command_raw = entry.get("command")
             command: tuple[str, ...] | None = None
             if isinstance(command_raw, Sequence):
-                candidate = tuple(str(item) for item in command_raw if str(item).strip())
-                if candidate:
-                    command = candidate
+                command_candidate = tuple(str(item) for item in command_raw if str(item).strip())
+                if command_candidate:
+                    command = command_candidate
             configs.append(
                 ExternalAnalysisAdapterConfig(name=name, enabled=enabled, command=command)
             )

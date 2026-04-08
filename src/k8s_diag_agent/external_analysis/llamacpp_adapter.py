@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -182,7 +182,12 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
     ) -> str:
         prompt_parts: list[str] = [
             f"LLM external analysis request\nrun_id={request.run_id}\ncluster_label={request.cluster_label}",
-            "Produce a concise JSON advisory payload that includes summary, triageOrder/triage_order, topConcerns/top_concerns, evidenceGaps/evidence_gaps, nextChecks/next_checks, and focusNotes/focus_notes. Use arrays of non-empty strings for the list entries and highlight missing data explicitly.",
+            (
+                "Produce a concise JSON advisory payload that includes summary, triageOrder/triage_order, "
+                "topConcerns/top_concerns, evidenceGaps/evidence_gaps, nextChecks/next_checks, and "
+                "focusNotes/focus_notes. Use arrays of non-empty strings for the list entries and highlight "
+                "missing data explicitly."
+            ),
             "Review artifact:",
             json.dumps(context.review, indent=2),
         ]

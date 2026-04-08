@@ -1,8 +1,7 @@
-from datetime import datetime, timedelta, timezone
-
 import json
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from k8s_diag_agent.external_analysis.artifact import (
@@ -113,7 +112,7 @@ class UIApiTests(unittest.TestCase):
                 status=ExternalAnalysisStatus.SUCCESS,
                 artifact_path=str(artifact_path),
                 provider="llamacpp",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 duration_ms=120,
                 purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
             )
@@ -158,7 +157,7 @@ class UIApiTests(unittest.TestCase):
                 status=ExternalAnalysisStatus.SUCCESS,
                 artifact_path=str(artifact_path),
                 provider="llamacpp",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 duration_ms=130,
                 purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
             )
@@ -190,12 +189,18 @@ class UIApiTests(unittest.TestCase):
             self.assertIsNone(payload.get("reviewEnrichmentStatus"))
 
     def test_freshness_helper_computes_statuses(self) -> None:
-        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
         payload = _build_freshness_payload("2026-01-01T00:00:00+00:00", 300, now=base + timedelta(seconds=200))
+        self.assertIsNotNone(payload)
+        assert payload is not None
         self.assertEqual(payload["status"], "fresh")
         payload = _build_freshness_payload("2026-01-01T00:00:00+00:00", 300, now=base + timedelta(seconds=500))
+        self.assertIsNotNone(payload)
+        assert payload is not None
         self.assertEqual(payload["status"], "delayed")
         payload = _build_freshness_payload("2026-01-01T00:00:00+00:00", 300, now=base + timedelta(seconds=1300))
+        self.assertIsNotNone(payload)
+        assert payload is not None
         self.assertEqual(payload["status"], "stale")
 
     def test_fleet_payload_summarizes_clusters(self) -> None:

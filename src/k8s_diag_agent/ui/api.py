@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TypedDict
 
+from ..health.freshness import freshness_status
 from .model import (
     AssessmentHypothesisView,
     AssessmentNextCheckView,
@@ -27,7 +28,6 @@ from .model import (
     RunStatsView,
     UIIndexContext,
 )
-from ..health.freshness import freshness_status
 
 
 class ArtifactLink(TypedDict):
@@ -482,7 +482,7 @@ def _build_freshness_payload(
         parsed = datetime.fromisoformat(timestamp_value)
     except ValueError:
         return None
-    now_value = now or datetime.now(timezone.utc)
+    now_value = now or datetime.now(UTC)
     age_seconds = int(max(0, (now_value - parsed).total_seconds()))
     status = freshness_status(age_seconds, expected_interval_seconds)
     payload: FreshnessPayload = {

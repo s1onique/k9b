@@ -3,10 +3,11 @@ import json
 import shutil
 import tempfile
 import threading
-import urllib.request
 import unittest
+import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -88,10 +89,14 @@ class RunApiServerTests(unittest.TestCase):
         return server, thread
 
     def _fetch_run_payload(self, server: ThreadingHTTPServer) -> dict[str, object]:
-        host, port = server.server_address
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
         url = f"http://{host}:{port}/api/run"
         with urllib.request.urlopen(url, timeout=5) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
+            assert isinstance(payload, dict)
+            return cast(dict[str, object], payload)
 
     def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
         server.shutdown()

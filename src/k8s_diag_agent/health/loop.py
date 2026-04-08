@@ -50,6 +50,7 @@ from .baseline import (
 )
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .drilldown_assessor import assess_drilldown_artifact
+from .freshness import freshness_status
 from .image_pull_secret import (
     BROKEN_IMAGE_PULL_SECRET_REASON,
     ImagePullSecretInsight,
@@ -69,7 +70,6 @@ from .ui import (
     _serialize_review_enrichment_policy,
     write_health_ui_index,
 )
-from .freshness import freshness_status
 from .utils import normalize_ref
 from .validators import (
     ComparisonDecisionValidator,
