@@ -53,6 +53,7 @@ export type RunPayload = {
   reviewEnrichmentStatus?: ReviewEnrichmentStatus | null;
   providerExecution?: ProviderExecution | null;
   nextCheckExecutionHistory?: NextCheckExecutionHistoryEntry[];
+  nextCheckPlan?: NextCheckPlan | null;
 };
 
 export type RunStats = {
@@ -268,6 +269,16 @@ export type NextCheckPlanCandidate = {
     approvalReason?: string | null;
     duplicateReason?: string | null;
     blockingReason?: string | null;
+    approvalState?: string | null;
+    executionState?: string | null;
+    outcomeStatus?: string | null;
+    latestArtifactPath?: string | null;
+    latestTimestamp?: string | null;
+};
+
+export type NextCheckOutcomeCount = {
+  status: string;
+  count: number;
 };
 
 export type NextCheckPlan = {
@@ -279,6 +290,8 @@ export type NextCheckPlan = {
     candidateCount: number;
     candidates: NextCheckPlanCandidate[];
     orphanedApprovals: NextCheckOrphanedApproval[];
+    outcomeCounts: NextCheckOutcomeCount[];
+    orphanedApprovalCount: number;
 };
 
 export type NextCheckOrphanedApproval = {

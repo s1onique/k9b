@@ -1116,6 +1116,91 @@ body {
   gap: 0.75rem;
 }
 
+.next-check-outcome-summary {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.outcome-pill {
+  padding: 0.15rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+}
+
+.outcome-pill-executed-success {
+  background: #e6f4ed;
+  color: #0f5132;
+  border-color: #0f5132;
+}
+
+.outcome-pill-executed-failed {
+  background: #ffe6e6;
+  color: #8a1f11;
+  border-color: #8a1f11;
+}
+
+.outcome-pill-timed-out {
+  background: #fff4e6;
+  color: #7a4b1c;
+  border-color: #7a4b1c;
+}
+
+.outcome-pill-approval-required {
+  background: #e7f1ff;
+  color: #0b4da4;
+  border-color: #0b4da4;
+}
+
+.outcome-pill-approved {
+  background: #e6fcfb;
+  color: #0a6b6d;
+  border-color: #0a6b6d;
+}
+
+.outcome-pill-approval-stale {
+  background: #fffbe6;
+  color: #7a5900;
+  border-color: #7a5900;
+}
+
+.outcome-pill-approval-orphaned {
+  background: #f4f4f4;
+  color: #4a4a4a;
+  border-color: #4a4a4a;
+}
+
+.outcome-pill-not-used {
+  background: #f8f9fa;
+  color: #212529;
+  border-color: #adb5bd;
+}
+
+.outcome-pill-unknown {
+  background: #f2f2f2;
+  color: #4c4c4c;
+  border-color: #d1d5db;
+}
+
+.next-check-outcome-meta {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: rgba(248, 250, 252, 0.78);
+}
+
+.next-check-outcome-meta a.link {
+  font-size: 0.8rem;
+}
+
 .next-check-plan-head {
   align-items: center;
   justify-content: space-between;

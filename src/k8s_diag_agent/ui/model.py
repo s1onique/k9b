@@ -275,6 +275,11 @@ class NextCheckCandidateView:
     approval_reason: str | None
     duplicate_reason: str | None
     blocking_reason: str | None
+    approval_state: str | None
+    execution_state: str | None
+    outcome_status: str | None
+    latest_artifact_path: str | None
+    latest_timestamp: str | None
 
 
 @dataclass(frozen=True)
@@ -290,6 +295,12 @@ class NextCheckOrphanedApprovalView:
 
 
 @dataclass(frozen=True)
+class NextCheckOutcomeCountView:
+    status: str
+    count: int
+
+
+@dataclass(frozen=True)
 class NextCheckPlanView:
     status: str
     summary: str | None
@@ -299,6 +310,8 @@ class NextCheckPlanView:
     candidate_count: int
     candidates: tuple[NextCheckCandidateView, ...]
     orphaned_approvals: tuple[NextCheckOrphanedApprovalView, ...]
+    outcome_counts: tuple[NextCheckOutcomeCountView, ...]
+    orphaned_approval_count: int
 
 
 @dataclass(frozen=True)
@@ -986,6 +999,13 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
         for entry in orphaned_raw
         if isinstance(entry, Mapping)
     )
+    outcome_counts_raw = raw.get("outcomeCounts") or ()
+    outcome_counts = tuple(
+        _build_outcome_count_view(entry)
+        for entry in outcome_counts_raw
+        if isinstance(entry, Mapping)
+    )
+    orphaned_count = _coerce_int(raw.get("orphanedApprovalCount"))
     return NextCheckPlanView(
         status=_coerce_str(raw.get("status")),
         summary=_coerce_optional_str(raw.get("summary")),
@@ -995,6 +1015,8 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
         candidate_count=_coerce_int(raw.get("candidateCount")),
         candidates=candidates,
         orphaned_approvals=orphaned,
+        outcome_counts=outcome_counts,
+        orphaned_approval_count=orphaned_count,
     )
 
 
@@ -1036,6 +1058,13 @@ def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphane
     )
 
 
+def _build_outcome_count_view(raw: Mapping[str, object]) -> NextCheckOutcomeCountView:
+    return NextCheckOutcomeCountView(
+        status=_coerce_str(raw.get("status")),
+        count=_coerce_int(raw.get("count")),
+    )
+
+
 def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
     return NextCheckCandidateView(
         candidate_id=_coerce_optional_str(raw.get("candidateId")),
@@ -1063,6 +1092,11 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
         approval_reason=_coerce_optional_str(raw.get("approvalReason")),
         duplicate_reason=_coerce_optional_str(raw.get("duplicateReason")),
         blocking_reason=_coerce_optional_str(raw.get("blockingReason")),
+        approval_state=_coerce_optional_str(raw.get("approvalState")),
+        execution_state=_coerce_optional_str(raw.get("executionState")),
+        outcome_status=_coerce_optional_str(raw.get("outcomeStatus")),
+        latest_artifact_path=_coerce_optional_str(raw.get("latestArtifactPath")),
+        latest_timestamp=_coerce_optional_str(raw.get("latestTimestamp")),
     )
 
 

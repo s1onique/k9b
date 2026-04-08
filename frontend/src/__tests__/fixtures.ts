@@ -25,6 +25,11 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     candidateId: "candidate-logs",
     candidateIndex: 0,
     approvalStatus: "not-required",
+    approvalState: "not-required",
+    executionState: "executed-success",
+    outcomeStatus: "executed-success",
+    latestArtifactPath: "/artifacts/run-123-next-check-execution-0.json",
+    latestTimestamp: "2026-04-06T12:05:00Z",
   },
   {
     description: "Describe diag CRD for control plane",
@@ -43,6 +48,11 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     candidateId: "candidate-describe",
     candidateIndex: 1,
     approvalStatus: "approval-required",
+    approvalState: "approval-required",
+    executionState: "unexecuted",
+    outcomeStatus: "approval-required",
+    latestArtifactPath: null,
+    latestTimestamp: null,
   },
   {
     description: "Capture kubelet metrics for control-plane nodes",
@@ -61,6 +71,11 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     candidateId: "candidate-metrics",
     candidateIndex: 2,
     approvalStatus: "not-required",
+    approvalState: "not-required",
+    executionState: "unexecuted",
+    outcomeStatus: "not-used",
+    latestArtifactPath: null,
+    latestTimestamp: null,
   },
 ];
 
@@ -225,6 +240,12 @@ export const sampleRun: RunPayload = {
     candidateCount: sampleNextCheckCandidates.length,
     candidates: sampleNextCheckCandidates,
     orphanedApprovals: [],
+    outcomeCounts: [
+      { status: "executed-success", count: 1 },
+      { status: "approval-required", count: 1 },
+      { status: "not-used", count: 1 },
+    ],
+    orphanedApprovalCount: 0,
   },
   nextCheckExecutionHistory: [
     {

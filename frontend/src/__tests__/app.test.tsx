@@ -189,6 +189,16 @@ describe("App", () => {
     expect(screen.getByText(/Matches deterministic next check: Collect kubelet metrics/i)).toBeInTheDocument();
   });
 
+  test("next check outcome summary reveals status counts", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Next check plan/i });
+    expect(screen.getByText(/Executed \(success\) · 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Awaiting approval · 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not used · 1/i)).toBeInTheDocument();
+  });
+
   test("renders stale and orphaned approvals", async () => {
     const staleCandidates = sampleNextCheckCandidates.map((candidate) =>
       candidate.candidateId === "candidate-describe"

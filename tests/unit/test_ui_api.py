@@ -233,6 +233,8 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(plan.get("artifactPath"), "external-analysis/plan.json")
         candidate = plan["candidates"][0]
         self.assertEqual(candidate.get("candidateId"), "candidate-logs")
+        self.assertEqual(plan.get("outcomeCounts"), [])
+        self.assertEqual(plan.get("orphanedApprovalCount"), 0)
 
     def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
         index = sample_ui_index()

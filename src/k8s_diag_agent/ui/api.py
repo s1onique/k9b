@@ -191,6 +191,11 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     approvalStatus: str | None
     approvalArtifactPath: str | None
     approvalTimestamp: str | None
+    approvalState: str | None
+    executionState: str | None
+    outcomeStatus: str | None
+    latestArtifactPath: str | None
+    latestTimestamp: str | None
     candidateId: str | None
     candidateIndex: int | None
 
@@ -206,6 +211,11 @@ class NextCheckOrphanedApprovalPayload(TypedDict, total=False):
     approvalTimestamp: str | None
 
 
+class NextCheckOutcomeCountPayload(TypedDict):
+    status: str
+    count: int
+
+
 class NextCheckPlanPayload(TypedDict, total=False):
     status: str
     summary: str | None
@@ -215,6 +225,8 @@ class NextCheckPlanPayload(TypedDict, total=False):
     candidateCount: int
     candidates: list[NextCheckCandidatePayload]
     orphanedApprovals: list[NextCheckOrphanedApprovalPayload]
+    outcomeCounts: list[NextCheckOutcomeCountPayload]
+    orphanedApprovalCount: int
 
 
 class ReviewEnrichmentStatusPayload(TypedDict, total=False):
@@ -878,8 +890,12 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
         "candidateCount": view.candidate_count,
         "candidates": [_serialize_next_check_candidate(entry) for entry in view.candidates],
         "orphanedApprovals": [
-             _serialize_orphaned_approval(entry) for entry in view.orphaned_approvals
+            _serialize_orphaned_approval(entry) for entry in view.orphaned_approvals
         ],
+        "outcomeCounts": [
+            {"status": entry.status, "count": entry.count} for entry in view.outcome_counts
+        ],
+        "orphanedApprovalCount": view.orphaned_approval_count,
     }
 
 
@@ -936,6 +952,11 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         "approvalReason": view.approval_reason,
         "duplicateReason": view.duplicate_reason,
         "blockingReason": view.blocking_reason,
+        "approvalState": view.approval_state,
+        "executionState": view.execution_state,
+        "outcomeStatus": view.outcome_status,
+        "latestArtifactPath": view.latest_artifact_path,
+        "latestTimestamp": view.latest_timestamp,
     }
     if view.candidate_id is not None:
         payload["candidateId"] = view.candidate_id

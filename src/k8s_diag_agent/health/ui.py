@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -504,6 +506,97 @@ def _log_next_check_approval_freshness(
         run_id=run_id,
         metadata=metadata,
     )
+    
+
+@dataclass(frozen=True)
+class NextCheckExecutionRecord:
+    candidate_id: str | None
+    candidate_index: int | None
+    artifact_path: str | None
+    timestamp: datetime
+    status: str
+    timed_out: bool | None
+
+
+def _collect_next_check_execution_records(
+    artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
+) -> tuple[dict[str, NextCheckExecutionRecord], dict[int, NextCheckExecutionRecord]]:
+    by_id: dict[str, NextCheckExecutionRecord] = {}
+    by_index: dict[int, NextCheckExecutionRecord] = {}
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp):
+        if (
+            artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION
+            or not artifact_matches_run(artifact, run_id)
+        ):
+            continue
+        payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+        raw_id = payload.get("candidateId")
+        raw_index = payload.get("candidateIndex")
+        candidate_id = raw_id if isinstance(raw_id, str) and raw_id else None
+        candidate_index = raw_index if isinstance(raw_index, int) else None
+        record = NextCheckExecutionRecord(
+            candidate_id=candidate_id,
+            candidate_index=candidate_index,
+            artifact_path=str(artifact.artifact_path) if artifact.artifact_path else None,
+            timestamp=artifact.timestamp,
+            status=artifact.status.value,
+            timed_out=artifact.timed_out,
+        )
+        if candidate_id:
+            existing = by_id.get(candidate_id)
+            if existing is None or record.timestamp >= existing.timestamp:
+                by_id[candidate_id] = record
+        if candidate_index is not None:
+            existing = by_index.get(candidate_index)
+            if existing is None or record.timestamp >= existing.timestamp:
+                by_index[candidate_index] = record
+    return by_id, by_index
+
+
+def _determine_execution_state(record: NextCheckExecutionRecord | None) -> str:
+    if not record:
+        return "unexecuted"
+    if record.timed_out:
+        return "timed-out"
+    if record.status == ExternalAnalysisStatus.SUCCESS.value:
+        return "executed-success"
+    return "executed-failed"
+
+
+def _derive_outcome_status(approval_state: str | None, execution_state: str) -> str:
+    if execution_state == "executed-success":
+        return "executed-success"
+    if execution_state in ("executed-failed", "timed-out"):
+        return "executed-failed"
+    if approval_state == "approval-stale":
+        return "approval-stale"
+    if approval_state == "approved":
+        return "approved"
+    if approval_state == "approval-required":
+        return "approval-required"
+    if approval_state == "not-required":
+        return "not-used"
+    return approval_state or "unknown"
+
+
+def _latest_outcome_artifact(
+    record: NextCheckExecutionRecord | None,
+    approval_path: str | None,
+    approval_timestamp: str | None,
+    root_dir: Path,
+) -> tuple[str | None, str | None]:
+    latest_time: datetime | None = None
+    latest_path: str | None = None
+    if record:
+        latest_time = record.timestamp
+        latest_path = _relative_path(root_dir, record.artifact_path)
+    if approval_timestamp:
+        parsed = _parse_timestamp(approval_timestamp)
+        if parsed and (latest_time is None or parsed > latest_time):
+            latest_time = parsed
+            latest_path = approval_path
+    timestamp = latest_time.isoformat() if latest_time else None
+    return latest_path, timestamp
 
 
 def _serialize_next_check_plan(
@@ -523,6 +616,8 @@ def _serialize_next_check_plan(
     approvals = collect_next_check_approvals(artifacts, run_id)
     used_approvals: set[NextCheckApprovalRecord] = set()
     plan_artifact_path = str(artifact.artifact_path) if artifact.artifact_path else None
+    execution_by_id, execution_by_index = _collect_next_check_execution_records(artifacts, run_id)
+    status_counter: Counter[str] = Counter()
     candidates: list[dict[str, object]] = []
     for index, entry in enumerate(candidates_raw):
         if not isinstance(entry, Mapping):
@@ -560,6 +655,25 @@ def _serialize_next_check_plan(
                     status=approval_status,
                 )
         candidate["approvalStatus"] = approval_status
+        candidate["approvalState"] = approval_status
+        execution_record: NextCheckExecutionRecord | None = None
+        if candidate_id_key:
+            execution_record = execution_by_id.get(candidate_id_key)
+        if execution_record is None and candidate_index_key is not None:
+            execution_record = execution_by_index.get(candidate_index_key)
+        execution_state = _determine_execution_state(execution_record)
+        candidate["executionState"] = execution_state
+        outcome_status = _derive_outcome_status(approval_status, execution_state)
+        candidate["outcomeStatus"] = outcome_status
+        latest_artifact, latest_timestamp = _latest_outcome_artifact(
+            execution_record,
+            candidate.get("approvalArtifactPath"),
+            candidate.get("approvalTimestamp"),
+            root_dir,
+        )
+        candidate["latestArtifactPath"] = latest_artifact
+        candidate["latestTimestamp"] = latest_timestamp
+        status_counter[outcome_status] += 1
         candidates.append(candidate)
     orphaned: list[dict[str, object]] = []
     all_records = set(approvals.by_id.values()) | set(approvals.by_index.values())
@@ -588,6 +702,7 @@ def _serialize_next_check_plan(
             candidate_description=record.candidate_description,
             status="approval-orphaned",
         )
+    status_counter["approval-orphaned"] += len(orphaned)
     return {
         "status": artifact.status.value,
         "summary": artifact.summary,
@@ -597,6 +712,11 @@ def _serialize_next_check_plan(
         "candidateCount": len(candidates),
         "candidates": candidates,
         "orphanedApprovals": orphaned,
+        "outcomeCounts": [
+            {"status": key, "count": value}
+            for key, value in sorted(status_counter.items())
+        ],
+        "orphanedApprovalCount": len(orphaned),
     }
 
 

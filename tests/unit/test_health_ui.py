@@ -2,6 +2,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -720,6 +721,184 @@ class HealthUITests(unittest.TestCase):
         self.assertIsNotNone(plan_entry)
         candidate_entry = plan_entry["candidates"][0]
         self.assertEqual(candidate_entry.get("approvalStatus"), "approved")
+
+    def test_next_check_plan_outcome_summary_reflects_artifacts(self) -> None:
+        run_id = "outcome-run"
+        run_label = "outcome-run"
+        output_dir = self.tmpdir / "runs" / "health"
+        artifact_dir = output_dir / "external-analysis"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        plan_path = "external-analysis/outcome-plan.json"
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "summary": "Outcome summary test",
+            "artifactPath": plan_path,
+            "review_path": "reviews/outcome-run-review.json",
+            "enrichment_artifact_path": "external-analysis/outcome-run-review.json",
+            "candidateCount": 5,
+            "candidates": [
+                {
+                    "description": "Inspect approved candidate",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": False,
+                    "requiresOperatorApproval": True,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "approved-executed",
+                    "candidateIndex": 0,
+                },
+                {
+                    "description": "Approval pending candidate",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": False,
+                    "requiresOperatorApproval": True,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "approval-required",
+                    "candidateIndex": 1,
+                },
+                {
+                    "description": "Stale approval candidate",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": False,
+                    "requiresOperatorApproval": True,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "stale-approval",
+                    "candidateIndex": 2,
+                },
+                {
+                    "description": "Executed failure",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "executed-failed",
+                    "candidateIndex": 3,
+                },
+                {
+                    "description": "Unused safe candidate",
+                    "targetCluster": "cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                    "candidateId": "safe-unused",
+                    "candidateIndex": 4,
+                },
+            ],
+        }
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label=run_label,
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=plan_path,
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        write_external_analysis_artifact(artifact_dir / "outcome-plan.json", plan_artifact)
+        approved_artifact = record_next_check_approval(
+            runs_dir=output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            plan_artifact_path=plan_path,
+            candidate_index=0,
+            candidate_id="approved-executed",
+            candidate_description="Inspect approved candidate",
+            target_cluster="cluster-a",
+        )
+        stale_plan_path = "external-analysis/outcome-plan-old.json"
+        stale_artifact = record_next_check_approval(
+            runs_dir=output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            plan_artifact_path=stale_plan_path,
+            candidate_index=2,
+            candidate_id="stale-approval",
+            candidate_description="Stale approval candidate",
+            target_cluster="cluster-a",
+        )
+        success_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label="cluster-a",
+            summary="Executed success",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/outcome-exec-success.json",
+            provider="runner",
+            duration_ms=45,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            payload={
+                "candidateId": "approved-executed",
+                "candidateIndex": 0,
+            },
+        )
+        failure_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label="cluster-a",
+            summary="Execution failed",
+            status=ExternalAnalysisStatus.FAILED,
+            artifact_path="external-analysis/outcome-exec-failed.json",
+            provider="runner",
+            duration_ms=62,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            payload={
+                "candidateId": "executed-failed",
+                "candidateIndex": 3,
+            },
+        )
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id=run_id,
+            run_label=run_label,
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[
+                plan_artifact,
+                approved_artifact,
+                stale_artifact,
+                success_artifact,
+                failure_artifact,
+            ],
+            notifications=[],
+            external_analysis_settings=ExternalAnalysisSettings(),
+        )
+        raw = cast(dict[str, object], json.loads(index_path.read_text(encoding="utf-8")))
+        plan_entry = raw["run"].get("next_check_plan")
+        self.assertIsNotNone(plan_entry)
+        assert isinstance(plan_entry, dict)
+        candidates = plan_entry.get("candidates") or []
+        candidate_map = {
+            str(entry.get("candidateId")): entry for entry in candidates if isinstance(entry, Mapping)
+        }
+        approved = candidate_map.get("approved-executed") or {}
+        self.assertEqual(approved.get("executionState"), "executed-success")
+        self.assertEqual(approved.get("outcomeStatus"), "executed-success")
+        self.assertEqual(approved.get("approvalState"), "approved")
+        pending = candidate_map.get("approval-required") or {}
+        self.assertEqual(pending.get("approvalState"), "approval-required")
+        self.assertEqual(pending.get("outcomeStatus"), "approval-required")
+        stale = candidate_map.get("stale-approval") or {}
+        self.assertEqual(stale.get("approvalState"), "approval-stale")
+        failed = candidate_map.get("executed-failed") or {}
+        self.assertEqual(failed.get("executionState"), "executed-failed")
+        self.assertEqual(failed.get("outcomeStatus"), "executed-failed")
+        unused = candidate_map.get("safe-unused") or {}
+        self.assertEqual(unused.get("outcomeStatus"), "not-used")
+        counts = {entry.get("status"): entry.get("count") for entry in plan_entry.get("outcomeCounts") or []}
+        self.assertEqual(counts.get("executed-success"), 1)
+        self.assertEqual(counts.get("approval-required"), 1)
+        self.assertEqual(counts.get("executed-failed"), 1)
+        self.assertEqual(counts.get("not-used"), 1)
+        self.assertEqual(counts.get("approval-stale"), 1)
+        self.assertEqual(plan_entry.get("orphanedApprovalCount"), 0)
 
     def test_failed_review_enrichment_artifact_still_exposed(self) -> None:
         output_dir = self.tmpdir / "runs" / "health"

@@ -293,6 +293,24 @@ const getPlanStatusLabel = (variant: NextCheckStatusVariant, candidate: NextChec
   return nextCheckStatusLabel(variant);
 };
 
+const outcomeStatusLabels: Record<string, string> = {
+  "executed-success": "Executed (success)",
+  "executed-failed": "Executed (failed)",
+  "timed-out": "Execution timed out",
+  "approval-required": "Awaiting approval",
+  approved: "Approved",
+  "approval-stale": "Approval stale",
+  "approval-orphaned": "Orphaned approval",
+  "not-used": "Not used",
+  unknown: "Unknown",
+};
+
+const outcomeStatusDisplay = (status?: string | null) =>
+  outcomeStatusLabels[status ?? "unknown"] || (status ? status : "Unknown");
+
+const outcomeStatusClass = (status?: string | null) =>
+  `outcome-pill outcome-pill-${((status ?? "unknown").replace(/[^a-z0-9]+/gi, "-").toLowerCase())}`;
+
 const EvidenceDetails = ({
   title,
   entries,
@@ -1551,6 +1569,7 @@ const App = () => {
       : `${planCandidates.length} candidate${planCandidates.length === 1 ? "" : "s"}`;
   const planStatusText = runPlan?.status ?? null;
   const executionHistory: NextCheckExecutionHistoryEntry[] = run.nextCheckExecutionHistory ?? [];
+  const outcomeSummary = runPlan?.outcomeCounts ?? [];
 
   const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
   const historicalLlmStatsLine = run.historicalLlmStats
@@ -2007,6 +2026,15 @@ const App = () => {
                           {planCandidateCountLabel}
                           {planStatusText ? ` · ${planStatusText}` : ""}
                         </p>
+                        {outcomeSummary.length ? (
+                          <div className="next-check-outcome-summary">
+                            {outcomeSummary.map((entry) => (
+                              <span key={entry.status} className={outcomeStatusClass(entry.status)}>
+                                {outcomeStatusDisplay(entry.status)} · {entry.count}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       {planArtifactLink ? (
                         <a
@@ -2154,15 +2182,36 @@ const App = () => {
                                 Estimated cost: <strong>{candidate.estimatedCost || "—"}</strong>
                               </span>
                             </div>
-                            {rationaleEntries.length ? (
-                              <div className="plan-rationale">
-                                {rationaleEntries.map((entry) => (
-                                  <span key={entry.label} className="plan-rationale-item">
-                                    <strong>{entry.label}:</strong> {humanizeReason(entry.value) || entry.value}
-                                  </span>
-                                ))}
+                              {rationaleEntries.length ? (
+                                <div className="plan-rationale">
+                                  {rationaleEntries.map((entry) => (
+                                    <span key={entry.label} className="plan-rationale-item">
+                                      <strong>{entry.label}:</strong> {humanizeReason(entry.value) || entry.value}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <div className="next-check-outcome-meta">
+                                <span className={outcomeStatusClass(candidate.outcomeStatus)}>
+                                  {outcomeStatusDisplay(candidate.outcomeStatus)}
+                                </span>
+                                <span className="muted tiny">
+                                  Approval: {humanizeReason(candidate.approvalState) || candidate.approvalState || "unknown"} · Execution: {humanizeReason(candidate.executionState) || candidate.executionState || "unknown"}
+                                </span>
+                                {candidate.latestTimestamp ? (
+                                  <span className="muted tiny">Updated {relativeRecency(candidate.latestTimestamp)}</span>
+                                ) : null}
+                                {candidate.latestArtifactPath ? (
+                                  <a
+                                    className="link"
+                                    href={artifactUrl(candidate.latestArtifactPath)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    View latest artifact
+                                  </a>
+                                ) : null}
                               </div>
-                            ) : null}
                               {(variant === "approval" || variant === "stale") && (
                                 <div className="next-check-approval-actions">
                                   <button
