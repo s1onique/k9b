@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { AUTOREFRESH_STORAGE_KEY } from "../App";
@@ -91,17 +91,27 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: /Cluster detail/i });
     const summaryToggle = await screen.findByText(/Tap to expand findings/i);
-    await user.click(summaryToggle);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
     const findingMatches = await screen.findAllByText(sampleClusterDetail.findings[0].label!, {
       exact: false,
     });
     expect(findingMatches.length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: /Hypotheses/i }));
-    expect(screen.getByText(sampleClusterDetail.hypotheses[0].description)).toBeInTheDocument();
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /Hypotheses/i }));
+    });
+    expect(
+      await screen.findByText(sampleClusterDetail.hypotheses[0].description)
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Next checks/i }));
-    expect(screen.getByText(sampleClusterDetail.nextChecks[0].description)).toBeInTheDocument();
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /Next checks/i }));
+    });
+    expect(
+      await screen.findByText(sampleClusterDetail.nextChecks[0].description)
+    ).toBeInTheDocument();
   });
 
   test("renders compact run stats string", async () => {
@@ -300,12 +310,15 @@ describe("App", () => {
     render(<App />);
 
     const panelHeading = await screen.findByRole("heading", { name: /LLM activity/i });
+    await screen.findByText(sampleClusterDetail.relatedNotifications[0].summary);
     expect(screen.getByText(/Retained entries: 19/i)).toBeInTheDocument();
     const panelSection = panelHeading.closest("section");
     expect(panelSection).not.toBeNull();
     const statusSelect = within(panelSection!).getByLabelText(/Status/i);
-    await user.selectOptions(statusSelect, "failed");
-    expect(within(panelSection!).getByText(/timeout/i)).toBeInTheDocument();
+    await act(async () => {
+      await user.selectOptions(statusSelect, "failed");
+    });
+    expect(await within(panelSection!).findByText(/timeout/i)).toBeInTheDocument();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {
@@ -319,9 +332,11 @@ describe("App", () => {
     expect(select).toHaveValue("30");
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
 
-    await user.selectOptions(select, "off");
-    expect(localStorage.getItem(AUTOREFRESH_STORAGE_KEY)).toBe("off");
-    expect(clearIntervalSpy).toHaveBeenCalled();
+    await act(async () => {
+      await user.selectOptions(select, "off");
+    });
+    await waitFor(() => expect(localStorage.getItem(AUTOREFRESH_STORAGE_KEY)).toBe("off"));
+    await waitFor(() => expect(clearIntervalSpy).toHaveBeenCalled());
     await screen.findByText(/Auto refresh is off/i);
   });
 
