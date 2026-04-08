@@ -151,6 +151,13 @@ describe("App", () => {
     expect(
       screen.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/Current run/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/(Fresh|Stale) data/i, { selector: ".freshness-pill" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/LLM telemetry/i)).toBeInTheDocument();
+    expect(screen.getByText(/Collector collector:v1.2.0/i)).toBeInTheDocument();
   });
 
   test("renders llm policy block with budget details", async () => {

@@ -1219,19 +1219,21 @@ const App = () => {
         <div className="hero-content">
           <p className="eyebrow">Operator console</p>
           <h1>Fleet triage cockpit</h1>
-          <div className="hero-meta">
-            <span className="muted small">Run {run.label} · {run.runId}</span>
-            <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
-              {runFresh ? "Fresh data" : "Stale data"} · {runRecency}
-            </span>
+          <div className="hero-run">
+            <div className="hero-run-identity">
+              <p className="eyebrow hero-run-label">Current run</p>
+              <div className="hero-run-title">
+                <strong>Run {run.label}</strong>
+                <span className="hero-run-id">ID {run.runId}</span>
+              </div>
+            </div>
+            <div className="hero-run-freshness">
+              <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
+                {runFresh ? "Fresh data" : "Stale data"}
+              </span>
+              <p className="hero-run-recency small muted">Last run {runRecency}</p>
+            </div>
           </div>
-          <p className="run-header-inline-stats muted small">{runStatsSummary}</p>
-          {runLlmStatsLine}
-          {providerBreakdown && (
-            <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
-          )}
-          {historicalLlmStatsLine}
-          <p className="muted">Collector {run.collectorVersion}</p>
         </div>
         <div className="hero-actions">
           <div className="refresh-controls">
@@ -1273,28 +1275,50 @@ const App = () => {
           <div>
             <p className="eyebrow">Run summary</p>
             <h2>{run.label}</h2>
+            <p className="muted tiny run-summary-collector">Collector {run.collectorVersion}</p>
           </div>
           <div className="run-summary-freshness">
-            <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
-              Last run {runRecency}
-            </span>
             <p className="muted small">{formatTimestamp(run.timestamp)}</p>
           </div>
         </div>
-        <div className="run-summary-stats">
-          {runSummaryStats.map((stat) => (
-            <span className="run-stat-pill" key={stat.label} aria-label={`${stat.label}: ${stat.value}`}>
-              <span className="run-stat-label">{stat.label}: </span>
-              <strong>{stat.value}</strong>
-            </span>
-          ))}
+        <div className="run-summary-metrics">
+          <div className="run-summary-stats">
+            {runSummaryStats.map((stat) => (
+              <article
+                className="run-stat-card"
+                key={stat.label}
+                aria-label={`${stat.label}: ${stat.value}`}
+              >
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+              </article>
+            ))}
+          </div>
+          <p className="run-duration-summary muted small">{runStatsSummary}</p>
+        </div>
+        <div className="run-summary-llm">
+          <div className="run-summary-llm-heading">
+            <p className="eyebrow">LLM telemetry</p>
+            <span className="muted tiny">Provider call metrics from artifacts</span>
+          </div>
+          {runLlmStatsLine}
+          {providerBreakdown && (
+            <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
+          )}
+          {historicalLlmStatsLine}
         </div>
         <div className="artifact-strip run-artifacts">
           {run.artifacts.map((artifact) => {
             const url = artifactUrl(artifact.path);
             return (
               url && (
-                <a key={artifact.label} className="artifact-link" href={url} target="_blank" rel="noreferrer">
+                <a
+                  key={artifact.label}
+                  className="artifact-link run-artifact-link"
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   {artifact.label}
                 </a>
               )
