@@ -231,13 +231,13 @@ def write_health_ui_index(
         "next_check_plan": plan_entry,
         "next_check_queue": queue_entry,
         "next_check_queue_explanation": _build_next_check_queue_explanation(
-            assessments,
             clusters,
             drilldown_availability,
             plan_entry,
             queue_entry,
             review_enrichment_entry,
             review_status,
+            deterministic_next_checks,
         ),
         "deterministic_next_checks": deterministic_next_checks,
         "next_check_execution_history": _build_next_check_execution_history(
@@ -1277,22 +1277,19 @@ def _pluck_plan_candidates(plan_entry: Mapping[str, object] | None) -> list[Mapp
 
 
 def _summarize_deterministic_checks(
-    assessments: Sequence[HealthAssessmentArtifact],
+    deterministic_next_checks: Mapping[str, object] | None,
     clusters: Sequence[dict[str, object]],
     drilldown_availability: dict[str, object],
 ) -> dict[str, object]:
     deterministic_total = 0
-    deterministic_clusters: set[str] = set()
-    for artifact in assessments:
-        assessment_payload = artifact.assessment if isinstance(artifact.assessment, dict) else {}
-        next_checks = assessment_payload.get("next_evidence_to_collect")
-        if isinstance(next_checks, Sequence) and not isinstance(next_checks, (str, bytes, bytearray)):
-            count = len(next_checks)
-        else:
-            count = 0
-        if count:
-            deterministic_total += count
-            deterministic_clusters.add(artifact.label)
+    deterministic_clusters = 0
+    if isinstance(deterministic_next_checks, Mapping):
+        deterministic_total = _coerce_int_value(
+            deterministic_next_checks.get("totalNextCheckCount")
+        )
+        deterministic_clusters = _coerce_int_value(
+            deterministic_next_checks.get("clusterCount")
+        )
     degraded_labels = [
         str(cluster.get("label"))
         for cluster in clusters
@@ -1303,7 +1300,7 @@ def _summarize_deterministic_checks(
         "degradedClusterCount": len(degraded_labels),
         "degradedClusterLabels": degraded_labels,
         "deterministicNextCheckCount": deterministic_total,
-        "deterministicClusterCount": len(deterministic_clusters),
+        "deterministicClusterCount": deterministic_clusters,
         "drilldownReadyCount": drilldown_ready,
     }
 
@@ -1358,6 +1355,11 @@ def _build_deterministic_next_checks_projection(
 ) -> dict[str, object]:
     entries: list[dict[str, object]] = []
     total_next_checks = 0
+    degraded_labels = [
+        str(cluster.get("label"))
+        for cluster in clusters
+        if str(cluster.get("health_rating") or "").lower() == "degraded"
+    ]
     for cluster in clusters:
         rating = str(cluster.get("health_rating") or "").lower()
         if rating != "degraded":
@@ -1392,7 +1394,7 @@ def _build_deterministic_next_checks_projection(
             }
         )
     return {
-        "clusterCount": len(entries),
+        "clusterCount": len(degraded_labels),
         "totalNextCheckCount": total_next_checks,
         "clusters": entries,
     }
@@ -1507,19 +1509,21 @@ def _derive_queue_artifact_path(
 
 
 def _build_next_check_queue_explanation(
-    assessments: Sequence[HealthAssessmentArtifact],
     clusters: Sequence[dict[str, object]],
     drilldown_availability: dict[str, object],
     plan_entry: Mapping[str, object] | None,
     queue: list[dict[str, object]],
     review_entry: Mapping[str, object] | None,
     review_status: Mapping[str, object] | None,
+    deterministic_next_checks: Mapping[str, object] | None,
 ) -> dict[str, object] | None:
     if queue:
         return None
     status = _determine_queue_explanation_status(plan_entry, review_entry, review_status)
     reason = _collect_queue_explanation_reason(plan_entry, review_entry, review_status)
-    cluster_state = _summarize_deterministic_checks(assessments, clusters, drilldown_availability)
+    cluster_state = _summarize_deterministic_checks(
+        deterministic_next_checks, clusters, drilldown_availability
+    )
     candidate_accounting = _build_candidate_accounting(plan_entry)
     next_action_hint = _NEXT_CHECK_QUEUE_EXPLANATION_HINTS.get(status)
     recommended_actions: list[str] = []

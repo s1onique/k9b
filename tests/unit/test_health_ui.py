@@ -403,6 +403,49 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(auto_policy["maxPerRun"], 3)
 
     def test_deterministic_next_checks_projection_appears(self) -> None:
+        data = self._build_sample_deterministic_run_index()
+        deterministic = data["run"].get("deterministic_next_checks")
+        self.assertIsNotNone(deterministic)
+        assert isinstance(deterministic, dict)
+        self.assertEqual(deterministic.get("clusterCount"), 1)
+        self.assertEqual(deterministic.get("totalNextCheckCount"), 1)
+        cluster_entry = deterministic["clusters"][0]
+        self.assertEqual(cluster_entry.get("label"), "cluster-beta")
+        self.assertEqual(cluster_entry.get("topProblem"), "tcpdump-investigation")
+        self.assertEqual(cluster_entry.get("deterministicNextCheckCount"), 1)
+        summaries = cluster_entry.get("deterministicNextCheckSummaries")
+        self.assertIsInstance(summaries, list)
+        self.assertEqual(summaries[0]["description"], "Capture tcpdump")
+        self.assertEqual(summaries[0]["method"], "kubectl exec")
+        self.assertEqual(cluster_entry.get("assessmentArtifactPath"), "assessments/cluster-beta.json")
+        self.assertEqual(cluster_entry.get("drilldownArtifactPath"), "drilldowns/cluster-beta.json")
+
+    def test_queue_explanation_counts_align_with_deterministic_projection(self) -> None:
+        data = self._build_sample_deterministic_run_index()
+        run_entry = data["run"]
+        deterministic = run_entry.get("deterministic_next_checks")
+        queue_explanation = run_entry.get("next_check_queue_explanation")
+        self.assertIsNotNone(deterministic)
+        self.assertIsNotNone(queue_explanation)
+        cluster_state = queue_explanation["clusterState"]
+        self.assertEqual(
+            deterministic.get("totalNextCheckCount"),
+            cluster_state.get("deterministicNextCheckCount"),
+        )
+        self.assertEqual(
+            deterministic.get("clusterCount"),
+            cluster_state.get("deterministicClusterCount"),
+        )
+        self.assertEqual(
+            bool(deterministic.get("totalNextCheckCount")),
+            bool(queue_explanation.get("deterministicNextChecksAvailable")),
+        )
+        self.assertEqual(
+            cluster_state.get("degradedClusterCount"),
+            len(cluster_state.get("degradedClusterLabels", [])),
+        )
+
+    def _build_sample_deterministic_run_index(self) -> dict[str, object]:
         target = HealthTarget(
             context="cluster-beta",
             label="cluster-beta",
@@ -493,22 +536,7 @@ class HealthUITests(unittest.TestCase):
             external_analysis=[],
             notifications=[],
         )
-        data = json.loads(result_path.read_text(encoding="utf-8"))
-        deterministic = data["run"].get("deterministic_next_checks")
-        self.assertIsNotNone(deterministic)
-        assert isinstance(deterministic, dict)
-        self.assertEqual(deterministic.get("clusterCount"), 1)
-        self.assertEqual(deterministic.get("totalNextCheckCount"), 1)
-        cluster_entry = deterministic["clusters"][0]
-        self.assertEqual(cluster_entry.get("label"), "cluster-beta")
-        self.assertEqual(cluster_entry.get("topProblem"), "tcpdump-investigation")
-        self.assertEqual(cluster_entry.get("deterministicNextCheckCount"), 1)
-        summaries = cluster_entry.get("deterministicNextCheckSummaries")
-        self.assertIsInstance(summaries, list)
-        self.assertEqual(summaries[0]["description"], "Capture tcpdump")
-        self.assertEqual(summaries[0]["method"], "kubectl exec")
-        self.assertEqual(cluster_entry.get("assessmentArtifactPath"), "assessments/cluster-beta.json")
-        self.assertEqual(cluster_entry.get("drilldownArtifactPath"), "drilldowns/cluster-beta.json")
+        return cast(dict[str, object], json.loads(result_path.read_text(encoding="utf-8")))
 
     def test_next_check_plan_includes_approval_metadata(self) -> None:
         run_id = "approval-run"
