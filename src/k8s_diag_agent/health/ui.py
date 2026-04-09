@@ -184,6 +184,9 @@ def write_health_ui_index(
         bool(review_enrichment_entry),
         review_config,
     )
+    planner_availability_entry = _build_next_check_planner_availability(
+        plan_entry, review_enrichment_entry, review_status
+    )
     auto_config = _serialize_auto_drilldown_policy(settings.auto_drilldown)
     run_entry = {
         "run_id": run_id,
@@ -215,6 +218,7 @@ def write_health_ui_index(
         "review_enrichment": review_enrichment_entry,
         "review_enrichment_config": review_config,
         "review_enrichment_status": review_status,
+        "planner_availability": planner_availability_entry,
         "next_check_plan": plan_entry,
         "next_check_execution_history": _build_next_check_execution_history(
             external_analysis, output_dir, run_id
@@ -764,6 +768,89 @@ def _find_next_check_plan_artifact(
         ):
             return artifact
     return None
+
+
+_PLANNER_STATUS_POLICY_DISABLED = "policy-disabled"
+_PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED = "enrichment-not-attempted"
+_PLANNER_STATUS_ENRICHMENT_FAILED = "enrichment-failed"
+_PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS = "enrichment-succeeded-without-next-checks"
+_PLANNER_STATUS_PLANNER_MISSING = "planner-missing-unexpectedly"
+_PLANNER_STATUS_PLANNER_PRESENT = "planner-present"
+_PLANNER_HINT_TEXT = (
+    "Cluster Detail next checks may still reflect deterministic assessments or review content "
+    "even when the planner artifact is absent."
+)
+
+
+def _build_next_check_planner_availability(
+    plan_entry: Mapping[str, object] | None,
+    review_entry: Mapping[str, object] | None,
+    review_status: Mapping[str, object] | None,
+) -> dict[str, object]:
+    if plan_entry:
+        summary = plan_entry.get("summary")
+        reason = str(summary) if summary else "Planner candidates were generated for this run."
+        return {
+            "status": _PLANNER_STATUS_PLANNER_PRESENT,
+            "reason": reason,
+            "hint": None,
+        }
+    status = _PLANNER_STATUS_PLANNER_MISSING
+    reason = "Planner data is not available for this run."
+    if review_entry is None:
+        if review_status:
+            status_value = str(review_status.get("status") or "").lower()
+            if status_value == _PLANNER_STATUS_POLICY_DISABLED:
+                status = _PLANNER_STATUS_POLICY_DISABLED
+                reason = (
+                    str(review_status.get("reason"))
+                    if review_status.get("reason")
+                    else "Review enrichment is disabled in the current configuration."
+                )
+            else:
+                status = _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED
+                reason = (
+                    str(review_status.get("reason"))
+                    if review_status.get("reason")
+                    else "Review enrichment was not attempted for this run."
+                )
+        else:
+            status = _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED
+            reason = "Review enrichment was not attempted for this run."
+    else:
+        entry_status = str(review_entry.get("status") or "").lower()
+        if entry_status != "success":
+            status = _PLANNER_STATUS_ENRICHMENT_FAILED
+            error_summary = review_entry.get("errorSummary")
+            reason = "Review enrichment ran but failed."
+            if error_summary:
+                reason = f"{reason} {error_summary}"
+        else:
+            next_checks = review_entry.get("nextChecks")
+            has_checks = False
+            if isinstance(next_checks, Sequence) and not isinstance(next_checks, (str, bytes, bytearray)):
+                has_checks = bool(next_checks)
+            else:
+                has_checks = bool(next_checks)
+            if not has_checks:
+                status = _PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS
+                reason = "Review enrichment succeeded but returned no nextChecks."
+            else:
+                status = _PLANNER_STATUS_PLANNER_MISSING
+            summary_value = review_entry.get("summary")
+            reason = (
+                str(summary_value)
+                if summary_value is not None
+                else "Review enrichment returned next checks, but the planner artifact is missing."
+            )
+    hint = None
+    if status != _PLANNER_STATUS_PLANNER_PRESENT:
+        hint = _PLANNER_HINT_TEXT
+    return {
+        "status": status,
+        "reason": reason,
+        "hint": hint,
+    }
 
 
 def _build_review_enrichment_status(

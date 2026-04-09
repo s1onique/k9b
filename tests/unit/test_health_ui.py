@@ -417,6 +417,11 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(candidate_entry["normalizationReason"], "selection_label")
         self.assertEqual(candidate_entry["safetyReason"], "known_command")
         self.assertIn("blockingReason", candidate_entry)
+        planner_availability = cast(dict[str, object], data["run"].get("planner_availability"))
+        self.assertIsNotNone(planner_availability)
+        self.assertEqual(planner_availability["status"], "planner-present")
+        self.assertEqual(planner_availability["reason"], "Planned 1 next-check candidate")
+        self.assertIsNone(planner_availability.get("hint"))
         self.assertEqual(data.get("next_check_plan"), plan_entry)
 
     def test_next_check_plan_includes_approval_metadata(self) -> None:
@@ -1230,6 +1235,17 @@ class HealthUITests(unittest.TestCase):
         self.assertTrue(config.get("enabled"))
         self.assertEqual(config.get("provider"), "llm-provider")
         self.assertEqual(config.get("maxPerRun"), 2)
+
+    def test_planner_availability_reports_review_enrichment_not_attempted(self) -> None:
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(enabled=True, provider="llamacpp")
+        )
+        data = self._write_status_index(settings, adapters=("llamacpp",))
+        planner = cast(dict[str, object], data["run"].get("planner_availability"))
+        self.assertIsNotNone(planner)
+        self.assertEqual(planner["status"], "enrichment-not-attempted")
+        self.assertIn("no artifact was recorded", str(planner["reason"]))
+        self.assertIsNotNone(planner.get("hint"))
 
     def test_review_enrichment_status_disabled_by_policy(self) -> None:
         settings = ExternalAnalysisSettings(

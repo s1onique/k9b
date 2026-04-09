@@ -23,6 +23,7 @@ from .model import (
     NextCheckOrphanedApprovalView,
     NextCheckPlanView,
     NotificationView,
+    PlannerAvailabilityView,
     ProposalView,
     ProviderExecutionBranchView,
     ProviderExecutionView,
@@ -86,6 +87,7 @@ class RunPayload(TypedDict):
     nextCheckExecutionHistory: list[NextCheckExecutionHistoryEntry]
     freshness: FreshnessPayload | None
     nextCheckPlan: NextCheckPlanPayload | None
+    plannerAvailability: PlannerAvailabilityPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -228,6 +230,12 @@ class NextCheckPlanPayload(TypedDict, total=False):
     orphanedApprovals: list[NextCheckOrphanedApprovalPayload]
     outcomeCounts: list[NextCheckOutcomeCountPayload]
     orphanedApprovalCount: int
+
+
+class PlannerAvailabilityPayload(TypedDict, total=False):
+    status: str
+    reason: str | None
+    hint: str | None
 
 
 class ReviewEnrichmentStatusPayload(TypedDict, total=False):
@@ -470,6 +478,7 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
             context.run.timestamp, context.run.scheduler_interval_seconds
         ),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
+        "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
         "nextCheckExecutionHistory": _serialize_execution_history(
             context.run.next_check_execution_history
         ),
@@ -897,6 +906,18 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
             {"status": entry.status, "count": entry.count} for entry in view.outcome_counts
         ],
         "orphanedApprovalCount": view.orphaned_approval_count,
+    }
+
+
+def _serialize_planner_availability(
+    view: PlannerAvailabilityView | None,
+) -> PlannerAvailabilityPayload | None:
+    if not view:
+        return None
+    return {
+        "status": view.status,
+        "reason": view.reason,
+        "hint": view.hint,
     }
 
 

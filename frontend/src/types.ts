@@ -8,6 +8,12 @@ export type ProblemSummary = {
   detail: string;
 };
 
+export type PlannerAvailability = {
+  status: string;
+  reason?: string | null;
+  hint?: string | null;
+};
+
 export type NextCheckExecutionHistoryEntry = {
   timestamp: string;
   clusterLabel: string | null;
@@ -54,6 +60,7 @@ export type RunPayload = {
   providerExecution?: ProviderExecution | null;
   nextCheckExecutionHistory?: NextCheckExecutionHistoryEntry[];
   nextCheckPlan?: NextCheckPlan | null;
+  plannerAvailability?: PlannerAvailability | null;
 };
 
 export type RunStats = {

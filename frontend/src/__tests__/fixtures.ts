@@ -250,6 +250,11 @@ export const sampleRun: RunPayload = {
     ],
     orphanedApprovalCount: 0,
   },
+  plannerAvailability: {
+    status: "planner-present",
+    reason: "Planner generated multiple advisory checks.",
+    hint: null,
+  },
   nextCheckExecutionHistory: [
     {
       timestamp: "2026-04-06T12:05:00Z",

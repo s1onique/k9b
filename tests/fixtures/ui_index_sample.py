@@ -234,6 +234,11 @@ def sample_ui_index() -> dict[str, object]:
                 },
             ],
             },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "3 provider-suggested next checks normalized into safe/approval/duplicate categories.",
+                "hint": None,
+            },
             "next_check_execution_history": [
                 {
                     "timestamp": "2026-04-08T06:26:30Z",

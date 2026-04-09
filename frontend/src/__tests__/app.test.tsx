@@ -38,6 +38,8 @@ const defaultPayloads = {
 };
 
 const NOTIFICATION_BASE_TIME = Date.UTC(2026, 3, 7, 0, 0, 0);
+const PLANNER_HINT_TEXT =
+  "Cluster Detail next checks may still reflect deterministic assessments or review content even when the planner artifact is absent.";
 
 const buildNotificationEntry = (
   index: number,
@@ -225,6 +227,53 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText(/No next checks generated for this run/i)).toBeInTheDocument();
+  });
+
+  test("run summary empty state explains review enrichment not attempted", async () => {
+    const reasonText = "Review enrichment was not attempted for this run.";
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": {
+        ...sampleRun,
+        nextCheckPlan: null,
+        plannerAvailability: {
+          status: "enrichment-not-attempted",
+          reason: reasonText,
+          hint: PLANNER_HINT_TEXT,
+        },
+      },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    expect(await screen.findByText(new RegExp(reasonText, "i"))).toBeInTheDocument();
+    expect(screen.getByText(/No next checks generated for this run/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(PLANNER_HINT_TEXT, "i"))).toBeInTheDocument();
+  });
+
+  test("run summary empty state explains review enrichment succeeded but no nextChecks", async () => {
+    const reasonText = "Review enrichment succeeded but returned no nextChecks.";
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": {
+        ...sampleRun,
+        nextCheckPlan: null,
+        reviewEnrichment: {
+          ...sampleRun.reviewEnrichment!,
+          nextChecks: [],
+        },
+        plannerAvailability: {
+          status: "enrichment-succeeded-without-next-checks",
+          reason: reasonText,
+          hint: PLANNER_HINT_TEXT,
+        },
+      },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    expect(await screen.findByText(new RegExp(reasonText, "i"))).toBeInTheDocument();
+    expect(screen.getByText(/No next checks generated for this run/i)).toBeInTheDocument();
   });
 
   test("review next checks button opens the cluster detail panel", async () => {

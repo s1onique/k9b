@@ -1573,7 +1573,12 @@ const App = () => {
   const runPlan = run.nextCheckPlan;
   const orphanedApprovals = runPlan?.orphanedApprovals ?? [];
   const planArtifactLink = runPlan?.artifactPath ? artifactUrl(runPlan.artifactPath) : null;
-  const planSummaryText = runPlan?.summary ?? "Provider-assisted next-check candidates are available.";
+  const plannerAvailability = run.plannerAvailability ?? null;
+  const plannerReason = plannerAvailability?.reason;
+  const plannerHint = plannerAvailability?.hint;
+  const planSummaryText =
+    runPlan?.summary ?? plannerReason ?? "Provider-assisted next-check candidates are available.";
+  const plannerReasonText = plannerReason ?? "Planner data is not available for this run.";
   const planCandidateCountLabel =
     runPlan?.candidateCount != null
       ? `${runPlan.candidateCount} candidate${runPlan.candidateCount === 1 ? "" : "s"}`
@@ -1767,7 +1772,7 @@ const App = () => {
                   ) : null}
                 </>
               ) : (
-                <p className="muted tiny">Planner data is not available for this run.</p>
+               <p className="muted tiny">{plannerReasonText}</p>
               )}
               {runPlan && runPlanCandidates.length ? (
                 <p className="muted tiny">{planCandidateCountLabel}</p>
@@ -1783,7 +1788,12 @@ const App = () => {
             </button>
           </div>
           {!runPlan ? (
-            <p className="muted small">No next checks generated for this run.</p>
+            <>
+              <p className="muted small">No next checks generated for this run.</p>
+              {plannerHint ? (
+                <p className="muted tiny">{plannerHint}</p>
+              ) : null}
+            </>
           ) : runPlanCandidates.length ? (
             <>
               <div className="run-summary-next-checks-stats">

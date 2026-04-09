@@ -88,6 +88,15 @@ class UIApiTests(unittest.TestCase):
         review_exec = provider_execution.get("reviewEnrichment") or {}
         self.assertEqual(review_exec.get("eligible"), 1)
         self.assertEqual(review_exec.get("attempted"), 1)
+        planner_availability = payload.get("plannerAvailability")
+        self.assertIsNotNone(planner_availability)
+        assert planner_availability is not None
+        self.assertEqual(planner_availability["status"], "planner-present")
+        self.assertEqual(
+            planner_availability["reason"],
+            "3 provider-suggested next checks normalized into safe/approval/duplicate categories.",
+        )
+        self.assertIsNone(planner_availability.get("hint"))
 
     def test_run_payload_includes_freshness(self) -> None:
         payload = build_run_payload(self.context)
@@ -236,6 +245,25 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(candidate.get("candidateId"), "candidate-logs")
         self.assertEqual(plan.get("outcomeCounts"), [])
         self.assertEqual(plan.get("orphanedApprovalCount"), 0)
+
+    def test_run_payload_planner_enrichment_not_attempted(self) -> None:
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["next_check_plan"] = None
+        run_entry["planner_availability"] = {
+            "status": "enrichment-not-attempted",
+            "reason": "Review enrichment was not attempted for this run.",
+            "hint": "Cluster Detail next checks can still derive from assessment output.",
+        }
+        index["next_check_plan"] = None
+        context = build_ui_context(index)
+        payload = build_run_payload(context)
+        self.assertIsNone(payload.get("nextCheckPlan"))
+        planner_availability = payload.get("plannerAvailability")
+        self.assertIsNotNone(planner_availability)
+        assert planner_availability is not None
+        self.assertEqual(planner_availability["status"], "enrichment-not-attempted")
+        self.assertIn("not attempted", str(planner_availability["reason"]))
 
     def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
         index = sample_ui_index()

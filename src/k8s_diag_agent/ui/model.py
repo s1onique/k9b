@@ -30,6 +30,7 @@ class RunView:
     review_enrichment_status: ReviewEnrichmentStatusView | None
     provider_execution: ProviderExecutionView | None
     next_check_plan: NextCheckPlanView | None
+    planner_availability: PlannerAvailabilityView | None
     next_check_execution_history: tuple[NextCheckExecutionHistoryEntryView, ...]
 
 
@@ -88,6 +89,13 @@ class LLMActivitySummaryView:
 class LLMActivityView:
     entries: tuple[LLMActivityEntryView, ...]
     summary: LLMActivitySummaryView
+
+
+@dataclass(frozen=True)
+class PlannerAvailabilityView:
+    status: str
+    reason: str | None
+    hint: str | None
 
 
 @dataclass(frozen=True)
@@ -427,6 +435,7 @@ class UIIndexContext:
     review_enrichment_status: ReviewEnrichmentStatusView | None
     provider_execution: ProviderExecutionView | None
     next_check_plan: NextCheckPlanView | None
+    planner_availability: PlannerAvailabilityView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -443,6 +452,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         run_data.get("review_enrichment_status")
     )
     next_check_plan = _build_next_check_plan_view(run_data.get("next_check_plan"))
+    planner_availability = _build_planner_availability_view(run_data.get("planner_availability"))
     run = RunView(
         run_id=_coerce_str(run_data.get("run_id")),
         run_label=_coerce_str(run_data.get("run_label")),
@@ -463,6 +473,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         review_enrichment_status=review_enrichment_status,
         provider_execution=_build_provider_execution_view(run_data.get("provider_execution")),
         next_check_plan=next_check_plan,
+        planner_availability=planner_availability,
         next_check_execution_history=_build_execution_history_view(
             run_data.get("next_check_execution_history")
         ),
@@ -505,6 +516,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         review_enrichment_status=review_enrichment_status,
         provider_execution=run.provider_execution,
         next_check_plan=run.next_check_plan,
+        planner_availability=run.planner_availability,
     )
 
 
@@ -982,6 +994,16 @@ def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | 
         artifact_path=_coerce_optional_str(raw.get("artifactPath")),
         error_summary=_coerce_optional_str(raw.get("errorSummary")),
         skip_reason=_coerce_optional_str(raw.get("skipReason")),
+    )
+
+
+def _build_planner_availability_view(raw: object | None) -> PlannerAvailabilityView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return PlannerAvailabilityView(
+        status=_coerce_str(raw.get("status")),
+        reason=_coerce_optional_str(raw.get("reason")),
+        hint=_coerce_optional_str(raw.get("hint")),
     )
 
 

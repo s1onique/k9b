@@ -107,6 +107,14 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(history_entries[0].status, "success")
         self.assertFalse(history_entries[0].timed_out)
 
+        planner_availability = context.run.planner_availability
+        self.assertIsNotNone(planner_availability)
+        assert planner_availability is not None
+        self.assertEqual(planner_availability.status, "planner-present")
+        self.assertIsNotNone(planner_availability.reason)
+        assert planner_availability.reason is not None
+        self.assertTrue(planner_availability.reason.startswith("3 provider-suggested"))
+
         provider_execution = context.run.provider_execution
         self.assertIsNotNone(provider_execution)
         assert provider_execution is not None
