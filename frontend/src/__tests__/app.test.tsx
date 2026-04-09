@@ -125,15 +125,16 @@ describe("App", () => {
     });
     expect(findingMatches.length).toBeGreaterThan(0);
 
+    const tabList = screen.getByRole("tablist", { name: /Cluster detail tabs/i });
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Hypotheses/i }));
+      await user.click(within(tabList).getByRole("button", { name: /Hypotheses/i }));
     });
     expect(
       await screen.findByText(sampleClusterDetail.hypotheses[0].description)
     ).toBeInTheDocument();
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Next checks/i }));
+      await user.click(within(tabList).getByRole("button", { name: /Next checks/i }));
     });
     expect(
       await screen.findByText(sampleClusterDetail.nextChecks[0].description)
@@ -182,11 +183,16 @@ describe("App", () => {
     await act(async () => {
       await user.click(summaryToggle);
     });
-    const safeLabels = await screen.findAllByText(/Safe candidate/i);
-    expect(safeLabels.length).toBeGreaterThan(0);
-    expect(screen.getByText(/Approval needed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Command not recognized or too vague/i)).toBeInTheDocument();
-    expect(screen.getByText(/Matches deterministic next check: Collect kubelet metrics/i)).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planPanel = heading.closest(".next-check-plan");
+    expect(planPanel).not.toBeNull();
+    const scoped = within(planPanel!);
+    expect(scoped.getAllByText(/Safe candidate/i).length).toBeGreaterThan(0);
+    expect(scoped.getByText(/Approval needed/i)).toBeInTheDocument();
+    expect(scoped.getByText(/Command not recognized or too vague/i)).toBeInTheDocument();
+    expect(
+      scoped.getByText(/Matches deterministic next check: Collect kubelet metrics/i)
+    ).toBeInTheDocument();
   });
 
   test("next check outcome summary reveals status counts", async () => {
@@ -197,6 +203,44 @@ describe("App", () => {
     expect(screen.getByText(/Executed \(success\) · 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Awaiting approval · 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Not used · 1/i)).toBeInTheDocument();
+  });
+
+  test("run summary surfaces next-check discovery actions", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByText(/Planner candidates/i);
+    expect(screen.getByRole("button", { name: /Review next checks/i })).toBeInTheDocument();
+    expect(screen.getByText(/Safe candidate/i)).toBeInTheDocument();
+    expect(screen.getByText(/Approval needed/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cluster-a/i })).toBeInTheDocument();
+  });
+
+  test("run summary shows empty state when planner data is absent", async () => {
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": { ...sampleRun, nextCheckPlan: null },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    expect(await screen.findByText(/No next checks generated for this run/i)).toBeInTheDocument();
+  });
+
+  test("review next checks button opens the cluster detail panel", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const reviewButton = await screen.findByRole("button", { name: /Review next checks/i });
+    await act(async () => {
+      await user.click(reviewButton);
+    });
+
+    const details = screen.getByText(/Tap to expand findings/i).closest("details");
+    expect(details).not.toBeNull();
+    expect(details).toHaveAttribute("open");
+    expect(await screen.findByRole("heading", { name: /Next check plan/i })).toBeInTheDocument();
   });
 
   test("renders stale and orphaned approvals", async () => {
@@ -243,8 +287,12 @@ describe("App", () => {
     await act(async () => {
       await user.click(summaryToggle);
     });
-    expect(screen.getByText(/Approval stale/i)).toBeInTheDocument();
-    expect(screen.getByText(/Orphaned approvals/i)).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planPanel = heading.closest(".next-check-plan");
+    expect(planPanel).not.toBeNull();
+    const scoped = within(planPanel!);
+    expect(scoped.getByText(/Approval stale/i)).toBeInTheDocument();
+    expect(scoped.getByText(/Orphaned approvals/i)).toBeInTheDocument();
   });
 
   test("displays run button only for allowed next-check candidates", async () => {

@@ -218,6 +218,11 @@ const humanizeReason = (value?: string | null) => {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 };
 
+const formatCandidatePriority = (value?: string | null) => {
+  const normalized = (value ?? "secondary").toLowerCase();
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+};
+
 const ALLOWED_MANUAL_FAMILIES = new Set([
   "kubectl-get",
   "kubectl-describe",
@@ -1357,12 +1362,18 @@ const App = () => {
     });
   };
 
-  const handleClusterSelection = (label: string) => {
-    if (!label || label === selectedClusterLabel) {
+  const handleClusterSelection = (label: string, options?: { expand?: boolean }) => {
+    if (!label) {
+      return;
+    }
+    if (label === selectedClusterLabel) {
+      if (options?.expand) {
+        setClusterDetailExpanded(true);
+      }
       return;
     }
     setSelectedClusterLabel(label);
-    setClusterDetailExpanded(false);
+    setClusterDetailExpanded(Boolean(options?.expand));
   };
 
   const handleAutoRefreshChange = (value: string) => {
@@ -1571,6 +1582,50 @@ const App = () => {
   const executionHistory: NextCheckExecutionHistoryEntry[] = run.nextCheckExecutionHistory ?? [];
   const outcomeSummary = runPlan?.outcomeCounts ?? [];
 
+  const runPlanCandidates: NextCheckPlanCandidate[] = runPlan?.candidates ?? [];
+  const discoveryVariantOrder: NextCheckStatusVariant[] = [
+    "safe",
+    "approval",
+    "approved",
+    "duplicate",
+    "stale",
+  ];
+  const discoveryVariantCounts: Record<NextCheckStatusVariant, number> = {
+    safe: 0,
+    approval: 0,
+    approved: 0,
+    duplicate: 0,
+    stale: 0,
+  };
+  runPlanCandidates.forEach((candidate) => {
+    const variant = determineNextCheckStatusVariant(candidate);
+    discoveryVariantCounts[variant] = (discoveryVariantCounts[variant] ?? 0) + 1;
+  });
+  const discoveryClusters = Array.from(
+    new Set(
+      runPlanCandidates
+        .map((candidate) => candidate.targetCluster)
+        .filter((label): label is string => Boolean(label))
+    )
+  );
+
+  const focusClusterForNextChecks = (clusterLabel?: string | null) => {
+    const target =
+      clusterLabel ||
+      discoveryClusters[0] ||
+      selectedClusterLabel ||
+      fleet.clusters[0]?.label ||
+      null;
+    if (!target) {
+      return;
+    }
+    handleClusterSelection(target, { expand: true });
+    if (typeof document !== "undefined") {
+      const section = document.getElementById("cluster");
+      section?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+  };
+
   const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
   const historicalLlmStatsLine = run.historicalLlmStats
     ? renderLlmStatsLine(run.historicalLlmStats, "llm-stats-line-historical")
@@ -1698,6 +1753,83 @@ const App = () => {
               )
             );
           })}
+        </div>
+        <div className="run-summary-next-checks">
+          <div className="run-summary-next-checks-head">
+            <div>
+              <p className="eyebrow">Next checks</p>
+              <h3>Planner candidates</h3>
+              {runPlan ? (
+                <>
+                  <p className="muted tiny">{planSummaryText}</p>
+                  {planStatusText ? (
+                    <p className="muted tiny">Planner status: {planStatusText}</p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="muted tiny">Planner data is not available for this run.</p>
+              )}
+              {runPlan && runPlanCandidates.length ? (
+                <p className="muted tiny">{planCandidateCountLabel}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="run-summary-next-checks-button"
+              onClick={() => focusClusterForNextChecks()}
+              disabled={!runPlan}
+            >
+              Review next checks
+            </button>
+          </div>
+          {!runPlan ? (
+            <p className="muted small">No next checks generated for this run.</p>
+          ) : runPlanCandidates.length ? (
+            <>
+              <div className="run-summary-next-checks-stats">
+                {discoveryVariantOrder.map((variant) => {
+                  const count = discoveryVariantCounts[variant];
+                  if (!count) {
+                    return null;
+                  }
+                  return (
+                    <span
+                      key={variant}
+                      className={`next-check-discovery-pill next-check-discovery-pill-${variant}`}
+                    >
+                      <strong>{count}</strong>
+                      <span>{nextCheckStatusLabel(variant)}</span>
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="run-summary-next-checks-clusters">
+                <p className="muted tiny">
+                  Affected cluster{discoveryClusters.length === 1 ? "" : "s"}: {discoveryClusters.length || "None"}
+                </p>
+                <div className="next-check-cluster-tags">
+                  {discoveryClusters.length ? (
+                    discoveryClusters.map((cluster) => (
+                      <button
+                        type="button"
+                        className="next-check-cluster-badge"
+                        key={cluster}
+                        onClick={() => focusClusterForNextChecks(cluster)}
+                      >
+                        {cluster}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="muted small">
+                      Planner candidates do not target a specific cluster.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="muted small">Planner created no candidates for this run.</p>
+          )}
         </div>
         {!runFresh && (
           <div className="alert alert-inline">
@@ -2089,6 +2221,9 @@ const App = () => {
                           const variant = determineNextCheckStatusVariant(candidate);
                           const statusLabel = getPlanStatusLabel(variant, candidate);
                           const statusClassName = `plan-status-pill plan-status-pill-${variant}`;
+                          const priority = (candidate.priorityLabel ?? "secondary").toLowerCase();
+                          const displayPriority = formatCandidatePriority(priority);
+                          const priorityIndicatorClass = `priority-pill priority-pill-${priority}`;
                           const targetLabel =
                             candidate.targetCluster ||
                             clusterDetail?.selectedClusterLabel ||
@@ -2146,6 +2281,9 @@ const App = () => {
                                   Source: {candidate.sourceReason || "Planner advisory"}
                                 </p>
                                 <strong>{candidate.description}</strong>
+                                <span className={priorityIndicatorClass}>
+                                  Priority: {displayPriority}
+                                </span>
                               </div>
                               <span className={statusClassName}>{statusLabel}</span>
                             </header>
@@ -2315,7 +2453,7 @@ const App = () => {
                     </div>
                   </div>
                 ) : null}
-                <div className="tab-list">
+                <div className="tab-list" role="tablist" aria-label="Cluster detail tabs">
                   {[
                     { id: "findings", label: "Findings" },
                     { id: "hypotheses", label: "Hypotheses" },

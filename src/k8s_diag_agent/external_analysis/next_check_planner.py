@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -228,6 +229,99 @@ def _determine_normalization_reason(
     return NormalizationReason.UNKNOWN
 
 
+_GENERIC_PHRASES = (
+    "review status",
+    "review cluster",
+    "review everything",
+    "investigate flagged",
+    "investigate flagged resources",
+    "investigate resources",
+    "assess cluster",
+)
+
+_GENERIC_KEYWORDS = ("review", "investigate", "assess", "inspect", "check", "verify")
+_GENERIC_STATUS_TERMS = ("status", "resources", "signals", "components", "health", "workload", "everything")
+
+
+def _normalize_for_dedup(value: str) -> str:
+    normalized = _normalize_text(value)
+    normalized = re.sub(r"\(.*?\)", "", normalized)
+    normalized = re.sub(r"\bversion\b\s*\S*", "", normalized)
+    normalized = re.sub(r"\b(v?\d+(?:\.\d+)*)\b", "", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized or _normalize_text(value)
+
+
+def _build_dedup_signature(description: str, target_cluster: str | None) -> str:
+    normalized = _normalize_for_dedup(description)
+    target = target_cluster or ""
+    return f"{target}|{normalized}"
+
+
+def _is_generic_candidate(text: str, family: CommandFamily) -> bool:
+    if family != CommandFamily.UNKNOWN:
+        return False
+    normalized = _normalize_text(text)
+    for phrase in _GENERIC_PHRASES:
+        if phrase in normalized:
+            return True
+    if any(keyword in normalized for keyword in _GENERIC_KEYWORDS) and any(
+        term in normalized for term in _GENERIC_STATUS_TERMS
+    ):
+        return True
+    if "everything" in normalized or "general" in normalized:
+        return True
+    return False
+
+
+def _determine_priority_label(
+    *,
+    duplicate: bool,
+    target_cluster: str | None,
+    safe_to_automate: bool,
+    family: CommandFamily,
+    cost: CostEstimate,
+    generic: bool,
+) -> str:
+    if duplicate or generic or family == CommandFamily.UNKNOWN:
+        return "fallback"
+    if target_cluster and safe_to_automate and cost == CostEstimate.LOW:
+        return "primary"
+    return "secondary"
+
+
+def _compute_candidate_sort_score(candidate: NextCheckCandidate) -> int:
+    score = 0
+    if candidate.target_cluster:
+        score += 250
+    if candidate.suggested_command_family != CommandFamily.UNKNOWN:
+        score += 150
+    if candidate.safe_to_automate:
+        score += 120
+    cost_score = {
+        CostEstimate.LOW: 40,
+        CostEstimate.MEDIUM: 20,
+        CostEstimate.HIGH: 5,
+    }
+    score += cost_score.get(candidate.estimated_cost, 0)
+    if candidate.expected_signal:
+        score += 40
+    if candidate.duplicate_of_existing_evidence:
+        score -= 160
+    if _is_generic_candidate(candidate.description, candidate.suggested_command_family):
+        score -= 80
+    return score
+
+
+def _rank_candidates(candidates: Sequence[NextCheckCandidate]) -> tuple[NextCheckCandidate, ...]:
+    scored: list[tuple[int, NextCheckCandidate]] = []
+    for candidate in candidates:
+        score = _compute_candidate_sort_score(candidate)
+        scored.append((score, candidate))
+    scored.sort(key=lambda entry: (-entry[0], entry[1].description))
+    return tuple(entry[1] for entry in scored)
+
+
 @dataclass(frozen=True)
 class NextCheckCandidate:
     candidate_id: str
@@ -249,6 +343,7 @@ class NextCheckCandidate:
     approval_reason: str | None
     duplicate_reason: str | None
     blocking_reason: str | None
+    priority_label: str
 
     def to_dict(self) -> dict[str, object | str | bool]:
         return {
@@ -261,7 +356,7 @@ class NextCheckCandidate:
             "requiresOperatorApproval": self.requires_operator_approval,
             "riskLevel": self.risk_level.value,
             "estimatedCost": self.estimated_cost.value,
-         "confidence": self.confidence,
+            "confidence": self.confidence,
             "gatingReason": self.gating_reason,
             "duplicateOfExistingEvidence": self.duplicate_of_existing_evidence,
             "duplicateEvidenceDescription": self.duplicate_evidence_description,
@@ -271,6 +366,7 @@ class NextCheckCandidate:
             "duplicateReason": self.duplicate_reason,
             "blockingReason": self.blocking_reason,
             "candidateId": self.candidate_id,
+            "priorityLabel": self.priority_label,
         }
 
 
@@ -311,6 +407,7 @@ def plan_next_checks(
     evidence_map = _collect_existing_evidence(context)
     selections = context.selections
     candidates: list[NextCheckCandidate] = []
+    seen_signatures: set[str] = set()
     for candidate_text in checks:
         if not candidate_text or not isinstance(candidate_text, str):
             continue
@@ -378,6 +475,19 @@ def plan_next_checks(
             gating_reason = "Command not recognized or too vague"
         cost = _cost_from_risk(risk)
         confidence = _confidence_level(safe, family)
+        signature = _build_dedup_signature(candidate_text, target_cluster)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        is_generic = _is_generic_candidate(candidate_text, family)
+        priority_label = _determine_priority_label(
+            duplicate=duplicate,
+            target_cluster=target_cluster,
+            safe_to_automate=safe,
+            family=family,
+            cost=cost,
+            generic=is_generic,
+        )
         candidate_id = _derive_candidate_id(
             candidate_text,
             target_cluster,
@@ -404,13 +514,15 @@ def plan_next_checks(
             approval_reason=approval_reason.value if approval_reason else None,
             duplicate_reason=duplicate_reason_enum.value if duplicate_reason_enum else None,
             blocking_reason=blocking_reason.value if blocking_reason else None,
+            priority_label=priority_label,
         )
         candidates.append(candidate)
     if not candidates:
         return None
+    sorted_candidates = _rank_candidates(candidates)
     return NextCheckPlan(
         run_id=run_id,
         review_path=review_path,
         enrichment_artifact_path=enrichment_artifact.artifact_path,
-        candidates=tuple(candidates),
+        candidates=sorted_candidates,
     )

@@ -253,6 +253,7 @@ class ReviewEnrichmentView:
 @dataclass(frozen=True)
 class NextCheckCandidateView:
     candidate_id: str | None
+    priority_label: str | None
     description: str
     target_cluster: str | None
     source_reason: str | None
@@ -1097,6 +1098,7 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
         outcome_status=_coerce_optional_str(raw.get("outcomeStatus")),
         latest_artifact_path=_coerce_optional_str(raw.get("latestArtifactPath")),
         latest_timestamp=_coerce_optional_str(raw.get("latestTimestamp")),
+        priority_label=_coerce_optional_str(raw.get("priorityLabel")),
     )
 
 

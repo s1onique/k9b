@@ -90,7 +90,9 @@ class UIViewModelTests(unittest.TestCase):
             "Collect kubelet logs for control-plane pods",
         )
         self.assertEqual(plan.candidates[0].candidate_id, "candidate-control-plane-logs")
+        self.assertEqual(plan.candidates[0].priority_label, "primary")
         self.assertEqual(plan.candidates[1].gating_reason, "Command not recognized or too vague")
+        self.assertEqual(plan.candidates[1].priority_label, "fallback")
         self.assertTrue(plan.candidates[2].duplicate_of_existing_evidence)
         self.assertEqual(
             plan.candidates[2].duplicate_evidence_description,

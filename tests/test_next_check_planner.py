@@ -205,6 +205,84 @@ def test_fixture_duplicate_detection_handles_variations(tmp_path: Path) -> None:
     assert "Matches deterministic next check" in (candidate.gating_reason or "")
 
 
+def test_specific_candidate_preferred_over_generic(tmp_path: Path) -> None:
+    run_id = "run-ranking"
+    root = tmp_path / "runs" / "health"
+    review_path = _write_review(
+        root,
+        run_id,
+        [
+            {
+                "label": "cluster-ranking",
+                "context": "cluster-ranking",
+                "reasons": ["warning_event_threshold"],
+            }
+        ],
+    )
+    artifact = _build_enrichment_artifact(
+        run_id,
+        (
+            "Investigate flagged resources",
+            "kubectl logs -n default deployment/alpha",
+        ),
+    )
+    plan = plan_next_checks(review_path, run_id, artifact)
+    assert plan is not None
+    assert len(plan.candidates) == 2
+    assert plan.candidates[0].description.startswith("kubectl logs")
+    assert plan.candidates[0].priority_label == "primary"
+    assert plan.candidates[1].priority_label == "fallback"
+
+
+def test_generic_candidate_preserved_when_no_specific_suggestions(tmp_path: Path) -> None:
+    run_id = "run-generic"
+    root = tmp_path / "runs" / "health"
+    review_path = _write_review(
+        root,
+        run_id,
+        [
+            {
+                "label": "cluster-generic",
+                "context": "cluster-generic",
+                "reasons": ["cluster_health"],
+            }
+        ],
+    )
+    artifact = _build_enrichment_artifact(run_id, ("Review cluster status and signals",))
+    plan = plan_next_checks(review_path, run_id, artifact)
+    assert plan is not None
+    assert len(plan.candidates) == 1
+    assert plan.candidates[0].priority_label == "fallback"
+
+
+def test_repeated_helm_suggestions_are_collapsed(tmp_path: Path) -> None:
+    run_id = "run-helm"
+    root = tmp_path / "runs" / "health"
+    review_path = _write_review(
+        root,
+        run_id,
+        [
+            {
+                "label": "cluster-helm",
+                "context": "cluster-helm",
+                "reasons": ["helm_release"],
+            }
+        ],
+    )
+    artifact = _build_enrichment_artifact(
+        run_id,
+        (
+            "Validate Helm release nginx",
+            "Validate Helm release nginx version 2.1",
+            "Validate Helm release nginx (status check)",
+        ),
+    )
+    plan = plan_next_checks(review_path, run_id, artifact)
+    assert plan is not None
+    assert len(plan.candidates) == 1
+    assert plan.candidates[0].description == "Validate Helm release nginx"
+
+
 def test_planner_skips_when_enrichment_missing(tmp_path: Path) -> None:
     run_id = "run-missing"
     root = tmp_path / "runs" / "health"

@@ -256,6 +256,7 @@ export type NextCheckPlanCandidate = {
     riskLevel: string;
     estimatedCost: string;
     confidence: string;
+    priorityLabel?: string | null;
     gatingReason: string | null;
     duplicateOfExistingEvidence: boolean;
     duplicateEvidenceDescription: string | null;

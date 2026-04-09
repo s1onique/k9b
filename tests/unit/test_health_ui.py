@@ -230,8 +230,9 @@ class HealthUITests(unittest.TestCase):
                     "requiresOperatorApproval": False,
                     "riskLevel": "low",
                     "estimatedCost": "low",
-                    "confidence": "high",
-                    "gatingReason": None,
+            "confidence": "high",
+            "priorityLabel": "primary",
+            "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
                     "candidateId": "candidate-control-plane",
@@ -412,6 +413,7 @@ class HealthUITests(unittest.TestCase):
         candidate_entry = plan_entry["candidates"][0]
         self.assertEqual(candidate_entry["suggestedCommandFamily"], "kubectl-logs")
         self.assertTrue(candidate_entry["safeToAutomate"])
+        self.assertEqual(candidate_entry.get("priorityLabel"), "primary")
         self.assertEqual(candidate_entry["normalizationReason"], "selection_label")
         self.assertEqual(candidate_entry["safetyReason"], "known_command")
         self.assertIn("blockingReason", candidate_entry)

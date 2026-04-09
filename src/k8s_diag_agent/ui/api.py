@@ -180,6 +180,7 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     riskLevel: str
     estimatedCost: str
     confidence: str
+    priorityLabel: str | None
     gatingReason: str | None
     duplicateOfExistingEvidence: bool
     duplicateEvidenceDescription: str | None
@@ -962,6 +963,8 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         payload["candidateId"] = view.candidate_id
     if view.candidate_index is not None:
         payload["candidateIndex"] = view.candidate_index
+    if view.priority_label is not None:
+        payload["priorityLabel"] = view.priority_label
     return payload
 
 

@@ -207,6 +207,7 @@ class UIApiTests(unittest.TestCase):
                     "riskLevel": "low",
                     "estimatedCost": "low",
                     "confidence": "high",
+                    "priorityLabel": "primary",
                     "gatingReason": None,
                     "duplicateOfExistingEvidence": False,
                     "duplicateEvidenceDescription": None,
