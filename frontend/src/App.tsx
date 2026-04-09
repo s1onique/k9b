@@ -1421,6 +1421,14 @@ const App = () => {
       candidate.targetCluster ?? selectedClusterLabel ?? "global"
     }`;
 
+  const [expandedQueueItems, setExpandedQueueItems] = useState<Record<string, boolean>>({});
+  const toggleQueueDetails = useCallback((key: string) => {
+    setExpandedQueueItems((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }, []);
+
   const isManualExecutionAllowed = (candidate: NextCheckPlanCandidate) => {
     const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
     if (!hasCandidateIdentifier) {
@@ -1937,6 +1945,20 @@ const App = () => {
                   ? artifactUrl(item.latestArtifactPath)
                   : null;
                 const allowRun = isManualExecutionAllowed(item);
+                const detailsExpanded = Boolean(expandedQueueItems[queueCandidateKey]);
+                const planArtifactLink = item.planArtifactPath
+                  ? artifactUrl(item.planArtifactPath)
+                  : null;
+                const metadataEntries = [
+                  { label: "Source reason", value: item.sourceReason },
+                  { label: "Expected signal", value: item.expectedSignal },
+                  { label: "Normalization", value: humanizeReason(item.normalizationReason) },
+                  { label: "Safety", value: humanizeReason(item.safetyReason) },
+                  { label: "Approval reason", value: humanizeReason(item.approvalReason) },
+                  { label: "Duplicate reason", value: humanizeReason(item.duplicateReason) },
+                  { label: "Blocking reason", value: humanizeReason(item.blockingReason) },
+                  { label: "Target context", value: item.targetContext },
+                ].filter((entry) => entry.value);
                 return (
                   <article className="next-check-queue-item" key={queueCandidateKey}>
                     <div className="next-check-queue-item-meta">
@@ -1990,6 +2012,13 @@ const App = () => {
                           View latest artifact
                         </a>
                       )}
+                      <button
+                        type="button"
+                        className="toggle-details-button"
+                        onClick={() => toggleQueueDetails(queueCandidateKey)}
+                      >
+                        {detailsExpanded ? "Hide details" : "Show details"}
+                      </button>
                     </div>
                     {approvalResult ? (
                       <p className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}>
@@ -2032,6 +2061,30 @@ const App = () => {
                         ) : null}
                       </p>
                     ) : null}
+                    {detailsExpanded && (
+                      <div className="next-check-queue-item-details">
+                        <div className="next-check-queue-item-metadata">
+                          {metadataEntries.map((entry) => (
+                            <span key={entry.label}>
+                              <strong>{entry.label}:</strong> {entry.value}
+                            </span>
+                          ))}
+                          {planArtifactLink ? (
+                            <span>
+                              <strong>Plan artifact:</strong>
+                              {" "}
+                              <a href={planArtifactLink} target="_blank" rel="noreferrer">
+                                View planner artifact
+                              </a>
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="next-check-command-preview">
+                          <p className="tiny muted">Command preview</p>
+                          <pre>{item.commandPreview ?? item.description}</pre>
+                        </div>
+                      </div>
+                    )}
                   </article>
                 );
               })}

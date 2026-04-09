@@ -517,7 +517,7 @@ class HealthUITests(unittest.TestCase):
         self.assertIsNotNone(candidate_entry.get("approvalTimestamp"))
 
     def test_build_next_check_queue_orders_statuses(self) -> None:
-        plan_entry = {
+        plan_entry: dict[str, object] = {
             "candidates": [
                 {
                     "candidateId": "approved-ready",
@@ -580,7 +580,8 @@ class HealthUITests(unittest.TestCase):
                 },
             ]
         }
-        queue = _build_next_check_queue(plan_entry)
+        plan_entry["artifactPath"] = "external-analysis/queue-plan.json"
+        queue = _build_next_check_queue(plan_entry, {})
         statuses = [entry.get("queueStatus") for entry in queue]
         self.assertEqual(
             statuses,
@@ -596,6 +597,12 @@ class HealthUITests(unittest.TestCase):
         )
         self.assertEqual(queue[0].get("candidateIndex"), 0)
         self.assertEqual(queue[1].get("candidateIndex"), 1)
+        self.assertEqual(
+            queue[0].get("planArtifactPath"),
+            "external-analysis/queue-plan.json",
+        )
+        self.assertIsNotNone(queue[0].get("commandPreview"))
+        self.assertIn("targetContext", queue[0])
 
     def test_next_check_plan_marks_stale_approval_when_plan_changes(self) -> None:
         run_id = "stale-run"

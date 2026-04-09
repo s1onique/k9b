@@ -356,6 +356,16 @@ class NextCheckQueueItemView:
     outcome_status: str | None
     latest_artifact_path: str | None
     queue_status: str
+    source_reason: str | None
+    expected_signal: str | None
+    normalization_reason: str | None
+    safety_reason: str | None
+    approval_reason: str | None
+    duplicate_reason: str | None
+    blocking_reason: str | None
+    target_context: str | None
+    command_preview: str | None
+    plan_artifact_path: str | None
 
 
 @dataclass(frozen=True)
@@ -1116,6 +1126,16 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
                 execution_state=_coerce_optional_str(entry.get("executionState")),
                 outcome_status=_coerce_optional_str(entry.get("outcomeStatus")),
                 latest_artifact_path=_coerce_optional_str(entry.get("latestArtifactPath")),
+                source_reason=_coerce_optional_str(entry.get("sourceReason")),
+                expected_signal=_coerce_optional_str(entry.get("expectedSignal")),
+                normalization_reason=_coerce_optional_str(entry.get("normalizationReason")),
+                safety_reason=_coerce_optional_str(entry.get("safetyReason")),
+                approval_reason=_coerce_optional_str(entry.get("approvalReason")),
+                duplicate_reason=_coerce_optional_str(entry.get("duplicateReason")),
+                blocking_reason=_coerce_optional_str(entry.get("blockingReason")),
+                target_context=_coerce_optional_str(entry.get("targetContext")),
+                command_preview=_coerce_optional_str(entry.get("commandPreview")),
+                plan_artifact_path=_coerce_optional_str(entry.get("planArtifactPath")),
                 queue_status=_coerce_str(entry.get("queueStatus")),
             )
         )

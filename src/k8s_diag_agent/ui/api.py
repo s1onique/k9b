@@ -203,6 +203,8 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     latestTimestamp: str | None
     candidateId: str | None
     candidateIndex: int | None
+    targetContext: str | None
+    commandPreview: str | None
 
 
 class NextCheckQueueItemPayload(TypedDict, total=False):
@@ -219,6 +221,16 @@ class NextCheckQueueItemPayload(TypedDict, total=False):
     outcomeStatus: str | None
     latestArtifactPath: str | None
     queueStatus: str
+    sourceReason: str | None
+    expectedSignal: str | None
+    normalizationReason: str | None
+    safetyReason: str | None
+    approvalReason: str | None
+    duplicateReason: str | None
+    blockingReason: str | None
+    targetContext: str | None
+    commandPreview: str | None
+    planArtifactPath: str | None
 
 
 class NextCheckOrphanedApprovalPayload(TypedDict, total=False):
@@ -945,6 +957,16 @@ def _serialize_next_check_queue(queue: tuple[NextCheckQueueItemView, ...]) -> li
             "executionState": item.execution_state,
             "outcomeStatus": item.outcome_status,
             "latestArtifactPath": item.latest_artifact_path,
+            "sourceReason": item.source_reason,
+            "expectedSignal": item.expected_signal,
+            "normalizationReason": item.normalization_reason,
+            "safetyReason": item.safety_reason,
+            "approvalReason": item.approval_reason,
+            "duplicateReason": item.duplicate_reason,
+            "blockingReason": item.blocking_reason,
+            "targetContext": item.target_context,
+            "commandPreview": item.command_preview,
+            "planArtifactPath": item.plan_artifact_path,
             "queueStatus": item.queue_status,
         }
         for item in queue

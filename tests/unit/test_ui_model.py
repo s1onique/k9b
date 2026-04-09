@@ -126,6 +126,9 @@ class UIViewModelTests(unittest.TestCase):
         queue = context.run.next_check_queue
         self.assertTrue(queue)
         self.assertIn("approval-needed", {entry.queue_status for entry in queue})
+        for item in queue:
+            self.assertTrue(item.command_preview is None or isinstance(item.command_preview, str))
+            self.assertTrue(item.plan_artifact_path is None or isinstance(item.plan_artifact_path, str))
 
         provider_execution = context.run.provider_execution
         self.assertIsNotNone(provider_execution)

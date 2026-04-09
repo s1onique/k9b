@@ -285,6 +285,9 @@ export type NextCheckPlanCandidate = {
     outcomeStatus?: string | null;
     latestArtifactPath?: string | null;
     latestTimestamp?: string | null;
+    targetContext?: string | null;
+    commandPreview?: string | null;
+    planArtifactPath?: string | null;
 };
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {

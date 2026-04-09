@@ -327,6 +327,7 @@ class NextCheckCandidate:
     candidate_id: str
     description: str
     target_cluster: str | None
+    target_context: str | None
     source_reason: str | None
     expected_signal: str | None
     suggested_command_family: CommandFamily
@@ -365,6 +366,7 @@ class NextCheckCandidate:
             "approvalReason": self.approval_reason,
             "duplicateReason": self.duplicate_reason,
             "blockingReason": self.blocking_reason,
+            "targetContext": self.target_context,
             "candidateId": self.candidate_id,
             "priorityLabel": self.priority_label,
         }
@@ -413,6 +415,7 @@ def plan_next_checks(
             continue
         selection = _match_selection_for_text(candidate_text, selections)
         target_cluster = selection.label if selection else None
+        target_context = selection.context.strip() if selection and selection.context else None
         source_reason = None
         if selection:
             reasons_entry = selection.entry.get("reasons")
@@ -498,6 +501,7 @@ def plan_next_checks(
             candidate_id=candidate_id,
             description=candidate_text.strip(),
             target_cluster=target_cluster,
+            target_context=target_context,
             source_reason=source_reason,
             expected_signal=expected_signal,
             suggested_command_family=family,

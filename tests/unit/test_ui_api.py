@@ -124,6 +124,9 @@ class UIApiTests(unittest.TestCase):
         self.assertIn("approval-needed", statuses)
         self.assertIn("completed", statuses)
         self.assertTrue(all("queueStatus" in entry for entry in queue))
+        first_entry = queue[0]
+        self.assertIn("commandPreview", first_entry)
+        self.assertIn("planArtifactPath", first_entry)
 
     def test_run_payload_reconstructs_review_enrichment_from_artifact_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -333,6 +333,11 @@ class RunApiServerTests(unittest.TestCase):
         self.assertTrue(queue)
         statuses = {entry.get("queueStatus") for entry in queue if isinstance(entry, Mapping)}
         self.assertIn("approval-needed", statuses)
+        first_entry = next((entry for entry in queue if isinstance(entry, Mapping)), None)
+        self.assertIsNotNone(first_entry)
+        first_entry_mapping = cast(Mapping[str, object], first_entry)
+        self.assertIn("commandPreview", first_entry_mapping)
+        self.assertIn("planArtifactPath", first_entry_mapping)
 
     def test_notifications_endpoint_filters(self) -> None:
         artifact = self._build_artifact(run_id="filter-run", status=ExternalAnalysisStatus.SUCCESS)

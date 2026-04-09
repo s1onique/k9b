@@ -235,6 +235,26 @@ describe("App", () => {
     expect(queueScoped.getAllByRole("link", { name: /View latest artifact/i }).length).toBeGreaterThan(0);
   });
 
+  test("queue item details toggle reveals metadata and command preview", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const eyebrow = await screen.findByText(/Next-check queue/i);
+    const queuePanel = eyebrow.closest(".next-check-queue-panel");
+    expect(queuePanel).not.toBeNull();
+    const queueScoped = within(queuePanel!);
+    const showButtons = queueScoped.getAllByRole("button", { name: /Show details/i });
+    expect(showButtons.length).toBeGreaterThan(0);
+    await act(async () => {
+      await user.click(showButtons[0]);
+    });
+    expect(queueScoped.getByText(/Source reason:/i)).toBeInTheDocument();
+    expect(queueScoped.getByText(/Command preview/i)).toBeInTheDocument();
+    expect(queueScoped.getByText(/Plan artifact/i)).toBeInTheDocument();
+    expect(queueScoped.getByText(/kubectl describe diag/i)).toBeInTheDocument();
+  });
+
   test("run summary shows empty state when planner data is absent", async () => {
     const payloads = {
       ...defaultPayloads,

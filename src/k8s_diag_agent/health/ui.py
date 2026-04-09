@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import shlex
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -155,6 +156,7 @@ def write_health_ui_index(
         _serialize_cluster(record, assessment_map, drilldown_map, output_dir)
         for record in records
     ]
+    cluster_context_map = {record.target.label: record.target.context for record in records}
     drilldown_entries = [
         _serialize_drilldown(artifact, output_dir)
         for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True)
@@ -176,7 +178,7 @@ def write_health_ui_index(
         historical_entries,
     )
     plan_entry = _serialize_next_check_plan(external_analysis, output_dir, run_id)
-    queue_entry = _build_next_check_queue(plan_entry)
+    queue_entry = _build_next_check_queue(plan_entry, cluster_context_map)
     settings = external_analysis_settings or ExternalAnalysisSettings()
     review_config = _serialize_review_enrichment_policy(settings.review_enrichment)
     review_status = _build_review_enrichment_status(
@@ -655,7 +657,41 @@ def _queue_sort_key(entry: Mapping[str, object]) -> tuple[int, int, int, str]:
     return status_index, priority_index, index_value, identifier
 
 
-def _build_next_check_queue(plan_entry: Mapping[str, object] | None) -> list[dict[str, object]]:
+def _strip_context_tokens(tokens: Sequence[str]) -> tuple[str, ...]:
+    sanitized: list[str] = []
+    iterator = iter(tokens)
+    for token in iterator:
+        if token in ("--context", "-c"):
+            next(iterator, None)
+            continue
+        if token.startswith("--context=") or token.startswith("-c="):
+            continue
+        sanitized.append(token)
+    return tuple(sanitized)
+
+
+def _build_command_preview(description: object | None, target_context: str | None) -> str | None:
+    if not isinstance(description, str) or not description.strip():
+        return None
+    try:
+        tokens = shlex.split(description)
+    except ValueError:
+        tokens = description.strip().split()
+    if not tokens:
+        return None
+    if tokens[0] != "kubectl":
+        tokens = ["kubectl", *tokens]
+    remainder = _strip_context_tokens(tokens[1:])
+    if target_context:
+        remainder = (*remainder, "--context", target_context)
+    preview_tokens = ("kubectl", *remainder)
+    return " ".join(shlex.quote(token) for token in preview_tokens)
+
+
+def _build_next_check_queue(
+    plan_entry: Mapping[str, object] | None,
+    cluster_context_map: Mapping[str, str],
+) -> list[dict[str, object]]:
     if not isinstance(plan_entry, Mapping):
         return []
     raw_candidates = plan_entry.get("candidates")
@@ -664,6 +700,7 @@ def _build_next_check_queue(plan_entry: Mapping[str, object] | None) -> list[dic
     else:
         candidates = []
     queue: list[dict[str, object]] = []
+    plan_artifact_path = plan_entry.get("artifactPath")
     for index, entry in enumerate(candidates):
         if not isinstance(entry, Mapping):
             continue
@@ -674,6 +711,19 @@ def _build_next_check_queue(plan_entry: Mapping[str, object] | None) -> list[dic
         queue_entry["queueStatus"] = queue_status
         queue_entry["candidateIndex"] = candidate_index
         queue_entry.setdefault("clusterLabel", entry.get("targetCluster"))
+        candidate_context = entry.get("targetContext")
+        target_context: str | None = None
+        if isinstance(candidate_context, str) and candidate_context.strip():
+            target_context = candidate_context.strip()
+        else:
+            cluster_label = entry.get("targetCluster")
+            if isinstance(cluster_label, str):
+                context_value = cluster_context_map.get(cluster_label)
+                if context_value:
+                    target_context = context_value
+        queue_entry["targetContext"] = target_context
+        queue_entry["planArtifactPath"] = plan_artifact_path
+        queue_entry["commandPreview"] = _build_command_preview(entry.get("description"), target_context)
         queue.append(queue_entry)
     queue.sort(key=_queue_sort_key)
     return queue
