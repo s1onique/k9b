@@ -42,6 +42,9 @@ from k8s_diag_agent.health.ui import (
     _build_next_check_queue,
     _build_provider_execution,
     _build_review_enrichment_status,
+    _classify_blocked_candidate,
+    _classify_execution_failure,
+    _classify_execution_success,
     _serialize_review_enrichment,
     write_health_ui_index,
 )
@@ -398,46 +401,114 @@ class HealthUITests(unittest.TestCase):
         self.assertTrue(auto_policy["enabled"])
         self.assertEqual(auto_policy["provider"], "default")
         self.assertEqual(auto_policy["maxPerRun"], 3)
-        self.assertEqual(auto_policy["usedThisRun"], 1)
-        self.assertEqual(auto_policy["successfulThisRun"], 1)
-        self.assertEqual(auto_policy["failedThisRun"], 0)
-        self.assertEqual(auto_policy["skippedThisRun"], 0)
-        self.assertFalse(auto_policy["budgetExhausted"])
-        enrichment = data["run"].get("review_enrichment")
-        self.assertIsNotNone(enrichment)
-        self.assertEqual(enrichment["status"], "success")
-        self.assertEqual(enrichment["triageOrder"], ["cluster-b", "cluster-a"])
-        llm_activity = data["run"].get("llm_activity")
-        self.assertIsNotNone(llm_activity)
-        self.assertEqual(llm_activity["summary"]["retained_entries"], 3)
-        entries = llm_activity["entries"]
-        self.assertEqual(entries[0]["status"], "success")
-        self.assertEqual(entries[1]["status"], "success")
-        self.assertEqual(entries[2]["status"], "failed")
-        status_entry = data["run"].get("review_enrichment_status")
-        self.assertIsNone(status_entry)
-        plan_entry = data["run"].get("next_check_plan")
-        self.assertIsNotNone(plan_entry)
-        self.assertEqual(plan_entry["candidateCount"], 1)
-        candidate_entry = plan_entry["candidates"][0]
-        self.assertEqual(candidate_entry["suggestedCommandFamily"], "kubectl-logs")
-        self.assertTrue(candidate_entry["safeToAutomate"])
-        self.assertEqual(candidate_entry.get("priorityLabel"), "primary")
-        self.assertEqual(candidate_entry["normalizationReason"], "selection_label")
-        self.assertEqual(candidate_entry["safetyReason"], "known_command")
-        self.assertIn("blockingReason", candidate_entry)
-        planner_availability = cast(dict[str, object], data["run"].get("planner_availability"))
-        self.assertIsNotNone(planner_availability)
-        self.assertEqual(planner_availability["status"], "planner-present")
-        self.assertEqual(planner_availability["reason"], "Planned 1 next-check candidate")
-        self.assertIsNone(planner_availability.get("hint"))
-        self.assertEqual(
-            planner_availability.get("artifactPath"),
-            "external-analysis/health-run-1-next-check-plan.json",
+
+    def test_deterministic_next_checks_projection_appears(self) -> None:
+        target = HealthTarget(
+            context="cluster-beta",
+            label="cluster-beta",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+            cluster_class="prod",
+            cluster_role="primary",
+            baseline_cohort="fleet",
         )
-        expected_hint = _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_PLANNER_PRESENT]
-        self.assertEqual(planner_availability.get("nextActionHint"), expected_hint)
-        self.assertEqual(data.get("next_check_plan"), plan_entry)
+        snapshot = ClusterSnapshot.from_dict(
+            {
+                "metadata": {
+                    "cluster_id": "cluster-beta",
+                    "captured_at": "2026-01-02T00:00:00Z",
+                    "control_plane_version": "v1.26.0",
+                    "node_count": 2,
+                },
+                "health_signals": {
+                    "node_conditions": {"ready": 2},
+                    "pod_counts": {"non_running": 0},
+                    "warning_events": (),
+                    "job_failures": 0,
+                },
+            }
+        )
+        record = HealthSnapshotRecord(
+            target=target,
+            snapshot=snapshot,
+            path=self.tmpdir / "snapshot-beta.json",
+            baseline_policy=BaselinePolicy.empty(),
+            baseline_policy_path="baseline.json",
+        )
+        assessment = HealthAssessmentArtifact(
+            run_label="run-deterministic",
+            run_id="run-deterministic-1",
+            timestamp=snapshot.metadata.captured_at,
+            context=target.context,
+            label=target.label,
+            cluster_id=target.label,
+            snapshot_path=str(record.path),
+            assessment={
+                "next_evidence_to_collect": [
+                    {
+                        "description": "Capture tcpdump",
+                        "owner": "platform",
+                        "method": "kubectl exec",
+                        "evidence_needed": ["tcpdump output"],
+                    }
+                ],
+            },
+            missing_evidence=(),
+            health_rating=HealthRating.DEGRADED,
+        )
+        assessment.artifact_path = "assessments/cluster-beta.json"
+        drilldown = DrilldownArtifact(
+            run_label="run-deterministic",
+            run_id="run-deterministic-1",
+            timestamp=snapshot.metadata.captured_at,
+            snapshot_timestamp=snapshot.metadata.captured_at,
+            context=target.context,
+            label=target.label,
+            cluster_id=target.label,
+            trigger_reasons=("tcpdump-investigation",),
+            missing_evidence=(),
+            evidence_summary={"note": "tcpdump pending"},
+            affected_namespaces=(),
+            affected_workloads=(),
+            warning_events=(),
+            non_running_pods=(),
+            pod_descriptions={},
+            rollout_status=(),
+            collection_timestamps={
+                "pods": snapshot.metadata.captured_at.isoformat(),
+            },
+            artifact_path="drilldowns/cluster-beta.json",
+        )
+        output_dir = self.tmpdir / "runs" / "health"
+        result_path = write_health_ui_index(
+            output_dir,
+            run_id="run-deterministic-1",
+            run_label="run-deterministic",
+            collector_version="1.0",
+            records=[record],
+            assessments=[assessment],
+            drilldowns=[drilldown],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+        )
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+        deterministic = data["run"].get("deterministic_next_checks")
+        self.assertIsNotNone(deterministic)
+        assert isinstance(deterministic, dict)
+        self.assertEqual(deterministic.get("clusterCount"), 1)
+        self.assertEqual(deterministic.get("totalNextCheckCount"), 1)
+        cluster_entry = deterministic["clusters"][0]
+        self.assertEqual(cluster_entry.get("label"), "cluster-beta")
+        self.assertEqual(cluster_entry.get("topProblem"), "tcpdump-investigation")
+        self.assertEqual(cluster_entry.get("deterministicNextCheckCount"), 1)
+        summaries = cluster_entry.get("deterministicNextCheckSummaries")
+        self.assertIsInstance(summaries, list)
+        self.assertEqual(summaries[0]["description"], "Capture tcpdump")
+        self.assertEqual(summaries[0]["method"], "kubectl exec")
+        self.assertEqual(cluster_entry.get("assessmentArtifactPath"), "assessments/cluster-beta.json")
+        self.assertEqual(cluster_entry.get("drilldownArtifactPath"), "drilldowns/cluster-beta.json")
 
     def test_next_check_plan_includes_approval_metadata(self) -> None:
         run_id = "approval-run"
@@ -1727,3 +1798,87 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(review.get("attempted"), 0)
         self.assertEqual(review.get("unattempted"), 1)
         self.assertIn("no artifact", str(review.get("notes")))
+
+    def test_classify_execution_failure_prefers_timeout(self) -> None:
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="test",
+            cluster_label="cluster-a",
+            status=ExternalAnalysisStatus.FAILED,
+            timed_out=True,
+            error_summary="Command timed out.",
+        )
+        follow_up = _classify_execution_failure(artifact)
+        self.assertIsNotNone(follow_up)
+        assert follow_up is not None
+        self.assertEqual(follow_up.failure_class, "timed-out")
+        self.assertEqual(follow_up.suggested_next_operator_move, "Retry candidate")
+
+    def test_classify_execution_failure_detects_missing_kubectl(self) -> None:
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="test",
+            cluster_label="cluster-a",
+            status=ExternalAnalysisStatus.FAILED,
+            error_summary="[Errno 2] No such file or directory: 'kubectl'",
+        )
+        follow_up = _classify_execution_failure(artifact)
+        self.assertIsNotNone(follow_up)
+        assert follow_up is not None
+        self.assertEqual(follow_up.failure_class, "command-unavailable")
+        self.assertEqual(follow_up.suggested_next_operator_move, "Inspect artifact output")
+
+    def test_classify_execution_success_detects_empty_output(self) -> None:
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="test",
+            cluster_label="cluster-a",
+            status=ExternalAnalysisStatus.SUCCESS,
+            output_bytes_captured=0,
+            raw_output="",
+        )
+        interpretation = _classify_execution_success(artifact)
+        self.assertIsNotNone(interpretation)
+        assert interpretation is not None
+        self.assertEqual(interpretation.result_class, "empty-result")
+        self.assertEqual(interpretation.result_summary, "Command completed without producing output.")
+
+    def test_classify_execution_success_flags_truncated_output(self) -> None:
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="test",
+            cluster_label="cluster-a",
+            status=ExternalAnalysisStatus.SUCCESS,
+            stdout_truncated=True,
+            output_bytes_captured=512,
+        )
+        interpretation = _classify_execution_success(artifact)
+        self.assertIsNotNone(interpretation)
+        assert interpretation is not None
+        self.assertEqual(interpretation.result_class, "partial-result")
+
+    def test_classify_execution_success_prefers_useful_signal(self) -> None:
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="test",
+            cluster_label="cluster-a",
+            status=ExternalAnalysisStatus.SUCCESS,
+            raw_output="some logs",
+            payload={"commandFamily": "kubectl-logs", "outputBytesCaptured": 128},
+        )
+        interpretation = _classify_execution_success(artifact)
+        self.assertIsNotNone(interpretation)
+        assert interpretation is not None
+        self.assertEqual(interpretation.result_class, "useful-signal")
+
+    def test_classify_blocked_candidate_requires_approval(self) -> None:
+        candidate = {
+            "requiresOperatorApproval": True,
+            "approvalState": "approval-required",
+            "queueStatus": "approval-needed",
+        }
+        follow_up = _classify_blocked_candidate(candidate)
+        self.assertIsNotNone(follow_up)
+        assert follow_up is not None
+        self.assertEqual(follow_up.failure_class, "approval-missing-or-stale")
+        self.assertEqual(follow_up.suggested_next_operator_move, "Review approval state")

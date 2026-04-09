@@ -5,9 +5,38 @@ from k8s_diag_agent.ui.model import AssessmentView, FindingsView, RecommendedAct
 from tests.fixtures.ui_index_sample import sample_ui_index
 
 
+def _sample_deterministic_next_checks() -> dict[str, object]:
+    return {
+        "clusterCount": 1,
+        "totalNextCheckCount": 1,
+        "clusters": [
+            {
+                "label": "cluster-a",
+                "context": "cluster-a",
+                "topProblem": "warning_event_threshold",
+                "deterministicNextCheckCount": 1,
+                "deterministicNextCheckSummaries": [
+                    {
+                        "description": "capture tcpdump",
+                        "owner": "platform",
+                        "method": "kubectl exec",
+                        "evidenceNeeded": ["tcpdump"],
+                    }
+                ],
+                "drilldownAvailable": True,
+                "assessmentArtifactPath": "assessments/cluster-a.json",
+                "drilldownArtifactPath": "drilldowns/cluster-a.json",
+            }
+        ],
+    }
+
+
 class UIViewModelTests(unittest.TestCase):
     def test_build_ui_context_from_index(self) -> None:
         index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
         context = build_ui_context(index)
         self.assertEqual(context.run.run_id, "run-1")
         self.assertEqual(context.clusters[0].cluster_class, "prod")
@@ -129,6 +158,20 @@ class UIViewModelTests(unittest.TestCase):
         for item in queue:
             self.assertTrue(item.command_preview is None or isinstance(item.command_preview, str))
             self.assertTrue(item.plan_artifact_path is None or isinstance(item.plan_artifact_path, str))
+
+        deterministic = context.run.deterministic_next_checks
+        self.assertIsNotNone(deterministic)
+        assert deterministic is not None
+        self.assertEqual(deterministic.cluster_count, 1)
+        self.assertEqual(deterministic.total_next_check_count, 1)
+        cluster_summary = deterministic.clusters[0]
+        self.assertEqual(cluster_summary.label, "cluster-a")
+        self.assertTrue(cluster_summary.top_problem)
+        self.assertEqual(cluster_summary.deterministic_next_check_count, 1)
+        summary_entry = cluster_summary.deterministic_next_check_summaries[0]
+        self.assertEqual(summary_entry.description, "capture tcpdump")
+        self.assertEqual(summary_entry.method, "kubectl exec")
+        self.assertEqual(summary_entry.owner, "platform")
 
         provider_execution = context.run.provider_execution
         self.assertIsNotNone(provider_execution)

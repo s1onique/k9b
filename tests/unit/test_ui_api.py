@@ -28,9 +28,37 @@ from k8s_diag_agent.ui.model import build_ui_context
 from tests.fixtures.ui_index_sample import sample_ui_index
 
 
+def _sample_deterministic_next_checks() -> dict[str, object]:
+    return {
+        "clusterCount": 1,
+        "totalNextCheckCount": 1,
+        "clusters": [
+            {
+                "label": "cluster-a",
+                "context": "cluster-a",
+                "topProblem": "warning_event_threshold",
+                "deterministicNextCheckCount": 1,
+                "deterministicNextCheckSummaries": [
+                    {
+                        "description": "capture tcpdump",
+                        "owner": "platform",
+                        "method": "kubectl exec",
+                        "evidenceNeeded": ["tcpdump"],
+                    }
+                ],
+                "drilldownAvailable": True,
+                "assessmentArtifactPath": "assessments/cluster-a.json",
+                "drilldownArtifactPath": "drilldowns/cluster-a.json",
+            }
+        ],
+    }
+
+
 class UIApiTests(unittest.TestCase):
     def setUp(self) -> None:
         index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
         self.context = build_ui_context(index)
 
     def test_run_payload_contains_artifacts(self) -> None:
@@ -277,6 +305,7 @@ class UIApiTests(unittest.TestCase):
             "hint": "Cluster Detail next checks can still derive from assessment output.",
             "nextActionHint": "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run.",
         }
+        run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
         index["next_check_plan"] = None
         context = build_ui_context(index)
         payload = build_run_payload(context)
@@ -291,6 +320,19 @@ class UIApiTests(unittest.TestCase):
             planner_availability.get("nextActionHint"),
             "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run.",
         )
+    
+        deterministic = payload.get("deterministicNextChecks")
+        self.assertIsNotNone(deterministic)
+        assert isinstance(deterministic, dict)
+        self.assertEqual(deterministic.get("clusterCount"), 1)
+        self.assertEqual(deterministic.get("totalNextCheckCount"), 1)
+        cluster_entry = deterministic.get("clusters", [])[0]
+        self.assertEqual(cluster_entry.get("label"), "cluster-a")
+        self.assertEqual(cluster_entry.get("topProblem"), "warning_event_threshold")
+        self.assertEqual(cluster_entry.get("deterministicNextCheckCount"), 1)
+        summary_entry = cluster_entry.get("deterministicNextCheckSummaries", [])[0]
+        self.assertEqual(summary_entry.get("description"), "capture tcpdump")
+        self.assertEqual(summary_entry.get("method"), "kubectl exec")
 
     def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
         index = sample_ui_index()
@@ -343,6 +385,11 @@ class UIApiTests(unittest.TestCase):
         entry = history[0]
         self.assertEqual(entry.get("status"), "success")
         self.assertFalse(entry.get("timedOut"))
+        self.assertEqual(entry.get("resultClass"), "useful-signal")
+        self.assertEqual(
+            entry.get("resultSummary"),
+            "Captured control-plane logs that highlight recent kubelet errors.",
+        )
 
     def test_freshness_helper_computes_statuses(self) -> None:
         base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)

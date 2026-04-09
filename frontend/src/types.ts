@@ -28,6 +28,11 @@ export type NextCheckExecutionHistoryEntry = {
   stdoutTruncated: boolean | null;
   stderrTruncated: boolean | null;
   outputBytesCaptured: number | null;
+  failureClass?: string | null;
+  failureSummary?: string | null;
+  suggestedNextOperatorMove?: string | null;
+  resultClass?: string | null;
+  resultSummary?: string | null;
 };
 
 export type StatusCount = {
@@ -63,6 +68,8 @@ export type RunPayload = {
   nextCheckExecutionHistory?: NextCheckExecutionHistoryEntry[];
   nextCheckPlan?: NextCheckPlan | null;
   nextCheckQueue?: NextCheckQueueItem[];
+  nextCheckQueueExplanation?: NextCheckQueueExplanation | null;
+  deterministicNextChecks?: DeterministicNextChecks | null;
   plannerAvailability?: PlannerAvailability | null;
 };
 
@@ -288,10 +295,68 @@ export type NextCheckPlanCandidate = {
     targetContext?: string | null;
     commandPreview?: string | null;
     planArtifactPath?: string | null;
+    failureClass?: string | null;
+    failureSummary?: string | null;
+    suggestedNextOperatorMove?: string | null;
+    resultClass?: string | null;
+    resultSummary?: string | null;
 };
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {
   queueStatus: string;
+};
+
+export type NextCheckQueueCandidateAccounting = {
+  generated: number;
+  safe: number;
+  approvalNeeded: number;
+  duplicate: number;
+  completed: number;
+  staleOrphaned: number;
+  orphanedApprovals: number;
+};
+
+export type NextCheckQueueClusterState = {
+  degradedClusterCount: number;
+  degradedClusterLabels: string[];
+  deterministicNextCheckCount: number;
+  deterministicClusterCount: number;
+  drilldownReadyCount: number;
+};
+
+export type NextCheckQueueExplanation = {
+  status: string;
+  reason?: string | null;
+  hint?: string | null;
+  plannerArtifactPath?: string | null;
+  clusterState: NextCheckQueueClusterState;
+  candidateAccounting: NextCheckQueueCandidateAccounting;
+  deterministicNextChecksAvailable: boolean;
+  recommendedNextActions: string[];
+};
+
+export type DeterministicNextCheckSummary = {
+  description: string;
+  owner: string;
+  method: string;
+  evidenceNeeded: string[];
+};
+
+export type DeterministicNextCheckCluster = {
+  label: string;
+  context: string;
+  topProblem?: string | null;
+  deterministicNextCheckCount: number;
+  deterministicNextCheckSummaries: DeterministicNextCheckSummary[];
+  drilldownAvailable: boolean;
+  assessmentArtifactPath?: string | null;
+  drilldownArtifactPath?: string | null;
+};
+
+export type DeterministicNextChecks = {
+  clusterCount: number;
+  totalNextCheckCount: number;
+  clusters: DeterministicNextCheckCluster[];
 };
 
 export type NextCheckOutcomeCount = {

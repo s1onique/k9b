@@ -12,6 +12,9 @@ from .model import (
     AssessmentView,
     AutoDrilldownInterpretationView,
     ClusterView,
+    DeterministicNextCheckClusterView,
+    DeterministicNextCheckSummaryView,
+    DeterministicNextChecksView,
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
     FindingsView,
@@ -22,6 +25,9 @@ from .model import (
     NextCheckExecutionHistoryEntryView,
     NextCheckOrphanedApprovalView,
     NextCheckPlanView,
+    NextCheckQueueCandidateAccountingView,
+    NextCheckQueueClusterStateView,
+    NextCheckQueueExplanationView,
     NextCheckQueueItemView,
     NotificationView,
     PlannerAvailabilityView,
@@ -58,6 +64,11 @@ class NextCheckExecutionHistoryEntry(TypedDict, total=False):
     stdoutTruncated: bool | None
     stderrTruncated: bool | None
     outputBytesCaptured: int | None
+    failureClass: str | None
+    failureSummary: str | None
+    suggestedNextOperatorMove: str | None
+    resultClass: str | None
+    resultSummary: str | None
 
 
 class FreshnessPayload(TypedDict, total=False):
@@ -89,6 +100,8 @@ class RunPayload(TypedDict):
     freshness: FreshnessPayload | None
     nextCheckPlan: NextCheckPlanPayload | None
     nextCheckQueue: list[NextCheckQueueItemPayload]
+    nextCheckQueueExplanation: NextCheckQueueExplanationPayload | None
+    deterministicNextChecks: DeterministicNextChecksPayload | None
     plannerAvailability: PlannerAvailabilityPayload | None
 
 
@@ -231,6 +244,64 @@ class NextCheckQueueItemPayload(TypedDict, total=False):
     targetContext: str | None
     commandPreview: str | None
     planArtifactPath: str | None
+    failureClass: str | None
+    failureSummary: str | None
+    suggestedNextOperatorMove: str | None
+    resultClass: str | None
+    resultSummary: str | None
+
+
+class NextCheckQueueCandidateAccountingPayload(TypedDict):
+    generated: int
+    safe: int
+    approvalNeeded: int
+    duplicate: int
+    completed: int
+    staleOrphaned: int
+    orphanedApprovals: int
+
+
+class NextCheckQueueClusterStatePayload(TypedDict):
+    degradedClusterCount: int
+    degradedClusterLabels: list[str]
+    deterministicNextCheckCount: int
+    deterministicClusterCount: int
+    drilldownReadyCount: int
+
+
+class NextCheckQueueExplanationPayload(TypedDict, total=False):
+    status: str
+    reason: str | None
+    hint: str | None
+    plannerArtifactPath: str | None
+    clusterState: NextCheckQueueClusterStatePayload
+    candidateAccounting: NextCheckQueueCandidateAccountingPayload
+    deterministicNextChecksAvailable: bool
+    recommendedNextActions: list[str]
+
+
+class DeterministicNextCheckSummaryPayload(TypedDict):
+    description: str
+    owner: str
+    method: str
+    evidenceNeeded: list[str]
+
+
+class DeterministicNextCheckClusterPayload(TypedDict):
+    label: str
+    context: str
+    topProblem: str | None
+    deterministicNextCheckCount: int
+    deterministicNextCheckSummaries: list[DeterministicNextCheckSummaryPayload]
+    drilldownAvailable: bool
+    assessmentArtifactPath: str | None
+    drilldownArtifactPath: str | None
+
+
+class DeterministicNextChecksPayload(TypedDict):
+    clusterCount: int
+    totalNextCheckCount: int
+    clusters: list[DeterministicNextCheckClusterPayload]
 
 
 class NextCheckOrphanedApprovalPayload(TypedDict, total=False):
@@ -511,6 +582,12 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
         ),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
         "nextCheckQueue": _serialize_next_check_queue(context.run.next_check_queue),
+        "nextCheckQueueExplanation": _serialize_queue_explanation(
+            context.run.next_check_queue_explanation
+        ),
+        "deterministicNextChecks": _serialize_deterministic_next_checks(
+            context.run.deterministic_next_checks
+        ),
         "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
         "nextCheckExecutionHistory": _serialize_execution_history(
             context.run.next_check_execution_history
@@ -964,6 +1041,11 @@ def _serialize_next_check_queue(queue: tuple[NextCheckQueueItemView, ...]) -> li
             "approvalReason": item.approval_reason,
             "duplicateReason": item.duplicate_reason,
             "blockingReason": item.blocking_reason,
+            "failureClass": item.failure_class,
+            "failureSummary": item.failure_summary,
+            "suggestedNextOperatorMove": item.suggested_next_operator_move,
+            "resultClass": item.result_class,
+            "resultSummary": item.result_summary,
             "targetContext": item.target_context,
             "commandPreview": item.command_preview,
             "planArtifactPath": item.plan_artifact_path,
@@ -971,6 +1053,94 @@ def _serialize_next_check_queue(queue: tuple[NextCheckQueueItemView, ...]) -> li
         }
         for item in queue
     ]
+
+
+def _serialize_queue_cluster_state(
+    view: NextCheckQueueClusterStateView,
+) -> NextCheckQueueClusterStatePayload:
+    return {
+        "degradedClusterCount": view.degraded_cluster_count,
+        "degradedClusterLabels": list(view.degraded_cluster_labels),
+        "deterministicNextCheckCount": view.deterministic_next_check_count,
+        "deterministicClusterCount": view.deterministic_cluster_count,
+        "drilldownReadyCount": view.drilldown_ready_count,
+    }
+
+
+def _serialize_queue_candidate_accounting(
+    view: NextCheckQueueCandidateAccountingView,
+) -> NextCheckQueueCandidateAccountingPayload:
+    return {
+        "generated": view.generated,
+        "safe": view.safe,
+        "approvalNeeded": view.approval_needed,
+        "duplicate": view.duplicate,
+        "completed": view.completed,
+        "staleOrphaned": view.stale_orphaned,
+        "orphanedApprovals": view.orphaned_approvals,
+    }
+
+
+def _serialize_queue_explanation(
+    explanation: NextCheckQueueExplanationView | None,
+) -> NextCheckQueueExplanationPayload | None:
+    if not explanation:
+        return None
+    return {
+        "status": explanation.status,
+        "reason": explanation.reason,
+        "hint": explanation.hint,
+        "plannerArtifactPath": explanation.planner_artifact_path,
+        "clusterState": _serialize_queue_cluster_state(explanation.cluster_state),
+        "candidateAccounting": _serialize_queue_candidate_accounting(
+            explanation.candidate_accounting
+        ),
+        "deterministicNextChecksAvailable": explanation.deterministic_next_checks_available,
+        "recommendedNextActions": list(explanation.recommended_next_actions),
+    }
+
+
+def _serialize_deterministic_next_check_summary(
+    view: DeterministicNextCheckSummaryView,
+) -> DeterministicNextCheckSummaryPayload:
+    return {
+        "description": view.description,
+        "owner": view.owner,
+        "method": view.method,
+        "evidenceNeeded": list(view.evidence_needed),
+    }
+
+
+def _serialize_deterministic_next_check_cluster(
+    view: DeterministicNextCheckClusterView,
+) -> DeterministicNextCheckClusterPayload:
+    return {
+        "label": view.label,
+        "context": view.context,
+        "topProblem": view.top_problem,
+        "deterministicNextCheckCount": view.deterministic_next_check_count,
+        "deterministicNextCheckSummaries": [
+            _serialize_deterministic_next_check_summary(entry)
+            for entry in view.deterministic_next_check_summaries
+        ],
+        "drilldownAvailable": view.drilldown_available,
+        "assessmentArtifactPath": view.assessment_artifact_path,
+        "drilldownArtifactPath": view.drilldown_artifact_path,
+    }
+
+
+def _serialize_deterministic_next_checks(
+    view: DeterministicNextChecksView | None,
+) -> DeterministicNextChecksPayload | None:
+    if not view:
+        return None
+    return {
+        "clusterCount": view.cluster_count,
+        "totalNextCheckCount": view.total_next_check_count,
+        "clusters": [
+            _serialize_deterministic_next_check_cluster(entry) for entry in view.clusters
+        ],
+    }
 
 
 def _serialize_planner_availability(
@@ -1015,6 +1185,11 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
             "stdoutTruncated": entry.stdout_truncated,
             "stderrTruncated": entry.stderr_truncated,
             "outputBytesCaptured": entry.output_bytes_captured,
+            "failureClass": entry.failure_class,
+            "failureSummary": entry.failure_summary,
+            "suggestedNextOperatorMove": entry.suggested_next_operator_move,
+            "resultClass": entry.result_class,
+            "resultSummary": entry.result_summary,
         }
         for entry in entries
     ]

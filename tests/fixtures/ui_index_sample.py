@@ -266,6 +266,9 @@ def sample_ui_index() -> dict[str, object]:
                     "commandPreview": "kubectl logs deployment/control-plane --context cluster1",
                     "planArtifactPath": "runs/health/external-analysis/health-run-20260408T061911Z-next-check-plan.json",
                     "queueStatus": "approval-needed",
+                    "failureClass": "approval-missing-or-stale",
+                    "failureSummary": "Candidate requires operator approval before execution.",
+                    "suggestedNextOperatorMove": "Review approval state",
                 },
                 {
                     "candidateId": "candidate-control-plane-logs",
@@ -326,12 +329,15 @@ def sample_ui_index() -> dict[str, object]:
                     "commandFamily": "kubectl-logs",
                     "status": "success",
                     "durationMs": 1840,
-                    "artifactPath": "runs/health/external-analysis/health-run-20260408T061911Z-next-check-execution-0.json",
-                    "timedOut": False,
-                    "stdoutTruncated": False,
-                    "stderrTruncated": False,
-                    "outputBytesCaptured": 1240,
-                }
+            "artifactPath": "runs/health/external-analysis/health-run-20260408T061911Z-next-check-execution-0.json",
+            "timedOut": False,
+            "stdoutTruncated": False,
+            "stderrTruncated": False,
+            "outputBytesCaptured": 1240,
+            "resultClass": "useful-signal",
+            "resultSummary": "Captured control-plane logs that highlight recent kubelet errors.",
+            "suggestedNextOperatorMove": "Correlate this output with the target incident.",
+        }
             ],
         },
         "run_stats": {
@@ -651,4 +657,27 @@ def sample_ui_index() -> dict[str, object]:
                 "outputBytesCaptured": 1240,
             }
          ],
+        "deterministic_next_checks": {
+            "clusterCount": 1,
+            "totalNextCheckCount": 1,
+            "clusters": [
+                {
+                    "label": "cluster-a",
+                    "context": "cluster-a",
+                    "topProblem": "warning_event_threshold",
+                    "deterministicNextCheckCount": 1,
+                    "deterministicNextCheckSummaries": [
+                        {
+                            "description": "capture tcpdump",
+                            "owner": "platform",
+                            "method": "kubectl exec",
+                            "evidenceNeeded": ["tcpdump"],
+                        }
+                    ],
+                    "drilldownAvailable": True,
+                    "assessmentArtifactPath": "assessments/cluster-a.json",
+                    "drilldownArtifactPath": "drilldowns/cluster-a.json",
+                }
+            ],
+        },
     }

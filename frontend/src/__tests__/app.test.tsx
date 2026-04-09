@@ -231,6 +231,32 @@ describe("App", () => {
     expect(summaryScoped.getByRole("link", { name: /View planner artifact/i })).toBeInTheDocument();
   });
 
+  test("deterministic panel surfaces run-derived checks", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText(/1 deterministic check derived from assessments/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review cluster detail/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View assessment artifact/i })).toBeInTheDocument();
+  });
+
+  test("deterministic panel empty state is obvious when data is absent", async () => {
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": {
+        ...sampleRun,
+        deterministicNextChecks: null,
+      },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    expect(await screen.findByText(/No deterministic next checks were generated for this run./i)).toBeInTheDocument();
+    expect(screen.getByText(/Review cluster detail to inspect evidence-derived work./i)).toBeInTheDocument();
+  });
+
   test("renders next-check queue panel with queue items", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
@@ -265,6 +291,36 @@ describe("App", () => {
     expect(queueScoped.getByText(/Command preview/i)).toBeInTheDocument();
     expect(queueScoped.getByText(/Plan artifact/i)).toBeInTheDocument();
     expect(queueScoped.getByText(/kubectl describe diag/i)).toBeInTheDocument();
+  });
+
+  test("execution history cards surface result interpretations", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const summaryText = /control-plane errors useful for diagnosing the incident/i;
+    expect(await screen.findByText(summaryText)).toBeInTheDocument();
+  });
+
+  test("queue details show result interpretation for completed entries", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const logsCard = queueScoped
+      .getByText(/Collect kubelet logs for control-plane pods/i)
+      .closest("article");
+    expect(logsCard).not.toBeNull();
+    const showButton = within(logsCard!).getByRole("button", { name: /Show details/i });
+    await act(async () => {
+      await user.click(showButton);
+    });
+    expect(
+      queueScoped.getByText(/Captured control-plane logs that highlight recent kubelet errors/i)
+    ).toBeInTheDocument();
+    expect(
+      queueScoped.getByText(/Correlate this output with the target incident/i)
+    ).toBeInTheDocument();
   });
 
   test("queue cluster filter scopes to selected cluster", async () => {
@@ -764,6 +820,28 @@ describe("App", () => {
     expect(screen.getByText(/Manual next-check runs/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Collect kubelet logs for control-plane pods/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Timed out/i, { selector: ".execution-history-badge" })).toBeInTheDocument();
+  });
+
+  test("execution history follow-up block surfaces retry guidance", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    expect(await screen.findByText(/Retry candidate/i)).toBeInTheDocument();
+  });
+
+  test("queue details expose follow-up guidance for failed executions", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueCard = await screen.findByText(/Inspect etcd leader/i);
+    const queueArticle = queueCard.closest("article");
+    expect(queueArticle).not.toBeNull();
+    const showDetails = within(queueArticle!).getByRole("button", { name: /Show details/i });
+    await act(async () => {
+      await user.click(showDetails);
+    });
+    expect(within(queueArticle!).getByText(/Inspect artifact output/i)).toBeInTheDocument();
   });
 
   test("hides next check plan section when planner data is absent", async () => {

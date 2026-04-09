@@ -271,6 +271,29 @@ export const sampleRun: RunPayload = {
     ],
     orphanedApprovalCount: 0,
   },
+  deterministicNextChecks: {
+    clusterCount: 1,
+    totalNextCheckCount: 1,
+    clusters: [
+      {
+        label: "cluster-a",
+        context: "prod",
+        topProblem: "High CPU",
+        deterministicNextCheckCount: 1,
+        deterministicNextCheckSummaries: [
+          {
+            description: "Capture tcpdump",
+            owner: "platform",
+            method: "kubectl exec",
+            evidenceNeeded: ["tcpdump output"],
+          },
+        ],
+        drilldownAvailable: true,
+        assessmentArtifactPath: "/artifacts/cluster-a-assessment.json",
+        drilldownArtifactPath: "/artifacts/drilldown-cluster-a.json",
+      },
+    ],
+  },
   nextCheckQueue: [
     {
       candidateId: "candidate-vague",
@@ -296,6 +319,9 @@ export const sampleRun: RunPayload = {
       commandPreview: "kubectl describe diag customresourcedefinition --context cluster-b",
       planArtifactPath: "/artifacts/next-check-plan.json",
       queueStatus: "approval-needed",
+      failureClass: "approval-missing-or-stale",
+      failureSummary: "Candidate requires operator approval before execution.",
+      suggestedNextOperatorMove: "Review approval state",
     },
     {
       candidateId: "candidate-logs",
@@ -321,6 +347,9 @@ export const sampleRun: RunPayload = {
       commandPreview: "kubectl logs deployment/control-plane --context cluster-a",
       planArtifactPath: "/artifacts/next-check-plan.json",
       queueStatus: "completed",
+      resultClass: "useful-signal",
+      resultSummary: "Captured control-plane logs that highlight recent kubelet errors.",
+      suggestedNextOperatorMove: "Correlate this output with the target incident.",
     },
     {
       candidateId: "candidate-metrics",
@@ -424,6 +453,9 @@ export const sampleRun: RunPayload = {
       commandPreview: "kubectl get endpoints --context cluster-b",
       planArtifactPath: "/artifacts/next-check-plan.json",
       queueStatus: "failed",
+      failureClass: "command-failed",
+      failureSummary: "Command returned a non-zero exit code.",
+      suggestedNextOperatorMove: "Inspect artifact output",
     },
   ],
   plannerAvailability: {
@@ -447,6 +479,9 @@ export const sampleRun: RunPayload = {
       stdoutTruncated: false,
       stderrTruncated: false,
       outputBytesCaptured: 2048,
+      resultClass: "useful-signal",
+      resultSummary: "Logs include control-plane errors useful for diagnosing the incident.",
+      suggestedNextOperatorMove: "Correlate these logs with the ongoing incident timeline.",
     },
     {
       timestamp: "2026-04-06T12:03:00Z",
@@ -460,6 +495,9 @@ export const sampleRun: RunPayload = {
       stdoutTruncated: true,
       stderrTruncated: false,
       outputBytesCaptured: 4096,
+      failureClass: "timed-out",
+      failureSummary: "Command timed out.",
+      suggestedNextOperatorMove: "Retry candidate",
     },
   ],
 };

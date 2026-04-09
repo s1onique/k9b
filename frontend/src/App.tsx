@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
@@ -85,6 +85,98 @@ const formatLatency = (value: number | null | undefined) => {
   return `${Math.round(value)}ms`;
 };
 
+const FAILURE_FOLLOW_UP_LABELS: Record<string, string> = {
+  "timed-out": "Timed out",
+  "command-unavailable": "Command unavailable",
+  "context-unavailable": "Context unavailable",
+  "command-failed": "Command failed",
+  "blocked-by-gating": "Blocked",
+  "approval-missing-or-stale": "Approval needed",
+  "unknown-failure": "Action needed",
+};
+
+const RESULT_FOLLOW_UP_LABELS: Record<string, string> = {
+  "useful-signal": "Useful signal",
+  "empty-result": "Empty result",
+  "noisy-result": "Noisy result",
+  "inconclusive": "Inconclusive",
+  "partial-result": "Partial output",
+};
+
+type FailureFollowUpProps = {
+  failureClass?: string | null;
+  failureSummary?: string | null;
+  suggestedNextOperatorMove?: string | null;
+};
+
+type InterpretationBlockProps = {
+  badgeLabel: string;
+  badgeClass?: string;
+  summary?: string | null;
+  suggestedNextOperatorMove?: string | null;
+};
+
+const InterpretationBlock = ({
+  badgeLabel,
+  badgeClass,
+  summary,
+  suggestedNextOperatorMove,
+}: InterpretationBlockProps) => (
+  <div className="follow-up-block">
+    <span className={`follow-up-badge ${badgeClass ?? ""}`.trim()}>{badgeLabel}</span>
+    {summary ? <p className="follow-up-summary">{summary}</p> : null}
+    {suggestedNextOperatorMove ? (
+      <p className="follow-up-action">
+        <strong>Next step:</strong> {suggestedNextOperatorMove}
+      </p>
+    ) : null}
+  </div>
+);
+
+const FailureFollowUpBlock = ({
+  failureClass,
+  failureSummary,
+  suggestedNextOperatorMove,
+}: FailureFollowUpProps) => {
+  if (!failureClass) {
+    return null;
+  }
+  const badgeLabel = FAILURE_FOLLOW_UP_LABELS[failureClass] ?? failureClass;
+  return (
+    <InterpretationBlock
+      badgeLabel={badgeLabel}
+      badgeClass={`follow-up-badge-${failureClass}`}
+      summary={failureSummary}
+      suggestedNextOperatorMove={suggestedNextOperatorMove}
+    />
+  );
+};
+
+const ResultInterpretationBlock = ({
+  resultClass,
+  resultSummary,
+  suggestedNextOperatorMove,
+}: {
+  resultClass?: string | null;
+  resultSummary?: string | null;
+  suggestedNextOperatorMove?: string | null;
+}) => {
+  if (!resultClass) {
+    return null;
+  }
+  const badgeLabel = RESULT_FOLLOW_UP_LABELS[resultClass] ?? resultClass;
+  return (
+    <InterpretationBlock
+      badgeLabel={badgeLabel}
+      badgeClass={`follow-up-badge-${resultClass}`}
+      summary={resultSummary}
+      suggestedNextOperatorMove={suggestedNextOperatorMove}
+    />
+  );
+};
+
+const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
+
 const NOTIFICATIONS_PER_PAGE = 50;
 
 const getLlmScopeLabel = (scope?: string | null) =>
@@ -169,6 +261,11 @@ const artifactUrl = (path: string | null) => {
   }
   return `/artifact?path=${encodeURIComponent(path)}`;
 };
+
+const buildExecutionEntryKey = (entry: NextCheckExecutionHistoryEntry) =>
+  `${entry.clusterLabel ?? "global"}::${entry.candidateDescription ?? ""}::${entry.timestamp ?? ""}::${
+    entry.artifactPath ?? ""
+  }`;
 
 const buildClusterRecommendedArtifacts = (detail?: ClusterDetailPayload) => {
   if (!detail) {
@@ -945,8 +1042,10 @@ const ProviderExecutionPanel = ({
 
 const ExecutionHistoryPanel = ({
   history,
+  highlightedKey,
 }: {
   history: NextCheckExecutionHistoryEntry[];
+  highlightedKey: string | null;
 }) => (
   <section className="panel execution-history-panel" id="execution-history">
     <div className="section-head">
@@ -966,8 +1065,19 @@ const ExecutionHistoryPanel = ({
             entry.stderrTruncated ? "stderr truncated" : null,
           ].filter(Boolean) as string[];
           const durationSeconds = entry.durationMs != null ? entry.durationMs / 1000 : null;
+          const entryKey = buildExecutionEntryKey(entry);
+          const cardClasses = [
+            "execution-history-card",
+            highlightedKey === entryKey ? "highlight-target" : null,
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
-            <article className="execution-history-card" key={key}>
+            <article
+              className={cardClasses}
+              key={key}
+              data-highlighted={highlightedKey === entryKey ? "true" : undefined}
+            >
               <header>
                 <div>
                   <p className="tiny muted">{relativeRecency(entry.timestamp)}</p>
@@ -995,6 +1105,16 @@ const ExecutionHistoryPanel = ({
                   </span>
                 )}
               </div>
+              <ResultInterpretationBlock
+                resultClass={entry.resultClass}
+                resultSummary={entry.resultSummary}
+                suggestedNextOperatorMove={entry.suggestedNextOperatorMove}
+              />
+              <FailureFollowUpBlock
+                failureClass={entry.failureClass}
+                failureSummary={entry.failureSummary}
+                suggestedNextOperatorMove={entry.suggestedNextOperatorMove}
+              />
               {entry.artifactPath ? (
                 <a
                   className="link"
@@ -1450,6 +1570,10 @@ const App = () => {
   const [queueFocusMode, setQueueFocusMode] = useState<QueueFocusMode>(
     initialQueueViewState.focusMode
   );
+  const [highlightedClusterLabel, setHighlightedClusterLabel] = useState<string | null>(null);
+  const [executionHistoryHighlightKey, setExecutionHistoryHighlightKey] = useState<string | null>(null);
+  const clusterHighlightTimer = useRef<number | null>(null);
+  const executionHighlightTimer = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -1503,6 +1627,17 @@ const App = () => {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    return () => {
+      if (clusterHighlightTimer.current) {
+        window.clearTimeout(clusterHighlightTimer.current);
+      }
+      if (executionHighlightTimer.current) {
+        window.clearTimeout(executionHighlightTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedClusterLabel) {
@@ -1559,6 +1694,43 @@ const App = () => {
     setClusterDetailExpanded(Boolean(options?.expand));
   };
 
+  const scrollToSection = (id: string) => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const section = document.getElementById(id);
+    if (!section) {
+      return;
+    }
+    section.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  };
+
+  const highlightCluster = (label: string | null) => {
+    setHighlightedClusterLabel(label);
+    if (clusterHighlightTimer.current) {
+      window.clearTimeout(clusterHighlightTimer.current);
+    }
+    if (!label) {
+      return;
+    }
+    clusterHighlightTimer.current = window.setTimeout(() => {
+      setHighlightedClusterLabel(null);
+    }, NAVIGATION_HIGHLIGHT_DURATION_MS);
+  };
+
+  const highlightExecutionEntry = (key: string | null) => {
+    setExecutionHistoryHighlightKey(key);
+    if (executionHighlightTimer.current) {
+      window.clearTimeout(executionHighlightTimer.current);
+    }
+    if (!key) {
+      return;
+    }
+    executionHighlightTimer.current = window.setTimeout(() => {
+      setExecutionHistoryHighlightKey(null);
+    }, NAVIGATION_HIGHLIGHT_DURATION_MS);
+  };
+
   const handleAutoRefreshChange = (value: string) => {
     if (value === "off") {
       persistAutoRefreshInterval("off");
@@ -1578,6 +1750,42 @@ const App = () => {
     }`;
 
   const runQueue: NextCheckQueueItem[] = run?.nextCheckQueue ?? [];
+  const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
+  const queueExplanation = run?.nextCheckQueueExplanation ?? null;
+
+  const findExecutionHistoryEntry = (candidate: NextCheckQueueItem) => {
+    if (!executionHistory.length) {
+      return null;
+    }
+    if (candidate.latestArtifactPath) {
+      const artifactMatch = executionHistory.find(
+        (entry) => entry.artifactPath === candidate.latestArtifactPath
+      );
+      if (artifactMatch) {
+        return artifactMatch;
+      }
+    }
+    const normalizedDescription = candidate.description?.trim();
+    if (candidate.targetCluster && normalizedDescription) {
+      const contextMatch = executionHistory.find(
+        (entry) =>
+          entry.clusterLabel === candidate.targetCluster &&
+          entry.candidateDescription === normalizedDescription
+      );
+      if (contextMatch) {
+        return contextMatch;
+      }
+    }
+    if (normalizedDescription) {
+      const descriptionMatch = executionHistory.find(
+        (entry) => entry.candidateDescription === normalizedDescription
+      );
+      if (descriptionMatch) {
+        return descriptionMatch;
+      }
+    }
+    return null;
+  };
   const formatCluster = (value: string | null | undefined) =>
     value && value.trim() ? value : "Unassigned";
   const formatCommandFamily = (value: string | null | undefined) =>
@@ -1922,7 +2130,6 @@ const App = () => {
       ? `${runPlan.candidateCount} candidate${runPlan.candidateCount === 1 ? "" : "s"}`
       : `${planCandidates.length} candidate${planCandidates.length === 1 ? "" : "s"}`;
   const planStatusText = runPlan?.status ?? null;
-  const executionHistory: NextCheckExecutionHistoryEntry[] = run.nextCheckExecutionHistory ?? [];
   const outcomeSummary = runPlan?.outcomeCounts ?? [];
 
   const runPlanCandidates: NextCheckPlanCandidate[] = runPlan?.candidates ?? [];
@@ -1952,6 +2159,15 @@ const App = () => {
     )
   );
 
+  const deterministicChecks = run.deterministicNextChecks;
+  const deterministicClusters = deterministicChecks?.clusters ?? [];
+  const hasDeterministicNextChecks = deterministicClusters.length > 0;
+  const deterministicSummary = hasDeterministicNextChecks
+    ? `${deterministicChecks?.totalNextCheckCount ?? 0} deterministic check${
+        deterministicChecks?.totalNextCheckCount === 1 ? "" : "s"
+      } derived from assessments`
+    : "Deterministic next checks are not available for this run.";
+
   const focusClusterForNextChecks = (clusterLabel?: string | null) => {
     const target =
       clusterLabel ||
@@ -1963,10 +2179,24 @@ const App = () => {
       return;
     }
     handleClusterSelection(target, { expand: true });
+    highlightCluster(target);
     if (typeof document !== "undefined") {
-      const section = document.getElementById("cluster");
-      section?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      scrollToSection("cluster");
     }
+  };
+
+  const handleBackToQueue = () => {
+    scrollToSection("next-check-queue");
+  };
+
+  const handleQueueClusterJump = (candidate: NextCheckQueueItem) => {
+    focusClusterForNextChecks(candidate.targetCluster ?? undefined);
+  };
+
+  const handleQueueExecutionJump = (candidate: NextCheckQueueItem) => {
+    const entry = findExecutionHistoryEntry(candidate);
+    highlightExecutionEntry(entry ? buildExecutionEntryKey(entry) : null);
+    scrollToSection("execution-history");
   };
 
   const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
@@ -2195,6 +2425,95 @@ const App = () => {
         </div>
       )}
     </section>
+    <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Deterministic evidence</p>
+          <h2>Deterministic next checks</h2>
+          <p className="muted tiny">{deterministicSummary}</p>
+        </div>
+        <span className="muted tiny">
+          {deterministicChecks?.clusterCount ?? 0} degraded cluster
+          {(deterministicChecks?.clusterCount ?? 0) === 1 ? "" : "s"}
+        </span>
+      </div>
+      {hasDeterministicNextChecks ? (
+        <div className="deterministic-cluster-grid">
+          {deterministicClusters.map((cluster) => (
+            <article className="deterministic-cluster-card" key={cluster.label}>
+              <div className="deterministic-cluster-head">
+                <div>
+                  <p className="eyebrow">Cluster detail</p>
+                  <h3>{cluster.label}</h3>
+                  <p className="muted tiny">
+                    {cluster.topProblem ?? "Trigger reasons pending"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="run-summary-next-checks-button"
+                  onClick={() => focusClusterForNextChecks(cluster.label)}
+                >
+                  Review cluster detail
+                </button>
+              </div>
+              <div className="deterministic-cluster-stats">
+                <span>
+                  {cluster.deterministicNextCheckCount} deterministic check
+                  {cluster.deterministicNextCheckCount === 1 ? "" : "s"}
+                </span>
+                <span>
+                  Drilldown: {cluster.drilldownAvailable ? "available" : "missing"}
+                </span>
+              </div>
+              <ul className="deterministic-check-list">
+                {cluster.deterministicNextCheckSummaries.map((check, index) => (
+                  <li key={`${cluster.label}-${index}`}>
+                    <strong>{check.description}</strong>
+                    <div className="deterministic-check-meta">
+                      <span>Method: {check.method || "—"}</span>
+                      <span>Owner: {check.owner}</span>
+                    </div>
+                    {check.evidenceNeeded.length ? (
+                      <p className="muted tiny">
+                        Evidence: {check.evidenceNeeded.join(", ")}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <div className="deterministic-cluster-attachments">
+                {cluster.assessmentArtifactPath ? (
+                  <a
+                    className="link tiny"
+                    href={artifactUrl(cluster.assessmentArtifactPath)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View assessment artifact
+                  </a>
+                ) : null}
+                {cluster.drilldownArtifactPath ? (
+                  <a
+                    className="link tiny"
+                    href={artifactUrl(cluster.drilldownArtifactPath)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View drilldown artifact
+                  </a>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="deterministic-empty-state">
+          <p className="muted small">No deterministic next checks were generated for this run.</p>
+          <p className="muted tiny">Review cluster detail to inspect evidence-derived work.</p>
+        </div>
+      )}
+    </section>
     <section className="panel next-check-queue-panel" id="next-check-queue">
         <div className="section-head">
           <div>
@@ -2273,6 +2592,9 @@ const App = () => {
                 onChange={(event) => setQueueSearch(event.target.value)}
               />
             </label>
+            <button type="button" className="text-button" onClick={handleBackToQueue}>
+              Back to queue
+            </button>
           </div>
           <div className="next-check-control-row">
             <div className="focus-presets">
@@ -2319,7 +2641,73 @@ const App = () => {
           </p>
         </div>
         {runQueue.length === 0 ? (
-          <p className="muted small">Planner queue is empty for this run.</p>
+          <div className="queue-empty-state queue-empty-explanation">
+            <p className="muted small">Planner queue is empty for this run.</p>
+            {queueExplanation ? (
+              <div className="queue-explanation-block">
+                <div className="queue-explanation-header">
+                  <div>
+                    <p className="tiny">Queue status: {queueExplanation.status}</p>
+                    {queueExplanation.reason ? (
+                      <p>{queueExplanation.reason}</p>
+                    ) : null}
+                  </div>
+                  {queueExplanation.plannerArtifactPath ? (
+                    <a
+                      className="link tiny"
+                      href={artifactUrl(queueExplanation.plannerArtifactPath)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View planner artifact
+                    </a>
+                  ) : null}
+                </div>
+                {queueExplanation.hint ? (
+                  <p className="muted tiny">{queueExplanation.hint}</p>
+                ) : null}
+                <div className="queue-explanation-stats">
+                  <span>
+                    Degraded clusters: {queueExplanation.clusterState.degradedClusterCount}
+                    {queueExplanation.clusterState.degradedClusterLabels.length
+                      ? ` (${queueExplanation.clusterState.degradedClusterLabels.join(", ")})`
+                      : ""}
+                  </span>
+                  <span>
+                    Drilldowns ready: {queueExplanation.clusterState.drilldownReadyCount}
+                  </span>
+                  <span>
+                    Deterministic next checks: {queueExplanation.clusterState.deterministicNextCheckCount} available
+                  </span>
+                </div>
+                <div className="queue-explanation-accounting">
+                  <span>Generated: {queueExplanation.candidateAccounting.generated}</span>
+                  <span>Safe: {queueExplanation.candidateAccounting.safe}</span>
+                  <span>
+                    Approval needed: {queueExplanation.candidateAccounting.approvalNeeded}
+                  </span>
+                  <span>Duplicate: {queueExplanation.candidateAccounting.duplicate}</span>
+                  <span>Completed: {queueExplanation.candidateAccounting.completed}</span>
+                  <span>
+                    Stale/orphaned: {queueExplanation.candidateAccounting.staleOrphaned}
+                  </span>
+                </div>
+                <p className="muted tiny">
+                  Deterministic next checks available: {queueExplanation.deterministicNextChecksAvailable ? "Yes" : "No"}
+                </p>
+                {queueExplanation.recommendedNextActions.length ? (
+                  <div className="queue-explanation-actions">
+                    <div className="queue-explanation-actions__label">Recommended next actions</div>
+                    <ul>
+                      {queueExplanation.recommendedNextActions.map((entry) => (
+                        <li key={entry}>{entry}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : sortedQueue.length === 0 ? (
           <p className="muted small queue-empty-state">
             Filters hide all {runQueue.length} candidate{runQueue.length === 1 ? "" : "s"}.
@@ -2346,19 +2734,20 @@ const App = () => {
                   {group.label}
                 </span>
               </div>
-              <div className="next-check-queue-items">
-                {group.items.map((item, index) => {
-                  const queueCandidateKey = buildCandidateKey(item, index);
-                  const approvalResult = approvalResults[queueCandidateKey];
-                  const executionResult = executionResults[queueCandidateKey];
-                  const latestArtifactLink = item.latestArtifactPath
-                    ? artifactUrl(item.latestArtifactPath)
-                    : null;
-                  const allowRun = isManualExecutionAllowed(item);
-                  const detailsExpanded = Boolean(expandedQueueItems[queueCandidateKey]);
-                  const planArtifactLink = item.planArtifactPath
-                    ? artifactUrl(item.planArtifactPath)
-                    : null;
+                  <div className="next-check-queue-items">
+                    {group.items.map((item, index) => {
+                      const queueCandidateKey = buildCandidateKey(item, index);
+                      const approvalResult = approvalResults[queueCandidateKey];
+                      const executionResult = executionResults[queueCandidateKey];
+                      const latestArtifactLink = item.latestArtifactPath
+                        ? artifactUrl(item.latestArtifactPath)
+                        : null;
+                      const allowRun = isManualExecutionAllowed(item);
+                      const executionEntry = findExecutionHistoryEntry(item);
+                      const detailsExpanded = Boolean(expandedQueueItems[queueCandidateKey]);
+                      const planArtifactLink = item.planArtifactPath
+                        ? artifactUrl(item.planArtifactPath)
+                        : null;
                   const metadataEntries = [
                     { label: "Source reason", value: item.sourceReason },
                     { label: "Expected signal", value: item.expectedSignal },
@@ -2424,6 +2813,23 @@ const App = () => {
                         )}
                         <button
                           type="button"
+                          className="queue-action-button"
+                          onClick={() => handleQueueClusterJump(item)}
+                          disabled={!item.targetCluster}
+                        >
+                          Open cluster detail
+                        </button>
+                        {executionEntry ? (
+                          <button
+                            type="button"
+                            className="queue-action-button"
+                            onClick={() => handleQueueExecutionJump(item)}
+                          >
+                            View latest execution
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
                           className="toggle-details-button"
                           onClick={() => toggleQueueDetails(queueCandidateKey)}
                         >
@@ -2473,6 +2879,16 @@ const App = () => {
                       ) : null}
                       {detailsExpanded && (
                         <div className="next-check-queue-item-details">
+                          <ResultInterpretationBlock
+                            resultClass={item.resultClass}
+                            resultSummary={item.resultSummary}
+                            suggestedNextOperatorMove={item.suggestedNextOperatorMove}
+                          />
+                          <FailureFollowUpBlock
+                            failureClass={item.failureClass}
+                            failureSummary={item.failureSummary}
+                            suggestedNextOperatorMove={item.suggestedNextOperatorMove}
+                          />
                           <div className="next-check-queue-item-metadata">
                             {metadataEntries.map((entry) => (
                               <span key={entry.label}>
@@ -2503,7 +2919,7 @@ const App = () => {
           ))
         )}
       </section>
-    <ExecutionHistoryPanel history={executionHistory} />
+    <ExecutionHistoryPanel history={executionHistory} highlightedKey={executionHistoryHighlightKey} />
       <ReviewEnrichmentPanel
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}
@@ -2551,12 +2967,21 @@ const App = () => {
             <tbody>
               {fleet.clusters.map((cluster) => {
                 const isSelected = cluster.label === selectedClusterLabel;
+                const isFleetRowHighlighted = cluster.label === highlightedClusterLabel;
                 const clusterRowFresh = !isStaleTimestamp(cluster.latestRunTimestamp);
                 const clusterRowRecency = relativeRecency(cluster.latestRunTimestamp);
                 return (
                   <tr
                     key={cluster.label}
-                    className={isSelected ? "row-selected" : undefined}
+                    className={
+                      [
+                        isSelected ? "row-selected" : null,
+                        isFleetRowHighlighted ? "highlighted-row" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
+                    data-highlighted={isFleetRowHighlighted ? "true" : undefined}
                     onClick={() => handleClusterSelection(cluster.label)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -2598,7 +3023,11 @@ const App = () => {
           </table>
         </div>
       </section>
-      <section className="panel" id="cluster">
+      <section
+        className={`panel${highlightedClusterLabel === selectedClusterLabel ? " cluster-highlighted-panel" : ""}`}
+        id="cluster"
+        data-highlighted={highlightedClusterLabel === selectedClusterLabel ? "true" : undefined}
+      >
         <div className="section-head">
           <h2>Cluster detail</h2>
           <div className="cluster-controls">

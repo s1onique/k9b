@@ -156,6 +156,12 @@ def write_health_ui_index(
         _serialize_cluster(record, assessment_map, drilldown_map, output_dir)
         for record in records
     ]
+    deterministic_next_checks = _build_deterministic_next_checks_projection(
+        clusters,
+        assessment_map,
+        drilldown_map,
+        output_dir,
+    )
     cluster_context_map = {record.target.label: record.target.context for record in records}
     drilldown_entries = [
         _serialize_drilldown(artifact, output_dir)
@@ -224,6 +230,16 @@ def write_health_ui_index(
         "planner_availability": planner_availability_entry,
         "next_check_plan": plan_entry,
         "next_check_queue": queue_entry,
+        "next_check_queue_explanation": _build_next_check_queue_explanation(
+            assessments,
+            clusters,
+            drilldown_availability,
+            plan_entry,
+            queue_entry,
+            review_enrichment_entry,
+            review_status,
+        ),
+        "deterministic_next_checks": deterministic_next_checks,
         "next_check_execution_history": _build_next_check_execution_history(
             external_analysis, output_dir, run_id
         ),
@@ -243,6 +259,7 @@ def write_health_ui_index(
         "auto_drilldown_interpretations": auto_drilldown_data,
         "latest_assessment": latest_assessment,
         "next_check_plan": plan_entry,
+        "deterministic_next_checks": deterministic_next_checks,
     }
     index["run_stats"] = _build_run_stats(output_dir / "reviews")
     index_path = output_dir / "ui-index.json"
@@ -531,6 +548,20 @@ def _log_next_check_approval_freshness(
     
 
 @dataclass(frozen=True)
+class FailureFollowUp:
+    failure_class: str | None
+    failure_summary: str | None
+    suggested_next_operator_move: str | None
+
+
+@dataclass(frozen=True)
+class ResultInterpretation:
+    result_class: str
+    result_summary: str | None
+    suggested_next_operator_move: str | None
+
+
+@dataclass(frozen=True)
 class NextCheckExecutionRecord:
     candidate_id: str | None
     candidate_index: int | None
@@ -538,6 +569,8 @@ class NextCheckExecutionRecord:
     timestamp: datetime
     status: str
     timed_out: bool | None
+    follow_up: FailureFollowUp | None
+    result_interpretation: ResultInterpretation | None
 
 
 def _collect_next_check_execution_records(
@@ -556,6 +589,8 @@ def _collect_next_check_execution_records(
         raw_index = payload.get("candidateIndex")
         candidate_id = raw_id if isinstance(raw_id, str) and raw_id else None
         candidate_index = raw_index if isinstance(raw_index, int) else None
+        follow_up = _classify_execution_failure(artifact)
+        result_interpretation = _classify_execution_success(artifact)
         record = NextCheckExecutionRecord(
             candidate_id=candidate_id,
             candidate_index=candidate_index,
@@ -563,6 +598,8 @@ def _collect_next_check_execution_records(
             timestamp=artifact.timestamp,
             status=artifact.status.value,
             timed_out=artifact.timed_out,
+            follow_up=follow_up,
+            result_interpretation=result_interpretation,
         )
         if candidate_id:
             existing = by_id.get(candidate_id)
@@ -655,6 +692,184 @@ def _queue_sort_key(entry: Mapping[str, object]) -> tuple[int, int, int, str]:
     index_value = candidate_index if isinstance(candidate_index, int) else 0
     identifier = str(entry.get("candidateId") or "")
     return status_index, priority_index, index_value, identifier
+
+
+_FAILURE_CLASS_TIMED_OUT = "timed-out"
+_FAILURE_CLASS_COMMAND_UNAVAILABLE = "command-unavailable"
+_FAILURE_CLASS_CONTEXT_UNAVAILABLE = "context-unavailable"
+_FAILURE_CLASS_COMMAND_FAILED = "command-failed"
+_FAILURE_CLASS_BLOCKED_BY_GATING = "blocked-by-gating"
+_FAILURE_CLASS_APPROVAL_MISSING = "approval-missing-or-stale"
+_FAILURE_CLASS_UNKNOWN = "unknown-failure"
+
+_FAILURE_ACTIONS: dict[str, str] = {
+    _FAILURE_CLASS_TIMED_OUT: "Retry candidate",
+    _FAILURE_CLASS_COMMAND_UNAVAILABLE: "Inspect artifact output",
+    _FAILURE_CLASS_CONTEXT_UNAVAILABLE: "Open cluster detail",
+    _FAILURE_CLASS_COMMAND_FAILED: "Inspect artifact output",
+    _FAILURE_CLASS_BLOCKED_BY_GATING: "Open cluster detail",
+    _FAILURE_CLASS_APPROVAL_MISSING: "Review approval state",
+    _FAILURE_CLASS_UNKNOWN: "Inspect artifact output",
+}
+
+_FAILURE_DEFAULT_SUMMARIES: dict[str, str] = {
+    _FAILURE_CLASS_TIMED_OUT: "Command timed out.",
+    _FAILURE_CLASS_COMMAND_UNAVAILABLE: "kubectl is unavailable on this host.",
+    _FAILURE_CLASS_CONTEXT_UNAVAILABLE: "Unable to resolve the cluster context.",
+    _FAILURE_CLASS_COMMAND_FAILED: "Command returned a non-zero exit code.",
+    _FAILURE_CLASS_BLOCKED_BY_GATING: "Candidate was blocked by planner gating.",
+    _FAILURE_CLASS_APPROVAL_MISSING: "Candidate requires operator approval.",
+    _FAILURE_CLASS_UNKNOWN: "Execution failed without details.",
+}
+
+
+_RESULT_CLASS_USEFUL = "useful-signal"
+_RESULT_CLASS_EMPTY = "empty-result"
+_RESULT_CLASS_NOISY = "noisy-result"
+_RESULT_CLASS_INCONCLUSIVE = "inconclusive"
+_RESULT_CLASS_PARTIAL = "partial-result"
+
+_RESULT_SUMMARIES: dict[str, str] = {
+    _RESULT_CLASS_USEFUL: "Command captured signal-rich output that can guide the diagnosis.",
+    _RESULT_CLASS_EMPTY: "Command completed without producing output.",
+    _RESULT_CLASS_NOISY: "Command emitted warnings or noise alongside the output.",
+    _RESULT_CLASS_INCONCLUSIVE: "Output is limited; it is unclear whether it contains useful signal.",
+    _RESULT_CLASS_PARTIAL: "Output was truncated or interrupted before completion.",
+}
+
+_RESULT_ACTIONS: dict[str, str] = {
+    _RESULT_CLASS_USEFUL: "Correlate this evidence with the target symptom.",
+    _RESULT_CLASS_EMPTY: "Rerun with a broader selector or check that the target exists.",
+    _RESULT_CLASS_NOISY: "Inspect the artifact for warnings before trusting the signal.",
+    _RESULT_CLASS_INCONCLUSIVE: "Open the artifact to confirm whether the result is actionable.",
+    _RESULT_CLASS_PARTIAL: "Download the artifact to review the full output or rerun with a higher limit.",
+}
+
+_RESULT_USEFUL_OUTPUT_THRESHOLD = 256
+_RESULT_USEFUL_FAMILIES = {
+    "kubectl-logs",
+    "kubectl-describe",
+}
+_RESULT_NOISE_KEYWORDS = ("warning", "warn", "error", "failed", "denied")
+
+
+def _classify_execution_failure(artifact: ExternalAnalysisArtifact) -> FailureFollowUp | None:
+    if artifact.status == ExternalAnalysisStatus.SUCCESS:
+        return None
+    summary = artifact.error_summary or artifact.summary
+    normalized = (summary or "").lower()
+    if artifact.timed_out:
+        failure_class = _FAILURE_CLASS_TIMED_OUT
+    elif summary and ("kubectl is unavailable" in normalized or "command runner not found" in normalized or "no such file or directory" in normalized):
+        failure_class = _FAILURE_CLASS_COMMAND_UNAVAILABLE
+    elif summary and "context" in normalized and any(token in normalized for token in ("missing", "unavailable", "not found")):
+        failure_class = _FAILURE_CLASS_CONTEXT_UNAVAILABLE
+    elif summary:
+        failure_class = _FAILURE_CLASS_COMMAND_FAILED
+    else:
+        failure_class = _FAILURE_CLASS_UNKNOWN
+    failure_summary = summary or _FAILURE_DEFAULT_SUMMARIES.get(failure_class)
+    suggested = _FAILURE_ACTIONS.get(failure_class)
+    return FailureFollowUp(failure_class, failure_summary, suggested)
+
+
+def _coerce_int_value(value: object | None) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
+def _looks_noisy(output: str) -> bool:
+    normalized = output.lower()
+    return any(keyword in normalized for keyword in _RESULT_NOISE_KEYWORDS)
+
+
+def _classify_execution_success(artifact: ExternalAnalysisArtifact) -> ResultInterpretation | None:
+    if artifact.status != ExternalAnalysisStatus.SUCCESS:
+        return None
+    payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+    timed_out = bool(artifact.timed_out or payload.get("timedOut"))
+    stdout_truncated = bool(artifact.stdout_truncated or payload.get("stdoutTruncated"))
+    stderr_truncated = bool(artifact.stderr_truncated or payload.get("stderrTruncated"))
+    truncated = stdout_truncated or stderr_truncated
+    bytes_captured = (
+        artifact.output_bytes_captured
+        if artifact.output_bytes_captured is not None
+        else _coerce_int_value(payload.get("outputBytesCaptured"))
+    )
+    raw_output = str(artifact.raw_output or "").strip()
+    has_output = bool(bytes_captured) or bool(raw_output)
+    command_family = str(payload.get("commandFamily") or "").lower()
+
+    if timed_out:
+        result_class = _RESULT_CLASS_PARTIAL
+    elif not has_output:
+        result_class = _RESULT_CLASS_EMPTY
+    elif truncated:
+        result_class = _RESULT_CLASS_PARTIAL
+    elif raw_output and _looks_noisy(raw_output):
+        result_class = _RESULT_CLASS_NOISY
+    elif bytes_captured >= _RESULT_USEFUL_OUTPUT_THRESHOLD or command_family in _RESULT_USEFUL_FAMILIES:
+        result_class = _RESULT_CLASS_USEFUL
+    else:
+        result_class = _RESULT_CLASS_INCONCLUSIVE
+
+    summary = _RESULT_SUMMARIES.get(result_class) or "Command output requires review."
+    suggested = _RESULT_ACTIONS.get(result_class)
+    return ResultInterpretation(result_class, summary, suggested)
+
+
+def _apply_result_interpretation(candidate: dict[str, object], interpretation: ResultInterpretation | None) -> None:
+    if not interpretation:
+        return
+    candidate["resultClass"] = interpretation.result_class
+    candidate["resultSummary"] = interpretation.result_summary
+    candidate["suggestedNextOperatorMove"] = interpretation.suggested_next_operator_move
+
+def _classify_blocked_candidate(candidate: Mapping[str, object]) -> FailureFollowUp | None:
+    queue_status = str(candidate.get("queueStatus") or "")
+    if queue_status == "duplicate-or-stale":
+        return None
+    requires_approval = bool(candidate.get("requiresOperatorApproval"))
+    approval_state = str(candidate.get("approvalState") or "").lower()
+    if requires_approval and approval_state not in ("approved", "not-required"):
+        if approval_state == "approval-stale":
+            summary = "Approval is stale; reapprove this candidate."
+        elif approval_state == "approval-orphaned":
+            summary = "Approval record is orphaned; reapprove the candidate."
+        else:
+            summary = "Candidate requires operator approval before execution."
+        return FailureFollowUp(
+            _FAILURE_CLASS_APPROVAL_MISSING,
+            summary,
+            _FAILURE_ACTIONS[_FAILURE_CLASS_APPROVAL_MISSING],
+        )
+    if queue_status in ("failed", "approval-needed", "safe-ready", "approved-ready"):
+        gating_reason = candidate.get("gatingReason") or candidate.get("blockingReason")
+        reason_text = str(gating_reason).strip() if gating_reason else ""
+        if reason_text:
+            summary = f"Gating reason: {reason_text}"
+            return FailureFollowUp(
+                _FAILURE_CLASS_BLOCKED_BY_GATING,
+                summary,
+                _FAILURE_ACTIONS[_FAILURE_CLASS_BLOCKED_BY_GATING],
+            )
+    return None
+
+
+def _apply_failure_follow_up(candidate: dict[str, object], follow_up: FailureFollowUp | None) -> None:
+    if not follow_up or not follow_up.failure_class:
+        return
+    candidate["failureClass"] = follow_up.failure_class
+    candidate["failureSummary"] = follow_up.failure_summary
+    candidate["suggestedNextOperatorMove"] = follow_up.suggested_next_operator_move
 
 
 def _strip_context_tokens(tokens: Sequence[str]) -> tuple[str, ...]:
@@ -795,6 +1010,12 @@ def _serialize_next_check_plan(
         candidate["executionState"] = execution_state
         outcome_status = _derive_outcome_status(approval_status, execution_state)
         candidate["outcomeStatus"] = outcome_status
+        follow_up = execution_record.follow_up if execution_record else None
+        if not follow_up or not follow_up.failure_class:
+            follow_up = _classify_blocked_candidate(candidate)
+        _apply_failure_follow_up(candidate, follow_up)
+        execution_result_interpretation = execution_record.result_interpretation if execution_record else None
+        _apply_result_interpretation(candidate, execution_result_interpretation)
         latest_artifact, latest_timestamp = _latest_outcome_artifact(
             execution_record,
             candidate.get("approvalArtifactPath"),
@@ -864,6 +1085,7 @@ def _build_next_check_execution_history(
         ):
             continue
         payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+        follow_up = _classify_execution_failure(artifact)
         entries.append(
             {
                 "timestamp": artifact.timestamp.isoformat(),
@@ -879,6 +1101,18 @@ def _build_next_check_execution_history(
                 "outputBytesCaptured": artifact.output_bytes_captured,
             }
         )
+        if follow_up and follow_up.failure_class:
+            entries[-1]["failureClass"] = follow_up.failure_class
+            entries[-1]["failureSummary"] = follow_up.failure_summary
+            entries[-1]["suggestedNextOperatorMove"] = follow_up.suggested_next_operator_move
+        else:
+            success_interpretation = _classify_execution_success(artifact)
+            if success_interpretation:
+                entries[-1]["resultClass"] = success_interpretation.result_class
+                entries[-1]["resultSummary"] = success_interpretation.result_summary
+                entries[-1]["suggestedNextOperatorMove"] = (
+                    success_interpretation.suggested_next_operator_move
+                )
         if len(entries) >= limit:
             break
     return entries
@@ -925,6 +1159,28 @@ _PLANNER_NEXT_ACTION_HINTS: dict[str, str] = {
     ),
     _PLANNER_STATUS_PLANNER_PRESENT: (
         "Inspect the planner artifact for candidate context before taking any next-check action."
+    ),
+}
+
+
+_NEXT_CHECK_QUEUE_EXPLANATION_HINTS: dict[str, str] = {
+    "planner-present-with-candidates": (
+        "Planner candidates are available; clear queue filters or focus on a cluster to surface them."
+    ),
+    "queue-exhausted-by-completion-or-filtering": (
+        "All planner candidates were completed or filtered out; check deterministic evidence for remaining work."
+    ),
+    "enrichment-succeeded-without-next-checks": (
+        "Review deterministic Cluster Detail next-checks since enrichment returned no planner candidates."
+    ),
+    "enrichment-failed": (
+        "Inspect the failed review enrichment artifact before relying on deterministic Cluster Detail next checks."
+    ),
+    "enrichment-not-attempted": (
+        "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run."
+    ),
+    "planner-missing-unexpectedly": (
+        "The planner artifact is missing despite enrichment success; inspect the enrichment artifact and deterministic evidence chain."
     ),
 }
 
@@ -1008,6 +1264,282 @@ def _build_next_check_planner_availability(
         "hint": hint,
         "artifactPath": artifact_path,
         "nextActionHint": next_action_hint,
+    }
+
+
+def _pluck_plan_candidates(plan_entry: Mapping[str, object] | None) -> list[Mapping[str, object]]:
+    if not isinstance(plan_entry, Mapping):
+        return []
+    raw = plan_entry.get("candidates")
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+        return [entry for entry in raw if isinstance(entry, Mapping)]
+    return []
+
+
+def _summarize_deterministic_checks(
+    assessments: Sequence[HealthAssessmentArtifact],
+    clusters: Sequence[dict[str, object]],
+    drilldown_availability: dict[str, object],
+) -> dict[str, object]:
+    deterministic_total = 0
+    deterministic_clusters: set[str] = set()
+    for artifact in assessments:
+        assessment_payload = artifact.assessment if isinstance(artifact.assessment, dict) else {}
+        next_checks = assessment_payload.get("next_evidence_to_collect")
+        if isinstance(next_checks, Sequence) and not isinstance(next_checks, (str, bytes, bytearray)):
+            count = len(next_checks)
+        else:
+            count = 0
+        if count:
+            deterministic_total += count
+            deterministic_clusters.add(artifact.label)
+    degraded_labels = [
+        str(cluster.get("label"))
+        for cluster in clusters
+        if str(cluster.get("health_rating") or "").lower() == "degraded"
+    ]
+    drilldown_ready = _coerce_int_value(drilldown_availability.get("available", 0))
+    return {
+        "degradedClusterCount": len(degraded_labels),
+        "degradedClusterLabels": degraded_labels,
+        "deterministicNextCheckCount": deterministic_total,
+        "deterministicClusterCount": len(deterministic_clusters),
+        "drilldownReadyCount": drilldown_ready,
+    }
+
+
+def _summarize_next_evidence_entries(
+    artifact: HealthAssessmentArtifact,
+) -> list[dict[str, object]]:
+    payload = artifact.assessment if isinstance(artifact.assessment, Mapping) else {}
+    raw_next_checks = payload.get("next_evidence_to_collect")
+    if not isinstance(raw_next_checks, Sequence) or isinstance(raw_next_checks, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, object]] = []
+    for entry in raw_next_checks:
+        if not isinstance(entry, Mapping):
+            continue
+        description = str(entry.get("description") or "").strip()
+        owner = str(entry.get("owner") or "platform")
+        method = str(entry.get("method") or "").strip()
+        evidence_raw = entry.get("evidence_needed")
+        if isinstance(evidence_raw, Sequence) and not isinstance(evidence_raw, (str, bytes, bytearray)):
+            evidence = [str(item) for item in evidence_raw if item is not None]
+        else:
+            evidence = []
+        summaries.append(
+            {
+                "description": description or "Next evidence",
+                "owner": owner,
+                "method": method,
+                "evidenceNeeded": evidence,
+            }
+        )
+    return summaries
+
+
+def _derive_deterministic_top_problem(
+    cluster: dict[str, object],
+    drilldown: DrilldownArtifact | None,
+) -> str | None:
+    if drilldown and drilldown.trigger_reasons:
+        return drilldown.trigger_reasons[0]
+    reason = cluster.get("top_trigger_reason")
+    if isinstance(reason, str) and reason.strip():
+        return reason.strip()
+    return None
+
+
+def _build_deterministic_next_checks_projection(
+    clusters: Sequence[dict[str, object]],
+    assessment_map: Mapping[str, HealthAssessmentArtifact | None],
+    drilldown_map: Mapping[str, DrilldownArtifact],
+    root_dir: Path,
+) -> dict[str, object]:
+    entries: list[dict[str, object]] = []
+    total_next_checks = 0
+    for cluster in clusters:
+        rating = str(cluster.get("health_rating") or "").lower()
+        if rating != "degraded":
+            continue
+        label = str(cluster.get("label") or "")
+        if not label:
+            continue
+        assessment = assessment_map.get(label)
+        if not assessment:
+            continue
+        summaries = _summarize_next_evidence_entries(assessment)
+        if not summaries:
+            continue
+        drilldown = drilldown_map.get(label)
+        top_problem = _derive_deterministic_top_problem(cluster, drilldown)
+        total_next_checks += len(summaries)
+        entries.append(
+            {
+                "label": label,
+                "context": str(cluster.get("context") or ""),
+                "topProblem": top_problem,
+                "triggerReason": top_problem,
+                "deterministicNextCheckCount": len(summaries),
+                "deterministicNextCheckSummaries": summaries,
+                "drilldownAvailable": bool(drilldown),
+                "assessmentArtifactPath": _relative_path(
+                    root_dir, assessment.artifact_path
+                ),
+                "drilldownArtifactPath": _relative_path(
+                    root_dir, drilldown.artifact_path if drilldown else None
+                ),
+            }
+        )
+    return {
+        "clusterCount": len(entries),
+        "totalNextCheckCount": total_next_checks,
+        "clusters": entries,
+    }
+
+
+def _build_candidate_accounting(plan_entry: Mapping[str, object] | None) -> dict[str, int]:
+    candidates = _pluck_plan_candidates(plan_entry)
+    safe = approval_needed = duplicate = completed = stale_orphaned = 0
+    approval_needed_states = {"approval-needed"}
+    for candidate in candidates:
+        status = str(candidate.get("queueStatus") or "").lower()
+        if status in ("safe-ready", "approved-ready"):
+            safe += 1
+        if status in approval_needed_states:
+            approval_needed += 1
+        if status == "duplicate-or-stale":
+            duplicate += 1
+        if status == "completed":
+            completed += 1
+        approval_state = str(candidate.get("approvalState") or "").lower()
+        if approval_state in ("approval-stale", "approval-orphaned") or status == "duplicate-or-stale":
+            stale_orphaned += 1
+    orphaned = plan_entry.get("orphanedApprovalCount") if isinstance(plan_entry, Mapping) else 0
+    orphaned_value = _coerce_int_value(orphaned)
+    generated = _coerce_int_value(
+        plan_entry.get("candidateCount") if isinstance(plan_entry, Mapping) else len(candidates)
+    )
+    return {
+        "generated": generated,
+        "safe": safe,
+        "approvalNeeded": approval_needed,
+        "duplicate": duplicate,
+        "completed": completed,
+        "staleOrphaned": stale_orphaned,
+        "orphanedApprovals": orphaned_value,
+    }
+
+
+def _determine_queue_explanation_status(
+    plan_entry: Mapping[str, object] | None,
+    review_entry: Mapping[str, object] | None,
+    review_status: Mapping[str, object] | None,
+) -> str:
+    candidates = _pluck_plan_candidates(plan_entry)
+    if candidates:
+        return "planner-present-with-candidates"
+    if plan_entry and not candidates:
+        return "queue-exhausted-by-completion-or-filtering"
+    if review_entry:
+        entry_status = str(review_entry.get("status") or "").lower()
+        next_checks = review_entry.get("nextChecks")
+        has_checks = (
+            isinstance(next_checks, Sequence)
+            and not isinstance(next_checks, (str, bytes, bytearray))
+            and bool(next_checks)
+        )
+        if entry_status != "success":
+            return "enrichment-failed"
+        if has_checks:
+            return "planner-missing-unexpectedly"
+        return "enrichment-succeeded-without-next-checks"
+    if review_status:
+        state = str(review_status.get("status") or "").lower()
+        if state in (
+            "policy-disabled",
+            "provider-missing",
+            "adapter-unavailable",
+            "awaiting-next-run",
+        ):
+            return "enrichment-not-attempted"
+        return "enrichment-not-attempted"
+    return "enrichment-not-attempted"
+
+
+def _collect_queue_explanation_reason(
+    plan_entry: Mapping[str, object] | None,
+    review_entry: Mapping[str, object] | None,
+    review_status: Mapping[str, object] | None,
+) -> str | None:
+    if plan_entry and isinstance(plan_entry, Mapping):
+        summary = plan_entry.get("summary") or plan_entry.get("reason")
+        if isinstance(summary, str) and summary.strip():
+            return summary.strip()
+    if review_entry and isinstance(review_entry, Mapping):
+        error = review_entry.get("errorSummary")
+        if isinstance(error, str) and error.strip():
+            return error.strip()
+        summary = review_entry.get("reason")
+        if isinstance(summary, str) and summary.strip():
+            return summary.strip()
+    if review_status and isinstance(review_status, Mapping):
+        reason = review_status.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip()
+    return None
+
+
+def _derive_queue_artifact_path(
+    plan_entry: Mapping[str, object] | None,
+    review_entry: Mapping[str, object] | None,
+) -> str | None:
+    if plan_entry and isinstance(plan_entry, Mapping):
+        path = plan_entry.get("artifactPath")
+        if isinstance(path, str) and path:
+            return path
+    if review_entry and isinstance(review_entry, Mapping):
+        for key in _PLANNER_ARTIFACT_KEYS:
+            value = review_entry.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _build_next_check_queue_explanation(
+    assessments: Sequence[HealthAssessmentArtifact],
+    clusters: Sequence[dict[str, object]],
+    drilldown_availability: dict[str, object],
+    plan_entry: Mapping[str, object] | None,
+    queue: list[dict[str, object]],
+    review_entry: Mapping[str, object] | None,
+    review_status: Mapping[str, object] | None,
+) -> dict[str, object] | None:
+    if queue:
+        return None
+    status = _determine_queue_explanation_status(plan_entry, review_entry, review_status)
+    reason = _collect_queue_explanation_reason(plan_entry, review_entry, review_status)
+    cluster_state = _summarize_deterministic_checks(assessments, clusters, drilldown_availability)
+    candidate_accounting = _build_candidate_accounting(plan_entry)
+    next_action_hint = _NEXT_CHECK_QUEUE_EXPLANATION_HINTS.get(status)
+    recommended_actions: list[str] = []
+    if next_action_hint:
+        recommended_actions.append(next_action_hint)
+    if cluster_state.get("deterministicNextCheckCount"):
+        recommended_actions.append(
+            "Inspect deterministic Cluster Detail next checks to close the remaining evidence gaps."
+        )
+    return {
+        "status": status,
+        "reason": reason,
+        "hint": next_action_hint,
+        "plannerArtifactPath": _derive_queue_artifact_path(plan_entry, review_entry),
+        "clusterState": cluster_state,
+        "candidateAccounting": candidate_accounting,
+        "deterministicNextChecksAvailable": bool(
+            cluster_state.get("deterministicNextCheckCount")
+        ),
+        "recommendedNextActions": recommended_actions,
     }
 
 

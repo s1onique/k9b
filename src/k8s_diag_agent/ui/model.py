@@ -33,6 +33,8 @@ class RunView:
     planner_availability: PlannerAvailabilityView | None
     next_check_execution_history: tuple[NextCheckExecutionHistoryEntryView, ...]
     next_check_queue: tuple[NextCheckQueueItemView, ...]
+    next_check_queue_explanation: NextCheckQueueExplanationView | None
+    deterministic_next_checks: DeterministicNextChecksView | None
 
 
 @dataclass(frozen=True)
@@ -339,6 +341,11 @@ class NextCheckExecutionHistoryEntryView:
     stdout_truncated: bool | None
     stderr_truncated: bool | None
     output_bytes_captured: int | None
+    failure_class: str | None = None
+    failure_summary: str | None = None
+    suggested_next_operator_move: str | None = None
+    result_class: str | None = None
+    result_summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -366,6 +373,70 @@ class NextCheckQueueItemView:
     target_context: str | None
     command_preview: str | None
     plan_artifact_path: str | None
+    failure_class: str | None = None
+    failure_summary: str | None = None
+    suggested_next_operator_move: str | None = None
+    result_class: str | None = None
+    result_summary: str | None = None
+
+
+@dataclass(frozen=True)
+class NextCheckQueueCandidateAccountingView:
+    generated: int
+    safe: int
+    approval_needed: int
+    duplicate: int
+    completed: int
+    stale_orphaned: int
+    orphaned_approvals: int
+
+
+@dataclass(frozen=True)
+class NextCheckQueueClusterStateView:
+    degraded_cluster_count: int
+    degraded_cluster_labels: tuple[str, ...]
+    deterministic_next_check_count: int
+    deterministic_cluster_count: int
+    drilldown_ready_count: int
+
+
+@dataclass(frozen=True)
+class NextCheckQueueExplanationView:
+    status: str
+    reason: str | None
+    hint: str | None
+    planner_artifact_path: str | None
+    cluster_state: NextCheckQueueClusterStateView
+    candidate_accounting: NextCheckQueueCandidateAccountingView
+    deterministic_next_checks_available: bool
+    recommended_next_actions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeterministicNextCheckSummaryView:
+    description: str
+    owner: str
+    method: str
+    evidence_needed: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeterministicNextCheckClusterView:
+    label: str
+    context: str
+    top_problem: str | None
+    deterministic_next_check_count: int
+    deterministic_next_check_summaries: tuple[DeterministicNextCheckSummaryView, ...]
+    drilldown_available: bool
+    assessment_artifact_path: str | None
+    drilldown_artifact_path: str | None
+
+
+@dataclass(frozen=True)
+class DeterministicNextChecksView:
+    cluster_count: int
+    total_next_check_count: int
+    clusters: tuple[DeterministicNextCheckClusterView, ...]
 
 
 @dataclass(frozen=True)
@@ -484,6 +555,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     )
     next_check_plan = _build_next_check_plan_view(run_data.get("next_check_plan"))
     planner_availability = _build_planner_availability_view(run_data.get("planner_availability"))
+    queue_explanation = _build_queue_explanation_view(run_data.get("next_check_queue_explanation"))
     run = RunView(
         run_id=_coerce_str(run_data.get("run_id")),
         run_label=_coerce_str(run_data.get("run_label")),
@@ -509,6 +581,10 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
             run_data.get("next_check_execution_history")
         ),
         next_check_queue=_build_next_check_queue_view(run_data.get("next_check_queue")),
+        next_check_queue_explanation=queue_explanation,
+        deterministic_next_checks=_build_deterministic_next_checks_view(
+            run_data.get("deterministic_next_checks")
+        ),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -1100,6 +1176,11 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 stdout_truncated=_coerce_optional_bool(entry.get("stdoutTruncated")),
                 stderr_truncated=_coerce_optional_bool(entry.get("stderrTruncated")),
                 output_bytes_captured=_coerce_optional_int(entry.get("outputBytesCaptured")),
+                failure_class=_coerce_optional_str(entry.get("failureClass")),
+                failure_summary=_coerce_optional_str(entry.get("failureSummary")),
+                suggested_next_operator_move=_coerce_optional_str(entry.get("suggestedNextOperatorMove")),
+                result_class=_coerce_optional_str(entry.get("resultClass")),
+                result_summary=_coerce_optional_str(entry.get("resultSummary")),
             )
         )
     return tuple(entries)
@@ -1133,6 +1214,11 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
                 approval_reason=_coerce_optional_str(entry.get("approvalReason")),
                 duplicate_reason=_coerce_optional_str(entry.get("duplicateReason")),
                 blocking_reason=_coerce_optional_str(entry.get("blockingReason")),
+                failure_class=_coerce_optional_str(entry.get("failureClass")),
+                failure_summary=_coerce_optional_str(entry.get("failureSummary")),
+                suggested_next_operator_move=_coerce_optional_str(entry.get("suggestedNextOperatorMove")),
+                result_class=_coerce_optional_str(entry.get("resultClass")),
+                result_summary=_coerce_optional_str(entry.get("resultSummary")),
                 target_context=_coerce_optional_str(entry.get("targetContext")),
                 command_preview=_coerce_optional_str(entry.get("commandPreview")),
                 plan_artifact_path=_coerce_optional_str(entry.get("planArtifactPath")),
@@ -1140,6 +1226,109 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
             )
         )
     return tuple(entries)
+
+
+def _build_queue_cluster_state_view(raw: object | None) -> NextCheckQueueClusterStateView:
+    if not isinstance(raw, Mapping):
+        return NextCheckQueueClusterStateView(
+            degraded_cluster_count=0,
+            degraded_cluster_labels=(),
+            deterministic_next_check_count=0,
+            deterministic_cluster_count=0,
+            drilldown_ready_count=0,
+        )
+    return NextCheckQueueClusterStateView(
+        degraded_cluster_count=_coerce_int(raw.get("degradedClusterCount")),
+        degraded_cluster_labels=_coerce_sequence(raw.get("degradedClusterLabels")),
+        deterministic_next_check_count=_coerce_int(raw.get("deterministicNextCheckCount")),
+        deterministic_cluster_count=_coerce_int(raw.get("deterministicClusterCount")),
+        drilldown_ready_count=_coerce_int(raw.get("drilldownReadyCount")),
+    )
+
+
+def _build_queue_candidate_accounting_view(raw: object | None) -> NextCheckQueueCandidateAccountingView:
+    if not isinstance(raw, Mapping):
+        return NextCheckQueueCandidateAccountingView(
+            generated=0,
+            safe=0,
+            approval_needed=0,
+            duplicate=0,
+            completed=0,
+            stale_orphaned=0,
+            orphaned_approvals=0,
+        )
+    return NextCheckQueueCandidateAccountingView(
+        generated=_coerce_int(raw.get("generated")),
+        safe=_coerce_int(raw.get("safe")),
+        approval_needed=_coerce_int(raw.get("approvalNeeded")),
+        duplicate=_coerce_int(raw.get("duplicate")),
+        completed=_coerce_int(raw.get("completed")),
+        stale_orphaned=_coerce_int(raw.get("staleOrphaned")),
+        orphaned_approvals=_coerce_int(raw.get("orphanedApprovals")),
+    )
+
+
+def _build_queue_explanation_view(raw: object | None) -> NextCheckQueueExplanationView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    recommended_actions_raw = raw.get("recommendedNextActions") or ()
+    recommended_actions = tuple(
+        str(entry) for entry in recommended_actions_raw if isinstance(entry, str) and entry.strip()
+    )
+    return NextCheckQueueExplanationView(
+        status=_coerce_str(raw.get("status")),
+        reason=_coerce_optional_str(raw.get("reason")),
+        hint=_coerce_optional_str(raw.get("hint")),
+        planner_artifact_path=_coerce_optional_str(raw.get("plannerArtifactPath")),
+        cluster_state=_build_queue_cluster_state_view(raw.get("clusterState")),
+        candidate_accounting=_build_queue_candidate_accounting_view(raw.get("candidateAccounting")),
+        deterministic_next_checks_available=bool(raw.get("deterministicNextChecksAvailable")),
+        recommended_next_actions=recommended_actions,
+    )
+
+
+def _build_deterministic_next_checks_view(raw: object | None) -> DeterministicNextChecksView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    clusters_raw = raw.get("clusters") or ()
+    clusters = tuple(
+        _build_deterministic_next_check_cluster_view(entry)
+        for entry in clusters_raw
+        if isinstance(entry, Mapping)
+    )
+    return DeterministicNextChecksView(
+        cluster_count=_coerce_int(raw.get("clusterCount")),
+        total_next_check_count=_coerce_int(raw.get("totalNextCheckCount")),
+        clusters=clusters,
+    )
+
+
+def _build_deterministic_next_check_cluster_view(raw: Mapping[str, object]) -> DeterministicNextCheckClusterView:
+    summaries_raw = raw.get("deterministicNextCheckSummaries") or ()
+    summaries = tuple(
+        _build_deterministic_next_check_summary_view(entry)
+        for entry in summaries_raw
+        if isinstance(entry, Mapping)
+    )
+    return DeterministicNextCheckClusterView(
+        label=_coerce_str(raw.get("label")),
+        context=_coerce_str(raw.get("context")),
+        top_problem=_coerce_optional_str(raw.get("topProblem")),
+        deterministic_next_check_count=_coerce_int(raw.get("deterministicNextCheckCount")),
+        deterministic_next_check_summaries=summaries,
+        drilldown_available=bool(raw.get("drilldownAvailable")),
+        assessment_artifact_path=_coerce_optional_str(raw.get("assessmentArtifactPath")),
+        drilldown_artifact_path=_coerce_optional_str(raw.get("drilldownArtifactPath")),
+    )
+
+
+def _build_deterministic_next_check_summary_view(raw: Mapping[str, object]) -> DeterministicNextCheckSummaryView:
+    return DeterministicNextCheckSummaryView(
+        description=_coerce_str(raw.get("description")),
+        owner=_coerce_str(raw.get("owner")),
+        method=_coerce_str(raw.get("method")),
+        evidence_needed=_coerce_sequence(raw.get("evidenceNeeded")),
+    )
 
 
 def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphanedApprovalView:
