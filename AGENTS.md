@@ -61,6 +61,10 @@ Always:
 - verify meaningful changes,
 - and state risks and tradeoffs clearly.
 
+## Completion contract
+
+Work is not considered complete until `scripts/verify_all.sh` exits successfully and prints the canonical `VERIFICATION GATE: PASSED` marker (or, if the gate cannot run, the completion summary explicitly states what steps were blocked and why the script did not finish). Use the same structured PASS/FAIL signal when reviewing or automating acceptance checks so every change has evidence that the verification gate ran.
+
 Never:
 - invent facts,
 - blur signal and hypothesis,

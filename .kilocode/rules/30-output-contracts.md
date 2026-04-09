@@ -61,6 +61,8 @@ How can this be reversed, disabled, or contained?
 ### Next validation step
 What should be tested, measured, or verified next?
 
+**Verification contract:** Work is not complete until `scripts/verify_all.sh` exits successfully and emits `VERIFICATION GATE: PASSED`. If the gate cannot run, state the blocking reason explicitly in the completion summary and report when the gate is expected to run or why it was skipped.
+
 ## Required answer skeleton for implementation tasks
 
 When creating or changing code, include:

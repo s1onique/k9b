@@ -22,8 +22,10 @@ class ExternalAnalysisPurpose(StrEnum):
     AUTO_DRILLDOWN = "auto-drilldown"
     REVIEW_ENRICHMENT = "review-enrichment"
     NEXT_CHECK_PLANNING = "next-check-planning"
+    NEXT_CHECK_PROMOTION = "next-check-promotion"
     NEXT_CHECK_APPROVAL = "next-check-approval"
     NEXT_CHECK_EXECUTION = "next-check-execution"
+    DIAGNOSTIC_PACK_REVIEW = "diagnostic-pack-review"
 
 
 def _coerce_optional_int(value: object | None) -> int | None:

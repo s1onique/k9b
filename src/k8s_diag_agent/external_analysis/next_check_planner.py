@@ -86,7 +86,7 @@ def _match_selection_for_text(
     return next(iter(selections), None)
 
 
-def _detect_command_family(text: str) -> CommandFamily:
+def detect_command_family(text: str) -> CommandFamily:
     normalized = text.lower()
     if "kubectl logs" in normalized or "logs" in normalized and "kubectl" in normalized:
         return CommandFamily.KUBECTL_LOGS
@@ -101,7 +101,7 @@ def _detect_command_family(text: str) -> CommandFamily:
     return CommandFamily.UNKNOWN
 
 
-def _detect_expected_signal(text: str) -> str | None:
+def detect_expected_signal(text: str) -> str | None:
     normalized = text.lower()
     if any(keyword in normalized for keyword in ("logs", "log file", "pod logs")):
         return "logs"
@@ -426,9 +426,9 @@ def plan_next_checks(
                         break
         if not source_reason and enrichment_artifact.summary:
             source_reason = enrichment_artifact.summary
-        family = _detect_command_family(candidate_text)
+        family = detect_command_family(candidate_text)
         risk = _risk_from_family(family)
-        expected_signal = _detect_expected_signal(candidate_text)
+        expected_signal = detect_expected_signal(candidate_text)
         candidate_key = _normalize_description(candidate_text)
         duplicate_reason_enum, duplicate_description = _find_similar_description(
             candidate_key, evidence_map

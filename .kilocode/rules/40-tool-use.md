@@ -130,6 +130,8 @@ Preferred order:
 
 Do not claim completion without some verification unless the repo truly has no verification path, and then say so explicitly.
 
+**Completion contract:** Work is not complete until `scripts/verify_all.sh` exits successfully and emits `VERIFICATION GATE: PASSED`, or the completion summary documents the blocking reason and next attempt. Reviewers and automation should check for the PASS/FAIL marker when judging readiness.
+
 ## Web lookup rule
 
 Use web tools when:

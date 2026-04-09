@@ -42,7 +42,7 @@ k8s-diag-agent check-proposal runs/health/proposals/<proposal-id>.json [--fixtur
 
 ## Development
 
-- `scripts/verify_all.sh` (canonical acceptance gate; runs Ruff, unittest, mypy, and the frontend `npm run test:ui` + `npm run build` steps after `npm ci`)
+- `scripts/verify_all.sh` (canonical acceptance gate; runs Ruff, unittest, mypy, and the frontend `npm run test:ui` + `npm run build` steps after `npm ci`). Work is not complete unless this script exits successfully and prints `VERIFICATION GATE: PASSED` (or a blocking explanation is documented when the gate cannot run).
 - `.venv/bin/python -m unittest discover tests` (active verification path)
 - `.venv/bin/python -m mypy src tests` (type checker; see [typing guidance](docs/typing.md))
 - Frontend UI smoke: `cd frontend && npm run test:ui`

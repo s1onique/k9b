@@ -1,5 +1,7 @@
 import type {
   ClusterDetailPayload,
+  DeterministicNextCheckPromotionRequest,
+  DeterministicNextCheckPromotionResponse,
   FleetPayload,
   NextCheckApprovalRequest,
   NextCheckApprovalResponse,
@@ -123,4 +125,30 @@ export const approveNextCheckCandidate = async (
   }
   const data = await response.json();
   return data as NextCheckApprovalResponse;
+};
+
+export const promoteDeterministicNextCheck = async (
+  request: DeterministicNextCheckPromotionRequest
+): Promise<DeterministicNextCheckPromotionResponse> => {
+  const response = await fetch("/api/deterministic-next-check/promote", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to promote deterministic next check");
+  }
+  return (await response.json()) as DeterministicNextCheckPromotionResponse;
 };

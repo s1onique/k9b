@@ -364,6 +364,7 @@ class NextCheckQueueItemView:
     latest_artifact_path: str | None
     queue_status: str
     source_reason: str | None
+    source_type: str | None
     expected_signal: str | None
     normalization_reason: str | None
     safety_reason: str | None
@@ -422,6 +423,7 @@ class DeterministicNextCheckSummaryView:
     urgency: str
     is_primary_triage: bool
     why_now: str
+    priority_score: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1198,21 +1200,22 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
         if not isinstance(entry, Mapping):
             continue
         entries.append(
-            NextCheckQueueItemView(
-                candidate_id=_coerce_optional_str(entry.get("candidateId")),
-                candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
-                description=_coerce_str(entry.get("description")),
-                target_cluster=_coerce_optional_str(entry.get("targetCluster")),
-                priority_label=_coerce_optional_str(entry.get("priorityLabel")),
-                suggested_command_family=_coerce_optional_str(entry.get("suggestedCommandFamily")),
-                safe_to_automate=bool(entry.get("safeToAutomate")),
-                requires_operator_approval=bool(entry.get("requiresOperatorApproval")),
-                approval_state=_coerce_optional_str(entry.get("approvalState")),
-                execution_state=_coerce_optional_str(entry.get("executionState")),
-                outcome_status=_coerce_optional_str(entry.get("outcomeStatus")),
-                latest_artifact_path=_coerce_optional_str(entry.get("latestArtifactPath")),
-                source_reason=_coerce_optional_str(entry.get("sourceReason")),
-                expected_signal=_coerce_optional_str(entry.get("expectedSignal")),
+                NextCheckQueueItemView(
+                    candidate_id=_coerce_optional_str(entry.get("candidateId")),
+                    candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
+                    description=_coerce_str(entry.get("description")),
+                    target_cluster=_coerce_optional_str(entry.get("targetCluster")),
+                    priority_label=_coerce_optional_str(entry.get("priorityLabel")),
+                    suggested_command_family=_coerce_optional_str(entry.get("suggestedCommandFamily")),
+                    safe_to_automate=bool(entry.get("safeToAutomate")),
+                    requires_operator_approval=bool(entry.get("requiresOperatorApproval")),
+                    approval_state=_coerce_optional_str(entry.get("approvalState")),
+                    execution_state=_coerce_optional_str(entry.get("executionState")),
+                    outcome_status=_coerce_optional_str(entry.get("outcomeStatus")),
+                    latest_artifact_path=_coerce_optional_str(entry.get("latestArtifactPath")),
+                    source_reason=_coerce_optional_str(entry.get("sourceReason")),
+                    source_type=_coerce_optional_str(entry.get("sourceType")),
+                    expected_signal=_coerce_optional_str(entry.get("expectedSignal")),
                 normalization_reason=_coerce_optional_str(entry.get("normalizationReason")),
                 safety_reason=_coerce_optional_str(entry.get("safetyReason")),
                 approval_reason=_coerce_optional_str(entry.get("approvalReason")),
@@ -1336,6 +1339,7 @@ def _build_deterministic_next_check_summary_view(raw: Mapping[str, object]) -> D
         urgency=_coerce_str(raw.get("urgency")),
         is_primary_triage=bool(raw.get("isPrimaryTriage")),
         why_now=_coerce_str(raw.get("whyNow")),
+        priority_score=_coerce_optional_int(raw.get("priorityScore")),
     )
 
 

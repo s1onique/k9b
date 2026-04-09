@@ -10,6 +10,7 @@ import {
   fetchNotifications,
   fetchProposals,
   fetchRun,
+  promoteDeterministicNextCheck,
 } from "./api";
 import type {
   AutoInterpretation,
@@ -32,6 +33,7 @@ import type {
   RunPayload,
   DeterministicNextCheckSummary,
   NextCheckApprovalResponse,
+  DeterministicNextCheckPromotionRequest,
 } from "./types";
 import "./index.css";
 
@@ -97,6 +99,7 @@ const DETERMINISTIC_WORKSTREAM_DESCRIPTIONS: Record<string, string> = {
   evidence: "Collect supporting telemetry and context",
   drift: "Log drift, parity, and toil follow-up",
 };
+const INCIDENT_PREVIEW_LIMIT = 3;
 
 const FAILURE_FOLLOW_UP_LABELS: Record<string, string> = {
   "timed-out": "Timed out",
@@ -306,6 +309,10 @@ const buildClusterRecommendedArtifacts = (detail?: ClusterDetailPayload) => {
   return Array.from(seen.values()).slice(0, 3);
 };
 
+const sortDeterministicSummaries = (
+  summaries: DeterministicNextCheckSummary[] = []
+) => [...summaries].sort((first, second) => (second.priorityScore ?? 0) - (first.priorityScore ?? 0));
+
 const safetyClass = (value?: string) => {
   const normalized = value ? value.replace(/[^a-z0-9]+/gi, "-").toLowerCase() : "";
   return `safety-pill ${normalized ? `safety-pill-${normalized}` : ""}`.trim();
@@ -318,6 +325,14 @@ const priorityLabel = (confidence: string) => {
   if (normalized.includes("medium")) return "medium";
   if (normalized.includes("low")) return "low";
   return "default";
+};
+
+const formatSourceType = (value?: string | null) => {
+  if (!value) return null;
+  if (value === "deterministic") {
+    return "Deterministic evidence";
+  }
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 };
 
 const humanizeReason = (value?: string | null) => {
@@ -354,6 +369,11 @@ type ApprovalResult = {
   summary: string;
   artifactPath?: string | null;
   approvalTimestamp?: string | null;
+};
+
+type PromotionStatus = {
+  status: "idle" | "pending" | "success" | "error";
+  message?: string | null;
 };
 
 const approvalStatusLabels: Record<string, string> = {
@@ -1563,6 +1583,9 @@ const App = () => {
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
   const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
+  const [promotionStatus, setPromotionStatus] = useState<Record<string, PromotionStatus>>({});
+  const [promotingDeterministic, setPromotingDeterministic] = useState<Record<string, boolean>>({});
+  const [promotionMessages, setPromotionMessages] = useState<Record<string, string>>({});
   const initialQueueViewState = useMemo(() => readStoredQueueViewState(), []);
   const [queueClusterFilter, setQueueClusterFilter] = useState(
     initialQueueViewState.clusterFilter
@@ -1584,6 +1607,7 @@ const App = () => {
     initialQueueViewState.focusMode
   );
   const [highlightedClusterLabel, setHighlightedClusterLabel] = useState<string | null>(null);
+  const [incidentExpandedClusters, setIncidentExpandedClusters] = useState<Record<string, boolean>>({});
   const [executionHistoryHighlightKey, setExecutionHistoryHighlightKey] = useState<string | null>(null);
   const clusterHighlightTimer = useRef<number | null>(null);
   const executionHighlightTimer = useRef<number | null>(null);
@@ -1610,6 +1634,55 @@ const App = () => {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [selectedClusterLabel]);
+
+  const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
+    `${clusterLabel}::${description}::${index}`;
+
+  const handlePromoteDeterministicCheck = useCallback(
+    async (
+      clusterLabel: string,
+      clusterContext: string | null,
+      topProblem: string | null,
+      check: DeterministicNextCheckSummary,
+      index: number
+    ) => {
+      const key = buildPromotionKey(clusterLabel, check.description, index);
+      setPromotionStatus((current) => ({
+        ...current,
+        [key]: { status: "pending", message: null },
+      }));
+      const request: DeterministicNextCheckPromotionRequest = {
+        clusterLabel,
+        context: clusterContext,
+        description: check.description,
+        method: check.method || null,
+        evidenceNeeded: check.evidenceNeeded,
+        workstream: check.workstream,
+        urgency: check.urgency,
+        whyNow: check.whyNow,
+        topProblem,
+        priorityScore: check.priorityScore ?? null,
+      };
+      try {
+        const response = await promoteDeterministicNextCheck(request);
+        setPromotionStatus((current) => ({
+          ...current,
+          [key]: {
+            status: "success",
+            message: response.summary ?? "Promoted to queue",
+          },
+        }));
+        await refresh();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Promotion failed";
+        setPromotionStatus((current) => ({
+          ...current,
+          [key]: { status: "error", message },
+        }));
+      }
+    },
+    [refresh]
+  );
 
   useEffect(() => {
     refresh();
@@ -1742,6 +1815,13 @@ const App = () => {
     executionHighlightTimer.current = window.setTimeout(() => {
       setExecutionHistoryHighlightKey(null);
     }, NAVIGATION_HIGHLIGHT_DURATION_MS);
+  };
+
+  const toggleIncidentExpansion = (label: string) => {
+    setIncidentExpandedClusters((current) => ({
+      ...current,
+      [label]: !current[label],
+    }));
   };
 
   const handleAutoRefreshChange = (value: string) => {
@@ -2453,52 +2533,87 @@ const App = () => {
       {hasDeterministicNextChecks ? (
         <div className="deterministic-cluster-grid">
           {deterministicClusters.map((cluster) => {
-            const incidentChecks = cluster.deterministicNextCheckSummaries.filter(
-              (check) => check.workstream === "incident"
+            const sortedChecks = sortDeterministicSummaries(
+              cluster.deterministicNextCheckSummaries
             );
-            const evidenceChecks = cluster.deterministicNextCheckSummaries.filter(
-              (check) => check.workstream === "evidence"
-            );
-            const driftChecks = cluster.deterministicNextCheckSummaries.filter(
-              (check) => check.workstream === "drift"
-            );
+            const incidentChecks = sortedChecks.filter((check) => check.workstream === "incident");
+            const evidenceChecks = sortedChecks.filter((check) => check.workstream === "evidence");
+            const driftChecks = sortedChecks.filter((check) => check.workstream === "drift");
+            const isIncidentExpanded = Boolean(incidentExpandedClusters[cluster.label]);
+            const incidentPreview = isIncidentExpanded
+              ? incidentChecks
+              : incidentChecks.slice(0, INCIDENT_PREVIEW_LIMIT);
+            const incidentHasMore = incidentChecks.length > INCIDENT_PREVIEW_LIMIT;
             const renderCheckItem = (
               check: DeterministicNextCheckSummary,
               index: number
-            ) => (
-              <li key={`${cluster.label}-${check.workstream}-${index}`}>
-                <div className="deterministic-check-head">
-                  <div>
-                    <strong>{check.description}</strong>
-                    <div className="deterministic-check-badges">
-                      <span
-                        className={`deterministic-workstream-pill deterministic-workstream-pill-${check.workstream}`}
-                      >
-                        {DETERMINISTIC_WORKSTREAM_LABELS[check.workstream]}
-                      </span>
-                      <span
-                        className={`deterministic-urgency-pill deterministic-urgency-pill-${check.urgency}`}
-                      >
-                        {check.urgency}
-                      </span>
-                      {check.isPrimaryTriage ? (
-                        <span className="deterministic-primary-pill">Primary triage</span>
-                      ) : null}
+            ) => {
+              const promotionKey = buildPromotionKey(cluster.label, check.description, index);
+              const promotionEntry = promotionStatus[promotionKey];
+              const isPromoting = promotionEntry?.status === "pending";
+              const isPromoted = promotionEntry?.status === "success";
+              return (
+                <li key={`${cluster.label}-${check.workstream}-${index}`}>
+                  <div className="deterministic-check-head">
+                    <div>
+                      <strong>{check.description}</strong>
+                      <div className="deterministic-check-badges">
+                        <span
+                          className={`deterministic-workstream-pill deterministic-workstream-pill-${check.workstream}`}
+                        >
+                          {DETERMINISTIC_WORKSTREAM_LABELS[check.workstream]}
+                        </span>
+                        <span
+                          className={`deterministic-urgency-pill deterministic-urgency-pill-${check.urgency}`}
+                        >
+                          {check.urgency}
+                        </span>
+                        {check.isPrimaryTriage ? (
+                          <span className="deterministic-primary-pill">Primary triage</span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="deterministic-check-meta">
-                  <span>Method: {check.method || "—"}</span>
-                  <span>Owner: {check.owner}</span>
-                </div>
-                <p className="muted tiny">{check.whyNow}</p>
-                {check.evidenceNeeded.length ? (
-                  <p className="muted tiny">
-                    Evidence: {check.evidenceNeeded.join(", ")}
-                  </p>
-                ) : null}
-              </li>
-            );
+                  <div className="deterministic-check-meta">
+                    <span>Method: {check.method || "—"}</span>
+                    <span>Owner: {check.owner}</span>
+                  </div>
+                  <p className="muted tiny">{check.whyNow}</p>
+                  {check.evidenceNeeded.length ? (
+                    <p className="muted tiny">
+                      Evidence: {check.evidenceNeeded.join(", ")}
+                    </p>
+                  ) : null}
+                  <div className="deterministic-check-actions">
+                    {isPromoted ? (
+                      <span className="muted tiny">Promoted to queue</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="button tertiary tiny"
+                        onClick={() =>
+                          handlePromoteDeterministicCheck(
+                            cluster.label,
+                            cluster.context || null,
+                            cluster.topProblem ?? null,
+                            check,
+                            index
+                          )
+                        }
+                        disabled={isPromoting}
+                      >
+                        {isPromoting ? "Promoting…" : "Promote to queue"}
+                      </button>
+                    )}
+                    {promotionEntry?.message ? (
+                      <p className="muted tiny deterministic-promotion-message">
+                        {promotionEntry.message}
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            };
             const buildCheckCountLabel = (count: number) =>
               `${count} check${count === 1 ? "" : "s"}`;
             return (
@@ -2543,8 +2658,19 @@ const App = () => {
                         </span>
                       </div>
                       <ul className="deterministic-check-list">
-                        {incidentChecks.map(renderCheckItem)}
+                        {incidentPreview.map(renderCheckItem)}
                       </ul>
+                      {incidentHasMore ? (
+                        <button
+                          type="button"
+                          className="text-button deterministic-show-more"
+                          onClick={() => toggleIncidentExpansion(cluster.label)}
+                        >
+                          {isIncidentExpanded
+                            ? "Show fewer incident checks"
+                            : `Show all ${incidentChecks.length} incident checks`}
+                        </button>
+                      ) : null}
                     </section>
                   ) : null}
                   {evidenceChecks.length ? (
@@ -2852,6 +2978,7 @@ const App = () => {
                         ? artifactUrl(item.planArtifactPath)
                         : null;
                   const metadataEntries = [
+                    { label: "Origin", value: formatSourceType(item.sourceType) },
                     { label: "Source reason", value: item.sourceReason },
                     { label: "Expected signal", value: item.expectedSignal },
                     { label: "Normalization", value: humanizeReason(item.normalizationReason) },
@@ -2866,6 +2993,11 @@ const App = () => {
                       <div className="next-check-queue-item-meta">
                         <div>
                           <strong>{item.description}</strong>
+                          {formatSourceType(item.sourceType) ? (
+                            <span className="queue-source-pill">
+                              {formatSourceType(item.sourceType)}
+                            </span>
+                          ) : null}
                           <p className="tiny">
                             Cluster: {item.targetCluster ?? "Unassigned"}
                           </p>

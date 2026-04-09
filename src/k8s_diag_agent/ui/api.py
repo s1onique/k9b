@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import TypedDict
+from typing import NotRequired, TypedDict, cast
 
 from ..health.freshness import freshness_status
 from .model import (
@@ -244,6 +245,7 @@ class NextCheckQueueItemPayload(TypedDict, total=False):
     targetContext: str | None
     commandPreview: str | None
     planArtifactPath: str | None
+    sourceType: str | None
     failureClass: str | None
     failureSummary: str | None
     suggestedNextOperatorMove: str | None
@@ -289,6 +291,7 @@ class DeterministicNextCheckSummaryPayload(TypedDict):
     urgency: str
     isPrimaryTriage: bool
     whyNow: str
+    priorityScore: NotRequired[int | None]
 
 
 class DeterministicNextCheckClusterPayload(TypedDict):
@@ -555,7 +558,11 @@ class ClusterDetailPayload(TypedDict):
     topProblem: ProblemSummary
 
 
-def build_run_payload(context: UIIndexContext) -> RunPayload:
+def build_run_payload(
+    context: UIIndexContext,
+    *,
+    promotions: Sequence[dict[str, object]] | None = None,
+) -> RunPayload:
     return {
         "runId": context.run.run_id,
         "label": context.run.run_label,
@@ -585,7 +592,9 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
             context.run.timestamp, context.run.scheduler_interval_seconds
         ),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
-        "nextCheckQueue": _serialize_next_check_queue(context.run.next_check_queue),
+        "nextCheckQueue": _serialize_next_check_queue(
+            context.run.next_check_queue, promotions
+        ),
         "nextCheckQueueExplanation": _serialize_queue_explanation(
             context.run.next_check_queue_explanation
         ),
@@ -1023,23 +1032,27 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
     }
 
 
-def _serialize_next_check_queue(queue: tuple[NextCheckQueueItemView, ...]) -> list[NextCheckQueueItemPayload]:
-    return [
-        {
-            "candidateId": item.candidate_id,
-            "candidateIndex": item.candidate_index,
-            "description": item.description,
-            "targetCluster": item.target_cluster,
-            "priorityLabel": item.priority_label,
-            "suggestedCommandFamily": item.suggested_command_family,
-            "safeToAutomate": item.safe_to_automate,
-            "requiresOperatorApproval": item.requires_operator_approval,
-            "approvalState": item.approval_state,
-            "executionState": item.execution_state,
-            "outcomeStatus": item.outcome_status,
-            "latestArtifactPath": item.latest_artifact_path,
-            "sourceReason": item.source_reason,
-            "expectedSignal": item.expected_signal,
+def _serialize_next_check_queue(
+    queue: tuple[NextCheckQueueItemView, ...],
+    promotions: Sequence[Mapping[str, object]] | None = None,
+) -> list[NextCheckQueueItemPayload]:
+    entries: list[NextCheckQueueItemPayload] = [
+            {
+                "candidateId": item.candidate_id,
+                "candidateIndex": item.candidate_index,
+                "description": item.description,
+                "targetCluster": item.target_cluster,
+                "priorityLabel": item.priority_label,
+                "suggestedCommandFamily": item.suggested_command_family,
+                "safeToAutomate": item.safe_to_automate,
+                "requiresOperatorApproval": item.requires_operator_approval,
+                "approvalState": item.approval_state,
+                "executionState": item.execution_state,
+                "outcomeStatus": item.outcome_status,
+                "latestArtifactPath": item.latest_artifact_path,
+                "sourceReason": item.source_reason,
+                "sourceType": item.source_type,
+                "expectedSignal": item.expected_signal,
             "normalizationReason": item.normalization_reason,
             "safetyReason": item.safety_reason,
             "approvalReason": item.approval_reason,
@@ -1057,6 +1070,11 @@ def _serialize_next_check_queue(queue: tuple[NextCheckQueueItemView, ...]) -> li
         }
         for item in queue
     ]
+    if promotions:
+        for entry in promotions:
+            if isinstance(entry, Mapping):
+                entries.append(cast(NextCheckQueueItemPayload, dict(entry)))
+    return entries
 
 
 def _serialize_queue_cluster_state(

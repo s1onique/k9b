@@ -18,6 +18,7 @@ from k8s_diag_agent.external_analysis.config import (
 from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.ui.api import (
     _build_freshness_payload,
+    _serialize_next_check_queue,
     build_cluster_detail_payload,
     build_fleet_payload,
     build_notifications_payload,
@@ -44,6 +45,7 @@ def _sample_deterministic_next_checks() -> dict[str, object]:
                     "owner": "platform",
                     "method": "kubectl exec",
                     "evidenceNeeded": ["tcpdump"],
+                    "priorityScore": 85,
                     "workstream": "incident",
                     "urgency": "high",
                     "isPrimaryTriage": True,
@@ -159,6 +161,20 @@ class UIApiTests(unittest.TestCase):
         first_entry = queue[0]
         self.assertIn("commandPreview", first_entry)
         self.assertIn("planArtifactPath", first_entry)
+
+    def test_serialize_queue_appends_promoted_entries(self) -> None:
+        promotions = [
+            {
+                "candidateId": "promo-id",
+                "description": "Promoted deterministic check",
+                "queueStatus": "approval-needed",
+                "planArtifactPath": "external-analysis/promo.json",
+                "sourceType": "deterministic",
+            }
+        ]
+        serialized = _serialize_next_check_queue(self.context.run.next_check_queue, promotions)
+        self.assertEqual(serialized[-1]["candidateId"], "promo-id")
+        self.assertEqual(serialized[-1].get("sourceType"), "deterministic")
 
     def test_run_payload_reconstructs_review_enrichment_from_artifact_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

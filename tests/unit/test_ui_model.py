@@ -21,6 +21,7 @@ def _sample_deterministic_next_checks() -> dict[str, object]:
                     "owner": "platform",
                     "method": "kubectl exec",
                     "evidenceNeeded": ["tcpdump"],
+                    "priorityScore": 85,
                     "workstream": "incident",
                     "urgency": "high",
                     "isPrimaryTriage": True,

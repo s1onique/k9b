@@ -35,6 +35,12 @@ const defaultPayloads = {
   "/api/notifications": sampleNotifications,
   "/api/notifications?limit=50&page=1": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
+  "/api/deterministic-next-check/promote": {
+    status: "success",
+    summary: "Deterministic next check promoted to the queue.",
+    artifactPath: "/artifacts/promoted.json",
+    candidateId: "promo-1",
+  },
 };
 
 const getQueuePanel = async () => {
@@ -249,6 +255,70 @@ describe("App", () => {
     expect(driftDetails).not.toHaveAttribute("open");
   });
 
+  test("promote deterministic next check button triggers API and shows status", async () => {
+    const payloads = { ...defaultPayloads };
+    const fetchMock = createFetchMock(payloads);
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const promoteButtons = await screen.findAllByRole("button", { name: /Promote to queue/i });
+    expect(promoteButtons.length).toBeGreaterThan(0);
+    await act(async () => {
+      await user.click(promoteButtons[0]);
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Deterministic next check promoted to the queue/i)
+      ).toBeInTheDocument()
+    );
+    const promoteCall = fetchMock.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/deterministic-next-check/promote")
+    );
+    expect(promoteCall).toBeDefined();
+    expect(promoteCall?.[1]).toMatchObject({ method: "POST" });
+  });
+
+  test("incident group shows limited checks before expanding", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const incidentSection = incidentLabel.closest("section");
+    expect(incidentSection).not.toBeNull();
+    const incidentItems = within(incidentSection!).getAllByRole("listitem");
+    expect(incidentItems.length).toBe(3);
+    expect(
+      within(incidentSection!).getByRole("button", { name: /Show all 4 incident checks/i })
+    ).toBeInTheDocument();
+  });
+
+  test("incident show more toggle reveals additional checks", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const incidentSection = incidentLabel.closest("section");
+    expect(incidentSection).not.toBeNull();
+    const showButton = within(incidentSection!).getByRole("button", {
+      name: /Show all 4 incident checks/i,
+    });
+    await act(async () => {
+      await userEvent.click(showButton);
+    });
+    expect(within(incidentSection!).getAllByRole("listitem").length).toBe(4);
+    expect(
+      within(incidentSection!).getByRole("button", { name: /Show fewer incident checks/i })
+    ).toBeInTheDocument();
+  });
+
   test("deterministic panel empty state is obvious when data is absent", async () => {
     const payloads = {
       ...defaultPayloads,
@@ -328,6 +398,22 @@ describe("App", () => {
     expect(
       queueScoped.getByText(/Correlate this output with the target incident/i)
     ).toBeInTheDocument();
+  });
+
+  test("queue metadata shows deterministic origin label", async () => {
+    const runWithSource = JSON.parse(JSON.stringify(sampleRun));
+    runWithSource.nextCheckQueue[0].sourceType = "deterministic";
+    const payloads = { ...defaultPayloads, "/api/run": runWithSource };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const logsCard = queueScoped
+      .getByText(/Collect kubelet logs for control-plane pods/i)
+      .closest("article");
+    expect(logsCard).not.toBeNull();
+    await queueScoped.findByText(/Deterministic evidence/i);
   });
 
   test("queue cluster filter scopes to selected cluster", async () => {

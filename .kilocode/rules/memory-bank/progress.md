@@ -186,6 +186,8 @@ The next stage is successful if the repo can do all of the following:
 - define stable fixture and assessment contracts
 - and test at least one realistic diagnostic scenario end to end
 
+Operators can now import deterministic next-check suggestions into the guarded queue via durable promotion artifacts, keeping the evidence-first signal while giving operators a direct promotion path into the manual workflow.
+
 ## Risks to watch now
 
 Current early-stage risks:

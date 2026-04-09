@@ -11,6 +11,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
+from ..external_analysis.deterministic_next_check_promotion import (
+    build_promoted_candidate_id,
+    collect_promoted_queue_entries,
+    write_deterministic_next_check_promotion,
+)
 from ..external_analysis.manual_next_check import (
     ManualNextCheckError,
     execute_manual_next_check,
@@ -73,6 +78,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         route, _, _ = self.path.partition("?")
+        if route == "/api/deterministic-next-check/promote":
+            self._handle_deterministic_promotion()
+            return
         if route == "/api/next-check-execution":
             self._handle_next_check_execution()
             return
@@ -89,7 +97,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if context is None:
             return
         if route == "/api/run":
-            self._send_json(build_run_payload(context))
+            promotions = collect_promoted_queue_entries(self.runs_dir, context.run.run_id)
+            self._send_json(build_run_payload(context, promotions=promotions))
             return
         if route == "/api/fleet":
             self._send_json(build_fleet_payload(context))
@@ -281,6 +290,95 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "outputBytesCaptured": artifact.output_bytes_captured,
         }
         self._send_json(payload)
+
+    def _handle_deterministic_promotion(self) -> None:
+        context = self._load_context()
+        if context is None:
+            return
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+        cluster_label = payload.get("clusterLabel")
+        if not isinstance(cluster_label, str) or not cluster_label:
+            self._send_json({"error": "clusterLabel is required"}, 400)
+            return
+        description = payload.get("description")
+        if not isinstance(description, str) or not description.strip():
+            self._send_json({"error": "description is required"}, 400)
+            return
+        matching_cluster = next(
+            (cluster for cluster in context.clusters if cluster.label == cluster_label),
+            None,
+        )
+        if matching_cluster is None:
+            self._send_json({"error": "Cluster label is not part of this run."}, 400)
+            return
+        workstream = payload.get("workstream") if isinstance(payload.get("workstream"), str) else None
+        urgency = payload.get("urgency") if isinstance(payload.get("urgency"), str) else None
+        why_now = payload.get("whyNow") if isinstance(payload.get("whyNow"), str) else None
+        top_problem = payload.get("topProblem") if isinstance(payload.get("topProblem"), str) else None
+        method = payload.get("method") if isinstance(payload.get("method"), str) else None
+        raw_evidence = payload.get("evidenceNeeded")
+        evidence = [str(item) for item in raw_evidence or [] if isinstance(item, str)]
+        priority_score = payload.get("priorityScore")
+        priority_value: int | None = None
+        if isinstance(priority_score, (int, float)):
+            priority_value = int(priority_score)
+        elif isinstance(priority_score, str):
+            try:
+                priority_value = int(priority_score)
+            except ValueError:
+                priority_value = None
+        target_context = payload.get("context") if isinstance(payload.get("context"), str) else None
+        if not target_context and matching_cluster:
+            target_context = matching_cluster.context
+        summary = {
+            "description": description.strip(),
+            "method": method,
+            "evidenceNeeded": evidence,
+            "workstream": workstream,
+            "urgency": urgency,
+            "whyNow": why_now,
+            "topProblem": top_problem,
+            "priorityScore": priority_value,
+        }
+        promotions = collect_promoted_queue_entries(self.runs_dir, context.run.run_id)
+        candidate_id = build_promoted_candidate_id(
+            description, cluster_label, context.run.run_id
+        )
+        existing_ids = {entry.get("candidateId") for entry in promotions if entry.get("candidateId")}
+        if candidate_id in existing_ids:
+            self._send_json(
+                {"error": "A similar deterministic check has already been promoted."},
+                409,
+            )
+            return
+        try:
+            artifact, _ = write_deterministic_next_check_promotion(
+                runs_dir=self.runs_dir,
+                run_id=context.run.run_id,
+                run_label=context.run.run_label,
+                cluster_label=cluster_label,
+                target_context=target_context,
+                summary=summary,
+            )
+        except Exception as exc:
+            self._send_json({"error": f"Unable to persist promotion: {exc}"}, 500)
+            return
+        response = {
+            "status": "success",
+            "summary": "Deterministic next check promoted to the queue.",
+            "artifactPath": artifact.artifact_path,
+            "candidateId": candidate_id,
+        }
+        self._send_json(response)
 
     def _handle_next_check_approval(self) -> None:
         context = self._load_context()

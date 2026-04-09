@@ -304,6 +304,7 @@ export type NextCheckPlanCandidate = {
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {
   queueStatus: string;
+  sourceType?: string | null;
 };
 
 export type NextCheckQueueCandidateAccounting = {
@@ -340,6 +341,7 @@ export type DeterministicNextCheckSummary = {
   owner: string;
   method: string;
   evidenceNeeded: string[];
+  priorityScore?: number;
   workstream: "incident" | "evidence" | "drift";
   urgency: "high" | "medium" | "low";
   isPrimaryTriage: boolean;
@@ -396,6 +398,26 @@ export type NextCheckExecutionRequest = {
   candidateId?: string;
   candidateIndex?: number;
   clusterLabel: string;
+};
+
+export type DeterministicNextCheckPromotionRequest = {
+  clusterLabel: string;
+  context?: string | null;
+  description: string;
+  method?: string | null;
+  evidenceNeeded?: string[];
+  workstream?: string | null;
+  urgency?: string | null;
+  whyNow?: string | null;
+  topProblem?: string | null;
+  priorityScore?: number | null;
+};
+
+export type DeterministicNextCheckPromotionResponse = {
+  status: string;
+  summary: string | null;
+  artifactPath: string | null;
+  candidateId: string;
 };
 
 export type NextCheckExecutionResponse = {

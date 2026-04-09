@@ -19,6 +19,10 @@ from k8s_diag_agent.external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from k8s_diag_agent.external_analysis.deterministic_next_check_promotion import (
+    collect_promoted_queue_entries,
+    write_deterministic_next_check_promotion,
+)
 from k8s_diag_agent.external_analysis.next_check_approval import record_next_check_approval
 from k8s_diag_agent.health.adaptation import HealthProposal
 from k8s_diag_agent.health.baseline import BaselinePolicy
@@ -495,6 +499,21 @@ class HealthUITests(unittest.TestCase):
             len(cluster_state.get("degradedClusterLabels", [])),
         )
 
+    def test_generic_checks_are_contextualized_and_scored(self) -> None:
+        data = self._build_generic_next_checks_index()
+        deterministic = data["run"].get("deterministic_next_checks")
+        self.assertIsNotNone(deterministic)
+        assert isinstance(deterministic, dict)
+        cluster_entry = deterministic["clusters"][0]
+        summaries = cluster_entry.get("deterministicNextCheckSummaries", [])
+        self.assertGreaterEqual(len(summaries), 3)
+        descriptions = [str(summary.get("description") or "") for summary in summaries]
+        self.assertTrue(any("cluster-generic" in desc for desc in descriptions))
+        self.assertTrue(any("pod-crash" in desc for desc in descriptions))
+        self.assertEqual(descriptions[0], "Capture tcpdump")
+        for summary in summaries:
+            self.assertIsInstance(summary.get("priorityScore"), int)
+
     def _build_sample_deterministic_run_index(self) -> dict[str, object]:
         target = HealthTarget(
             context="cluster-beta",
@@ -578,6 +597,117 @@ class HealthUITests(unittest.TestCase):
             output_dir,
             run_id="run-deterministic-1",
             run_label="run-deterministic",
+            collector_version="1.0",
+            records=[record],
+            assessments=[assessment],
+            drilldowns=[drilldown],
+            proposals=[],
+            external_analysis=[],
+            notifications=[],
+        )
+        return cast(dict[str, object], json.loads(result_path.read_text(encoding="utf-8")))
+
+    def _build_generic_next_checks_index(self) -> dict[str, object]:
+        target = HealthTarget(
+            context="cluster-generic",
+            label="cluster-generic",
+            monitor_health=True,
+            watched_helm_releases=(),
+            watched_crd_families=(),
+            cluster_class="prod",
+            cluster_role="primary",
+            baseline_cohort="fleet",
+        )
+        snapshot = ClusterSnapshot.from_dict(
+            {
+                "metadata": {
+                    "cluster_id": "cluster-generic",
+                    "captured_at": "2026-01-03T00:00:00Z",
+                    "control_plane_version": "v1.26.0",
+                    "node_count": 3,
+                },
+                "health_signals": {
+                    "node_conditions": {"ready": 3},
+                    "pod_counts": {"non_running": 1},
+                    "warning_events": (),
+                    "job_failures": 0,
+                },
+            }
+        )
+        record = HealthSnapshotRecord(
+            target=target,
+            snapshot=snapshot,
+            path=self.tmpdir / "snapshot-generic.json",
+            baseline_policy=BaselinePolicy.empty(),
+            baseline_policy_path="baseline.json",
+        )
+        assessment = HealthAssessmentArtifact(
+            run_label="generic-run",
+            run_id="generic-run-1",
+            timestamp=snapshot.metadata.captured_at,
+            context=target.context,
+            label=target.label,
+            cluster_id=target.label,
+            snapshot_path=str(record.path),
+            assessment={
+                "next_evidence_to_collect": [
+                    {
+                        "description": "Capture tcpdump",
+                        "owner": "platform",
+                        "method": "kubectl exec",
+                        "evidence_needed": ["tcpdump output"],
+                    },
+                    {
+                        "description": "Review node, pod, and control plane status before taking action.",
+                        "owner": "platform engineer",
+                        "method": "kubectl",
+                        "evidence_needed": ["nodes", "pods", "control plane version"],
+                    },
+                    {
+                        "description": "Investigate the flagged nodes, pods, jobs, and warning events.",
+                        "owner": "platform engineer",
+                        "method": "kubectl",
+                        "evidence_needed": ["nodes", "pods", "jobs", "events"],
+                    },
+                ]
+            },
+            missing_evidence=(),
+            health_rating=HealthRating.DEGRADED,
+        )
+        assessment.artifact_path = "assessments/cluster-generic.json"
+        drilldown = DrilldownArtifact(
+            run_label="generic-run",
+            run_id="generic-run-1",
+            timestamp=snapshot.metadata.captured_at,
+            snapshot_timestamp=snapshot.metadata.captured_at,
+            context=target.context,
+            label=target.label,
+            cluster_id=target.label,
+            trigger_reasons=("pod-crash",),
+            missing_evidence=(),
+            evidence_summary={"note": "tcpdump pending"},
+            affected_namespaces=("default",),
+            affected_workloads=(
+                {
+                    "kind": "Deployment",
+                    "namespace": "default",
+                    "name": "web",
+                    "phase": "CrashLoopBackOff",
+                    "reason": "CrashLoopBackOff",
+                },
+            ),
+            warning_events=(),
+            non_running_pods=(),
+            pod_descriptions={},
+            rollout_status=(),
+            collection_timestamps={"pods": snapshot.metadata.captured_at.isoformat()},
+            artifact_path="drilldowns/cluster-generic.json",
+        )
+        output_dir = self.tmpdir / "runs" / "health-generic"
+        result_path = write_health_ui_index(
+            output_dir,
+            run_id="generic-run-1",
+            run_label="generic-run",
             collector_version="1.0",
             records=[record],
             assessments=[assessment],
@@ -752,6 +882,32 @@ class HealthUITests(unittest.TestCase):
         )
         self.assertIsNotNone(queue[0].get("commandPreview"))
         self.assertIn("targetContext", queue[0])
+
+    def test_collect_promoted_queue_entries_exposes_deterministic_source(self) -> None:
+        runs_dir = self.tmpdir / "runs" / "health"
+        run_id = "promo-run"
+        run_label = "promo-run"
+        summary = {
+            "description": "Inspect promoted logs",
+            "method": "kubectl logs",
+            "whyNow": "Immediate triage",
+            "workstream": "incident",
+            "evidenceNeeded": ["logs"],
+        }
+        artifact, payload = write_deterministic_next_check_promotion(
+            runs_dir=runs_dir,
+            run_id=run_id,
+            run_label=run_label,
+            cluster_label="cluster-deterministic",
+            target_context="prod",
+            summary=summary,
+        )
+        entries = collect_promoted_queue_entries(runs_dir, run_id)
+        self.assertTrue(entries)
+        entry = entries[0]
+        self.assertEqual(entry.get("sourceType"), "deterministic")
+        self.assertEqual(entry.get("queueStatus"), "approval-needed")
+        self.assertEqual(entry.get("planArtifactPath"), artifact.artifact_path)
 
     def test_next_check_plan_marks_stale_approval_when_plan_changes(self) -> None:
         run_id = "stale-run"

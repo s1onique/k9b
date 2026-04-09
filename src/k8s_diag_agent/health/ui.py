@@ -1335,6 +1335,125 @@ def _summarize_next_evidence_entries(
     return summaries
 
 
+def _derive_deterministic_context(drilldown: DrilldownArtifact | None) -> dict[str, str | None]:
+    if drilldown is None:
+        return {"namespace": None, "workload": None}
+    workload_namespace: str | None = None
+    workload_text: str | None = None
+    for entry in drilldown.affected_workloads:
+        name = str(entry.get("name") or "").strip()
+        kind = str(entry.get("kind") or "").strip()
+        namespace = str(entry.get("namespace") or "").strip()
+        display = ""
+        if kind and name:
+            display = f"{kind}/{name}"
+        elif name:
+            display = name
+        elif kind:
+            display = kind
+        if display:
+            if namespace:
+                display = f"{display} in {namespace}"
+            workload_text = display
+            workload_namespace = namespace or workload_namespace
+            break
+        if namespace and not workload_namespace:
+            workload_namespace = namespace
+    if not workload_text:
+        for ns in drilldown.affected_namespaces:
+            if ns:
+                workload_namespace = workload_namespace or ns
+                break
+    if not workload_namespace:
+        for event in drilldown.warning_events:
+            if event.namespace:
+                workload_namespace = workload_namespace or event.namespace
+                break
+    return {"namespace": workload_namespace, "workload": workload_text}
+
+
+def _rewrite_deterministic_next_check_description(
+    summary: dict[str, object],
+    cluster_label: str | None,
+    cluster_context: str | None,
+    top_problem: str | None,
+    context: dict[str, str | None],
+) -> None:
+    description = str(summary.get("description") or "").strip()
+    normalized = description.lower()
+    cluster_name = cluster_label or cluster_context or "the cluster"
+    namespace = context.get("namespace")
+    workload = context.get("workload")
+    if normalized == "review node, pod, and control plane status before taking action." or (
+        "node" in normalized and "control plane" in normalized and "review" in normalized
+    ):
+        prefix = f"Review {cluster_name}'s node, pod, and control plane status"
+        if workload:
+            prefix += f" around {workload}"
+        elif namespace:
+            prefix += f" in {namespace}"
+        if top_problem:
+            prefix += f" for {top_problem}"
+        summary["description"] = f"{prefix} before taking action."
+        summary["_generic_template"] = "status_review"
+        return
+    if normalized == "investigate the flagged nodes, pods, jobs, and warning events." or "flagged nodes" in normalized:
+        prefix = f"Investigate flagged nodes, pods, jobs, and warning events on {cluster_name}"
+        if workload:
+            prefix += f" targeting {workload}"
+        elif namespace:
+            prefix += f" in {namespace}"
+        if top_problem:
+            prefix += f" tied to {top_problem}"
+        summary["description"] = f"{prefix}."
+        summary["_generic_template"] = "flagged_investigation"
+
+
+def _mentions_top_problem(description: str | None, top_problem: str | None) -> bool:
+    if not top_problem or not description:
+        return False
+    top_tokens = _tokenize_text(top_problem)
+    desc_tokens = _tokenize_text(description)
+    return bool(top_tokens and any(token in desc_tokens for token in top_tokens))
+
+
+_WORKSTREAM_BASE_SCORES = {
+    "incident": 60,
+    "evidence": 40,
+    "drift": 20,
+}
+
+
+def _score_deterministic_next_check(
+    summary: dict[str, object],
+    top_problem: str | None,
+    context: dict[str, str | None],
+) -> None:
+    generic_template = summary.pop("_generic_template", None)
+    workstream = str(summary.get("workstream") or "evidence")
+    urgency = str(summary.get("urgency") or "").lower()
+    score = _WORKSTREAM_BASE_SCORES.get(workstream, 30)
+    if summary.get("isPrimaryTriage"):
+        score += 20
+    if urgency == "high":
+        score += 10
+    elif urgency == "medium":
+        score += 5
+    if _mentions_top_problem(str(summary.get("description")), top_problem):
+        score += 8
+    workload = context.get("workload")
+    namespace = context.get("namespace")
+    if workload:
+        score += 10
+    elif namespace:
+        score += 5
+    if generic_template == "status_review":
+        score -= 15
+    elif generic_template == "flagged_investigation":
+        score -= 10
+    summary["priorityScore"] = max(score, 0)
+
+
 def _derive_deterministic_top_problem(
     cluster: dict[str, object],
     drilldown: DrilldownArtifact | None,
@@ -1536,9 +1655,28 @@ def _build_deterministic_next_checks_projection(
             continue
         drilldown = drilldown_map.get(label)
         top_problem = _derive_deterministic_top_problem(cluster, drilldown)
+        context = _derive_deterministic_context(drilldown)
+        for summary in summaries:
+            _rewrite_deterministic_next_check_description(
+                summary,
+                label,
+                str(cluster.get("context") or ""),
+                top_problem,
+                context,
+            )
         # annotate classification metadata for each predicted check
         for s in summaries:
             s.update(_classify_deterministic_next_check(s, top_problem))
+            _score_deterministic_next_check(s, top_problem, context)
+        def _priority_sort_key(entry: dict[str, object]) -> tuple[int, str]:
+            raw_score = entry.get("priorityScore")
+            magnitude = 0
+            if isinstance(raw_score, (int, float)):
+                magnitude = int(raw_score)
+            description = str(entry.get("description") or "")
+            return (-magnitude, description)
+
+        summaries.sort(key=_priority_sort_key)
         total_next_checks += len(summaries)
         entries.append(
             {
