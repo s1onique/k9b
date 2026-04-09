@@ -553,6 +553,82 @@ body {
   gap: 0.75rem;
 }
 
+.next-check-queue-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.next-check-filter-row,
+.next-check-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.next-check-filter-row label,
+.next-check-control-row label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+}
+
+.next-check-filter-row select,
+.next-check-control-row select,
+.queue-search input {
+  margin-top: 0.25rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  padding: 0.35rem 0.65rem;
+  background: rgba(2, 6, 23, 0.85);
+  color: #f8fafc;
+}
+
+.queue-search input {
+  min-width: 220px;
+}
+
+.focus-presets {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.focus-preset-button {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.focus-preset-button.active,
+.focus-preset-button:focus-visible {
+  border-color: #38bdf8;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.queue-empty-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.queue-empty-state .link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #38bdf8;
+  cursor: pointer;
+}
+
 .next-check-queue-group {
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 0.9rem;

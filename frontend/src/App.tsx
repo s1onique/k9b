@@ -325,6 +325,142 @@ const NEXT_CHECK_QUEUE_STATUS_ORDER: NextCheckQueueStatus[] = [
   "duplicate-or-stale",
 ];
 
+const QUEUE_SORT_OPTIONS = [
+  { label: "Backend order", value: "default" },
+  { label: "Priority", value: "priority" },
+  { label: "Cluster", value: "cluster" },
+  { label: "Latest activity", value: "activity" },
+] as const;
+
+type QueueSortOption = (typeof QUEUE_SORT_OPTIONS)[number]["value"];
+
+const QUEUE_PRIORITY_ORDER: Record<string, number> = {
+  primary: 0,
+  secondary: 1,
+  fallback: 2,
+};
+
+type QueueFocusMode = "none" | "work" | "review";
+const QUEUE_FOCUS_FILTERS: Record<QueueFocusMode, NextCheckQueueStatus[]> = {
+  none: [],
+  work: ["approved-ready", "safe-ready", "failed"],
+  review: ["approval-needed", "duplicate-or-stale"],
+};
+
+export const QUEUE_VIEW_STORAGE_KEY = "dashboard-queue-view-state";
+
+const QUEUE_STATUS_FILTER_VALUES = new Set<NextCheckQueueStatus | "all">([
+  "all",
+  ...NEXT_CHECK_QUEUE_STATUS_ORDER,
+]);
+const QUEUE_SORT_VALUES = QUEUE_SORT_OPTIONS.map((option) => option.value);
+const QUEUE_FOCUS_MODE_VALUES: QueueFocusMode[] = ["none", "work", "review"];
+
+type QueueViewState = {
+  clusterFilter: string;
+  statusFilter: NextCheckQueueStatus | "all";
+  commandFamilyFilter: string;
+  priorityFilter: string;
+  searchText: string;
+  focusMode: QueueFocusMode;
+  sortOption: QueueSortOption;
+};
+
+const DEFAULT_QUEUE_VIEW_STATE: QueueViewState = {
+  clusterFilter: "all",
+  statusFilter: "all",
+  commandFamilyFilter: "all",
+  priorityFilter: "all",
+  searchText: "",
+  focusMode: "none",
+  sortOption: "default",
+};
+
+const isQueueStatusFilterValue = (
+  value: unknown
+): value is NextCheckQueueStatus | "all" =>
+  typeof value === "string" && QUEUE_STATUS_FILTER_VALUES.has(value as NextCheckQueueStatus | "all");
+
+const isQueueSortOptionValue = (value: unknown): value is QueueSortOption =>
+  typeof value === "string" && QUEUE_SORT_VALUES.includes(value as QueueSortOption);
+
+const isQueueFocusModeValue = (value: unknown): value is QueueFocusMode =>
+  typeof value === "string" && QUEUE_FOCUS_MODE_VALUES.includes(value as QueueFocusMode);
+
+const readStoredQueueViewState = (): QueueViewState => {
+  if (typeof window === "undefined") {
+    return DEFAULT_QUEUE_VIEW_STATE;
+  }
+  const stored = window.localStorage.getItem(QUEUE_VIEW_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_QUEUE_VIEW_STATE;
+  }
+  try {
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object") {
+      return DEFAULT_QUEUE_VIEW_STATE;
+    }
+    const candidate = parsed as Record<string, unknown>;
+    return {
+      clusterFilter:
+        typeof candidate.clusterFilter === "string"
+          ? candidate.clusterFilter
+          : DEFAULT_QUEUE_VIEW_STATE.clusterFilter,
+      statusFilter: isQueueStatusFilterValue(candidate.statusFilter)
+        ? candidate.statusFilter
+        : DEFAULT_QUEUE_VIEW_STATE.statusFilter,
+      commandFamilyFilter:
+        typeof candidate.commandFamilyFilter === "string"
+          ? candidate.commandFamilyFilter
+          : DEFAULT_QUEUE_VIEW_STATE.commandFamilyFilter,
+      priorityFilter:
+        typeof candidate.priorityFilter === "string"
+          ? candidate.priorityFilter
+          : DEFAULT_QUEUE_VIEW_STATE.priorityFilter,
+      searchText:
+        typeof candidate.searchText === "string"
+          ? candidate.searchText
+          : DEFAULT_QUEUE_VIEW_STATE.searchText,
+      focusMode: isQueueFocusModeValue(candidate.focusMode)
+        ? candidate.focusMode
+        : DEFAULT_QUEUE_VIEW_STATE.focusMode,
+      sortOption: isQueueSortOptionValue(candidate.sortOption)
+        ? candidate.sortOption
+        : DEFAULT_QUEUE_VIEW_STATE.sortOption,
+    };
+  } catch {
+    return DEFAULT_QUEUE_VIEW_STATE;
+  }
+};
+
+const persistQueueViewState = (state: QueueViewState) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(QUEUE_VIEW_STORAGE_KEY, JSON.stringify(state));
+};
+
+const clearStoredQueueViewState = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(QUEUE_VIEW_STORAGE_KEY);
+};
+
+const normalizeQueuePriority = (value: string | null | undefined) =>
+  (value ?? "unknown").toLowerCase();
+
+const queuePriorityRank = (value: string | null | undefined) =>
+  QUEUE_PRIORITY_ORDER[normalizeQueuePriority(value)] ?? Object.keys(QUEUE_PRIORITY_ORDER).length;
+
+const queueTimestampValue = (value: string | null | undefined) => {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
 const outcomeStatusLabels: Record<string, string> = {
   "executed-success": "Executed (success)",
   "executed-failed": "Executed (failed)",
@@ -1294,6 +1430,26 @@ const App = () => {
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
   const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
+  const initialQueueViewState = useMemo(() => readStoredQueueViewState(), []);
+  const [queueClusterFilter, setQueueClusterFilter] = useState(
+    initialQueueViewState.clusterFilter
+  );
+  const [queueStatusFilter, setQueueStatusFilter] = useState<NextCheckQueueStatus | "all">(
+    initialQueueViewState.statusFilter
+  );
+  const [queueCommandFamilyFilter, setQueueCommandFamilyFilter] = useState(
+    initialQueueViewState.commandFamilyFilter
+  );
+  const [queuePriorityFilter, setQueuePriorityFilter] = useState(
+    initialQueueViewState.priorityFilter
+  );
+  const [queueSearch, setQueueSearch] = useState(initialQueueViewState.searchText);
+  const [queueSortOption, setQueueSortOption] = useState<QueueSortOption>(
+    initialQueueViewState.sortOption
+  );
+  const [queueFocusMode, setQueueFocusMode] = useState<QueueFocusMode>(
+    initialQueueViewState.focusMode
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -1420,6 +1576,150 @@ const App = () => {
     `next-check-${candidate.candidateId ?? candidate.candidateIndex ?? index}-${
       candidate.targetCluster ?? selectedClusterLabel ?? "global"
     }`;
+
+  const runQueue: NextCheckQueueItem[] = run?.nextCheckQueue ?? [];
+  const formatCluster = (value: string | null | undefined) =>
+    value && value.trim() ? value : "Unassigned";
+  const formatCommandFamily = (value: string | null | undefined) =>
+    value && value.trim() ? value : "Unspecified";
+  const formatPriority = (value: string | null | undefined) =>
+    (value ?? "unknown").toLowerCase();
+
+  const queueClusterOptions = useMemo(() => {
+    const values = new Set<string>();
+    runQueue.forEach((entry) => values.add(formatCluster(entry.targetCluster)));
+    return Array.from(values).sort();
+  }, [runQueue]);
+
+  const queueCommandFamilyOptions = useMemo(() => {
+    const values = new Set<string>();
+    runQueue.forEach((entry) => values.add(formatCommandFamily(entry.suggestedCommandFamily)));
+    return Array.from(values).sort();
+  }, [runQueue]);
+
+  const queuePriorityOptions = useMemo(() => {
+    const values = new Set<string>();
+    runQueue.forEach((entry) => values.add(formatPriority(entry.priorityLabel)));
+    return Array.from(values).sort();
+  }, [runQueue]);
+
+  const queueSearchTerm = queueSearch.trim().toLowerCase();
+  const filteredQueue = useMemo(() => {
+    const focusStatuses = QUEUE_FOCUS_FILTERS[queueFocusMode];
+    return runQueue.filter((item) => {
+      const status = (item.queueStatus as NextCheckQueueStatus) ?? "duplicate-or-stale";
+      if (queueStatusFilter !== "all" && status !== queueStatusFilter) {
+        return false;
+      }
+      if (focusStatuses.length && !focusStatuses.includes(status)) {
+        return false;
+      }
+      const clusterValue = formatCluster(item.targetCluster);
+      if (queueClusterFilter !== "all" && clusterValue !== queueClusterFilter) {
+        return false;
+      }
+      const commandFamilyValue = formatCommandFamily(item.suggestedCommandFamily);
+      if (queueCommandFamilyFilter !== "all" && commandFamilyValue !== queueCommandFamilyFilter) {
+        return false;
+      }
+      const priorityValue = formatPriority(item.priorityLabel);
+      if (queuePriorityFilter !== "all" && priorityValue !== queuePriorityFilter) {
+        return false;
+      }
+      if (!queueSearchTerm) {
+        return true;
+      }
+      const haystack = [item.description, item.sourceReason, item.expectedSignal]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(queueSearchTerm);
+    });
+  }, [
+    runQueue,
+    queueClusterFilter,
+    queueStatusFilter,
+    queueCommandFamilyFilter,
+    queuePriorityFilter,
+    queueSearchTerm,
+    queueFocusMode,
+  ]);
+
+  const sortedQueue = useMemo(() => {
+    if (queueSortOption === "default") {
+      return filteredQueue;
+    }
+    const copy = [...filteredQueue];
+    if (queueSortOption === "priority") {
+      copy.sort(
+        (a, b) => queuePriorityRank(a.priorityLabel) - queuePriorityRank(b.priorityLabel)
+      );
+    } else if (queueSortOption === "cluster") {
+      copy.sort((a, b) =>
+        formatCluster(a.targetCluster).localeCompare(formatCluster(b.targetCluster))
+      );
+    } else if (queueSortOption === "activity") {
+      copy.sort(
+        (a, b) => queueTimestampValue(b.latestTimestamp) - queueTimestampValue(a.latestTimestamp)
+      );
+    }
+    return copy;
+  }, [filteredQueue, queueSortOption]);
+
+  const filtersActive =
+    queueClusterFilter !== "all" ||
+    queueStatusFilter !== "all" ||
+    queueCommandFamilyFilter !== "all" ||
+    queuePriorityFilter !== "all" ||
+    Boolean(queueSearchTerm) ||
+    queueFocusMode !== "none";
+
+  const queueGroups = NEXT_CHECK_QUEUE_STATUS_ORDER.map((status) => ({
+    status,
+    label: NEXT_CHECK_QUEUE_STATUS_LABELS[status],
+    items: sortedQueue.filter(
+      (entry) => ((entry.queueStatus as NextCheckQueueStatus) ?? "duplicate-or-stale") === status
+    ),
+  })).filter((group) => group.items.length > 0);
+
+  const toggleQueueFocusPreset = (mode: QueueFocusMode) => {
+    setQueueFocusMode((current) => (current === mode ? "none" : mode));
+  };
+
+  const resetQueueFilters = () => {
+    setQueueClusterFilter(DEFAULT_QUEUE_VIEW_STATE.clusterFilter);
+    setQueueStatusFilter(DEFAULT_QUEUE_VIEW_STATE.statusFilter);
+    setQueueCommandFamilyFilter(DEFAULT_QUEUE_VIEW_STATE.commandFamilyFilter);
+    setQueuePriorityFilter(DEFAULT_QUEUE_VIEW_STATE.priorityFilter);
+    setQueueSearch(DEFAULT_QUEUE_VIEW_STATE.searchText);
+    setQueueSortOption(DEFAULT_QUEUE_VIEW_STATE.sortOption);
+    setQueueFocusMode(DEFAULT_QUEUE_VIEW_STATE.focusMode);
+  };
+
+  const resetQueueView = () => {
+    resetQueueFilters();
+    clearStoredQueueViewState();
+  };
+
+  useEffect(() => {
+    persistQueueViewState({
+      clusterFilter: queueClusterFilter,
+      statusFilter: queueStatusFilter,
+      commandFamilyFilter: queueCommandFamilyFilter,
+      priorityFilter: queuePriorityFilter,
+      searchText: queueSearch,
+      focusMode: queueFocusMode,
+      sortOption: queueSortOption,
+    });
+  }, [
+    queueClusterFilter,
+    queueStatusFilter,
+    queueCommandFamilyFilter,
+    queuePriorityFilter,
+    queueSearch,
+    queueFocusMode,
+    queueSortOption,
+  ]);
 
   const [expandedQueueItems, setExpandedQueueItems] = useState<Record<string, boolean>>({});
   const toggleQueueDetails = useCallback((key: string) => {
@@ -1651,24 +1951,6 @@ const App = () => {
         .filter((label): label is string => Boolean(label))
     )
   );
-
-  const runQueue: NextCheckQueueItem[] = run.nextCheckQueue ?? [];
-  const queueBuckets = NEXT_CHECK_QUEUE_STATUS_ORDER.reduce<
-    Record<NextCheckQueueStatus, NextCheckQueueItem[]>
-  >((acc, status) => {
-    acc[status] = [];
-    return acc;
-  }, {} as Record<NextCheckQueueStatus, NextCheckQueueItem[]>);
-  runQueue.forEach((queueItem) => {
-    const status = (queueItem.queueStatus as NextCheckQueueStatus) ?? "duplicate-or-stale";
-    const bucket = queueBuckets[status] ?? queueBuckets["duplicate-or-stale"];
-    bucket.push(queueItem);
-  });
-  const queueGroups = NEXT_CHECK_QUEUE_STATUS_ORDER.map((status) => ({
-    status,
-    label: NEXT_CHECK_QUEUE_STATUS_LABELS[status],
-    items: queueBuckets[status],
-  })).filter((group) => group.items.length > 0);
 
   const focusClusterForNextChecks = (clusterLabel?: string | null) => {
     const target =
@@ -1914,187 +2196,313 @@ const App = () => {
       )}
     </section>
     <section className="panel next-check-queue-panel" id="next-check-queue">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Next-check queue</p>
-          <h2>Planner queue</h2>
-          <p className="muted tiny">Work through planner candidates from most actionable to low priority.</p>
-        </div>
-        <span className="muted tiny">{runQueue.length} candidate{runQueue.length === 1 ? "" : "s"}</span>
-      </div>
-      {queueGroups.length ? (
-        queueGroups.map((group) => (
-          <div className="next-check-queue-group" key={group.status}>
-            <div className="next-check-queue-group-head">
-              <div>
-                <h3>{group.label}</h3>
-                <p className="tiny muted">
-                  {group.items.length} item{group.items.length === 1 ? "" : "s"} · {group.label}
-                </p>
-              </div>
-              <span className={`queue-status-pill queue-status-pill-${group.status}`}>
-                {group.label}
-              </span>
-            </div>
-            <div className="next-check-queue-items">
-              {group.items.map((item, index) => {
-                const queueCandidateKey = buildCandidateKey(item, index);
-                const approvalResult = approvalResults[queueCandidateKey];
-                const executionResult = executionResults[queueCandidateKey];
-                const latestArtifactLink = item.latestArtifactPath
-                  ? artifactUrl(item.latestArtifactPath)
-                  : null;
-                const allowRun = isManualExecutionAllowed(item);
-                const detailsExpanded = Boolean(expandedQueueItems[queueCandidateKey]);
-                const planArtifactLink = item.planArtifactPath
-                  ? artifactUrl(item.planArtifactPath)
-                  : null;
-                const metadataEntries = [
-                  { label: "Source reason", value: item.sourceReason },
-                  { label: "Expected signal", value: item.expectedSignal },
-                  { label: "Normalization", value: humanizeReason(item.normalizationReason) },
-                  { label: "Safety", value: humanizeReason(item.safetyReason) },
-                  { label: "Approval reason", value: humanizeReason(item.approvalReason) },
-                  { label: "Duplicate reason", value: humanizeReason(item.duplicateReason) },
-                  { label: "Blocking reason", value: humanizeReason(item.blockingReason) },
-                  { label: "Target context", value: item.targetContext },
-                ].filter((entry) => entry.value);
-                return (
-                  <article className="next-check-queue-item" key={queueCandidateKey}>
-                    <div className="next-check-queue-item-meta">
-                      <div>
-                        <strong>{item.description}</strong>
-                        <p className="tiny">
-                          Cluster: {item.targetCluster ?? "Unassigned"}
-                        </p>
-                        <p className="tiny">
-                          Priority: {formatCandidatePriority((item.priorityLabel ?? "secondary").toLowerCase())} · Command: {item.suggestedCommandFamily ?? "—"}
-                        </p>
-                      </div>
-                      <div className="next-check-queue-item-status">
-                        <span>Approval: {item.approvalState ?? "unknown"}</span>
-                        <span>Execution: {item.executionState ?? "unknown"}</span>
-                        <span>Outcome: {item.outcomeStatus ?? "unknown"}</span>
-                      </div>
-                    </div>
-                    <div className="next-check-queue-item-flags">
-                      <span>Safe to automate: <strong>{item.safeToAutomate ? "Yes" : "No"}</strong></span>
-                      <span>Requires approval: <strong>{item.requiresOperatorApproval ? "Yes" : "No"}</strong></span>
-                    </div>
-                    <div className="next-check-queue-item-actions">
-                      {item.requiresOperatorApproval && item.approvalState !== "approved" && (
-                        <button
-                          type="button"
-                          className="button secondary small"
-                          onClick={() => handleApproveCandidate(item, queueCandidateKey)}
-                          disabled={approvingCandidate === queueCandidateKey}
-                        >
-                          {approvingCandidate === queueCandidateKey ? "Approving…" : "Approve candidate"}
-                        </button>
-                      )}
-                      {allowRun && (
-                        <button
-                          type="button"
-                          className="button primary small"
-                          onClick={() => handleManualExecution(item, queueCandidateKey)}
-                          disabled={executingCandidate === queueCandidateKey}
-                        >
-                          {executingCandidate === queueCandidateKey ? "Running…" : "Run candidate"}
-                        </button>
-                      )}
-                      {latestArtifactLink && (
-                        <a
-                          className="link"
-                          href={latestArtifactLink}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View latest artifact
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        className="toggle-details-button"
-                        onClick={() => toggleQueueDetails(queueCandidateKey)}
-                      >
-                        {detailsExpanded ? "Hide details" : "Show details"}
-                      </button>
-                    </div>
-                    {approvalResult ? (
-                      <p className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}>
-                        {approvalResult.summary}
-                        {approvalResult.artifactPath ? (
-                          <>
-                            {" "}
-                            <a
-                              className="link"
-                              href={artifactUrl(approvalResult.artifactPath)}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              View approval record
-                            </a>
-                          </>
-                        ) : null}
-                      </p>
-                    ) : null}
-                    {executionResult ? (
-                      <p
-                        className={`next-check-execution next-check-execution-${
-                          executionResult.status === "success" ? "success" : "error"
-                        }`}
-                      >
-                        {executionResult.summary ||
-                          (executionResult.status === "success" ? "Execution recorded." : "Execution failed.")}
-                        {executionResult.artifactPath ? (
-                          <>
-                            {" "}
-                            <a
-                              className="link"
-                              href={artifactUrl(executionResult.artifactPath)}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              View artifact
-                            </a>
-                          </>
-                        ) : null}
-                      </p>
-                    ) : null}
-                    {detailsExpanded && (
-                      <div className="next-check-queue-item-details">
-                        <div className="next-check-queue-item-metadata">
-                          {metadataEntries.map((entry) => (
-                            <span key={entry.label}>
-                              <strong>{entry.label}:</strong> {entry.value}
-                            </span>
-                          ))}
-                          {planArtifactLink ? (
-                            <span>
-                              <strong>Plan artifact:</strong>
-                              {" "}
-                              <a href={planArtifactLink} target="_blank" rel="noreferrer">
-                                View planner artifact
-                              </a>
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="next-check-command-preview">
-                          <p className="tiny muted">Command preview</p>
-                          <pre>{item.commandPreview ?? item.description}</pre>
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Next-check queue</p>
+            <h2>Planner queue</h2>
+            <p className="muted tiny">Work through planner candidates from most actionable to low priority.</p>
           </div>
-        ))
-      ) : (
-        <p className="muted small">Planner queue is empty for this run.</p>
-      )}
-    </section>
+          <span className="muted tiny">{runQueue.length} candidate{runQueue.length === 1 ? "" : "s"}</span>
+        </div>
+        <div className="next-check-queue-controls">
+          <div className="next-check-filter-row">
+            <label>
+              Cluster filter
+              <select
+                value={queueClusterFilter}
+                onChange={(event) => setQueueClusterFilter(event.target.value)}
+              >
+                <option value="all">All clusters</option>
+                {queueClusterOptions.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Queue status
+              <select
+                value={queueStatusFilter}
+                onChange={(event) =>
+                  setQueueStatusFilter(event.target.value as NextCheckQueueStatus | "all")
+                }
+              >
+                <option value="all">All statuses</option>
+                {NEXT_CHECK_QUEUE_STATUS_ORDER.map((status) => (
+                  <option key={status} value={status}>
+                    {NEXT_CHECK_QUEUE_STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Command family
+              <select
+                value={queueCommandFamilyFilter}
+                onChange={(event) => setQueueCommandFamilyFilter(event.target.value)}
+              >
+                <option value="all">All command families</option>
+                {queueCommandFamilyOptions.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Priority
+              <select
+                value={queuePriorityFilter}
+                onChange={(event) => setQueuePriorityFilter(event.target.value)}
+              >
+                <option value="all">All priorities</option>
+                {queuePriorityOptions.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="queue-search">
+              Search queue
+              <input
+                type="search"
+                placeholder="Description, reason, or signal"
+                value={queueSearch}
+                onChange={(event) => setQueueSearch(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="next-check-control-row">
+            <div className="focus-presets">
+              <button
+                type="button"
+                className={`focus-preset-button ${queueFocusMode === "work" ? "active" : ""}`}
+                aria-pressed={queueFocusMode === "work"}
+                onClick={() => toggleQueueFocusPreset("work")}
+              >
+                Work now
+              </button>
+              <button
+                type="button"
+                className={`focus-preset-button ${queueFocusMode === "review" ? "active" : ""}`}
+                aria-pressed={queueFocusMode === "review"}
+                onClick={() => toggleQueueFocusPreset("review")}
+              >
+                Needs review
+              </button>
+            </div>
+            <label>
+              Sort by
+              <select
+                value={queueSortOption}
+                onChange={(event) =>
+                  setQueueSortOption(event.target.value as QueueSortOption)
+                }
+              >
+                {QUEUE_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="muted tiny next-check-filter-summary">
+            Showing {sortedQueue.length} of {runQueue.length} candidate{runQueue.length === 1 ? "" : "s"}
+            {filtersActive ? " · filters applied" : ""}
+            {" "}
+            <button type="button" className="link tiny" onClick={resetQueueView}>
+              Reset queue view
+            </button>
+          </p>
+        </div>
+        {runQueue.length === 0 ? (
+          <p className="muted small">Planner queue is empty for this run.</p>
+        ) : sortedQueue.length === 0 ? (
+          <p className="muted small queue-empty-state">
+            Filters hide all {runQueue.length} candidate{runQueue.length === 1 ? "" : "s"}.
+            {filtersActive ? (
+              <>
+                {" "}
+                <button type="button" className="link tiny" onClick={resetQueueFilters}>
+                  Reset filters
+                </button>
+              </>
+            ) : null}
+          </p>
+        ) : (
+          queueGroups.map((group) => (
+            <div className="next-check-queue-group" key={group.status}>
+              <div className="next-check-queue-group-head">
+                <div>
+                  <h3>{group.label}</h3>
+                  <p className="tiny muted">
+                    {group.items.length} item{group.items.length === 1 ? "" : "s"} · {group.label}
+                  </p>
+                </div>
+                <span className={`queue-status-pill queue-status-pill-${group.status}`}>
+                  {group.label}
+                </span>
+              </div>
+              <div className="next-check-queue-items">
+                {group.items.map((item, index) => {
+                  const queueCandidateKey = buildCandidateKey(item, index);
+                  const approvalResult = approvalResults[queueCandidateKey];
+                  const executionResult = executionResults[queueCandidateKey];
+                  const latestArtifactLink = item.latestArtifactPath
+                    ? artifactUrl(item.latestArtifactPath)
+                    : null;
+                  const allowRun = isManualExecutionAllowed(item);
+                  const detailsExpanded = Boolean(expandedQueueItems[queueCandidateKey]);
+                  const planArtifactLink = item.planArtifactPath
+                    ? artifactUrl(item.planArtifactPath)
+                    : null;
+                  const metadataEntries = [
+                    { label: "Source reason", value: item.sourceReason },
+                    { label: "Expected signal", value: item.expectedSignal },
+                    { label: "Normalization", value: humanizeReason(item.normalizationReason) },
+                    { label: "Safety", value: humanizeReason(item.safetyReason) },
+                    { label: "Approval reason", value: humanizeReason(item.approvalReason) },
+                    { label: "Duplicate reason", value: humanizeReason(item.duplicateReason) },
+                    { label: "Blocking reason", value: humanizeReason(item.blockingReason) },
+                    { label: "Target context", value: item.targetContext },
+                  ].filter((entry) => entry.value);
+                  return (
+                    <article className="next-check-queue-item" key={queueCandidateKey}>
+                      <div className="next-check-queue-item-meta">
+                        <div>
+                          <strong>{item.description}</strong>
+                          <p className="tiny">
+                            Cluster: {item.targetCluster ?? "Unassigned"}
+                          </p>
+                          <p className="tiny">
+                            Priority: {formatCandidatePriority((item.priorityLabel ?? "secondary").toLowerCase())} · Command: {item.suggestedCommandFamily ?? "—"}
+                          </p>
+                        </div>
+                        <div className="next-check-queue-item-status">
+                          <span>Approval: {item.approvalState ?? "unknown"}</span>
+                          <span>Execution: {item.executionState ?? "unknown"}</span>
+                          <span>Outcome: {item.outcomeStatus ?? "unknown"}</span>
+                        </div>
+                      </div>
+                      <div className="next-check-queue-item-flags">
+                        <span>Safe to automate: <strong>{item.safeToAutomate ? "Yes" : "No"}</strong></span>
+                        <span>Requires approval: <strong>{item.requiresOperatorApproval ? "Yes" : "No"}</strong></span>
+                      </div>
+                      <div className="next-check-queue-item-actions">
+                        {item.requiresOperatorApproval && item.approvalState !== "approved" && (
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            onClick={() => handleApproveCandidate(item, queueCandidateKey)}
+                            disabled={approvingCandidate === queueCandidateKey}
+                          >
+                            {approvingCandidate === queueCandidateKey ? "Approving…" : "Approve candidate"}
+                          </button>
+                        )}
+                        {allowRun && (
+                          <button
+                            type="button"
+                            className="button primary small"
+                            onClick={() => handleManualExecution(item, queueCandidateKey)}
+                            disabled={executingCandidate === queueCandidateKey}
+                          >
+                            {executingCandidate === queueCandidateKey ? "Running…" : "Run candidate"}
+                          </button>
+                        )}
+                        {latestArtifactLink && (
+                          <a
+                            className="link"
+                            href={latestArtifactLink}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View latest artifact
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          className="toggle-details-button"
+                          onClick={() => toggleQueueDetails(queueCandidateKey)}
+                        >
+                          {detailsExpanded ? "Hide details" : "Show details"}
+                        </button>
+                      </div>
+                      {approvalResult ? (
+                        <p className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}>
+                          {approvalResult.summary}
+                          {approvalResult.artifactPath ? (
+                            <>
+                              {" "}
+                              <a
+                                className="link"
+                                href={artifactUrl(approvalResult.artifactPath)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                View approval record
+                              </a>
+                            </>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      {executionResult ? (
+                        <p
+                          className={`next-check-execution next-check-execution-${
+                            executionResult.status === "success" ? "success" : "error"
+                          }`}
+                        >
+                          {executionResult.summary ||
+                            (executionResult.status === "success" ? "Execution recorded." : "Execution failed.")}
+                          {executionResult.artifactPath ? (
+                            <>
+                              {" "}
+                              <a
+                                className="link"
+                                href={artifactUrl(executionResult.artifactPath)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                View artifact
+                              </a>
+                            </>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      {detailsExpanded && (
+                        <div className="next-check-queue-item-details">
+                          <div className="next-check-queue-item-metadata">
+                            {metadataEntries.map((entry) => (
+                              <span key={entry.label}>
+                                <strong>{entry.label}:</strong> {entry.value}
+                              </span>
+                            ))}
+                            {planArtifactLink ? (
+                              <span>
+                                <strong>Plan artifact:</strong>
+                                {" "}
+                                <a href={planArtifactLink} target="_blank" rel="noreferrer">
+                                  View planner artifact
+                                </a>
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="next-check-command-preview">
+                            <p className="tiny muted">Command preview</p>
+                            <pre>{item.commandPreview ?? item.description}</pre>
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </section>
     <ExecutionHistoryPanel history={executionHistory} />
       <ReviewEnrichmentPanel
         reviewEnrichment={run.reviewEnrichment}

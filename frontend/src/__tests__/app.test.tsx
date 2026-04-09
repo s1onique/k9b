@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
-import App, { AUTOREFRESH_STORAGE_KEY } from "../App";
+import App, { AUTOREFRESH_STORAGE_KEY, QUEUE_VIEW_STORAGE_KEY } from "../App";
 import type { NotificationEntry } from "../types";
 import {
   sampleClusterDetail,
@@ -35,6 +35,15 @@ const defaultPayloads = {
   "/api/notifications": sampleNotifications,
   "/api/notifications?limit=50&page=1": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
+};
+
+const getQueuePanel = async () => {
+  const eyebrow = await screen.findByText(/Next-check queue/i);
+  const queuePanel = eyebrow.closest(".next-check-queue-panel");
+  if (!queuePanel) {
+    throw new Error("Queue panel is not rendered");
+  }
+  return within(queuePanel);
 };
 
 const NOTIFICATION_BASE_TIME = Date.UTC(2026, 3, 7, 0, 0, 0);
@@ -244,15 +253,213 @@ describe("App", () => {
     const queuePanel = eyebrow.closest(".next-check-queue-panel");
     expect(queuePanel).not.toBeNull();
     const queueScoped = within(queuePanel!);
-    const showButtons = queueScoped.getAllByRole("button", { name: /Show details/i });
-    expect(showButtons.length).toBeGreaterThan(0);
+    const describeCard = queueScoped
+      .getByText(/Describe diag CRD for control plane/i)
+      .closest("article");
+    expect(describeCard).not.toBeNull();
+    const showButton = within(describeCard!).getByRole("button", { name: /Show details/i });
     await act(async () => {
-      await user.click(showButtons[0]);
+      await user.click(showButton);
     });
     expect(queueScoped.getByText(/Source reason:/i)).toBeInTheDocument();
     expect(queueScoped.getByText(/Command preview/i)).toBeInTheDocument();
     expect(queueScoped.getByText(/Plan artifact/i)).toBeInTheDocument();
     expect(queueScoped.getByText(/kubectl describe diag/i)).toBeInTheDocument();
+  });
+
+  test("queue cluster filter scopes to selected cluster", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const clusterSelect = queueScoped.getByLabelText(/Cluster filter/i);
+    await act(async () => {
+      await user.selectOptions(clusterSelect, "cluster-b");
+    });
+    expect(queueScoped.getAllByText(/Cluster: cluster-b/i).length).toBeGreaterThan(0);
+    expect(queueScoped.queryByText(/Cluster: cluster-a/i)).toBeNull();
+    expect(queueScoped.queryByText(/Cluster: Unassigned/i)).toBeNull();
+  });
+
+  test("queue status filter limits to chosen status", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const statusSelect = queueScoped.getByLabelText(/Queue status/i);
+    await act(async () => {
+      await user.selectOptions(statusSelect, "duplicate-or-stale");
+    });
+    expect(queueScoped.getAllByRole("heading", { level: 3, name: /Duplicate \/ stale/i }).length).toBeGreaterThan(0);
+    expect(
+      queueScoped.queryByRole("heading", { name: /Approval needed/i })
+    ).toBeNull();
+  });
+
+  test("queue command family filter restricts to logs", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const commandSelect = queueScoped.getByLabelText(/Command family/i);
+    await act(async () => {
+      await user.selectOptions(commandSelect, "kubectl-logs");
+    });
+    expect(queueScoped.getByText(/Collect kubelet logs for control-plane pods/i)).toBeInTheDocument();
+    expect(queueScoped.queryByText(/Describe diag CRD for control plane/i)).toBeNull();
+  });
+
+  test("queue priority filter narrows to fallback candidates", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const prioritySelect = queueScoped.getByLabelText(/Priority/i);
+    await act(async () => {
+      await user.selectOptions(prioritySelect, "fallback");
+    });
+    expect(queueScoped.getByText(/Capture kubelet metrics for control-plane nodes/i)).toBeInTheDocument();
+    expect(queueScoped.queryByText(/Collect kubelet logs for control-plane pods/i)).toBeNull();
+  });
+
+  test("queue search matches description or reason", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const searchInput = queueScoped.getByPlaceholderText(/Description, reason, or signal/i);
+    await act(async () => {
+      await user.type(searchInput, "storage");
+    });
+    expect(queueScoped.getByText(/Collect storage latency metrics/i)).toBeInTheDocument();
+    expect(queueScoped.queryByText(/Collect kubelet logs for control-plane pods/i)).toBeNull();
+  });
+
+  test("queue focus presets toggle actionable sets", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const workButton = queueScoped.getByRole("button", { name: /Work now/i });
+    const reviewButton = queueScoped.getByRole("button", { name: /Needs review/i });
+    await act(async () => {
+      await user.click(workButton);
+    });
+    expect(
+      queueScoped.getAllByRole("heading", { level: 3, name: /Safe to automate/i }).length
+    ).toBeGreaterThan(0);
+    expect(
+      queueScoped.queryByRole("heading", { name: /Approval needed/i })
+    ).toBeNull();
+    await act(async () => {
+      await user.click(reviewButton);
+    });
+    expect(
+      queueScoped.getAllByRole("heading", { level: 3, name: /Approval needed/i }).length
+    ).toBeGreaterThan(0);
+    expect(
+      queueScoped.getAllByRole("heading", { level: 3, name: /Duplicate \/ stale/i }).length
+    ).toBeGreaterThan(0);
+    expect(queueScoped.queryByRole("heading", { level: 3, name: /Safe to automate/i })).toBeNull();
+  });
+
+  test("queue filters restore saved queue view", async () => {
+    localStorage.setItem(
+      QUEUE_VIEW_STORAGE_KEY,
+      JSON.stringify({
+        clusterFilter: "cluster-b",
+        statusFilter: "safe-ready",
+        commandFamilyFilter: "kubectl-get",
+        priorityFilter: "primary",
+        searchText: "storage",
+        focusMode: "work",
+        sortOption: "activity",
+      })
+    );
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    expect(queueScoped.getByLabelText(/Cluster filter/i)).toHaveValue("cluster-b");
+    expect(queueScoped.getByLabelText(/Queue status/i)).toHaveValue("safe-ready");
+    expect(queueScoped.getByLabelText(/Command family/i)).toHaveValue("kubectl-get");
+    expect(queueScoped.getByLabelText(/Priority/i)).toHaveValue("primary");
+    expect(queueScoped.getByLabelText(/Sort by/i)).toHaveValue("activity");
+    expect(queueScoped.getByPlaceholderText(/Description, reason, or signal/i)).toHaveValue(
+      "storage"
+    );
+    const workButton = queueScoped.getByRole("button", { name: /Work now/i });
+    expect(workButton).toHaveClass("active");
+    expect(queueScoped.getByText(/Collect storage latency metrics/i)).toBeInTheDocument();
+    expect(queueScoped.queryByText(/Collect kubelet logs for control-plane pods/i)).toBeNull();
+  });
+
+  test("reset queue view clears persisted filters", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    const clusterSelect = queueScoped.getByLabelText(/Cluster filter/i);
+    await act(async () => {
+      await user.selectOptions(clusterSelect, "cluster-b");
+    });
+    await waitFor(() => {
+      const stored = localStorage.getItem(QUEUE_VIEW_STORAGE_KEY);
+      expect(stored).not.toBeNull();
+      expect(stored ? JSON.parse(stored).clusterFilter : null).toBe("cluster-b");
+    });
+
+    const resetButton = queueScoped.getByRole("button", { name: /Reset queue view/i });
+    await act(async () => {
+      await user.click(resetButton);
+    });
+    expect(clusterSelect).toHaveValue("all");
+    await waitFor(() => {
+      const stored = localStorage.getItem(QUEUE_VIEW_STORAGE_KEY);
+      expect(stored).not.toBeNull();
+      expect(stored ? JSON.parse(stored).clusterFilter : null).toBe("all");
+    });
+  });
+
+  test("invalid stored queue view falls back to defaults", async () => {
+    localStorage.setItem(
+      QUEUE_VIEW_STORAGE_KEY,
+      JSON.stringify({
+        clusterFilter: 123,
+        statusFilter: "nonexistent",
+        commandFamilyFilter: null,
+        priorityFilter: { label: "fallback" },
+        searchText: 5,
+        focusMode: "broken",
+        sortOption: "unexpected",
+      })
+    );
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    expect(queueScoped.getByLabelText(/Cluster filter/i)).toHaveValue("all");
+    expect(queueScoped.getByLabelText(/Queue status/i)).toHaveValue("all");
+    expect(queueScoped.getByLabelText(/Command family/i)).toHaveValue("all");
+    expect(queueScoped.getByLabelText(/Priority/i)).toHaveValue("all");
+    expect(queueScoped.getByLabelText(/Sort by/i)).toHaveValue("default");
+    expect(queueScoped.getByPlaceholderText(/Description, reason, or signal/i)).toHaveValue("");
+    const workButton = queueScoped.getByRole("button", { name: /Work now/i });
+    const reviewButton = queueScoped.getByRole("button", { name: /Needs review/i });
+    expect(workButton).not.toHaveClass("active");
+    expect(reviewButton).not.toHaveClass("active");
+    await waitFor(() => {
+      const stored = localStorage.getItem(QUEUE_VIEW_STORAGE_KEY);
+      expect(stored).not.toBeNull();
+      expect(stored ? JSON.parse(stored).statusFilter : null).toBe("all");
+    });
   });
 
   test("run summary shows empty state when planner data is absent", async () => {
