@@ -176,6 +176,7 @@ def write_health_ui_index(
         historical_entries,
     )
     plan_entry = _serialize_next_check_plan(external_analysis, output_dir, run_id)
+    queue_entry = _build_next_check_queue(plan_entry)
     settings = external_analysis_settings or ExternalAnalysisSettings()
     review_config = _serialize_review_enrichment_policy(settings.review_enrichment)
     review_status = _build_review_enrichment_status(
@@ -220,6 +221,7 @@ def write_health_ui_index(
         "review_enrichment_status": review_status,
         "planner_availability": planner_availability_entry,
         "next_check_plan": plan_entry,
+        "next_check_queue": queue_entry,
         "next_check_execution_history": _build_next_check_execution_history(
             external_analysis, output_dir, run_id
         ),
@@ -279,6 +281,20 @@ _ANALYSIS_STATUS_ORDER = tuple(status.value for status in ExternalAnalysisStatus
 _LLM_ACTIVITY_LIMIT = 20
 _NOTIFICATION_HISTORY_LIMIT = 20
 _NEXT_CHECK_EXECUTION_HISTORY_LIMIT = 5
+_NEXT_CHECK_QUEUE_STATUS_ORDER = (
+    "approved-ready",
+    "safe-ready",
+    "approval-needed",
+    "failed",
+    "completed",
+    "duplicate-or-stale",
+)
+_NEXT_CHECK_QUEUE_PRIORITY_ORDER = {
+    "primary": 0,
+    "secondary": 1,
+    "fallback": 2,
+}
+_QUEUE_STATUS_ORDER = {status: idx for idx, status in enumerate(_NEXT_CHECK_QUEUE_STATUS_ORDER)}
 _SCOPE_CURRENT_RUN = "current_run"
 _SCOPE_RETAINED_HISTORY = "retained_history"
 
@@ -603,6 +619,66 @@ def _latest_outcome_artifact(
     return latest_path, timestamp
 
 
+def _determine_next_check_queue_status(candidate: Mapping[str, object]) -> str:
+    requires_approval = bool(candidate.get("requiresOperatorApproval"))
+    safe_to_automate = bool(candidate.get("safeToAutomate"))
+    approval_state = str(candidate.get("approvalState") or "").lower()
+    execution_state = str(candidate.get("executionState") or "unexecuted").lower()
+    duplicate = bool(candidate.get("duplicateOfExistingEvidence"))
+    if duplicate or approval_state in ("approval-stale", "approval-orphaned"):
+        return "duplicate-or-stale"
+    if execution_state in ("executed-failed", "timed-out"):
+        return "failed"
+    if execution_state == "executed-success":
+        return "completed"
+    if requires_approval:
+        if approval_state == "approved":
+            return "approved-ready"
+        return "approval-needed"
+    if safe_to_automate and execution_state == "unexecuted":
+        return "safe-ready"
+    return "duplicate-or-stale"
+
+
+def _queue_priority_value(value: object | None) -> int:
+    label = str(value or "").lower()
+    return _NEXT_CHECK_QUEUE_PRIORITY_ORDER.get(label, len(_NEXT_CHECK_QUEUE_PRIORITY_ORDER))
+
+
+def _queue_sort_key(entry: Mapping[str, object]) -> tuple[int, int, int, str]:
+    status = str(entry.get("queueStatus") or "duplicate-or-stale")
+    status_index = _QUEUE_STATUS_ORDER.get(status, len(_QUEUE_STATUS_ORDER))
+    priority_index = _queue_priority_value(entry.get("priorityLabel"))
+    candidate_index = entry.get("candidateIndex")
+    index_value = candidate_index if isinstance(candidate_index, int) else 0
+    identifier = str(entry.get("candidateId") or "")
+    return status_index, priority_index, index_value, identifier
+
+
+def _build_next_check_queue(plan_entry: Mapping[str, object] | None) -> list[dict[str, object]]:
+    if not isinstance(plan_entry, Mapping):
+        return []
+    raw_candidates = plan_entry.get("candidates")
+    if isinstance(raw_candidates, Sequence) and not isinstance(raw_candidates, (str, bytes, bytearray)):
+        candidates: Sequence[object] = raw_candidates
+    else:
+        candidates = []
+    queue: list[dict[str, object]] = []
+    for index, entry in enumerate(candidates):
+        if not isinstance(entry, Mapping):
+            continue
+        queue_status = _determine_next_check_queue_status(entry)
+        raw_index = entry.get("candidateIndex")
+        candidate_index = raw_index if isinstance(raw_index, int) else index
+        queue_entry: dict[str, object] = dict(entry)
+        queue_entry["queueStatus"] = queue_status
+        queue_entry["candidateIndex"] = candidate_index
+        queue_entry.setdefault("clusterLabel", entry.get("targetCluster"))
+        queue.append(queue_entry)
+    queue.sort(key=_queue_sort_key)
+    return queue
+
+
 def _serialize_next_check_plan(
     artifacts: Sequence[ExternalAnalysisArtifact],
     root_dir: Path,
@@ -780,6 +856,27 @@ _PLANNER_HINT_TEXT = (
     "Cluster Detail next checks may still reflect deterministic assessments or review content "
     "even when the planner artifact is absent."
 )
+_PLANNER_ARTIFACT_KEYS = ("artifactPath", "enrichmentArtifactPath", "reviewPath")
+_PLANNER_NEXT_ACTION_HINTS: dict[str, str] = {
+    _PLANNER_STATUS_POLICY_DISABLED: (
+        "Review the enrichment policy to re-enable provider-assisted planning or rely on deterministic next checks."
+    ),
+    _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED: (
+        "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run."
+    ),
+    _PLANNER_STATUS_ENRICHMENT_FAILED: (
+        "Inspect the failed review enrichment artifact before relying on deterministic Cluster Detail next checks."
+    ),
+    _PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS: (
+        "Review deterministic Cluster Detail next-checks since enrichment returned no planner candidates."
+    ),
+    _PLANNER_STATUS_PLANNER_MISSING: (
+        "The planner artifact is missing despite enrichment success; inspect the enrichment artifact and deterministic evidence chain."
+    ),
+    _PLANNER_STATUS_PLANNER_PRESENT: (
+        "Inspect the planner artifact for candidate context before taking any next-check action."
+    ),
+}
 
 
 def _build_next_check_planner_availability(
@@ -790,66 +887,77 @@ def _build_next_check_planner_availability(
     if plan_entry:
         summary = plan_entry.get("summary")
         reason = str(summary) if summary else "Planner candidates were generated for this run."
-        return {
-            "status": _PLANNER_STATUS_PLANNER_PRESENT,
-            "reason": reason,
-            "hint": None,
-        }
-    status = _PLANNER_STATUS_PLANNER_MISSING
-    reason = "Planner data is not available for this run."
-    if review_entry is None:
-        if review_status:
-            status_value = str(review_status.get("status") or "").lower()
-            if status_value == _PLANNER_STATUS_POLICY_DISABLED:
-                status = _PLANNER_STATUS_POLICY_DISABLED
-                reason = (
-                    str(review_status.get("reason"))
-                    if review_status.get("reason")
-                    else "Review enrichment is disabled in the current configuration."
-                )
+        status = _PLANNER_STATUS_PLANNER_PRESENT
+    else:
+        status = _PLANNER_STATUS_PLANNER_MISSING
+        reason = "Planner data is not available for this run."
+        if review_entry is None:
+            if review_status:
+                status_value = str(review_status.get("status") or "").lower()
+                if status_value == _PLANNER_STATUS_POLICY_DISABLED:
+                    status = _PLANNER_STATUS_POLICY_DISABLED
+                    reason = (
+                        str(review_status.get("reason"))
+                        if review_status.get("reason")
+                        else "Review enrichment is disabled in the current configuration."
+                    )
+                else:
+                    status = _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED
+                    reason = (
+                        str(review_status.get("reason"))
+                        if review_status.get("reason")
+                        else "Review enrichment was not attempted for this run."
+                    )
             else:
                 status = _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED
-                reason = (
-                    str(review_status.get("reason"))
-                    if review_status.get("reason")
-                    else "Review enrichment was not attempted for this run."
-                )
+                reason = "Review enrichment was not attempted for this run."
         else:
-            status = _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED
-            reason = "Review enrichment was not attempted for this run."
-    else:
-        entry_status = str(review_entry.get("status") or "").lower()
-        if entry_status != "success":
-            status = _PLANNER_STATUS_ENRICHMENT_FAILED
-            error_summary = review_entry.get("errorSummary")
-            reason = "Review enrichment ran but failed."
-            if error_summary:
-                reason = f"{reason} {error_summary}"
-        else:
-            next_checks = review_entry.get("nextChecks")
-            has_checks = False
-            if isinstance(next_checks, Sequence) and not isinstance(next_checks, (str, bytes, bytearray)):
-                has_checks = bool(next_checks)
+            entry_status = str(review_entry.get("status") or "").lower()
+            if entry_status != "success":
+                status = _PLANNER_STATUS_ENRICHMENT_FAILED
+                error_summary = review_entry.get("errorSummary")
+                reason = "Review enrichment ran but failed."
+                if error_summary:
+                    reason = f"{reason} {error_summary}"
             else:
-                has_checks = bool(next_checks)
-            if not has_checks:
-                status = _PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS
-                reason = "Review enrichment succeeded but returned no nextChecks."
-            else:
-                status = _PLANNER_STATUS_PLANNER_MISSING
-            summary_value = review_entry.get("summary")
-            reason = (
-                str(summary_value)
-                if summary_value is not None
-                else "Review enrichment returned next checks, but the planner artifact is missing."
-            )
+                next_checks = review_entry.get("nextChecks")
+                has_checks = False
+                if isinstance(next_checks, Sequence) and not isinstance(next_checks, (str, bytes, bytearray)):
+                    has_checks = bool(next_checks)
+                else:
+                    has_checks = bool(next_checks)
+                if not has_checks:
+                    status = _PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS
+                    reason = "Review enrichment succeeded but returned no nextChecks."
+                else:
+                    status = _PLANNER_STATUS_PLANNER_MISSING
+                    summary_value = review_entry.get("summary")
+                    reason = (
+                        str(summary_value)
+                        if summary_value is not None
+                        else "Review enrichment returned next checks, but the planner artifact is missing."
+                    )
     hint = None
     if status != _PLANNER_STATUS_PLANNER_PRESENT:
         hint = _PLANNER_HINT_TEXT
+    artifact_path = None
+    if status == _PLANNER_STATUS_PLANNER_PRESENT and plan_entry:
+        candidate = plan_entry.get("artifactPath")
+        if isinstance(candidate, str) and candidate:
+            artifact_path = candidate
+    elif review_entry:
+        for key in _PLANNER_ARTIFACT_KEYS:
+            value = review_entry.get(key)
+            if isinstance(value, str) and value:
+                artifact_path = value
+                break
+    next_action_hint = _PLANNER_NEXT_ACTION_HINTS.get(status)
     return {
         "status": status,
         "reason": reason,
         "hint": hint,
+        "artifactPath": artifact_path,
+        "nextActionHint": next_action_hint,
     }
 
 

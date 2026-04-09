@@ -114,6 +114,18 @@ class UIViewModelTests(unittest.TestCase):
         self.assertIsNotNone(planner_availability.reason)
         assert planner_availability.reason is not None
         self.assertTrue(planner_availability.reason.startswith("3 provider-suggested"))
+        self.assertEqual(
+            planner_availability.artifact_path,
+            "runs/health/external-analysis/health-run-20260408T061911Z-next-check-plan.json",
+        )
+        self.assertEqual(
+            planner_availability.next_action_hint,
+            "Inspect the planner artifact for candidate context before taking any next-check action.",
+        )
+
+        queue = context.run.next_check_queue
+        self.assertTrue(queue)
+        self.assertIn("approval-needed", {entry.queue_status for entry in queue})
 
         provider_execution = context.run.provider_execution
         self.assertIsNotNone(provider_execution)

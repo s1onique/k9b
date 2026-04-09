@@ -12,6 +12,8 @@ export type PlannerAvailability = {
   status: string;
   reason?: string | null;
   hint?: string | null;
+  artifactPath?: string | null;
+  nextActionHint?: string | null;
 };
 
 export type NextCheckExecutionHistoryEntry = {
@@ -60,6 +62,7 @@ export type RunPayload = {
   providerExecution?: ProviderExecution | null;
   nextCheckExecutionHistory?: NextCheckExecutionHistoryEntry[];
   nextCheckPlan?: NextCheckPlan | null;
+  nextCheckQueue?: NextCheckQueueItem[];
   plannerAvailability?: PlannerAvailability | null;
 };
 
@@ -282,6 +285,10 @@ export type NextCheckPlanCandidate = {
     outcomeStatus?: string | null;
     latestArtifactPath?: string | null;
     latestTimestamp?: string | null;
+};
+
+export type NextCheckQueueItem = NextCheckPlanCandidate & {
+  queueStatus: string;
 };
 
 export type NextCheckOutcomeCount = {

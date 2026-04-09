@@ -290,6 +290,50 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(entry.get("candidateDescription"), "Inspect control-plane logs")
         self.assertEqual(entry.get("status"), "success")
 
+    def test_run_endpoint_exposes_next_check_queue(self) -> None:
+        run_id = "queue-run"
+        plan_payload = {
+            "status": "success",
+            "summary": "Queue plan",
+            "artifactPath": "external-analysis/queue-plan.json",
+            "candidateCount": 1,
+            "candidates": [
+                {
+                    "description": "Requires approval",
+                    "targetCluster": "cluster-a",
+                    "requiresOperatorApproval": True,
+                    "approvalState": "approval-required",
+                    "executionState": "unexecuted",
+                    "priorityLabel": "primary",
+                }
+            ],
+        }
+        plan_path = self._write_plan_artifact(plan_payload, "queue-plan.json")
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id=run_id,
+            run_label=run_id,
+            cluster_label="cluster-a",
+            summary="Queue candidate",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path=str(plan_path.relative_to(self.runs_dir)),
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        self._write_index(plan_artifact)
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server)
+        finally:
+            self._shutdown_server(server, thread)
+        queue = payload.get("nextCheckQueue")
+        self.assertIsInstance(queue, list)
+        self.assertTrue(queue)
+        statuses = {entry.get("queueStatus") for entry in queue if isinstance(entry, Mapping)}
+        self.assertIn("approval-needed", statuses)
+
     def test_notifications_endpoint_filters(self) -> None:
         artifact = self._build_artifact(run_id="filter-run", status=ExternalAnalysisStatus.SUCCESS)
         self._write_index(artifact)

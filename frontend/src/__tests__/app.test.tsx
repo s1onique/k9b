@@ -211,11 +211,28 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    await screen.findByText(/Planner candidates/i);
-    expect(screen.getByRole("button", { name: /Review next checks/i })).toBeInTheDocument();
-    expect(screen.getByText(/Safe candidate/i)).toBeInTheDocument();
-    expect(screen.getByText(/Approval needed/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /cluster-a/i })).toBeInTheDocument();
+    await screen.findAllByText(/Daily sweep/i);
+    const summaryPanel = document.getElementById("run-detail");
+    expect(summaryPanel).not.toBeNull();
+    const summaryScoped = within(summaryPanel!);
+    expect(summaryScoped.getByText(/Planner candidates/i)).toBeInTheDocument();
+    expect(summaryScoped.getByText(/Safe candidate/i)).toBeInTheDocument();
+    expect(summaryScoped.getByText(/Approval needed/i)).toBeInTheDocument();
+    expect(summaryScoped.getByRole("button", { name: /Review next checks/i })).toBeInTheDocument();
+    expect(summaryScoped.getByRole("link", { name: /View planner artifact/i })).toBeInTheDocument();
+  });
+
+  test("renders next-check queue panel with queue items", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const eyebrow = await screen.findByText(/Next-check queue/i);
+    const queuePanel = eyebrow.closest(".next-check-queue-panel");
+    expect(queuePanel).not.toBeNull();
+    const queueScoped = within(queuePanel!);
+    expect(queueScoped.getByRole("heading", { name: /Planner queue/i })).toBeInTheDocument();
+    expect(queueScoped.getAllByRole("button", { name: /Approve candidate/i }).length).toBeGreaterThan(0);
+    expect(queueScoped.getAllByRole("link", { name: /View latest artifact/i }).length).toBeGreaterThan(0);
   });
 
   test("run summary shows empty state when planner data is absent", async () => {
@@ -233,15 +250,17 @@ describe("App", () => {
     const reasonText = "Review enrichment was not attempted for this run.";
     const payloads = {
       ...defaultPayloads,
-      "/api/run": {
-        ...sampleRun,
-        nextCheckPlan: null,
-        plannerAvailability: {
-          status: "enrichment-not-attempted",
-          reason: reasonText,
-          hint: PLANNER_HINT_TEXT,
+        "/api/run": {
+          ...sampleRun,
+          nextCheckPlan: null,
+          plannerAvailability: {
+            status: "enrichment-not-attempted",
+            reason: reasonText,
+            hint: PLANNER_HINT_TEXT,
+            nextActionHint:
+              "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run.",
+          },
         },
-      },
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
@@ -249,31 +268,41 @@ describe("App", () => {
     expect(await screen.findByText(new RegExp(reasonText, "i"))).toBeInTheDocument();
     expect(screen.getByText(/No next checks generated for this run/i)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(PLANNER_HINT_TEXT, "i"))).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Inspect Review Enrichment configuration or provider registration/i
+      )
+    ).toBeInTheDocument();
   });
 
   test("run summary empty state explains review enrichment succeeded but no nextChecks", async () => {
     const reasonText = "Review enrichment succeeded but returned no nextChecks.";
     const payloads = {
       ...defaultPayloads,
-      "/api/run": {
-        ...sampleRun,
-        nextCheckPlan: null,
-        reviewEnrichment: {
-          ...sampleRun.reviewEnrichment!,
-          nextChecks: [],
+        "/api/run": {
+          ...sampleRun,
+          nextCheckPlan: null,
+          reviewEnrichment: {
+            ...sampleRun.reviewEnrichment!,
+            nextChecks: [],
+          },
+          plannerAvailability: {
+            status: "enrichment-succeeded-without-next-checks",
+            reason: reasonText,
+            hint: PLANNER_HINT_TEXT,
+            nextActionHint:
+              "Review deterministic Cluster Detail next-checks since enrichment returned no planner candidates.",
+          },
         },
-        plannerAvailability: {
-          status: "enrichment-succeeded-without-next-checks",
-          reason: reasonText,
-          hint: PLANNER_HINT_TEXT,
-        },
-      },
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
 
     expect(await screen.findByText(new RegExp(reasonText, "i"))).toBeInTheDocument();
     expect(screen.getByText(/No next checks generated for this run/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Review deterministic Cluster Detail next-checks/i)
+    ).toBeInTheDocument();
   });
 
   test("review next checks button opens the cluster detail panel", async () => {
@@ -354,7 +383,10 @@ describe("App", () => {
     await act(async () => {
       await user.click(summaryToggle);
     });
-    const buttons = screen.getAllByRole("button", { name: /Run candidate/i });
+    const heading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planPanel = heading.closest(".next-check-plan");
+    expect(planPanel).not.toBeNull();
+    const buttons = within(planPanel!).getAllByRole("button", { name: /Run candidate/i });
     expect(buttons.length).toBe(1);
   });
 
@@ -401,7 +433,10 @@ describe("App", () => {
     await act(async () => {
       await user.click(summaryToggle);
     });
-    const runButton = await screen.findByRole("button", { name: /Run candidate/i });
+    const planHeading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planPanel = planHeading.closest(".next-check-plan");
+    expect(planPanel).not.toBeNull();
+    const runButton = within(planPanel!).getByRole("button", { name: /Run candidate/i });
     await act(async () => {
       await user.click(runButton);
     });
@@ -417,18 +452,16 @@ describe("App", () => {
     const executionBody = JSON.parse(executionInit.body as string);
     expect(executionBody.candidateId).toBe("candidate-logs");
     expect(executionBody.candidateIndex).toBe(0);
-    expect(await screen.findByText(/Manual execution recorded/i)).toBeInTheDocument();
-        const successMessage = await screen.findByText(/Manual execution recorded/i);
-        const manualActions = successMessage.closest(".next-check-manual-actions");
-        expect(manualActions).not.toBeNull();
-        const artifactLink = within(manualActions!).getByRole("link", { name: /View artifact/i });
-        expect(artifactLink).toHaveAttribute(
-          "href",
-          expect.stringContaining(
-            encodeURIComponent("external-analysis/run-123-next-check-execution-0.json")
-          )
-        );
-    });
+    const successMessages = await within(planPanel!).findAllByText(/Manual execution recorded/i);
+    expect(successMessages.length).toBeGreaterThan(0);
+    const manualActions = successMessages[0].closest(".next-check-manual-actions");
+    expect(manualActions).not.toBeNull();
+    const artifactLink = within(manualActions!).getByRole("link", { name: /View artifact/i });
+    expect(artifactLink).toHaveAttribute(
+      "href",
+      expect.stringContaining("external-analysis%2Frun-123-next-check-execution-0.json")
+    );
+  });
 
     test("approve candidate button calls API and shows approval record", async () => {
         const approvalResponse = {
@@ -439,59 +472,61 @@ describe("App", () => {
             candidateIndex: 1,
             approvalTimestamp: "2026-04-06T12:01:00Z",
         };
-        const fetchMock = vi.fn((input: RequestInfo, init?: RequestInit) => {
-            const url = typeof input === "string" ? input : input.url;
-            if (url === "/api/next-check-approval" && init?.method === "POST") {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    statusText: "OK",
-                    json: () => Promise.resolve(approvalResponse),
-                });
-            }
-            const base = url.split("?")[0];
-            const payload = defaultPayloads[url] ?? defaultPayloads[base];
-            if (!payload) {
-                return Promise.reject(new Error(`Unexpected fetch ${url}`));
-            }
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                statusText: "OK",
-                json: () => Promise.resolve(payload),
-            });
+    const fetchMock = vi.fn((input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url === "/api/next-check-approval" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve(approvalResponse),
         });
-        vi.stubGlobal("fetch", fetchMock);
-        const user = userEvent.setup();
-        render(<App />);
-
-        await screen.findByRole("heading", { name: /Cluster detail/i });
-        const summaryToggle = await screen.findByText(/Tap to expand findings/i);
-        await act(async () => {
-            await user.click(summaryToggle);
-        });
-        const approveButton = await screen.findByRole("button", { name: /Approve candidate/i });
-        await act(async () => {
-            await user.click(approveButton);
-        });
-        expect(fetchMock).toHaveBeenCalledWith(
-            "/api/next-check-approval",
-            expect.objectContaining({ method: "POST" })
-        );
-        const approvalCall = fetchMock.mock.calls.find(
-            ([input]) => typeof input === "string" && input === "/api/next-check-approval"
-        );
-        expect(approvalCall).toBeTruthy();
-        const approvalInit = approvalCall![1] as RequestInit;
-        const approvalBody = JSON.parse(approvalInit.body as string);
-        expect(approvalBody.candidateId).toBe("candidate-describe");
-        expect(approvalBody.candidateIndex).toBe(1);
-        expect(await screen.findByText(/Candidate approved/i)).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /View approval record/i })).toHaveAttribute(
-            "href",
-            expect.stringContaining("external-analysis/approval-0.json"),
-        );
+      }
+      const base = url.split("?")[0];
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
     });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Cluster detail/i });
+    const summaryToggle = await screen.findByText(/Tap to expand findings/i);
+    await act(async () => {
+      await user.click(summaryToggle);
+    });
+    const planHeading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planPanel = planHeading.closest(".next-check-plan");
+    expect(planPanel).not.toBeNull();
+    const approveButton = within(planPanel!).getByRole("button", { name: /Approve candidate/i });
+    await act(async () => {
+      await user.click(approveButton);
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/next-check-approval",
+      expect.objectContaining({ method: "POST" })
+    );
+    const approvalCall = fetchMock.mock.calls.find(
+      ([input]) => typeof input === "string" && input === "/api/next-check-approval"
+    );
+    expect(approvalCall).toBeTruthy();
+    const approvalInit = approvalCall![1] as RequestInit;
+    const approvalBody = JSON.parse(approvalInit.body as string);
+    expect(approvalBody.candidateId).toBe("candidate-describe");
+    expect(approvalBody.candidateIndex).toBe(1);
+    const approvalMessage = await within(planPanel!).findByText(/Candidate approved/i);
+    expect(approvalMessage).toBeInTheDocument();
+    const approvalLink = within(planPanel!).getByRole("link", { name: /View approval record/i });
+    expect(approvalLink).toHaveAttribute("href", expect.stringContaining("external-analysis/approval-0.json"));
+  });
 
   test("renders execution history entries from the run payload", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));

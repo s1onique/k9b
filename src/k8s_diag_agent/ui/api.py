@@ -22,6 +22,7 @@ from .model import (
     NextCheckExecutionHistoryEntryView,
     NextCheckOrphanedApprovalView,
     NextCheckPlanView,
+    NextCheckQueueItemView,
     NotificationView,
     PlannerAvailabilityView,
     ProposalView,
@@ -87,6 +88,7 @@ class RunPayload(TypedDict):
     nextCheckExecutionHistory: list[NextCheckExecutionHistoryEntry]
     freshness: FreshnessPayload | None
     nextCheckPlan: NextCheckPlanPayload | None
+    nextCheckQueue: list[NextCheckQueueItemPayload]
     plannerAvailability: PlannerAvailabilityPayload | None
 
 
@@ -203,6 +205,22 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     candidateIndex: int | None
 
 
+class NextCheckQueueItemPayload(TypedDict, total=False):
+    candidateId: str | None
+    candidateIndex: int | None
+    description: str
+    targetCluster: str | None
+    priorityLabel: str | None
+    suggestedCommandFamily: str | None
+    safeToAutomate: bool
+    requiresOperatorApproval: bool
+    approvalState: str | None
+    executionState: str | None
+    outcomeStatus: str | None
+    latestArtifactPath: str | None
+    queueStatus: str
+
+
 class NextCheckOrphanedApprovalPayload(TypedDict, total=False):
     approvalStatus: str | None
     candidateId: str | None
@@ -236,6 +254,8 @@ class PlannerAvailabilityPayload(TypedDict, total=False):
     status: str
     reason: str | None
     hint: str | None
+    artifactPath: str | None
+    nextActionHint: str | None
 
 
 class ReviewEnrichmentStatusPayload(TypedDict, total=False):
@@ -478,6 +498,7 @@ def build_run_payload(context: UIIndexContext) -> RunPayload:
             context.run.timestamp, context.run.scheduler_interval_seconds
         ),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
+        "nextCheckQueue": _serialize_next_check_queue(context.run.next_check_queue),
         "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
         "nextCheckExecutionHistory": _serialize_execution_history(
             context.run.next_check_execution_history
@@ -909,6 +930,27 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
     }
 
 
+def _serialize_next_check_queue(queue: tuple[NextCheckQueueItemView, ...]) -> list[NextCheckQueueItemPayload]:
+    return [
+        {
+            "candidateId": item.candidate_id,
+            "candidateIndex": item.candidate_index,
+            "description": item.description,
+            "targetCluster": item.target_cluster,
+            "priorityLabel": item.priority_label,
+            "suggestedCommandFamily": item.suggested_command_family,
+            "safeToAutomate": item.safe_to_automate,
+            "requiresOperatorApproval": item.requires_operator_approval,
+            "approvalState": item.approval_state,
+            "executionState": item.execution_state,
+            "outcomeStatus": item.outcome_status,
+            "latestArtifactPath": item.latest_artifact_path,
+            "queueStatus": item.queue_status,
+        }
+        for item in queue
+    ]
+
+
 def _serialize_planner_availability(
     view: PlannerAvailabilityView | None,
 ) -> PlannerAvailabilityPayload | None:
@@ -918,6 +960,8 @@ def _serialize_planner_availability(
         "status": view.status,
         "reason": view.reason,
         "hint": view.hint,
+        "artifactPath": view.artifact_path,
+        "nextActionHint": view.next_action_hint,
     }
 
 

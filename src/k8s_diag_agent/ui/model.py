@@ -32,6 +32,7 @@ class RunView:
     next_check_plan: NextCheckPlanView | None
     planner_availability: PlannerAvailabilityView | None
     next_check_execution_history: tuple[NextCheckExecutionHistoryEntryView, ...]
+    next_check_queue: tuple[NextCheckQueueItemView, ...]
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,8 @@ class PlannerAvailabilityView:
     status: str
     reason: str | None
     hint: str | None
+    artifact_path: str | None
+    next_action_hint: str | None
 
 
 @dataclass(frozen=True)
@@ -339,6 +342,23 @@ class NextCheckExecutionHistoryEntryView:
 
 
 @dataclass(frozen=True)
+class NextCheckQueueItemView:
+    candidate_id: str | None
+    candidate_index: int | None
+    description: str
+    target_cluster: str | None
+    priority_label: str | None
+    suggested_command_family: str | None
+    safe_to_automate: bool
+    requires_operator_approval: bool
+    approval_state: str | None
+    execution_state: str | None
+    outcome_status: str | None
+    latest_artifact_path: str | None
+    queue_status: str
+
+
+@dataclass(frozen=True)
 class ExternalAnalysisSummary:
     count: int
     status_counts: tuple[tuple[str, int], ...]
@@ -436,6 +456,7 @@ class UIIndexContext:
     provider_execution: ProviderExecutionView | None
     next_check_plan: NextCheckPlanView | None
     planner_availability: PlannerAvailabilityView | None
+    next_check_queue: tuple[NextCheckQueueItemView, ...]
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -477,6 +498,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         next_check_execution_history=_build_execution_history_view(
             run_data.get("next_check_execution_history")
         ),
+        next_check_queue=_build_next_check_queue_view(run_data.get("next_check_queue")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -517,6 +539,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         provider_execution=run.provider_execution,
         next_check_plan=run.next_check_plan,
         planner_availability=run.planner_availability,
+        next_check_queue=run.next_check_queue,
     )
 
 
@@ -1004,6 +1027,10 @@ def _build_planner_availability_view(raw: object | None) -> PlannerAvailabilityV
         status=_coerce_str(raw.get("status")),
         reason=_coerce_optional_str(raw.get("reason")),
         hint=_coerce_optional_str(raw.get("hint")),
+        artifact_path=_coerce_optional_str(raw.get("artifactPath"))
+        or _coerce_optional_str(raw.get("artifact_path")),
+        next_action_hint=_coerce_optional_str(raw.get("nextActionHint"))
+        or _coerce_optional_str(raw.get("next_action_hint")),
     )
 
 
@@ -1063,6 +1090,33 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 stdout_truncated=_coerce_optional_bool(entry.get("stdoutTruncated")),
                 stderr_truncated=_coerce_optional_bool(entry.get("stderrTruncated")),
                 output_bytes_captured=_coerce_optional_int(entry.get("outputBytesCaptured")),
+            )
+        )
+    return tuple(entries)
+
+
+def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItemView, ...]:
+    if not isinstance(raw, Sequence):
+        return ()
+    entries: list[NextCheckQueueItemView] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append(
+            NextCheckQueueItemView(
+                candidate_id=_coerce_optional_str(entry.get("candidateId")),
+                candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
+                description=_coerce_str(entry.get("description")),
+                target_cluster=_coerce_optional_str(entry.get("targetCluster")),
+                priority_label=_coerce_optional_str(entry.get("priorityLabel")),
+                suggested_command_family=_coerce_optional_str(entry.get("suggestedCommandFamily")),
+                safe_to_automate=bool(entry.get("safeToAutomate")),
+                requires_operator_approval=bool(entry.get("requiresOperatorApproval")),
+                approval_state=_coerce_optional_str(entry.get("approvalState")),
+                execution_state=_coerce_optional_str(entry.get("executionState")),
+                outcome_status=_coerce_optional_str(entry.get("outcomeStatus")),
+                latest_artifact_path=_coerce_optional_str(entry.get("latestArtifactPath")),
+                queue_status=_coerce_str(entry.get("queueStatus")),
             )
         )
     return tuple(entries)

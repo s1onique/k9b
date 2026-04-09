@@ -97,6 +97,14 @@ class UIApiTests(unittest.TestCase):
             "3 provider-suggested next checks normalized into safe/approval/duplicate categories.",
         )
         self.assertIsNone(planner_availability.get("hint"))
+        self.assertEqual(
+            planner_availability.get("artifactPath"),
+            "runs/health/external-analysis/health-run-20260408T061911Z-next-check-plan.json",
+        )
+        self.assertEqual(
+            planner_availability.get("nextActionHint"),
+            "Inspect the planner artifact for candidate context before taking any next-check action.",
+        )
 
     def test_run_payload_includes_freshness(self) -> None:
         payload = build_run_payload(self.context)
@@ -106,6 +114,16 @@ class UIApiTests(unittest.TestCase):
         self.assertEqual(freshness.get("expectedIntervalSeconds"), 300)
         self.assertIsInstance(freshness.get("ageSeconds"), int)
         self.assertIn(freshness.get("status"), ("fresh", "delayed", "stale", None))
+
+    def test_run_payload_includes_next_check_queue(self) -> None:
+        payload = build_run_payload(self.context)
+        queue = payload.get("nextCheckQueue")
+        self.assertIsNotNone(queue)
+        assert isinstance(queue, list)
+        statuses = [entry.get("queueStatus") for entry in queue]
+        self.assertIn("approval-needed", statuses)
+        self.assertIn("completed", statuses)
+        self.assertTrue(all("queueStatus" in entry for entry in queue))
 
     def test_run_payload_reconstructs_review_enrichment_from_artifact_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -254,6 +272,7 @@ class UIApiTests(unittest.TestCase):
             "status": "enrichment-not-attempted",
             "reason": "Review enrichment was not attempted for this run.",
             "hint": "Cluster Detail next checks can still derive from assessment output.",
+            "nextActionHint": "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run.",
         }
         index["next_check_plan"] = None
         context = build_ui_context(index)
@@ -264,6 +283,11 @@ class UIApiTests(unittest.TestCase):
         assert planner_availability is not None
         self.assertEqual(planner_availability["status"], "enrichment-not-attempted")
         self.assertIn("not attempted", str(planner_availability["reason"]))
+        self.assertIsNone(planner_availability.get("artifactPath"))
+        self.assertEqual(
+            planner_availability.get("nextActionHint"),
+            "Inspect Review Enrichment configuration or provider registration to understand why the planner didn't run.",
+        )
 
     def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
         index = sample_ui_index()

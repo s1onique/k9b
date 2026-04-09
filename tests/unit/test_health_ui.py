@@ -31,6 +31,15 @@ from k8s_diag_agent.health.loop import (
 )
 from k8s_diag_agent.health.notifications import NotificationArtifact
 from k8s_diag_agent.health.ui import (
+    _PLANNER_NEXT_ACTION_HINTS,
+    _PLANNER_STATUS_ENRICHMENT_FAILED,
+    _PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED,
+    _PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS,
+    _PLANNER_STATUS_PLANNER_MISSING,
+    _PLANNER_STATUS_PLANNER_PRESENT,
+    _PLANNER_STATUS_POLICY_DISABLED,
+    _build_next_check_planner_availability,
+    _build_next_check_queue,
     _build_provider_execution,
     _build_review_enrichment_status,
     _serialize_review_enrichment,
@@ -422,6 +431,12 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(planner_availability["status"], "planner-present")
         self.assertEqual(planner_availability["reason"], "Planned 1 next-check candidate")
         self.assertIsNone(planner_availability.get("hint"))
+        self.assertEqual(
+            planner_availability.get("artifactPath"),
+            "external-analysis/health-run-1-next-check-plan.json",
+        )
+        expected_hint = _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_PLANNER_PRESENT]
+        self.assertEqual(planner_availability.get("nextActionHint"), expected_hint)
         self.assertEqual(data.get("next_check_plan"), plan_entry)
 
     def test_next_check_plan_includes_approval_metadata(self) -> None:
@@ -500,6 +515,87 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(candidate_entry.get("approvalStatus"), "approved")
         self.assertIsNotNone(candidate_entry.get("approvalArtifactPath"))
         self.assertIsNotNone(candidate_entry.get("approvalTimestamp"))
+
+    def test_build_next_check_queue_orders_statuses(self) -> None:
+        plan_entry = {
+            "candidates": [
+                {
+                    "candidateId": "approved-ready",
+                    "description": "Candidate awaiting run",
+                    "requiresOperatorApproval": True,
+                    "approvalState": "approved",
+                    "executionState": "unexecuted",
+                    "safeToAutomate": False,
+                    "priorityLabel": "primary",
+                },
+                {
+                    "candidateId": "safe-ready",
+                    "description": "Safe to automate",
+                    "requiresOperatorApproval": False,
+                    "safeToAutomate": True,
+                    "executionState": "unexecuted",
+                    "priorityLabel": "secondary",
+                },
+                {
+                    "candidateId": "approval-needed",
+                    "description": "Requires approval",
+                    "requiresOperatorApproval": True,
+                    "approvalState": "approval-required",
+                    "executionState": "unexecuted",
+                    "safeToAutomate": False,
+                    "priorityLabel": "fallback",
+                },
+                {
+                    "candidateId": "failed",
+                    "description": "Failed execution",
+                    "requiresOperatorApproval": False,
+                    "safeToAutomate": True,
+                    "executionState": "executed-failed",
+                    "priorityLabel": "secondary",
+                },
+                {
+                    "candidateId": "completed",
+                    "description": "Already executed",
+                    "requiresOperatorApproval": False,
+                    "safeToAutomate": True,
+                    "executionState": "executed-success",
+                    "priorityLabel": "secondary",
+                },
+                {
+                    "candidateId": "duplicate",
+                    "description": "Duplicate evidence",
+                    "requiresOperatorApproval": False,
+                    "safeToAutomate": False,
+                    "duplicateOfExistingEvidence": True,
+                    "priorityLabel": "fallback",
+                },
+                {
+                    "candidateId": "approval-stale",
+                    "description": "Stale approval",
+                    "requiresOperatorApproval": True,
+                    "approvalState": "approval-stale",
+                    "executionState": "unexecuted",
+                    "safeToAutomate": False,
+                    "priorityLabel": "secondary",
+                },
+            ]
+        }
+        queue = _build_next_check_queue(plan_entry)
+        statuses = [entry.get("queueStatus") for entry in queue]
+        self.assertEqual(
+            statuses,
+            [
+                "approved-ready",
+                "safe-ready",
+                "approval-needed",
+                "failed",
+                "completed",
+                "duplicate-or-stale",
+                "duplicate-or-stale",
+            ],
+        )
+        self.assertEqual(queue[0].get("candidateIndex"), 0)
+        self.assertEqual(queue[1].get("candidateIndex"), 1)
 
     def test_next_check_plan_marks_stale_approval_when_plan_changes(self) -> None:
         run_id = "stale-run"
@@ -1246,6 +1342,70 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(planner["status"], "enrichment-not-attempted")
         self.assertIn("no artifact was recorded", str(planner["reason"]))
         self.assertIsNotNone(planner.get("hint"))
+        self.assertIsNone(planner.get("artifactPath"))
+        expected_hint = _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_ENRICHMENT_NOT_ATTEMPTED]
+        self.assertEqual(planner.get("nextActionHint"), expected_hint)
+
+    def test_build_next_check_planner_availability_supplies_artifact_paths_and_hints(self) -> None:
+        plan_entry = {"summary": "Plan summary", "artifactPath": "external-analysis/plan.json"}
+        plan_result = _build_next_check_planner_availability(plan_entry, None, None)
+        self.assertEqual(plan_result["status"], _PLANNER_STATUS_PLANNER_PRESENT)
+        self.assertEqual(plan_result["artifactPath"], "external-analysis/plan.json")
+        self.assertEqual(
+            plan_result["nextActionHint"],
+            _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_PLANNER_PRESENT],
+        )
+
+        review_failure = {
+            "status": "failed",
+            "artifactPath": "external-analysis/review-failed.json",
+            "errorSummary": "timeout",
+        }
+        failure_result = _build_next_check_planner_availability(None, review_failure, None)
+        self.assertEqual(failure_result["status"], _PLANNER_STATUS_ENRICHMENT_FAILED)
+        self.assertEqual(failure_result["artifactPath"], "external-analysis/review-failed.json")
+        self.assertEqual(
+            failure_result["nextActionHint"],
+            _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_ENRICHMENT_FAILED],
+        )
+
+        review_no_checks = {
+            "status": "success",
+            "artifactPath": "external-analysis/review-no-checks.json",
+            "nextChecks": [],
+        }
+        no_checks_result = _build_next_check_planner_availability(None, review_no_checks, None)
+        self.assertEqual(no_checks_result["status"], _PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS)
+        self.assertEqual(
+            no_checks_result["nextActionHint"],
+            _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_ENRICHMENT_SUCCESS_NO_CHECKS],
+        )
+
+        review_with_checks = {
+            "status": "success",
+            "artifactPath": "external-analysis/review-success.json",
+            "nextChecks": ["cmd"],
+            "summary": "Ran enrichment",
+        }
+        missing_result = _build_next_check_planner_availability(None, review_with_checks, None)
+        self.assertEqual(missing_result["status"], _PLANNER_STATUS_PLANNER_MISSING)
+        self.assertEqual(
+            missing_result["artifactPath"], "external-analysis/review-success.json"
+        )
+        self.assertEqual(
+            missing_result["nextActionHint"],
+            _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_PLANNER_MISSING],
+        )
+
+        disabled_result = _build_next_check_planner_availability(
+            None, None, {"status": "policy-disabled"}
+        )
+        self.assertEqual(disabled_result["status"], _PLANNER_STATUS_POLICY_DISABLED)
+        self.assertIsNone(disabled_result.get("artifactPath"))
+        self.assertEqual(
+            disabled_result["nextActionHint"],
+            _PLANNER_NEXT_ACTION_HINTS[_PLANNER_STATUS_POLICY_DISABLED],
+        )
 
     def test_review_enrichment_status_disabled_by_policy(self) -> None:
         settings = ExternalAnalysisSettings(

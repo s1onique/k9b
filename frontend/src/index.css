@@ -545,6 +545,119 @@ body {
   background: rgba(15, 23, 42, 0.6);
 }
 
+.next-check-queue-panel {
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.next-check-queue-group {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.next-check-queue-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.next-check-queue-items {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.next-check-queue-item {
+  padding: 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.next-check-queue-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.next-check-queue-item-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+
+.next-check-queue-item-flags {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.next-check-queue-item-flags strong {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.next-check-queue-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.queue-status-pill {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(248, 250, 252, 0.1);
+}
+
+.queue-status-pill-approved-ready {
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  color: #bae6fd;
+}
+
+.queue-status-pill-safe-ready {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #a7f3d0;
+}
+
+.queue-status-pill-approval-needed {
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde047;
+}
+
+.queue-status-pill-failed {
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
+.queue-status-pill-completed {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.queue-status-pill-duplicate-or-stale {
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #cbd5f5;
+}
+
 .run-summary-llm-heading {
   display: flex;
   justify-content: space-between;
