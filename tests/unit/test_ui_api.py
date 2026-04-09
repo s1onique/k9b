@@ -38,14 +38,18 @@ def _sample_deterministic_next_checks() -> dict[str, object]:
                 "context": "cluster-a",
                 "topProblem": "warning_event_threshold",
                 "deterministicNextCheckCount": 1,
-                "deterministicNextCheckSummaries": [
-                    {
-                        "description": "capture tcpdump",
-                        "owner": "platform",
-                        "method": "kubectl exec",
-                        "evidenceNeeded": ["tcpdump"],
-                    }
-                ],
+            "deterministicNextCheckSummaries": [
+                {
+                    "description": "capture tcpdump",
+                    "owner": "platform",
+                    "method": "kubectl exec",
+                    "evidenceNeeded": ["tcpdump"],
+                    "workstream": "incident",
+                    "urgency": "high",
+                    "isPrimaryTriage": True,
+                    "whyNow": "Immediate triage for warning_event_threshold",
+                }
+            ],
                 "drilldownAvailable": True,
                 "assessmentArtifactPath": "assessments/cluster-a.json",
                 "drilldownArtifactPath": "drilldowns/cluster-a.json",
@@ -333,6 +337,10 @@ class UIApiTests(unittest.TestCase):
         summary_entry = cluster_entry.get("deterministicNextCheckSummaries", [])[0]
         self.assertEqual(summary_entry.get("description"), "capture tcpdump")
         self.assertEqual(summary_entry.get("method"), "kubectl exec")
+        self.assertEqual(summary_entry.get("workstream"), "incident")
+        self.assertEqual(summary_entry.get("urgency"), "high")
+        self.assertTrue(summary_entry.get("isPrimaryTriage"))
+        self.assertIn("warning_event_threshold", str(summary_entry.get("whyNow")))
 
     def test_cluster_detail_payload_includes_next_check_plan(self) -> None:
         index = sample_ui_index()

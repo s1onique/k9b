@@ -1347,6 +1347,167 @@ def _derive_deterministic_top_problem(
     return None
 
 
+_DETERMINISTIC_INCIDENT_KEYWORDS = {
+    "pod",
+    "pods",
+    "container",
+    "containers",
+    "deployment",
+    "deployments",
+    "statefulset",
+    "statefulsets",
+    "daemonset",
+    "service",
+    "services",
+    "restart",
+    "crashloop",
+    "oom",
+    "oomkill",
+    "failure",
+    "fail",
+    "error",
+    "timeout",
+    "latency",
+    "packet",
+    "connection",
+    "drop",
+    "tcpdump",
+    "traffic",
+    "unhealthy",
+    "evict",
+    "kubelet",
+}
+
+_DETERMINISTIC_DRIFT_KEYWORDS = {
+    "baseline",
+    "drift",
+    "parity",
+    "version",
+    "channel",
+    "crd",
+    "helm",
+    "release",
+    "image",
+    "policy",
+    "configuration",
+    "config",
+    "upgrade",
+    "sync",
+}
+
+_DETERMINISTIC_DRIFT_REASON_LABELS = (
+    ("baseline", "Baseline drift"),
+    ("parity", "Baseline parity"),
+    ("version", "Version parity"),
+    ("channel", "Channel parity"),
+    ("crd", "CRD parity"),
+    ("helm", "Helm release parity"),
+    ("release", "Release parity"),
+    ("image", "Image parity"),
+    ("policy", "Policy parity"),
+)
+
+_DETERMINISTIC_INCIDENT_METHODS = ("kubectl exec", "kubectl rollout", "rollout status")
+
+
+def _tokenize_text(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {part for part in re.split(r"[^a-z0-9]+", value.lower()) if part}
+
+
+def _collect_evidence_tokens(evidence: Sequence[str] | None) -> set[str]:
+    tokens: set[str] = set()
+    if not evidence:
+        return tokens
+    for item in evidence:
+        if item:
+            tokens.update(_tokenize_text(str(item)))
+    return tokens
+
+
+def _token_variants(value: str) -> set[str]:
+    normalized = {value}
+    if value.endswith("s") and len(value) > 1:
+        normalized.add(value[:-1])
+    elif not value.endswith("s"):
+        normalized.add(f"{value}s")
+    return normalized
+
+
+def _classify_deterministic_next_check(
+    summary: Mapping[str, object], top_problem: str | None
+) -> dict[str, object]:
+    description = str(summary.get("description") or "").lower()
+    method = str(summary.get("method") or "").lower()
+    evidence_raw = summary.get("evidenceNeeded")
+    if isinstance(evidence_raw, Sequence) and not isinstance(evidence_raw, (str, bytes, bytearray)):
+        evidence = [str(item) for item in evidence_raw if item is not None]
+    else:
+        evidence = []
+    desc_tokens = _tokenize_text(description)
+    method_tokens = _tokenize_text(method)
+    evidence_tokens = _collect_evidence_tokens(evidence)
+    all_tokens = desc_tokens | method_tokens | evidence_tokens
+    top_problem_tokens = _tokenize_text(top_problem)
+
+    def _matches_top_problem() -> bool:
+        if not top_problem_tokens:
+            return False
+        for token in top_problem_tokens:
+            if token and any(variant in all_tokens for variant in _token_variants(token)):
+                return True
+        return False
+
+    def _method_immediate() -> bool:
+        for command in _DETERMINISTIC_INCIDENT_METHODS:
+            if command in method:
+                return True
+        return False
+
+    def _method_log_or_describe() -> bool:
+        return "describe" in method or "log" in method or "logs" in method
+
+    incident_tokens_match = bool(all_tokens & _DETERMINISTIC_INCIDENT_KEYWORDS)
+    if _matches_top_problem() or _method_immediate() or (_method_log_or_describe() and incident_tokens_match):
+        summary_reason = (
+            f"Immediate triage for {top_problem}" if top_problem else "Immediate triage for degraded cluster"
+        )
+        return {
+            "workstream": "incident",
+            "urgency": "high",
+            "isPrimaryTriage": True,
+            "whyNow": summary_reason,
+        }
+
+    drift_tokens_match = bool(all_tokens & _DETERMINISTIC_DRIFT_KEYWORDS)
+    if drift_tokens_match:
+        drift_reason = next(
+            (label for term, label in _DETERMINISTIC_DRIFT_REASON_LABELS if term in all_tokens),
+            None,
+        )
+        if drift_reason:
+            why_now = f"{drift_reason} follow-up"
+        else:
+            why_now = "Drift / toil follow-up"
+        return {
+            "workstream": "drift",
+            "urgency": "low",
+            "isPrimaryTriage": False,
+            "whyNow": why_now,
+        }
+
+    evidence_reason = (
+        f"Gather additional evidence for {top_problem}" if top_problem else "Gather additional evidence"
+    )
+    return {
+        "workstream": "evidence",
+        "urgency": "medium",
+        "isPrimaryTriage": False,
+        "whyNow": evidence_reason,
+    }
+
+
 def _build_deterministic_next_checks_projection(
     clusters: Sequence[dict[str, object]],
     assessment_map: Mapping[str, HealthAssessmentArtifact | None],
@@ -1375,6 +1536,9 @@ def _build_deterministic_next_checks_projection(
             continue
         drilldown = drilldown_map.get(label)
         top_problem = _derive_deterministic_top_problem(cluster, drilldown)
+        # annotate classification metadata for each predicted check
+        for s in summaries:
+            s.update(_classify_deterministic_next_check(s, top_problem))
         total_next_checks += len(summaries)
         entries.append(
             {

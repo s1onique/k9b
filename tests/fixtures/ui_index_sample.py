@@ -668,11 +668,15 @@ def sample_ui_index() -> dict[str, object]:
                     "deterministicNextCheckCount": 1,
                     "deterministicNextCheckSummaries": [
                         {
-                            "description": "capture tcpdump",
-                            "owner": "platform",
-                            "method": "kubectl exec",
-                            "evidenceNeeded": ["tcpdump"],
-                        }
+                    "description": "capture tcpdump",
+                    "owner": "platform",
+                    "method": "kubectl exec",
+                    "evidenceNeeded": ["tcpdump"],
+                    "workstream": "incident",
+                    "urgency": "high",
+                    "isPrimaryTriage": True,
+                    "whyNow": "Immediate triage for warning_event_threshold",
+                }
                     ],
                     "drilldownAvailable": True,
                     "assessmentArtifactPath": "assessments/cluster-a.json",

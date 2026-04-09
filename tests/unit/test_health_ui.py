@@ -43,6 +43,7 @@ from k8s_diag_agent.health.ui import (
     _build_provider_execution,
     _build_review_enrichment_status,
     _classify_blocked_candidate,
+    _classify_deterministic_next_check,
     _classify_execution_failure,
     _classify_execution_success,
     _serialize_review_enrichment,
@@ -420,6 +421,55 @@ class HealthUITests(unittest.TestCase):
         self.assertEqual(cluster_entry.get("assessmentArtifactPath"), "assessments/cluster-beta.json")
         self.assertEqual(cluster_entry.get("drilldownArtifactPath"), "drilldowns/cluster-beta.json")
 
+    def test_classifies_summary_as_incident_when_tied_to_top_problem(self) -> None:
+        summary = {
+            "description": "Check crashing pod logs",
+            "owner": "platform",
+            "method": "kubectl logs",
+            "evidenceNeeded": ["pod logs"],
+        }
+        result = _classify_deterministic_next_check(summary, "pod restart")
+        self.assertEqual(result.get("workstream"), "incident")
+        self.assertEqual(result.get("urgency"), "high")
+        self.assertTrue(result.get("isPrimaryTriage"))
+        self.assertIn("pod restart", str(result.get("whyNow")))
+
+    def test_classifies_general_status_checks_as_evidence(self) -> None:
+        summary = {
+            "description": "Review node status overview",
+            "owner": "platform engineer",
+            "method": "kubectl describe nodes",
+            "evidenceNeeded": [],
+        }
+        result = _classify_deterministic_next_check(summary, None)
+        self.assertEqual(result.get("workstream"), "evidence")
+        self.assertEqual(result.get("urgency"), "medium")
+        self.assertFalse(result.get("isPrimaryTriage"))
+        self.assertIn("Gather additional evidence", str(result.get("whyNow")))
+
+    def test_classifies_version_parity_checks_as_drift(self) -> None:
+        summary = {
+            "description": "Compare baseline release parity",
+            "owner": "platform",
+            "method": "kubectl get helmrelease",
+            "evidenceNeeded": ["helm release list"],
+        }
+        result = _classify_deterministic_next_check(summary, None)
+        self.assertEqual(result.get("workstream"), "drift")
+        self.assertEqual(result.get("urgency"), "low")
+        self.assertFalse(result.get("isPrimaryTriage"))
+        self.assertIn("drift", str(result.get("whyNow")).lower())
+
+    def test_drift_summary_promotes_to_incident_when_directly_tied_to_symptom(self) -> None:
+        summary = {
+            "description": "Validate baseline parity for pods that kept crashing",
+            "owner": "platform engineer",
+            "method": "kubectl get helmrelease",
+            "evidenceNeeded": ["crashloop data"],
+        }
+        result = _classify_deterministic_next_check(summary, "pod crash")
+        self.assertEqual(result.get("workstream"), "incident")
+        self.assertEqual(result.get("urgency"), "high")
     def test_queue_explanation_counts_align_with_deterministic_projection(self) -> None:
         data = self._build_sample_deterministic_run_index()
         run_entry = data["run"]

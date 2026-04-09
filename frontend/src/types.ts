@@ -340,6 +340,10 @@ export type DeterministicNextCheckSummary = {
   owner: string;
   method: string;
   evidenceNeeded: string[];
+  workstream: "incident" | "evidence" | "drift";
+  urgency: "high" | "medium" | "low";
+  isPrimaryTriage: boolean;
+  whyNow: string;
 };
 
 export type DeterministicNextCheckCluster = {

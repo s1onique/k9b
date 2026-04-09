@@ -418,6 +418,10 @@ class DeterministicNextCheckSummaryView:
     owner: str
     method: str
     evidence_needed: tuple[str, ...]
+    workstream: str
+    urgency: str
+    is_primary_triage: bool
+    why_now: str
 
 
 @dataclass(frozen=True)
@@ -1328,6 +1332,10 @@ def _build_deterministic_next_check_summary_view(raw: Mapping[str, object]) -> D
         owner=_coerce_str(raw.get("owner")),
         method=_coerce_str(raw.get("method")),
         evidence_needed=_coerce_sequence(raw.get("evidenceNeeded")),
+        workstream=_coerce_str(raw.get("workstream")),
+        urgency=_coerce_str(raw.get("urgency")),
+        is_primary_triage=bool(raw.get("isPrimaryTriage")),
+        why_now=_coerce_str(raw.get("whyNow")),
     )
 
 

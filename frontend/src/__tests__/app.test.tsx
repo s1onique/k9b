@@ -237,9 +237,16 @@ describe("App", () => {
 
     const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
     expect(heading).toBeInTheDocument();
-    expect(screen.getByText(/1 deterministic check derived from assessments/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/deterministic check.*derived from assessments/i)
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Review cluster detail/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View assessment artifact/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
+    const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
+    expect(driftNodes.length).toBeGreaterThan(0);
+    const driftDetails = driftNodes[0].closest("details");
+    expect(driftDetails).not.toHaveAttribute("open");
   });
 
   test("deterministic panel empty state is obvious when data is absent", async () => {

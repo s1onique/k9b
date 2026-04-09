@@ -285,6 +285,10 @@ class DeterministicNextCheckSummaryPayload(TypedDict):
     owner: str
     method: str
     evidenceNeeded: list[str]
+    workstream: str
+    urgency: str
+    isPrimaryTriage: bool
+    whyNow: str
 
 
 class DeterministicNextCheckClusterPayload(TypedDict):
@@ -1108,6 +1112,10 @@ def _serialize_deterministic_next_check_summary(
         "owner": view.owner,
         "method": view.method,
         "evidenceNeeded": list(view.evidence_needed),
+        "workstream": view.workstream,
+        "urgency": view.urgency,
+        "isPrimaryTriage": view.is_primary_triage,
+        "whyNow": view.why_now,
     }
 
 

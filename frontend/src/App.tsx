@@ -30,6 +30,7 @@ import type {
   ProviderExecutionBranch,
   ReviewEnrichmentStatus,
   RunPayload,
+  DeterministicNextCheckSummary,
   NextCheckApprovalResponse,
 } from "./types";
 import "./index.css";
@@ -83,6 +84,18 @@ const formatLatency = (value: number | null | undefined) => {
     return "—";
   }
   return `${Math.round(value)}ms`;
+};
+
+const DETERMINISTIC_WORKSTREAM_ORDER = ["incident", "evidence", "drift"] as const;
+const DETERMINISTIC_WORKSTREAM_LABELS: Record<string, string> = {
+  incident: "Firefight now",
+  evidence: "Evidence gathering",
+  drift: "Drift / toil follow-up",
+};
+const DETERMINISTIC_WORKSTREAM_DESCRIPTIONS: Record<string, string> = {
+  incident: "Focus on the current degraded symptom",
+  evidence: "Collect supporting telemetry and context",
+  drift: "Log drift, parity, and toil follow-up",
 };
 
 const FAILURE_FOLLOW_UP_LABELS: Record<string, string> = {
@@ -2439,73 +2452,163 @@ const App = () => {
       </div>
       {hasDeterministicNextChecks ? (
         <div className="deterministic-cluster-grid">
-          {deterministicClusters.map((cluster) => (
-            <article className="deterministic-cluster-card" key={cluster.label}>
-              <div className="deterministic-cluster-head">
-                <div>
-                  <p className="eyebrow">Cluster detail</p>
-                  <h3>{cluster.label}</h3>
-                  <p className="muted tiny">
-                    {cluster.topProblem ?? "Trigger reasons pending"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="run-summary-next-checks-button"
-                  onClick={() => focusClusterForNextChecks(cluster.label)}
-                >
-                  Review cluster detail
-                </button>
-              </div>
-              <div className="deterministic-cluster-stats">
-                <span>
-                  {cluster.deterministicNextCheckCount} deterministic check
-                  {cluster.deterministicNextCheckCount === 1 ? "" : "s"}
-                </span>
-                <span>
-                  Drilldown: {cluster.drilldownAvailable ? "available" : "missing"}
-                </span>
-              </div>
-              <ul className="deterministic-check-list">
-                {cluster.deterministicNextCheckSummaries.map((check, index) => (
-                  <li key={`${cluster.label}-${index}`}>
+          {deterministicClusters.map((cluster) => {
+            const incidentChecks = cluster.deterministicNextCheckSummaries.filter(
+              (check) => check.workstream === "incident"
+            );
+            const evidenceChecks = cluster.deterministicNextCheckSummaries.filter(
+              (check) => check.workstream === "evidence"
+            );
+            const driftChecks = cluster.deterministicNextCheckSummaries.filter(
+              (check) => check.workstream === "drift"
+            );
+            const renderCheckItem = (
+              check: DeterministicNextCheckSummary,
+              index: number
+            ) => (
+              <li key={`${cluster.label}-${check.workstream}-${index}`}>
+                <div className="deterministic-check-head">
+                  <div>
                     <strong>{check.description}</strong>
-                    <div className="deterministic-check-meta">
-                      <span>Method: {check.method || "—"}</span>
-                      <span>Owner: {check.owner}</span>
+                    <div className="deterministic-check-badges">
+                      <span
+                        className={`deterministic-workstream-pill deterministic-workstream-pill-${check.workstream}`}
+                      >
+                        {DETERMINISTIC_WORKSTREAM_LABELS[check.workstream]}
+                      </span>
+                      <span
+                        className={`deterministic-urgency-pill deterministic-urgency-pill-${check.urgency}`}
+                      >
+                        {check.urgency}
+                      </span>
+                      {check.isPrimaryTriage ? (
+                        <span className="deterministic-primary-pill">Primary triage</span>
+                      ) : null}
                     </div>
-                    {check.evidenceNeeded.length ? (
-                      <p className="muted tiny">
-                        Evidence: {check.evidenceNeeded.join(", ")}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              <div className="deterministic-cluster-attachments">
-                {cluster.assessmentArtifactPath ? (
-                  <a
-                    className="link tiny"
-                    href={artifactUrl(cluster.assessmentArtifactPath)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View assessment artifact
-                  </a>
+                  </div>
+                </div>
+                <div className="deterministic-check-meta">
+                  <span>Method: {check.method || "—"}</span>
+                  <span>Owner: {check.owner}</span>
+                </div>
+                <p className="muted tiny">{check.whyNow}</p>
+                {check.evidenceNeeded.length ? (
+                  <p className="muted tiny">
+                    Evidence: {check.evidenceNeeded.join(", ")}
+                  </p>
                 ) : null}
-                {cluster.drilldownArtifactPath ? (
-                  <a
-                    className="link tiny"
-                    href={artifactUrl(cluster.drilldownArtifactPath)}
-                    target="_blank"
-                    rel="noreferrer"
+              </li>
+            );
+            const buildCheckCountLabel = (count: number) =>
+              `${count} check${count === 1 ? "" : "s"}`;
+            return (
+              <article className="deterministic-cluster-card" key={cluster.label}>
+                <div className="deterministic-cluster-head">
+                  <div>
+                    <p className="eyebrow">Cluster detail</p>
+                    <h3>{cluster.label}</h3>
+                    <p className="muted tiny">
+                      {cluster.topProblem ?? "Trigger reasons pending"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="run-summary-next-checks-button"
+                    onClick={() => focusClusterForNextChecks(cluster.label)}
                   >
-                    View drilldown artifact
-                  </a>
-                ) : null}
-              </div>
-            </article>
-          ))}
+                    Review cluster detail
+                  </button>
+                </div>
+                <div className="deterministic-cluster-stats">
+                  <span>
+                    {cluster.deterministicNextCheckCount} deterministic check
+                    {cluster.deterministicNextCheckCount === 1 ? "" : "s"}
+                  </span>
+                  <span>
+                    Drilldown: {cluster.drilldownAvailable ? "available" : "missing"}
+                  </span>
+                </div>
+                <div className="deterministic-group-list">
+                  {incidentChecks.length ? (
+                    <section className="deterministic-group">
+                      <div className="deterministic-group-head">
+                        <div>
+                          <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.incident}</p>
+                          <p className="muted tiny">
+                            {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.incident}
+                          </p>
+                        </div>
+                        <span className="muted tiny">
+                          {buildCheckCountLabel(incidentChecks.length)}
+                        </span>
+                      </div>
+                      <ul className="deterministic-check-list">
+                        {incidentChecks.map(renderCheckItem)}
+                      </ul>
+                    </section>
+                  ) : null}
+                  {evidenceChecks.length ? (
+                    <section className="deterministic-group">
+                      <div className="deterministic-group-head">
+                        <div>
+                          <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.evidence}</p>
+                          <p className="muted tiny">
+                            {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.evidence}
+                          </p>
+                        </div>
+                        <span className="muted tiny">
+                          {buildCheckCountLabel(evidenceChecks.length)}
+                        </span>
+                      </div>
+                      <ul className="deterministic-check-list">
+                        {evidenceChecks.map(renderCheckItem)}
+                      </ul>
+                    </section>
+                  ) : null}
+                  {driftChecks.length ? (
+                    <details className="deterministic-group deterministic-group--drift">
+                      <summary className="deterministic-group-head">
+                        <div>
+                          <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.drift}</p>
+                          <p className="muted tiny">
+                            {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.drift}
+                          </p>
+                        </div>
+                        <span className="muted tiny">
+                          {buildCheckCountLabel(driftChecks.length)}
+                        </span>
+                      </summary>
+                      <ul className="deterministic-check-list">
+                        {driftChecks.map(renderCheckItem)}
+                      </ul>
+                    </details>
+                  ) : null}
+                </div>
+                <div className="deterministic-cluster-attachments">
+                  {cluster.assessmentArtifactPath ? (
+                    <a
+                      className="link tiny"
+                      href={artifactUrl(cluster.assessmentArtifactPath)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View assessment artifact
+                    </a>
+                  ) : null}
+                  {cluster.drilldownArtifactPath ? (
+                    <a
+                      className="link tiny"
+                      href={artifactUrl(cluster.drilldownArtifactPath)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View drilldown artifact
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="deterministic-empty-state">

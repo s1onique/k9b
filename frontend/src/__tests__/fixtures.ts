@@ -273,19 +273,33 @@ export const sampleRun: RunPayload = {
   },
   deterministicNextChecks: {
     clusterCount: 1,
-    totalNextCheckCount: 1,
+    totalNextCheckCount: 2,
     clusters: [
       {
         label: "cluster-a",
         context: "prod",
         topProblem: "High CPU",
-        deterministicNextCheckCount: 1,
+        deterministicNextCheckCount: 2,
         deterministicNextCheckSummaries: [
           {
             description: "Capture tcpdump",
             owner: "platform",
             method: "kubectl exec",
             evidenceNeeded: ["tcpdump output"],
+            workstream: "incident",
+            urgency: "high",
+            isPrimaryTriage: true,
+            whyNow: "Immediate triage for High CPU",
+          },
+          {
+            description: "Compare baseline release parity",
+            owner: "platform engineer",
+            method: "kubectl get helmrelease",
+            evidenceNeeded: ["helm release list"],
+            workstream: "drift",
+            urgency: "low",
+            isPrimaryTriage: false,
+            whyNow: "Baseline drift follow-up",
           },
         ],
         drilldownAvailable: true,

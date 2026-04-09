@@ -611,6 +611,106 @@ body {
   font-size: 0.75rem;
 }
 
+.deterministic-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deterministic-group {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.deterministic-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.deterministic-check-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.deterministic-check-badges {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.deterministic-workstream-pill,
+.deterministic-urgency-pill,
+.deterministic-primary-pill {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.deterministic-workstream-pill {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+}
+
+.deterministic-workstream-pill-incident {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+.deterministic-workstream-pill-evidence {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.deterministic-workstream-pill-drift {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+}
+
+.deterministic-urgency-pill {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+}
+
+.deterministic-urgency-pill-high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+.deterministic-urgency-pill-medium {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.deterministic-urgency-pill-low {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+}
+
+.deterministic-primary-pill {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.deterministic-group--drift summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.deterministic-group--drift summary::-webkit-details-marker {
+  display: none;
+}
+.deterministic-group--drift summary::marker {
+  display: none;
+}
+
 .deterministic-cluster-attachments {
   display: flex;
   gap: 0.75rem;

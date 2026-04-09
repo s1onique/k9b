@@ -16,13 +16,17 @@ def _sample_deterministic_next_checks() -> dict[str, object]:
                 "topProblem": "warning_event_threshold",
                 "deterministicNextCheckCount": 1,
                 "deterministicNextCheckSummaries": [
-                    {
-                        "description": "capture tcpdump",
-                        "owner": "platform",
-                        "method": "kubectl exec",
-                        "evidenceNeeded": ["tcpdump"],
-                    }
-                ],
+                {
+                    "description": "capture tcpdump",
+                    "owner": "platform",
+                    "method": "kubectl exec",
+                    "evidenceNeeded": ["tcpdump"],
+                    "workstream": "incident",
+                    "urgency": "high",
+                    "isPrimaryTriage": True,
+                    "whyNow": "Immediate triage for warning_event_threshold",
+                }
+            ],
                 "drilldownAvailable": True,
                 "assessmentArtifactPath": "assessments/cluster-a.json",
                 "drilldownArtifactPath": "drilldowns/cluster-a.json",
@@ -172,6 +176,10 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(summary_entry.description, "capture tcpdump")
         self.assertEqual(summary_entry.method, "kubectl exec")
         self.assertEqual(summary_entry.owner, "platform")
+        self.assertEqual(summary_entry.workstream, "incident")
+        self.assertEqual(summary_entry.urgency, "high")
+        self.assertTrue(summary_entry.is_primary_triage)
+        self.assertIn("warning_event_threshold", summary_entry.why_now)
 
         provider_execution = context.run.provider_execution
         self.assertIsNotNone(provider_execution)
