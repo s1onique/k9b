@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import patch
 
-from scripts.build_diagnostic_pack import REVIEW_BUNDLE_SCHEMA, create_diagnostic_pack
+from scripts.build_diagnostic_pack import (
+    REVIEW_BUNDLE_SCHEMA,
+    REVIEW_INPUT_SCHEMA,
+    create_diagnostic_pack,
+)
 from tests.fixtures.ui_index_sample import sample_ui_index
 
 
@@ -71,6 +75,7 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                 self.assertIn("external-analysis/run-1-next-check-plan.json", names)
                 self.assertIn("digest.md", names)
                 self.assertIn("review_bundle.json", names)
+                self.assertIn("review_input_14b.json", names)
                 manifest = json.loads(archive.read("manifest.json"))
                 self.assertEqual(manifest.get("run_id"), run_id)
                 self.assertGreaterEqual(manifest.get("file_count"), 1)
@@ -108,6 +113,19 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                     set(bundle.get("artifact_manifest", {}).get("included_paths", [])),
                     set(filter(None, file_paths)),
                 )
+                review_input = json.loads(archive.read("review_input_14b.json"))
+                self.assertEqual(review_input.get("schema_version"), REVIEW_INPUT_SCHEMA)
+                self.assertEqual(review_input.get("run", {}).get("run_id"), run_id)
+                self.assertEqual(review_input.get("source_review_bundle_path"), "review_bundle.json")
+                self.assertEqual(
+                    review_input.get("artifact_manifest", {}).get("review_input_14b_path"),
+                    "review_input_14b.json",
+                )
+                self.assertIn("review_bundle.json", review_input.get("artifact_manifest", {}).get("included_paths", []))
+                self.assertIsInstance(review_input.get("cluster_summaries"), list)
+                self.assertIsInstance(review_input.get("fleet_summary"), dict)
+                self.assertNotIn("pod_descriptions", json.dumps(review_input))
+                self.assertNotIn("warning_events", json.dumps(review_input))
 
     def test_structured_log_events_emit_when_building_pack(self) -> None:
         run_id = "run-logging"

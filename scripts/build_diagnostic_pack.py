@@ -11,7 +11,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
-from typing import Iterable, Mapping, cast
+from typing import Iterable, Mapping, Sequence, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = ROOT / "src"
@@ -24,6 +24,7 @@ COMPONENT_NAME = "diagnostic-pack-builder"
 
 PACK_METADATA_CATEGORY = "pack_metadata"
 REVIEW_BUNDLE_SCHEMA = "diagnostic-pack-review-bundle/v1"
+REVIEW_INPUT_SCHEMA = "diagnostic-pack-review-input-14b/v1"
 
 
 def create_diagnostic_pack(
@@ -92,8 +93,11 @@ def create_diagnostic_pack(
         (temp_dir / "analyst_prompt.md").write_text(prompt_text, encoding="utf-8")
         manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "analyst_prompt.md"})
         final_manifest_entries = list(manifest_entries)
-        final_manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "review_bundle.json"})
-        final_manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "manifest.json"})
+        final_manifest_entries.extend([
+            {"category": PACK_METADATA_CATEGORY, "path": "review_bundle.json"},
+            {"category": PACK_METADATA_CATEGORY, "path": "review_input_14b.json"},
+            {"category": PACK_METADATA_CATEGORY, "path": "manifest.json"},
+        ])
         review_bundle = _build_review_bundle(
             run_id=run_id,
             run_health_dir=run_health_dir,
@@ -104,6 +108,10 @@ def create_diagnostic_pack(
         )
         (temp_dir / "review_bundle.json").write_text(
             json.dumps(review_bundle, indent=2), encoding="utf-8"
+        )
+        review_input = _build_review_input_14b(index_data, run_entry, review_bundle)
+        (temp_dir / "review_input_14b.json").write_text(
+            json.dumps(review_input, indent=2), encoding="utf-8"
         )
         manifest = _build_manifest(run_id, run_label, final_manifest_entries)
         (temp_dir / "manifest.json").write_text(
@@ -244,6 +252,260 @@ def _build_review_bundle(
         },
     }
 
+
+def _build_review_input_14b(
+    index_data: dict[str, object],
+    run_entry: dict[str, object],
+    review_bundle: dict[str, object],
+) -> dict[str, object]:
+    run_obj = review_bundle.get("run") or {}
+    run_id_value = str(run_entry.get("run_id") or run_obj.get("run_id") or "")
+    run_label = str(run_entry.get("run_label") or run_obj.get("run_label") or "")
+    review_entry = cast(dict[str, object], review_bundle.get("review") or {})
+    review_content = cast(dict[str, object], review_entry.get("content") or {})
+    cluster_entries = cast(list[dict[str, object]], review_bundle.get("assessments") or [])
+    drilldown_entries = cast(list[dict[str, object]], review_bundle.get("drilldowns") or [])
+    external_entries = cast(list[dict[str, object]], review_bundle.get("external_analysis") or [])
+    comparison_entries = cast(list[dict[str, object]], review_bundle.get("comparisons") or [])
+    proposal_entries = cast(list[dict[str, object]], review_bundle.get("proposals") or [])
+    bundle_manifest = cast(dict[str, object], review_bundle.get("artifact_manifest") or {})
+    included_paths = cast(list[str], bundle_manifest.get("included_paths") or [])
+    return {
+        "schema_version": REVIEW_INPUT_SCHEMA,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source_run_id": run_id_value,
+        "source_review_bundle_path": "review_bundle.json",
+        "run": {
+            "run_label": run_label or None,
+            "run_id": run_id_value or None,
+            "timestamp": run_obj.get("timestamp"),
+        },
+        "fleet_summary": _build_fleet_summary(index_data, run_entry),
+        "review_summary": _build_review_summary(review_entry, review_content),
+        "cluster_summaries": _build_cluster_summaries(
+            cluster_entries, drilldown_entries, external_entries
+        ),
+        "comparison_summary": _build_comparison_summary(comparison_entries),
+        "external_analysis_summary": _build_external_analysis_summary(external_entries),
+        "proposal_summary": _build_proposal_summary(proposal_entries),
+        "review_enrichment": _extract_mapping(review_bundle, "review_enrichment"),
+        "provider_execution": _extract_mapping(review_bundle, "provider_execution"),
+        "artifact_manifest": {
+            "review_input_14b_path": "review_input_14b.json",
+            "review_bundle_path": "review_bundle.json",
+            "digest_path": "digest.md",
+            "included_paths": _normalize_included_paths(included_paths + ["review_input_14b.json"]),
+        },
+    }
+
+
+def _build_review_summary(
+    review_entry: dict[str, object], review_content: dict[str, object]
+) -> dict[str, object] | None:
+    if not review_entry or not review_content:
+        return None
+    selected_drilldowns = []
+    for selection in cast(list[dict[str, object]], review_content.get("selected_drilldowns") or []):
+        selected_drilldowns.append(
+            {
+                "cluster_label": selection.get("cluster_label"),
+                "reasons": _ensure_strings(selection.get("reasons")),
+            }
+        )
+    return {
+        "path": review_entry.get("path"),
+        "quality_summary": _trim_quality_summary(review_content.get("quality_summary")),
+        "failure_modes": _ensure_strings(review_content.get("failure_modes")),
+        "selected_drilldowns": selected_drilldowns,
+    }
+
+
+def _build_cluster_summaries(
+    cluster_entries: list[dict[str, object]],
+    drilldown_entries: list[dict[str, object]],
+    external_entries: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    drilldown_map: dict[str, dict[str, object]] = {}
+    for entry in drilldown_entries:
+        label = entry.get("cluster_label")
+        if isinstance(label, str):
+            drilldown_map[label] = entry
+    external_map: dict[str, list[str]] = {}
+    for entry in external_entries:
+        label = entry.get("cluster_label")
+        if not isinstance(label, str):
+            continue
+        path_value = entry.get("path")
+        if isinstance(path_value, str):
+            external_map.setdefault(label, []).append(path_value)
+    summaries: list[dict[str, object]] = []
+    for assessment in cluster_entries:
+        label = assessment.get("cluster_label")
+        if not isinstance(label, str):
+            continue
+        content = cast(dict[str, object], assessment.get("content") or {})
+        drilldown_entry = drilldown_map.get(label)
+        summaries.append(
+            {
+                "cluster_label": label,
+                "health_rating": content.get("health_rating"),
+                "top_findings": _extract_descriptions(content.get("findings"), ("description", "summary")),
+                "top_hypotheses": _extract_descriptions(content.get("hypotheses"), ("description", "summary")),
+                "top_next_checks": _build_top_next_checks(content),
+                "drilldown_summary": _build_drilldown_summary(
+                    cast(dict[str, object], drilldown_entry.get("content") if drilldown_entry else {})
+                    if drilldown_entry
+                    else {},
+                ),
+                "artifact_paths": {
+                    "assessment": assessment.get("path"),
+                    "drilldown": (drilldown_entry or {}).get("path"),
+                    "external_analysis": _ensure_strings(external_map.get(label)),
+                },
+            }
+        )
+    return summaries
+
+
+def _build_top_next_checks(content: Mapping[str, object]) -> list[str]:
+    candidates: list[str] = []
+    for section in ("next_evidence_to_collect", "next_checks", "recommended_next_checks"):
+        for entry in cast(list[object], content.get(section) or []):
+            text = _extract_first_string(entry, ("description", "summary"))
+            if text:
+                candidates.append(text)
+            if len(candidates) >= 3:
+                return candidates
+    recommended_action = content.get("recommended_action")
+    if isinstance(recommended_action, Mapping):
+        description = _extract_first_string(recommended_action, ("description",))
+        if description:
+            candidates.append(description)
+    return candidates[:3]
+
+
+def _build_drilldown_summary(content: dict[str, object]) -> dict[str, object] | None:
+    if not content:
+        return None
+    return {
+        "trigger_reasons": _ensure_strings(content.get("trigger_reasons")),
+        "non_running_pods": len(cast(list[object], content.get("non_running_pods") or [])),
+        "summary": _flatten_summary(content.get("summary")),
+    }
+
+
+def _build_comparison_summary(comparisons: list[dict[str, object]]) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for entry in comparisons:
+        content = cast(dict[str, object], entry.get("content") or {})
+        result.append(
+            {
+                "path": entry.get("path"),
+                "summary": {
+                    "summary": str(content.get("summary") or "comparison"),
+                    "primary_cluster": content.get("primary_cluster_label"),
+                    "secondary_cluster": content.get("secondary_cluster_label"),
+                },
+                "top_drifts": _extract_top_drifts(content),
+            }
+        )
+    return result
+
+
+def _build_external_analysis_summary(external: list[dict[str, object]]) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for entry in external:
+        content = cast(dict[str, object], entry.get("content") or {})
+        result.append(
+            {
+                "purpose": content.get("purpose"),
+                "cluster_label": entry.get("cluster_label"),
+                "provider": content.get("provider"),
+                "status": content.get("status"),
+                "summary": {
+                    "text": str(content.get("summary") or ""),
+                    "findings": _extract_descriptions(content.get("findings"), ("description",)),
+                    "suggested_next_checks": _ensure_strings(content.get("suggested_next_checks")),
+                },
+                "path": entry.get("path"),
+            }
+        )
+    return result
+
+
+def _build_proposal_summary(proposals: list[dict[str, object]]) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for proposal in proposals:
+        content = cast(dict[str, object], proposal.get("content") or {})
+        summary_text = _extract_first_string(content, ("rationale", "summary", "expected_benefit"))
+        result.append(
+            {
+                "proposal_id": proposal.get("proposal_id"),
+                "summary": summary_text or "proposal",
+                "path": proposal.get("path"),
+            }
+        )
+    return result
+
+
+def _trim_quality_summary(metrics: object | None) -> list[dict[str, object]]:
+    metric_list = cast(list[dict[str, object]], metrics or [])
+    trimmed: list[dict[str, object]] = []
+    for metric in metric_list[:3]:
+        trimmed.append({
+            "dimension": metric.get("dimension"),
+            "level": metric.get("level"),
+            "score": metric.get("score"),
+        })
+    return trimmed
+
+
+def _extract_descriptions(
+    items: object | None, keys: Sequence[str]
+) -> list[str]:
+    results: list[str] = []
+    for entry in cast(list[object], items or []):
+        text = _extract_first_string(entry, keys)
+        if text:
+            results.append(text)
+        if len(results) >= 3:
+            break
+    return results
+
+
+def _extract_top_drifts(content: Mapping[str, object]) -> list[str]:
+    drifts = content.get("top_drifts") or content.get("drift_reasons") or []
+    return _ensure_strings(drifts)[:3]
+
+
+def _ensure_strings(value: object | None) -> list[str]:
+    results: list[str] = []
+    for entry in cast(list[object], value or []):
+        if isinstance(entry, str):
+            results.append(entry)
+    return results
+
+
+def _extract_first_string(entry: object, keys: Sequence[str]) -> str | None:
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, Mapping):
+        for key in keys:
+            candidate = entry.get(key)
+            if isinstance(candidate, str):
+                return candidate
+    return None
+
+
+def _flatten_summary(value: object | None) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        parts: list[str] = []
+        for key, val in value.items():
+            parts.append(f"{key}: {val}")
+        return "; ".join(parts)
+    return ""
 
 def _build_fleet_summary(index_data: dict[str, object], run_entry: dict[str, object]) -> dict[str, object]:
     cluster_count = _coerce_int_from_dict(run_entry, "cluster_count")
