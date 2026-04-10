@@ -19,12 +19,17 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from k8s_diag_agent.structured_logging import emit_structured_log
+from k8s_diag_agent.health.utils import normalize_ref
 
 COMPONENT_NAME = "diagnostic-pack-builder"
-
 PACK_METADATA_CATEGORY = "pack_metadata"
 REVIEW_BUNDLE_SCHEMA = "diagnostic-pack-review-bundle/v1"
 REVIEW_INPUT_SCHEMA = "diagnostic-pack-review-input-14b/v1"
+MAX_TOP_FINDINGS = 7
+MAX_TOP_HYPOTHESES = 5
+MAX_TOP_NEXT_CHECKS = 6
+MAX_TOP_DRIFTS = 7
+MAX_PATTERN_KEYS = 5
 
 
 def create_diagnostic_pack(
@@ -270,6 +275,7 @@ def _build_review_input_14b(
     proposal_entries = cast(list[dict[str, object]], review_bundle.get("proposals") or [])
     bundle_manifest = cast(dict[str, object], review_bundle.get("artifact_manifest") or {})
     included_paths = cast(list[str], bundle_manifest.get("included_paths") or [])
+    label_map, _ = _build_cluster_label_map(cluster_entries)
     return {
         "schema_version": REVIEW_INPUT_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -281,11 +287,16 @@ def _build_review_input_14b(
             "timestamp": run_obj.get("timestamp"),
         },
         "fleet_summary": _build_fleet_summary(index_data, run_entry),
-        "review_summary": _build_review_summary(review_entry, review_content),
+        "review_summary": _build_review_summary(review_entry, review_content, label_map),
         "cluster_summaries": _build_cluster_summaries(
-            cluster_entries, drilldown_entries, external_entries
+            cluster_entries,
+            drilldown_entries,
+            external_entries,
+            label_map,
         ),
-        "comparison_summary": _build_comparison_summary(comparison_entries),
+        "comparison_summary": _build_comparison_summary(
+            comparison_entries, label_map, run_id_value
+        ),
         "external_analysis_summary": _build_external_analysis_summary(external_entries),
         "proposal_summary": _build_proposal_summary(proposal_entries),
         "review_enrichment": _extract_mapping(review_bundle, "review_enrichment"),
@@ -299,8 +310,24 @@ def _build_review_input_14b(
     }
 
 
+def _build_cluster_label_map(cluster_entries: list[dict[str, object]]) -> tuple[dict[str, str], dict[str, str]]:
+    mapping: dict[str, str] = {}
+    lookup: dict[str, str] = {}
+    for entry in cluster_entries:
+        label = entry.get("cluster_label")
+        if not isinstance(label, str):
+            continue
+        normalized = normalize_ref(label)
+        if not normalized:
+            continue
+        mapping[label] = normalized
+        lookup[normalized] = label
+    return mapping, lookup
+
+
 def _build_review_summary(
-    review_entry: dict[str, object], review_content: dict[str, object]
+    review_entry: dict[str, object], review_content: dict[str, object],
+    label_map: dict[str, str],
 ) -> dict[str, object] | None:
     if not review_entry or not review_content:
         return None
@@ -308,7 +335,9 @@ def _build_review_summary(
     for selection in cast(list[dict[str, object]], review_content.get("selected_drilldowns") or []):
         selected_drilldowns.append(
             {
-                "cluster_label": selection.get("cluster_label"),
+                "cluster_label": _normalize_reference_label(
+                    selection.get("cluster_label") or selection.get("label"), label_map
+                ),
                 "reasons": _ensure_strings(selection.get("reasons")),
             }
         )
@@ -324,64 +353,107 @@ def _build_cluster_summaries(
     cluster_entries: list[dict[str, object]],
     drilldown_entries: list[dict[str, object]],
     external_entries: list[dict[str, object]],
+    label_map: dict[str, str],
 ) -> list[dict[str, object]]:
     drilldown_map: dict[str, dict[str, object]] = {}
     for entry in drilldown_entries:
-        label = entry.get("cluster_label")
-        if isinstance(label, str):
-            drilldown_map[label] = entry
-    external_map: dict[str, list[str]] = {}
+        normalized = _normalize_reference_label(entry.get("cluster_label"), label_map)
+        if not normalized:
+            normalized = _normalize_reference_label(entry.get("label"), label_map)
+        if normalized:
+            drilldown_map[normalized] = entry
+    external_paths_map: dict[str, list[str]] = {}
+    external_check_map: dict[str, list[str]] = {}
     for entry in external_entries:
-        label = entry.get("cluster_label")
-        if not isinstance(label, str):
+        normalized = _normalize_reference_label(entry.get("cluster_label"), label_map)
+        if not normalized:
+            normalized = _normalize_reference_label(entry.get("label"), label_map)
+        if not normalized:
             continue
         path_value = entry.get("path")
-        if isinstance(path_value, str):
-            external_map.setdefault(label, []).append(path_value)
+        if _is_auto_drilldown_entry(entry) and isinstance(path_value, str):
+            external_paths_map.setdefault(normalized, []).append(path_value)
+        content = cast(dict[str, object], entry.get("content") or {})
+        suggestions = _ensure_strings(content.get("suggested_next_checks"))
+        summary_text = _extract_first_string(content, ("summary",))
+        extras = _ensure_strings(content.get("findings"))
+        external_candidates: list[str] = []
+        external_candidates.extend(suggestions)
+        if summary_text:
+            external_candidates.append(summary_text)
+        external_candidates.extend(extras)
+        if external_candidates:
+            external_check_map.setdefault(normalized, []).extend(external_candidates)
     summaries: list[dict[str, object]] = []
     for assessment in cluster_entries:
-        label = assessment.get("cluster_label")
-        if not isinstance(label, str):
+        normalized_label = _normalize_reference_label(assessment.get("cluster_label"), label_map)
+        if not normalized_label:
+            normalized_label = _normalize_reference_label(assessment.get("label"), label_map)
+        if not normalized_label:
             continue
         content = cast(dict[str, object], assessment.get("content") or {})
-        drilldown_entry = drilldown_map.get(label)
-        summaries.append(
-            {
-                "cluster_label": label,
-                "health_rating": content.get("health_rating"),
-                "top_findings": _extract_descriptions(content.get("findings"), ("description", "summary")),
-                "top_hypotheses": _extract_descriptions(content.get("hypotheses"), ("description", "summary")),
-                "top_next_checks": _build_top_next_checks(content),
-                "drilldown_summary": _build_drilldown_summary(
-                    cast(dict[str, object], drilldown_entry.get("content") if drilldown_entry else {})
-                    if drilldown_entry
-                    else {},
-                ),
-                "artifact_paths": {
-                    "assessment": assessment.get("path"),
-                    "drilldown": (drilldown_entry or {}).get("path"),
-                    "external_analysis": _ensure_strings(external_map.get(label)),
-                },
-            }
+        assessment_section = cast(dict[str, object], content.get("assessment") or content)
+        drilldown_entry = drilldown_map.get(normalized_label)
+        drilldown_content = (
+            cast(dict[str, object], drilldown_entry.get("content") or {})
+            if drilldown_entry
+            else {}
         )
+        summaries.append({
+            "cluster_label": normalized_label,
+            "health_rating": assessment_section.get("health_rating") or content.get("health_rating"),
+            "top_findings": _extract_descriptions(
+                assessment_section.get("findings"), ("description", "summary")
+            ),
+            "top_hypotheses": _extract_descriptions(
+                assessment_section.get("hypotheses"), ("description", "summary")
+            ),
+            "top_next_checks": _build_top_next_checks(
+                assessment_section,
+                drilldown_content,
+                external_check_map.get(normalized_label, []),
+            ),
+            "drilldown_summary": _build_drilldown_summary(drilldown_content),
+            "artifact_paths": {
+                "assessment": assessment.get("path"),
+                "drilldown": (drilldown_entry or {}).get("path"),
+                "external_analysis": external_paths_map.get(normalized_label) or [],
+            },
+        })
     return summaries
 
 
-def _build_top_next_checks(content: Mapping[str, object]) -> list[str]:
+def _build_top_next_checks(
+    assessment: Mapping[str, object],
+    drilldown: Mapping[str, object],
+    external_next_checks: Sequence[str],
+) -> list[str]:
     candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(text: str | None) -> None:
+        if not text:
+            return
+        text = text.strip()
+        if not text or text in seen:
+            return
+        seen.add(text)
+        candidates.append(text)
+
     for section in ("next_evidence_to_collect", "next_checks", "recommended_next_checks"):
-        for entry in cast(list[object], content.get(section) or []):
+        for entry in cast(list[object], assessment.get(section) or []):
             text = _extract_first_string(entry, ("description", "summary"))
-            if text:
-                candidates.append(text)
-            if len(candidates) >= 3:
+            add_candidate(text)
+            if len(candidates) >= MAX_TOP_NEXT_CHECKS:
                 return candidates
-    recommended_action = content.get("recommended_action")
-    if isinstance(recommended_action, Mapping):
-        description = _extract_first_string(recommended_action, ("description",))
-        if description:
-            candidates.append(description)
-    return candidates[:3]
+    recommended_action = cast(Mapping[str, object], assessment.get("recommended_action") or {})
+    add_candidate(_extract_first_string(recommended_action, ("description",)))
+    add_candidate(_flatten_summary(drilldown.get("summary")))
+    for extra in external_next_checks:
+        add_candidate(extra)
+        if len(candidates) >= MAX_TOP_NEXT_CHECKS:
+            return candidates
+    return candidates[:MAX_TOP_NEXT_CHECKS]
 
 
 def _build_drilldown_summary(content: dict[str, object]) -> dict[str, object] | None:
@@ -389,22 +461,34 @@ def _build_drilldown_summary(content: dict[str, object]) -> dict[str, object] | 
         return None
     return {
         "trigger_reasons": _ensure_strings(content.get("trigger_reasons")),
-        "non_running_pods": len(cast(list[object], content.get("non_running_pods") or [])),
-        "summary": _flatten_summary(content.get("summary")),
+        "warning_event_count": len(cast(list[object], content.get("warning_events") or [])),
+        "non_running_pod_count": len(cast(list[object], content.get("non_running_pods") or [])),
+        "affected_namespaces": _ensure_strings(content.get("affected_namespaces")),
+        "pattern_keys": _extract_pattern_keys(content.get("pattern_details")),
     }
 
 
-def _build_comparison_summary(comparisons: list[dict[str, object]]) -> list[dict[str, object]]:
+def _build_comparison_summary(
+    comparisons: list[dict[str, object]],
+    label_map: dict[str, str],
+    run_id: str,
+) -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for entry in comparisons:
         content = cast(dict[str, object], entry.get("content") or {})
+        primary_label = _normalize_reference_label(content.get("primary_cluster_label"), label_map)
+        secondary_label = _normalize_reference_label(content.get("secondary_cluster_label"), label_map)
+        if not primary_label or not secondary_label:
+            derived_primary, derived_secondary = _extract_comparison_clusters(entry.get("path"), run_id, label_map)
+            primary_label = primary_label or derived_primary
+            secondary_label = secondary_label or derived_secondary
         result.append(
             {
                 "path": entry.get("path"),
                 "summary": {
                     "summary": str(content.get("summary") or "comparison"),
-                    "primary_cluster": content.get("primary_cluster_label"),
-                    "secondary_cluster": content.get("secondary_cluster_label"),
+                    "primary_cluster": primary_label,
+                    "secondary_cluster": secondary_label,
                 },
                 "top_drifts": _extract_top_drifts(content),
             }
@@ -474,8 +558,38 @@ def _extract_descriptions(
 
 
 def _extract_top_drifts(content: Mapping[str, object]) -> list[str]:
-    drifts = content.get("top_drifts") or content.get("drift_reasons") or []
-    return _ensure_strings(drifts)[:3]
+    candidates: list[str] = []
+    def add_candidate(text: str | None) -> None:
+        if not text:
+            return
+        text = text.strip()
+        if not text or text in candidates:
+            return
+        candidates.append(text)
+    drifts_raw = content.get("top_drifts") or content.get("drift_reasons") or []
+    for entry in cast(list[object], drifts_raw):
+        if isinstance(entry, str):
+            add_candidate(entry)
+        elif isinstance(entry, Mapping):
+            text = entry.get("reason") or entry.get("summary") or entry.get("label")
+            if isinstance(text, str):
+                add_candidate(text)
+        if len(candidates) >= MAX_TOP_DRIFTS:
+            return candidates[:MAX_TOP_DRIFTS]
+    for entry in cast(list[dict[str, object]], content.get("trigger_details") or []):
+        reason = entry.get("reason")
+        classification = entry.get("classification")
+        if isinstance(reason, str):
+            label = f"{reason} ({classification})" if isinstance(classification, str) else reason
+            add_candidate(label)
+        if len(candidates) >= MAX_TOP_DRIFTS:
+            break
+    if not candidates:
+        for reason in cast(list[str], content.get("trigger_reasons") or []):
+            add_candidate(reason)
+            if len(candidates) >= MAX_TOP_DRIFTS:
+                break
+    return candidates[:MAX_TOP_DRIFTS]
 
 
 def _ensure_strings(value: object | None) -> list[str]:
@@ -506,6 +620,20 @@ def _flatten_summary(value: object | None) -> str:
             parts.append(f"{key}: {val}")
         return "; ".join(parts)
     return ""
+
+
+def _extract_pattern_keys(value: object | None) -> list[str]:
+    if not isinstance(value, Mapping):
+        return []
+    keys: list[str] = []
+    for raw_key in value.keys():
+        if isinstance(raw_key, str):
+            keys.append(raw_key)
+        elif raw_key is not None:
+            keys.append(str(raw_key))
+        if len(keys) >= MAX_PATTERN_KEYS:
+            break
+    return keys
 
 def _build_fleet_summary(index_data: dict[str, object], run_entry: dict[str, object]) -> dict[str, object]:
     cluster_count = _coerce_int_from_dict(run_entry, "cluster_count")
@@ -538,11 +666,13 @@ def _build_review_entry(run_health_dir: Path, run_id: str, review_paths: list[Pa
 def _build_cluster_entries(paths: list[Path], run_health_dir: Path, run_id: str) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
     for path in sorted(paths, key=lambda candidate: candidate.as_posix()):
+        content = _load_json_object(path)
+        label_value = _extract_content_label(content) or _extract_cluster_label(path, run_id)
         entries.append(
             {
-                "cluster_label": _extract_cluster_label(path, run_id),
+                "cluster_label": label_value,
                 "path": path.relative_to(run_health_dir).as_posix(),
-                "content": _load_json_object(path),
+                "content": content,
             }
         )
     return entries
@@ -645,9 +775,70 @@ def _load_json_object(path: Path) -> object:
 def _extract_cluster_label(path: Path, run_id: str) -> str | None:
     stem = path.stem
     prefix = f"{run_id}-"
-    if stem.startswith(prefix):
-        return stem[len(prefix) :]
+    trimmed = stem[len(prefix) :] if stem.startswith(prefix) else stem
+    for suffix in ("-assessment", "-drilldown", "-trigger", "-comparison"):
+        if trimmed.endswith(suffix):
+            trimmed = trimmed[: -len(suffix)]
+            break
+    return trimmed or None
+
+
+def _extract_content_label(content: object | None) -> str | None:
+    if not isinstance(content, Mapping):
+        return None
+    for key in ("label", "cluster_label"):
+        candidate = content.get(key)
+        if isinstance(candidate, str):
+            return candidate
     return None
+
+
+def _normalize_reference_label(value: object | None, label_map: dict[str, str]) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = normalize_ref(value)
+    if not normalized:
+        return None
+    if normalized in label_map.values():
+        return normalized
+    if value in label_map:
+        return label_map[value]
+    # fallback to normalized string even if not previously recorded
+    return normalized
+
+
+def _extract_auto_drilldown_purpose(content: dict[str, object]) -> bool:
+    purpose = content.get("purpose")
+    if isinstance(purpose, str) and purpose == "auto-drilldown":
+        return True
+    metadata = content.get("payload")
+    if isinstance(metadata, Mapping):
+        if metadata.get("purpose") == "auto-drilldown":
+            return True
+    return False
+
+
+def _is_auto_drilldown_entry(entry: dict[str, object]) -> bool:
+    content = cast(dict[str, object], entry.get("content") or {})
+    return _extract_auto_drilldown_purpose(content)
+
+
+def _extract_comparison_clusters(path: object | None, run_id: str, label_map: dict[str, str]) -> tuple[str | None, str | None]:
+    if not isinstance(path, str):
+        return None, None
+    name = Path(path).stem
+    if name.startswith(f"{run_id}-"):
+        name = name[len(run_id) + 1 :]
+    for suffix in ("-comparison", "-diff"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    if "-vs-" not in name:
+        return None, None
+    primary_part, secondary_part = name.split("-vs-", 1)
+    primary = _normalize_reference_label(primary_part, label_map)
+    secondary = _normalize_reference_label(secondary_part, label_map)
+    return primary, secondary
 
 
 def _build_summary_text(

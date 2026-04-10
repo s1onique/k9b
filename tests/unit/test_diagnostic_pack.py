@@ -36,17 +36,42 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                 json.dumps(index_data), encoding="utf-8"
             )
             # write artifacts per category
+            assessment_payload = {
+                "cluster_label": "cluster-a",
+                "assessment": {
+                    "health_rating": "degraded",
+                    "findings": [{"description": "pod pressure"}],
+                    "hypotheses": [{"description": "control plane drift"}],
+                    "next_checks": [{"description": "capture pod logs"}],
+                    "recommended_action": {"description": "investigate workloads"},
+                },
+            }
             (health_dir / "assessments" / f"{run_id}-cluster-a.json").write_text(
-                "{}", encoding="utf-8"
+                json.dumps(assessment_payload), encoding="utf-8"
             )
+            drilldown_payload = {
+                "cluster_label": "cluster-a",
+                "trigger_reasons": ["CrashLoopBackOff"],
+                "warning_events": [{"reason": "CrashLoopBackOff"}],
+                "non_running_pods": [{"name": "pod"}],
+                "affected_namespaces": ["default"],
+                "pattern_details": {"pattern": "failure"},
+                "summary": {"severity": "high"},
+            }
             (health_dir / "drilldowns" / f"{run_id}-cluster-a.json").write_text(
-                "{}", encoding="utf-8"
+                json.dumps(drilldown_payload), encoding="utf-8"
             )
             (health_dir / "triggers" / f"{run_id}-cluster-a.json").write_text(
                 "{}", encoding="utf-8"
             )
+            comparison_payload = {
+                "summary": "comparison summary",
+                "top_drifts": ["control plane version drift"],
+                "primary_cluster_label": "cluster-a",
+                "secondary_cluster_label": "cluster-b",
+            }
             (health_dir / "comparisons" / f"{run_id}-cluster-a-vs-cluster-b-comparison.json").write_text(
-                "{}", encoding="utf-8"
+                json.dumps(comparison_payload), encoding="utf-8"
             )
             (health_dir / "reviews" / f"{run_id}-review.json").write_text(
                 json.dumps({"rating": "ok"}), encoding="utf-8"
@@ -56,6 +81,16 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
             )
             (health_dir / "external-analysis" / f"{run_id}-next-check-plan.json").write_text(
                 "{}", encoding="utf-8"
+            )
+            external_diagnostic = {
+                "cluster_label": "cluster-a",
+                "suggested_next_checks": ["external check"],
+                "findings": ["external finding"],
+                "summary": "external summary",
+                "purpose": "auto-drilldown",
+            }
+            (health_dir / "external-analysis" / f"{run_id}-cluster-a-diag.json").write_text(
+                json.dumps(external_diagnostic), encoding="utf-8"
             )
             packs_dir = Path(tmpdir) / "packs"
             pack_path = create_diagnostic_pack(run_id, runs_dir, output_dir=packs_dir)
@@ -122,10 +157,33 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                     "review_input_14b.json",
                 )
                 self.assertIn("review_bundle.json", review_input.get("artifact_manifest", {}).get("included_paths", []))
-                self.assertIsInstance(review_input.get("cluster_summaries"), list)
+                cluster_summary = review_input.get("cluster_summaries", [])[0]
+                self.assertEqual(cluster_summary.get("cluster_label"), "cluster-a")
+                self.assertTrue(cluster_summary.get("top_findings"))
+                self.assertTrue(cluster_summary.get("top_hypotheses"))
+                self.assertTrue(cluster_summary.get("top_next_checks"))
+                self.assertIsNotNone(cluster_summary.get("drilldown_summary"))
+                self.assertTrue(cluster_summary.get("artifact_paths", {}).get("external_analysis"))
                 self.assertIsInstance(review_input.get("fleet_summary"), dict)
+                review_summary = review_input.get("review_summary", {})
+                selected = review_summary.get("selected_drilldowns", [])
+                if selected:
+                    self.assertIsNotNone(selected[0].get("cluster_label"))
+                    self.assertEqual(selected[0].get("cluster_label"), "cluster-a")
+                comparison_detail = review_input.get("comparison_summary", [])[0]
+                self.assertIsNotNone(comparison_detail.get("summary", {}).get("primary_cluster"))
+                self.assertIsNotNone(comparison_detail.get("summary", {}).get("secondary_cluster"))
+                self.assertTrue(comparison_detail.get("top_drifts"))
+                top_drifts = comparison_detail.get("top_drifts") or []
+                self.assertTrue(any("control plane version drift" in drift for drift in top_drifts))
                 self.assertNotIn("pod_descriptions", json.dumps(review_input))
                 self.assertNotIn("warning_events", json.dumps(review_input))
+                artifact_paths = cluster_summary.get("artifact_paths", {})
+                self.assertIsNotNone(artifact_paths.get("drilldown"))
+                self.assertTrue(
+                    "external-analysis/run-1-cluster-a-diag.json"
+                    in artifact_paths.get("external_analysis", []),
+                )
 
     def test_structured_log_events_emit_when_building_pack(self) -> None:
         run_id = "run-logging"
