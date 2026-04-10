@@ -2,6 +2,14 @@
 
 Fixture-driven Kubernetes diagnostics agent that can ingest replayable snapshots or collect real cluster state. Prefer running commands through the project virtual environment (`.venv/bin/python`).
 
+## Core principles
+
+- Deterministic evidence and assessment logic is the primary path; any provider-assisted branch is opt-in, auditable, and never treated as the source of truth.
+- Artifact-first runs live in `runs/health` so every execution is replayable, reviewable, and tied to the same review, proposal, and UI workflows that operators actually follow.
+- Signal, findings, hypotheses, next-evidence actions, and recommended steps stay distinct so reviewers can trace how each conclusion was reached and what still needs confirmation.
+- Operator usefulness matters more than chatter; the system foregrounds review, handoff, and safe follow-up, keeping optional provider output confined to advisory insights and gating live action on explicit approval.
+- This project delivers a trustworthy diagnostic workflow rather than generic AI commentary; every recommendation remains grounded in deterministic artifacts, explicit evidence, and gateable operator steps.
+
 ## Data model and run lifecycle
 
 Artifact-first semantics, entity definitions, and the current run lifecycle are documented in [docs/data-model.md](docs/data-model.md). Refer to that page before making UI, persistence, or workflow changes so future work learns the current contracts instead of inferring them from code.

@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import cast
 
-from scripts.build_diagnostic_pack import create_diagnostic_pack
+from scripts.build_diagnostic_pack import REVIEW_BUNDLE_SCHEMA, create_diagnostic_pack
 from tests.fixtures.ui_index_sample import sample_ui_index
 
 
@@ -69,14 +69,29 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                 self.assertIn("external-analysis/run-1-review-enrichment.json", names)
                 self.assertIn("external-analysis/run-1-next-check-plan.json", names)
                 self.assertIn("digest.md", names)
+                self.assertIn("review_bundle.json", names)
                 manifest = json.loads(archive.read("manifest.json"))
                 self.assertEqual(manifest.get("run_id"), run_id)
                 self.assertGreaterEqual(manifest.get("file_count"), 1)
                 file_paths = [entry.get("path") for entry in manifest.get("files", [])]
                 self.assertIn("digest.md", file_paths)
+                self.assertIn("review_bundle.json", file_paths)
                 summary = archive.read("summary.md").decode("utf-8")
                 self.assertIn("Degraded clusters", summary)
                 digest = archive.read("digest.md").decode("utf-8")
                 self.assertIn("Diagnostic pack digest", digest)
                 self.assertIn("## Run identity", digest)
                 self.assertIn("## Artifact map", digest)
+                bundle = json.loads(archive.read("review_bundle.json"))
+                self.assertEqual(bundle.get("schema_version"), REVIEW_BUNDLE_SCHEMA)
+                self.assertEqual(bundle.get("run", {}).get("run_id"), run_id)
+                self.assertEqual(bundle.get("review", {}).get("path"), f"reviews/{run_id}-review.json")
+                self.assertEqual(bundle.get("review", {}).get("content", {}).get("rating"), "ok")
+                self.assertIsInstance(bundle.get("assessments"), list)
+                self.assertEqual(bundle.get("assessments", [])[0].get("cluster_label"), "cluster-a")
+                self.assertIn(
+                    "assessments/run-1-cluster-a.json",
+                    bundle.get("artifact_manifest", {}).get("included_paths", []),
+                )
+                self.assertIn("external-analysis/run-1-review-enrichment.json",
+                    bundle.get("artifact_manifest", {}).get("included_paths", []))

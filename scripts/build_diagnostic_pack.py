@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, cast
 
 PACK_METADATA_CATEGORY = "pack_metadata"
+REVIEW_BUNDLE_SCHEMA = "diagnostic-pack-review-bundle/v1"
 
 
 def create_diagnostic_pack(
@@ -60,8 +61,21 @@ def create_diagnostic_pack(
         prompt_text = _build_analyst_prompt(run_id, run_label)
         (temp_dir / "analyst_prompt.md").write_text(prompt_text, encoding="utf-8")
         manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "analyst_prompt.md"})
-        manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "manifest.json"})
-        manifest = _build_manifest(run_id, run_label, manifest_entries)
+        final_manifest_entries = list(manifest_entries)
+        final_manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "review_bundle.json"})
+        final_manifest_entries.append({"category": PACK_METADATA_CATEGORY, "path": "manifest.json"})
+        review_bundle = _build_review_bundle(
+            run_id=run_id,
+            run_health_dir=run_health_dir,
+            artifacts=artifacts,
+            index_data=index_data,
+            run_entry=run_entry,
+            included_paths=[entry["path"] for entry in final_manifest_entries],
+        )
+        (temp_dir / "review_bundle.json").write_text(
+            json.dumps(review_bundle, indent=2), encoding="utf-8"
+        )
+        manifest = _build_manifest(run_id, run_label, final_manifest_entries)
         (temp_dir / "manifest.json").write_text(
             json.dumps(manifest, indent=2), encoding="utf-8"
         )
@@ -125,6 +139,192 @@ def _build_manifest(run_id: str, run_label: str, files: Iterable[dict[str, str]]
         "file_count": len(files_list),
         "files": files_list,
     }
+
+
+def _build_review_bundle(
+    run_id: str,
+    run_health_dir: Path,
+    artifacts: dict[str, list[Path]],
+    index_data: dict[str, object],
+    run_entry: dict[str, object],
+    included_paths: Iterable[str],
+) -> dict[str, object]:
+    run_label = run_entry.get("run_label")
+    run_id_value = str(run_entry.get("run_id") or run_id)
+    timestamp = run_entry.get("timestamp")
+    review_paths = artifacts.get("review", [])
+    return {
+        "schema_version": REVIEW_BUNDLE_SCHEMA,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "run": {
+            "run_label": str(run_label) if isinstance(run_label, str) else None,
+            "run_id": run_id_value,
+            "timestamp": str(timestamp) if timestamp else None,
+        },
+        "fleet_summary": _build_fleet_summary(index_data, run_entry),
+        "ui_index": dict(index_data),
+        "review": _build_review_entry(run_health_dir, run_id, review_paths),
+        "assessments": _build_cluster_entries(artifacts.get("assessments", []), run_health_dir, run_id),
+        "drilldowns": _build_cluster_entries(artifacts.get("drilldowns", []), run_health_dir, run_id),
+        "triggers": _build_cluster_entries(artifacts.get("triggers", []), run_health_dir, run_id),
+        "comparisons": _build_comparison_entries(artifacts.get("comparisons", []), run_health_dir),
+        "external_analysis": _build_external_analysis_entries(artifacts.get("external_analysis", []), run_health_dir),
+        "proposals": _build_proposal_entries(index_data),
+        "deterministic_next_checks": _first_mapping(index_data, run_entry, "deterministic_next_checks"),
+        "review_enrichment": _extract_mapping(run_entry, "review_enrichment"),
+        "provider_execution": _extract_mapping(run_entry, "provider_execution"),
+        "diagnostic_pack_review": _extract_mapping(run_entry, "diagnostic_pack_review"),
+        "artifact_manifest": {
+            "summary_path": "summary.md",
+            "digest_path": "digest.md",
+            "ui_index_path": "ui-index.json",
+            "review_bundle_path": "review_bundle.json",
+            "included_paths": _normalize_included_paths(included_paths),
+        },
+    }
+
+
+def _build_fleet_summary(index_data: dict[str, object], run_entry: dict[str, object]) -> dict[str, object]:
+    cluster_count = _coerce_int_from_dict(run_entry, "cluster_count")
+    fleet_status = cast(dict[str, object], index_data.get("fleet_status") or {})
+    degraded_clusters = cast(list[str], fleet_status.get("degraded_clusters") or [])
+    degraded_count = len(degraded_clusters)
+    healthy_count = None
+    if cluster_count or degraded_count:
+        healthy_count = max(cluster_count - degraded_count, 0)
+    return {
+        "cluster_count": cluster_count,
+        "healthy_count": healthy_count,
+        "degraded_count": degraded_count,
+        "proposal_count": _coerce_optional_int(run_entry, "proposal_count"),
+        "drilldown_count": _coerce_optional_int(run_entry, "drilldown_count"),
+        "external_analysis_count": _coerce_optional_int(run_entry, "external_analysis_count"),
+    }
+
+
+def _build_review_entry(run_health_dir: Path, run_id: str, review_paths: list[Path]) -> dict[str, object | None]:
+    if not review_paths:
+        return {"path": None, "content": None}
+    selected = min(review_paths, key=lambda path: path.as_posix())
+    return {
+        "path": selected.relative_to(run_health_dir).as_posix(),
+        "content": _load_json_object(selected),
+    }
+
+
+def _build_cluster_entries(paths: list[Path], run_health_dir: Path, run_id: str) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in sorted(paths, key=lambda candidate: candidate.as_posix()):
+        entries.append(
+            {
+                "cluster_label": _extract_cluster_label(path, run_id),
+                "path": path.relative_to(run_health_dir).as_posix(),
+                "content": _load_json_object(path),
+            }
+        )
+    return entries
+
+
+def _build_comparison_entries(paths: list[Path], run_health_dir: Path) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in sorted(paths, key=lambda candidate: candidate.as_posix()):
+        entries.append(
+            {
+                "cluster_label": None,
+                "path": path.relative_to(run_health_dir).as_posix(),
+                "content": _load_json_object(path),
+            }
+        )
+    return entries
+
+
+def _build_external_analysis_entries(paths: list[Path], run_health_dir: Path) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in sorted(paths, key=lambda candidate: candidate.as_posix()):
+        content = _load_json_object(path)
+        cluster_label = None
+        if isinstance(content, Mapping):
+            raw_label = content.get("cluster_label")
+            if isinstance(raw_label, str):
+                cluster_label = raw_label
+        entries.append(
+            {
+                "cluster_label": cluster_label,
+                "path": path.relative_to(run_health_dir).as_posix(),
+                "content": content,
+            }
+        )
+    return entries
+
+
+def _build_proposal_entries(index_data: dict[str, object]) -> list[dict[str, object]]:
+    proposals = cast(list[dict[str, object]], index_data.get("proposals") or [])
+    entries: list[dict[str, object]] = []
+    for proposal in proposals:
+        proposal_id = proposal.get("proposal_id")
+        artifact_path = proposal.get("artifact_path")
+        path_value = str(artifact_path) if artifact_path else f"proposals/{proposal_id or 'unknown'}.json"
+        entries.append(
+            {
+                "proposal_id": str(proposal_id) if proposal_id is not None else None,
+                "path": path_value,
+                "content": dict(proposal),
+            }
+        )
+    return entries
+
+
+def _coerce_optional_int(source: dict[str, object], key: str) -> int | None:
+    if key not in source:
+        return None
+    value = source.get(key)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_mapping(source: dict[str, object], key: str) -> dict[str, object] | None:
+    value = source.get(key)
+    if isinstance(value, Mapping):
+        return dict(value)
+    return None
+
+
+def _first_mapping(
+    primary: dict[str, object], secondary: dict[str, object], key: str
+) -> dict[str, object] | None:
+    mapping = _extract_mapping(primary, key)
+    if mapping is not None:
+        return mapping
+    return _extract_mapping(secondary, key)
+
+
+def _normalize_included_paths(paths: Iterable[str]) -> list[str]:
+    seen: list[str] = []
+    for path in paths:
+        if path not in seen:
+            seen.append(path)
+    return seen
+
+
+def _load_json_object(path: Path) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _extract_cluster_label(path: Path, run_id: str) -> str | None:
+    stem = path.stem
+    prefix = f"{run_id}-"
+    if stem.startswith(prefix):
+        return stem[len(prefix) :]
+    return None
 
 
 def _build_summary_text(
