@@ -46,6 +46,19 @@ print(os.path.join(output_dir, "health"))
 PY
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|y|Y)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+BUILD_DIAGNOSTIC_PACK="${HEALTH_BUILD_DIAGNOSTIC_PACK:-0}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --config)
@@ -109,6 +122,34 @@ if "$PYTHON" -m k8s_diag_agent.cli health-summary --runs-dir "$RUNS_DIR" > "$SUM
 else
   echo "Health summary failed; inspect $RUNS_DIR for artifacts." >&2
   exit 1
+fi
+
+if is_truthy "$BUILD_DIAGNOSTIC_PACK"; then
+  echo "Building diagnostic pack for latest run"
+  UI_INDEX_PATH="$RUNS_DIR/ui-index.json"
+  if [[ ! -f "$UI_INDEX_PATH" ]]; then
+    echo "UI index missing; cannot determine run_id" >&2
+  else
+    RUN_ID="$($PYTHON - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("$UI_INDEX_PATH")
+data = json.loads(path.read_text(encoding="utf-8"))
+run_entry = data.get("run", {})
+run_id = run_entry.get("run_id")
+print(run_id or "")
+PY
+)"
+    if [[ -n "$RUN_ID" ]]; then
+      "$PYTHON" "$ROOT/scripts/build_diagnostic_pack.py" --run-id "$RUN_ID" --runs-dir "$RUNS_DIR"
+      if ! "$PYTHON" "$ROOT/scripts/update_ui_index.py" --runs-dir "$RUNS_DIR" --run-id "$RUN_ID"; then
+        echo "Warning: unable to refresh UI index after pack creation" >&2
+      fi
+    else
+      echo "Unable to read run_id from UI index" >&2
+    fi
+  fi
 fi
 
   if [[ $GENERATE_DIGEST -eq 1 ]]; then
