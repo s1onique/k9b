@@ -10,7 +10,17 @@ import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from typing import Iterable, Mapping, cast
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from k8s_diag_agent.structured_logging import emit_structured_log
+
+COMPONENT_NAME = "diagnostic-pack-builder"
 
 PACK_METADATA_CATEGORY = "pack_metadata"
 REVIEW_BUNDLE_SCHEMA = "diagnostic-pack-review-bundle/v1"
@@ -29,11 +39,31 @@ def create_diagnostic_pack(
     index_data = json.loads(index_path.read_text(encoding="utf-8"))
     run_entry = cast(dict[str, object], index_data.get("run") or {})
     run_label = str(run_entry.get("run_label") or run_id)
-    print(f"Preparing diagnostic pack for run {run_id} ({run_label})")
+    _log_structured_event(
+        event="diagnostic-pack-start",
+        message=f"Preparing diagnostic pack for run {run_id} ({run_label})",
+        run_label=run_label,
+        run_id=run_id,
+        metadata={
+            "runs_dir": str(runs_dir),
+            "run_health_dir": str(run_health_dir),
+        },
+    )
 
     artifacts = _collect_run_artifacts(run_id, run_health_dir)
     for category, paths in artifacts.items():
-        print(f"  Collected {len(paths)} {category.replace('_', ' ')} artifact(s)")
+        _log_structured_event(
+            event="diagnostic-pack-collection-summary",
+            message=f"Collected {len(paths)} {category.replace('_', ' ')} artifact(s)",
+            run_label=run_label,
+            run_id=run_id,
+            metadata={
+                "artifact_kind": category,
+                "artifact_count": len(paths),
+                "runs_dir": str(runs_dir),
+                "run_health_dir": str(run_health_dir),
+            },
+        )
 
     temp_dir = Path(tempfile.mkdtemp(prefix=f"diagnostic-pack-{run_id}-"))
     try:
@@ -81,10 +111,42 @@ def create_diagnostic_pack(
         )
         final_output_dir = output_dir or run_health_dir / "diagnostic-packs"
         pack_path = _zip_pack(temp_dir, final_output_dir, run_id)
-        print(f"Diagnostic pack ready: {pack_path}")
+        _log_structured_event(
+            event="diagnostic-pack-ready",
+            message=f"Diagnostic pack ready: {pack_path}",
+            run_label=run_label,
+            run_id=run_id,
+            metadata={
+                "pack_path": str(pack_path),
+                "output_dir": str(final_output_dir),
+                "runs_dir": str(runs_dir),
+                "run_health_dir": str(run_health_dir),
+            },
+        )
         return pack_path
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _log_structured_event(
+    *,
+    event: str,
+    message: str,
+    run_label: str,
+    run_id: str | None,
+    severity: str = "INFO",
+    metadata: Mapping[str, object] | None = None,
+) -> None:
+    metadata_dict = dict(metadata or {})
+    emit_structured_log(
+        component=COMPONENT_NAME,
+        message=message,
+        severity=severity,
+        run_label=run_label,
+        run_id=run_id,
+        metadata=metadata_dict,
+        event=event,
+    )
 
 
 def _collect_run_artifacts(run_id: str, run_health_dir: Path) -> dict[str, list[Path]]:
@@ -162,7 +224,6 @@ def _build_review_bundle(
             "timestamp": str(timestamp) if timestamp else None,
         },
         "fleet_summary": _build_fleet_summary(index_data, run_entry),
-        "ui_index": dict(index_data),
         "review": _build_review_entry(run_health_dir, run_id, review_paths),
         "assessments": _build_cluster_entries(artifacts.get("assessments", []), run_health_dir, run_id),
         "drilldowns": _build_cluster_entries(artifacts.get("drilldowns", []), run_health_dir, run_id),
