@@ -16,6 +16,8 @@ from .model import (
     DeterministicNextCheckClusterView,
     DeterministicNextCheckSummaryView,
     DeterministicNextChecksView,
+    DiagnosticPackReviewView,
+    DiagnosticPackView,
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
     FindingsView,
@@ -104,6 +106,8 @@ class RunPayload(TypedDict):
     nextCheckQueueExplanation: NextCheckQueueExplanationPayload | None
     deterministicNextChecks: DeterministicNextChecksPayload | None
     plannerAvailability: PlannerAvailabilityPayload | None
+    diagnosticPackReview: DiagnosticPackReviewPayload | None
+    diagnosticPack: DiagnosticPackPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -359,6 +363,34 @@ class ReviewEnrichmentStatusPayload(TypedDict, total=False):
     runProvider: str | None
 
 
+class DiagnosticPackReviewCandidatePayload(TypedDict, total=False):
+    providerReview: dict[str, object] | None
+
+
+class DiagnosticPackReviewPayload(TypedDict, total=False):
+    timestamp: str | None
+    summary: str | None
+    majorDisagreements: list[str]
+    missingChecks: list[str]
+    rankingIssues: list[str]
+    genericChecks: list[str]
+    recommendedNextActions: list[str]
+    driftMisprioritized: bool
+    confidence: str | None
+    providerStatus: str | None
+    providerSummary: str | None
+    providerErrorSummary: str | None
+    providerSkipReason: str | None
+    providerReview: dict[str, object] | None
+    artifactPath: str | None
+
+
+class DiagnosticPackPayload(TypedDict, total=False):
+    path: str | None
+    timestamp: str | None
+    label: str | None
+
+
 class ProviderExecutionBranchPayload(TypedDict, total=False):
     enabled: bool | None
     provider: str | None
@@ -602,6 +634,8 @@ def build_run_payload(
             context.run.deterministic_next_checks
         ),
         "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
+        "diagnosticPackReview": _serialize_diagnostic_pack_review(context.run.diagnostic_pack_review),
+        "diagnosticPack": _serialize_diagnostic_pack(context.run.diagnostic_pack),
         "nextCheckExecutionHistory": _serialize_execution_history(
             context.run.next_check_execution_history
         ),
@@ -1180,6 +1214,40 @@ def _serialize_planner_availability(
         "hint": view.hint,
         "artifactPath": view.artifact_path,
         "nextActionHint": view.next_action_hint,
+    }
+
+
+def _serialize_diagnostic_pack_review(
+    view: DiagnosticPackReviewView | None,
+) -> DiagnosticPackReviewPayload | None:
+    if not view:
+        return None
+    return {
+        "timestamp": view.timestamp,
+        "summary": view.summary,
+        "majorDisagreements": list(view.major_disagreements),
+        "missingChecks": list(view.missing_checks),
+        "rankingIssues": list(view.ranking_issues),
+        "genericChecks": list(view.generic_checks),
+        "recommendedNextActions": list(view.recommended_next_actions),
+        "driftMisprioritized": view.drift_misprioritized,
+        "confidence": view.confidence,
+        "providerStatus": view.provider_status,
+        "providerSummary": view.provider_summary,
+        "providerErrorSummary": view.provider_error_summary,
+        "providerSkipReason": view.provider_skip_reason,
+        "providerReview": dict(view.provider_review) if view.provider_review else None,
+        "artifactPath": view.artifact_path,
+    }
+
+
+def _serialize_diagnostic_pack(view: DiagnosticPackView | None) -> DiagnosticPackPayload | None:
+    if not view:
+        return None
+    return {
+        "path": view.path,
+        "timestamp": view.timestamp,
+        "label": view.label,
     }
 
 

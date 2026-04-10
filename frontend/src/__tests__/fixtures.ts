@@ -1,9 +1,13 @@
 import type {
   ClusterDetailPayload,
+  DiagnosticPackReview,
   FleetPayload,
   NextCheckPlanCandidate,
   NotificationsPayload,
   ProposalsPayload,
+  ProviderExecution,
+  ReviewEnrichment,
+  ReviewEnrichmentStatus,
   RunPayload,
 } from "../types";
 
@@ -102,6 +106,113 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     commandPreview: "kubectl get nodes --context cluster-a",
   },
 ];
+
+export const sampleDiagnosticPackReview: DiagnosticPackReview = {
+  timestamp: "2026-04-06T12:02:00Z",
+  summary: "Review detected ranking mismatches and suggested additional confirmation steps.",
+  majorDisagreements: [
+    "cluster-b priority order conflicts with deterministic assessment",
+    "planner ranked storage downstream of networking despite earlier alerts",
+  ],
+  missingChecks: [
+    "Validate storage latency from cluster-b",
+    "Capture node drain readiness for cluster-a",
+  ],
+  rankingIssues: [
+    "Top recommendations favor low-utility checks",
+    "Evidence-sourced prioritization differs from deterministic triggers",
+  ],
+  genericChecks: [
+    "Review kubelet logs before escalating",
+    "Double-check baseline release parity",
+  ],
+  recommendedNextActions: [
+    "Confirm drift detection before reordering planner queue",
+    "Survey provider-proposed actions with operator",
+  ],
+  driftMisprioritized: true,
+  confidence: "medium",
+  providerStatus: "provider-ok",
+  providerSummary: "Provider k8sgpt validated the review and provided metadata.",
+  providerErrorSummary: null,
+  providerSkipReason: null,
+  providerReview: { source: "k8sgpt", score: 0.92 },
+  artifactPath: "/artifacts/diagnostic-pack-review.json",
+};
+
+export const makeDiagnosticPackReview = (
+  overrides: Partial<DiagnosticPackReview> = {}
+): DiagnosticPackReview => ({
+  ...sampleDiagnosticPackReview,
+  ...overrides,
+  majorDisagreements:
+    overrides.majorDisagreements ?? [...sampleDiagnosticPackReview.majorDisagreements],
+  missingChecks: overrides.missingChecks ?? [...sampleDiagnosticPackReview.missingChecks],
+  rankingIssues: overrides.rankingIssues ?? [...sampleDiagnosticPackReview.rankingIssues],
+  genericChecks: overrides.genericChecks ?? [...sampleDiagnosticPackReview.genericChecks],
+  recommendedNextActions:
+    overrides.recommendedNextActions ?? [...sampleDiagnosticPackReview.recommendedNextActions],
+});
+
+export const sampleReviewEnrichmentStatus: ReviewEnrichmentStatus = {
+  status: "success",
+  reason: "Review enrichment succeeded and produced insights.",
+  provider: "k8sgpt",
+  policyEnabled: true,
+  providerConfigured: true,
+  adapterAvailable: true,
+  runEnabled: true,
+  runProvider: "k8sgpt",
+};
+
+export const makeReviewEnrichmentStatus = (
+  overrides: Partial<ReviewEnrichmentStatus> = {}
+): ReviewEnrichmentStatus => ({
+  ...sampleReviewEnrichmentStatus,
+  ...overrides,
+});
+
+export const sampleProviderExecution: ProviderExecution = {
+  autoDrilldown: {
+    enabled: true,
+    provider: "default",
+    maxPerRun: 3,
+    eligible: 2,
+    attempted: 1,
+    succeeded: 0,
+    failed: 1,
+    skipped: 0,
+    unattempted: 1,
+    budgetLimited: 1,
+    notes: "Reached max per run (3) before the 2nd eligible branch.",
+  },
+  reviewEnrichment: {
+    enabled: true,
+    provider: "k8sgpt",
+    maxPerRun: 1,
+    eligible: 1,
+    attempted: 1,
+    succeeded: 1,
+    failed: 0,
+    skipped: 0,
+    unattempted: 0,
+    budgetLimited: null,
+    notes: "Review enrichment artifact recorded.",
+  },
+};
+
+export const makeProviderExecution = (
+  overrides: Partial<ProviderExecution> = {}
+): ProviderExecution => ({
+  autoDrilldown: {
+    ...sampleProviderExecution.autoDrilldown,
+    ...overrides.autoDrilldown,
+  },
+  reviewEnrichment:
+    overrides.reviewEnrichment === undefined
+      ? sampleProviderExecution.reviewEnrichment
+      : overrides.reviewEnrichment,
+});
 
 export const sampleRun: RunPayload = {
   runId: "run-123",
@@ -215,32 +326,7 @@ export const sampleRun: RunPayload = {
       budgetExhausted: false,
     },
   },
-  providerExecution: {
-    autoDrilldown: {
-      enabled: true,
-      provider: "default",
-      maxPerRun: 3,
-      eligible: 2,
-      attempted: 1,
-      succeeded: 0,
-      failed: 1,
-      skipped: 0,
-      unattempted: 1,
-      budgetLimited: 1,
-      notes: "Reached max per run (3) before the 2nd eligible branch.",
-    },
-    reviewEnrichment: {
-      enabled: true,
-      eligible: 1,
-      attempted: 1,
-      succeeded: 1,
-      failed: 0,
-      skipped: 0,
-      unattempted: 0,
-      budgetLimited: null,
-      notes: "Review enrichment artifact recorded.",
-    },
-  },
+  providerExecution: sampleProviderExecution,
   reviewEnrichment: {
     status: "success",
     provider: "k8sgpt",
@@ -255,8 +341,8 @@ export const sampleRun: RunPayload = {
     errorSummary: null,
     skipReason: null,
   },
+  reviewEnrichmentStatus: sampleReviewEnrichmentStatus,
   nextCheckPlan: {
-    status: "success",
     summary: "Planner generated multiple advisory checks.",
     artifactPath: "/artifacts/next-check-plan.json",
     reviewPath: "/artifacts/run-123-review.json",
@@ -526,6 +612,7 @@ export const sampleRun: RunPayload = {
     nextActionHint:
       "Inspect the planner artifact for candidate context before taking any next-check action.",
   },
+  diagnosticPackReview: sampleDiagnosticPackReview,
   nextCheckExecutionHistory: [
     {
       timestamp: "2026-04-06T12:05:00Z",
@@ -560,6 +647,14 @@ export const sampleRun: RunPayload = {
       suggestedNextOperatorMove: "Retry candidate",
     },
   ],
+};
+
+export const makeRunWithOverrides = (overrides: Partial<RunPayload> = {}): RunPayload => {
+  const base = JSON.parse(JSON.stringify(sampleRun)) as RunPayload;
+  return {
+    ...base,
+    ...overrides,
+  };
 };
 
 export const sampleFleet: FleetPayload = {

@@ -115,6 +115,15 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(review_enrichment.top_concerns[0], "ingress latency")
         self.assertIsNone(context.run.review_enrichment_status)
 
+        diag_review = context.run.diagnostic_pack_review
+        self.assertIsNotNone(diag_review)
+        assert diag_review is not None
+        self.assertEqual(diag_review.summary, "Diagnostic pack second opinion")
+        self.assertEqual(diag_review.provider_status, "success")
+        self.assertIn("validate diagnostics", diag_review.recommended_next_actions)
+        self.assertEqual(diag_review.confidence, "medium")
+        self.assertEqual(diag_review.provider_review, {"meta": "value"})
+
         plan = context.run.next_check_plan
         self.assertIsNotNone(plan)
         assert plan is not None

@@ -162,6 +162,17 @@ class UIApiTests(unittest.TestCase):
         self.assertIn("commandPreview", first_entry)
         self.assertIn("planArtifactPath", first_entry)
 
+    def test_run_payload_exposes_diagnostic_pack_review_fields(self) -> None:
+        payload = build_run_payload(self.context)
+        review = payload.get("diagnosticPackReview")
+        self.assertIsNotNone(review)
+        assert review is not None
+        self.assertEqual(review.get("summary"), "Diagnostic pack second opinion")
+        self.assertEqual(review.get("providerStatus"), "success")
+        self.assertIn("validate diagnostics", review.get("recommendedNextActions", []))
+        self.assertEqual(review.get("timestamp"), "2026-01-01T00:15:00Z")
+        self.assertEqual(review.get("artifactPath"), "external-analysis/run-1-diagnostic-pack-review.json")
+
     def test_serialize_queue_appends_promoted_entries(self) -> None:
         promotions = [
             {

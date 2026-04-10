@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { AUTOREFRESH_STORAGE_KEY, QUEUE_VIEW_STORAGE_KEY } from "../App";
 import type { NotificationEntry } from "../types";
 import {
+  makeDiagnosticPackReview,
+  makeRunWithOverrides,
   sampleClusterDetail,
   sampleFleet,
   sampleNextCheckCandidates,
@@ -91,6 +93,16 @@ const createFetchMock = (payloads: Record<string, unknown>) =>
       json: () => Promise.resolve(payload),
     });
   });
+
+const renderAppWithRunOverride = async (overrides: Partial<RunPayload>) => {
+  const payloads = {
+    ...defaultPayloads,
+    "/api/run": makeRunWithOverrides(overrides),
+  };
+  vi.stubGlobal("fetch", createFetchMock(payloads));
+  render(<App />);
+  await screen.findByRole("heading", { name: /Fleet overview/i });
+};
 
 let setIntervalSpy: ReturnType<typeof vi.fn>;
 let clearIntervalSpy: ReturnType<typeof vi.fn>;
@@ -1084,8 +1096,9 @@ describe("App", () => {
     expect(
       screen.getByText(/Awaiting a run that has enrichment enabled./i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Provider k8sgpt/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run configuration disabled review enrichment/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Provider k8sgpt · Run configuration disabled review enrichment/i)
+    ).toBeInTheDocument();
   });
 
   test("shows provider name when run config enabled review enrichment", async () => {
@@ -1127,7 +1140,7 @@ describe("App", () => {
       name: /Provider-assisted advisory/i,
     });
     expect(screen.getByText(/Review enrichment reshaped the triage order/i)).toBeInTheDocument();
-    expect(screen.getByText(/Provider k8sgpt/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Provider k8sgpt/i).length).toBeGreaterThan(0);
     expect(
       screen.getByRole("link", { name: /View enrichment artifact/i })
     ).toBeInTheDocument();
@@ -1152,6 +1165,95 @@ describe("App", () => {
     expect(attemptedMatches.length).toBeGreaterThanOrEqual(1);
     const reviewMatches = scoped.getAllByText(/Review enrichment/i);
     expect(reviewMatches[0]).toBeInTheDocument();
+  });
+
+  test("renders diagnostic pack review panel when data exists", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", {
+      name: /Automated review insights/i,
+    });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText(/Review detected ranking mismatches/i)).toBeInTheDocument();
+    expect(screen.getByText(/Major disagreements · 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Missing checks · 2/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Provider k8sgpt validated the review and provided metadata./i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Provider flagged suspected drift misprioritization/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /View diagnostic pack review artifact/i })
+    ).toBeInTheDocument();
+  });
+
+  test("diagnostic pack review panel surfaces provider error details", async () => {
+    const runWithError = {
+      ...sampleRun,
+      diagnosticPackReview: makeDiagnosticPackReview({
+        providerErrorSummary: "Timeout contacting adapter",
+        providerStatus: "error",
+        majorDisagreements: ["Erroring provider"],
+      }),
+    };
+    const payloads = { ...defaultPayloads, "/api/run": runWithError };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", {
+      name: /Automated review insights/i,
+    });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText(/Timeout contacting adapter/i)).toBeInTheDocument();
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+    expect(within(panel!).getByText(/^error$/i)).toHaveClass("status-pill");
+    expect(screen.getByText(/Major disagreements · 1/i)).toBeInTheDocument();
+  });
+
+  test("diagnostic pack review panel handles skip-state with empty lists", async () => {
+    const runWithSkip = {
+      ...sampleRun,
+      diagnosticPackReview: makeDiagnosticPackReview({
+        majorDisagreements: [],
+        missingChecks: [],
+        rankingIssues: [],
+        recommendedNextActions: [],
+        providerStatus: null,
+        providerSkipReason: "Provider intentionally skipped for this run",
+        providerSummary: null,
+        providerErrorSummary: null,
+      }),
+    };
+    const payloads = { ...defaultPayloads, "/api/run": runWithSkip };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", {
+      name: /Automated review insights/i,
+    });
+    expect(heading).toBeInTheDocument();
+    expect(screen.queryByText(/Provider unspecified/i)).toBeNull();
+    expect(screen.getByText(/Provider intentionally skipped for this run/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Major disagreements ·/i)).toBeNull();
+    expect(screen.queryByText(/Missing checks ·/i)).toBeNull();
+    expect(screen.queryByText(/Recommended next actions/i)).toBeNull();
+  });
+
+  test("hides diagnostic pack review panel when the payload is missing", async () => {
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": {
+        ...sampleRun,
+        diagnosticPackReview: null,
+      },
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Provider-assisted advisory/i });
+    expect(screen.queryByText(/Automated review insights/i)).toBeNull();
+    expect(screen.queryByText(/Major disagreements/i)).toBeNull();
   });
 
   test("renders llm activity panel and filters entries", async () => {

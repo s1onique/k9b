@@ -241,6 +241,23 @@ def sample_ui_index() -> dict[str, object]:
                 "artifactPath": "runs/health/external-analysis/health-run-20260408T061911Z-next-check-plan.json",
                 "nextActionHint": "Inspect the planner artifact for candidate context before taking any next-check action.",
             },
+            "diagnostic_pack_review": {
+                "timestamp": "2026-01-01T00:15:00Z",
+                "summary": "Diagnostic pack second opinion",
+                "majorDisagreements": ["planner prioritizes different clusters"],
+                "missingChecks": ["missing deterministic candidates"],
+                "rankingIssues": [],
+                "genericChecks": ["review generic health"],
+                "recommendedNextActions": ["validate diagnostics"],
+                "driftMisprioritized": False,
+                "confidence": "medium",
+                "providerStatus": "success",
+                "providerSummary": "LLM review agrees",
+                "providerErrorSummary": None,
+                "providerSkipReason": None,
+                "providerReview": {"meta": "value"},
+                "artifactPath": "external-analysis/run-1-diagnostic-pack-review.json",
+            },
             "next_check_queue": [
                 {
                     "candidateId": "candidate-vague",

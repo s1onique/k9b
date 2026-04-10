@@ -23,9 +23,49 @@ Deeper doctrine, playbooks, and eval definitions live under `docs/doctrine/`.
 
 ---
 
-## How to use this repo as an agent
+## Reading policy by task type
 
-Before doing substantial work, read in this order:
+Choose the lightest bootstrap that still keeps the work truthful and safe.
+
+### Fast implementation path (default for routine coding tasks)
+
+Use this path for:
+- bug fixes
+- small features
+- UI/API/model updates
+- test additions
+- verification-focused follow-ups
+
+Read in this order:
+
+1. `.kilocode/rules/00-global.md`
+2. `.kilocode/rules/20-architecture-doctrine.md`
+3. `.kilocode/rules/05-fast-task-bootstrap.md`
+4. `.kilocode/rules/30-output-contracts.md`
+5. `.kilocode/rules/40-tool-use.md`
+6. `.kilocode/rules/memory-bank/current.md`
+7. directly relevant code/tests/docs for the task
+8. `docs/data-model.md` only if the task affects artifact, UI, API, or persistence contracts
+
+Do not read by default on this path:
+- `README.md`
+- all memory-bank files
+- doctrine playbooks
+- broad doctrine files unrelated to the task
+
+If a routine implementation prompt explicitly chooses the **Fast implementation path**, do not expand to the **Full planning / architecture path** unless a concrete blocker remains after reading the fast-path files and the directly relevant task files.
+
+### Full planning / architecture path
+
+Use this path for:
+- architecture work
+- doctrine changes
+- major refactors
+- roadmap/backlog decisions
+- memory-bank updates
+- contract redesign
+
+Read in this order:
 
 1. `.kilocode/rules/00-global.md`
 2. `.kilocode/rules/10-agent-mission.md`
@@ -35,8 +75,32 @@ Before doing substantial work, read in this order:
 6. `.kilocode/rules/50-kubernetes-monitoring-domain.md`
 7. relevant files under `.kilocode/rules/memory-bank/`
 8. relevant files under `docs/doctrine/`
+9. `docs/data-model.md`
+10. `README.md` only when startup/runbook/operator workflow details matter
 
-Do not assume the current task is context-free.
+### Human-reference files
+
+These files are not required for routine implementation tasks.
+- `README.md`
+- broad playbooks under `docs/doctrine/playbooks/`
+
+Read them only when the task specifically needs:
+- startup/runbook behavior
+- local dev workflow
+- container workflow
+- higher-level design procedure
+
+---
+
+## How to use this repo as an agent
+
+Before doing substantial work, choose the appropriate reading path from **Reading policy by task type** above.
+
+- Use the **Fast implementation path** for routine coding tasks.
+- Use the **Full planning / architecture path** only for architecture, doctrine, roadmap, contract, or major refactor work.
+
+Do not default to the full path for routine implementation.
+Routine coding prompts should normally choose the Fast implementation path explicitly.
 
 ---
 
@@ -251,8 +315,8 @@ When escalating, state:
 
 For most non-trivial tasks:
 
-1. read repo guidance
-2. read relevant memory-bank context
+1. read repo guidance using the appropriate reading path above
+2. read the memory-bank context required by that path
 3. discover relevant files and tests
 4. inspect current implementation
 5. choose the smallest coherent change

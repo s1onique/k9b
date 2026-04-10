@@ -35,6 +35,8 @@ class RunView:
     next_check_queue: tuple[NextCheckQueueItemView, ...]
     next_check_queue_explanation: NextCheckQueueExplanationView | None
     deterministic_next_checks: DeterministicNextChecksView | None
+    diagnostic_pack_review: DiagnosticPackReviewView | None
+    diagnostic_pack: DiagnosticPackView | None
 
 
 @dataclass(frozen=True)
@@ -261,6 +263,32 @@ class ReviewEnrichmentView:
     artifact_path: str | None
     error_summary: str | None
     skip_reason: str | None
+
+
+@dataclass(frozen=True)
+class DiagnosticPackReviewView:
+    timestamp: str | None
+    summary: str | None
+    major_disagreements: tuple[str, ...]
+    missing_checks: tuple[str, ...]
+    ranking_issues: tuple[str, ...]
+    generic_checks: tuple[str, ...]
+    recommended_next_actions: tuple[str, ...]
+    drift_misprioritized: bool
+    confidence: str | None
+    provider_status: str | None
+    provider_summary: str | None
+    provider_error_summary: str | None
+    provider_skip_reason: str | None
+    provider_review: Mapping[str, object] | None
+    artifact_path: str | None
+
+
+@dataclass(frozen=True)
+class DiagnosticPackView:
+    path: str | None
+    timestamp: str | None
+    label: str | None
 
 
 @dataclass(frozen=True)
@@ -543,6 +571,7 @@ class UIIndexContext:
     provider_execution: ProviderExecutionView | None
     next_check_plan: NextCheckPlanView | None
     planner_availability: PlannerAvailabilityView | None
+    diagnostic_pack: DiagnosticPackView | None
     next_check_queue: tuple[NextCheckQueueItemView, ...]
 
 
@@ -591,6 +620,10 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         deterministic_next_checks=_build_deterministic_next_checks_view(
             run_data.get("deterministic_next_checks")
         ),
+        diagnostic_pack_review=_build_diagnostic_pack_review_view(
+            run_data.get("diagnostic_pack_review")
+        ),
+        diagnostic_pack=_build_diagnostic_pack_view(run_data.get("diagnostic_pack")),
     )
     raw_clusters = index.get("clusters")
     if not isinstance(raw_clusters, Sequence):
@@ -631,6 +664,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         provider_execution=run.provider_execution,
         next_check_plan=run.next_check_plan,
         planner_availability=run.planner_availability,
+        diagnostic_pack=run.diagnostic_pack,
         next_check_queue=run.next_check_queue,
     )
 
@@ -1126,6 +1160,40 @@ def _build_planner_availability_view(raw: object | None) -> PlannerAvailabilityV
     )
 
 
+def _build_diagnostic_pack_review_view(raw: object | None) -> DiagnosticPackReviewView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    major_disagreements = _coerce_sequence(raw.get("majorDisagreements") or raw.get("major_disagreements"))
+    missing_checks = _coerce_sequence(raw.get("missingChecks") or raw.get("missing_checks"))
+    ranking_issues = _coerce_sequence(raw.get("rankingIssues") or raw.get("ranking_issues"))
+    generic_checks = _coerce_sequence(raw.get("genericChecks") or raw.get("generic_checks"))
+    recommended_next_actions = _coerce_sequence(
+        raw.get("recommendedNextActions") or raw.get("recommended_next_actions")
+    )
+    provider_review = raw.get("providerReview") or raw.get("provider_review")
+    return DiagnosticPackReviewView(
+        timestamp=_coerce_optional_str(raw.get("timestamp")),
+        summary=_coerce_optional_str(raw.get("summary")),
+        major_disagreements=major_disagreements,
+        missing_checks=missing_checks,
+        ranking_issues=ranking_issues,
+        generic_checks=generic_checks,
+        recommended_next_actions=recommended_next_actions,
+        drift_misprioritized=bool(raw.get("driftMisprioritized") or raw.get("drift_misprioritized")),
+        confidence=_coerce_optional_str(raw.get("confidence")),
+        provider_status=_coerce_optional_str(raw.get("providerStatus") or raw.get("provider_status")),
+        provider_summary=_coerce_optional_str(raw.get("providerSummary") or raw.get("provider_summary")),
+        provider_error_summary=_coerce_optional_str(
+            raw.get("providerErrorSummary") or raw.get("provider_error_summary")
+        ),
+        provider_skip_reason=_coerce_optional_str(
+            raw.get("providerSkipReason") or raw.get("provider_skip_reason")
+        ),
+        provider_review=provider_review if isinstance(provider_review, Mapping) else None,
+        artifact_path=_coerce_optional_str(raw.get("artifactPath") or raw.get("artifact_path")),
+    )
+
+
 def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
     if not isinstance(raw, Mapping):
         return None
@@ -1424,6 +1492,16 @@ def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysis
         suggested_next_checks=_coerce_sequence(raw.get("suggested_next_checks")),
         timestamp=_coerce_str(raw.get("timestamp")),
         artifact_path=_coerce_optional_str(raw.get("artifact_path")),
+    )
+
+
+def _build_diagnostic_pack_view(raw: object | None) -> DiagnosticPackView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return DiagnosticPackView(
+        path=_coerce_optional_str(raw.get("path")),
+        timestamp=_coerce_optional_str(raw.get("timestamp")),
+        label=_coerce_optional_str(raw.get("label")),
     )
 
 

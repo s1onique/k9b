@@ -71,6 +71,7 @@ export type RunPayload = {
   nextCheckQueueExplanation?: NextCheckQueueExplanation | null;
   deterministicNextChecks?: DeterministicNextChecks | null;
   plannerAvailability?: PlannerAvailability | null;
+  diagnosticPackReview?: DiagnosticPackReview | null;
 };
 
 export type RunStats = {
@@ -537,4 +538,22 @@ export type ReviewEnrichmentStatus = {
   adapterAvailable: boolean | null;
   runEnabled: boolean | null;
   runProvider: string | null;
+};
+
+export type DiagnosticPackReview = {
+  timestamp: string | null;
+  summary: string | null;
+  majorDisagreements: string[];
+  missingChecks: string[];
+  rankingIssues: string[];
+  genericChecks: string[];
+  recommendedNextActions: string[];
+  driftMisprioritized: boolean;
+  confidence: string | null;
+  providerStatus: string | null;
+  providerSummary: string | null;
+  providerErrorSummary: string | null;
+  providerSkipReason: string | null;
+  providerReview: Record<string, unknown> | null;
+  artifactPath: string | null;
 };

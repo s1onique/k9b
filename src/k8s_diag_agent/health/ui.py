@@ -197,6 +197,9 @@ def write_health_ui_index(
         plan_entry, review_enrichment_entry, review_status
     )
     auto_config = _serialize_auto_drilldown_policy(settings.auto_drilldown)
+    diagnostic_pack_review_entry = _serialize_diagnostic_pack_review(
+        external_analysis, output_dir, run_id
+    )
     run_entry = {
         "run_id": run_id,
         "run_label": run_label,
@@ -240,6 +243,8 @@ def write_health_ui_index(
             deterministic_next_checks,
         ),
         "deterministic_next_checks": deterministic_next_checks,
+        "diagnostic_pack_review": diagnostic_pack_review_entry,
+        "diagnostic_pack": _serialize_diagnostic_pack(output_dir, run_id, run_label),
         "next_check_execution_history": _build_next_check_execution_history(
             external_analysis, output_dir, run_id
         ),
@@ -503,6 +508,115 @@ def _find_review_enrichment_artifact(
         ):
             return artifact
     return None
+
+
+def _find_diagnostic_pack_review_artifact(
+    artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
+) -> ExternalAnalysisArtifact | None:
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
+        if (
+            artifact.purpose == ExternalAnalysisPurpose.DIAGNOSTIC_PACK_REVIEW
+            and artifact_matches_run(artifact, run_id)
+        ):
+            return artifact
+    return None
+
+
+def _normalize_sequence(
+    payload: Mapping[str, object], *keys: str
+) -> tuple[str, ...]:
+    for key in keys:
+        value = payload.get(key)
+        if value is not None:
+            return _coerce_sequence(value)
+    return ()
+
+
+def _serialize_diagnostic_pack_review(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+    root_dir: Path,
+    run_id: str,
+) -> dict[str, object] | None:
+    artifact = _find_diagnostic_pack_review_artifact(artifacts, run_id)
+    if not artifact:
+        return None
+    payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+    provider_review_raw = payload.get("provider_review") or payload.get("providerReview")
+    provider_review = dict(provider_review_raw) if isinstance(provider_review_raw, Mapping) else None
+    return {
+        "timestamp": artifact.timestamp.isoformat(),
+        "summary": payload.get("summary") or artifact.summary,
+        "majorDisagreements": _normalize_sequence(
+            payload, "major_disagreements", "majorDisagreements"
+        ),
+        "missingChecks": _normalize_sequence(
+            payload, "missing_checks", "missingChecks"
+        ),
+        "rankingIssues": _normalize_sequence(
+            payload, "ranking_issues", "rankingIssues"
+        ),
+        "genericChecks": _normalize_sequence(
+            payload, "generic_checks", "genericChecks"
+        ),
+        "recommendedNextActions": _normalize_sequence(
+            payload,
+            "recommended_next_actions",
+            "recommendedNextActions",
+        ),
+        "driftMisprioritized": bool(
+            payload.get("drift_misprioritized") or payload.get("driftMisprioritized")
+        ),
+        "confidence": payload.get("confidence"),
+        "providerStatus": payload.get("provider_status") or artifact.status.value,
+        "providerSummary": payload.get("provider_summary") or artifact.summary,
+        "providerErrorSummary": payload.get("provider_error_summary") or artifact.error_summary,
+        "providerSkipReason": payload.get("provider_skip_reason") or artifact.skip_reason,
+        "providerReview": provider_review,
+        "artifactPath": _relative_path(root_dir, artifact.artifact_path),
+    }
+
+
+_DIAGNOSTIC_PACK_TIMESTAMP_PATTERN = re.compile(r"\d{8}T\d{6}Z")
+
+
+def _serialize_diagnostic_pack(
+    root_dir: Path, run_id: str, run_label: str
+) -> dict[str, object] | None:
+    packs_dir = root_dir / "diagnostic-packs"
+    if not packs_dir.is_dir():
+        return None
+    glob_pattern = f"diagnostic-pack-{run_id}-*.zip"
+    latest_path: Path | None = None
+    latest_time: datetime | None = None
+    for candidate in packs_dir.glob(glob_pattern):
+        if not candidate.is_file():
+            continue
+        parsed_timestamp: datetime | None = None
+        match = _DIAGNOSTIC_PACK_TIMESTAMP_PATTERN.search(candidate.name)
+        if match:
+            try:
+                parsed_timestamp = datetime.strptime(match.group(0), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+            except ValueError:
+                parsed_timestamp = None
+        entry_time = parsed_timestamp
+        if entry_time is None:
+            try:
+                entry_time = datetime.fromtimestamp(candidate.stat().st_mtime, UTC)
+            except OSError:
+                entry_time = None
+        if entry_time is None:
+            continue
+        if latest_time is None or entry_time > latest_time:
+            latest_path = candidate
+            latest_time = entry_time
+    if not latest_path:
+        return None
+    label_value = run_label.strip() if run_label and run_label.strip() else None
+    return {
+        "path": _relative_path(root_dir, latest_path),
+        "timestamp": latest_time.isoformat() if latest_time else None,
+        "label": label_value,
+    }
 
 
 def _plan_paths_match(plan_path: str | None, approval_path: str | None) -> bool:
@@ -2182,6 +2296,14 @@ def _parse_optional_int(value: object | None) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _coerce_sequence(value: object | None) -> tuple[str, ...]:
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return tuple(str(item) for item in value)
+    if value is None:
+        return ()
+    return (str(value),)
 
 
 def _parse_timestamp(value: object | None) -> datetime | None:

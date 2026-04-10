@@ -900,6 +900,34 @@ const ReviewEnrichmentList = ({
   );
 };
 
+const DiagnosticPackReviewList = ({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: string[];
+}) => {
+  if (!entries.length) {
+    return null;
+  }
+  const previewLimit = 3;
+  const hasMore = entries.length > previewLimit;
+  const visible = entries.slice(0, previewLimit);
+  return (
+    <div className="diagnostic-pack-review-list">
+      <p className="tiny">
+        {title} · {entries.length}
+      </p>
+      <ul>
+        {visible.map((entry) => (
+          <li key={entry}>{entry}</li>
+        ))}
+        {hasMore && <li className="muted">…and {entries.length - previewLimit} more</li>}
+      </ul>
+    </div>
+  );
+};
+
 const reviewEnrichmentStatusMessage = (status?: ReviewEnrichmentStatus) => {
   if (!status) {
     return "Provider-assisted review enrichment is not configured for this run.";
@@ -1012,6 +1040,71 @@ const ReviewEnrichmentPanel = ({
           </p>
         </div>
       )}
+    </section>
+  );
+};
+
+const DiagnosticPackReviewPanel = ({
+  review,
+}: {
+  review: RunPayload["diagnosticPackReview"] | undefined;
+}) => {
+  if (!review) {
+    return null;
+  }
+  const artifactLink = review.artifactPath ? artifactUrl(review.artifactPath) : null;
+  const providerStatus = review.providerStatus || "Status unavailable";
+  const hasProviderDetails = review.providerSummary || review.providerErrorSummary || review.providerSkipReason;
+  return (
+    <section className="panel diagnostic-pack-review" id="diagnostic-pack-review">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Diagnostic pack review</p>
+          <h2>Automated review insights</h2>
+        </div>
+        <span className={`status-pill ${statusClass(providerStatus)}`}>
+          {providerStatus}
+        </span>
+      </div>
+      <p className="muted tiny">
+        {review.timestamp ? formatTimestamp(review.timestamp) : "Timestamp unavailable"}
+      </p>
+      {review.summary ? <p className="diagnostic-pack-summary">{review.summary}</p> : null}
+      {review.confidence ? (
+        <p className="muted tiny">Confidence: {review.confidence}</p>
+      ) : null}
+      {hasProviderDetails ? (
+        <div className="diagnostic-pack-provider">
+          {review.providerSummary ? (
+            <p className="muted small">{review.providerSummary}</p>
+          ) : null}
+          {review.providerErrorSummary ? (
+            <p className="muted small">Error: {review.providerErrorSummary}</p>
+          ) : null}
+          {review.providerSkipReason ? (
+            <p className="muted small">Skipped because {review.providerSkipReason}</p>
+          ) : null}
+        </div>
+      ) : null}
+      {review.driftMisprioritized ? (
+        <p className="muted tiny">
+          Provider flagged suspected drift misprioritization. Review the assigned check order.
+        </p>
+      ) : null}
+      <div className="diagnostic-pack-review-grid">
+        <DiagnosticPackReviewList title="Major disagreements" entries={review.majorDisagreements} />
+        <DiagnosticPackReviewList title="Missing checks" entries={review.missingChecks} />
+        <DiagnosticPackReviewList title="Ranking issues" entries={review.rankingIssues} />
+        <DiagnosticPackReviewList
+          title="Recommended next actions"
+          entries={review.recommendedNextActions}
+        />
+      </div>
+      {artifactLink ? (
+        <a className="link" href={artifactLink} target="_blank" rel="noreferrer">
+          View diagnostic pack review artifact
+        </a>
+      ) : null}
     </section>
   );
 };
@@ -3159,6 +3252,7 @@ const App = () => {
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}
       />
+      <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
       <ProviderExecutionPanel execution={run.providerExecution} />
       <section className="panel llm-activity-panel" id="llm-activity">
         <LLMActivityPanel activity={run.llmActivity} />
