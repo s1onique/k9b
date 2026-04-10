@@ -545,6 +545,22 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if not artifact_path.exists():
             self._send_text(404, "Artifact not found")
             return
+        if artifact_path.suffix.lower() == ".zip":
+            try:
+                artifact_bytes = artifact_path.read_bytes()
+            except OSError as exc:
+                self._send_text(500, f"Unable to read artifact: {exc}")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(len(artifact_bytes)))
+            self.send_header(
+                "Content-Disposition",
+                f"attachment; filename=\"{artifact_path.name}\"",
+            )
+            self.end_headers()
+            self.wfile.write(artifact_bytes)
+            return
         try:
             payload = artifact_path.read_text(encoding="utf-8")
         except OSError as exc:

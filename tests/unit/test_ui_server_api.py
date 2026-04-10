@@ -6,7 +6,9 @@ import threading
 import unittest
 import unittest.mock as mock
 import urllib.error
+import urllib.parse
 import urllib.request
+import zipfile
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
@@ -186,6 +188,29 @@ class RunApiServerTests(unittest.TestCase):
         server.shutdown()
         thread.join(timeout=2)
         server.server_close()
+
+    def test_artifact_endpoint_serves_zip_binary(self) -> None:
+        artifact_dir = self.runs_dir / "external-analysis"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = artifact_dir / "diagnostic-pack.zip"
+        with zipfile.ZipFile(artifact_path, "w") as archive:
+            archive.writestr("info.txt", "diagnostic bundle")
+        server, thread = self._start_server()
+        try:
+            encoded_path = urllib.parse.quote(str(artifact_path.relative_to(self.runs_dir)))
+            url = f"http://127.0.0.1:{server.server_address[1]}/artifact?path={encoded_path}"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                self.assertEqual(response.getcode(), 200)
+                self.assertEqual(response.getheader("Content-Type"), "application/zip")
+                content_length = response.getheader("Content-Length")
+                body = response.read()
+            self.assertEqual(body, artifact_path.read_bytes())
+            self.assertEqual(content_length, str(len(body)))
+            disposition = response.getheader("Content-Disposition")
+            self.assertIsNotNone(disposition)
+            self.assertIn("diagnostic-pack.zip", disposition)
+        finally:
+            self._shutdown_server(server, thread)
 
     def test_run_endpoint_exposes_successful_review_enrichment(self) -> None:
         artifact = self._build_artifact(
