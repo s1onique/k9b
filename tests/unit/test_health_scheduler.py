@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -8,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import k8s_diag_agent.health.loop as health_loop
 from k8s_diag_agent.external_analysis.config import ExternalAnalysisSettings
 from k8s_diag_agent.health.loop import (
     HealthLoopScheduler,
@@ -491,3 +493,32 @@ class HealthSchedulerTests(unittest.TestCase):
         self.assertEqual(metadata.get("freshness_age_seconds"), 25)
         self.assertEqual(metadata.get("expected_interval_seconds"), 10)
         self.assertEqual(metadata.get("freshness_status"), "stale")
+
+    def test_maybe_build_diagnostic_pack_respects_env_gate(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=False)
+        with patch.dict(os.environ, {"HEALTH_BUILD_DIAGNOSTIC_PACK": "0"}):
+            with patch("k8s_diag_agent.health.loop.subprocess.run") as run_mock:
+                scheduler._maybe_build_diagnostic_pack("run-123")
+        run_mock.assert_not_called()
+
+    def test_maybe_build_diagnostic_pack_invokes_scripts_when_enabled(self) -> None:
+        scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=False)
+        run_id = "run-abc"
+        expected_runs_dir = str(scheduler._runs_dir_base)
+        build_script = health_loop._SCRIPTS_DIR / "build_diagnostic_pack.py"
+        update_script = health_loop._SCRIPTS_DIR / "update_ui_index.py"
+        with patch.dict(os.environ, {"HEALTH_BUILD_DIAGNOSTIC_PACK": "1"}):
+            with patch("k8s_diag_agent.health.loop.subprocess.run") as run_mock:
+                run_mock.return_value = None
+                scheduler._maybe_build_diagnostic_pack(run_id)
+        self.assertEqual(run_mock.call_count, 2)
+        build_call = run_mock.call_args_list[0]
+        build_cmd = build_call.args[0]
+        self.assertEqual(build_cmd[0], sys.executable)
+        self.assertEqual(build_cmd[1], str(build_script))
+        self.assertEqual(build_cmd[3], run_id)
+        self.assertEqual(build_cmd[5], expected_runs_dir)
+        update_call = run_mock.call_args_list[1]
+        update_cmd = update_call.args[0]
+        self.assertEqual(update_cmd[1], str(update_script))
+        self.assertEqual(update_cmd[3], run_id)

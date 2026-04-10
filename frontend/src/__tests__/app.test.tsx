@@ -1187,6 +1187,21 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  test("renders run diagnostic pack download link when run artifact is present", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", {
+      name: /Run diagnostic package archive/i,
+    });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText(/Run 123 pack/i)).toBeInTheDocument();
+    expect(screen.getByText(/Apr 6, 2026 12:01 UTC/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Download diagnostic pack/i })
+    ).toHaveAttribute("href", expect.stringContaining("run-123-diagnostic-pack.zip"));
+  });
+
   test("diagnostic pack review panel surfaces provider error details", async () => {
     const runWithError = {
       ...sampleRun,

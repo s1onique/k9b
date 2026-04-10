@@ -72,6 +72,7 @@ export type RunPayload = {
   deterministicNextChecks?: DeterministicNextChecks | null;
   plannerAvailability?: PlannerAvailability | null;
   diagnosticPackReview?: DiagnosticPackReview | null;
+  diagnosticPack?: DiagnosticPack | null;
 };
 
 export type RunStats = {
@@ -556,4 +557,10 @@ export type DiagnosticPackReview = {
   providerSkipReason: string | null;
   providerReview: Record<string, unknown> | null;
   artifactPath: string | null;
+};
+
+export type DiagnosticPack = {
+  path: string;
+  timestamp: string | null;
+  label: string | null;
 };

@@ -613,6 +613,11 @@ export const sampleRun: RunPayload = {
       "Inspect the planner artifact for candidate context before taking any next-check action.",
   },
   diagnosticPackReview: sampleDiagnosticPackReview,
+  diagnosticPack: {
+    path: "/artifacts/run-123-diagnostic-pack.zip",
+    timestamp: "2026-04-06T12:01:00Z",
+    label: "Run 123 pack",
+  },
   nextCheckExecutionHistory: [
     {
       timestamp: "2026-04-06T12:05:00Z",

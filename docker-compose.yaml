@@ -34,6 +34,7 @@ services:
       HEALTH_RUNS_DIR: /app/runs/health
       KUBECONFIG: /app/kubeconfig/config
       PYTHONPATH: /app/src
+      HEALTH_BUILD_DIAGNOSTIC_PACK: 1
     volumes:
       - ./runs:/app/runs
       - ./podman/kubeconfig:/app/kubeconfig:Z

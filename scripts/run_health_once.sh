@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="$ROOT/.venv/bin/python"
+PYTHON="${HEALTH_PYTHON_BIN:-$ROOT/.venv/bin/python}"
 SRC_PATH="$ROOT/src"
 export PYTHONPATH="$SRC_PATH${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -95,6 +95,7 @@ if [[ -n "$RUNS_DIR_OVERRIDE" ]]; then
 else
   RUNS_DIR="$(resolve_runs_dir "$CONFIG_PATH")"
 fi
+RUNS_BASE_DIR="$(dirname "$RUNS_DIR")"
 
 echo "Inspecting health config: $CONFIG_PATH"
 if "$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"; then
@@ -102,16 +103,6 @@ if "$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"; then
 else
   echo "Config inspection failed; aborting health run." >&2
   exit 1
-fi
-
-echo "Running one-shot health loop"
-if "$PYTHON" -m k8s_diag_agent.cli run-health-loop --config "$CONFIG_PATH" --once; then
-  echo "Health run result: PASS (exit 0)"
-else
-  exit_code=$?
-  echo "Health run result: FAIL (exit $exit_code)" >&2
-  echo "Skipping summary because the health run failed." >&2
-  exit "$exit_code"
 fi
 
 SUMMARY_OUTPUT="$RUNS_DIR/health-summary.txt"
@@ -127,9 +118,8 @@ fi
 if is_truthy "$BUILD_DIAGNOSTIC_PACK"; then
   echo "Building diagnostic pack for latest run"
   UI_INDEX_PATH="$RUNS_DIR/ui-index.json"
-  if [[ ! -f "$UI_INDEX_PATH" ]]; then
-    echo "UI index missing; cannot determine run_id" >&2
-  else
+  RUN_ID=""
+  if [[ -f "$UI_INDEX_PATH" ]]; then
     RUN_ID="$($PYTHON - <<'PY'
 import json
 from pathlib import Path
@@ -140,16 +130,28 @@ run_entry = data.get("run", {})
 run_id = run_entry.get("run_id")
 print(run_id or "")
 PY
-)"
-    if [[ -n "$RUN_ID" ]]; then
-      "$PYTHON" "$ROOT/scripts/build_diagnostic_pack.py" --run-id "$RUN_ID" --runs-dir "$RUNS_DIR"
-      if ! "$PYTHON" "$ROOT/scripts/update_ui_index.py" --runs-dir "$RUNS_DIR" --run-id "$RUN_ID"; then
-        echo "Warning: unable to refresh UI index after pack creation" >&2
-      fi
+    )"
+  else
+    echo "UI index missing; cannot determine run_id" >&2
+  fi
+  if [[ -n "$RUN_ID" ]]; then
+    "$PYTHON" "$ROOT/scripts/build_diagnostic_pack.py" --run-id "$RUN_ID" --runs-dir "$RUNS_BASE_DIR"
+    if ! "$PYTHON" "$ROOT/scripts/update_ui_index.py" --runs-dir "$RUNS_BASE_DIR" --run-id "$RUN_ID"; then
+      echo "Warning: unable to refresh UI index after pack creation" >&2
+    fi
+  else
+    echo "Unable to read run_id from UI index" >&2
+  fi
+fi
+    echo "Unable to read run_id from UI index" >&2
+  fi
+fi
+    echo "Unable to read run_id from UI index" >&2
+  fi
+fi
     else
       echo "Unable to read run_id from UI index" >&2
     fi
-  fi
 fi
 
   if [[ $GENERATE_DIGEST -eq 1 ]]; then

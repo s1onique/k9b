@@ -66,7 +66,7 @@ const statusClass = (value: string) => {
   return `status-pill status-pill-${normalized}`;
 };
 
-const formatTimestamp = (value: string) => dayjs(value).format("MMM D, YYYY HH:mm [UTC]");
+const formatTimestamp = (value: string) => dayjs.utc(value).format("MMM D, YYYY HH:mm [UTC]");
 
 const formatDuration = (value: number | null | undefined) => {
   if (value == null || !Number.isFinite(value)) {
@@ -1040,6 +1040,41 @@ const ReviewEnrichmentPanel = ({
           </p>
         </div>
       )}
+    </section>
+  );
+};
+
+const RunDiagnosticPackPanel = ({
+  diagnosticPack,
+}: {
+  diagnosticPack: RunPayload["diagnosticPack"] | undefined;
+}) => {
+  if (!diagnosticPack || !diagnosticPack.path) {
+    return null;
+  }
+  const artifactLink = artifactUrl(diagnosticPack.path);
+  if (!artifactLink) {
+    return null;
+  }
+  return (
+    <section className="panel diagnostic-pack-download" id="diagnostic-pack-download">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Diagnostic pack</p>
+          <h2>Run diagnostic package archive</h2>
+        </div>
+      </div>
+      {diagnosticPack.label ? (
+        <p className="muted tiny">Label: {diagnosticPack.label}</p>
+      ) : null}
+      <p className="muted tiny">
+        {diagnosticPack.timestamp
+          ? formatTimestamp(diagnosticPack.timestamp)
+          : "Timestamp unavailable"}
+      </p>
+      <a className="link" href={artifactLink} target="_blank" rel="noreferrer">
+        Download diagnostic pack
+      </a>
     </section>
   );
 };
@@ -3252,6 +3287,7 @@ const App = () => {
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}
       />
+      <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
       <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
       <ProviderExecutionPanel execution={run.providerExecution} />
       <section className="panel llm-activity-panel" id="llm-activity">

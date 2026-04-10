@@ -6,6 +6,8 @@ import json
 import os
 import re
 import socket
+import subprocess
+import sys
 import time
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -84,6 +86,9 @@ from .validators import (
 
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 _HISTORY_FILENAME = "history.json"
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "y", "on"}
 
 
 def _safe_label(value: str) -> str:
@@ -91,6 +96,12 @@ def _safe_label(value: str) -> str:
     cleaned = re.sub(r"-+", "-", cleaned)
     cleaned = cleaned.strip("-")
     return cleaned.lower() or "entry"
+
+
+def _env_is_truthy(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.strip().lower() in _TRUTHY_ENV_VALUES
 
 
 
@@ -3329,6 +3340,7 @@ class HealthLoopScheduler:
         self._run_label = run_label or "health-scheduler"
         self._log_path = output_dir / "health" / "scheduler.log"
         self._last_run_finish_time: float | None = None
+        self._runs_dir_base = output_dir
 
         self._instance_id = uuid4().hex
         self._pending_run_id: str | None = None
@@ -3435,6 +3447,7 @@ class HealthLoopScheduler:
                             freshness_age_seconds=freshness_age_seconds,
                             expected_interval_seconds=self._interval_seconds,
                         )
+                        self._maybe_build_diagnostic_pack(run_id)
                         self._last_run_finish_time = time.time()
                     finally:
                         self._pending_run_id = None
@@ -4111,6 +4124,67 @@ class HealthLoopScheduler:
             "INFO",
             "Health run summary",
             **metadata,
+        )
+
+    def _maybe_build_diagnostic_pack(self, run_id: str) -> None:
+        env_value = os.environ.get("HEALTH_BUILD_DIAGNOSTIC_PACK")
+        if not _env_is_truthy(env_value):
+            return
+        if not run_id or run_id == "<unknown>":
+            self._log_event(
+                "INFO",
+                "Skipping diagnostic pack generation; run_id unavailable",
+                run_id=run_id,
+                event="diag-pack-skipped",
+            )
+            return
+        runs_dir = str(self._runs_dir_base)
+        build_script = _SCRIPTS_DIR / "build_diagnostic_pack.py"
+        build_cmd = [
+            sys.executable,
+            str(build_script),
+            "--run-id",
+            run_id,
+            "--runs-dir",
+            runs_dir,
+        ]
+        try:
+            subprocess.run(build_cmd, check=True, env=os.environ)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            self._log_event(
+                "ERROR",
+                "Scheduled diagnostic pack build failed",
+                run_id=run_id,
+                severity_reason=str(exc),
+                event="diag-pack-build-failed",
+            )
+            return
+        update_script = _SCRIPTS_DIR / "update_ui_index.py"
+        update_cmd = [
+            sys.executable,
+            str(update_script),
+            "--run-id",
+            run_id,
+            "--runs-dir",
+            runs_dir,
+        ]
+        try:
+            subprocess.run(update_cmd, check=True, env=os.environ)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            self._log_event(
+                "ERROR",
+                "Scheduled UI index refresh failed after diagnostic pack build",
+                run_id=run_id,
+                severity_reason=str(exc),
+                event="diag-pack-ui-refresh-failed",
+            )
+            return
+        self._log_event(
+            "INFO",
+            "Scheduled diagnostic pack generated",
+            run_id=run_id,
+            runs_dir=runs_dir,
+            event="diag-pack-generated",
         )
 
 
