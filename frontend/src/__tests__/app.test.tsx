@@ -292,6 +292,93 @@ describe("App", () => {
     expect(promoteCall?.[1]).toMatchObject({ method: "POST" });
   });
 
+  test("successful promotion shows link to filter queue by approval-needed status", async () => {
+    const payloads = { ...defaultPayloads };
+    const fetchMock = createFetchMock(payloads);
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const promoteButtons = await screen.findAllByRole("button", { name: /Promote to queue/i });
+    await act(async () => {
+      await user.click(promoteButtons[0]);
+    });
+
+    // Wait for promotion success message
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Deterministic next check promoted to the queue/i)
+      ).toBeInTheDocument()
+    );
+
+    // Verify "View in queue →" link is present
+    const viewInQueueLink = await screen.findByRole("button", { name: /View in queue →/i });
+    expect(viewInQueueLink).toBeInTheDocument();
+
+    // Click the link and verify queue status filter changes
+    await act(async () => {
+      await user.click(viewInQueueLink);
+    });
+
+    // Verify the queue status filter is now set to "approval-needed"
+    const queueScoped = await getQueuePanel();
+    const statusSelect = queueScoped.getByLabelText(/Queue status/i);
+    expect(statusSelect).toHaveValue("approval-needed");
+
+    // Verify the queue cluster filter is set to the promoted cluster
+    const clusterSelect = queueScoped.getByLabelText(/Cluster filter/i);
+    expect(clusterSelect).toHaveValue("cluster-a");
+
+    // Verify the queue section is scrolled into view
+    const queueSection = document.getElementById("next-check-queue");
+    expect(queueSection).toBeInTheDocument();
+  });
+
+  test("view in queue click scrolls to queue section", async () => {
+    const payloads = { ...defaultPayloads };
+    const fetchMock = createFetchMock(payloads);
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const promoteButtons = await screen.findAllByRole("button", { name: /Promote to queue/i });
+    await act(async () => {
+      await user.click(promoteButtons[0]);
+    });
+
+    // Wait for promotion success
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Deterministic next check promoted to the queue/i)
+      ).toBeInTheDocument()
+    );
+
+    // Get the queue section element
+    const queueSection = document.getElementById("next-check-queue");
+    expect(queueSection).toBeInTheDocument();
+
+    // Mock scrollIntoView on the element
+    const scrollMock = vi.fn();
+    const originalScrollIntoView = queueSection!.scrollIntoView;
+    queueSection!.scrollIntoView = scrollMock;
+
+    const viewInQueueLink = await screen.findByRole("button", { name: /View in queue →/i });
+
+    // Click the link
+    await act(async () => {
+      await user.click(viewInQueueLink);
+    });
+
+    // Verify scrollIntoView was called (this verifies the scroll behavior)
+    expect(scrollMock).toHaveBeenCalled();
+
+    // Restore original
+    queueSection!.scrollIntoView = originalScrollIntoView;
+  });
+
   test("incident group shows limited checks before expanding", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);

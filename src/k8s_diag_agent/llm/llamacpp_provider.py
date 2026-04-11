@@ -27,6 +27,35 @@ _SYSTEM_INSTRUCTIONS = (
     " recommended_action, safety_level) and set strings accordingly."
 )
 
+# System instructions for review-enrichment use case (bounded advisory payload)
+_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
+    "You are a Kubernetes diagnostics review advisor."
+    " Provide a concise JSON advisory payload that includes summary, triageOrder, topConcerns,"
+    " evidenceGaps, nextChecks, and focusNotes."  # noqa: E501
+    " Use arrays of non-empty strings for list entries and highlight missing data explicitly."  # noqa: E501
+    " Do not include markdown, XML, or explanatory text outside the JSON payload."  # noqa: E501
+    " CRITICAL for nextChecks: each entry MUST be an explicit kubectl command in one of these formats:"  # noqa: E501
+    " - 'kubectl describe <resource> -n <namespace>'"
+    " - 'kubectl logs <pod> -n <namespace>'"
+    " - 'kubectl get <resource> -n <namespace>'"
+    " - 'kubectl get crd --context <cluster>'"
+    " - 'kubectl top <resource> -n <namespace>' (if metrics-server available)"
+    " REQUIREMENTS:"
+    " - Every nextChecks entry must START with one of: kubectl describe, kubectl logs, kubectl get, kubectl top"  # noqa: E501
+    " - Each command must target exactly ONE cluster (use --context flag)"
+    " - NEVER use phrases like: validate, review, check status, confirm, investigate, verify, plan upgrade"  # noqa: E501
+    " - NEVER suggest 'all clusters', 'across clusters', or multi-cluster commands"
+    " - NEVER suggest mutations: do not include apply, patch, scale, edit, upgrade, delete, restart, rollout"  # noqa: E501
+    " Examples of CORRECT nextChecks:"
+    " - 'kubectl describe pod -n default myapp-abc123 --context cluster1'"
+    " - 'kubectl logs deployment/myapp -n production --context admin@prod'"
+    " - 'kubectl get crd --context cluster2'"
+    " Examples of WRONG nextChecks (will be rejected by planner):"
+    " - 'Validate image pull secrets in cluster1' (has 'validate')"
+    " - 'Check all clusters for CRDs' (has 'all clusters')"
+    " - 'Verify cluster2 version and upgrade to v1.33' (has 'upgrade')"
+)
+
 
 @dataclass(frozen=True)
 class LlamaCppProviderConfig:
@@ -108,12 +137,19 @@ class LlamaCppProvider(LLMProvider):
             self._endpoint = self._config.endpoint
         return self._config, self._session, self._endpoint
 
-    def _build_payload(self, prompt: str, config: LlamaCppProviderConfig) -> dict[str, Any]:
+    def _build_payload(
+        self,
+        prompt: str,
+        config: LlamaCppProviderConfig,
+        *,
+        system_instructions: str | None = None,
+    ) -> dict[str, Any]:
+        system = system_instructions if system_instructions is not None else _SYSTEM_INSTRUCTIONS
         return {
             "model": config.model,
             "temperature": 0.0,
             "messages": [
-                {"role": "system", "content": _SYSTEM_INSTRUCTIONS},
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
         }
@@ -294,9 +330,10 @@ class LlamaCppProvider(LLMProvider):
         payload: LLMAssessmentInput,
         *,
         validate_schema: bool = True,
+        system_instructions: str | None = None,
     ) -> dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
-        request_payload = self._build_payload(prompt, config)
+        request_payload = self._build_payload(prompt, config, system_instructions=system_instructions)
         response: requests.Response | None = None
         timeout_seconds = config.timeout_seconds
         try:

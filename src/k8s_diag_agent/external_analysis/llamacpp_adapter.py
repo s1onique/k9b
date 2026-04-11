@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from ..llm.base import LLMAssessmentInput
-from ..llm.llamacpp_provider import LlamaCppProvider, LlamaCppProviderConfig
+from ..llm.llamacpp_provider import (
+    _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
+    LlamaCppProvider,
+    LlamaCppProviderConfig,
+)
 from .adapter import (
     ExternalAnalysisAdapter,
     ExternalAnalysisExecutionError,
@@ -133,7 +137,10 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         prompt, payload = self._prepare_provider_request(request)
         try:
             assessment = self._http_provider.assess(
-                prompt, payload, validate_schema=False
+                prompt,
+                payload,
+                validate_schema=False,
+                system_instructions=_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
             )
             parsed = ReviewEnrichmentPayload.from_dict(assessment)
             duration_ms = int((time.perf_counter() - start) * 1000)
@@ -232,7 +239,29 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             prompt_parts.append("Missing context details:")
             prompt_parts.extend(missing_notes)
         prompt_parts.append(
-            "Interpret the inputs conservatively and describe any missing data when providing hypotheses and next evidence."
+            "Interpret the inputs conservatively and focus on actionable next checks and missing evidence."
+        )
+        prompt_parts.append(
+            "CRITICAL for nextChecks: each entry MUST be an explicit kubectl command in one of these formats:\n"
+            "  - 'kubectl describe <resource> -n <namespace>'\n"
+            "  - 'kubectl logs <pod> -n <namespace>'\n"
+            "  - 'kubectl get <resource> -n <namespace>'\n"
+            "  - 'kubectl get crd --context <cluster>'\n"
+            "  - 'kubectl top <resource> -n <namespace>' (if metrics-server available)\n"
+            "REQUIREMENTS:\n"
+            "  - Every nextChecks entry must START with one of: kubectl describe, kubectl logs, kubectl get, kubectl top\n"
+            "  - Each command must target exactly ONE cluster (use --context flag)\n"
+            "  - NEVER use phrases like: validate, review, check status, confirm, investigate, verify, plan upgrade\n"
+            "  - NEVER suggest 'all clusters', 'across clusters', or multi-cluster commands\n"
+            "  - NEVER suggest mutations: do not include apply, patch, scale, edit, upgrade, delete, restart, rollout\n"
+            "Examples of CORRECT nextChecks:\n"
+            "  - 'kubectl describe pod -n default myapp-abc123 --context cluster1'\n"
+            "  - 'kubectl logs deployment/myapp -n production --context admin@prod'\n"
+            "  - 'kubectl get crd --context cluster2'\n"
+            "Examples of WRONG nextChecks (will be rejected by planner):\n"
+            "  - 'Validate image pull secrets in cluster1' (has 'validate')\n"
+            "  - 'Check all clusters for CRDs' (has 'all clusters')\n"
+            "  - 'Verify cluster2 version and upgrade to v1.33' (has 'upgrade')"
         )
         return "\n".join(prompt_parts)
 

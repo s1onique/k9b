@@ -30,6 +30,7 @@ from ..external_analysis.artifact import (
 )
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..external_analysis.next_check_planner import plan_next_checks
+from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..models import (
     Assessment,
     ConfidenceLevel,
@@ -2085,7 +2086,7 @@ class HealthLoopRunner:
         )
         self._prune_external_analysis_history(directories["external_analysis"])
         try:
-            write_health_ui_index(
+            ui_index_path = write_health_ui_index(
                 directories["root"],
                 self.run_id,
                 self.run_label,
@@ -2099,6 +2100,18 @@ class HealthLoopRunner:
                 external_analysis_settings=self.config.external_analysis,
                 available_adapters=self._analysis_adapters.keys(),
                 expected_scheduler_interval_seconds=self._expected_scheduler_interval_seconds,
+            )
+            self._log_event(
+                "health-loop",
+                "INFO",
+                "UI index generated",
+                artifact_path=str(ui_index_path),
+                assessment_count=len(assessments),
+                trigger_count=len(triggers),
+                drilldown_count=len(drilldowns),
+                proposal_count=len(proposals),
+                external_analysis_count=len(external_artifacts),
+                event="ui-index-generated",
             )
         except Exception as exc:
             self._log_event(
@@ -2657,14 +2670,56 @@ class HealthLoopRunner:
             if artifact.status == ExternalAnalysisStatus.SKIPPED
             else "Review enrichment failed"
         )
+        # Extract nextChecks from the enrichment payload for structured logging
+        next_checks_count = 0
+        enrichment_payload = artifact.payload if isinstance(artifact.payload, dict) else {}
+        if enrichment_payload:
+            next_checks = enrichment_payload.get("nextChecks") or enrichment_payload.get("next_checks")
+            if isinstance(next_checks, list):
+                next_checks_count = len(next_checks)
+
+        # Classify the payload shape for observability
+        shape_analysis = classify_review_enrichment_shape(enrichment_payload)
+
+        # Emit shape classification log
+        self._log_event(
+            "review-enrichment",
+            "INFO",
+            f"Review enrichment payload shape: {shape_analysis.classification.value}",
+            run_label=self.run_label,
+            run_id=self.run_id,
+            provider=provider or "unspecified",
+            artifact_path=str(artifact_path),
+            status=artifact.status.value,
+            shape_classification=shape_analysis.classification.value,
+            reason=shape_analysis.reason,
+            raw_payload_keys=list(shape_analysis.raw_payload_keys)[:10],  # Limit to first 10 keys
+            summary_present=shape_analysis.summary_present,
+            triage_order_count=shape_analysis.triage_order_count,
+            top_concerns_count=shape_analysis.top_concerns_count,
+            evidence_gaps_count=shape_analysis.evidence_gaps_count,
+            next_checks_count=shape_analysis.next_checks_count,
+            focus_notes_count=shape_analysis.focus_notes_count,
+            event="review-enrichment-shape",
+        )
+
+        # Build error_summary or skip_reason for structured logging
+        error_summary = artifact.error_summary
+        skip_reason = artifact.skip_reason
+
         self._log_event(
             "review-enrichment",
             severity,
             message,
+            run_label=self.run_label,
+            run_id=self.run_id,
             provider=provider or "unspecified",
-            status=artifact.status.value,
             artifact_path=str(artifact_path),
-            event="review-enrichment",
+            status=artifact.status.value,
+            next_checks_count=next_checks_count,
+            error_summary=error_summary,
+            skip_reason=skip_reason,
+            event="review-enrichment-result",
         )
         return artifact
 
@@ -2675,9 +2730,33 @@ class HealthLoopRunner:
         directories: dict[str, Path],
     ) -> ExternalAnalysisArtifact | None:
         if not review_path or not enrichment_artifact:
+            # Log that planner was skipped because no enrichment artifact
+            self._log_event(
+                "next-check-planner",
+                "DEBUG",
+                "Next-check planner skipped",
+                run_label=self.run_label,
+                run_id=self.run_id,
+                source_enrichment_artifact_path=str(enrichment_artifact.artifact_path) if enrichment_artifact else None,
+                reason="no_enrichment_artifact",
+                event="next-check-planning-skipped",
+            )
             return None
         plan = plan_next_checks(review_path, self.run_id, enrichment_artifact)
         if not plan:
+            # Log that planner produced no candidates
+            self._log_event(
+                "next-check-planner",
+                "INFO",
+                "Next-check planner produced no candidates",
+                run_label=self.run_label,
+                run_id=self.run_id,
+                source_enrichment_artifact_path=str(enrichment_artifact.artifact_path),
+                source_next_checks_count=len(enrichment_artifact.suggested_next_checks) if enrichment_artifact.suggested_next_checks else 0,
+                candidate_count=0,
+                reason="no_candidates_from_planner",
+                event="next-check-planning-no-candidates",
+            )
             return None
         artifact_path = directories["external_analysis"] / (
             f"{self.run_id}-next-check-plan.json"
@@ -2711,8 +2790,13 @@ class HealthLoopRunner:
             "next-check-planner",
             "INFO",
             "Next-check plan recorded",
-            artifact_path=str(artifact_path),
+            run_label=self.run_label,
+            run_id=self.run_id,
+            source_enrichment_artifact_path=str(enrichment_artifact.artifact_path),
+            source_next_checks_count=len(enrichment_artifact.suggested_next_checks) if enrichment_artifact.suggested_next_checks else 0,
             candidate_count=candidate_count,
+            plan_artifact_path=str(artifact_path),
+            reason="plan_recorded" if candidate_count > 0 else "no_candidates",
             event="next-check-planning",
         )
         return artifact

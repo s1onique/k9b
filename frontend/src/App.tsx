@@ -957,18 +957,35 @@ const reviewEnrichmentStatusMessage = (status?: ReviewEnrichmentStatus) => {
   }
 };
 
+type ReviewEnrichmentPanelProps = {
+  reviewEnrichment: RunPayload["reviewEnrichment"] | undefined;
+  reviewEnrichmentStatus: RunPayload["reviewEnrichmentStatus"] | undefined;
+  nextCheckPlan: RunPayload["nextCheckPlan"] | undefined;
+  onNavigateToQueue?: () => void;
+  onFocusQueueReview?: () => void;
+};
+
 const ReviewEnrichmentPanel = ({
   reviewEnrichment,
   reviewEnrichmentStatus,
-}: {
-  reviewEnrichment: RunPayload["reviewEnrichment"] | undefined;
-  reviewEnrichmentStatus: RunPayload["reviewEnrichmentStatus"] | undefined;
-}) => {
+  nextCheckPlan,
+  onNavigateToQueue,
+  onFocusQueueReview,
+}: ReviewEnrichmentPanelProps) => {
   const status =
     reviewEnrichment?.status || reviewEnrichmentStatus?.status || "pending";
   const artifactLink = reviewEnrichment?.artifactPath
     ? artifactUrl(reviewEnrichment.artifactPath)
     : null;
+  // Check if this enrichment led to planning - match by artifact path
+  const enrichmentArtifactPath = reviewEnrichment?.artifactPath;
+  const linkedPlan = nextCheckPlan?.enrichmentArtifactPath === enrichmentArtifactPath
+    ? nextCheckPlan
+    : null;
+  const planCandidates = linkedPlan?.candidates ?? [];
+  const planCandidateCount = linkedPlan?.candidateCount ?? planCandidates.length;
+  const topPlanCandidates = planCandidates.slice(0, 3);
+  const hasLinkedPlan = Boolean(linkedPlan) && planCandidateCount > 0;
   const runConfigDescription = () => {
     if (!reviewEnrichmentStatus) {
       return null;
@@ -1028,6 +1045,38 @@ const ReviewEnrichmentPanel = ({
               View enrichment artifact
             </a>
           ) : null}
+          {hasLinkedPlan && (
+            <div className="review-enrichment-planning-summary">
+              <p className="eyebrow">Planning outcomes</p>
+              <p className="small">
+                {planCandidateCount} candidate{planCandidateCount === 1 ? "" : "s"} generated from this enrichment
+              </p>
+              <ul className="review-enrichment-plan-preview">
+                {topPlanCandidates.map((candidate, idx) => (
+                  <li key={idx}>
+                    <span className="tiny">{candidate.description}</span>
+                  </li>
+                ))}
+              </ul>
+              {planCandidateCount > 3 && (
+                <p className="muted tiny">…and {planCandidateCount - 3} more</p>
+              )}
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  if (onFocusQueueReview) {
+                    onFocusQueueReview();
+                  }
+                  if (onNavigateToQueue) {
+                    onNavigateToQueue();
+                  }
+                }}
+              >
+                View full queue
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="review-enrichment-body">
@@ -2738,6 +2787,19 @@ const App = () => {
                         {promotionEntry.message}
                       </p>
                     ) : null}
+                    {isPromoted ? (
+                      <button
+                        type="button"
+                        className="deterministic-promotion-view-queue-link"
+                        onClick={() => {
+                          setQueueStatusFilter("approval-needed");
+                          setQueueClusterFilter(cluster.label);
+                          scrollToSection("next-check-queue");
+                        }}
+                      >
+                        View in queue →
+                      </button>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -3286,6 +3348,16 @@ const App = () => {
       <ReviewEnrichmentPanel
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}
+        nextCheckPlan={run.nextCheckPlan}
+        onFocusQueueReview={() => {
+          setQueueFocusMode("review");
+          // Extract cluster from first candidate if available
+          const firstCandidate = run.nextCheckPlan?.candidates?.[0];
+          if (firstCandidate?.targetCluster) {
+            setQueueClusterFilter(firstCandidate.targetCluster);
+          }
+        }}
+        onNavigateToQueue={() => scrollToSection("next-check-queue")}
       />
       <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
       <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
@@ -3899,6 +3971,9 @@ const App = () => {
                                 ) : null}
                               </div>
                             )}
+                            {candidate.normalizationReason ? (
+                              <p className="plan-normalization">Normalized: {humanizeReason(candidate.normalizationReason)}</p>
+                            ) : null}
                             {candidate.gatingReason ? (
                               <p className="plan-gating">Gating reason: {candidate.gatingReason}</p>
                             ) : null}

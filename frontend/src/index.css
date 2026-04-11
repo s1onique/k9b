@@ -1961,6 +1961,13 @@ body {
   font-style: italic;
 }
 
+.plan-normalization {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.85);
+  font-style: italic;
+}
+
 .plan-stale-note {
   margin: 0.4rem 0;
   font-size: 0.75rem;

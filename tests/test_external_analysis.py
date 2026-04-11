@@ -183,11 +183,30 @@ def _configure_http_env(monkeypatch: Any) -> None:
 
 def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
-    fake_assessment = _fake_assessment_payload()
+    # Use bounded review-enrichment payload (not assessment-shaped)
+    fake_review_enrichment = {
+        "summary": "Review insight",
+        "triageOrder": ["cluster-a"],
+        "topConcerns": ["latency", "storage"],
+        "evidenceGaps": ["pod metrics"],
+        "nextChecks": ["check ingress", "check storage"],
+        "focusNotes": ["prioritize cluster-a"],
+    }
+
     def fake_assess(
-        self: LlamaCppProvider, prompt: str, payload: Any, *, validate_schema: bool = True
+        self: LlamaCppProvider,
+        prompt: str,
+        payload: Any,
+        *,
+        validate_schema: bool = True,
+        system_instructions: str | None = None,
     ) -> dict[str, Any]:
-        return fake_assessment
+        # Verify system instructions include review enrichment guidance
+        assert system_instructions is not None
+        assert "summary" in system_instructions.lower() or "triageorder" in system_instructions.lower()
+        # Verify validate_schema is False for review enrichment
+        assert validate_schema is False
+        return fake_review_enrichment
     monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
     adapter = LlamaCppAdapter()
     review_path = tmp_path / "runs" / "health" / "reviews" / "r-review.json"
@@ -195,11 +214,11 @@ def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None
     req = ExternalAnalysisRequest(run_id="r", cluster_label="c", source_artifact=str(review_path))
     artifact = adapter.run(req)
     assert artifact.status == ExternalAnalysisStatus.SUCCESS
-    assert artifact.summary == "Review enrichment insight"
-    assert artifact.findings == ()
-    assert artifact.suggested_next_checks == ()
-    assert artifact.payload == fake_assessment
-    assert artifact.payload == fake_assessment
+    assert artifact.summary == "Review insight"
+    # Verify bounded fields are extracted correctly
+    assert artifact.findings == ("latency", "storage")
+    assert artifact.suggested_next_checks == ("check ingress", "check storage")
+    assert artifact.payload == fake_review_enrichment
     assert artifact.provider == "llamacpp"
 
 
@@ -220,8 +239,14 @@ def test_llamacpp_adapter_http_failure(monkeypatch: Any, tmp_path: Path) -> None
 
 def test_llamacpp_adapter_http_invalid_response(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
+
     def fake_assess(
-        self: LlamaCppProvider, prompt: str, payload: Any, *, validate_schema: bool = True
+        self: LlamaCppProvider,
+        prompt: str,
+        payload: Any,
+        *,
+        validate_schema: bool = True,
+        system_instructions: str | None = None,
     ) -> dict[str, Any]:
         raise ValueError("schema")
     monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
@@ -246,7 +271,14 @@ def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) 
         "focusNotes": ["prioritize cluster-a"],
     }
 
-    def fake_assess(self: LlamaCppProvider, prompt: str, payload: Any, *, validate_schema: bool = True) -> dict[str, Any]:
+    def fake_assess(
+        self: LlamaCppProvider,
+        prompt: str,
+        payload: Any,
+        *,
+        validate_schema: bool = True,
+        system_instructions: str | None = None,
+    ) -> dict[str, Any]:
         assert validate_schema is False
         return fake_payload
 
@@ -267,7 +299,14 @@ def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) 
 def test_llamacpp_adapter_http_review_payload_invalid(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
 
-    def fake_assess(self: LlamaCppProvider, prompt: str, payload: Any, *, validate_schema: bool = True) -> dict[str, Any]:
+    def fake_assess(
+        self: LlamaCppProvider,
+        prompt: str,
+        payload: Any,
+        *,
+        validate_schema: bool = True,
+        system_instructions: str | None = None,
+    ) -> dict[str, Any]:
         return {"triageOrder": [""], "topConcerns": ["latency"], "nextChecks": ["check ingress"], "focusNotes": []}
 
     monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
