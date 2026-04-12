@@ -943,6 +943,12 @@ body {
 
 .queue-card-reason {
   margin: 0.25rem 0;
+}
+
+.queue-card-reason-label {
+  color: #94a3b8;
+  font-weight: 500;
+}
   font-size: 0.85rem;
   color: #94a3b8;
 }

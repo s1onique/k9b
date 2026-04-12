@@ -3191,6 +3191,7 @@ const App = () => {
                             ) : null}
                           </div>
                           <p className="queue-card-reason">
+                            <span className="queue-card-reason-label">Why this check: </span>
                             {humanizeReason(item.sourceReason) || item.sourceReason || humanizeReason(item.normalizationReason) || "—"}{" "}
                             {item.expectedSignal ? <span className="queue-card-signal">→ {item.expectedSignal}</span> : null}
                           </p>
