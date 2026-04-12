@@ -298,6 +298,7 @@ def _build_review_input_14b(
             comparison_entries, label_map, run_id_value
         ),
         "external_analysis_summary": _build_external_analysis_summary(external_entries),
+        "next_check_execution_summary": _build_next_check_execution_summary(external_entries),
         "proposal_summary": _build_proposal_summary(proposal_entries),
         "review_enrichment": _extract_mapping(review_bundle, "review_enrichment"),
         "provider_execution": _extract_mapping(review_bundle, "provider_execution"),
@@ -493,6 +494,88 @@ def _build_comparison_summary(
                 "top_drifts": _extract_top_drifts(content),
             }
         )
+    return result
+
+
+def _is_next_check_execution_entry(entry: dict[str, object]) -> bool:
+    """Check if an external analysis entry is a next-check-execution artifact."""
+    content = cast(dict[str, object], entry.get("content") or {})
+    purpose = content.get("purpose")
+    return isinstance(purpose, str) and purpose == "next-check-execution"
+
+
+def _build_next_check_execution_summary(external: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Build a reviewer-friendly summary of next-check execution outcomes.
+    
+    Extracts the key fields that a reviewer model needs without requiring it to
+    scan all external-analysis artifacts manually. This includes:
+    - executed check description
+    - target cluster
+    - command family / preview
+    - execution status (success/failed/timed-out)
+    - duration
+    - summary
+    - artifact path pointer
+    """
+    result: list[dict[str, object]] = []
+    for entry in external:
+        if not _is_next_check_execution_entry(entry):
+            continue
+        content = cast(dict[str, object], entry.get("content") or {})
+        payload = cast(dict[str, object], content.get("payload") or {})
+        
+        # Extract description from payload
+        description = (
+            payload.get("candidate_description")
+            or payload.get("description")
+            or content.get("summary")
+            or "Next check execution"
+        )
+        
+        # Extract target cluster - prefer payload target, fall back to entry cluster_label
+        target_cluster = (
+            payload.get("target_cluster")
+            or entry.get("cluster_label")
+        )
+        
+        # Extract command family and preview
+        command_family = payload.get("command_family") or payload.get("suggested_command_family")
+        command_preview = payload.get("command_preview")
+        
+        # Extract status - handle outcome_status, timed_out, and generic status
+        status = content.get("status")
+        timed_out = content.get("timed_out")
+        outcome_status = content.get("outcome_status")
+        
+        # Build execution status string
+        execution_status = None
+        if outcome_status:
+            execution_status = str(outcome_status)
+        elif timed_out is True:
+            execution_status = "timed-out"
+        elif status:
+            execution_status = str(status)
+        
+        # Extract duration
+        duration_ms = content.get("duration_ms")
+        
+        # Extract summary
+        summary = content.get("summary")
+        
+        # Get artifact path
+        artifact_path = entry.get("path")
+        
+        result.append({
+            "description": description,
+            "target_cluster": target_cluster,
+            "command_family": command_family,
+            "command_preview": command_preview,
+            "execution_status": execution_status,
+            "timed_out": timed_out if timed_out is not None else False,
+            "duration_ms": duration_ms,
+            "summary": summary,
+            "path": artifact_path,
+        })
     return result
 
 

@@ -28,7 +28,7 @@ _ALLOWED_FAMILIES = {
 }
 _DANGEROUS_CHARS = {";", "&&", "||", "|", "<", ">", "$", "`"}
 _OUTPUT_LIMIT = 8192
-_COMMAND_TIMEOUT_SECONDS = 30
+_COMMAND_TIMEOUT_SECONDS = 45
 _LOG_COMPONENT = "manual-next-check"
 
 

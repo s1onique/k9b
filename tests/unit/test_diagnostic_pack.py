@@ -185,6 +185,112 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                     in artifact_paths.get("external_analysis", []),
                 )
 
+    def test_next_check_execution_summary_included_in_review_input(self) -> None:
+        """Test that next-check-execution artifacts are extracted to review_input_14b.json."""
+        run_id = "run-next-check"
+        run_label = "health-run"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs"
+            health_dir = runs_dir / "health"
+            (health_dir / "assessments").mkdir(parents=True, exist_ok=True)
+            (health_dir / "drilldowns").mkdir(parents=True, exist_ok=True)
+            (health_dir / "triggers").mkdir(parents=True, exist_ok=True)
+            (health_dir / "comparisons").mkdir(parents=True, exist_ok=True)
+            (health_dir / "reviews").mkdir(parents=True, exist_ok=True)
+            (health_dir / "external-analysis").mkdir(parents=True, exist_ok=True)
+            # write ui-index
+            index_data = sample_ui_index()
+            run_payload = cast(dict[str, object], index_data["run"])
+            run_payload["run_id"] = run_id
+            run_payload["run_label"] = run_label
+            (health_dir / "ui-index.json").write_text(
+                json.dumps(index_data), encoding="utf-8"
+            )
+            # Create a next-check-execution external analysis artifact
+            next_check_execution = {
+                "cluster_label": "cluster-a",
+                "purpose": "next-check-execution",
+                "provider": "default",
+                "status": "success",
+                "summary": "Captured pod logs for debugging",
+                "duration_ms": 1500,
+                "payload": {
+                    "candidate_description": "Get pod logs from default namespace",
+                    "target_cluster": "cluster-a",
+                    "command_family": "kubectl",
+                    "command_preview": "kubectl logs -n default <pod>",
+                    "outcome_status": "success",
+                },
+            }
+            (health_dir / "external-analysis" / f"{run_id}-cluster-a-next-check-exec.json").write_text(
+                json.dumps(next_check_execution), encoding="utf-8"
+            )
+            # Add a timed-out execution
+            next_check_timeout = {
+                "cluster_label": "cluster-b",
+                "purpose": "next-check-execution",
+                "provider": "default",
+                "status": "failed",
+                "summary": "Command timed out",
+                "timed_out": True,
+                "duration_ms": 30000,
+                "payload": {
+                    "candidate_description": "Check node conditions",
+                    "target_cluster": "cluster-b",
+                    "command_family": "kubectl",
+                    "command_preview": "kubectl get nodes -o wide",
+                    "outcome_status": "timed-out",
+                },
+            }
+            (health_dir / "external-analysis" / f"{run_id}-cluster-b-next-check-exec.json").write_text(
+                json.dumps(next_check_timeout), encoding="utf-8"
+            )
+            # Add a non-next-check-execution artifact (should be ignored)
+            regular_external = {
+                "cluster_label": "cluster-a",
+                "purpose": "auto-drilldown",
+                "provider": "k8sgpt",
+                "summary": "regular analysis",
+            }
+            (health_dir / "external-analysis" / f"{run_id}-cluster-a-auto.json").write_text(
+                json.dumps(regular_external), encoding="utf-8"
+            )
+            packs_dir = Path(tmpdir) / "packs"
+            pack_path = create_diagnostic_pack(run_id, runs_dir, output_dir=packs_dir)
+            self.assertTrue(pack_path.exists())
+            with zipfile.ZipFile(pack_path, "r") as archive:
+                review_input = json.loads(archive.read("review_input_14b.json"))
+                # Verify next_check_execution_summary exists
+                next_check_summary = review_input.get("next_check_execution_summary")
+                self.assertIsNotNone(next_check_summary, "next_check_execution_summary should be present")
+                self.assertIsInstance(next_check_summary, list)
+                self.assertEqual(len(next_check_summary), 2, "Should have 2 next-check-execution entries")
+                
+                # Verify first entry (successful execution)
+                entry1 = next_check_summary[0]
+                self.assertEqual(entry1.get("description"), "Get pod logs from default namespace")
+                self.assertEqual(entry1.get("target_cluster"), "cluster-a")
+                self.assertEqual(entry1.get("command_family"), "kubectl")
+                self.assertEqual(entry1.get("command_preview"), "kubectl logs -n default <pod>")
+                self.assertEqual(entry1.get("execution_status"), "success")
+                self.assertEqual(entry1.get("timed_out"), False)
+                self.assertEqual(entry1.get("duration_ms"), 1500)
+                self.assertIn("path", entry1)
+                
+                # Verify second entry (timed out)
+                entry2 = next_check_summary[1]
+                self.assertEqual(entry2.get("description"), "Check node conditions")
+                self.assertEqual(entry2.get("target_cluster"), "cluster-b")
+                self.assertEqual(entry2.get("command_family"), "kubectl")
+                self.assertEqual(entry2.get("execution_status"), "timed-out")
+                self.assertEqual(entry2.get("timed_out"), True)
+                self.assertEqual(entry2.get("duration_ms"), 30000)
+                
+                # Verify external_analysis_summary still includes all entries
+                external_summary = review_input.get("external_analysis_summary")
+                self.assertIsNotNone(external_summary)
+                self.assertEqual(len(external_summary), 3, "Should have all 3 external analysis entries")
+
     def test_structured_log_events_emit_when_building_pack(self) -> None:
         run_id = "run-logging"
         run_label = "health-run"
