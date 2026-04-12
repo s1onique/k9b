@@ -1105,6 +1105,12 @@ const RunDiagnosticPackPanel = ({
   if (!artifactLink) {
     return null;
   }
+  const reviewBundleLink = diagnosticPack.reviewBundlePath
+    ? artifactUrl(diagnosticPack.reviewBundlePath)
+    : null;
+  const reviewInput14bLink = diagnosticPack.reviewInput14bPath
+    ? artifactUrl(diagnosticPack.reviewInput14bPath)
+    : null;
   return (
     <section className="panel diagnostic-pack-download" id="diagnostic-pack-download">
       <div className="section-head">
@@ -1124,6 +1130,22 @@ const RunDiagnosticPackPanel = ({
       <a className="link" href={artifactLink} target="_blank" rel="noreferrer">
         Download diagnostic pack
       </a>
+      {reviewBundleLink && (
+        <>
+          <br />
+          <a className="link" href={reviewBundleLink} target="_blank" rel="noreferrer">
+            Review bundle
+          </a>
+        </>
+      )}
+      {reviewInput14bLink && (
+        <>
+          <br />
+          <a className="link" href={reviewInput14bLink} target="_blank" rel="noreferrer">
+            Review input (14b)
+          </a>
+        </>
+      )}
     </section>
   );
 };

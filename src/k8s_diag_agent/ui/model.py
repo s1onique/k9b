@@ -289,6 +289,8 @@ class DiagnosticPackView:
     path: str | None
     timestamp: str | None
     label: str | None
+    review_bundle_path: str | None
+    review_input_14b_path: str | None
 
 
 @dataclass(frozen=True)
@@ -1502,6 +1504,8 @@ def _build_diagnostic_pack_view(raw: object | None) -> DiagnosticPackView | None
         path=_coerce_optional_str(raw.get("path")),
         timestamp=_coerce_optional_str(raw.get("timestamp")),
         label=_coerce_optional_str(raw.get("label")),
+        review_bundle_path=_coerce_optional_str(raw.get("review_bundle_path")),
+        review_input_14b_path=_coerce_optional_str(raw.get("review_input_14b_path")),
     )
 
 

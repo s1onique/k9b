@@ -32,6 +32,10 @@ MAX_TOP_DRIFTS = 7
 MAX_PATTERN_KEYS = 5
 
 
+# Directory name for the stable "latest" unpacked pack mirror
+LATEST_PACK_DIR_NAME = "latest"
+
+
 def create_diagnostic_pack(
     run_id: str, runs_dir: Path, *, output_dir: Path | None = None
 ) -> Path:
@@ -124,6 +128,15 @@ def create_diagnostic_pack(
         )
         final_output_dir = output_dir or run_health_dir / "diagnostic-packs"
         pack_path = _zip_pack(temp_dir, final_output_dir, run_id)
+
+        # Write stable uncompressed "latest" mirror for operator/reviewer convenience
+        _write_latest_pack_mirror(
+            final_output_dir,
+            review_bundle=review_bundle,
+            review_input=review_input,
+            run_id=run_id,
+        )
+
         _log_structured_event(
             event="diagnostic-pack-ready",
             message=f"Diagnostic pack ready: {pack_path}",
@@ -134,6 +147,7 @@ def create_diagnostic_pack(
                 "output_dir": str(final_output_dir),
                 "runs_dir": str(runs_dir),
                 "run_health_dir": str(run_health_dir),
+                "latest_pack_dir": str(final_output_dir / LATEST_PACK_DIR_NAME),
             },
         )
         return pack_path
@@ -1457,6 +1471,35 @@ def _zip_pack(pack_root: Path, output_dir: Path, run_id: str) -> Path:
             if file_path.is_file():
                 archive.write(file_path, file_path.relative_to(pack_root))
     return pack_path
+
+
+def _write_latest_pack_mirror(
+    output_dir: Path,
+    review_bundle: dict[str, object],
+    review_input: dict[str, object],
+    run_id: str,
+) -> None:
+    """Write stable uncompressed copies of the review files to a 'latest' directory.
+    
+    This provides operator/reviewer convenience by making the pack outputs available
+    as plain JSON files without requiring ZIP extraction.
+    
+    The files are written to: {output_dir}/latest/
+    - review_bundle.json
+    - review_input_14b.json
+    
+    Each pack build overwrites these files to maintain the "latest" invariant.
+    """
+    latest_dir = output_dir / LATEST_PACK_DIR_NAME
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Write review_bundle.json
+    bundle_path = latest_dir / "review_bundle.json"
+    bundle_path.write_text(json.dumps(review_bundle, indent=2), encoding="utf-8")
+    
+    # Write review_input_14b.json
+    input_path = latest_dir / "review_input_14b.json"
+    input_path.write_text(json.dumps(review_input, indent=2), encoding="utf-8")
 
 
 def _parse_args() -> argparse.Namespace:

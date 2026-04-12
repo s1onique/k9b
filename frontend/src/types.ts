@@ -563,4 +563,6 @@ export type DiagnosticPack = {
   path: string;
   timestamp: string | null;
   label: string | null;
+  reviewBundlePath: string | null;
+  reviewInput14bPath: string | null;
 };

@@ -36,6 +36,10 @@ if TYPE_CHECKING:
     from .loop import DrilldownArtifact, HealthAssessmentArtifact, HealthSnapshotRecord
 
 
+# Directory name for stable "latest" diagnostic pack mirror files
+LATEST_PACK_DIR_NAME = "latest"
+
+
 def _serialize_cluster(
     record: HealthSnapshotRecord,
     assessment_map: Mapping[str, HealthAssessmentArtifact | None],
@@ -612,11 +616,32 @@ def _serialize_diagnostic_pack(
     if not latest_path:
         return None
     label_value = run_label.strip() if run_label and run_label.strip() else None
-    return {
+
+    # Look for the stable "latest" mirror files
+    latest_mirror_dir = packs_dir / LATEST_PACK_DIR_NAME
+    review_bundle_path: Path | None = None
+    review_input_14b_path: Path | None = None
+    if latest_mirror_dir.is_dir():
+        bundle_candidate = latest_mirror_dir / "review_bundle.json"
+        if bundle_candidate.is_file():
+            review_bundle_path = bundle_candidate
+        input_candidate = latest_mirror_dir / "review_input_14b.json"
+        if input_candidate.is_file():
+            review_input_14b_path = input_candidate
+
+    result: dict[str, object] = {
         "path": _relative_path(root_dir, latest_path),
         "timestamp": latest_time.isoformat() if latest_time else None,
         "label": label_value,
     }
+
+    # Add mirrored review files if they exist
+    if review_bundle_path:
+        result["review_bundle_path"] = _relative_path(root_dir, review_bundle_path)
+    if review_input_14b_path:
+        result["review_input_14b_path"] = _relative_path(root_dir, review_input_14b_path)
+
+    return result
 
 
 def _plan_paths_match(plan_path: str | None, approval_path: str | None) -> bool:

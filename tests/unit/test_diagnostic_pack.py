@@ -354,3 +354,245 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
             self.assertEqual(counts.get("external_analysis"), 2)
             ready_call = emit_mock.call_args_list[-1]
             self.assertEqual(ready_call.kwargs["event"], "diagnostic-pack-ready")
+
+    def test_latest_pack_mirror_written_to_disk(self) -> None:
+        """Test that review files are written as uncompressed files in 'latest' directory."""
+        run_id = "run-latest"
+        run_label = "health-run"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs"
+            health_dir = runs_dir / "health"
+            (health_dir / "assessments").mkdir(parents=True, exist_ok=True)
+            (health_dir / "drilldowns").mkdir(parents=True, exist_ok=True)
+            (health_dir / "triggers").mkdir(parents=True, exist_ok=True)
+            (health_dir / "comparisons").mkdir(parents=True, exist_ok=True)
+            (health_dir / "reviews").mkdir(parents=True, exist_ok=True)
+            (health_dir / "external-analysis").mkdir(parents=True, exist_ok=True)
+            # write ui-index
+            index_data = sample_ui_index()
+            run_payload = cast(dict[str, object], index_data["run"])
+            run_payload["run_id"] = run_id
+            run_payload["run_label"] = run_label
+            (health_dir / "ui-index.json").write_text(
+                json.dumps(index_data), encoding="utf-8"
+            )
+            # write minimal artifacts
+            assessment_payload = {
+                "cluster_label": "cluster-a",
+                "assessment": {"health_rating": "healthy"},
+            }
+            (health_dir / "assessments" / f"{run_id}-cluster-a.json").write_text(
+                json.dumps(assessment_payload), encoding="utf-8"
+            )
+            (health_dir / "drilldowns" / f"{run_id}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "triggers" / f"{run_id}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "reviews" / f"{run_id}-review.json").write_text(
+                json.dumps({"rating": "ok"}), encoding="utf-8"
+            )
+            packs_dir = Path(tmpdir) / "packs"
+            pack_path = create_diagnostic_pack(run_id, runs_dir, output_dir=packs_dir)
+            
+            # Verify ZIP is still created
+            self.assertTrue(pack_path.exists())
+            
+            # Verify latest directory exists
+            latest_dir = packs_dir / "latest"
+            self.assertTrue(latest_dir.exists())
+            self.assertTrue(latest_dir.is_dir())
+            
+            # Verify review_bundle.json exists in latest
+            bundle_path = latest_dir / "review_bundle.json"
+            self.assertTrue(bundle_path.exists())
+            
+            # Verify review_input_14b.json exists in latest
+            input_path = latest_dir / "review_input_14b.json"
+            self.assertTrue(input_path.exists())
+            
+            # Verify content matches pack content
+            with zipfile.ZipFile(pack_path, "r") as archive:
+                zip_bundle = json.loads(archive.read("review_bundle.json"))
+                zip_input = json.loads(archive.read("review_input_14b.json"))
+            
+            disk_bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            disk_input = json.loads(input_path.read_text(encoding="utf-8"))
+            
+            # Compare key fields to ensure content parity
+            self.assertEqual(zip_bundle.get("schema_version"), disk_bundle.get("schema_version"))
+            self.assertEqual(zip_bundle.get("run", {}).get("run_id"), disk_bundle.get("run", {}).get("run_id"))
+            self.assertEqual(zip_input.get("schema_version"), disk_input.get("schema_version"))
+            self.assertEqual(zip_input.get("source_run_id"), disk_input.get("source_run_id"))
+
+    def test_latest_pack_mirror_overwritten_on_rebuild(self) -> None:
+        """Test that rebuilding pack overwrites the latest mirror with new content."""
+        run_id_1 = "run-first"
+        run_id_2 = "run-second"
+        run_label = "health-run"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs"
+            health_dir = runs_dir / "health"
+            (health_dir / "assessments").mkdir(parents=True, exist_ok=True)
+            (health_dir / "drilldowns").mkdir(parents=True, exist_ok=True)
+            (health_dir / "triggers").mkdir(parents=True, exist_ok=True)
+            (health_dir / "comparisons").mkdir(parents=True, exist_ok=True)
+            (health_dir / "reviews").mkdir(parents=True, exist_ok=True)
+            (health_dir / "external-analysis").mkdir(parents=True, exist_ok=True)
+            
+            # Create ui-index with first run
+            index_data = sample_ui_index()
+            run_payload = cast(dict[str, object], index_data["run"])
+            run_payload["run_id"] = run_id_1
+            run_payload["run_label"] = run_label
+            (health_dir / "ui-index.json").write_text(
+                json.dumps(index_data), encoding="utf-8"
+            )
+            
+            # Create artifacts
+            assessment_payload = {
+                "cluster_label": "cluster-a",
+                "assessment": {"health_rating": "healthy"},
+            }
+            (health_dir / "assessments" / f"{run_id_1}-cluster-a.json").write_text(
+                json.dumps(assessment_payload), encoding="utf-8"
+            )
+            (health_dir / "drilldowns" / f"{run_id_1}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "triggers" / f"{run_id_1}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "reviews" / f"{run_id_1}-review.json").write_text(
+                json.dumps({"rating": "ok"}), encoding="utf-8"
+            )
+            
+            packs_dir = Path(tmpdir) / "packs"
+            
+            # First pack build
+            pack_path_1 = create_diagnostic_pack(run_id_1, runs_dir, output_dir=packs_dir)
+            self.assertTrue(pack_path_1.exists())
+            
+            latest_dir = packs_dir / "latest"
+            bundle_path = latest_dir / "review_bundle.json"
+            input_path = latest_dir / "review_input_14b.json"
+            
+            # Verify first build created files
+            self.assertTrue(bundle_path.exists())
+            self.assertTrue(input_path.exists())
+            
+            # Get modification times
+            bundle_mtime_1 = bundle_path.stat().st_mtime
+            input_mtime_1 = input_path.stat().st_mtime
+            
+            # Modify run artifacts for second run
+            (health_dir / "ui-index.json").write_text(
+                json.dumps({**index_data, "run": {**run_payload, "run_id": run_id_2}}), encoding="utf-8"
+            )
+            (health_dir / "assessments" / f"{run_id_1}-cluster-a.json").unlink()
+            (health_dir / "assessments" / f"{run_id_2}-cluster-a.json").write_text(
+                json.dumps(assessment_payload), encoding="utf-8"
+            )
+            (health_dir / "drilldowns" / f"{run_id_1}-cluster-a.json").unlink()
+            (health_dir / "drilldowns" / f"{run_id_2}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "triggers" / f"{run_id_1}-cluster-a.json").unlink()
+            (health_dir / "triggers" / f"{run_id_2}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "reviews" / f"{run_id_1}-review.json").unlink()
+            (health_dir / "reviews" / f"{run_id_2}-review.json").write_text(
+                json.dumps({"rating": "degraded"}), encoding="utf-8"
+            )
+            
+            # Second pack build with different run_id
+            pack_path_2 = create_diagnostic_pack(run_id_2, runs_dir, output_dir=packs_dir)
+            self.assertTrue(pack_path_2.exists())
+            
+            # Verify latest directory still exists (same location)
+            self.assertTrue(latest_dir.exists())
+            self.assertTrue(latest_dir.is_dir())
+            
+            # Verify files were overwritten (newer modification time)
+            bundle_mtime_2 = bundle_path.stat().st_mtime
+            input_mtime_2 = input_path.stat().st_mtime
+            
+            self.assertGreater(bundle_mtime_2, bundle_mtime_1)
+            self.assertGreater(input_mtime_2, input_mtime_1)
+            
+            # Verify content reflects second run
+            bundle_content = json.loads(bundle_path.read_text(encoding="utf-8"))
+            input_content = json.loads(input_path.read_text(encoding="utf-8"))
+            
+            self.assertEqual(bundle_content.get("run", {}).get("run_id"), run_id_2)
+            self.assertEqual(input_content.get("source_run_id"), run_id_2)
+
+    def test_latest_pack_mirror_content_parity_with_zip(self) -> None:
+        """Test that latest mirror files have identical content to ZIP contents."""
+        run_id = "run-parity"
+        run_label = "health-run"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs"
+            health_dir = runs_dir / "health"
+            (health_dir / "assessments").mkdir(parents=True, exist_ok=True)
+            (health_dir / "drilldowns").mkdir(parents=True, exist_ok=True)
+            (health_dir / "triggers").mkdir(parents=True, exist_ok=True)
+            (health_dir / "comparisons").mkdir(parents=True, exist_ok=True)
+            (health_dir / "reviews").mkdir(parents=True, exist_ok=True)
+            (health_dir / "external-analysis").mkdir(parents=True, exist_ok=True)
+            
+            index_data = sample_ui_index()
+            run_payload = cast(dict[str, object], index_data["run"])
+            run_payload["run_id"] = run_id
+            run_payload["run_label"] = run_label
+            (health_dir / "ui-index.json").write_text(
+                json.dumps(index_data), encoding="utf-8"
+            )
+            
+            # Create richer test data
+            assessment_payload = {
+                "cluster_label": "cluster-a",
+                "assessment": {
+                    "health_rating": "degraded",
+                    "findings": [{"description": "pod pressure"}],
+                    "hypotheses": [{"description": "control plane drift"}],
+                },
+            }
+            (health_dir / "assessments" / f"{run_id}-cluster-a.json").write_text(
+                json.dumps(assessment_payload), encoding="utf-8"
+            )
+            drilldown_payload = {
+                "cluster_label": "cluster-a",
+                "trigger_reasons": ["CrashLoopBackOff"],
+                "warning_events": [{"reason": "CrashLoopBackOff"}],
+                "non_running_pods": [{"name": "pod"}],
+            }
+            (health_dir / "drilldowns" / f"{run_id}-cluster-a.json").write_text(
+                json.dumps(drilldown_payload), encoding="utf-8"
+            )
+            (health_dir / "triggers" / f"{run_id}-cluster-a.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (health_dir / "reviews" / f"{run_id}-review.json").write_text(
+                json.dumps({"rating": "ok", "quality_summary": []}), encoding="utf-8"
+            )
+            
+            packs_dir = Path(tmpdir) / "packs"
+            pack_path = create_diagnostic_pack(run_id, runs_dir, output_dir=packs_dir)
+            
+            latest_dir = packs_dir / "latest"
+            
+            # Read ZIP contents
+            with zipfile.ZipFile(pack_path, "r") as archive:
+                zip_bundle_text = archive.read("review_bundle.json").decode("utf-8")
+                zip_input_text = archive.read("review_input_14b.json").decode("utf-8")
+            
+            # Read disk contents
+            disk_bundle_text = (latest_dir / "review_bundle.json").read_text(encoding="utf-8")
+            disk_input_text = (latest_dir / "review_input_14b.json").read_text(encoding="utf-8")
+            
+            # Verify exact parity (same JSON text)
+            self.assertEqual(zip_bundle_text, disk_bundle_text)
+            self.assertEqual(zip_input_text, disk_input_text)

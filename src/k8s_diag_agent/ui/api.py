@@ -389,6 +389,8 @@ class DiagnosticPackPayload(TypedDict, total=False):
     path: str | None
     timestamp: str | None
     label: str | None
+    reviewBundlePath: str | None
+    reviewInput14bPath: str | None
 
 
 class ProviderExecutionBranchPayload(TypedDict, total=False):
@@ -1248,6 +1250,8 @@ def _serialize_diagnostic_pack(view: DiagnosticPackView | None) -> DiagnosticPac
         "path": view.path,
         "timestamp": view.timestamp,
         "label": view.label,
+        "reviewBundlePath": view.review_bundle_path,
+        "reviewInput14bPath": view.review_input_14b_path,
     }
 
 
