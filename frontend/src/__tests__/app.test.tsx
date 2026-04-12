@@ -1036,6 +1036,50 @@ describe("App", () => {
     expect(within(queueArticle!).getByText(/Inspect artifact output/i)).toBeInTheDocument();
   });
 
+  test("queue card status metadata is visually separate from title content", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    // Find a queue card - the first one that has both title and status
+    const queueCard = queueScoped
+      .getByText(/Describe diag CRD for control plane/i)
+      .closest("article");
+    expect(queueCard).not.toBeNull();
+
+    // Verify the title/reason block exists (left column content)
+    const titleBlock = within(queueCard!).getByText(/Describe diag CRD for control plane/i);
+    expect(titleBlock).toBeInTheDocument();
+
+    // Verify the "Why this check" label exists (part of the left column)
+    expect(within(queueCard!).getByText(/Why this check:/i)).toBeInTheDocument();
+
+    // Verify the status block exists (right column: Approval, Execution, Outcome)
+    const statusBlock = queueCard!.querySelector(".next-check-queue-item-status");
+    expect(statusBlock).not.toBeNull();
+    expect(within(statusBlock!).getByText(/Approval:/i)).toBeInTheDocument();
+    expect(within(statusBlock!).getByText(/Execution:/i)).toBeInTheDocument();
+    expect(within(statusBlock!).getByText(/Outcome:/i)).toBeInTheDocument();
+
+    // Verify the status block is a separate DOM element from the title
+    // The status block should be a sibling to the left content div, not nested inside it
+    const metaContainer = within(queueCard!).getByText(/Why this check:/i).closest(".next-check-queue-item-meta");
+    expect(metaContainer).not.toBeNull();
+
+    // The meta container should have two direct children: the left content div and the status div
+    const metaChildren = metaContainer!.children;
+    expect(metaChildren.length).toBe(2);
+
+    // First child should contain the title/reason (left column)
+    const leftColumn = metaChildren[0];
+    expect(leftColumn.textContent).toContain("Describe diag CRD");
+    expect(leftColumn.textContent).toContain("Why this check:");
+
+    // Second child should be the status block (right column)
+    const rightColumn = metaChildren[1];
+    expect(rightColumn.className).toContain("next-check-queue-item-status");
+  });
+
   test("hides next check plan section when planner data is absent", async () => {
     const noPlanCluster = { ...sampleClusterDetail, nextCheckPlan: [] };
     const runWithoutPlan = { ...sampleRun, nextCheckPlan: null };

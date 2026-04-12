@@ -934,6 +934,10 @@ body {
 
 .next-check-queue-item-meta {
   display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .queue-card-title {
@@ -948,9 +952,7 @@ body {
 .queue-card-reason-label {
   color: #94a3b8;
   font-weight: 500;
-}
   font-size: 0.85rem;
-  color: #94a3b8;
 }
 
 .queue-card-signal {
