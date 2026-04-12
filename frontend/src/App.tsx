@@ -3182,12 +3182,18 @@ const App = () => {
                     <article className="next-check-queue-item" key={queueCandidateKey}>
                       <div className="next-check-queue-item-meta">
                         <div>
-                          <strong>{item.description}</strong>
-                          {formatSourceType(item.sourceType) ? (
-                            <span className="queue-source-pill">
-                              {formatSourceType(item.sourceType)}
-                            </span>
-                          ) : null}
+                          <div className="queue-card-title">
+                            <strong>{item.description}</strong>
+                            {formatSourceType(item.sourceType) ? (
+                              <span className="queue-source-pill">
+                                {formatSourceType(item.sourceType)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="queue-card-reason">
+                            {humanizeReason(item.sourceReason) || item.sourceReason || humanizeReason(item.normalizationReason) || "—"}{" "}
+                            {item.expectedSignal ? <span className="queue-card-signal">→ {item.expectedSignal}</span> : null}
+                          </p>
                           <p className="tiny">
                             Cluster: {item.targetCluster ?? "Unassigned"}
                           </p>

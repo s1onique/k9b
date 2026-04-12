@@ -163,6 +163,58 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             candidate_index_value = requested_candidate_index
         return found_entry, candidate_index_value
 
+    def _find_candidate_in_all_plan_artifacts(
+        self,
+        run_id: str,
+        candidate_id: str | None,
+        candidate_index: int | None,
+    ) -> tuple[dict[str, object] | None, int | None, Path | None]:
+        """Search for a candidate across all planner artifacts for the given run.
+
+        This handles cases where the plan artifact path in the queue may differ from
+        the current next_check_plan.artifact_path (e.g., due to plan regeneration).
+
+        Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
+        """
+        # First try the promoted entries (deterministic checks)
+        promotions = collect_promoted_queue_entries(self.runs_dir, run_id)
+        if promotions:
+            entry, idx = self._resolve_plan_candidate(
+                promotions,
+                candidate_id,
+                candidate_index,
+            )
+            if entry is not None and idx is not None:
+                return dict(entry), idx, None
+
+        # Scan all external-analysis artifacts for planner artifacts
+        external_analysis_dir = self.runs_dir / "external-analysis"
+        if external_analysis_dir.exists():
+            # Find all next-check-plan artifacts for this run
+            for artifact_file in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+                try:
+                    artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                    # Check if this is a planning artifact
+                    purpose = artifact_data.get("purpose")
+                    if purpose != "next-check-planning":
+                        continue
+
+                    payload = artifact_data.get("payload", {})
+                    candidates = payload.get("candidates", [])
+                    entry, idx = self._resolve_plan_candidate(
+                        candidates if isinstance(candidates, Sequence) else (),
+                        candidate_id,
+                        candidate_index,
+                    )
+                    if entry is not None and idx is not None:
+                        # Return full relative path within runs_dir (external-analysis/filename)
+                        return dict(entry), idx, Path("external-analysis") / artifact_file.name
+                except Exception:
+                    # Skip malformed artifacts, continue searching
+                    continue
+
+        return None, None, None
+
     def _handle_next_check_execution(self) -> None:
         context = self._load_context()
         if context is None:
@@ -190,34 +242,68 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if not isinstance(request_cluster, str) or not request_cluster:
             self._send_json({"error": "clusterLabel is required"}, 400)
             return
-        plan_path = (self.runs_dir / plan.artifact_path).resolve()
-        if not str(plan_path).startswith(str(self.runs_dir.resolve())):
-            self._send_json({"error": "Invalid plan artifact path"}, 400)
-            return
-        if not plan_path.exists():
-            self._send_json({"error": "Plan artifact missing"}, 404)
-            return
-        try:
-            plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
-        except Exception:
-            self._send_json({"error": "Unable to read plan artifact"}, 500)
-            return
         candidate_id_raw = payload.get("candidateId")
         candidate_id = candidate_id_raw if isinstance(candidate_id_raw, str) and candidate_id_raw else None
         if candidate_id is None and candidate_index is None:
             self._send_json({"error": "candidateId or candidateIndex is required"}, 400)
             return
-        candidates = plan_data.get("candidates")
-        candidate_entry, resolved_index = self._resolve_plan_candidate(
-            candidates if isinstance(candidates, Sequence) else (),
-            candidate_id,
-            candidate_index,
-        )
+
+        # Try the primary plan artifact first
+        candidate_entry: dict[str, object] | None = None
+        resolved_index: int | None = None
+        plan_path_used: Path | None = None
+
+        plan_path = (self.runs_dir / plan.artifact_path).resolve()
+        if str(plan_path).startswith(str(self.runs_dir.resolve())) and plan_path.exists():
+            try:
+                plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
+                candidates = plan_data.get("candidates")
+                raw_entry, resolved_index = self._resolve_plan_candidate(
+                    candidates if isinstance(candidates, Sequence) else (),
+                    candidate_id,
+                    candidate_index,
+                )
+                if raw_entry is not None and resolved_index is not None:
+                    candidate_entry = dict(raw_entry)
+                    plan_path_used = plan_path
+            except Exception:
+                # Plan artifact read failed, will try fallback
+                pass
+
+        # If not found in primary plan, search across all plan artifacts
         if candidate_entry is None or resolved_index is None:
-            self._send_json({"error": "Candidate not found"}, 400)
+            fallback_entry, fallback_index, fallback_path = self._find_candidate_in_all_plan_artifacts(
+                context.run.run_id,
+                candidate_id,
+                candidate_index,
+            )
+            if fallback_entry is not None and fallback_index is not None:
+                candidate_entry = fallback_entry
+                resolved_index = fallback_index
+                plan_path_used = fallback_path
+
+        if candidate_entry is None or resolved_index is None:
+            # Provide clearer error message for operator
+            if candidate_id and candidate_index is not None:
+                self._send_json({"error": "Candidate not found. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
+            elif candidate_id:
+                self._send_json({"error": "Candidate not found by ID. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
+            else:
+                self._send_json({"error": "Candidate not found at specified index. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
             return
+
         candidate = candidate_entry
         candidate_index = resolved_index
+
+        # Use the fallback plan path if the primary wasn't found
+        # Convert fallback relative path to absolute for validation
+        if plan_path_used is not None and not plan_path_used.is_absolute():
+            plan_path_used = self.runs_dir / plan_path_used
+        effective_plan_path = plan_path_used if plan_path_used else plan_path
+        if not effective_plan_path or not str(effective_plan_path).startswith(str(self.runs_dir.resolve())):
+            self._send_json({"error": "Plan artifact path invalid"}, 400)
+            return
+
         candidate_view = None
         plan_view = context.run.next_check_plan
         if plan_view:
@@ -257,7 +343,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 runs_dir=self.runs_dir,
                 run_id=context.run.run_id,
                 run_label=context.run.run_label,
-                plan_artifact_path=Path(plan.artifact_path),
+                plan_artifact_path=effective_plan_path,
                 candidate_index=candidate_index,
                 candidate=candidate,
                 target_context=cluster_context,
@@ -274,7 +360,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Execution failed: {exc}"}, 500)
             return
         artifact_path = _relative_path(self.runs_dir, artifact.artifact_path)
-        payload = {
+        response_payload = {
             "status": artifact.status.value,
             "summary": artifact.summary,
             "artifactPath": artifact_path,
@@ -289,7 +375,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "stderrTruncated": artifact.stderr_truncated,
             "outputBytesCaptured": artifact.output_bytes_captured,
         }
-        self._send_json(payload)
+        self._send_json(response_payload)
 
     def _handle_deterministic_promotion(self) -> None:
         context = self._load_context()
@@ -407,31 +493,51 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if not isinstance(request_cluster, str) or not request_cluster:
             self._send_json({"error": "clusterLabel is required"}, 400)
             return
-        plan_path = (self.runs_dir / plan.artifact_path).resolve()
-        if not str(plan_path).startswith(str(self.runs_dir.resolve())):
-            self._send_json({"error": "Invalid plan artifact path"}, 400)
-            return
-        if not plan_path.exists():
-            self._send_json({"error": "Plan artifact missing"}, 404)
-            return
-        try:
-            plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
-        except Exception:
-            self._send_json({"error": "Unable to read plan artifact"}, 500)
-            return
         candidate_id_raw = payload.get("candidateId")
         candidate_id = candidate_id_raw if isinstance(candidate_id_raw, str) and candidate_id_raw else None
         if candidate_id is None and candidate_index is None:
             self._send_json({"error": "candidateId or candidateIndex is required"}, 400)
             return
-        candidates = plan_data.get("candidates")
-        candidate_entry, resolved_index = self._resolve_plan_candidate(
-            candidates if isinstance(candidates, Sequence) else (),
-            candidate_id,
-            candidate_index,
-        )
+
+        # Try the primary plan artifact first
+        candidate_entry: dict[str, object] | None = None
+        resolved_index: int | None = None
+
+        plan_path = (self.runs_dir / plan.artifact_path).resolve()
+        if str(plan_path).startswith(str(self.runs_dir.resolve())) and plan_path.exists():
+            try:
+                plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
+                candidates = plan_data.get("candidates")
+                raw_entry, resolved_index = self._resolve_plan_candidate(
+                    candidates if isinstance(candidates, Sequence) else (),
+                    candidate_id,
+                    candidate_index,
+                )
+                if raw_entry is not None and resolved_index is not None:
+                    candidate_entry = dict(raw_entry)
+            except Exception:
+                # Plan artifact read failed, will try fallback
+                pass
+
+        # If not found in primary plan, search across all plan artifacts
         if candidate_entry is None or resolved_index is None:
-            self._send_json({"error": "Candidate not found"}, 400)
+            fallback_entry, fallback_index, _ = self._find_candidate_in_all_plan_artifacts(
+                context.run.run_id,
+                candidate_id,
+                candidate_index,
+            )
+            if fallback_entry is not None and fallback_index is not None:
+                candidate_entry = fallback_entry
+                resolved_index = fallback_index
+
+        if candidate_entry is None or resolved_index is None:
+            # Provide clearer error message for operator
+            if candidate_id and candidate_index is not None:
+                self._send_json({"error": "Candidate not found. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
+            elif candidate_id:
+                self._send_json({"error": "Candidate not found by ID. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
+            else:
+                self._send_json({"error": "Candidate not found at specified index. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
             return
         candidate = candidate_entry
         raw_candidate_id_value = candidate.get("candidateId")
