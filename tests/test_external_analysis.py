@@ -13,6 +13,7 @@ from k8s_diag_agent.external_analysis.adapter import (
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisStatus,
+    UsefulnessClass,
     write_external_analysis_artifact,
 )
 from k8s_diag_agent.external_analysis.config import (
@@ -445,3 +446,91 @@ def test_external_analysis_adapter_persists_artifact(tmp_path: Path, monkeypatch
     persisted = json.loads(output_path.read_text(encoding="utf-8"))
     assert persisted["tool_name"] == "k8sgpt"
     assert persisted["artifact_path"] == str(output_path)
+
+
+# --- UsefulnessClass contract tests ---
+
+def test_usefulness_class_enum_values() -> None:
+    """Verify only the 4 approved usefulness classes exist."""
+    expected = {"useful", "partial", "noisy", "empty"}
+    actual = {cls.value for cls in UsefulnessClass}
+    assert actual == expected, f"UsefulnessClass has unexpected values: {actual - expected} or missing: {expected - actual}"
+
+
+def test_usefulness_class_roundtrip_useful() -> None:
+    """Test roundtrip for useful."""
+    artifact = ExternalAnalysisArtifact(
+        tool_name="test",
+        run_id="r",
+        cluster_label="c",
+        usefulness_class=UsefulnessClass.USEFUL,
+        usefulness_summary="Found relevant output",
+    )
+    data = artifact.to_dict()
+    loaded = ExternalAnalysisArtifact.from_dict(data)
+    assert loaded.usefulness_class == UsefulnessClass.USEFUL
+    assert loaded.usefulness_summary == "Found relevant output"
+
+
+def test_usefulness_class_roundtrip_partial() -> None:
+    """Test roundtrip for partial."""
+    artifact = ExternalAnalysisArtifact(
+        tool_name="test",
+        run_id="r",
+        cluster_label="c",
+        usefulness_class=UsefulnessClass.PARTIAL,
+        usefulness_summary="Output was truncated",
+    )
+    data = artifact.to_dict()
+    loaded = ExternalAnalysisArtifact.from_dict(data)
+    assert loaded.usefulness_class == UsefulnessClass.PARTIAL
+
+
+def test_usefulness_class_roundtrip_noisy() -> None:
+    """Test roundtrip for noisy."""
+    artifact = ExternalAnalysisArtifact(
+        tool_name="test",
+        run_id="r",
+        cluster_label="c",
+        usefulness_class=UsefulnessClass.NOISY,
+        usefulness_summary="Found warnings in output",
+    )
+    data = artifact.to_dict()
+    loaded = ExternalAnalysisArtifact.from_dict(data)
+    assert loaded.usefulness_class == UsefulnessClass.NOISY
+
+
+def test_usefulness_class_roundtrip_empty() -> None:
+    """Test roundtrip for empty."""
+    artifact = ExternalAnalysisArtifact(
+        tool_name="test",
+        run_id="r",
+        cluster_label="c",
+        usefulness_class=UsefulnessClass.EMPTY,
+    )
+    data = artifact.to_dict()
+    loaded = ExternalAnalysisArtifact.from_dict(data)
+    assert loaded.usefulness_class == UsefulnessClass.EMPTY
+
+
+def test_usefulness_class_unknown_value_becomes_none() -> None:
+    """Test that unknown usefulness values (e.g., from old artifacts) become None."""
+    # Simulate an old artifact with "redundant" which is no longer valid
+    old_artifact_data = {
+        "tool_name": "test",
+        "run_id": "r",
+        "cluster_label": "c",
+        "usefulness_class": "redundant",
+    }
+    loaded = ExternalAnalysisArtifact.from_dict(old_artifact_data)
+    # Unknown value should be treated as unset (None)
+    assert loaded.usefulness_class is None
+
+
+def test_usefulness_class_not_in_enum_raises() -> None:
+    """Verify that constructing UsefulnessClass with invalid value raises ValueError."""
+    import pytest
+    with pytest.raises(ValueError):
+        UsefulnessClass("redundant")
+    with pytest.raises(ValueError):
+        UsefulnessClass("unknown")

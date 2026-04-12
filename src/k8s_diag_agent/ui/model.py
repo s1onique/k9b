@@ -371,6 +371,8 @@ class NextCheckExecutionHistoryEntryView:
     stdout_truncated: bool | None
     stderr_truncated: bool | None
     output_bytes_captured: int | None
+    pack_refresh_status: str | None = None
+    pack_refresh_warning: str | None = None
     failure_class: str | None = None
     failure_summary: str | None = None
     suggested_next_operator_move: str | None = None
@@ -1252,6 +1254,8 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 stdout_truncated=_coerce_optional_bool(entry.get("stdoutTruncated")),
                 stderr_truncated=_coerce_optional_bool(entry.get("stderrTruncated")),
                 output_bytes_captured=_coerce_optional_int(entry.get("outputBytesCaptured")),
+                pack_refresh_status=_coerce_optional_str(entry.get("packRefreshStatus")),
+                pack_refresh_warning=_coerce_optional_str(entry.get("packRefreshWarning")),
                 failure_class=_coerce_optional_str(entry.get("failureClass")),
                 failure_summary=_coerce_optional_str(entry.get("failureSummary")),
                 suggested_next_operator_move=_coerce_optional_str(entry.get("suggestedNextOperatorMove")),

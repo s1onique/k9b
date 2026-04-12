@@ -28,6 +28,8 @@ export type NextCheckExecutionHistoryEntry = {
   stdoutTruncated: boolean | null;
   stderrTruncated: boolean | null;
   outputBytesCaptured: number | null;
+  packRefreshStatus: string | null;
+  packRefreshWarning: string | null;
   failureClass?: string | null;
   failureSummary?: string | null;
   suggestedNextOperatorMove?: string | null;
@@ -436,6 +438,9 @@ export type NextCheckExecutionResponse = {
   stdoutTruncated: boolean | null;
   stderrTruncated: boolean | null;
   outputBytesCaptured: number | null;
+  packRefreshStatus: string | null;
+  packRefreshWarning: string | null;
+  warning?: string | null;
 };
 
 export type NextCheckApprovalRequest = {

@@ -34,6 +34,13 @@
   color: var(--color-error, #b30000);
 }
 
+.next-check-execution-warning {
+  color: var(--color-warning, #8a6d3b);
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1348,6 +1355,19 @@ body {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: #bfdbfe;
+}
+
+.execution-history-pack-refresh {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.execution-history-pack-refresh .text-success {
+  color: #4ade80;
+}
+
+.execution-history-pack-refresh .text-warning {
+  color: #fbbf24;
 }
 
 .follow-up-block {

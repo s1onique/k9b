@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import mimetypes
 import sys
 from collections.abc import Mapping, Sequence
@@ -11,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
+from ..external_analysis.artifact import PackRefreshStatus
 from ..external_analysis.deterministic_next_check_promotion import (
     build_promoted_candidate_id,
     collect_promoted_queue_entries,
@@ -33,8 +35,93 @@ from .api import (
 from .model import UIIndexContext, build_ui_context, load_ui_index
 from .notifications import query_notifications
 
+logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_STATIC_DIR = PROJECT_ROOT / "frontend" / "dist"
+
+# Directory name for stable "latest" diagnostic pack mirror files
+_LATEST_PACK_DIR_NAME = "latest"
+
+# Scripts directory
+_SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+
+
+def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
+    """Refresh the latest diagnostic pack mirror files after manual next-check execution.
+
+    This rebuilds the review_bundle.json and review_input_14b.json files in the
+    'latest' directory so the UI always points to current content after operator
+    actions.
+
+    Args:
+        run_id: The current run ID
+        runs_dir: Path to the runs directory
+
+    Returns:
+        True if refresh succeeded, False otherwise.
+    """
+    import subprocess as _subprocess
+
+    build_script = _SCRIPTS_DIR / "build_diagnostic_pack.py"
+    if not build_script.exists():
+        logger.warning(
+            "Cannot refresh diagnostic pack: build script not found",
+            extra={"run_id": run_id, "script": str(build_script)},
+        )
+        return False
+
+    runs_dir_str = str(runs_dir)
+    build_cmd = [
+        sys.executable,
+        str(build_script),
+        "--run-id",
+        run_id,
+        "--runs-dir",
+        runs_dir_str,
+    ]
+
+    try:
+        # Run the build script - it will write the latest mirror files as part of its work
+        _subprocess.run(
+            build_cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,  # 2 minute timeout for pack building
+        )
+        logger.info(
+            "Diagnostic pack latest mirror refreshed",
+            extra={"run_id": run_id, "runs_dir": runs_dir_str},
+        )
+        return True
+    except _subprocess.CalledProcessError as exc:
+        logger.warning(
+            "Failed to refresh diagnostic pack latest mirror",
+            extra={
+                "run_id": run_id,
+                "runs_dir": runs_dir_str,
+                "returncode": exc.returncode,
+                "stderr": exc.stderr[:500] if exc.stderr else "",
+            },
+        )
+        return False
+    except _subprocess.TimeoutExpired:
+        logger.warning(
+            "Failed to refresh diagnostic pack latest mirror: timeout",
+            extra={"run_id": run_id, "runs_dir": runs_dir_str},
+        )
+        return False
+    except OSError as exc:
+        logger.warning(
+            "Failed to refresh diagnostic pack latest mirror",
+            extra={
+                "run_id": run_id,
+                "runs_dir": runs_dir_str,
+                "error": str(exc),
+            },
+        )
+        return False
 
 
 def start_ui_server(
@@ -375,6 +462,40 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "stderrTruncated": artifact.stderr_truncated,
             "outputBytesCaptured": artifact.output_bytes_captured,
         }
+
+        # Refresh diagnostic pack latest mirrors after successful execution
+        # This is a best-effort operation - don't fail the request if it doesn't work
+        refresh_status: PackRefreshStatus = PackRefreshStatus.SUCCEEDED
+        refresh_warning: str | None = None
+        refresh_ok = _refresh_diagnostic_pack_latest(context.run.run_id, self.runs_dir)
+        if not refresh_ok:
+            # Add a non-fatal warning to the response if refresh failed
+            refresh_status = PackRefreshStatus.FAILED
+            refresh_warning = "Review pack refresh failed; latest review files may be stale"
+            response_payload["warning"] = refresh_warning
+
+        # Persist the pack refresh outcome into the execution artifact for durable visibility
+        if artifact.artifact_path:
+            artifact_path_obj = Path(artifact.artifact_path)
+            if artifact_path_obj.exists():
+                try:
+                    # Read the existing artifact
+                    artifact_data = json.loads(artifact_path_obj.read_text(encoding="utf-8"))
+                    # Update with pack refresh outcome
+                    artifact_data["pack_refresh_status"] = refresh_status.value
+                    artifact_data["pack_refresh_warning"] = refresh_warning
+                    # Write back the updated artifact
+                    artifact_path_obj.write_text(json.dumps(artifact_data, indent=2), encoding="utf-8")
+                    # Also update the in-memory artifact for the response
+                    response_payload["packRefreshStatus"] = refresh_status.value
+                    response_payload["packRefreshWarning"] = refresh_warning
+                except Exception as exc:
+                    # Log but don't fail - refresh outcome is non-fatal
+                    logger.warning(
+                        "Failed to persist pack refresh status to artifact",
+                        extra={"artifact": str(artifact_path_obj), "error": str(exc)},
+                    )
+
         self._send_json(response_payload)
 
     def _handle_deterministic_promotion(self) -> None:

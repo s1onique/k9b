@@ -67,6 +67,8 @@ class NextCheckExecutionHistoryEntry(TypedDict, total=False):
     stdoutTruncated: bool | None
     stderrTruncated: bool | None
     outputBytesCaptured: int | None
+    packRefreshStatus: str | None
+    packRefreshWarning: str | None
     failureClass: str | None
     failureSummary: str | None
     suggestedNextOperatorMove: str | None
@@ -1283,6 +1285,8 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
             "stdoutTruncated": entry.stdout_truncated,
             "stderrTruncated": entry.stderr_truncated,
             "outputBytesCaptured": entry.output_bytes_captured,
+            "packRefreshStatus": entry.pack_refresh_status,
+            "packRefreshWarning": entry.pack_refresh_warning,
             "failureClass": entry.failure_class,
             "failureSummary": entry.failure_summary,
             "suggestedNextOperatorMove": entry.suggested_next_operator_move,

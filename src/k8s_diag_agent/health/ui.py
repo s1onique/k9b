@@ -17,6 +17,7 @@ from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
+    UsefulnessClass,
 )
 from ..external_analysis.config import (
     AutoDrilldownPolicy,
@@ -965,6 +966,20 @@ def _classify_execution_success(artifact: ExternalAnalysisArtifact) -> ResultInt
     return ResultInterpretation(result_class, summary, suggested)
 
 
+# Mapping from UsefulnessClass to the internal result class names used in UI
+_USE_TO_RESULT_CLASS_MAP: dict[str, str] = {
+    "useful": _RESULT_CLASS_USEFUL,
+    "partial": _RESULT_CLASS_PARTIAL,
+    "noisy": _RESULT_CLASS_NOISY,
+    "empty": _RESULT_CLASS_EMPTY,
+}
+
+
+def _map_usefulness_to_result_class(usefulness: UsefulnessClass) -> str:
+    """Map persisted usefulness class to UI result class for backward compatibility."""
+    return _USE_TO_RESULT_CLASS_MAP.get(usefulness.value, _RESULT_CLASS_INCONCLUSIVE)
+
+
 def _apply_result_interpretation(candidate: dict[str, object], interpretation: ResultInterpretation | None) -> None:
     if not interpretation:
         return
@@ -1225,33 +1240,49 @@ def _build_next_check_execution_history(
             continue
         payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
         follow_up = _classify_execution_failure(artifact)
-        entries.append(
-            {
-                "timestamp": artifact.timestamp.isoformat(),
-                "clusterLabel": artifact.cluster_label,
-                "candidateDescription": payload.get("candidateDescription"),
-                "commandFamily": payload.get("commandFamily"),
-                "status": artifact.status.value,
-                "durationMs": artifact.duration_ms,
-                "artifactPath": _relative_path(root_dir, artifact.artifact_path),
-                "timedOut": artifact.timed_out,
-                "stdoutTruncated": artifact.stdout_truncated,
-                "stderrTruncated": artifact.stderr_truncated,
-                "outputBytesCaptured": artifact.output_bytes_captured,
-            }
-        )
+        # Determine pack refresh status from artifact or default to None
+        pack_refresh_status: str | None = None
+        if artifact.pack_refresh_status:
+            pack_refresh_status = artifact.pack_refresh_status.value
+        entry: dict[str, object] = {
+            "timestamp": artifact.timestamp.isoformat(),
+            "clusterLabel": artifact.cluster_label,
+            "candidateDescription": payload.get("candidateDescription"),
+            "commandFamily": payload.get("commandFamily"),
+            "status": artifact.status.value,
+            "durationMs": artifact.duration_ms,
+            "artifactPath": _relative_path(root_dir, artifact.artifact_path),
+            "timedOut": artifact.timed_out,
+            "stdoutTruncated": artifact.stdout_truncated,
+            "stderrTruncated": artifact.stderr_truncated,
+            "outputBytesCaptured": artifact.output_bytes_captured,
+            "packRefreshStatus": pack_refresh_status,
+            "packRefreshWarning": artifact.pack_refresh_warning,
+        }
+        # Include persisted usefulness if available
+        if artifact.usefulness_class is not None:
+            entry["usefulnessClass"] = artifact.usefulness_class.value
+            if artifact.usefulness_summary:
+                entry["usefulnessSummary"] = artifact.usefulness_summary
         if follow_up and follow_up.failure_class:
-            entries[-1]["failureClass"] = follow_up.failure_class
-            entries[-1]["failureSummary"] = follow_up.failure_summary
-            entries[-1]["suggestedNextOperatorMove"] = follow_up.suggested_next_operator_move
+            entry["failureClass"] = follow_up.failure_class
+            entry["failureSummary"] = follow_up.failure_summary
+            entry["suggestedNextOperatorMove"] = follow_up.suggested_next_operator_move
         else:
-            success_interpretation = _classify_execution_success(artifact)
-            if success_interpretation:
-                entries[-1]["resultClass"] = success_interpretation.result_class
-                entries[-1]["resultSummary"] = success_interpretation.result_summary
-                entries[-1]["suggestedNextOperatorMove"] = (
-                    success_interpretation.suggested_next_operator_move
-                )
+            # Use persisted usefulness or compute from output
+            if artifact.usefulness_class is None:
+                success_interpretation = _classify_execution_success(artifact)
+                if success_interpretation:
+                    entry["resultClass"] = success_interpretation.result_class
+                    entry["resultSummary"] = success_interpretation.result_summary
+                    entry["suggestedNextOperatorMove"] = (
+                        success_interpretation.suggested_next_operator_move
+                    )
+            else:
+                # Persisted usefulness exists - use it as the result interpretation
+                entry["resultClass"] = _map_usefulness_to_result_class(artifact.usefulness_class)
+                entry["resultSummary"] = artifact.usefulness_summary
+        entries.append(entry)
         if len(entries) >= limit:
             break
     return entries

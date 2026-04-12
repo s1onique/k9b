@@ -28,6 +28,13 @@ class ExternalAnalysisPurpose(StrEnum):
     DIAGNOSTIC_PACK_REVIEW = "diagnostic-pack-review"
 
 
+class UsefulnessClass(StrEnum):
+    USEFUL = "useful"
+    PARTIAL = "partial"
+    NOISY = "noisy"
+    EMPTY = "empty"
+
+
 def _coerce_optional_int(value: object | None) -> int | None:
     if value is None:
         return None
@@ -39,6 +46,12 @@ def _coerce_optional_int(value: object | None) -> int | None:
         except ValueError:
             return None
     return None
+
+
+class PackRefreshStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    TIMED_OUT = "timed-out"
 
 
 @dataclass(frozen=True)
@@ -65,9 +78,13 @@ class ExternalAnalysisArtifact:
     error_summary: str | None = None
     skip_reason: str | None = None
     output_bytes_captured: int | None = None
+    pack_refresh_status: PackRefreshStatus | None = None
+    pack_refresh_warning: str | None = None
+    usefulness_class: UsefulnessClass | None = None
+    usefulness_summary: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
         "tool_name": self.tool_name,
         "run_label": self.run_label,
         "run_id": self.run_id,
@@ -90,7 +107,14 @@ class ExternalAnalysisArtifact:
         "error_summary": self.error_summary,
         "skip_reason": self.skip_reason,
         "output_bytes_captured": self.output_bytes_captured,
+        "pack_refresh_status": self.pack_refresh_status.value if self.pack_refresh_status else None,
+        "pack_refresh_warning": self.pack_refresh_warning,
         }
+        if self.usefulness_class is not None:
+            result["usefulness_class"] = self.usefulness_class.value
+        if self.usefulness_summary is not None:
+            result["usefulness_summary"] = self.usefulness_summary
+        return result
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ExternalAnalysisArtifact:
@@ -100,6 +124,22 @@ class ExternalAnalysisArtifact:
         purpose = ExternalAnalysisPurpose(purpose_raw)
         payload_raw = raw.get("payload")
         payload = dict(payload_raw) if isinstance(payload_raw, Mapping) else None
+        # Parse pack_refresh_status if present
+        pack_refresh_status_raw = raw.get("pack_refresh_status")
+        pack_refresh_status: PackRefreshStatus | None = None
+        if pack_refresh_status_raw:
+            try:
+                pack_refresh_status = PackRefreshStatus(str(pack_refresh_status_raw))
+            except ValueError:
+                pass
+        # Parse usefulness_class if present
+        usefulness_class_raw = raw.get("usefulness_class")
+        usefulness_class: UsefulnessClass | None = None
+        if usefulness_class_raw:
+            try:
+                usefulness_class = UsefulnessClass(str(usefulness_class_raw))
+            except ValueError:
+                pass
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -123,6 +163,10 @@ class ExternalAnalysisArtifact:
             stderr_truncated=bool(raw.get("stderr_truncated")) if raw.get("stderr_truncated") is not None else None,
             timed_out=bool(raw.get("timed_out")) if raw.get("timed_out") is not None else None,
             output_bytes_captured=_coerce_optional_int(raw.get("output_bytes_captured")),
+            pack_refresh_status=pack_refresh_status,
+            pack_refresh_warning=str(raw.get("pack_refresh_warning")) if raw.get("pack_refresh_warning") else None,
+            usefulness_class=usefulness_class,
+            usefulness_summary=str(raw.get("usefulness_summary")) if raw.get("usefulness_summary") else None,
         )
 
 

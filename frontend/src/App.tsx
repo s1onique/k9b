@@ -1347,6 +1347,16 @@ const ExecutionHistoryPanel = ({
                 failureSummary={entry.failureSummary}
                 suggestedNextOperatorMove={entry.suggestedNextOperatorMove}
               />
+              {entry.packRefreshStatus && (
+                <div className="execution-history-pack-refresh">
+                  <span className={entry.packRefreshStatus === "succeeded" ? "text-success" : "text-warning"}>
+                    Pack refresh: {entry.packRefreshStatus}
+                  </span>
+                  {entry.packRefreshWarning && (
+                    <span className="muted small"> — {entry.packRefreshWarning}</span>
+                  )}
+                </div>
+              )}
               {entry.artifactPath ? (
                 <a
                   className="link"
@@ -3379,6 +3389,11 @@ const App = () => {
                           ) : null}
                         </p>
                       ) : null}
+                      {executionResult?.warning ? (
+                        <p className="next-check-execution next-check-execution-warning">
+                          {executionResult.warning}
+                        </p>
+                      ) : null}
                       {detailsExpanded && (
                         <div className="next-check-queue-item-details">
                           <ResultInterpretationBlock
@@ -4039,6 +4054,11 @@ const App = () => {
                                         </a>
                                       </>
                                     ) : null}
+                                  </p>
+                                ) : null}
+                                {executionResult?.warning ? (
+                                  <p className="next-check-execution next-check-execution-warning">
+                                    {executionResult.warning}
                                   </p>
                                 ) : null}
                                 {executionBlockingReason ? (
