@@ -299,6 +299,7 @@ def _build_review_input_14b(
         ),
         "external_analysis_summary": _build_external_analysis_summary(external_entries),
         "next_check_execution_summary": _build_next_check_execution_summary(external_entries),
+        "next_check_lifecycle_summary": _build_next_check_lifecycle_summary(external_entries),
         "proposal_summary": _build_proposal_summary(proposal_entries),
         "review_enrichment": _extract_mapping(review_bundle, "review_enrichment"),
         "provider_execution": _extract_mapping(review_bundle, "provider_execution"),
@@ -497,6 +498,27 @@ def _build_comparison_summary(
     return result
 
 
+def _is_next_check_planning_entry(entry: dict[str, object]) -> bool:
+    """Check if an external analysis entry is a next-check-planning artifact."""
+    content = cast(dict[str, object], entry.get("content") or {})
+    purpose = content.get("purpose")
+    return isinstance(purpose, str) and purpose == "next-check-planning"
+
+
+def _is_next_check_approval_entry(entry: dict[str, object]) -> bool:
+    """Check if an external analysis entry is a next-check-approval artifact."""
+    content = cast(dict[str, object], entry.get("content") or {})
+    purpose = content.get("purpose")
+    return isinstance(purpose, str) and purpose == "next-check-approval"
+
+
+def _is_next_check_promotion_entry(entry: dict[str, object]) -> bool:
+    """Check if an external analysis entry is a next-check-promotion artifact."""
+    content = cast(dict[str, object], entry.get("content") or {})
+    purpose = content.get("purpose")
+    return isinstance(purpose, str) and purpose == "next-check-promotion"
+
+
 def _is_next_check_execution_entry(entry: dict[str, object]) -> bool:
     """Check if an external analysis entry is a next-check-execution artifact."""
     content = cast(dict[str, object], entry.get("content") or {})
@@ -577,6 +599,230 @@ def _build_next_check_execution_summary(external: list[dict[str, object]]) -> li
             "path": artifact_path,
         })
     return result
+
+
+def _build_next_check_lifecycle_summary(external: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Build a compact, reviewer-friendly summary of next-check candidates with lifecycle state.
+    
+    This function extracts lifecycle information from next-check planning, approval, promotion,
+    and execution artifacts to provide a consolidated view of all candidates in the current run.
+    
+    For each candidate, it includes:
+    - candidate_id: unique identifier
+    - source_type: 'planner' or 'deterministic'
+    - description: human-readable description
+    - cluster_label: target cluster
+    - source_reason: why this candidate was generated
+    - approval_status: current approval state
+    - execution_status: current execution state  
+    - outcome_status: final outcome
+    - timed_out: whether execution timed out
+    - result_summary: summary of execution result
+    - suggested_next_operator_move: suggested next action
+    - artifact pointers: plan_artifact_path, approval_artifact_path, execution_artifact_path
+    
+    Only includes planner-originated and deterministic-promoted candidates from the current run.
+    """
+    # Collect artifacts by type for efficient lookup
+    planning_entries: list[dict[str, object]] = []
+    approval_entries: list[dict[str, object]] = []
+    promotion_entries: list[dict[str, object]] = []
+    execution_entries: list[dict[str, object]] = []
+    
+    for entry in external:
+        content = cast(dict[str, object], entry.get("content") or {})
+        if _is_next_check_planning_entry(entry):
+            planning_entries.append(entry)
+        elif _is_next_check_approval_entry(entry):
+            approval_entries.append(entry)
+        elif _is_next_check_promotion_entry(entry):
+            promotion_entries.append(entry)
+        elif _is_next_check_execution_entry(entry):
+            execution_entries.append(entry)
+    
+    # Build lookup maps for approvals and executions by candidate_id and candidate_index
+    approval_by_candidate_id: dict[str, dict[str, object]] = {}
+    approval_by_candidate_index: dict[int, dict[str, object]] = {}
+    
+    for entry in approval_entries:
+        content = cast(dict[str, object], entry.get("content") or {})
+        payload = cast(dict[str, object], content.get("payload") or {})
+        candidate_id = payload.get("candidateId") or content.get("candidate_id")
+        candidate_index = payload.get("candidateIndex") or content.get("candidate_index")
+        
+        if isinstance(candidate_id, str) and candidate_id:
+            approval_by_candidate_id[candidate_id] = entry
+        if isinstance(candidate_index, int):
+            approval_by_candidate_index[candidate_index] = entry
+    
+    execution_by_candidate_id: dict[str, dict[str, object]] = {}
+    execution_by_candidate_index: dict[int, dict[str, object]] = {}
+    
+    for entry in execution_entries:
+        content = cast(dict[str, object], entry.get("content") or {})
+        payload = cast(dict[str, object], content.get("payload") or {})
+        candidate_id = payload.get("candidateId") or payload.get("candidate_id")
+        candidate_index = payload.get("candidateIndex") or payload.get("candidate_index")
+        
+        if isinstance(candidate_id, str) and candidate_id:
+            execution_by_candidate_id[candidate_id] = entry
+        if isinstance(candidate_index, int):
+            execution_by_candidate_index[candidate_index] = entry
+    
+    # Process planner-originated candidates
+    result: list[dict[str, object]] = []
+    
+    for entry in planning_entries:
+        content = cast(dict[str, object], entry.get("content") or {})
+        payload = cast(dict[str, object], content.get("payload") or {})
+        candidates = payload.get("candidates") if isinstance(payload, dict) else []
+        
+        if not isinstance(candidates, list):
+            continue
+            
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+                
+            candidate_id = candidate.get("candidateId")
+            candidate_index = candidate.get("candidateIndex")
+            
+            # Find approval if exists
+            approval_entry: dict[str, object] | None = None
+            if isinstance(candidate_id, str) and candidate_id in approval_by_candidate_id:
+                approval_entry = approval_by_candidate_id[candidate_id]
+            elif isinstance(candidate_index, int) and candidate_index in approval_by_candidate_index:
+                approval_entry = approval_by_candidate_index[candidate_index]
+            
+            # Find execution if exists
+            execution_entry: dict[str, object] | None = None
+            if isinstance(candidate_id, str) and candidate_id in execution_by_candidate_id:
+                execution_entry = execution_by_candidate_id[candidate_id]
+            elif isinstance(candidate_index, int) and candidate_index in execution_by_candidate_index:
+                execution_entry = execution_by_candidate_index[candidate_index]
+            
+            # Build lifecycle entry
+            lifecycle_entry = _build_lifecycle_entry(
+                source_type="planner",
+                candidate=candidate,
+                plan_entry=entry,
+                approval_entry=approval_entry,
+                execution_entry=execution_entry,
+            )
+            if lifecycle_entry:
+                result.append(lifecycle_entry)
+    
+    # Process deterministic promoted candidates
+    for entry in promotion_entries:
+        content = cast(dict[str, object], entry.get("content") or {})
+        payload = cast(dict[str, object], content.get("payload") or {})
+        
+        candidate_id = payload.get("candidateId")
+        candidate_index = payload.get("promotionIndex")
+        
+        # Find approval if exists (approvals can reference promoted candidates)
+        approval_entry = None
+        if isinstance(candidate_id, str) and candidate_id in approval_by_candidate_id:
+            approval_entry = approval_by_candidate_id[candidate_id]
+        elif isinstance(candidate_index, int) and candidate_index in approval_by_candidate_index:
+            approval_entry = approval_by_candidate_index[candidate_index]
+        
+        # Find execution if exists
+        execution_entry = None
+        if isinstance(candidate_id, str) and candidate_id in execution_by_candidate_id:
+            execution_entry = execution_by_candidate_id[candidate_id]
+        elif isinstance(candidate_index, int) and candidate_index in execution_by_candidate_index:
+            execution_entry = execution_by_candidate_index[candidate_index]
+        
+        # Build lifecycle entry for deterministic candidate
+        lifecycle_entry = _build_lifecycle_entry(
+            source_type="deterministic",
+            candidate=payload,
+            plan_entry=entry,
+            approval_entry=approval_entry,
+            execution_entry=execution_entry,
+        )
+        if lifecycle_entry:
+            result.append(lifecycle_entry)
+    
+    return result
+
+
+def _build_lifecycle_entry(
+    source_type: str,
+    candidate: dict[str, object],
+    plan_entry: dict[str, object],
+    approval_entry: dict[str, object] | None,
+    execution_entry: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Build a single lifecycle entry from a candidate and its related artifacts."""
+    
+    # Extract basic candidate info
+    candidate_id = candidate.get("candidateId") or candidate.get("candidate_id")
+    description = candidate.get("description") or "Next check"
+    cluster_label = candidate.get("targetCluster") or candidate.get("target_cluster")
+    source_reason = candidate.get("sourceReason") or candidate.get("source_reason")
+    
+    # Determine approval status
+    approval_status: str | None = None
+    approval_artifact_path: str | None = None
+    if approval_entry:
+        approval_content = cast(dict[str, object], approval_entry.get("content") or {})
+        approval_payload = cast(dict[str, object], approval_content.get("payload") or {})
+        raw_approval_status = approval_payload.get("status") or approval_content.get("status")
+        approval_status = str(raw_approval_status) if raw_approval_status else None
+        raw_path = approval_entry.get("path")
+        approval_artifact_path = str(raw_path) if raw_path else None
+    
+    # Determine execution status
+    execution_status: str | None = None
+    execution_artifact_path: str | None = None
+    outcome_status: str | None = None
+    timed_out: bool = False
+    result_summary: str | None = None
+    suggested_next_operator_move: str | None = None
+    
+    if execution_entry:
+        exec_content = cast(dict[str, object], execution_entry.get("content") or {})
+        exec_payload = cast(dict[str, object], exec_content.get("payload") or {})
+        
+        raw_exec_status = exec_content.get("status")
+        execution_status = str(raw_exec_status) if raw_exec_status else None
+        raw_exec_path = execution_entry.get("path")
+        execution_artifact_path = str(raw_exec_path) if raw_exec_path else None
+        
+        # Get outcome status from payload
+        raw_outcome = exec_payload.get("outcomeStatus") or exec_content.get("outcome_status")
+        outcome_status = str(raw_outcome) if raw_outcome else None
+        
+        # Check for timeout
+        timed_out = bool(exec_content.get("timed_out") or exec_payload.get("timedOut"))
+        
+        # Get result summary and suggested move
+        raw_summary = exec_content.get("summary") or exec_payload.get("resultSummary")
+        result_summary = str(raw_summary) if raw_summary else None
+        raw_move = exec_payload.get("suggestedNextOperatorMove")
+        suggested_next_operator_move = str(raw_move) if raw_move else None
+    
+    # Get plan artifact path
+    plan_artifact_path = plan_entry.get("path")
+    
+    return {
+        "candidate_id": candidate_id,
+        "source_type": source_type,
+        "description": description,
+        "cluster_label": cluster_label,
+        "source_reason": source_reason,
+        "approval_status": approval_status,
+        "execution_status": execution_status,
+        "outcome_status": outcome_status,
+        "timed_out": timed_out,
+        "result_summary": result_summary,
+        "suggested_next_operator_move": suggested_next_operator_move,
+        "plan_artifact_path": plan_artifact_path,
+        "approval_artifact_path": approval_artifact_path,
+        "execution_artifact_path": execution_artifact_path,
+    }
 
 
 def _build_external_analysis_summary(external: list[dict[str, object]]) -> list[dict[str, object]]:

@@ -2237,6 +2237,57 @@ const App = () => {
     return true;
   };
 
+  const getNotRunnableExplanation = (candidate: NextCheckPlanCandidate): string | null => {
+    // Check in the same order as isManualExecutionAllowed to ensure consistency
+    // 1. Candidate identifier
+    const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
+    if (!hasCandidateIdentifier) {
+      return "Not runnable: missing candidate identifier";
+    }
+
+    // 2. Safe to automate
+    if (!candidate.safeToAutomate) {
+      const reason = candidate.safetyReason || "not marked safe to automate";
+      return `Not runnable: ${humanizeReason(reason) || reason}`;
+    }
+
+    // 3. Approval required
+    if (candidate.requiresOperatorApproval && candidate.approvalStatus !== "approved") {
+      const reason = candidate.approvalReason || "approval required";
+      return `Not runnable: ${humanizeReason(reason) || reason}`;
+    }
+
+    // 4. Duplicate
+    if (candidate.duplicateOfExistingEvidence) {
+      const reason = candidate.duplicateReason || "duplicate of existing evidence";
+      return `Not runnable: ${humanizeReason(reason) || reason}`;
+    }
+
+    // 5. Command family exists
+    if (!candidate.suggestedCommandFamily) {
+      return "Not runnable: no command family specified";
+    }
+
+    // 6. Command family allowed
+    if (!ALLOWED_MANUAL_FAMILIES.has(candidate.suggestedCommandFamily)) {
+      return `Not runnable: unsupported command family '${candidate.suggestedCommandFamily}'`;
+    }
+
+    // 7. Target cluster resolved
+    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
+    if (!targetLabel) {
+      return "Not runnable: target cluster unresolved";
+    }
+
+    // 8. Cluster match (if both are set and different)
+    if (selectedClusterLabel && candidate.targetCluster && candidate.targetCluster !== selectedClusterLabel) {
+      return `Not runnable: candidate targets '${candidate.targetCluster}' but '${selectedClusterLabel}' is selected`;
+    }
+
+    // Fallback - should not reach here if logic is correct
+    return "Not eligible for manual execution";
+  };
+
   const handleManualExecution = async (candidate: NextCheckPlanCandidate, candidateKey: string) => {
     const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
     const candidateId = candidate.candidateId?.trim() ? candidate.candidateId : undefined;
@@ -3232,6 +3283,11 @@ const App = () => {
                           >
                             {executingCandidate === queueCandidateKey ? "Running…" : "Run candidate"}
                           </button>
+                        )}
+                        {!allowRun && (
+                          <span className="not-runnable-explanation">
+                            {getNotRunnableExplanation(item)}
+                          </span>
                         )}
                         {latestArtifactLink && (
                           <a
