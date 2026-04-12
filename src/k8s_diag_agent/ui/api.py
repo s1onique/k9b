@@ -74,6 +74,8 @@ class NextCheckExecutionHistoryEntry(TypedDict, total=False):
     suggestedNextOperatorMove: str | None
     resultClass: str | None
     resultSummary: str | None
+    usefulnessClass: str | None
+    usefulnessSummary: str | None
 
 
 class FreshnessPayload(TypedDict, total=False):
@@ -1292,6 +1294,8 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
             "suggestedNextOperatorMove": entry.suggested_next_operator_move,
             "resultClass": entry.result_class,
             "resultSummary": entry.result_summary,
+            "usefulnessClass": entry.usefulness_class,
+            "usefulnessSummary": entry.usefulness_summary,
         }
         for entry in entries
     ]

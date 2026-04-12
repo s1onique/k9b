@@ -35,6 +35,8 @@ export type NextCheckExecutionHistoryEntry = {
   suggestedNextOperatorMove?: string | null;
   resultClass?: string | null;
   resultSummary?: string | null;
+  usefulnessClass?: string | null;
+  usefulnessSummary?: string | null;
 };
 
 export type StatusCount = {
@@ -456,6 +458,19 @@ export type NextCheckApprovalResponse = {
   durationMs: number | null;
   candidateIndex: number;
   approvalTimestamp: string | null;
+};
+
+export type UsefulnessFeedbackRequest = {
+  artifactPath: string;
+  usefulnessClass: "useful" | "partial" | "noisy" | "empty";
+  usefulnessSummary?: string;
+};
+
+export type UsefulnessFeedbackResponse = {
+  status: string;
+  summary: string;
+  usefulnessClass: string;
+  usefulnessSummary: string | null;
 };
 
 export type RecommendedAction = {

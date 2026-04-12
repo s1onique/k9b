@@ -11,6 +11,7 @@ import {
   fetchProposals,
   fetchRun,
   promoteDeterministicNextCheck,
+  submitUsefulnessFeedback,
 } from "./api";
 import type {
   AutoInterpretation,
@@ -1272,12 +1273,141 @@ const ProviderExecutionPanel = ({
   </section>
 );
 
+// Usefulness feedback constants
+const USEFULNESS_CLASSES = [
+  { value: "useful", label: "Useful" },
+  { value: "partial", label: "Partial" },
+  { value: "noisy", label: "Noisy" },
+  { value: "empty", label: "Empty" },
+] as const;
+
+type UsefulnessFeedbackState = {
+  artifactPath: string;
+  isSubmitting: boolean;
+  error: string | null;
+  isExpanded: boolean;
+};
+
+type UsefulnessFeedbackHandler = {
+  onSubmitFeedback: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
+};
+
+const UsefulnessFeedbackControl = ({
+  entry,
+  onSubmit,
+}: {
+  entry: NextCheckExecutionHistoryEntry;
+  onSubmit: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<"useful" | "partial" | "noisy" | "empty" | null>(null);
+  const [summary, setSummary] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  // If usefulness is already recorded, show it in read-only mode
+  if (entry.usefulnessClass) {
+    return null;
+  }
+
+  // Only show feedback control if there's an artifact path
+  if (!entry.artifactPath) {
+    return null;
+  }
+
+  const handleSubmit = async () => {
+    if (!selectedClass || !entry.artifactPath) {
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(entry.artifactPath, selectedClass, summary.trim() || undefined);
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit feedback");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="usefulness-feedback-success">
+        <span className="muted small">✓ Feedback recorded</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="usefulness-feedback-control">
+      {!isExpanded ? (
+        <button
+          type="button"
+          className="link tiny"
+          onClick={() => setIsExpanded(true)}
+        >
+          Rate usefulness
+        </button>
+      ) : (
+        <div className="usefulness-feedback-form">
+          <p className="tiny muted">Was this check useful?</p>
+          <div className="usefulness-feedback-options">
+            {USEFULNESS_CLASSES.map((cls) => (
+              <label key={cls.value} className="usefulness-feedback-option">
+                <input
+                  type="radio"
+                  name={`usefulness-${entry.artifactPath}`}
+                  value={cls.value}
+                  checked={selectedClass === cls.value}
+                  onChange={() => setSelectedClass(cls.value as "useful" | "partial" | "noisy" | "empty")}
+                />
+                <span>{cls.label}</span>
+              </label>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Optional note"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className="usefulness-feedback-summary"
+            maxLength={200}
+          />
+          <div className="usefulness-feedback-actions">
+            <button
+              type="button"
+              className="button primary tiny"
+              onClick={handleSubmit}
+              disabled={!selectedClass || isSubmitting}
+            >
+              {isSubmitting ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              className="button secondary tiny"
+              onClick={() => setIsExpanded(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && <p className="usefulness-feedback-error">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ExecutionHistoryPanel = ({
   history,
   highlightedKey,
+  onSubmitFeedback,
 }: {
   history: NextCheckExecutionHistoryEntry[];
   highlightedKey: string | null;
+  onSubmitFeedback?: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
 }) => (
   <section className="panel execution-history-panel" id="execution-history">
     <div className="section-head">
@@ -1347,6 +1477,14 @@ const ExecutionHistoryPanel = ({
                 failureSummary={entry.failureSummary}
                 suggestedNextOperatorMove={entry.suggestedNextOperatorMove}
               />
+              {entry.usefulnessClass && (
+                <div className="usefulness-indicator">
+                  <span className="muted small">Usefulness: {entry.usefulnessClass}</span>
+                  {entry.usefulnessSummary && (
+                    <span className="muted small"> — {entry.usefulnessSummary}</span>
+                  )}
+                </div>
+              )}
               {entry.packRefreshStatus && (
                 <div className="execution-history-pack-refresh">
                   <span className={entry.packRefreshStatus === "succeeded" ? "text-success" : "text-warning"}>
@@ -1367,6 +1505,12 @@ const ExecutionHistoryPanel = ({
                   View artifact
                 </a>
               ) : null}
+              {onSubmitFeedback && entry.artifactPath && (
+                <UsefulnessFeedbackControl
+                  entry={entry}
+                  onSubmit={onSubmitFeedback}
+                />
+              )}
             </article>
           );
         })}
@@ -2399,6 +2543,23 @@ const App = () => {
       setApprovingCandidate((current) => (current === candidateKey ? null : current));
     }
   };
+
+  const handleUsefulnessFeedback = useCallback(
+    async (
+      artifactPath: string,
+      usefulnessClass: string,
+      summary: string | undefined
+    ) => {
+      await submitUsefulnessFeedback({
+        artifactPath,
+        usefulnessClass: usefulnessClass as "useful" | "partial" | "noisy" | "empty",
+        usefulnessSummary: summary,
+      });
+      // Refresh to get updated data
+      await refresh();
+    },
+    [refresh]
+  );
 
   if (!run || !fleet || !proposals) {
     return (
@@ -3436,7 +3597,11 @@ const App = () => {
           ))
         )}
       </section>
-    <ExecutionHistoryPanel history={executionHistory} highlightedKey={executionHistoryHighlightKey} />
+    <ExecutionHistoryPanel
+      history={executionHistory}
+      highlightedKey={executionHistoryHighlightKey}
+      onSubmitFeedback={handleUsefulnessFeedback}
+    />
       <ReviewEnrichmentPanel
         reviewEnrichment={run.reviewEnrichment}
         reviewEnrichmentStatus={run.reviewEnrichmentStatus}

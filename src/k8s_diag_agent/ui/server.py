@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
-from ..external_analysis.artifact import PackRefreshStatus
+from ..external_analysis.artifact import PackRefreshStatus, UsefulnessClass
 from ..external_analysis.deterministic_next_check_promotion import (
     build_promoted_candidate_id,
     collect_promoted_queue_entries,
@@ -173,6 +173,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             return
         if route == "/api/next-check-approval":
             self._handle_next_check_approval()
+            return
+        if route == "/api/next-check-execution-usefulness":
+            self._handle_usefulness_feedback()
             return
         self._send_text(404, "Not Found")
 
@@ -739,6 +742,105 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "approvalTimestamp": artifact.timestamp.isoformat(),
         }
         self._send_json(response)
+
+    def _handle_usefulness_feedback(self) -> None:
+        """Handle operator feedback on next-check execution usefulness.
+
+        Accepts artifactPath, usefulnessClass (useful|partial|noisy|empty),
+        and optional usefulnessSummary, then updates the execution artifact in-place.
+        """
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+
+        # Validate required fields
+        artifact_path_rel = payload.get("artifactPath")
+        if not isinstance(artifact_path_rel, str) or not artifact_path_rel:
+            self._send_json({"error": "artifactPath is required"}, 400)
+            return
+
+        usefulness_class_raw = payload.get("usefulnessClass")
+        if not isinstance(usefulness_class_raw, str) or not usefulness_class_raw:
+            self._send_json({"error": "usefulnessClass is required"}, 400)
+            return
+
+        # Validate usefulness class - only allow the 4 contract values
+        try:
+            usefulness_class = UsefulnessClass(usefulness_class_raw)
+        except ValueError:
+            self._send_json(
+                {
+                    "error": "Invalid usefulnessClass. Must be one of: useful, partial, noisy, empty"
+                },
+                400,
+            )
+            return
+
+        # Optional summary
+        usefulness_summary = payload.get("usefulnessSummary")
+        if usefulness_summary is not None and not isinstance(usefulness_summary, str):
+            self._send_json({"error": "usefulnessSummary must be a string"}, 400)
+            return
+
+        # Resolve artifact path securely
+        try:
+            artifact_path = (self.runs_dir / artifact_path_rel).resolve()
+        except Exception:
+            self._send_json({"error": "Invalid artifact path"}, 400)
+            return
+
+        # Verify path is within runs_dir
+        if not str(artifact_path).startswith(str(self.runs_dir.resolve())):
+            self._send_json({"error": "Artifact path must be within runs directory"}, 400)
+            return
+
+        if not artifact_path.exists():
+            self._send_json({"error": "Artifact not found"}, 404)
+            return
+
+        # Read, update, and write the artifact
+        try:
+            artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            self._send_json({"error": f"Unable to read artifact: {exc}"}, 500)
+            return
+
+        # Update usefulness fields
+        artifact_data["usefulness_class"] = usefulness_class.value
+        if usefulness_summary:
+            artifact_data["usefulness_summary"] = usefulness_summary
+        elif "usefulness_summary" in artifact_data:
+            # Clear if empty string provided
+            del artifact_data["usefulness_summary"]
+
+        try:
+            artifact_path.write_text(json.dumps(artifact_data, indent=2), encoding="utf-8")
+        except Exception as exc:
+            self._send_json({"error": f"Unable to persist feedback: {exc}"}, 500)
+            return
+
+        logger.info(
+            "Operator recorded usefulness feedback",
+            extra={
+                "artifact": str(artifact_path),
+                "usefulness_class": usefulness_class.value,
+                "usefulness_summary": usefulness_summary,
+            },
+        )
+
+        self._send_json({
+            "status": "success",
+            "summary": "Usefulness feedback recorded",
+            "usefulnessClass": usefulness_class.value,
+            "usefulnessSummary": usefulness_summary,
+        })
 
     def _serve_static(self, route: str) -> None:
         target = route or "/"

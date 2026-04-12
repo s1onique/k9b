@@ -378,6 +378,8 @@ class NextCheckExecutionHistoryEntryView:
     suggested_next_operator_move: str | None = None
     result_class: str | None = None
     result_summary: str | None = None
+    usefulness_class: str | None = None
+    usefulness_summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1261,6 +1263,8 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 suggested_next_operator_move=_coerce_optional_str(entry.get("suggestedNextOperatorMove")),
                 result_class=_coerce_optional_str(entry.get("resultClass")),
                 result_summary=_coerce_optional_str(entry.get("resultSummary")),
+                usefulness_class=_coerce_optional_str(entry.get("usefulnessClass")),
+                usefulness_summary=_coerce_optional_str(entry.get("usefulnessSummary")),
             )
         )
     return tuple(entries)

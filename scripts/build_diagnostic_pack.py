@@ -598,6 +598,10 @@ def _build_next_check_execution_summary(external: list[dict[str, object]]) -> li
         # Extract summary
         summary = content.get("summary")
         
+        # Extract usefulness fields if present
+        usefulness_class = content.get("usefulness_class")
+        usefulness_summary = content.get("usefulness_summary")
+        
         # Get artifact path
         artifact_path = entry.get("path")
         
@@ -611,6 +615,8 @@ def _build_next_check_execution_summary(external: list[dict[str, object]]) -> li
             "duration_ms": duration_ms,
             "summary": summary,
             "path": artifact_path,
+            "usefulness_class": usefulness_class,
+            "usefulness_summary": usefulness_summary,
         })
     return result
 
@@ -795,6 +801,8 @@ def _build_lifecycle_entry(
     timed_out: bool = False
     result_summary: str | None = None
     suggested_next_operator_move: str | None = None
+    usefulness_class: str | None = None
+    usefulness_summary: str | None = None
     
     if execution_entry:
         exec_content = cast(dict[str, object], execution_entry.get("content") or {})
@@ -817,6 +825,12 @@ def _build_lifecycle_entry(
         result_summary = str(raw_summary) if raw_summary else None
         raw_move = exec_payload.get("suggestedNextOperatorMove")
         suggested_next_operator_move = str(raw_move) if raw_move else None
+        
+        # Get usefulness fields if present
+        raw_usefulness_class = exec_content.get("usefulness_class")
+        usefulness_class = str(raw_usefulness_class) if raw_usefulness_class else None
+        raw_usefulness_summary = exec_content.get("usefulness_summary")
+        usefulness_summary = str(raw_usefulness_summary) if raw_usefulness_summary else None
     
     # Get plan artifact path
     plan_artifact_path = plan_entry.get("path")
@@ -836,6 +850,8 @@ def _build_lifecycle_entry(
         "plan_artifact_path": plan_artifact_path,
         "approval_artifact_path": approval_artifact_path,
         "execution_artifact_path": execution_artifact_path,
+        "usefulness_class": usefulness_class,
+        "usefulness_summary": usefulness_summary,
     }
 
 

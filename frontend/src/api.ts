@@ -10,6 +10,8 @@ import type {
   NotificationsPayload,
   ProposalsPayload,
   RunPayload,
+  UsefulnessFeedbackRequest,
+  UsefulnessFeedbackResponse,
 } from "./types";
 
 type NextCheckExecutionError = Error & { blockingReason?: string | null };
@@ -151,4 +153,30 @@ export const promoteDeterministicNextCheck = async (
     throw new Error(message || "Failed to promote deterministic next check");
   }
   return (await response.json()) as DeterministicNextCheckPromotionResponse;
+};
+
+export const submitUsefulnessFeedback = async (
+  request: UsefulnessFeedbackRequest
+): Promise<UsefulnessFeedbackResponse> => {
+  const response = await fetch("/api/next-check-execution-usefulness", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to submit usefulness feedback");
+  }
+  return (await response.json()) as UsefulnessFeedbackResponse;
 };
