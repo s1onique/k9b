@@ -2231,9 +2231,6 @@ const App = () => {
     if (!targetLabel) {
       return false;
     }
-    if (selectedClusterLabel && candidate.targetCluster && candidate.targetCluster !== selectedClusterLabel) {
-      return false;
-    }
     return true;
   };
 
@@ -2277,11 +2274,6 @@ const App = () => {
     const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
     if (!targetLabel) {
       return "Not runnable: target cluster unresolved";
-    }
-
-    // 8. Cluster match (if both are set and different)
-    if (selectedClusterLabel && candidate.targetCluster && candidate.targetCluster !== selectedClusterLabel) {
-      return `Not runnable: candidate targets '${candidate.targetCluster}' but '${selectedClusterLabel}' is selected`;
     }
 
     // Fallback - should not reach here if logic is correct
