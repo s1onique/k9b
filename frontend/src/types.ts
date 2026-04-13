@@ -404,6 +404,7 @@ export type NextCheckExecutionRequest = {
   candidateId?: string;
   candidateIndex?: number;
   clusterLabel: string;
+  planArtifactPath?: string | null;
 };
 
 export type DeterministicNextCheckPromotionRequest = {

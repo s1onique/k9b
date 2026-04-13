@@ -246,7 +246,7 @@ describe("App", () => {
     expect(recentRunsPanel).toBeInTheDocument();
 
     // Verify runs list is rendered
-    const runsList = document.querySelector(".runs-list");
+    const runsList = document.querySelector(".runs-table-wrapper");
     expect(runsList).not.toBeNull();
 
     // Verify runs are displayed with review status pills - use getAll since there may be multiple
@@ -273,7 +273,7 @@ describe("App", () => {
     expect(noExecutionsFilter).not.toBeNull();
 
     // Initially should show all 4 runs
-    const allRunItems = document.querySelectorAll(".run-entry");
+    const allRunItems = document.querySelectorAll(".run-row");
     expect(allRunItems.length).toBe(4);
 
     // Test "no-executions" filter button - should show runs with no executions
@@ -283,7 +283,7 @@ describe("App", () => {
     await act(async () => {
       await user.click(noExecutionsFilterButton);
     });
-    let filteredItems = document.querySelectorAll(".run-entry");
+    let filteredItems = document.querySelectorAll(".run-row");
     expect(filteredItems.length).toBe(1);
 
     // Test "Awaiting review" filter - should show runs with reviewStatus "unreviewed"
@@ -292,7 +292,7 @@ describe("App", () => {
     await act(async () => {
       await user.click(awaitingReviewFilter);
     });
-    filteredItems = document.querySelectorAll(".run-entry");
+    filteredItems = document.querySelectorAll(".run-row");
     expect(filteredItems.length).toBe(1);
     expect(screen.getByText(/Showing 1 of 4/)).toBeInTheDocument();
 
@@ -301,7 +301,7 @@ describe("App", () => {
     await act(async () => {
       await user.click(allFilterButton);
     });
-    filteredItems = document.querySelectorAll(".run-entry");
+    filteredItems = document.querySelectorAll(".run-row");
     expect(filteredItems.length).toBe(4);
   });
 

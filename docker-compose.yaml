@@ -10,8 +10,8 @@ services:
     environment:
       HEALTH_SKIP_REFRESH: 1
       HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
-      HEALTH_RUNS_DIR: /app/runs/health
-      HEALTH_UI_RUNS_DIR: /app/runs/health
+      HEALTH_RUNS_DIR: /app/runs
+      HEALTH_UI_RUNS_DIR: /app/runs
       HEALTH_UI_HOST: 0.0.0.0
       HEALTH_UI_PORT: "8080"
       KUBECONFIG: /app/kubeconfig/config

@@ -36,8 +36,10 @@ from k8s_diag_agent.ui.server import HealthUIRequestHandler
 class RunApiServerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.mkdtemp())
-        self.runs_dir = self.tmpdir / "runs" / "health"
-        self.notifications_dir = self.runs_dir / "notifications"
+        # Canonical: parent 'runs' directory (the server normalizes leaf 'runs/health' to this)
+        self.runs_dir = self.tmpdir / "runs"
+        self.health_dir = self.runs_dir / "health"
+        self.notifications_dir = self.health_dir / "notifications"
         self.static_dir = self.tmpdir / "static"
         self.static_dir.mkdir(parents=True, exist_ok=True)
         self.notifications_dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +77,8 @@ class RunApiServerTests(unittest.TestCase):
         extra_external_analysis: tuple[ExternalAnalysisArtifact, ...] | None = None,
         skip_llm_activity: bool = False,
     ) -> None:
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        # Create the health directory (canonical location for UI index)
+        self.health_dir.mkdir(parents=True, exist_ok=True)
         settings = ExternalAnalysisSettings(
             review_enrichment=ReviewEnrichmentPolicy(
                 enabled=True,
@@ -91,7 +94,7 @@ class RunApiServerTests(unittest.TestCase):
                 return_value=[],
             ):
                 write_health_ui_index(
-                    self.runs_dir,
+                    self.health_dir,
                     run_id=artifact.run_id,
                     run_label=artifact.run_label or artifact.run_id,
                     collector_version="tests",
@@ -106,7 +109,7 @@ class RunApiServerTests(unittest.TestCase):
                 )
         else:
             write_health_ui_index(
-                self.runs_dir,
+                self.health_dir,
                 run_id=artifact.run_id,
                 run_label=artifact.run_label or artifact.run_id,
                 collector_version="tests",
@@ -120,13 +123,14 @@ class RunApiServerTests(unittest.TestCase):
             )
 
     def _write_plan_artifact(self, payload: Mapping[str, object], name: str) -> Path:
-        path = self.runs_dir / "external-analysis" / name
+        path = self.health_dir / "external-analysis" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
 
     def _ensure_cluster_entry(self, label: str, context: str) -> None:
-        index_path = self.runs_dir / "ui-index.json"
+        # Index is written to health_dir, not runs_dir
+        index_path = self.health_dir / "ui-index.json"
         data = json.loads(index_path.read_text(encoding="utf-8"))
         data["clusters"] = [
             {
@@ -712,6 +716,116 @@ class RunApiServerTests(unittest.TestCase):
             finally:
                 self._shutdown_server(server, thread)
 
+    def test_next_check_execution_endpoint_emits_structured_log_on_not_found(self) -> None:
+        """Test that structured log is emitted when candidate is not found.
+        
+        This verifies the fix for debugging "candidate not found" errors by ensuring
+        comprehensive structured logging is emitted even on failure paths.
+        """
+        # Create a plan with one candidate at index 0
+        plan_payload: dict[str, object] = {
+            "status": "success",
+            "candidates": [
+                {
+                    "description": "kubectl logs deployment/alpha",
+                    "targetCluster": "cluster-a",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "candidateId": "candidate-1",
+                    "candidateIndex": 0,
+                }
+            ],
+        }
+        self._write_plan_artifact(plan_payload, "notfound-plan.json")
+        plan_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-planner",
+            run_id="notfound-run",
+            run_label="health-run",
+            cluster_label="health-run",
+            summary="Planner",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/notfound-plan.json",
+            provider="planner",
+            duration_ms=10,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+            payload=plan_payload,
+        )
+        self._write_index(plan_artifact)
+        self._ensure_cluster_entry("cluster-a", "prod")
+        
+        # Capture structured log output by patching emit_structured_log
+        from k8s_diag_agent.structured_logging import emit_structured_log
+        
+        captured_logs: list[dict] = []
+        
+        # We need to capture logs by patching emit_structured_log
+        original_emit = emit_structured_log
+        
+        def capture_emit(
+            component: str,
+            message: str,
+            run_label: str = "",
+            run_id: str | None = None,
+            severity: str = "INFO",
+            metadata: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            result = original_emit(
+                component=component,
+                message=message,
+                run_label=run_label,
+                run_id=run_id,
+                severity=severity,
+                metadata=metadata,
+            )
+            captured_logs.append(result)
+            return result
+        
+        with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
+            server, thread = self._start_server()
+            try:
+                # Request a candidate that doesn't exist (index 99)
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
+                    data=json.dumps({"candidateIndex": 99, "clusterLabel": "cluster-a"}).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as cm:
+                    urllib.request.urlopen(req, timeout=5)
+                self.assertEqual(cm.exception.code, 400)
+                # Verify error message mentions "not found"
+                body = cm.exception.read().decode("utf-8")
+                self.assertIn("not found", body.lower())
+            finally:
+                self._shutdown_server(server, thread)
+        
+        # Verify structured log was emitted with required fields
+        self.assertTrue(len(captured_logs) > 0, "Expected at least one structured log")
+        
+        # Find the failure log entry
+        failure_logs = [log for log in captured_logs if log.get("message", "").endswith("resolution failed")]
+        self.assertEqual(len(failure_logs), 1, "Expected one failure structured log")
+        
+        log_entry = failure_logs[0]
+        # Verify all required fields are present
+        self.assertEqual(log_entry.get("component"), "next-check-execution")
+        self.assertEqual(log_entry.get("severity"), "ERROR")
+        self.assertIn("candidate_index_requested", log_entry)
+        self.assertEqual(log_entry.get("candidate_index_requested"), 99)
+        self.assertIsNone(log_entry.get("candidate_index_resolved"))
+        self.assertIn("request_plan_artifact_path_raw", log_entry)
+        self.assertIn("index_plan_artifact_path", log_entry)
+        self.assertIn("index_plan_artifact_exists", log_entry)
+        self.assertIn("candidate_found_in_request_artifact", log_entry)
+        self.assertIn("candidate_found_in_index_artifact", log_entry)
+        self.assertIn("fallback_search_attempted", log_entry)
+        self.assertIn("fallback_matched_artifact_path", log_entry)
+        self.assertIn("final_resolution_source", log_entry)
+        self.assertIn("error_summary", log_entry)
+        # Verify final_resolution_source indicates failure
+        self.assertEqual(log_entry.get("final_resolution_source"), "none")
+
     def test_next_check_approval_endpoint_accepts_candidate_id(self) -> None:
         plan_payload: dict[str, object] = {
             "status": "success",
@@ -977,7 +1091,7 @@ class RunApiServerTests(unittest.TestCase):
             "priorityScore": priority_score,
         }
         artifact, _ = write_deterministic_next_check_promotion(
-            runs_dir=self.runs_dir,
+            runs_dir=self.health_dir,
             run_id=run_id,
             run_label=run_id,
             cluster_label=cluster_label,
@@ -1034,7 +1148,7 @@ class RunApiServerTests(unittest.TestCase):
         from k8s_diag_agent.external_analysis.deterministic_next_check_promotion import (
             collect_promoted_queue_entries,
         )
-        promotions = collect_promoted_queue_entries(self.runs_dir, run_id)
+        promotions = collect_promoted_queue_entries(self.health_dir, run_id)
         self.assertTrue(promotions)
         promotion = promotions[0]
         candidate_id = promotion.get("candidateId")
@@ -1124,7 +1238,7 @@ class RunApiServerTests(unittest.TestCase):
         from k8s_diag_agent.external_analysis.deterministic_next_check_promotion import (
             collect_promoted_queue_entries,
         )
-        promotions = collect_promoted_queue_entries(self.runs_dir, run_id)
+        promotions = collect_promoted_queue_entries(self.health_dir, run_id)
         self.assertTrue(promotions)
         promotion = promotions[0]
         candidate_id = promotion.get("candidateId")
@@ -1216,7 +1330,7 @@ class RunApiServerTests(unittest.TestCase):
         from k8s_diag_agent.external_analysis.deterministic_next_check_promotion import (
             collect_promoted_queue_entries,
         )
-        promotions = collect_promoted_queue_entries(self.runs_dir, run_id)
+        promotions = collect_promoted_queue_entries(self.health_dir, run_id)
         self.assertTrue(promotions)
         promo_candidate_id = promotions[0].get("candidateId")
         self.assertIsNotNone(promo_candidate_id)
@@ -1332,7 +1446,7 @@ class RunApiServerTests(unittest.TestCase):
         )
         # Note: We don't need the promotions - we're just verifying that the
         # planner-specific-id doesn't accidentally match a promotion candidateId
-        collect_promoted_queue_entries(self.runs_dir, run_id)
+        collect_promoted_queue_entries(self.health_dir, run_id)
 
         server, thread = self._start_server()
         try:

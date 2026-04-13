@@ -116,24 +116,43 @@ def detect_expected_signal(text: str) -> str | None:
     return None
 
 
+# These are kubectl verbs that are genuinely mutating and should require approval.
+# Important: Order matters for the regex-based detection to avoid false positives.
+# - "describe" is NOT mutating (read-only operation, used for inspection)
+# - "label" and "annotate" are mutating but must be matched as whole words
 MUTATION_KEYWORDS = (
-    "apply",
-    "delete",
-    "scale",
-    "patch",
-    "restart",
-    "rollout",
-    "upgrade",
-    "replace",
-    "set",
-    "edit",
-    "create",
+    # Core mutating kubectl verbs (word-boundary matched)
+    r"\bapply\b",
+    r"\bdelete\b",
+    r"\bscale\b",
+    r"\bpatch\b",
+    r"\breplace\b",
+    r"\bcreate\b",
+    r"\bedit\b",
+    r"\blabel\b",
+    r"\bannotate\b",
+    # rollout is mutating when followed by certain subcommands
+    r"\brollout\b",
+    # cordon, uncordon, drain are mutating node operations
+    r"\bcordon\b",
+    r"\buncordon\b",
+    r"\bdrain\b",
+    # exec into pod is potentially mutating
+    r"\bexec\b",
+    # set commands that modify resources
+    r"\bset\s+",  # e.g., kubectl set image, kubectl set env
+    # port-forward is not strictly mutating but can be security-sensitive
+    # upgrade is a cluster operation
+    r"\bupgrade\b",
 )
 
 
 def _mentions_mutation(text: str) -> bool:
     normalized = text.lower()
-    return any(keyword in normalized for keyword in MUTATION_KEYWORDS)
+    # Use word-boundary aware regex matching to avoid false positives
+    # e.g., "describe" should NOT match "set" (it's not a mutation)
+    import re as _re
+    return any(_re.search(pattern, normalized) for pattern in MUTATION_KEYWORDS)
 
 
 def _risk_from_family(family: CommandFamily) -> RiskLevel:

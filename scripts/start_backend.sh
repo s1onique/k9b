@@ -11,6 +11,8 @@ if [[ ! -x "$PYTHON" ]]; then
   exit 1
 fi
 
+# Returns the parent runs directory (canonical contract).
+# The health loop internally uses runs/health/ subdirectory.
 resolve_runs_dir() {
   "$PYTHON" - "$1" <<'PY'
 import json
@@ -19,13 +21,20 @@ import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-output_dir = "runs"
+output_dir = "runs"  # Canonical: parent runs directory
 try:
     raw = json.loads(path.read_text(encoding="utf-8"))
-    output_dir = raw.get("output_dir") or output_dir
+    configured = raw.get("output_dir")
+    if configured:
+        # If user configured output_dir as runs/health, normalize to parent runs
+        configured_path = Path(configured)
+        if configured_path.name == "health":
+            output_dir = str(configured_path.parent)
+        else:
+            output_dir = configured
 except (OSError, json.JSONDecodeError):
     pass
-print(os.path.join(output_dir, "health"))
+print(output_dir)
 PY
 }
 

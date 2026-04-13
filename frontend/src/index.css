@@ -382,6 +382,106 @@ body {
   margin-left: auto;
 }
 
+/* Runs table and pagination */
+.runs-table-wrapper {
+  overflow-x: auto;
+}
+
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 500px;
+}
+
+.runs-table th,
+.runs-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.runs-table th {
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: rgba(148, 163, 184, 0.8);
+  font-weight: 600;
+}
+
+.runs-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.runs-table tbody tr:hover {
+  background: rgba(71, 85, 105, 0.4);
+}
+
+.runs-table tbody tr.run-row-selected {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.runs-table td strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.run-cell-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.run-cell-timestamp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.runs-pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.runs-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.runs-pagination-controls button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 0.5rem;
+  background: rgba(30, 41, 59, 0.8);
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.runs-pagination-controls button:hover:not(:disabled) {
+  background: rgba(71, 85, 105, 0.6);
+  border-color: rgba(100, 116, 139, 0.8);
+}
+
+.runs-pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.runs-pagination-controls span {
+  font-size: 0.8rem;
+  color: rgba(248, 250, 252, 0.75);
+}
+
 .status-pill {
   padding: 0.25rem 0.8rem;
   border-radius: 999px;
@@ -414,6 +514,9 @@ body {
 .fleet-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
 
 .diagnostic-pack-review-grid {
   display: grid;
@@ -439,9 +542,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-}
-  gap: 0.75rem;
-  margin: 1rem 0;
 }
 
 .fleet-metrics article {

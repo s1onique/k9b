@@ -272,10 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
         "health-ui",
         help="Launch the operator-facing UI for recent health runs.",
     )
-    ui_parser.add_argument(
-        "--runs-dir",
-        type=Path,
-        default=Path("runs/health"),
+    ui_parser.add_argument("--runs-dir", type=Path, default=Path("runs"),
         help="Health artifacts directory the UI should monitor.",
     )
     ui_parser.add_argument(

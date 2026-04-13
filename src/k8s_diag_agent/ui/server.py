@@ -32,6 +32,7 @@ from ..external_analysis.next_check_approval import (
     record_next_check_approval,
 )
 from ..health.ui import _derive_outcome_status
+from ..structured_logging import emit_structured_log
 from .api import (
     build_cluster_detail_payload,
     build_fleet_payload,
@@ -130,17 +131,146 @@ def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
         return False
 
 
+def _normalize_runs_dir(runs_dir: Path) -> Path:
+    """Normalize runs_dir to the canonical parent directory.
+
+    The canonical runs_dir can be either:
+    - 'runs' (parent directory) - UI internally accesses runs/health/ subdirectory
+    - 'runs/health' (leaf directory) - directly contains health artifacts
+
+    This function detects which form is being used and normalizes appropriately.
+    If user passes runs/health (where artifacts actually live), keep it.
+    If user passes runs (parent), keep it.
+    If runs/health is empty (no artifacts), normalize to parent runs.
+
+    Args:
+        runs_dir: The runs directory as provided by the user
+
+    Returns:
+        Normalized runs directory (either parent or leaf)
+    """
+    resolved = runs_dir.resolve()
+
+    # Check if runs_dir itself is the health directory (e.g., runs/health)
+    if resolved.name == "health":
+        # Check if this directory itself contains health artifacts
+        # (external-analysis, assessments, drilldowns are directly here)
+        if any(
+            (resolved / subdir).exists()
+            for subdir in ["external-analysis", "assessments", "drilldowns"]
+        ):
+            logger.debug(
+                "Kept runs_dir as health leaf directory",
+                extra={"input": str(runs_dir), "resolved": str(resolved)},
+            )
+            return resolved
+
+        # No artifacts in runs/health - normalize to parent runs
+        parent = resolved.parent
+        logger.debug(
+            "Normalized runs_dir from leaf to parent",
+            extra={"input": str(runs_dir), "normalized": str(parent)},
+        )
+        return parent
+
+    # Check if runs_dir has a 'health' subdirectory with artifacts
+    health_dir = resolved / "health"
+    if health_dir.exists() and any(
+        (health_dir / subdir).exists()
+        for subdir in ["external-analysis", "assessments", "drilldowns"]
+    ):
+        logger.debug(
+            "Kept runs_dir as parent (has health subdirectory)",
+            extra={"input": str(runs_dir), "resolved": str(resolved)},
+        )
+        return resolved
+
+    return resolved
+
+
+def _validate_runs_dir(runs_dir: Path) -> None:
+    """Validate that runs_dir has the expected structure.
+
+    The canonical runs_dir should have a 'health' subdirectory (or be empty
+    if no runs have been executed yet).
+
+    Raises:
+        ValueError: If runs_dir appears misconfigured
+    """
+    resolved = runs_dir.resolve()
+    health_subdir = resolved / "health"
+
+    # If neither the parent nor health subdir exists, warn but don't fail
+    # This allows fresh startup before any health runs have been executed
+    if not resolved.exists() and not health_subdir.exists():
+        logger.warning(
+            "runs_dir does not exist and may not have been initialized",
+            extra={"runs_dir": str(resolved)},
+        )
+        return
+
+    # If runs/health exists, this is the expected canonical structure
+    if health_subdir.exists():
+        return
+
+    # Check if user passed runs/health directly (doubled-path bug symptom)
+    if resolved.exists() and any(resolved.iterdir()):
+        # runs/ exists but no health subdir - might be misconfigured
+        logger.warning(
+            "runs_dir may be misconfigured: expected parent 'runs' with 'health' subdirectory",
+            extra={"runs_dir": str(resolved)},
+        )
+
+
+def _compute_health_root(runs_dir: Path) -> Path:
+    """Compute the health root directory for artifact resolution.
+
+    The health root is where artifact-backed source of truth lives:
+    - If runs_dir is the parent (e.g., 'runs'), health_root = runs_dir / 'health'
+    - If runs_dir is already the health leaf (e.g., 'runs/health'), health_root = runs_dir
+
+    This distinction is critical because plan artifacts (external-analysis/*-next-check-plan.json)
+    live under runs/health/external-analysis/, not directly under runs/external-analysis/.
+
+    Args:
+        runs_dir: The normalized runs directory
+
+    Returns:
+        The health root path for artifact resolution
+    """
+    resolved = runs_dir.resolve()
+
+    # If runs_dir itself is the health directory, it's already the health root
+    if resolved.name == "health":
+        return resolved
+
+    # Otherwise, compute health_root as runs_dir / "health"
+    health_root = resolved / "health"
+
+    # If health directory exists, use it; otherwise fall back to runs_dir
+    # (allows operation before first health run completes)
+    if health_root.exists():
+        return health_root
+
+    # Fall back to runs_dir if health doesn't exist yet
+    return resolved
+
+
 def start_ui_server(
     runs_dir: Path,
     host: str = "127.0.0.1",
     port: int = 8080,
     static_dir: Path | None = None,
 ) -> None:
+    # Normalize and validate runs_dir
+    normalized_runs_dir = _normalize_runs_dir(runs_dir)
+    _validate_runs_dir(normalized_runs_dir)
+
     assets = static_dir or DEFAULT_STATIC_DIR
-    handler = functools.partial(HealthUIRequestHandler, runs_dir=runs_dir, static_dir=assets)
+    handler = functools.partial(HealthUIRequestHandler, runs_dir=normalized_runs_dir, static_dir=assets)
     server = ThreadingHTTPServer((host, port), handler)
     print(
-        f"Operator UI listening on http://{host}:{port}/ (runs: {runs_dir}, assets: {assets})",
+        f"Operator UI listening on http://{host}:{port}/ (runs: {normalized_runs_dir}, assets: {assets})",
         file=sys.stderr,
     )
     try:
@@ -158,6 +288,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args: object, runs_dir: Path, static_dir: Path, **kwargs: object) -> None:
         self.runs_dir = runs_dir
         self.static_dir = static_dir
+        self._health_root = _compute_health_root(runs_dir)
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
 
     def do_GET(self) -> None:
@@ -204,7 +335,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if context is None:
             return
         if route == "/api/run":
-            promotions = collect_promoted_queue_entries(self.runs_dir, context.run.run_id)
+            promotions = collect_promoted_queue_entries(self._health_root, context.run.run_id)
             self._send_json(build_run_payload(context, promotions=promotions))
             return
         if route == "/api/fleet":
@@ -216,7 +347,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if route == "/api/notifications":
             params = parse_qs(query)
             payload = query_notifications(
-                self.runs_dir,
+                self.runs_dir / "health",
                 kind=params.get("kind", [None])[0],
                 cluster_label=params.get("cluster_label", [None])[0],
                 search=params.get("search", [None])[0],
@@ -284,7 +415,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
         """
         # First try the promoted entries (deterministic checks)
-        promotions = collect_promoted_queue_entries(self.runs_dir, run_id)
+        promotions = collect_promoted_queue_entries(self._health_root, run_id)
         if promotions:
             entry, idx = self._resolve_plan_candidate(
                 promotions,
@@ -295,7 +426,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 return dict(entry), idx, None
 
         # Scan all external-analysis artifacts for planner artifacts
-        external_analysis_dir = self.runs_dir / "external-analysis"
+        external_analysis_dir = self._health_root / "external-analysis"
         if external_analysis_dir.exists():
             # Find all next-check-plan artifacts for this run
             for artifact_file in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
@@ -315,6 +446,59 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     )
                     if entry is not None and idx is not None:
                         # Return full relative path within runs_dir (external-analysis/filename)
+                        return dict(entry), idx, Path("external-analysis") / artifact_file.name
+                except Exception:
+                    # Skip malformed artifacts, continue searching
+                    continue
+
+        return None, None, None
+
+    def _find_candidate_in_all_plan_artifacts_from_health_root(
+        self,
+        health_root: Path,
+        run_id: str,
+        candidate_id: str | None,
+        candidate_index: int | None,
+    ) -> tuple[dict[str, object] | None, int | None, Path | None]:
+        """Search for a candidate across all planner artifacts in health_root for the given run.
+
+        This is the fixed version that uses health_root (runs/health/external-analysis/)
+        instead of runs_root (runs/external-analysis/).
+
+        Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
+        """
+        # First try the promoted entries (deterministic checks) from health_root
+        promotions = collect_promoted_queue_entries(health_root, run_id)
+        if promotions:
+            entry, idx = self._resolve_plan_candidate(
+                promotions,
+                candidate_id,
+                candidate_index,
+            )
+            if entry is not None and idx is not None:
+                return dict(entry), idx, None
+
+        # Scan all external-analysis artifacts for planner artifacts in health_root
+        external_analysis_dir = health_root / "external-analysis"
+        if external_analysis_dir.exists():
+            # Find all next-check-plan artifacts for this run
+            for artifact_file in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+                try:
+                    artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                    # Check if this is a planning artifact
+                    purpose = artifact_data.get("purpose")
+                    if purpose != "next-check-planning":
+                        continue
+
+                    payload = artifact_data.get("payload", {})
+                    candidates = payload.get("candidates", [])
+                    entry, idx = self._resolve_plan_candidate(
+                        candidates if isinstance(candidates, Sequence) else (),
+                        candidate_id,
+                        candidate_index,
+                    )
+                    if entry is not None and idx is not None:
+                        # Return full relative path within health_root (external-analysis/filename)
                         return dict(entry), idx, Path("external-analysis") / artifact_file.name
                 except Exception:
                     # Skip malformed artifacts, continue searching
@@ -355,13 +539,117 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "candidateId or candidateIndex is required"}, 400)
             return
 
+        # Extract planArtifactPath from request if provided
+        plan_artifact_path_from_request = payload.get("planArtifactPath")
+        cluster_label = payload.get("clusterLabel")
+
+        # Compute health_root for artifact resolution - this is critical!
+        # Plan artifacts live under runs/health/external-analysis/, not runs/external-analysis/
+        health_root = _compute_health_root(self.runs_dir)
+        runs_root = self.runs_dir.resolve()
+        health_root_resolved = health_root.resolve()
+
         # Try the primary plan artifact first
         candidate_entry: dict[str, object] | None = None
         resolved_index: int | None = None
         plan_path_used: Path | None = None
 
-        plan_path = (self.runs_dir / plan.artifact_path).resolve()
-        if str(plan_path).startswith(str(self.runs_dir.resolve())) and plan_path.exists():
+        # Diagnostic logging helper
+        def _log_resolution_attempt(
+            stage: str,
+            candidate_id_val: str | None,
+            candidate_index_val: int | None,
+            path_attempted: Path | None,
+            found: bool,
+        ) -> None:
+            logger.debug(
+                f"Next-check resolution {stage}",
+                extra={
+                    "run_id": context.run.run_id,
+                    "candidate_id": candidate_id_val,
+                    "candidate_index": candidate_index_val,
+                    "cluster_label": cluster_label,
+                    "request_plan_artifact_path": plan_artifact_path_from_request,
+                    "path_attempted": str(path_attempted) if path_attempted else None,
+                    "path_exists": path_attempted.exists() if path_attempted else None,
+                    "found": found,
+                    "stage": stage,
+                },
+            )
+
+        # Track resolution details for comprehensive structured logging
+        # Use health_root for artifact resolution since that's where artifacts live
+        index_plan_artifact_path = plan.artifact_path if plan else None
+        index_plan_artifact_exists = False
+        resolved_index_plan_artifact_path: Path | None = None
+        if index_plan_artifact_path:
+            # Resolve relative to health_root, not runs_root
+            resolved_index_plan_artifact_path = (health_root / index_plan_artifact_path).resolve()
+            index_plan_artifact_exists = resolved_index_plan_artifact_path.exists()
+
+        # Use the explicit plan artifact path from request if available, otherwise fall back to index
+        request_plan_artifact_path_raw = plan_artifact_path_from_request
+        resolved_request_plan_artifact_path: Path | None = None
+        request_plan_artifact_exists = False
+        request_plan_artifact_within_health_root = False
+
+        if request_plan_artifact_path_raw and isinstance(request_plan_artifact_path_raw, str):
+            # Validate and use the provided path - resolve relative to health_root
+            resolved_request_plan_artifact_path = (health_root / request_plan_artifact_path_raw).resolve()
+            request_plan_artifact_within_health_root = str(resolved_request_plan_artifact_path).startswith(str(health_root_resolved))
+            request_plan_artifact_exists = resolved_request_plan_artifact_path.exists()
+
+            # Emit INFO structured log before resolution begins
+            emit_structured_log(
+                component="next-check-execution",
+                message="Next-check plan artifact resolution starting",
+                run_label=context.run.run_label,
+                run_id=context.run.run_id,
+                severity="INFO",
+                metadata={
+                    "runs_root": str(runs_root),
+                    "health_root": str(health_root_resolved),
+                    "request_plan_artifact_path_raw": request_plan_artifact_path_raw,
+                    "resolved_request_plan_artifact_path": str(resolved_request_plan_artifact_path) if resolved_request_plan_artifact_path else None,
+                    "index_plan_artifact_path": index_plan_artifact_path,
+                    "resolved_index_plan_artifact_path": str(resolved_index_plan_artifact_path) if resolved_index_plan_artifact_path else None,
+                },
+            )
+
+            if request_plan_artifact_within_health_root and request_plan_artifact_exists:
+                plan_path = resolved_request_plan_artifact_path
+                _log_resolution_attempt("explicit_path_valid", candidate_id, candidate_index, plan_path, True)
+            else:
+                # Fall back to index path if the requested path is invalid
+                emit_structured_log(
+                    component="next-check-execution",
+                    message="Next-check plan artifact path invalid, falling back to index",
+                    run_label=context.run.run_label,
+                    run_id=context.run.run_id,
+                    severity="WARNING",
+                    metadata={
+                        "requested_path": request_plan_artifact_path_raw,
+                        "resolved_request_path": str(resolved_request_plan_artifact_path) if resolved_request_plan_artifact_path else None,
+                        "request_path_valid": request_plan_artifact_exists,
+                        "request_path_within_health_root": request_plan_artifact_within_health_root,
+                        "fallback_index_path": plan.artifact_path,
+                        "resolved_fallback_path": str(resolved_index_plan_artifact_path) if resolved_index_plan_artifact_path else None,
+                    },
+                )
+                plan_path = resolved_index_plan_artifact_path
+                _log_resolution_attempt("explicit_path_invalid_fallback", candidate_id, candidate_index, plan_path, False)
+        else:
+            plan_path = resolved_index_plan_artifact_path
+
+        # Track whether we found candidate in each resolution stage
+        candidate_found_in_request_artifact = False
+        candidate_found_in_index_artifact = False
+        fallback_search_attempted = False
+        fallback_matched_artifact_path: str | None = None
+
+        # Validate plan_path is within health_root and exists
+        if plan_path and str(plan_path).startswith(str(health_root_resolved)) and plan_path.exists():
+            index_plan_artifact_exists = True
             try:
                 plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
                 candidates = plan_data.get("candidates")
@@ -373,13 +661,21 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 if raw_entry is not None and resolved_index is not None:
                     candidate_entry = dict(raw_entry)
                     plan_path_used = plan_path
+                    # Check if this was from explicit request or index
+                    if request_plan_artifact_path_raw and request_plan_artifact_exists:
+                        candidate_found_in_request_artifact = True
+                    else:
+                        candidate_found_in_index_artifact = True
             except Exception:
                 # Plan artifact read failed, will try fallback
                 pass
 
-        # If not found in primary plan, search across all plan artifacts
+        # If not found in primary plan, search across all plan artifacts in health_root
         if candidate_entry is None or resolved_index is None:
-            fallback_entry, fallback_index, fallback_path = self._find_candidate_in_all_plan_artifacts(
+            fallback_search_attempted = True
+            # Use health_root for fallback search - this is the key fix!
+            fallback_entry, fallback_index, fallback_path = self._find_candidate_in_all_plan_artifacts_from_health_root(
+                health_root,
                 context.run.run_id,
                 candidate_id,
                 candidate_index,
@@ -388,8 +684,60 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 candidate_entry = fallback_entry
                 resolved_index = fallback_index
                 plan_path_used = fallback_path
+                if fallback_path:
+                    fallback_matched_artifact_path = str(fallback_path)
 
         if candidate_entry is None or resolved_index is None:
+            # Emit structured log for failure case - provides comprehensive debug info
+            emit_structured_log(
+                component="next-check-execution",
+                message="Next-check candidate resolution failed",
+                run_label=context.run.run_label,
+                run_id=context.run.run_id,
+                severity="ERROR",
+                metadata={
+                    # Request context
+                    "candidate_id": candidate_id,
+                    "candidate_index_requested": candidate_index,
+                    "candidate_index_resolved": None,
+                    "cluster_label": cluster_label,
+                    # Resolution path details
+                    "request_plan_artifact_path_raw": request_plan_artifact_path_raw,
+                    "resolved_request_plan_artifact_path": str(resolved_request_plan_artifact_path) if resolved_request_plan_artifact_path else None,
+                    "request_plan_artifact_exists": request_plan_artifact_exists,
+                    "request_plan_artifact_within_health_root": request_plan_artifact_within_health_root,
+                    "index_plan_artifact_path": index_plan_artifact_path,
+                    "resolved_index_plan_artifact_path": str(resolved_index_plan_artifact_path) if resolved_index_plan_artifact_path else None,
+                    "index_plan_artifact_exists": index_plan_artifact_exists,
+                    "runs_root": str(runs_root),
+                    "health_root": str(health_root_resolved),
+                    # Resolution outcome
+                    "candidate_found_in_request_artifact": candidate_found_in_request_artifact,
+                    "candidate_found_in_index_artifact": candidate_found_in_index_artifact,
+                    "fallback_search_attempted": fallback_search_attempted,
+                    "fallback_matched_artifact_path": fallback_matched_artifact_path,
+                    "final_resolution_source": (
+                        "explicit_request_path" if candidate_found_in_request_artifact
+                        else "index_path" if candidate_found_in_index_artifact
+                        else "fallback_search" if fallback_matched_artifact_path
+                        else "none"
+                    ),
+                    # Error details
+                    "error_summary": "Candidate not found after checking all resolution paths",
+                },
+            )
+            # Log detailed debug info for operator to diagnose
+            logger.warning(
+                "Next-check candidate not found during execution",
+                extra={
+                    "run_id": context.run.run_id,
+                    "candidate_id": candidate_id,
+                    "candidate_index": candidate_index,
+                    "plan_path_used": str(plan_path) if plan_path else None,
+                    "plan_artifact_path_from_request": plan_artifact_path_from_request,
+                    "fallback_search_attempted": True,
+                },
+            )
             # Provide clearer error message for operator
             if candidate_id and candidate_index is not None:
                 self._send_json({"error": "Candidate not found. The queue may have changed since the page was loaded. Please refresh the page."}, 400)
@@ -528,6 +876,50 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         extra={"artifact": str(artifact_path_obj), "error": str(exc)},
                     )
 
+        # Emit comprehensive structured log for next-check execution resolution
+        # This captures all resolution stages for debugging and observability
+        emit_structured_log(
+            component="next-check-execution",
+            message="Next-check candidate resolved and executed",
+            run_label=context.run.run_label,
+            run_id=context.run.run_id,
+            severity="INFO",
+            metadata={
+                # Request context
+                "candidate_id": candidate_id,
+                "candidate_index_requested": candidate_index,
+                "candidate_index_resolved": resolved_index,
+                "cluster_label": cluster_label,
+                # Resolution path details
+                "explicit_request_path_provided": request_plan_artifact_path_raw is not None,
+                "explicit_request_path_raw": request_plan_artifact_path_raw,
+                "resolved_request_plan_artifact_path": str(resolved_request_plan_artifact_path) if resolved_request_plan_artifact_path else None,
+                "explicit_request_path_exists": request_plan_artifact_exists,
+                "explicit_request_path_validated": request_plan_artifact_within_health_root and request_plan_artifact_exists if request_plan_artifact_path_raw else None,
+                "index_plan_artifact_path": index_plan_artifact_path,
+                "resolved_index_plan_artifact_path": str(resolved_index_plan_artifact_path) if resolved_index_plan_artifact_path else None,
+                "index_plan_artifact_exists": index_plan_artifact_exists,
+                "runs_root": str(runs_root),
+                "health_root": str(health_root_resolved),
+                # Resolution outcome
+                "candidate_found_in_request_artifact": candidate_found_in_request_artifact,
+                "candidate_found_in_index_artifact": candidate_found_in_index_artifact,
+                "fallback_search_attempted": fallback_search_attempted,
+                "fallback_matched_artifact_path": fallback_matched_artifact_path,
+                "final_source": (
+                    "explicit_request_path" if candidate_found_in_request_artifact
+                    else "index_path" if candidate_found_in_index_artifact
+                    else "fallback_search" if fallback_matched_artifact_path
+                    else "unknown"
+                ),
+                # Execution result
+                "execution_status": artifact.status.value,
+                "execution_duration_ms": artifact.duration_ms,
+                "execution_timed_out": artifact.timed_out,
+                "refresh_status": refresh_status.value,
+            },
+        )
+
         self._send_json(response_payload)
 
     def _handle_deterministic_promotion(self) -> None:
@@ -588,7 +980,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "topProblem": top_problem,
             "priorityScore": priority_value,
         }
-        promotions = collect_promoted_queue_entries(self.runs_dir, context.run.run_id)
+        promotions = collect_promoted_queue_entries(self._health_root, context.run.run_id)
         candidate_id = build_promoted_candidate_id(
             description, cluster_label, context.run.run_id
         )
@@ -656,7 +1048,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         candidate_entry: dict[str, object] | None = None
         resolved_index: int | None = None
 
-        plan_path = (self.runs_dir / plan.artifact_path).resolve()
+        plan_path = (self._health_root / plan.artifact_path).resolve()
         if str(plan_path).startswith(str(self.runs_dir.resolve())) and plan_path.exists():
             try:
                 plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -955,7 +1347,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         # Default: load from ui-index.json (latest run)
         try:
-            index = load_ui_index(self.runs_dir)
+            # ui-index.json is written to runs/health/ by write_health_ui_index
+            index = load_ui_index(self.runs_dir / "health")
             return build_ui_context(index)
         except Exception as exc:  # pragma: no cover - read-model may be malformed
             self._send_text(500, f"Unable to read ui-index.json: {exc}")
@@ -1014,7 +1407,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         proposals_data, proposal_count = _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id)
 
         # Scan for external-analysis artifacts for this run
-        external_analysis_dir = self.runs_dir / "external-analysis"
+        external_analysis_dir = self._health_root / "external-analysis"
         external_analysis_data = _scan_external_analysis(external_analysis_dir, run_id)
         external_analysis_count = external_analysis_data.get("count", 0)
 

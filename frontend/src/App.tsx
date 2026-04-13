@@ -531,8 +531,12 @@ const isRunsReviewFilterValue = (value: unknown): value is RunsReviewFilter =>
 export const QUEUE_VIEW_STORAGE_KEY = "dashboard-queue-view-state";
 export const RUNS_REVIEW_FILTER_STORAGE_KEY = "dashboard-runs-review-filter";
 export const SELECTED_RUN_STORAGE_KEY = "dashboard-selected-run-id";
+export const RUNS_PAGE_SIZE_STORAGE_KEY = "dashboard-runs-page-size";
 
 const DEFAULT_RUNS_REVIEW_FILTER: RunsReviewFilter = "all";
+const DEFAULT_RUNS_PAGE_SIZE = 5;
+const MAX_RUNS_PAGE_SIZE = 20;
+const RUNS_PAGE_SIZE_OPTIONS = [5, 10, 20] as const;
 
 const readStoredRunsReviewFilter = (): RunsReviewFilter => {
   if (typeof window === "undefined") {
@@ -575,6 +579,31 @@ const persistSelectedRunId = (runId: string | null) => {
   } else {
     window.localStorage.removeItem(SELECTED_RUN_STORAGE_KEY);
   }
+};
+
+const isRunsPageSizeValue = (value: unknown): value is typeof RUNS_PAGE_SIZE_OPTIONS[number] =>
+  typeof value === "number" && RUNS_PAGE_SIZE_OPTIONS.includes(value as typeof RUNS_PAGE_SIZE_OPTIONS[number]);
+
+const readStoredRunsPageSize = (): number => {
+  if (typeof window === "undefined") {
+    return DEFAULT_RUNS_PAGE_SIZE;
+  }
+  const stored = window.localStorage.getItem(RUNS_PAGE_SIZE_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_RUNS_PAGE_SIZE;
+  }
+  const parsed = Number(stored);
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_RUNS_PAGE_SIZE) {
+    return DEFAULT_RUNS_PAGE_SIZE;
+  }
+  return parsed;
+};
+
+const persistRunsPageSize = (value: number) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(RUNS_PAGE_SIZE_STORAGE_KEY, String(value));
 };
 
 const QUEUE_STATUS_FILTER_VALUES = new Set<NextCheckQueueStatus | "all">([
@@ -2072,6 +2101,24 @@ const App = () => {
   // Runs list filter state
   const [runsFilter, setRunsFilter] = useState<RunsReviewFilter>(readStoredRunsReviewFilter);
   
+  // Pagination state for runs list
+  const [runsPageSize, setRunsPageSize] = useState<number>(readStoredRunsPageSize);
+  const [runsPage, setRunsPage] = useState(1);
+  
+  // Reset to page 1 when filter changes
+  const handleRunsFilterChange = useCallback((filter: RunsReviewFilter) => {
+    setRunsFilter(filter);
+    setRunsPage(1);
+    persistRunsReviewFilter(filter);
+  }, []);
+
+  // Handle page size change
+  const handleRunsPageSizeChange = useCallback((newSize: number) => {
+    setRunsPageSize(newSize);
+    setRunsPage(1); // Reset to first page when page size changes
+    persistRunsPageSize(newSize);
+  }, []);
+  
   // Selected run ID (persisted)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(() => readStoredSelectedRunId());
   
@@ -2135,6 +2182,15 @@ const App = () => {
       return true;
     });
   }, [runsList, runsFilter]);
+
+  // Computed paginated runs list
+  const paginatedRunsList = useMemo(() => {
+    const start = (runsPage - 1) * runsPageSize;
+    const end = start + runsPageSize;
+    return filteredRunsList.slice(start, end);
+  }, [filteredRunsList, runsPage, runsPageSize]);
+
+  const totalRunsPages = Math.ceil(filteredRunsList.length / runsPageSize);
 
   const refresh = useCallback(async () => {
     try {
@@ -2666,6 +2722,7 @@ const App = () => {
     const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
     const candidateId = candidate.candidateId?.trim() ? candidate.candidateId : undefined;
     const candidateIndex = candidate.candidateIndex;
+    const planArtifactPath = candidate.planArtifactPath?.trim() ? candidate.planArtifactPath : undefined;
     if (!targetLabel || (candidateIndex == null && !candidateId)) {
       setExecutionResults((prev) => ({
         ...prev,
@@ -2681,6 +2738,7 @@ const App = () => {
         candidateId,
         candidateIndex: candidateIndex ?? undefined,
         clusterLabel: targetLabel,
+        planArtifactPath: planArtifactPath ?? null,
       });
       setExecutionResults((prev) => ({
         ...prev,
@@ -2997,10 +3055,7 @@ const App = () => {
                   key={option.value}
                   type="button"
                   className={`runs-filter-button ${isActive ? "active" : ""}`}
-                  onClick={() => {
-                    setRunsFilter(option.value);
-                    persistRunsReviewFilter(option.value);
-                  }}
+                  onClick={() => handleRunsFilterChange(option.value)}
                 >
                   <span className="runs-filter-label">{option.label}</span>
                   <span className="runs-filter-count">({count})</span>
@@ -3011,7 +3066,7 @@ const App = () => {
         </div>
         {runsFilter !== "all" && filteredRunsList.length > 0 && (
           <p className="runs-filter-summary small muted">
-            Showing {filteredRunsList.length} of {runsList.length}
+            Showing {filteredRunsList.length} of {runsList.length} runs
           </p>
         )}
         {runsListLoading ? (
@@ -3021,45 +3076,106 @@ const App = () => {
         ) : filteredRunsList.length === 0 ? (
           <p className="muted">No runs match the current filter.</p>
         ) : (
-          <div className="runs-list">
-            {filteredRunsList.map((runEntry) => {
-              const isSelected = selectedRunId === runEntry.runId;
-              return (
-                <div
-                  key={runEntry.runId}
-                  className={`run-entry ${isSelected ? "run-entry-selected" : ""}`}
-                  data-testid="run-entry"
-                  data-run-id={runEntry.runId}
-                  onClick={() => handleRunSelection(runEntry.runId)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      handleRunSelection(runEntry.runId);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-pressed={isSelected}
-                >
-                  <div className="run-entry-main">
-                    <div className="run-entry-info">
-                      <strong>Run {runEntry.label}</strong>
-                      <span className="muted small">ID {runEntry.runId}</span>
-                    </div>
-                    <div className="run-entry-meta">
-                      <span className={statusClass(runEntry.reviewStatus)}>
-                        {runEntry.reviewStatus}
-                      </span>
-                      {runEntry.timestamp && (
-                        <span className="muted small">
-                          {relativeRecency(runEntry.timestamp)}
+          <div className="runs-table-wrapper">
+            <table className="runs-table" aria-label="Recent runs">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedRunsList.map((runEntry) => {
+                  const isSelected = selectedRunId === runEntry.runId;
+                  return (
+                    <tr
+                      key={runEntry.runId}
+                      className={`run-row ${isSelected ? "run-row-selected" : ""}`}
+                      data-testid="run-entry"
+                      data-run-id={runEntry.runId}
+                      onClick={() => handleRunSelection(runEntry.runId)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleRunSelection(runEntry.runId);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={isSelected}
+                      aria-label={`Run ${runEntry.label}, ${runEntry.reviewStatus}, selected: ${isSelected}`}
+                    >
+                      <td>
+                        <div className="run-cell-main">
+                          <strong>Run {runEntry.label}</strong>
+                          <span className="muted small">ID {runEntry.runId}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={statusClass(runEntry.reviewStatus)}>
+                          {runEntry.reviewStatus}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                      <td>
+                        {runEntry.timestamp ? (
+                          <div className="run-cell-timestamp">
+                            <span className="muted small">{relativeRecency(runEntry.timestamp)}</span>
+                            <span className="muted tiny" title={formatTimestamp(runEntry.timestamp)}>
+                              {formatTimestamp(runEntry.timestamp)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="muted small">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {totalRunsPages > 1 && (
+          <div className="runs-pagination">
+            <div className="runs-pagination-controls">
+              <button
+                type="button"
+                onClick={() => setRunsPage((p) => Math.max(1, p - 1))}
+                disabled={runsPage <= 1}
+                aria-label="Previous page"
+              >
+                Previous
+              </button>
+              <span>
+                Page {runsPage} of {totalRunsPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setRunsPage((p) => Math.min(totalRunsPages, p + 1))}
+                disabled={runsPage >= totalRunsPages}
+                aria-label="Next page"
+              >
+                Next
+              </button>
+            </div>
+            <div className="runs-pagination-size-selector">
+              <label htmlFor="runs-page-size">Per page:</label>
+              <select
+                id="runs-page-size"
+                value={runsPageSize}
+                onChange={(event) => handleRunsPageSizeChange(Number(event.target.value))}
+              >
+                {RUNS_PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="muted small">
+              Showing {(runsPage - 1) * runsPageSize + 1}–{Math.min(runsPage * runsPageSize, filteredRunsList.length)} of {filteredRunsList.length}
+            </p>
           </div>
         )}
       </section>
