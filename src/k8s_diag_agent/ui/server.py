@@ -11,6 +11,8 @@ import time
 from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
+from typing import Any
 from urllib.parse import parse_qs
 
 from ..external_analysis.artifact import (
@@ -47,6 +49,13 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_STATIC_DIR = PROJECT_ROOT / "frontend" / "dist"
+
+# In-memory cache for run payloads to avoid repeated expensive computation
+# Key: (run_id, ui_index_mtime), Value: (cached_payload, cached_promotions)
+_run_payload_cache: dict[tuple[str, float], tuple[dict[str, Any], list[dict[str, object]]]] = {}
+_run_payload_cache_lock = Lock()
+# Maximum cache entries to prevent unbounded memory growth
+_MAX_CACHE_ENTRIES = 10
 
 # Directory name for stable "latest" diagnostic pack mirror files
 _LATEST_PACK_DIR_NAME = "latest"
@@ -677,8 +686,114 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if context is None:
             return
         if route == "/api/run":
+            # Add structured timing for /api/run to identify hot sub-stages
+            timings: dict[str, float] = {}
+            total_start = time.perf_counter()
+
+            # Stage 1: Get ui-index.json mtime for cache key
+            ui_index_mtime = 0.0
+            ui_index_path = self.runs_dir / "health" / "ui-index.json"
+            if ui_index_path.exists():
+                ui_index_mtime = ui_index_path.stat().st_mtime
+            timings["ui_index_read_ms"] = (time.perf_counter() - total_start) * 1000
+
+            # Stage 2: Check cache for existing payload
+            cache_key = (context.run.run_id, ui_index_mtime)
+            with _run_payload_cache_lock:
+                cached = _run_payload_cache.get(cache_key)
+
+            if cached is not None:
+                # Cache hit - return cached payload directly
+                cached_payload, _ = cached
+                total_duration = (time.perf_counter() - total_start) * 1000
+                emit_structured_log(
+                    component="ui-run-payload",
+                    message="/api/run payload served from cache",
+                    run_id=context.run.run_id,
+                    run_label=context.run.run_label,
+                    severity="DEBUG",
+                    metadata={
+                        "path": "/api/run",
+                        "run_id": context.run.run_id,
+                        "run_label": context.run.run_label,
+                        "total_duration_ms": round(total_duration, 2),
+                        "cache_hit": True,
+                    },
+                )
+                self._send_json(cached_payload)
+                return
+
+            # Cache miss - build the payload with timing
+            context_load_start = time.perf_counter()
+            # _load_context was already called above, so context is already loaded
+            timings["context_load_ms"] = (time.perf_counter() - context_load_start) * 1000
+
+            # Stage 3: Load promotions (this scans external-analysis directory)
+            promotions_load_start = time.perf_counter()
             promotions = collect_promoted_queue_entries(self._health_root, context.run.run_id)
-            self._send_json(build_run_payload(context, promotions=promotions))
+            timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
+            timings["promotions_count"] = len(promotions)
+
+            # Stage 4: Build the run payload
+            payload_build_start = time.perf_counter()
+            run_payload = build_run_payload(context, promotions=promotions)
+            timings["payload_build_ms"] = (time.perf_counter() - payload_build_start) * 1000
+
+            # Stage 5: Serialize to JSON
+            serialize_start = time.perf_counter()
+            payload_json = json.dumps(run_payload, ensure_ascii=False)
+            timings["serialize_ms"] = (time.perf_counter() - serialize_start) * 1000
+
+            # Count files scanned for context
+            external_analysis_dir = self._health_root / "external-analysis"
+            external_analysis_count = 0
+            if external_analysis_dir.exists():
+                external_analysis_count = len(list(external_analysis_dir.glob(f"{context.run.run_id}-*.json")))
+            timings["external_analysis_files_scanned"] = external_analysis_count
+
+            notifications_dir = self.runs_dir / "health" / "notifications"
+            notification_count = 0
+            if notifications_dir.exists():
+                notification_count = len(list(notifications_dir.glob("*.json")))
+            timings["notification_files_scanned"] = notification_count
+
+            # Cache the built payload
+            with _run_payload_cache_lock:
+                # Evict old entries if cache is full
+                if len(_run_payload_cache) >= _MAX_CACHE_ENTRIES:
+                    # Remove oldest entry (first key in dict)
+                    oldest_key = next(iter(_run_payload_cache))
+                    del _run_payload_cache[oldest_key]
+                _run_payload_cache[cache_key] = (run_payload, promotions)
+
+            total_duration = (time.perf_counter() - total_start) * 1000
+            timings["total_duration_ms"] = total_duration
+
+            # Emit structured timing log
+            emit_structured_log(
+                component="ui-run-payload",
+                message="/api/run payload built with timing",
+                run_id=context.run.run_id,
+                run_label=context.run.run_label,
+                severity="INFO",
+                metadata={
+                    "path": "/api/run",
+                    "run_id": context.run.run_id,
+                    "run_label": context.run.run_label,
+                    "total_duration_ms": round(timings.get("total_duration_ms", 0), 2),
+                    "context_load_ms": round(timings.get("context_load_ms", 0), 2),
+                    "ui_index_read_ms": round(timings.get("ui_index_read_ms", 0), 2),
+                    "promotions_load_ms": round(timings.get("promotions_load_ms", 0), 2),
+                    "payload_build_ms": round(timings.get("payload_build_ms", 0), 2),
+                    "serialize_ms": round(timings.get("serialize_ms", 0), 2),
+                    "external_analysis_files_scanned": timings.get("external_analysis_files_scanned", 0),
+                    "notification_files_scanned": timings.get("notification_files_scanned", 0),
+                    "promotions_count": timings.get("promotions_count", 0),
+                    "cache_hit": False,
+                },
+            )
+
+            self._send_json(run_payload)
             return
         if route == "/api/fleet":
             self._send_json(build_fleet_payload(context))

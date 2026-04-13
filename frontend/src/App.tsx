@@ -12,6 +12,7 @@ import {
   fetchRun,
   fetchRunsList,
   promoteDeterministicNextCheck,
+  runBatchExecution,
   submitUsefulnessFeedback,
 } from "./api";
 import type {
@@ -2128,7 +2129,40 @@ const App = () => {
     persistSelectedRunId(runId);
     setSelectedRunId(runId);
   }, []);
-  
+
+  // Batch execution state for recent runs
+  const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
+  const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
+
+  // Handle batch execution for a run
+  const handleBatchExecution = useCallback(async (runId: string) => {
+    setExecutingBatchRunId(runId);
+    setBatchExecutionError((prev) => {
+      const next = { ...prev };
+      delete next[runId];
+      return next;
+    });
+    try {
+      await runBatchExecution({ runId });
+      // Refresh runs list after successful execution
+      const payload: RunsListPayload = await fetchRunsList();
+      setRunsList(payload.runs);
+      // If the selected run is the one we just executed, refresh that too
+      if (selectedRunId === runId) {
+        const runPayload = await fetchRun(runId);
+        setRun(runPayload);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Batch execution failed";
+      setBatchExecutionError((prev) => ({
+        ...prev,
+        [runId]: message,
+      }));
+    } finally {
+      setExecutingBatchRunId((current) => (current === runId ? null : current));
+    }
+  }, [selectedRunId]);
+
   // Fetch runs list on mount
   useEffect(() => {
     let active = true;
@@ -2193,7 +2227,16 @@ const App = () => {
 
   const totalRunsPages = Math.ceil(filteredRunsList.length / runsPageSize);
 
+  // Ref to track if a refresh is in progress to prevent duplicate fetches
+  const refreshInProgress = useRef(false);
+
   const refresh = useCallback(async () => {
+    // Prevent overlapping refresh requests - this is critical for reducing
+    // server load when auto-refresh is enabled or visibility changes rapidly
+    if (refreshInProgress.current) {
+      return;
+    }
+    refreshInProgress.current = true;
     try {
       setError(null);
       const [runPayload, fleetPayload, proposalsPayload] = await Promise.all([
@@ -2228,6 +2271,8 @@ const App = () => {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      refreshInProgress.current = false;
     }
   }, [selectedClusterLabel]);
 
@@ -3085,6 +3130,7 @@ const App = () => {
                   <th>Status</th>
                   <th>Review</th>
                   <th>Timestamp</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -3144,6 +3190,28 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="muted small">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {runEntry.reviewStatus === "no-executions" ? (
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBatchExecution(runEntry.runId);
+                            }}
+                            disabled={executingBatchRunId === runEntry.runId}
+                          >
+                            {executingBatchRunId === runEntry.runId ? "Running…" : "Execute"}
+                          </button>
+                        ) : (
+                          <span className="muted small">—</span>
+                        )}
+                        {batchExecutionError[runEntry.runId] && (
+                          <p className="muted tiny runs-execution-error">
+                            {batchExecutionError[runEntry.runId]}
+                          </p>
                         )}
                       </td>
                     </tr>
