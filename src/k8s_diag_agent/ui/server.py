@@ -70,17 +70,63 @@ def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
     """
     import subprocess as _subprocess
 
-    build_script = _SCRIPTS_DIR / "build_diagnostic_pack.py"
-    if not build_script.exists():
-        logger.warning(
-            "Cannot refresh diagnostic pack: build script not found",
-            extra={"run_id": run_id, "script": str(build_script)},
+    # Try multiple locations for the build script to handle both local and containerized environments
+    build_script: Path | None = None
+    script_locations_tried: list[str] = []
+
+    # First try the scripts directory relative to project root
+    primary_script = _SCRIPTS_DIR / "build_diagnostic_pack.py"
+    script_locations_tried.append(str(primary_script))
+    if primary_script.exists():
+        build_script = primary_script
+
+    # Fall back to current working directory (useful in containerized environments)
+    if build_script is None:
+        cwd_script = Path.cwd() / "scripts" / "build_diagnostic_pack.py"
+        script_locations_tried.append(str(cwd_script))
+        if cwd_script.exists():
+            build_script = cwd_script
+
+    # Last resort: try the script name directly in common locations
+    if build_script is None:
+        for search_path in [Path.cwd(), Path("/app"), Path("/app/scripts")]:
+            candidate = search_path / "build_diagnostic_pack.py"
+            script_locations_tried.append(str(candidate))
+            if candidate.exists():
+                build_script = candidate
+                break
+
+    if build_script is None:
+        # All locations failed - emit structured log with diagnostic info
+        emit_structured_log(
+            component="pack-refresh",
+            message="Cannot refresh diagnostic pack: build script not found",
+            run_id=run_id,
+            run_label="",
+            severity="WARNING",
+            metadata={
+                "run_id": run_id,
+                "runs_root": str(runs_dir),
+                "health_root": str(runs_dir / "health"),
+                "refresh_root": str(_SCRIPTS_DIR),
+                "script_path_attempted": script_locations_tried,
+                "failed_stage": "script_discovery",
+                "error_summary": "build script not found in any searched location",
+            },
         )
         return False
 
+    # Determine the correct Python executable to use
+    # In containerized environments, use sys.executable; in local dev, also prefer sys.executable
+    python_exe = sys.executable
+    if not python_exe:
+        # Fallback for edge cases
+        python_exe = "python3"
+
     runs_dir_str = str(runs_dir)
+    health_root = runs_dir / "health"
     build_cmd = [
-        sys.executable,
+        python_exe,
         str(build_script),
         "--run-id",
         run_id,
@@ -89,6 +135,24 @@ def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
     ]
 
     try:
+        # Emit structured log for start of pack refresh
+        emit_structured_log(
+            component="pack-refresh",
+            message="Starting diagnostic pack refresh",
+            run_id=run_id,
+            run_label="",
+            severity="INFO",
+            metadata={
+                "run_id": run_id,
+                "runs_root": str(runs_dir),
+                "health_root": str(health_root),
+                "refresh_root": str(build_script.parent),
+                "script_path_attempted": str(build_script),
+                "python_executable": python_exe,
+                "command": build_cmd,
+            },
+        )
+
         # Run the build script - it will write the latest mirror files as part of its work
         _subprocess.run(
             build_cmd,
@@ -97,35 +161,76 @@ def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
             text=True,
             timeout=120,  # 2 minute timeout for pack building
         )
-        logger.info(
-            "Diagnostic pack latest mirror refreshed",
-            extra={"run_id": run_id, "runs_dir": runs_dir_str},
+
+        # Emit structured log for successful refresh
+        emit_structured_log(
+            component="pack-refresh",
+            message="Diagnostic pack latest mirror refreshed successfully",
+            run_id=run_id,
+            run_label="",
+            severity="INFO",
+            metadata={
+                "run_id": run_id,
+                "runs_root": str(runs_dir),
+                "health_root": str(health_root),
+                "refresh_root": str(build_script.parent),
+                "script_path_attempted": str(build_script),
+            },
         )
         return True
     except _subprocess.CalledProcessError as exc:
-        logger.warning(
-            "Failed to refresh diagnostic pack latest mirror",
-            extra={
+        emit_structured_log(
+            component="pack-refresh",
+            message="Failed to refresh diagnostic pack latest mirror",
+            run_id=run_id,
+            run_label="",
+            severity="WARNING",
+            metadata={
                 "run_id": run_id,
-                "runs_dir": runs_dir_str,
+                "runs_root": str(runs_dir),
+                "health_root": str(health_root),
+                "refresh_root": str(build_script.parent),
+                "script_path_attempted": str(build_script),
+                "failed_stage": "script_execution",
                 "returncode": exc.returncode,
-                "stderr": exc.stderr[:500] if exc.stderr else "",
+                "error_summary": f"script returned non-zero: {exc.returncode}",
+                "stderr_preview": exc.stderr[:500] if exc.stderr else "",
             },
         )
         return False
     except _subprocess.TimeoutExpired:
-        logger.warning(
-            "Failed to refresh diagnostic pack latest mirror: timeout",
-            extra={"run_id": run_id, "runs_dir": runs_dir_str},
+        emit_structured_log(
+            component="pack-refresh",
+            message="Failed to refresh diagnostic pack latest mirror: timeout",
+            run_id=run_id,
+            run_label="",
+            severity="WARNING",
+            metadata={
+                "run_id": run_id,
+                "runs_root": str(runs_dir),
+                "health_root": str(health_root),
+                "refresh_root": str(build_script.parent),
+                "script_path_attempted": str(build_script),
+                "failed_stage": "script_timeout",
+                "error_summary": "build script timed out after 120 seconds",
+            },
         )
         return False
     except OSError as exc:
-        logger.warning(
-            "Failed to refresh diagnostic pack latest mirror",
-            extra={
+        emit_structured_log(
+            component="pack-refresh",
+            message="Failed to refresh diagnostic pack latest mirror",
+            run_id=run_id,
+            run_label="",
+            severity="WARNING",
+            metadata={
                 "run_id": run_id,
-                "runs_dir": runs_dir_str,
-                "error": str(exc),
+                "runs_root": str(runs_dir),
+                "health_root": str(health_root),
+                "refresh_root": str(build_script.parent),
+                "script_path_attempted": str(build_script),
+                "failed_stage": "os_error",
+                "error_summary": str(exc),
             },
         )
         return False
