@@ -25,6 +25,7 @@ _ALLOWED_FAMILIES = {
     CommandFamily.KUBECTL_DESCRIBE,
     CommandFamily.KUBECTL_LOGS,
     CommandFamily.KUBECTL_GET_CRD,
+    CommandFamily.KUBECTL_TOP,
 }
 _DANGEROUS_CHARS = {";", "&&", "||", "|", "<", ">", "$", "`"}
 _OUTPUT_LIMIT = 8192

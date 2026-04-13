@@ -1542,13 +1542,19 @@ def build_runs_list(runs_dir: Path) -> RunsListPayload:
         # Only provide a path for runs that need review: unreviewed or partially-reviewed
         review_download_path: str | None = None
         if review_status in ("unreviewed", "partially-reviewed"):
-            # Check if the run-scoped export exists
+            # Check for run-scoped export first
             run_scoped_path = diagnostic_packs_dir / run_id / "next_check_usefulness_review.json"
             if run_scoped_path.exists():
                 review_download_path = str(run_scoped_path.relative_to(runs_dir))
             else:
-                # Fallback: provide the path where it should be created
-                review_download_path = f"health/diagnostic-packs/{run_id}/next_check_usefulness_review.json"
+                # Fallback: check the canonical "latest" path
+                # The export script writes to latest/ by default
+                latest_path = diagnostic_packs_dir / "latest" / "next_check_usefulness_review.json"
+                if latest_path.exists():
+                    review_download_path = str(latest_path.relative_to(runs_dir))
+                else:
+                    # Provide the canonical path as fallback (export will write there)
+                    review_download_path = "health/diagnostic-packs/latest/next_check_usefulness_review.json"
 
         runs_list.append(
             RunsListEntry(
