@@ -277,16 +277,65 @@ def _log_and_raise_gating(
     raise ManualNextCheckError(reason, blocking_reason=blocking_reason)
 
 
-def _artifact_path_for_run(runs_dir: Path, run_id: str, candidate_index: int) -> Path:
-    directory = runs_dir / "external-analysis"
+def _artifact_path_for_run(health_root: Path, run_id: str, candidate_index: int) -> Path:
+    """Compute the artifact path for a next-check execution artifact.
+
+    Execution artifacts live under health_root/external-analysis/, not runs_root/external-analysis/.
+    This is critical because the UI scans runs/health/external-analysis/ to find execution artifacts.
+
+    Args:
+        health_root: The health root directory (runs/health or runs depending on setup)
+        run_id: The run ID
+        candidate_index: The candidate index
+
+    Returns:
+        Path to the execution artifact
+    """
+    directory = health_root / "external-analysis"
     directory.mkdir(parents=True, exist_ok=True)
     filename = f"{run_id}-next-check-execution-{candidate_index}.json"
     return directory / filename
 
 
+def _log_artifact_write(
+    *,
+    run_id: str,
+    run_label: str,
+    artifact_path: Path,
+    health_root: Path,
+    purpose: str = "next-check-execution",
+) -> None:
+    """Log structured information about execution artifact writes.
+
+    This provides observability into where artifacts are being written,
+    which is critical for debugging path-related issues.
+
+    Args:
+        run_id: The run ID
+        run_label: The run label
+        artifact_path: The full path to the artifact being written
+        health_root: The health root directory used
+        purpose: The purpose of the artifact
+    """
+    emit_structured_log(
+        component="next-check-execution",
+        message="Writing execution artifact",
+        run_label=run_label,
+        run_id=run_id,
+        severity="DEBUG",
+        metadata={
+            "artifact_path": str(artifact_path),
+            "health_root": str(health_root),
+            "runs_root": str(health_root.parent),  # Parent of health_root is runs_root
+            "purpose": purpose,
+            "artifact_relative_path": str(artifact_path.relative_to(health_root)),
+        },
+    )
+
+
 def execute_manual_next_check(
     *,
-    runs_dir: Path,
+    health_root: Path,
     run_id: str,
     run_label: str,
     plan_artifact_path: Path,
@@ -450,7 +499,7 @@ def execute_manual_next_check(
             stderr_truncated,
             output_bytes,
         ) = _summarize_outputs(exc.stdout, exc.stderr)
-        artifact_path = _artifact_path_for_run(runs_dir, run_id, candidate_index)
+        artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
         artifact = ExternalAnalysisArtifact(
             tool_name="next-check-runner",
             run_id=run_id,
@@ -483,6 +532,13 @@ def execute_manual_next_check(
             timed_out=True,
             output_bytes_captured=output_bytes,
         )
+        _log_artifact_write(
+            run_id=run_id,
+            run_label=run_label,
+            artifact_path=artifact_path,
+            health_root=health_root,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value,
+        )
         write_external_analysis_artifact(artifact_path, artifact)
         _log_execution_event(
             message="Manual next-check execution timed out",
@@ -508,7 +564,7 @@ def execute_manual_next_check(
         return artifact
     except FileNotFoundError as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
-        artifact_path = _artifact_path_for_run(runs_dir, run_id, candidate_index)
+        artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
         artifact = ExternalAnalysisArtifact(
             tool_name="next-check-runner",
             run_id=run_id,
@@ -536,6 +592,13 @@ def execute_manual_next_check(
             ),
             raw_output=None,
             error_summary=f"{exc}",
+        )
+        _log_artifact_write(
+            run_id=run_id,
+            run_label=run_label,
+            artifact_path=artifact_path,
+            health_root=health_root,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value,
         )
         write_external_analysis_artifact(artifact_path, artifact)
         _log_execution_event(
@@ -574,7 +637,7 @@ def execute_manual_next_check(
     error_summary = None
     if status == ExternalAnalysisStatus.FAILED:
         error_summary = stderr_text or "Command returned non-zero status."
-    artifact_path = _artifact_path_for_run(runs_dir, run_id, candidate_index)
+    artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
     artifact = ExternalAnalysisArtifact(
         tool_name="next-check-runner",
         run_id=run_id,
@@ -606,6 +669,13 @@ def execute_manual_next_check(
         stderr_truncated=stderr_truncated,
         timed_out=False,
         output_bytes_captured=output_bytes,
+    )
+    _log_artifact_write(
+        run_id=run_id,
+        run_label=run_label,
+        artifact_path=artifact_path,
+        health_root=health_root,
+        purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value,
     )
     write_external_analysis_artifact(artifact_path, artifact)
     _log_execution_event(

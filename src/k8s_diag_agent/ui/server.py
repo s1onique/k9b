@@ -795,7 +795,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             return
         try:
             artifact = execute_manual_next_check(
-                runs_dir=self.runs_dir,
+                health_root=self._health_root,
                 run_id=context.run.run_id,
                 run_label=context.run.run_label,
                 plan_artifact_path=effective_plan_path,

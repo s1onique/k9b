@@ -18,7 +18,9 @@ from k8s_diag_agent.external_analysis.next_check_planner import BlockingReason
 class ManualNextCheckTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.mkdtemp())
-        self.runs_dir = self.tmpdir
+        # health_root is the directory where execution artifacts should be written
+        # For tests, we use the tmpdir directly as health_root
+        self.health_root = self.tmpdir
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
@@ -41,7 +43,7 @@ class ManualNextCheckTests(unittest.TestCase):
     def test_executes_safe_candidate_and_persists_artifact(self) -> None:
         candidate = self._base_candidate()
         artifact = execute_manual_next_check(
-            runs_dir=self.runs_dir,
+            health_root=self.health_root,
             run_id="run-1",
             run_label="run-1",
             plan_artifact_path=Path("external-analysis/plan.json"),
@@ -52,7 +54,8 @@ class ManualNextCheckTests(unittest.TestCase):
             command_runner=lambda command: self._runner(0, stdout="ok"),
         )
         self.assertEqual(artifact.status, ExternalAnalysisStatus.SUCCESS)
-        artifact_path = self.runs_dir / "external-analysis" / "run-1-next-check-execution-0.json"
+        # Execution artifacts should be written under health_root/external-analysis/
+        artifact_path = self.health_root / "external-analysis" / "run-1-next-check-execution-0.json"
         self.assertTrue(artifact_path.exists())
         data = json.loads(artifact_path.read_text(encoding="utf-8"))
         self.assertEqual(data["status"], "success")
@@ -65,7 +68,7 @@ class ManualNextCheckTests(unittest.TestCase):
     def test_records_failed_execution_and_exposes_error_summary(self) -> None:
         candidate = self._base_candidate()
         artifact = execute_manual_next_check(
-            runs_dir=self.runs_dir,
+            health_root=self.health_root,
             run_id="run-2",
             run_label="run-2",
             plan_artifact_path=Path("external-analysis/plan.json"),
@@ -77,7 +80,7 @@ class ManualNextCheckTests(unittest.TestCase):
         )
         self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
         data = json.loads(
-            (self.runs_dir / "external-analysis" / "run-2-next-check-execution-1.json").read_text(encoding="utf-8")
+            (self.health_root / "external-analysis" / "run-2-next-check-execution-1.json").read_text(encoding="utf-8")
         )
         self.assertEqual(data["error_summary"], "permission denied")
 
@@ -86,7 +89,7 @@ class ManualNextCheckTests(unittest.TestCase):
         candidate["requiresOperatorApproval"] = True
         with self.assertRaises(ManualNextCheckError) as cm:
             execute_manual_next_check(
-                runs_dir=self.runs_dir,
+                health_root=self.health_root,
                 run_id="run-3",
                 run_label="run-3",
                 plan_artifact_path=Path("external-analysis/plan.json"),
@@ -103,7 +106,7 @@ class ManualNextCheckTests(unittest.TestCase):
         candidate["requiresOperatorApproval"] = True
         candidate["approvalStatus"] = "approved"
         artifact = execute_manual_next_check(
-            runs_dir=self.runs_dir,
+            health_root=self.health_root,
             run_id="run-approval",
             run_label="run-approval",
             plan_artifact_path=Path("external-analysis/plan.json"),
@@ -120,7 +123,7 @@ class ManualNextCheckTests(unittest.TestCase):
         candidate["duplicateOfExistingEvidence"] = True
         with self.assertRaises(ManualNextCheckError) as cm:
             execute_manual_next_check(
-                runs_dir=self.runs_dir,
+                health_root=self.health_root,
                 run_id="run-4",
                 run_label="run-4",
                 plan_artifact_path=Path("external-analysis/plan.json"),
@@ -137,7 +140,7 @@ class ManualNextCheckTests(unittest.TestCase):
         candidate["suggestedCommandFamily"] = "kubectl-apply"
         with self.assertRaises(ManualNextCheckError) as cm:
             execute_manual_next_check(
-                runs_dir=self.runs_dir,
+                health_root=self.health_root,
                 run_id="run-5",
                 run_label="run-5",
                 plan_artifact_path=Path("external-analysis/plan.json"),
@@ -160,7 +163,7 @@ class ManualNextCheckTests(unittest.TestCase):
             )
 
         artifact = execute_manual_next_check(
-            runs_dir=self.runs_dir,
+            health_root=self.health_root,
             run_id="run-timeout",
             run_label="run-timeout",
             plan_artifact_path=Path("external-analysis/plan.json"),
@@ -180,7 +183,7 @@ class ManualNextCheckTests(unittest.TestCase):
         candidate = self._base_candidate()
         long_stdout = "x" * (_OUTPUT_LIMIT + 10)
         artifact = execute_manual_next_check(
-            runs_dir=self.runs_dir,
+            health_root=self.health_root,
             run_id="run-truncate",
             run_label="run-truncate",
             plan_artifact_path=Path("external-analysis/plan.json"),

@@ -351,7 +351,7 @@ def run_batch_next_checks(
 
         try:
             artifact = execute_manual_next_check(
-                runs_dir=runs_dir,
+                health_root=run_health_dir,
                 run_id=run_id,
                 run_label=run_label,
                 plan_artifact_path=plan_artifact_path,
