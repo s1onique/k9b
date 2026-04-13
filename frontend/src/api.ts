@@ -187,3 +187,26 @@ export const submitUsefulnessFeedback = async (
 export type RunsListPayload = import("./types").RunsListPayload;
 
 export const fetchRunsList = (): Promise<RunsListPayload> => fetchJson<RunsListPayload>("/api/runs");
+
+// Batch execution API
+export type BatchExecutionRequest = import("./types").BatchExecutionRequest;
+export type BatchExecutionResponse = import("./types").BatchExecutionResponse;
+
+export const runBatchExecution = async (
+  request: BatchExecutionRequest
+): Promise<BatchExecutionResponse> => {
+  const response = await fetch("/api/run-batch-next-check-execution", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Failed to run batch execution");
+  }
+
+  return (await response.json()) as BatchExecutionResponse;
+};

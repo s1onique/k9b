@@ -423,7 +423,7 @@ def run_batch_next_checks(
 
 
 def _refresh_diagnostic_pack(runs_dir: Path, run_id: str, run_label: str) -> bool:
-    """Refresh the diagnostic pack mirror."""
+    """Refresh the diagnostic pack mirror and export usefulness review artifact."""
     try:
         # Import here to avoid circular imports
         from scripts.build_diagnostic_pack import create_diagnostic_pack  # noqa: E402
@@ -441,11 +441,77 @@ def _refresh_diagnostic_pack(runs_dir: Path, run_id: str, run_label: str) -> boo
             run_id=run_id,
             metadata={"pack_path": str(pack_path)},
         )
+
+        # Export run-scoped usefulness review artifact for recent runs
+        _export_usefulness_review(runs_dir, run_id, run_label)
+
         return True
     except Exception as exc:
         _log_event(
             message=f"Failed to refresh diagnostic pack: {exc}",
             severity="ERROR",
+            run_label=run_label,
+            run_id=run_id,
+            metadata={"error": str(exc)},
+        )
+        return False
+
+
+def _export_usefulness_review(runs_dir: Path, run_id: str, run_label: str) -> bool:
+    """Export run-scoped usefulness review artifact for the run.
+
+    Produces:
+    - Run-scoped file: runs/health/diagnostic-packs/<run_id>/next_check_usefulness_review.json
+    - Mirror at latest: runs/health/diagnostic-packs/latest/next_check_usefulness_review.json
+    """
+    try:
+        from scripts.export_next_check_usefulness_review import (  # noqa: E402
+            export_next_check_usefulness_review,
+        )
+
+        _log_event(
+            message="Exporting run-scoped usefulness review artifact",
+            run_label=run_label,
+            run_id=run_id,
+        )
+
+        # First, export to run-scoped path
+        run_scoped_path = export_next_check_usefulness_review(
+            runs_dir,
+            run_id=run_id,
+            use_run_scoped_path=True,
+        )
+        _log_event(
+            message=f"Exported run-scoped usefulness review: {run_scoped_path}",
+            run_label=run_label,
+            run_id=run_id,
+            metadata={
+                "artifact_path": str(run_scoped_path),
+                "path_type": "run_scoped",
+            },
+        )
+
+        # Also export to /latest/ as a mirror for convenience
+        latest_path = export_next_check_usefulness_review(
+            runs_dir,
+            run_id=run_id,
+            use_run_scoped_path=False,
+        )
+        _log_event(
+            message=f"Exported latest mirror usefulness review: {latest_path}",
+            run_label=run_label,
+            run_id=run_id,
+            metadata={
+                "artifact_path": str(latest_path),
+                "path_type": "latest_mirror",
+            },
+        )
+
+        return True
+    except Exception as exc:
+        _log_event(
+            message=f"Failed to export usefulness review: {exc}",
+            severity="WARNING",
             run_label=run_label,
             run_id=run_id,
             metadata={"error": str(exc)},

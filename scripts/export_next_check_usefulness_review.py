@@ -37,7 +37,7 @@ def export_next_check_usefulness_review(
     runs_dir: Path,
     *,
     run_id: str | None = None,
-    use_run_scoped_path: bool = False,
+    use_run_scoped_path: bool = True,
 ) -> Path:
     """Export next-check execution artifacts for batch review.
 
@@ -45,8 +45,9 @@ def export_next_check_usefulness_review(
         runs_dir: Path to the runs directory (contains health/)
         run_id: Optional specific run_id to filter by. If not provided,
                 uses the latest run from ui-index.json.
-        use_run_scoped_path: If True, write to a run-scoped path instead of latest.
+        use_run_scoped_path: If True (default), write to a run-scoped path.
                              The run-scoped path is: health/diagnostic-packs/{run_id}/next_check_usefulness_review.json
+                             If False, writes to: health/diagnostic-packs/latest/next_check_usefulness_review.json
 
     Returns:
         Path to the exported JSON file.
@@ -118,7 +119,58 @@ def export_next_check_usefulness_review(
     output_path = output_dir / "next_check_usefulness_review.json"
     output_path.write_text(json.dumps(export_data, indent=2), encoding="utf-8")
 
+    # Log structured event for observability
+    _log_export_event(
+        event="usefulness-review-exported",
+        message=f"Exported usefulness review to {output_path}",
+        run_id=run_id,
+        run_label=run_label,
+        metadata={
+            "output_path": str(output_path),
+            "output_dir": str(output_dir),
+            "use_run_scoped_path": use_run_scoped_path,
+            "entry_count": len(entries),
+            "file_exists": output_path.exists(),
+        },
+    )
+
     return output_path
+
+
+def _log_export_event(
+    *,
+    event: str,
+    message: str,
+    run_id: str,
+    run_label: str,
+    metadata: dict[str, object],
+    severity: str = "INFO",
+) -> None:
+    """Emit a structured log event for usefulness review export."""
+    # Import here to avoid circular imports
+    import sys
+    from pathlib import Path as PathLocal
+
+    ROOT = PathLocal(__file__).resolve().parents[1]
+    SRC_PATH = ROOT / "src"
+    if str(SRC_PATH) not in sys.path:
+        sys.path.insert(0, str(SRC_PATH))
+
+    try:
+        from k8s_diag_agent.structured_logging import emit_structured_log
+
+        emit_structured_log(
+            component="usefulness-review-export",
+            message=message,
+            severity=severity,
+            run_id=run_id,
+            run_label=run_label,
+            metadata=metadata,
+            event=event,
+        )
+    except ImportError:
+        # Fallback to print if structured logging not available
+        print(f"[{severity}] {message}: {metadata}")
 
 
 def _find_latest_run_id(run_health_dir: Path) -> str | None:

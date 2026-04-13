@@ -7,6 +7,7 @@ import json
 import logging
 import mimetypes
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -52,6 +53,70 @@ _LATEST_PACK_DIR_NAME = "latest"
 
 # Scripts directory
 _SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+
+# Slow request threshold in milliseconds
+_SLOW_REQUEST_THRESHOLD_MS = 1000
+
+
+def _log_request_access(
+    method: str,
+    path: str,
+    query: str,
+    status_code: int,
+    duration_ms: float,
+    response_bytes: int,
+    client_ip: str,
+    run_label: str = "",
+    is_static_asset: bool = False,
+) -> None:
+    """Log structured HTTP access event with latency telemetry.
+
+    Args:
+        method: HTTP method (GET, POST, etc.)
+        path: Request path (e.g., /api/run)
+        query: Query string (e.g., run_id=abc)
+        status_code: HTTP response status code
+        duration_ms: Request handling duration in milliseconds
+        response_bytes: Response body size in bytes
+        client_ip: Client IP address
+        run_label: Run label when known, else empty string
+        is_static_asset: Whether this is a static asset request
+    """
+    # Determine severity based on status code and latency
+    if status_code >= 500:
+        severity = "ERROR"
+    elif status_code >= 400:
+        severity = "WARNING"
+    elif duration_ms >= _SLOW_REQUEST_THRESHOLD_MS:
+        severity = "WARNING"
+    elif is_static_asset:
+        # Use DEBUG for static assets to reduce noise
+        severity = "DEBUG"
+    else:
+        severity = "INFO"
+
+    # Build message
+    message = f"{method} {path}"
+    if query:
+        message += f"?{query}"
+
+    emit_structured_log(
+        component="ui-access",
+        message=message,
+        severity=severity,
+        run_label=run_label,
+        run_id="",
+        metadata={
+            "method": method,
+            "path": path,
+            "query": query,
+            "status_code": status_code,
+            "duration_ms": round(duration_ms, 2),
+            "response_bytes": response_bytes,
+            "client_ip": client_ip,
+            "run_label": run_label,
+        },
+    )
 
 
 def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
@@ -177,6 +242,10 @@ def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
                 "script_path_attempted": str(build_script),
             },
         )
+
+        # Also export the run-scoped usefulness review artifact for Recent runs Download link
+        _export_usefulness_review_for_run(run_id, runs_dir)
+
         return True
     except _subprocess.CalledProcessError as exc:
         emit_structured_log(
@@ -231,6 +300,86 @@ def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
                 "script_path_attempted": str(build_script),
                 "failed_stage": "os_error",
                 "error_summary": str(exc),
+            },
+        )
+        return False
+
+
+def _export_usefulness_review_for_run(run_id: str, runs_dir: Path) -> bool:
+    """Export run-scoped usefulness review artifact after pack refresh.
+
+    This produces the run-scoped JSON file at:
+    runs/health/diagnostic-packs/<run_id>/next_check_usefulness_review.json
+
+    The Recent runs Download link in the UI requires this exact run-scoped file
+    to exist for the Download button to appear.
+
+    Args:
+        run_id: The current run ID
+        runs_dir: Path to the runs directory
+
+    Returns:
+        True if export succeeded, False otherwise.
+    """
+    try:
+        # Import here to avoid circular imports
+        from scripts.export_next_check_usefulness_review import (
+            export_next_check_usefulness_review,
+        )
+
+        emit_structured_log(
+            component="pack-refresh",
+            message="Exporting run-scoped usefulness review artifact",
+            run_id=run_id,
+            run_label="",
+            severity="INFO",
+            metadata={
+                "run_id": run_id,
+                "runs_root": str(runs_dir),
+                "health_root": str(runs_dir / "health"),
+                "operation": "export_usefulness_review",
+            },
+        )
+
+        # Export to run-scoped path only (not /latest/ mirror)
+        # The /latest/ mirror is already created by build_diagnostic_pack.py
+        output_path = export_next_check_usefulness_review(
+            runs_dir,
+            run_id=run_id,
+            use_run_scoped_path=True,
+        )
+
+        # Verify the file was written
+        file_exists = output_path.exists()
+
+        emit_structured_log(
+            component="pack-refresh",
+            message="Exported run-scoped usefulness review artifact",
+            run_id=run_id,
+            run_label="",
+            severity="INFO",
+            metadata={
+                "run_id": run_id,
+                "output_path": str(output_path),
+                "file_exists": file_exists,
+                "operation": "export_usefulness_review",
+            },
+        )
+
+        return file_exists
+    except Exception as exc:
+        emit_structured_log(
+            component="pack-refresh",
+            message="Failed to export run-scoped usefulness review artifact",
+            run_id=run_id,
+            run_label="",
+            severity="WARNING",
+            metadata={
+                "run_id": run_id,
+                "runs_root": str(runs_dir),
+                "health_root": str(runs_dir / "health"),
+                "operation": "export_usefulness_review",
+                "error": str(exc),
             },
         )
         return False
@@ -394,32 +543,120 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.runs_dir = runs_dir
         self.static_dir = static_dir
         self._health_root = _compute_health_root(runs_dir)
+        # Access logging state
+        self._start_time: float = 0.0
+        self._request_method: str = ""
+        self._request_path: str = ""
+        self._request_query: str = ""
+        self._is_static: bool = False
+        self._response_bytes: int = 0
+        self._status_code: int = 200
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+
+    def _get_client_ip(self) -> str:
+        """Extract client IP from request."""
+        # Check for forwarded headers (reverse proxy)
+        forwarded = self.headers.get("X-Forwarded-For")
+        if forwarded:
+            # Take the first IP in the chain
+            return forwarded.split(",")[0].strip()
+        # Fall back to direct connection
+        client = self.client_address
+        if isinstance(client, tuple):
+            return client[0]
+        return str(client)
+
+    def _get_run_label(self) -> str:
+        """Extract run_label from the current context if available."""
+        # Try to get run_label from the loaded context
+        # This is a best-effort attempt; if context can't be loaded, return empty
+        try:
+            context = self._load_context()
+            if context and context.run:
+                return context.run.run_label or ""
+        except Exception:
+            pass
+        return ""
 
     def do_GET(self) -> None:
         route, _, query = self.path.partition("?")
-        if route.startswith("/api/"):
-            self._handle_api(route, query)
-        elif route == "/artifact":
-            self._serve_artifact(query)
+        self._request_method = "GET"
+        self._request_path = route
+        self._request_query = query
+        self._is_static = not route.startswith("/api/") and route != "/artifact"
+        self._start_time = time.perf_counter()
+        self._status_code = 200
+        self._response_bytes = 0
+
+        try:
+            if route.startswith("/api/"):
+                self._handle_api(route, query)
+            elif route == "/artifact":
+                self._serve_artifact(query)
+            else:
+                self._serve_static(route)
+        except Exception:
+            # Log any uncaught exceptions as ERROR access logs
+            self._status_code = 500
+            self._log_access_completion()
+            raise
         else:
-            self._serve_static(route)
+            self._log_access_completion()
 
     def do_POST(self) -> None:
         route, _, _ = self.path.partition("?")
-        if route == "/api/deterministic-next-check/promote":
-            self._handle_deterministic_promotion()
+        self._request_method = "POST"
+        self._request_path = route
+        self._request_query = ""
+        self._is_static = False
+        self._start_time = time.perf_counter()
+        self._status_code = 200
+        self._response_bytes = 0
+
+        try:
+            if route == "/api/deterministic-next-check/promote":
+                self._handle_deterministic_promotion()
+                return
+            if route == "/api/next-check-execution":
+                self._handle_next_check_execution()
+                return
+            if route == "/api/next-check-approval":
+                self._handle_next_check_approval()
+                return
+            if route == "/api/next-check-execution-usefulness":
+                self._handle_usefulness_feedback()
+                return
+            if route == "/api/run-batch-next-check-execution":
+                self._handle_run_batch_next_check_execution()
+                return
+            self._status_code = 404
+            self._send_text(404, "Not Found")
+        except Exception:
+            # Log any uncaught exceptions as ERROR access logs
+            self._status_code = 500
+            self._log_access_completion()
+            raise
+        else:
+            self._log_access_completion()
+
+    def _log_access_completion(self) -> None:
+        """Log access completion with latency and status."""
+        if self._start_time == 0.0:
             return
-        if route == "/api/next-check-execution":
-            self._handle_next_check_execution()
-            return
-        if route == "/api/next-check-approval":
-            self._handle_next_check_approval()
-            return
-        if route == "/api/next-check-execution-usefulness":
-            self._handle_usefulness_feedback()
-            return
-        self._send_text(404, "Not Found")
+
+        duration_ms = (time.perf_counter() - self._start_time) * 1000
+
+        _log_request_access(
+            method=self._request_method,
+            path=self._request_path,
+            query=self._request_query,
+            status_code=self._status_code,
+            duration_ms=duration_ms,
+            response_bytes=self._response_bytes,
+            client_ip=self._get_client_ip(),
+            run_label=self._get_run_label() if self._request_path.startswith("/api/") else "",
+            is_static_asset=self._is_static,
+        )
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -1367,6 +1604,80 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "usefulnessClass": usefulness_class.value,
             "usefulnessSummary": usefulness_summary,
         })
+
+    def _handle_run_batch_next_check_execution(self) -> None:
+        """Handle batch execution of next-check candidates for a specific run.
+
+        Accepts run_id in the payload and executes all eligible candidates
+        that haven't been executed yet.
+        """
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+
+        run_id = payload.get("runId")
+        if not isinstance(run_id, str) or not run_id:
+            self._send_json({"error": "runId is required"}, 400)
+            return
+
+        dry_run = payload.get("dryRun", True)
+
+        # Import the batch execution function
+        try:
+            import sys
+            from pathlib import Path as PathLib
+
+            # Add scripts directory to path
+            project_root = PathLib(__file__).resolve().parents[4]
+            scripts_dir = project_root / "scripts"
+            if str(scripts_dir) not in sys.path:
+                sys.path.insert(0, str(scripts_dir))
+
+            from run_batch_next_checks import run_batch_next_checks
+        except Exception as exc:
+            self._send_json({"error": f"Failed to load batch execution module: {exc}"}, 500)
+            return
+
+        try:
+            result = run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=dry_run,
+            )
+        except FileNotFoundError:
+            self._send_json({"error": f"Run not found: {run_id}"}, 404)
+            return
+        except Exception as exc:
+            self._send_json({"error": f"Batch execution failed: {exc}"}, 500)
+            return
+
+        # Convert result to response
+        response = {
+            "status": "success",
+            "summary": f"Batch execution {'simulation' if dry_run else 'completed'} for run {run_id}",
+            "runId": run_id,
+            "dryRun": dry_run,
+            "totalCandidates": result.total_candidates,
+            "eligibleCandidates": result.eligible_candidates,
+            "executedCount": result.executed_count,
+            "skippedAlreadyExecuted": result.skipped_already_executed,
+            "skippedIneligible": result.skipped_ineligible,
+            "failedCount": result.failed_count,
+            "successCount": result.success_count,
+        }
+
+        # If not dry run, refresh diagnostic pack
+        if not dry_run and result.executed_count > 0:
+            _refresh_diagnostic_pack_latest(run_id, self.runs_dir)
+
+        self._send_json(response)
 
     def _serve_static(self, route: str) -> None:
         target = route or "/"

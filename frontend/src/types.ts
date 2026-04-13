@@ -603,9 +603,32 @@ export type RunsListEntry = {
   reviewedCount: number;
   reviewStatus: string;
   reviewDownloadPath: string | null;
+  // Batch execution support for Recent runs
+  batchExecutable: boolean;
+  batchEligibleCount: number;
 };
 
 export type RunsListPayload = {
   runs: RunsListEntry[];
   totalCount: number;
+};
+
+// Batch execution types
+export type BatchExecutionRequest = {
+  runId: string;
+  dryRun?: boolean;
+};
+
+export type BatchExecutionResponse = {
+  status: string;
+  summary: string;
+  runId: string;
+  dryRun: boolean;
+  totalCandidates: number;
+  eligibleCandidates: number;
+  executedCount: number;
+  skippedAlreadyExecuted: number;
+  skippedIneligible: number;
+  failedCount: number;
+  successCount: number;
 };

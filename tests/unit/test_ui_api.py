@@ -673,3 +673,214 @@ class RunsListTests(unittest.TestCase):
             self.assertEqual(run["reviewStatus"], "partially-reviewed")
             self.assertEqual(run["executionCount"], 2)
             self.assertEqual(run["reviewedCount"], 1)
+
+    def test_build_runs_list_different_runs_produce_different_download_paths(self) -> None:
+        """Test that two different runs produce two different download paths.
+        
+        This verifies the fix for the bug where historical runs all pointed to /latest/.
+        """
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            reviews_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+
+            # Create run-1 with a run-scoped review artifact
+            review1_content = {
+                "run_id": "run-1",
+                "run_label": "Run 1",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path1 = reviews_dir / "run-1-review.json"
+            review_path1.write_text(json.dumps(review1_content), encoding="utf-8")
+
+            # Create run-1's run-scoped diagnostic pack
+            run1_pack_dir = diagnostic_packs_dir / "run-1"
+            run1_pack_dir.mkdir(parents=True, exist_ok=True)
+            run1_review_content = {"run_id": "run-1", "entries": []}
+            (run1_pack_dir / "next_check_usefulness_review.json").write_text(
+                json.dumps(run1_review_content), encoding="utf-8"
+            )
+
+            # Add execution artifact for run-1 (to trigger unreviewed status)
+            exec1_content = {
+                "run_id": "run-1",
+                "purpose": "next-check-execution",
+                "status": "success",
+            }
+            (external_analysis_dir / "run-1-next-check-execution-001.json").write_text(
+                json.dumps(exec1_content), encoding="utf-8"
+            )
+
+            # Create run-2 with a different run-scoped review artifact
+            review2_content = {
+                "run_id": "run-2",
+                "run_label": "Run 2",
+                "timestamp": "2026-01-02T00:00:00Z",
+                "cluster_count": 3,
+            }
+            review_path2 = reviews_dir / "run-2-review.json"
+            review_path2.write_text(json.dumps(review2_content), encoding="utf-8")
+
+            # Create run-2's run-scoped diagnostic pack
+            run2_pack_dir = diagnostic_packs_dir / "run-2"
+            run2_pack_dir.mkdir(parents=True, exist_ok=True)
+            run2_review_content = {"run_id": "run-2", "entries": []}
+            (run2_pack_dir / "next_check_usefulness_review.json").write_text(
+                json.dumps(run2_review_content), encoding="utf-8"
+            )
+
+            # Add execution artifact for run-2 (to trigger unreviewed status)
+            exec2_content = {
+                "run_id": "run-2",
+                "purpose": "next-check-execution",
+                "status": "success",
+            }
+            (external_analysis_dir / "run-2-next-check-execution-001.json").write_text(
+                json.dumps(exec2_content), encoding="utf-8"
+            )
+
+            # Build the runs list
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 2)
+            
+            # Find each run's download path
+            run1_path = None
+            run2_path = None
+            for run in result["runs"]:
+                if run["runId"] == "run-1":
+                    run1_path = run["reviewDownloadPath"]
+                elif run["runId"] == "run-2":
+                    run2_path = run["reviewDownloadPath"]
+
+            # Key assertions: paths must be different and run-scoped
+            self.assertIsNotNone(run1_path)
+            self.assertIsNotNone(run2_path)
+            self.assertNotEqual(run1_path, run2_path)
+            assert run1_path is not None  # type narrowing
+            assert run2_path is not None  # type narrowing
+            self.assertIn("run-1", run1_path)
+            self.assertIn("run-2", run2_path)
+            self.assertNotIn("/latest/", run1_path)
+            self.assertNotIn("/latest/", run2_path)
+
+    def test_build_runs_list_historical_rows_no_latest_fallback(self) -> None:
+        """Test that historical rows without run-scoped artifacts do NOT show download links.
+        
+        This verifies that when only /latest/ exists, historical rows don't show misleading links.
+        """
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+            reviews_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+
+            # Create an old run (run-old) without a run-scoped artifact
+            review_content = {
+                "run_id": "run-old",
+                "run_label": "Old Run",
+                "timestamp": "2025-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "run-old-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Create execution artifact for the old run (so it needs review)
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            external_analysis_dir.mkdir(parents=True)
+            execution_content = {
+                "run_id": "run-old",
+                "purpose": "next-check-execution",
+                "status": "success",
+            }
+            (external_analysis_dir / "run-old-next-check-execution-001.json").write_text(
+                json.dumps(execution_content), encoding="utf-8"
+            )
+
+            # Create a /latest/ diagnostic pack (but NOT run-scoped for run-old)
+            latest_dir = diagnostic_packs_dir / "latest"
+            latest_dir.mkdir(parents=True, exist_ok=True)
+            latest_content = {"run_id": "run-old", "entries": []}
+            (latest_dir / "next_check_usefulness_review.json").write_text(
+                json.dumps(latest_content), encoding="utf-8"
+            )
+
+            # Build the runs list
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 1)
+            run = result["runs"][0]
+
+            # Key assertion: reviewDownloadPath must be None because run-scoped doesn't exist
+            # We should NOT fall back to /latest/
+            self.assertIsNone(run["reviewDownloadPath"])
+            self.assertEqual(run["reviewStatus"], "unreviewed")
+
+    def test_build_runs_list_download_link_only_when_artifact_exists(self) -> None:
+        """Test that only rows with real run-scoped artifacts render a live download link.
+        
+        This verifies the frontend will only show Download when the artifact actually exists.
+        """
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+            reviews_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+
+            # Create a run WITH run-scoped artifact
+            review1_content = {
+                "run_id": "run-with-artifact",
+                "run_label": "Run with artifact",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path1 = reviews_dir / "run-with-artifact-review.json"
+            review_path1.write_text(json.dumps(review1_content), encoding="utf-8")
+
+            # Create run-scoped diagnostic pack
+            run1_pack_dir = diagnostic_packs_dir / "run-with-artifact"
+            run1_pack_dir.mkdir(parents=True, exist_ok=True)
+            run1_review_content = {"run_id": "run-with-artifact", "entries": []}
+            (run1_pack_dir / "next_check_usefulness_review.json").write_text(
+                json.dumps(run1_review_content), encoding="utf-8"
+            )
+
+            # Create execution artifact
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            external_analysis_dir.mkdir(parents=True)
+            execution_content = {
+                "run_id": "run-with-artifact",
+                "purpose": "next-check-execution",
+                "status": "success",
+            }
+            (external_analysis_dir / "run-with-artifact-next-check-execution-001.json").write_text(
+                json.dumps(execution_content), encoding="utf-8"
+            )
+
+            # Build the runs list
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 1)
+            run = result["runs"][0]
+
+            # Key assertion: reviewDownloadPath should be set because artifact exists
+            self.assertIsNotNone(run["reviewDownloadPath"])
+            assert run["reviewDownloadPath"] is not None  # type narrowing
+            self.assertIn("run-with-artifact", run["reviewDownloadPath"])
+            self.assertIn("next_check_usefulness_review.json", run["reviewDownloadPath"])

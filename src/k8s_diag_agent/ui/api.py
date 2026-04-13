@@ -1412,6 +1412,9 @@ class RunsListEntry(TypedDict):
     reviewedCount: int
     reviewStatus: str
     reviewDownloadPath: str | None
+    # Batch execution support for Recent runs
+    batchExecutable: bool
+    batchEligibleCount: int
 
 
 class RunsListPayload(TypedDict):
@@ -1435,6 +1438,106 @@ def _derive_review_status(execution_count: int, reviewed_count: int) -> str:
     if reviewed_count < execution_count:
         return "partially-reviewed"
     return "fully-reviewed"
+
+
+def _compute_batch_eligibility(
+    run_id: str,
+    run_health_dir: Path,
+) -> tuple[bool, int]:
+    """Compute batch executable status for a run.
+
+    Uses the same eligibility logic as run_batch_next_checks.py to determine
+    if there are any eligible candidates that can be batch-executed.
+
+    Returns:
+        Tuple of (batchExecutable: bool, batchEligibleCount: int)
+    """
+    from typing import cast
+
+    external_analysis_dir = run_health_dir / "external-analysis"
+
+    # Load next_check_plan for this run
+    plan_data: dict[str, object] | None = None
+
+    if external_analysis_dir.is_dir():
+        for plan_path in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+            try:
+                raw = json.loads(plan_path.read_text(encoding="utf-8"))
+                if raw.get("purpose") == "next-check-planning":
+                    plan_data = cast(dict[str, object], raw)
+                    break
+            except Exception:
+                continue
+
+    if not plan_data:
+        return False, 0
+
+    # Get candidates from plan
+    candidates_data: list[dict[str, object]] = []
+    if "candidates" in plan_data and isinstance(plan_data["candidates"], list):
+        candidates_data = cast(list[dict[str, object]], plan_data["candidates"])
+    elif "payload" in plan_data and isinstance(plan_data["payload"], dict):
+        payload = cast(dict[str, object], plan_data["payload"])
+        if "candidates" in payload and isinstance(payload["candidates"], list):
+            candidates_data = cast(list[dict[str, object]], payload["candidates"])
+
+    if not candidates_data:
+        return False, 0
+
+    # Load already-executed indices
+    execution_indices: set[int] = set()
+    if external_analysis_dir.is_dir():
+        for exec_path in external_analysis_dir.glob(f"{run_id}-next-check-execution*.json"):
+            try:
+                raw = json.loads(exec_path.read_text(encoding="utf-8"))
+                if raw.get("purpose") == "next-check-execution":
+                    payload = raw.get("payload", {})
+                    candidate_index = payload.get("candidateIndex")
+                    if isinstance(candidate_index, int):
+                        execution_indices.add(candidate_index)
+            except Exception:
+                continue
+
+    # Count eligible candidates using the same logic as run_batch_next_checks.py
+    eligible_count = 0
+    for idx, candidate in enumerate(candidates_data):
+        # Already executed?
+        if idx in execution_indices:
+            continue
+
+        # Must be safe to automate
+        if not candidate.get("safeToAutomate"):
+            continue
+
+        # Must have a valid command family
+        family = candidate.get("suggestedCommandFamily")
+        if not family or not isinstance(family, str):
+            continue
+
+        # Must have a description
+        description = candidate.get("description")
+        if not description or not isinstance(description, str):
+            continue
+
+        # Must have target context info
+        target_context = candidate.get("targetContext")
+        if not target_context or not isinstance(target_context, str):
+            continue
+
+        # Check approval requirement
+        requires_approval = candidate.get("requiresOperatorApproval")
+        if requires_approval:
+            approval_status = str(candidate.get("approvalStatus") or "").lower()
+            if approval_status != "approved":
+                continue
+
+        # Check for duplicates
+        if candidate.get("duplicateOfExistingEvidence"):
+            continue
+
+        eligible_count += 1
+
+    return eligible_count > 0, eligible_count
 
 
 def build_runs_list(runs_dir: Path) -> RunsListPayload:
@@ -1546,15 +1649,11 @@ def build_runs_list(runs_dir: Path) -> RunsListPayload:
             run_scoped_path = diagnostic_packs_dir / run_id / "next_check_usefulness_review.json"
             if run_scoped_path.exists():
                 review_download_path = str(run_scoped_path.relative_to(runs_dir))
-            else:
-                # Fallback: check the canonical "latest" path
-                # The export script writes to latest/ by default
-                latest_path = diagnostic_packs_dir / "latest" / "next_check_usefulness_review.json"
-                if latest_path.exists():
-                    review_download_path = str(latest_path.relative_to(runs_dir))
-                else:
-                    # Provide the canonical path as fallback (export will write there)
-                    review_download_path = "health/diagnostic-packs/latest/next_check_usefulness_review.json"
+            # DO NOT fallback to /latest/ - historical runs must have run-specific artifacts
+            # If only /latest/ exists today, historical rows should NOT show misleading download links
+
+        # Compute batch eligibility for run-scoped execution
+        batch_executable, batch_eligible_count = _compute_batch_eligibility(run_id, run_health_dir)
 
         runs_list.append(
             RunsListEntry(
@@ -1567,6 +1666,8 @@ def build_runs_list(runs_dir: Path) -> RunsListPayload:
                 reviewedCount=reviewed_count,
                 reviewStatus=review_status,
                 reviewDownloadPath=review_download_path,
+                batchExecutable=batch_executable,
+                batchEligibleCount=batch_eligible_count,
             )
         )
 
