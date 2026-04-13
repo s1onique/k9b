@@ -57,6 +57,22 @@ _run_payload_cache_lock = Lock()
 # Maximum cache entries to prevent unbounded memory growth
 _MAX_CACHE_ENTRIES = 10
 
+# In-memory cache for runs list payload - keyed by runs_dir mtime
+# This avoids scanning reviews/ and external-analysis/ directories on every request
+_runs_list_cache: dict[str, tuple[dict[str, Any], float]] = {}  # key -> (payload, mtime)
+_runs_list_cache_lock = Lock()
+
+# In-memory cache for notifications - keyed by (notifications_dir_mtime, query_params)
+# This avoids scanning all notification files on every request
+_notifications_cache: dict[str, tuple[dict[str, Any], float]] = {}  # key -> (payload, mtime)
+_notifications_cache_lock = Lock()
+
+# Single-flight locks to prevent duplicate concurrent builds for the same cache key
+# Key: cache key, Value: tuple of (threading.Event, result_holder list)
+# result_holder: list with one element to hold the result when ready
+_single_flight_events: dict[str, tuple[object, list]] = {}
+_single_flight_lock = Lock()
+
 # Directory name for stable "latest" diagnostic pack mirror files
 _LATEST_PACK_DIR_NAME = "latest"
 
@@ -65,6 +81,61 @@ _SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 # Slow request threshold in milliseconds
 _SLOW_REQUEST_THRESHOLD_MS = 1000
+
+
+def _single_flight_acquire(key: str) -> tuple[bool, object | None]:
+    """Acquire single-flight lock for the given key.
+
+    Returns:
+        Tuple of (should_build, result_holder_or_event).
+        - should_build=True means this caller should build the result
+        - should_build=False means wait for the in-flight build and use its result
+    """
+    with _single_flight_lock:
+        if key in _single_flight_events:
+            # There's already an in-flight request - return event to wait on
+            return False, _single_flight_events[key]
+        else:
+            # Create new in-flight state
+            # result_holder: list with one element to hold result when ready
+            result_holder: list = [None]
+            event = result_holder  # Use list as mutable container for result
+            _single_flight_events[key] = (event, result_holder)
+            return True, (event, result_holder)
+
+
+def _single_flight_release(key: str, result: object) -> None:
+    """Release single-flight lock and set result."""
+    with _single_flight_lock:
+        if key in _single_flight_events:
+            event, result_holder = _single_flight_events[key]
+            result_holder[0] = result  # Store result in the holder
+            del _single_flight_events[key]
+
+
+def _single_flight_wait(event_holder: tuple[object, list]) -> object:
+    """Wait for single-flight result to be ready.
+
+    Args:
+        event_holder: Tuple of (event, result_holder) from _single_flight_acquire
+
+    Returns:
+        The computed result from the in-flight build.
+    """
+    event, result_holder = event_holder
+    # Wait for result - in a real implementation, this would use threading.Event.wait()
+    # For simplicity, we poll the result_holder (the actual build should be fast enough
+    # that this is a rare case, or the caller will have released the lock by the time we check)
+    import time as time_module
+
+    # Brief spin-wait for result (max ~100ms)
+    for _ in range(10):
+        time_module.sleep(0.01)
+        if result_holder[0] is not None:
+            return result_holder[0]
+
+    # If still not ready, return None (caller will handle)
+    return None
 
 
 def _log_request_access(
@@ -677,6 +748,89 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json(runs_payload)
             return
 
+        # Handle /api/notifications with caching and single-flight protection
+        if route == "/api/notifications":
+            params = parse_qs(query)
+            # Build cache key from query params + notifications dir mtime
+            notifications_dir = self.runs_dir / "health" / "notifications"
+            cache_mtime = 0.0
+            if notifications_dir.exists():
+                try:
+                    cache_mtime = notifications_dir.stat().st_mtime
+                except OSError:
+                    pass
+
+            # Create cache key including all query params
+            kind = params.get("kind", [None])[0] or ""
+            cluster_label = params.get("cluster_label", [None])[0] or ""
+            search = params.get("search", [None])[0] or ""
+            limit = str(self._parse_limit(params.get("limit", [None])[0]) or 50)
+            page = str(self._parse_page(params.get("page", [None])[0]))
+            notifications_cache_key = f"{cache_mtime}:{kind}:{cluster_label}:{search}:{limit}:{page}"
+
+            # Try single-flight to avoid duplicate concurrent builds
+            sf_key = f"/api/notifications:{notifications_cache_key}"
+            should_build, sf_result = _single_flight_acquire(sf_key)
+
+            if not should_build:
+                # Wait for in-flight result
+                result = _single_flight_wait(sf_result)  # type: ignore[arg-type]
+                if result is not None:
+                    self._send_json(result)
+                    return
+
+            # Build with caching - check cache first
+            with _notifications_cache_lock:
+                notifications_cached = _notifications_cache.get(notifications_cache_key)
+                if notifications_cached is not None:
+                    notifications_payload, notifications_mtime = notifications_cached
+                    if notifications_mtime == cache_mtime:
+                        # Release single-flight if we had it
+                        if should_build:
+                            _single_flight_release(sf_key, notifications_payload)
+                        emit_structured_log(
+                            component="ui-notifications",
+                            message="/api/notifications payload served from cache",
+                            run_id="",
+                            run_label="",
+                            severity="DEBUG",
+                            metadata={
+                                "path": "/api/notifications",
+                                "cache_hit": True,
+                            },
+                        )
+                        self._send_json(notifications_payload)
+                        return
+
+            # Build the payload
+            try:
+                payload = query_notifications(
+                    self.runs_dir / "health",
+                    kind=params.get("kind", [None])[0],
+                    cluster_label=params.get("cluster_label", [None])[0],
+                    search=params.get("search", [None])[0],
+                    limit=self._parse_limit(params.get("limit", [None])[0]),
+                    page=self._parse_page(params.get("page", [None])[0]),
+                )
+            except Exception as exc:
+                logger.warning("Failed to build notifications payload", extra={"error": str(exc)})
+                payload = {"notifications": [], "error": str(exc)}
+
+            # Cache the built payload
+            with _notifications_cache_lock:
+                # Evict old entries if cache is full
+                if len(_notifications_cache) >= _MAX_CACHE_ENTRIES:
+                    oldest_key = next(iter(_notifications_cache))
+                    del _notifications_cache[oldest_key]
+                _notifications_cache[notifications_cache_key] = (payload, cache_mtime)
+
+            # Release single-flight with result
+            if should_build:
+                _single_flight_release(sf_key, payload)
+
+            self._send_json(payload)
+            return
+
         # All other endpoints need the context from the current (possibly selected) run
         # Parse run_id from query string if provided
         params = parse_qs(query)
@@ -741,7 +895,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
             # Stage 5: Serialize to JSON
             serialize_start = time.perf_counter()
-            payload_json = json.dumps(run_payload, ensure_ascii=False)
+            _ = json.dumps(run_payload, ensure_ascii=False)  # Measure only, result not used
             timings["serialize_ms"] = (time.perf_counter() - serialize_start) * 1000
 
             # Count files scanned for context
@@ -762,9 +916,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 # Evict old entries if cache is full
                 if len(_run_payload_cache) >= _MAX_CACHE_ENTRIES:
                     # Remove oldest entry (first key in dict)
-                    oldest_key = next(iter(_run_payload_cache))
-                    del _run_payload_cache[oldest_key]
-                _run_payload_cache[cache_key] = (run_payload, promotions)
+                    cache_keys = list(_run_payload_cache.keys())
+                    oldest_cache_key: tuple[str, float] = cache_keys[0]
+                    del _run_payload_cache[oldest_cache_key]
+                _run_payload_cache[cache_key] = (run_payload, promotions)  # type: ignore[assignment]
 
             total_duration = (time.perf_counter() - total_start) * 1000
             timings["total_duration_ms"] = total_duration
@@ -800,18 +955,6 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             return
         if route == "/api/proposals":
             self._send_json(build_proposals_payload(context))
-            return
-        if route == "/api/notifications":
-            params = parse_qs(query)
-            payload = query_notifications(
-                self.runs_dir / "health",
-                kind=params.get("kind", [None])[0],
-                cluster_label=params.get("cluster_label", [None])[0],
-                search=params.get("search", [None])[0],
-                limit=self._parse_limit(params.get("limit", [None])[0]),
-                page=self._parse_page(params.get("page", [None])[0]),
-            )
-            self._send_json(payload)
             return
         if route == "/api/cluster-detail":
             params = parse_qs(query)
@@ -1744,18 +1887,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         dry_run = payload.get("dryRun", True)
 
-        # Import the batch execution function
+        # Import the batch execution function from the package
         try:
-            import sys
-            from pathlib import Path as PathLib
-
-            # Add scripts directory to path
-            project_root = PathLib(__file__).resolve().parents[4]
-            scripts_dir = project_root / "scripts"
-            if str(scripts_dir) not in sys.path:
-                sys.path.insert(0, str(scripts_dir))
-
-            from run_batch_next_checks import run_batch_next_checks
+            from k8s_diag_agent.batch import run_batch_next_checks
         except Exception as exc:
             self._send_json({"error": f"Failed to load batch execution module: {exc}"}, 500)
             return
@@ -2084,17 +2218,138 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         A run is considered "triaged" if at least one next-check execution artifact
         has the usefulness_class field set (operator has reviewed it).
+        
+        Uses caching keyed by the health directory mtime to avoid rescanning
+        the reviews/ and external-analysis/ directories on every request.
         """
         from .api import build_runs_list
-
+        
+        timings: dict[str, float] = {}
+        total_start = time.perf_counter()
+        
+        # Get the mtime of the health root to use as cache key
+        health_root = self.runs_dir / "health"
+        cache_mtime = 0.0
+        if health_root.exists():
+            try:
+                # Use the latest mtime from relevant subdirectories
+                reviews_dir = health_root / "reviews"
+                external_analysis_dir = health_root / "external-analysis"
+                diagnostic_packs_dir = health_root / "diagnostic-packs"
+                
+                mtimes = []
+                for d in [reviews_dir, external_analysis_dir, diagnostic_packs_dir]:
+                    if d.exists():
+                        mtimes.append(d.stat().st_mtime)
+                
+                if mtimes:
+                    cache_mtime = max(mtimes)
+            except OSError:
+                pass
+        timings["index_read_ms"] = (time.perf_counter() - total_start) * 1000
+        
+        # Check cache
+        cache_key = str(self.runs_dir)
+        with _runs_list_cache_lock:
+            cached = _runs_list_cache.get(cache_key)
+            if cached is not None:
+                cached_payload, cached_mtime = cached
+                if cached_mtime == cache_mtime:
+                    total_duration = (time.perf_counter() - total_start) * 1000
+                    emit_structured_log(
+                        component="ui-runs-list",
+                        message="/api/runs payload served from cache",
+                        run_id="",
+                        run_label="",
+                        severity="DEBUG",
+                        metadata={
+                            "path": "/api/runs",
+                            "total_duration_ms": round(total_duration, 2),
+                            "cache_hit": True,
+                        },
+                    )
+                    return cached_payload
+        
+        # Stage 1: Read review artifacts
+        reviews_scan_start = time.perf_counter()
+        reviews_dir = health_root / "reviews"
+        review_count = 0
+        if reviews_dir.exists():
+            review_count = len(list(reviews_dir.glob("*-review.json")))
+        timings["reviews_scan_ms"] = (time.perf_counter() - reviews_scan_start) * 1000
+        timings["review_files_count"] = review_count
+        
+        # Stage 2: Scan external-analysis for execution artifacts
+        external_analysis_scan_start = time.perf_counter()
+        external_analysis_dir = health_root / "external-analysis"
+        execution_count = 0
+        if external_analysis_dir.exists():
+            execution_count = len(list(external_analysis_dir.glob("*-next-check-execution*.json")))
+        timings["external_analysis_scan_ms"] = (time.perf_counter() - external_analysis_scan_start) * 1000
+        timings["execution_files_scanned"] = execution_count
+        
+        # Stage 3: Build the runs list payload
+        payload_build_start = time.perf_counter()
         try:
-            return dict(build_runs_list(self.runs_dir))
+            payload = dict(build_runs_list(self.runs_dir))
         except Exception as exc:
             logger.warning(
                 "Failed to build runs list payload",
                 extra={"error": str(exc)},
             )
-            return {"runs": [], "error": str(exc)}
+            emit_structured_log(
+                component="ui-runs-list",
+                message="/api/runs payload build failed",
+                run_id="",
+                run_label="",
+                severity="ERROR",
+                metadata={
+                    "path": "/api/runs",
+                    "error": str(exc),
+                },
+            )
+            payload = {"runs": [], "error": str(exc)}
+        timings["payload_build_ms"] = (time.perf_counter() - payload_build_start) * 1000
+        
+        # Stage 4: Serialize to JSON (for timing measurement)
+        serialize_start = time.perf_counter()
+        _ = json.dumps(payload, ensure_ascii=False)  # Measure only, result not used
+        timings["serialize_ms"] = (time.perf_counter() - serialize_start) * 1000
+        
+        # Cache the built payload
+        with _runs_list_cache_lock:
+            # Evict old entries if cache is full
+            if len(_runs_list_cache) >= _MAX_CACHE_ENTRIES:
+                oldest_key = next(iter(_runs_list_cache))
+                del _runs_list_cache[oldest_key]
+            _runs_list_cache[cache_key] = (payload, cache_mtime)
+        
+        total_duration = (time.perf_counter() - total_start) * 1000
+        timings["total_duration_ms"] = total_duration
+        
+        # Emit structured timing log
+        emit_structured_log(
+            component="ui-runs-list",
+            message="/api/runs payload built with timing",
+            run_id="",
+            run_label="",
+            severity="INFO",
+            metadata={
+                "path": "/api/runs",
+                "total_duration_ms": round(timings.get("total_duration_ms", 0), 2),
+                "index_read_ms": round(timings.get("index_read_ms", 0), 2),
+                "reviews_scan_ms": round(timings.get("reviews_scan_ms", 0), 2),
+                "external_analysis_scan_ms": round(timings.get("external_analysis_scan_ms", 0), 2),
+                "payload_build_ms": round(timings.get("payload_build_ms", 0), 2),
+                "serialize_ms": round(timings.get("serialize_ms", 0), 2),
+                "review_files_count": timings.get("review_files_count", 0),
+                "execution_files_scanned": timings.get("execution_files_scanned", 0),
+                "runs_count": len(payload.get("runs", [])),  # type: ignore[arg-type]
+                "cache_hit": False,
+            },
+        )
+        
+        return payload
 
     def _parse_limit(self, value: str | None) -> int | None:
         if not value:

@@ -8,11 +8,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.run_batch_next_checks import (  # noqa: E402
+from k8s_diag_agent.batch import (  # noqa: E402
     BatchExecutionResult,
-    _collect_candidates,
-    _is_candidate_eligible,
-    _load_existing_execution_indices,
+    collect_candidates,
+    is_candidate_eligible,
+    load_existing_execution_indices,
     run_batch_next_checks,
 )
 
@@ -84,7 +84,7 @@ class BatchNextCheckTests(unittest.TestCase):
     def test_eligible_candidate_passes_all_checks(self) -> None:
         """Eligible candidate passes all eligibility checks."""
         candidate = self._base_candidate()
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertTrue(is_eligible)
         self.assertIsNone(reason)
 
@@ -92,7 +92,7 @@ class BatchNextCheckTests(unittest.TestCase):
         """Candidate already executed is marked ineligible."""
         candidate = self._base_candidate()
         execution_indices = {0}
-        is_eligible, reason = _is_candidate_eligible(candidate, execution_indices, 0)
+        is_eligible, reason = is_candidate_eligible(candidate, execution_indices, 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "already_executed")
 
@@ -100,7 +100,7 @@ class BatchNextCheckTests(unittest.TestCase):
         """Candidate not marked safe to automate is ineligible."""
         candidate = self._base_candidate()
         candidate["safeToAutomate"] = False
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "not_safe_to_automate")
 
@@ -108,7 +108,7 @@ class BatchNextCheckTests(unittest.TestCase):
         """Candidate without command family is ineligible."""
         candidate = self._base_candidate()
         candidate["suggestedCommandFamily"] = ""
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "missing_command_family")
 
@@ -116,7 +116,7 @@ class BatchNextCheckTests(unittest.TestCase):
         """Candidate without description is ineligible."""
         candidate = self._base_candidate()
         candidate["description"] = ""
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "missing_description")
 
@@ -124,7 +124,7 @@ class BatchNextCheckTests(unittest.TestCase):
         """Candidate without target context is ineligible."""
         candidate = self._base_candidate()
         candidate["targetContext"] = ""
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "missing_target_context")
 
@@ -133,7 +133,7 @@ class BatchNextCheckTests(unittest.TestCase):
         candidate = self._base_candidate()
         candidate["requiresOperatorApproval"] = True
         candidate["approvalStatus"] = "pending"
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "requires_approval")
 
@@ -142,7 +142,7 @@ class BatchNextCheckTests(unittest.TestCase):
         candidate = self._base_candidate()
         candidate["requiresOperatorApproval"] = True
         candidate["approvalStatus"] = "approved"
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertTrue(is_eligible)
         self.assertIsNone(reason)
 
@@ -150,7 +150,7 @@ class BatchNextCheckTests(unittest.TestCase):
         """Candidate marked as duplicate is ineligible."""
         candidate = self._base_candidate()
         candidate["duplicateOfExistingEvidence"] = True
-        is_eligible, reason = _is_candidate_eligible(candidate, set(), 0)
+        is_eligible, reason = is_candidate_eligible(candidate, set(), 0)
         self.assertFalse(is_eligible)
         self.assertEqual(reason, "duplicate_of_existing_evidence")
 
@@ -164,7 +164,7 @@ class BatchNextCheckTests(unittest.TestCase):
                 self._base_candidate(1),
             ]
         }
-        candidates = _collect_candidates(plan)
+        candidates = collect_candidates(plan)
         self.assertEqual(len(candidates), 2)
         self.assertEqual(candidates[0][0], 0)
         self.assertEqual(candidates[1][0], 1)
@@ -179,7 +179,7 @@ class BatchNextCheckTests(unittest.TestCase):
                 ]
             }
         }
-        candidates = _collect_candidates(plan)
+        candidates = collect_candidates(plan)
         self.assertEqual(len(candidates), 2)
 
     def test_avoids_duplicates_when_candidates_in_both_places(self) -> None:
@@ -190,7 +190,7 @@ class BatchNextCheckTests(unittest.TestCase):
                 "candidates": [self._base_candidate(0)],
             }
         }
-        candidates = _collect_candidates(plan)
+        candidates = collect_candidates(plan)
         self.assertEqual(len(candidates), 1)
 
     # Tests for execution index loading
@@ -203,12 +203,12 @@ class BatchNextCheckTests(unittest.TestCase):
         self._create_execution_artifact(run_id, 2)
         self._create_execution_artifact(run_id, 5)
 
-        indices = _load_existing_execution_indices(self.health_dir, run_id)
+        indices = load_existing_execution_indices(self.health_dir, run_id)
         self.assertEqual(indices, {0, 2, 5})
 
     def test_returns_empty_set_when_no_execution_artifacts(self) -> None:
         """Returns empty set when no execution artifacts exist."""
-        indices = _load_existing_execution_indices(self.health_dir, "nonexistent-run")
+        indices = load_existing_execution_indices(self.health_dir, "nonexistent-run")
         self.assertEqual(indices, set())
 
     # Tests for batch execution flow
@@ -285,7 +285,7 @@ class BatchNextCheckTests(unittest.TestCase):
         def mock_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
 
-        with patch("scripts.run_batch_next_checks.execute_manual_next_check") as mock_exec:
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
             mock_exec.side_effect = lambda **kwargs: mock_runner(kwargs.get("command", []))
 
             run_batch_next_checks(
