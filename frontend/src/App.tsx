@@ -10,6 +10,7 @@ import {
   fetchNotifications,
   fetchProposals,
   fetchRun,
+  fetchRunsList,
   promoteDeterministicNextCheck,
   submitUsefulnessFeedback,
 } from "./api";
@@ -32,6 +33,8 @@ import type {
   ProviderExecutionBranch,
   ReviewEnrichmentStatus,
   RunPayload,
+  RunsListEntry,
+  RunsListPayload,
   DeterministicNextCheckSummary,
   NextCheckApprovalResponse,
   DeterministicNextCheckPromotionRequest,
@@ -478,7 +481,101 @@ const QUEUE_FOCUS_FILTERS: Record<QueueFocusMode, NextCheckQueueStatus[]> = {
   review: ["approval-needed", "duplicate-or-stale"],
 };
 
+// Review status filter types for recent runs panel
+// Uses reviewStatus from backend: "no-executions", "unreviewed", "partially-reviewed", "fully-reviewed"
+type RunsReviewFilter = "all" | "no-executions" | "awaiting-review" | "partially-reviewed" | "fully-reviewed" | "needs-attention";
+const RUNS_REVIEW_FILTER_OPTIONS: { label: string; value: RunsReviewFilter }[] = [
+  { label: "All runs", value: "all" },
+  { label: "No executions yet", value: "no-executions" },
+  { label: "Awaiting review", value: "awaiting-review" },
+  { label: "Partially reviewed", value: "partially-reviewed" },
+  { label: "Fully reviewed", value: "fully-reviewed" },
+  { label: "Needs attention", value: "needs-attention" },
+];
+
+// Compute filter counts from runs list
+const computeRunsFilterCounts = (
+  runs: RunsListEntry[]
+): Record<RunsReviewFilter, number> => {
+  const counts: Record<RunsReviewFilter, number> = {
+    all: runs.length,
+    "no-executions": 0,
+    "awaiting-review": 0,
+    "partially-reviewed": 0,
+    "fully-reviewed": 0,
+    "needs-attention": 0,
+  };
+
+  runs.forEach((run) => {
+    if (run.reviewStatus === "no-executions") {
+      counts["no-executions"]++;
+    } else if (run.reviewStatus === "unreviewed") {
+      counts["awaiting-review"]++;
+      counts["needs-attention"]++;
+    } else if (run.reviewStatus === "partially-reviewed") {
+      counts["partially-reviewed"]++;
+      counts["needs-attention"]++;
+    } else if (run.reviewStatus === "fully-reviewed") {
+      counts["fully-reviewed"]++;
+    }
+  });
+
+  return counts;
+};
+
+const RUNS_REVIEW_FILTER_VALUES: RunsReviewFilter[] = ["all", "no-executions", "awaiting-review", "partially-reviewed", "fully-reviewed", "needs-attention"];
+
+const isRunsReviewFilterValue = (value: unknown): value is RunsReviewFilter =>
+  typeof value === "string" && RUNS_REVIEW_FILTER_VALUES.includes(value as RunsReviewFilter);
+
 export const QUEUE_VIEW_STORAGE_KEY = "dashboard-queue-view-state";
+export const RUNS_REVIEW_FILTER_STORAGE_KEY = "dashboard-runs-review-filter";
+export const SELECTED_RUN_STORAGE_KEY = "dashboard-selected-run-id";
+
+const DEFAULT_RUNS_REVIEW_FILTER: RunsReviewFilter = "all";
+
+const readStoredRunsReviewFilter = (): RunsReviewFilter => {
+  if (typeof window === "undefined") {
+    return DEFAULT_RUNS_REVIEW_FILTER;
+  }
+  const stored = window.localStorage.getItem(RUNS_REVIEW_FILTER_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_RUNS_REVIEW_FILTER;
+  }
+  if (isRunsReviewFilterValue(stored)) {
+    return stored;
+  }
+  return DEFAULT_RUNS_REVIEW_FILTER;
+};
+
+const persistRunsReviewFilter = (value: RunsReviewFilter) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(RUNS_REVIEW_FILTER_STORAGE_KEY, value);
+};
+
+const readStoredSelectedRunId = (): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const stored = window.localStorage.getItem(SELECTED_RUN_STORAGE_KEY);
+  if (!stored) {
+    return null;
+  }
+  return stored;
+};
+
+const persistSelectedRunId = (runId: string | null) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (runId) {
+    window.localStorage.setItem(SELECTED_RUN_STORAGE_KEY, runId);
+  } else {
+    window.localStorage.removeItem(SELECTED_RUN_STORAGE_KEY);
+  }
+};
 
 const QUEUE_STATUS_FILTER_VALUES = new Set<NextCheckQueueStatus | "all">([
   "all",
@@ -1919,6 +2016,9 @@ const App = () => {
   const [run, setRun] = useState<RunPayload | null>(null);
   const [fleet, setFleet] = useState<FleetPayload | null>(null);
   const [proposals, setProposals] = useState<ProposalsPayload | null>(null);
+  const [runsList, setRunsList] = useState<RunsListEntry[]>([]);
+  const [runsListLoading, setRunsListLoading] = useState(true);
+  const [runsListError, setRunsListError] = useState<string | null>(null);
   const [clusterDetail, setClusterDetail] = useState<ClusterDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1962,8 +2062,79 @@ const App = () => {
   const [highlightedClusterLabel, setHighlightedClusterLabel] = useState<string | null>(null);
   const [incidentExpandedClusters, setIncidentExpandedClusters] = useState<Record<string, boolean>>({});
   const [executionHistoryHighlightKey, setExecutionHistoryHighlightKey] = useState<string | null>(null);
+  const [queueHighlightKey, setQueueHighlightKey] = useState<string | null>(null);
   const clusterHighlightTimer = useRef<number | null>(null);
   const executionHighlightTimer = useRef<number | null>(null);
+  const queueHighlightTimer = useRef<number | null>(null);
+  // Track the last executed candidate key so we can highlight it after refresh
+  const lastExecutedCandidateKey = useRef<string | null>(null);
+  
+  // Runs list filter state
+  const [runsFilter, setRunsFilter] = useState<RunsReviewFilter>(readStoredRunsReviewFilter);
+  
+  // Selected run ID (persisted)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(() => readStoredSelectedRunId());
+  
+  // Handle run selection from the list
+  const handleRunSelection = useCallback((runId: string) => {
+    persistSelectedRunId(runId);
+    setSelectedRunId(runId);
+  }, []);
+  
+  // Fetch runs list on mount
+  useEffect(() => {
+    let active = true;
+    const loadRunsList = async () => {
+      setRunsListLoading(true);
+      setRunsListError(null);
+      try {
+        const payload: RunsListPayload = await fetchRunsList();
+        if (active) {
+          setRunsList(payload.runs);
+        }
+      } catch (err) {
+        if (active) {
+          setRunsListError(err instanceof Error ? err.message : "Failed to load runs");
+        }
+      } finally {
+        if (active) {
+          setRunsListLoading(false);
+        }
+      }
+    };
+    loadRunsList();
+    return () => {
+      active = false;
+    };
+  }, []);
+  
+  // Compute filter counts
+  const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runsList), [runsList]);
+  
+  // Filter runs based on selected filter
+  const filteredRunsList = useMemo(() => {
+    if (runsFilter === "all") {
+      return runsList;
+    }
+    return runsList.filter((r) => {
+      if (runsFilter === "no-executions") {
+        return r.reviewStatus === "no-executions";
+      }
+      if (runsFilter === "awaiting-review") {
+        return r.reviewStatus === "unreviewed";
+      }
+      if (runsFilter === "partially-reviewed") {
+        return r.reviewStatus === "partially-reviewed";
+      }
+      if (runsFilter === "fully-reviewed") {
+        return r.reviewStatus === "fully-reviewed";
+      }
+      if (runsFilter === "needs-attention") {
+        return r.reviewStatus === "unreviewed" || r.reviewStatus === "partially-reviewed";
+      }
+      return true;
+    });
+  }, [runsList, runsFilter]);
 
   const refresh = useCallback(async () => {
     try {
@@ -1983,6 +2154,21 @@ const App = () => {
         }
       }
       setLastRefresh(dayjs());
+      // Clear local execution results after successful refresh reconciliation.
+      // This allows the UI to transition from transient local execution state
+      // to refreshed artifact-backed payload as the durable source of truth.
+      setExecutionResults({});
+      // After successful refresh reconciliation, highlight the last executed candidate
+      // if we have a tracked key from a recent manual execution.
+      if (lastExecutedCandidateKey.current) {
+        const keyToHighlight = lastExecutedCandidateKey.current;
+        // Clear the ref so we don't keep highlighting on subsequent auto-refreshes
+        lastExecutedCandidateKey.current = null;
+        // Trigger the highlight after state updates have settled
+        requestAnimationFrame(() => {
+          highlightQueueCard(keyToHighlight);
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -2168,6 +2354,26 @@ const App = () => {
     executionHighlightTimer.current = window.setTimeout(() => {
       setExecutionHistoryHighlightKey(null);
     }, NAVIGATION_HIGHLIGHT_DURATION_MS);
+  };
+
+  const highlightQueueCard = (key: string | null) => {
+    setQueueHighlightKey(key);
+    if (queueHighlightTimer.current) {
+      window.clearTimeout(queueHighlightTimer.current);
+    }
+    if (!key) {
+      return;
+    }
+    queueHighlightTimer.current = window.setTimeout(() => {
+      setQueueHighlightKey(null);
+    }, NAVIGATION_HIGHLIGHT_DURATION_MS);
+    // Scroll the highlighted queue card into view
+    requestAnimationFrame(() => {
+      const element = document.querySelector(`[data-queue-key="${CSS.escape(key)}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
   };
 
   const toggleIncidentExpansion = (label: string) => {
@@ -2468,6 +2674,8 @@ const App = () => {
       return;
     }
     setExecutingCandidate(candidateKey);
+    // Track the candidate key so we can highlight it after refresh reconciliation
+    lastExecutedCandidateKey.current = candidateKey;
     try {
       const result = await executeNextCheckCandidate({
         candidateId,
@@ -2771,6 +2979,90 @@ const App = () => {
         <a href="#notifications">Notifications</a>
       </nav>
       {error && <div className="alert">{error}</div>}
+      {/* Recent runs panel */}
+      <section className="panel recent-runs" id="recent-runs">
+        <div className="section-head">
+          <div>
+            <h2>Recent runs</h2>
+            <p className="muted small">Historical runs with triage status for review tracking.</p>
+          </div>
+        </div>
+        <div className="runs-filter-bar">
+          <div className="runs-filter-options">
+            {RUNS_REVIEW_FILTER_OPTIONS.map((option) => {
+              const count = runsFilterCounts[option.value];
+              const isActive = runsFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`runs-filter-button ${isActive ? "active" : ""}`}
+                  onClick={() => {
+                    setRunsFilter(option.value);
+                    persistRunsReviewFilter(option.value);
+                  }}
+                >
+                  <span className="runs-filter-label">{option.label}</span>
+                  <span className="runs-filter-count">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {runsFilter !== "all" && filteredRunsList.length > 0 && (
+          <p className="runs-filter-summary small muted">
+            Showing {filteredRunsList.length} of {runsList.length}
+          </p>
+        )}
+        {runsListLoading ? (
+          <p className="muted">Loading runs...</p>
+        ) : runsListError ? (
+          <div className="alert alert-inline">{runsListError}</div>
+        ) : filteredRunsList.length === 0 ? (
+          <p className="muted">No runs match the current filter.</p>
+        ) : (
+          <div className="runs-list">
+            {filteredRunsList.map((runEntry) => {
+              const isSelected = selectedRunId === runEntry.runId;
+              return (
+                <div
+                  key={runEntry.runId}
+                  className={`run-entry ${isSelected ? "run-entry-selected" : ""}`}
+                  data-testid="run-entry"
+                  data-run-id={runEntry.runId}
+                  onClick={() => handleRunSelection(runEntry.runId)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleRunSelection(runEntry.runId);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-pressed={isSelected}
+                >
+                  <div className="run-entry-main">
+                    <div className="run-entry-info">
+                      <strong>Run {runEntry.label}</strong>
+                      <span className="muted small">ID {runEntry.runId}</span>
+                    </div>
+                    <div className="run-entry-meta">
+                      <span className={statusClass(runEntry.reviewStatus)}>
+                        {runEntry.reviewStatus}
+                      </span>
+                      {runEntry.timestamp && (
+                        <span className="muted small">
+                          {relativeRecency(runEntry.timestamp)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
       <section className="panel run-summary" id="run-detail">
         <div className="run-summary-head">
           <div>
@@ -3414,8 +3706,20 @@ const App = () => {
                     { label: "Blocking reason", value: humanizeReason(item.blockingReason) },
                     { label: "Target context", value: item.targetContext },
                   ].filter((entry) => entry.value);
+                  const isQueueCardHighlighted = queueHighlightKey === queueCandidateKey;
+                  const queueCardClasses = [
+                    "next-check-queue-item",
+                    isQueueCardHighlighted ? "highlight-target" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
                   return (
-                    <article className="next-check-queue-item" key={queueCandidateKey}>
+                    <article
+                      className={queueCardClasses}
+                      key={queueCandidateKey}
+                      data-queue-key={queueCandidateKey}
+                      data-highlighted={isQueueCardHighlighted ? "true" : undefined}
+                    >
                       <div className="next-check-queue-item-meta">
                         <div>
                           <div className="queue-card-title">
@@ -3554,6 +3858,15 @@ const App = () => {
                         <p className="next-check-execution next-check-execution-warning">
                           {executionResult.warning}
                         </p>
+                      ) : null}
+                      {executionResult?.warning ? (
+                        <button
+                          type="button"
+                          className="link tiny next-check-refresh-action"
+                          onClick={() => refresh()}
+                        >
+                          Refresh now
+                        </button>
                       ) : null}
                       {detailsExpanded && (
                         <div className="next-check-queue-item-details">
@@ -4225,6 +4538,15 @@ const App = () => {
                                   <p className="next-check-execution next-check-execution-warning">
                                     {executionResult.warning}
                                   </p>
+                                ) : null}
+                                {executionResult?.warning ? (
+                                  <button
+                                    type="button"
+                                    className="link tiny next-check-refresh-action"
+                                    onClick={() => refresh()}
+                                  >
+                                    Refresh now
+                                  </button>
                                 ) : null}
                                 {executionBlockingReason ? (
                                   <p className="plan-blocking-reason">

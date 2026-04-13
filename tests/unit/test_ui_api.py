@@ -470,3 +470,206 @@ class UIApiTests(unittest.TestCase):
         assert interpretation is not None
         self.assertEqual(interpretation["status"], "success")
         self.assertEqual(interpretation["adapter"], "llm-autodrilldown")
+
+
+class RunsListTests(unittest.TestCase):
+    """Tests for runs list and review status derivation."""
+
+    def test_derive_review_status_no_executions(self) -> None:
+        """Test that review status is 'no-executions' when execution_count is 0."""
+        from k8s_diag_agent.ui.api import _derive_review_status
+
+        status = _derive_review_status(0, 0)
+        self.assertEqual(status, "no-executions")
+
+    def test_derive_review_status_unreviewed(self) -> None:
+        """Test that review status is 'unreviewed' when executions exist but none reviewed."""
+        from k8s_diag_agent.ui.api import _derive_review_status
+
+        status = _derive_review_status(5, 0)
+        self.assertEqual(status, "unreviewed")
+
+    def test_derive_review_status_partially_reviewed(self) -> None:
+        """Test that review status is 'partially-reviewed' when some executions reviewed."""
+        from k8s_diag_agent.ui.api import _derive_review_status
+
+        status = _derive_review_status(5, 3)
+        self.assertEqual(status, "partially-reviewed")
+
+    def test_derive_review_status_fully_reviewed(self) -> None:
+        """Test that review status is 'fully-reviewed' when all executions reviewed."""
+        from k8s_diag_agent.ui.api import _derive_review_status
+
+        status = _derive_review_status(5, 5)
+        self.assertEqual(status, "fully-reviewed")
+
+    def test_build_runs_list_no_executions_not_triaged(self) -> None:
+        """Test that runs with no executions are NOT marked as triaged."""
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create a review artifact (run exists)
+            review_content = {
+                "run_id": "run-no-exec",
+                "run_label": "Run without executions",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "run-no-exec-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list - no execution artifacts exist
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 1)
+            run = result["runs"][0]
+
+            # Key assertion: triaged must be False when there are no executions
+            self.assertFalse(run["triaged"])
+            self.assertEqual(run["reviewStatus"], "no-executions")
+            self.assertEqual(run["executionCount"], 0)
+            self.assertEqual(run["reviewedCount"], 0)
+
+    def test_build_runs_list_unreviewed_not_triaged(self) -> None:
+        """Test that runs with executions but none reviewed are NOT marked as triaged."""
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+
+            # Create a review artifact (run exists)
+            review_content = {
+                "run_id": "run-unreviewed",
+                "run_label": "Run with unreviewed executions",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "run-unreviewed-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Create execution artifact WITHOUT usefulness_class (unreviewed)
+            execution_content = {
+                "run_id": "run-unreviewed",
+                "purpose": "next-check-execution",
+                "status": "success",
+            }
+            exec_path = external_analysis_dir / "run-unreviewed-next-check-execution-001.json"
+            exec_path.write_text(json.dumps(execution_content), encoding="utf-8")
+
+            # Build the runs list
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 1)
+            run = result["runs"][0]
+
+            # Key assertion: triaged must be False when executions exist but none reviewed
+            self.assertFalse(run["triaged"])
+            self.assertEqual(run["reviewStatus"], "unreviewed")
+            self.assertEqual(run["executionCount"], 1)
+            self.assertEqual(run["reviewedCount"], 0)
+
+    def test_build_runs_list_reviewed_is_triaged(self) -> None:
+        """Test that runs with reviewed executions ARE marked as triaged."""
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+
+            # Create a review artifact (run exists)
+            review_content = {
+                "run_id": "run-reviewed",
+                "run_label": "Run with reviewed executions",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "run-reviewed-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Create execution artifact WITH usefulness_class (reviewed)
+            execution_content = {
+                "run_id": "run-reviewed",
+                "purpose": "next-check-execution",
+                "status": "success",
+                "usefulness_class": "useful",
+            }
+            exec_path = external_analysis_dir / "run-reviewed-next-check-execution-001.json"
+            exec_path.write_text(json.dumps(execution_content), encoding="utf-8")
+
+            # Build the runs list
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 1)
+            run = result["runs"][0]
+
+            # Key assertion: triaged must be True when executions have been reviewed
+            self.assertTrue(run["triaged"])
+            self.assertEqual(run["reviewStatus"], "fully-reviewed")
+            self.assertEqual(run["executionCount"], 1)
+            self.assertEqual(run["reviewedCount"], 1)
+
+    def test_build_runs_list_partial_review_is_triaged(self) -> None:
+        """Test that runs with partially reviewed executions ARE marked as triaged."""
+        from k8s_diag_agent.ui.api import build_runs_list
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+
+            # Create a review artifact (run exists)
+            review_content = {
+                "run_id": "run-partial",
+                "run_label": "Run with partial reviews",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "run-partial-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Create two execution artifacts - one with usefulness_class, one without
+            exec1_content = {
+                "run_id": "run-partial",
+                "purpose": "next-check-execution",
+                "status": "success",
+                "usefulness_class": "useful",
+            }
+            exec1_path = external_analysis_dir / "run-partial-next-check-execution-001.json"
+            exec1_path.write_text(json.dumps(exec1_content), encoding="utf-8")
+
+            exec2_content = {
+                "run_id": "run-partial",
+                "purpose": "next-check-execution",
+                "status": "success",
+            }
+            exec2_path = external_analysis_dir / "run-partial-next-check-execution-002.json"
+            exec2_path.write_text(json.dumps(exec2_content), encoding="utf-8")
+
+            # Build the runs list
+            result = build_runs_list(runs_dir)
+
+            self.assertEqual(result["totalCount"], 1)
+            run = result["runs"][0]
+
+            # Key assertion: triaged must be True when at least one execution has been reviewed
+            self.assertTrue(run["triaged"])
+            self.assertEqual(run["reviewStatus"], "partially-reviewed")
+            self.assertEqual(run["executionCount"], 2)
+            self.assertEqual(run["reviewedCount"], 1)

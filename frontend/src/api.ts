@@ -24,7 +24,10 @@ const fetchJson = async <T>(path: string): Promise<T> => {
   return response.json();
 };
 
-export const fetchRun = (): Promise<RunPayload> => fetchJson<RunPayload>("/api/run");
+export const fetchRun = (runId?: string): Promise<RunPayload> => {
+  const suffix = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
+  return fetchJson<RunPayload>(`/api/run${suffix}`);
+};
 export const fetchFleet = (): Promise<FleetPayload> => fetchJson<FleetPayload>("/api/fleet");
 export const fetchProposals = (): Promise<ProposalsPayload> => fetchJson<ProposalsPayload>("/api/proposals");
 
@@ -180,3 +183,7 @@ export const submitUsefulnessFeedback = async (
   }
   return (await response.json()) as UsefulnessFeedbackResponse;
 };
+
+export type RunsListPayload = import("./types").RunsListPayload;
+
+export const fetchRunsList = (): Promise<RunsListPayload> => fetchJson<RunsListPayload>("/api/runs");

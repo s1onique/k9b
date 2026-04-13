@@ -443,6 +443,11 @@ export type NextCheckExecutionResponse = {
   packRefreshStatus: string | null;
   packRefreshWarning: string | null;
   warning?: string | null;
+  // Card state fields - enable frontend to update card directly without waiting for refresh
+  executionState?: string | null;
+  outcomeStatus?: string | null;
+  latestArtifactPath?: string | null;
+  latestTimestamp?: string | null;
 };
 
 export type NextCheckApprovalRequest = {
@@ -585,4 +590,20 @@ export type DiagnosticPack = {
   label: string | null;
   reviewBundlePath: string | null;
   reviewInput14bPath: string | null;
+};
+
+export type RunsListEntry = {
+  runId: string;
+  runLabel: string;
+  timestamp: string;
+  clusterCount: number;
+  triaged: boolean;
+  executionCount: number;
+  reviewedCount: number;
+  reviewStatus: string;
+};
+
+export type RunsListPayload = {
+  runs: RunsListEntry[];
+  totalCount: number;
 };

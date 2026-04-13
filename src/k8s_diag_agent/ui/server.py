@@ -12,7 +12,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
-from ..external_analysis.artifact import PackRefreshStatus, UsefulnessClass
+from ..external_analysis.artifact import (
+    ExternalAnalysisArtifact,
+    ExternalAnalysisStatus,
+    PackRefreshStatus,
+    UsefulnessClass,
+)
 from ..external_analysis.deterministic_next_check_promotion import (
     build_promoted_candidate_id,
     collect_promoted_queue_entries,
@@ -26,6 +31,7 @@ from ..external_analysis.next_check_approval import (
     log_next_check_approval_event,
     record_next_check_approval,
 )
+from ..health.ui import _derive_outcome_status
 from .api import (
     build_cluster_detail_payload,
     build_fleet_payload,
@@ -183,7 +189,18 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         return
 
     def _handle_api(self, route: str, query: str) -> None:
-        context = self._load_context()
+        # Handle /api/runs endpoint specially - it doesn't need context from latest run
+        if route == "/api/runs":
+            runs_payload = self._build_runs_list_payload()
+            self._send_json(runs_payload)
+            return
+
+        # All other endpoints need the context from the current (possibly selected) run
+        # Parse run_id from query string if provided
+        params = parse_qs(query)
+        selected_run_id = params.get("run_id", [None])[0]
+
+        context = self._load_context(requested_run_id=selected_run_id)
         if context is None:
             return
         if route == "/api/run":
@@ -450,6 +467,13 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Execution failed: {exc}"}, 500)
             return
         artifact_path = _relative_path(self.runs_dir, artifact.artifact_path)
+
+        # Compute execution state from the artifact for client-side card state update
+        # This ensures the UI shows truthful execution state even when pack refresh fails
+        execution_state = _determine_execution_state_from_artifact(artifact)
+        approval_status = str(candidate.get("approvalStatus") or candidate.get("approvalState") or "not-required")
+        outcome_status = _derive_outcome_status(approval_status, execution_state)
+
         response_payload = {
             "status": artifact.status.value,
             "summary": artifact.summary,
@@ -464,6 +488,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "stdoutTruncated": artifact.stdout_truncated,
             "stderrTruncated": artifact.stderr_truncated,
             "outputBytesCaptured": artifact.output_bytes_captured,
+            # Card state fields - enable frontend to update card directly without waiting for refresh
+            "executionState": execution_state,
+            "outcomeStatus": outcome_status,
+            "latestArtifactPath": artifact_path,
+            "latestTimestamp": artifact.timestamp.isoformat() if artifact.timestamp else None,
         }
 
         # Refresh diagnostic pack latest mirrors after successful execution
@@ -474,7 +503,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if not refresh_ok:
             # Add a non-fatal warning to the response if refresh failed
             refresh_status = PackRefreshStatus.FAILED
-            refresh_warning = "Review pack refresh failed; latest review files may be stale"
+            refresh_warning = "Execution artifact saved. Pack refresh failed; queue/review state may be stale until next refresh."
             response_payload["warning"] = refresh_warning
 
         # Persist the pack refresh outcome into the execution artifact for durable visibility
@@ -900,13 +929,191 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload.encode("utf-8"))
 
-    def _load_context(self) -> UIIndexContext | None:
+    def _load_context(self, requested_run_id: str | None = None) -> UIIndexContext | None:
+        """Load the UI context, optionally for a specific run.
+
+        If requested_run_id is provided, try to load context from that run's review
+        artifact. Otherwise, load from the ui-index.json (latest run).
+
+        Args:
+            requested_run_id: Optional run ID to load. If None, loads latest run.
+
+        Returns:
+            UIIndexContext or None if loading fails.
+        """
+        # If a specific run is requested, try to build context from its review artifact
+        if requested_run_id:
+            context = self._load_context_for_run(requested_run_id)
+            if context is not None:
+                return context
+            # If the requested run doesn't exist, fall back to latest
+            # Log a warning but don't fail - this provides explicit behavior
+            logger.warning(
+                "Requested run not found, falling back to latest",
+                extra={"requested_run_id": requested_run_id},
+            )
+
+        # Default: load from ui-index.json (latest run)
         try:
             index = load_ui_index(self.runs_dir)
             return build_ui_context(index)
         except Exception as exc:  # pragma: no cover - read-model may be malformed
             self._send_text(500, f"Unable to read ui-index.json: {exc}")
             return None
+
+    def _load_context_for_run(self, run_id: str) -> UIIndexContext | None:
+        """Load UI context for a specific run from its durable artifacts.
+
+        This allows browsing non-latest runs by reading their artifacts
+        and building the context from that specific run's data.
+
+        Args:
+            run_id: The run ID to load.
+
+        Returns:
+            UIIndexContext for the requested run, or None if not found.
+        """
+        import json
+        from datetime import UTC, datetime
+
+        # Check if the run exists by looking for its review artifact
+        reviews_dir = self.runs_dir / "health" / "reviews"
+        review_artifact_path = reviews_dir / f"{run_id}-review.json"
+
+        if not review_artifact_path.exists():
+            logger.debug(
+                "Run review artifact not found",
+                extra={"run_id": run_id, "path": str(review_artifact_path)},
+            )
+            return None
+
+        try:
+            review_data = json.loads(review_artifact_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning(
+                "Failed to read run review artifact",
+                extra={"run_id": run_id, "error": str(exc)},
+            )
+            return None
+
+        # Derive run metadata from review artifact
+        run_label = review_data.get("run_label", run_id)
+        timestamp = review_data.get("timestamp", datetime.now(UTC).isoformat())
+
+        # Get cluster info from review's selected_drilldowns
+        selected_drilldowns = review_data.get("selected_drilldowns", [])
+        cluster_count = len(selected_drilldowns) if isinstance(selected_drilldowns, list) else 0
+
+        # Build clusters list from review data
+        clusters = _build_clusters_from_review(run_id, review_data, self.runs_dir)
+
+        # Scan for drilldowns belonging to this run
+        drilldown_count = _count_run_artifacts(self.runs_dir / "health" / "drilldowns", run_id)
+
+        # Scan for proposals belonging to this run
+        proposals_data, proposal_count = _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id)
+
+        # Scan for external-analysis artifacts for this run
+        external_analysis_dir = self.runs_dir / "external-analysis"
+        external_analysis_data = _scan_external_analysis(external_analysis_dir, run_id)
+        external_analysis_count = external_analysis_data.get("count", 0)
+
+        # Scan for notifications for this run
+        notification_history, notification_count = _load_notifications_for_run(
+            self.runs_dir / "health" / "notifications", run_id
+        )
+
+        # Build drilldown availability from review clusters + drilldown artifacts
+        drilldown_availability = _build_drilldown_availability_from_review(
+            review_data, self.runs_dir / "health" / "drilldowns", run_id
+        )
+
+        # Find review enrichment artifact
+        review_enrichment = _find_review_enrichment(external_analysis_dir, run_id)
+
+        # Find next-check plan artifact
+        next_check_plan = _find_next_check_plan(external_analysis_dir, run_id)
+
+        # Build next_check_queue from plan if exists
+        next_check_queue = _build_queue_from_plan(next_check_plan)
+
+        # Build next_check_execution_history
+        execution_history = _build_execution_history(external_analysis_dir, run_id)
+
+        # Build llm_stats from external-analysis artifacts for this run
+        llm_stats = _build_llm_stats_for_run(external_analysis_dir, run_id)
+
+        # Build run entry with artifact-backed values
+        run_entry = {
+            "run_id": run_id,
+            "run_label": run_label,
+            "timestamp": timestamp,
+            "collector_version": review_data.get("collector_version", "0.0.0"),
+            "cluster_count": cluster_count,
+            "drilldown_count": drilldown_count,
+            "proposal_count": proposal_count,
+            "external_analysis_count": external_analysis_count,
+            "notification_count": notification_count,
+            "llm_stats": llm_stats,
+            "historical_llm_stats": None,  # Historical stats are retained globally, not per-run
+            "llm_activity": {"entries": [], "summary": {"retainedEntries": 0}},
+            "llm_policy": None,
+            "review_enrichment": review_enrichment,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "next_check_plan": next_check_plan,
+            "next_check_queue": next_check_queue,
+            "next_check_queue_explanation": None,
+            "next_check_execution_history": execution_history,
+            "deterministic_next_checks": None,
+            "planner_availability": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        }
+
+        # Build proposal status summary
+        proposal_status_summary = _build_proposal_status_summary(proposals_data)
+
+        # Build a minimal UI index structure with artifact-backed data
+        index: dict[str, object] = {
+            "run": run_entry,
+            "clusters": clusters,
+            "latest_assessment": None,
+            "latest_findings": None,
+            "proposals": proposals_data,
+            "proposal_status_summary": proposal_status_summary,
+            "notification_history": notification_history,
+            "drilldown_availability": drilldown_availability,
+            "run_stats": {"total_runs": 0},
+            "auto_drilldown_interpretations": {},
+            "external_analysis": external_analysis_data,
+        }
+
+        try:
+            return build_ui_context(index)
+        except Exception as exc:
+            logger.warning(
+                "Failed to build context for run",
+                extra={"run_id": run_id, "error": str(exc)},
+            )
+            return None
+
+    def _build_runs_list_payload(self) -> dict[str, object]:
+        """Build the list of available runs with their triage state.
+
+        A run is considered "triaged" if at least one next-check execution artifact
+        has the usefulness_class field set (operator has reviewed it).
+        """
+        from .api import build_runs_list
+
+        try:
+            return dict(build_runs_list(self.runs_dir))
+        except Exception as exc:
+            logger.warning(
+                "Failed to build runs list payload",
+                extra={"error": str(exc)},
+            )
+            return {"runs": [], "error": str(exc)}
 
     def _parse_limit(self, value: str | None) -> int | None:
         if not value:
@@ -958,3 +1165,528 @@ def _relative_path(base: Path, target: object | None) -> str | None:
         return str(candidate.relative_to(base))
     except ValueError:
         return str(candidate)
+
+
+def _build_clusters_from_review(
+    run_id: str, review_data: dict[str, object], runs_dir: Path
+) -> list[dict[str, object]]:
+    """Build clusters list from review artifact's selected_drilldowns."""
+    clusters: list[dict[str, object]] = []
+    selected_drilldowns = review_data.get("selected_drilldowns", [])
+
+    if not isinstance(selected_drilldowns, list):
+        return clusters
+
+    for drilldown in selected_drilldowns:
+        if not isinstance(drilldown, dict):
+            continue
+
+        label = drilldown.get("label", "unknown")
+        context = drilldown.get("context", "")
+
+        # Check if drilldown artifact exists
+        drilldowns_dir = runs_dir / "health" / "drilldowns"
+        drilldown_artifact = None
+        drilldown_timestamp = None
+        if drilldowns_dir.exists():
+            for df in drilldowns_dir.glob(f"{run_id}-{label}-*.json"):
+                try:
+                    df_data = json.loads(df.read_text(encoding="utf-8"))
+                    drilldown_artifact = str(df.relative_to(runs_dir))
+                    drilldown_timestamp = df_data.get("timestamp")
+                    break
+                except Exception:
+                    continue
+
+        clusters.append({
+            "label": label,
+            "context": context,
+            "cluster_class": "primary",
+            "cluster_role": "worker",
+            "baseline_cohort": "fleet",
+            "node_count": drilldown.get("node_count", 0),
+            "control_plane_version": "unknown",
+            "health_rating": "degraded",  # Selected drilldowns indicate issues
+            "warnings": drilldown.get("warning_event_count", 0),
+            "non_running_pods": drilldown.get("non_running_pod_count", 0),
+            "baseline_policy_path": "",
+            "missing_evidence": drilldown.get("missing_evidence", []),
+            "latest_run_timestamp": review_data.get("timestamp", ""),
+            "top_trigger_reason": drilldown.get("reasons", [None])[0] if drilldown.get("reasons") else None,
+            "drilldown_available": drilldown_artifact is not None,
+            "drilldown_timestamp": drilldown_timestamp,
+            "artifact_paths": {
+                "snapshot": None,
+                "assessment": None,
+                "drilldown": drilldown_artifact,
+            },
+        })
+
+    return clusters
+
+
+def _count_run_artifacts(artifacts_dir: Path, run_id: str) -> int:
+    """Count artifacts belonging to a specific run in a directory."""
+    if not artifacts_dir.exists():
+        return 0
+    count = 0
+    for artifact_file in artifacts_dir.glob(f"{run_id}-*.json"):
+        count += 1
+    return count
+
+
+def _load_proposals_for_run(
+    proposals_dir: Path, run_id: str
+) -> tuple[list[dict[str, object]], int]:
+    """Load proposals for a specific run and return proposals data + count."""
+    proposals: list[dict[str, object]] = []
+
+    if not proposals_dir.exists():
+        return proposals, 0
+
+    for proposal_file in sorted(proposals_dir.glob(f"{run_id}-*.json")):
+        try:
+            proposal_data = json.loads(proposal_file.read_text(encoding="utf-8"))
+            if isinstance(proposal_data, dict):
+                proposals.append(proposal_data)
+        except Exception:
+            continue
+
+    return proposals, len(proposals)
+
+
+def _scan_external_analysis(
+    external_analysis_dir: Path, run_id: str
+) -> dict[str, object]:
+    """Scan external-analysis directory for artifacts belonging to a run."""
+    entries: list[dict[str, object]] = []
+    counts: dict[str, int] = {}
+
+    if not external_analysis_dir.exists():
+        return {"count": 0, "status_counts": [], "artifacts": entries}
+
+    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+        try:
+            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+            if not isinstance(artifact_data, dict):
+                continue
+
+            status = str(artifact_data.get("status", "unknown")).lower()
+            counts[status] = counts.get(status, 0) + 1
+
+            entries.append({
+                "tool_name": artifact_data.get("tool_name", "unknown"),
+                "cluster_label": artifact_data.get("cluster_label"),
+                "run_id": artifact_data.get("run_id"),
+                "run_label": artifact_data.get("run_label"),
+                "status": status,
+                "summary": artifact_data.get("summary"),
+                "findings": artifact_data.get("findings", []),
+                "suggested_next_checks": artifact_data.get("suggested_next_checks", []),
+                "timestamp": artifact_data.get("timestamp"),
+                "artifact_path": str(artifact_file.relative_to(external_analysis_dir.parent)),
+                "duration_ms": artifact_data.get("duration_ms"),
+                "provider": artifact_data.get("provider"),
+                "purpose": artifact_data.get("purpose"),
+                "payload": artifact_data.get("payload"),
+                "error_summary": artifact_data.get("error_summary"),
+                "skip_reason": artifact_data.get("skip_reason"),
+            })
+        except Exception:
+            continue
+
+    status_counts = [{"status": status, "count": count} for status, count in sorted(counts.items())]
+
+    return {"count": len(entries), "status_counts": status_counts, "artifacts": entries}
+
+
+def _load_notifications_for_run(
+    notifications_dir: Path, run_id: str
+) -> tuple[list[dict[str, object]], int]:
+    """Load notifications for a specific run."""
+    notifications: list[dict[str, object]] = []
+
+    if not notifications_dir.exists():
+        return notifications, 0
+
+    for notif_file in sorted(notifications_dir.glob("*.json")):
+        try:
+            notif_data = json.loads(notif_file.read_text(encoding="utf-8"))
+            if not isinstance(notif_data, dict):
+                continue
+
+            # Filter by run_id if present
+            notif_run_id = notif_data.get("run_id")
+            if notif_run_id and notif_run_id != run_id:
+                continue
+
+            notifications.append({
+                "kind": notif_data.get("kind", "info"),
+                "summary": notif_data.get("summary", ""),
+                "timestamp": notif_data.get("timestamp", ""),
+                "run_id": notif_run_id,
+                "cluster_label": notif_data.get("cluster_label"),
+                "context": notif_data.get("context"),
+                "details": notif_data.get("details", []),
+                "artifact_path": str(notif_file.relative_to(notifications_dir.parent)),
+            })
+        except Exception:
+            continue
+
+    return notifications, len(notifications)
+
+
+def _build_drilldown_availability_from_review(
+    review_data: dict[str, object], drilldowns_dir: Path, run_id: str
+) -> dict[str, object]:
+    """Build drilldown availability from review clusters + drilldown artifacts."""
+    selected_drilldowns = review_data.get("selected_drilldowns", [])
+    if not isinstance(selected_drilldowns, list):
+        selected_drilldowns = []
+
+    total = len(selected_drilldowns)
+    available = 0
+    missing_labels: list[str] = []
+    coverage: list[dict[str, object]] = []
+
+    # Check which drilldowns have artifacts
+    existing_drilldowns = set()
+    if drilldowns_dir.exists():
+        for df in drilldowns_dir.glob(f"{run_id}-*.json"):
+            # Extract cluster label from filename pattern
+            df_name = df.stem
+            # Pattern: {run_id}-{cluster_label}-...
+            if df_name.startswith(run_id + "-"):
+                cluster_label = df_name[len(run_id) + 1:].split("-")[0]
+                existing_drilldowns.add(cluster_label)
+
+    for drilldown in selected_drilldowns:
+        if not isinstance(drilldown, dict):
+            continue
+
+        label = drilldown.get("label", "unknown")
+        context = drilldown.get("context", "")
+
+        if label in existing_drilldowns:
+            available += 1
+            timestamp = review_data.get("timestamp")  # Use review timestamp as approximation
+            available_flag = True
+            # Find the actual artifact path
+            artifact_path = None
+            for df in drilldowns_dir.glob(f"{run_id}-{label}-*.json"):
+                artifact_path = str(df.relative_to(drilldowns_dir.parent))
+                break
+        else:
+            timestamp = None
+            artifact_path = None
+            missing_labels.append(label)
+            available_flag = False
+
+        coverage.append({
+            "label": label,
+            "context": context,
+            "available": available_flag,
+            "timestamp": timestamp,
+            "artifact_path": artifact_path,
+        })
+
+    return {
+        "total_clusters": total,
+        "available": available,
+        "missing": max(total - available, 0),
+        "missing_clusters": missing_labels,
+        "coverage": coverage,
+    }
+
+
+def _find_review_enrichment(
+    external_analysis_dir: Path, run_id: str
+) -> dict[str, object] | None:
+    """Find and parse review enrichment artifact for a run."""
+    if not external_analysis_dir.exists():
+        return None
+
+    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")):
+        try:
+            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+            if not isinstance(artifact_data, dict):
+                continue
+
+            purpose = artifact_data.get("purpose")
+            if purpose != "review-enrichment":
+                continue
+
+            payload = artifact_data.get("payload", {})
+
+            def _list_from(key: str) -> list[str]:
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return [str(item) for item in value]
+                return []
+
+            return {
+                "status": artifact_data.get("status", "unknown"),
+                "provider": artifact_data.get("provider"),
+                "timestamp": artifact_data.get("timestamp"),
+                "summary": artifact_data.get("summary"),
+                "triageOrder": _list_from("triageOrder"),
+                "topConcerns": _list_from("topConcerns"),
+                "evidenceGaps": _list_from("evidenceGaps"),
+                "nextChecks": _list_from("nextChecks"),
+                "focusNotes": _list_from("focusNotes"),
+                "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
+                "errorSummary": artifact_data.get("error_summary"),
+                "skipReason": artifact_data.get("skip_reason"),
+            }
+        except Exception:
+            continue
+
+    return None
+
+
+def _find_next_check_plan(
+    external_analysis_dir: Path, run_id: str
+) -> dict[str, object] | None:
+    """Find and parse next-check plan artifact for a run."""
+    if not external_analysis_dir.exists():
+        return None
+
+    # Look for plan artifacts - they have purpose = "next-check-planning"
+    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")):
+        try:
+            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+            if not isinstance(artifact_data, dict):
+                continue
+
+            purpose = artifact_data.get("purpose")
+            if purpose != "next-check-planning":
+                continue
+
+            payload = artifact_data.get("payload", {})
+            candidates = payload.get("candidates", [])
+
+            return {
+                "status": artifact_data.get("status", "unknown"),
+                "summary": payload.get("summary"),
+                "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
+                "reviewPath": payload.get("reviewPath"),
+                "enrichmentArtifactPath": payload.get("enrichmentArtifactPath"),
+                "candidateCount": len(candidates) if isinstance(candidates, list) else 0,
+                "candidates": candidates,
+                "orphanedApprovals": [],
+                "outcomeCounts": [],
+                "orphanedApprovalCount": 0,
+            }
+        except Exception:
+            continue
+
+    return None
+
+
+def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, object]]:
+    """Build next-check queue from plan artifact."""
+    if not plan:
+        return []
+
+    candidates = plan.get("candidates", [])
+    if not isinstance(candidates, list):
+        return []
+
+    queue: list[dict[str, object]] = []
+    for idx, candidate in enumerate(candidates):
+        if not isinstance(candidate, dict):
+            continue
+
+        requires_approval = bool(candidate.get("requiresOperatorApproval"))
+        safe_to_automate = bool(candidate.get("safeToAutomate"))
+
+        # Determine queue status
+        queue_status = "safe-ready"
+        if requires_approval:
+            approval_state = str(candidate.get("approvalState", "")).lower()
+            if approval_state == "approved":
+                queue_status = "approved-ready"
+            else:
+                queue_status = "approval-needed"
+        elif not safe_to_automate:
+            queue_status = "duplicate-or-stale"
+
+        queue.append({
+            "candidateId": candidate.get("candidateId"),
+            "candidateIndex": candidate.get("candidateIndex", idx),
+            "description": candidate.get("description", ""),
+            "targetCluster": candidate.get("targetCluster"),
+            "priorityLabel": candidate.get("priorityLabel"),
+            "suggestedCommandFamily": candidate.get("suggestedCommandFamily"),
+            "safeToAutomate": safe_to_automate,
+            "requiresOperatorApproval": requires_approval,
+            "approvalState": candidate.get("approvalState"),
+            "executionState": candidate.get("executionState", "unexecuted"),
+            "outcomeStatus": candidate.get("outcomeStatus"),
+            "latestArtifactPath": candidate.get("latestArtifactPath"),
+            "queueStatus": queue_status,
+            "sourceReason": candidate.get("sourceReason"),
+            "expectedSignal": candidate.get("expectedSignal"),
+            "normalizationReason": candidate.get("normalizationReason"),
+            "safetyReason": candidate.get("safetyReason"),
+            "approvalReason": candidate.get("approvalReason"),
+            "duplicateReason": candidate.get("duplicateReason"),
+            "blockingReason": candidate.get("blockingReason"),
+            "targetContext": None,
+            "commandPreview": None,
+            "planArtifactPath": plan.get("artifactPath"),
+        })
+
+    return queue
+
+
+def _build_execution_history(
+    external_analysis_dir: Path, run_id: str
+) -> list[dict[str, object]]:
+    """Build next-check execution history from execution artifacts."""
+    history: list[dict[str, object]] = []
+
+    if not external_analysis_dir.exists():
+        return history
+
+    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")):
+        try:
+            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+            if not isinstance(artifact_data, dict):
+                continue
+
+            purpose = artifact_data.get("purpose")
+            if purpose != "next-check-execution":
+                continue
+
+            payload = artifact_data.get("payload", {})
+
+            history.append({
+                "timestamp": artifact_data.get("timestamp"),
+                "clusterLabel": payload.get("clusterLabel"),
+                "candidateDescription": payload.get("candidateDescription"),
+                "commandFamily": payload.get("commandFamily"),
+                "status": artifact_data.get("status", "unknown"),
+                "durationMs": artifact_data.get("duration_ms"),
+                "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
+                "timedOut": artifact_data.get("timed_out"),
+                "stdoutTruncated": artifact_data.get("stdout_truncated"),
+                "stderrTruncated": artifact_data.get("stderr_truncated"),
+                "outputBytesCaptured": artifact_data.get("output_bytes_captured"),
+            })
+        except Exception:
+            continue
+
+    # Sort by timestamp descending (most recent first)
+    history.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
+
+    return history[:5]  # Limit to 5 most recent
+
+
+def _build_llm_stats_for_run(
+    external_analysis_dir: Path, run_id: str
+) -> dict[str, object]:
+    """Build LLM stats from external-analysis artifacts for a specific run."""
+    total_calls = 0
+    successful_calls = 0
+    failed_calls = 0
+    latest_timestamp: str | None = None
+    provider_counts: dict[str, dict[str, int]] = {}
+
+    if not external_analysis_dir.exists():
+        return {
+            "totalCalls": 0,
+            "successfulCalls": 0,
+            "failedCalls": 0,
+            "lastCallTimestamp": None,
+            "p50LatencyMs": None,
+            "p95LatencyMs": None,
+            "p99LatencyMs": None,
+            "providerBreakdown": [],
+            "scope": "current_run",
+        }
+
+    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+        try:
+            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+            if not isinstance(artifact_data, dict):
+                continue
+
+            status = str(artifact_data.get("status", "")).lower()
+            if status not in ("success", "failed"):
+                continue
+
+            total_calls += 1
+            if status == "success":
+                successful_calls += 1
+            if status == "failed":
+                failed_calls += 1
+
+            # Track latest timestamp
+            timestamp = artifact_data.get("timestamp")
+            if timestamp:
+                if latest_timestamp is None or timestamp > latest_timestamp:
+                    latest_timestamp = timestamp
+
+            # Track provider breakdown
+            provider = str(artifact_data.get("tool_name") or artifact_data.get("provider") or "unknown")
+            if provider not in provider_counts:
+                provider_counts[provider] = {"calls": 0, "failedCalls": 0}
+            provider_counts[provider]["calls"] += 1
+            if status == "failed":
+                provider_counts[provider]["failedCalls"] += 1
+
+        except Exception:
+            continue
+
+    provider_breakdown = [
+        {"provider": provider, "calls": data["calls"], "failedCalls": data["failedCalls"]}
+        for provider, data in sorted(provider_counts.items())
+    ]
+
+    return {
+        "totalCalls": total_calls,
+        "successfulCalls": successful_calls,
+        "failedCalls": failed_calls,
+        "lastCallTimestamp": latest_timestamp,
+        "p50LatencyMs": None,
+        "p95LatencyMs": None,
+        "p99LatencyMs": None,
+        "providerBreakdown": provider_breakdown,
+        "scope": "current_run",
+    }
+
+
+def _build_proposal_status_summary(proposals: list[dict[str, object]]) -> dict[str, object]:
+    """Build proposal status summary from proposals list."""
+    counts: dict[str, int] = {}
+
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            continue
+        status = str(proposal.get("status", "unknown")).lower()
+        counts[status] = counts.get(status, 0) + 1
+
+    status_counts = [{"status": status, "count": count} for status, count in sorted(counts.items())]
+
+    return {"status_counts": status_counts}
+
+
+def _determine_execution_state_from_artifact(artifact: ExternalAnalysisArtifact) -> str:
+    """Determine execution state from an execution artifact.
+
+    This is a local version that works directly with the artifact object,
+    used to compute execution state for the API response without needing
+    to build a full NextCheckExecutionRecord.
+
+    Args:
+        artifact: The execution artifact from manual next-check execution.
+
+    Returns:
+        Execution state string: "executed-success", "executed-failed", or "timed-out".
+    """
+    if artifact.timed_out:
+        return "timed-out"
+    if artifact.status == ExternalAnalysisStatus.SUCCESS:
+        return "executed-success"
+    return "executed-failed"

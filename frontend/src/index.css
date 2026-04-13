@@ -276,6 +276,112 @@ body {
   color: #fecaca;
 }
 
+/* Triage state pills */
+.triage-pill {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.triage-pill.triaged {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.triage-pill.not-triaged {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde047;
+}
+
+/* Recent runs panel */
+.recent-runs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recent-runs-panel .eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+/* Recent runs filter row */
+.recent-runs-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.recent-runs-filter-row .eyebrow {
+  margin-bottom: 0;
+}
+
+.runs-filter-select {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.runs-filter-select:hover {
+  border-color: rgba(100, 116, 139, 0.8);
+}
+
+.runs-filter-summary {
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+/* Recent runs list */
+.recent-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.recent-runs-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.recent-runs-item:hover {
+  background: rgba(71, 85, 105, 0.4);
+}
+
+.recent-runs-item.selected {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.recent-runs-label {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.recent-runs-time {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
 .status-pill {
   padding: 0.25rem 0.8rem;
   border-radius: 999px;
@@ -2481,4 +2587,47 @@ body {
   font-size: 0.75rem;
   margin-top: 0.35rem;
   color: #fca5a5;
+}
+
+/* Highlight animations */
+.highlight-target {
+  animation: highlight-pulse 2.2s ease-out;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    background-color: rgba(34, 197, 94, 0.4);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.6);
+  }
+  20% {
+    background-color: rgba(34, 197, 94, 0.25);
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.4);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* Highlighted row in fleet table */
+.highlighted-row {
+  animation: row-highlight-pulse 2.2s ease-out;
+}
+
+@keyframes row-highlight-pulse {
+  0% {
+    background-color: rgba(34, 197, 94, 0.3);
+  }
+  20% {
+    background-color: rgba(34, 197, 94, 0.15);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Data attribute driven highlight for queue cards */
+[data-highlighted="true"] {
+  background-color: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.5);
 }

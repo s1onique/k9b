@@ -164,6 +164,44 @@ The scheduler's run-summary entries now emit `freshness_age_seconds`, `expected_
 
 `scripts/run_health_once.sh` wraps `inspect_health_config.py`, `run-health-loop --once`, and `health-summary`; pass `--digest` or `--digest-output <path>` to run `make_health_digest.sh` afterward. The wrapper reads the config's `output_dir`, keeps every step inside the configured artifact layout, and presents the same eligibility/unsafe signals you already get from the individual commands.
 
+### Batch next-check execution
+
+After a health run produces next-check planning candidates, you can execute eligible checks in batch:
+
+```bash
+.venv/bin/python scripts/run_batch_next_checks.py --latest [--dry-run]
+.venv/bin/python scripts/run_batch_next_checks.py --run-id <run_id> [--dry-run]
+```
+
+Eligibility constraints for candidates:
+- `safeToAutomate` must be true
+- Must have a valid command family (kubectl-get, kubectl-describe, kubectl-logs, etc.)
+- Must have a description and target context
+- Must not have already been executed in this run
+- Must not require operator approval (or must have approvalStatus=approved)
+- Must not be marked as duplicate of existing evidence
+
+The script executes each eligible candidate using the existing manual next-check flow, writes execution artifacts to `runs/health/external-analysis/`, and refreshes the diagnostic pack after execution. Use `--dry-run` to preview which candidates would execute without running them.
+
+### Usefulness review loop
+
+After batch execution, operators can review the usefulness of executed checks:
+
+1. Export execution results for review:
+   ```bash
+   .venv/bin/python scripts/export_next_check_usefulness_review.py --runs-dir runs
+   ```
+   Output: `runs/health/diagnostic-packs/latest/next_check_usefulness_review.json`
+
+2. Review the exported JSON and add `usefulness_class` (useful, partial, noisy, empty) and optional `usefulness_summary` to each entry.
+
+3. Import the feedback back into the artifacts:
+   ```bash
+   .venv/bin/python scripts/import_next_check_usefulness_feedback.py --runs-dir runs --input-file runs/health/diagnostic-packs/latest/next_check_usefulness_review.json
+   ```
+
+This loop lets operators evaluate and improve the next-check recommendations over time.
+
 
 ### Health review and adaptation workflow
 

@@ -71,6 +71,32 @@
    The run-level UI now prefers the latest `purpose: review-enrichment` artifact when one exists and only derives a status from config/provenance metadata when the artifact is missing. This keeps the review enrichment panel truthful about skipped/failed runs and keeps the `review_enrichment_status` slice reserved for genuine “not attempted” or “policy disabled” cases.
     A companion planning pass now evaluates those suggested `nextChecks` and writes a `purpose: next-check-planning` artifact whenever the enrichment payload contains candidates. The planner cross-references the deterministic review context to map each candidate back to a selected drilldown, normalizes the command intent into a small set of safe, read-only families (`kubectl-logs`, `kubectl-describe`, `kubectl-get`, `kubectl-get-crd`), marks vague or mutating proposals as operator-approved-only, identifies duplicates against the deterministic `next_evidence_to_collect`, and records the result under `runs/health/external-analysis/{run_id}-next-check-plan.json`. Each entry in that plan records `description`, `target_cluster`, `source_reason`, `expected_signal`, `suggested_command_family`, `safe_to_automate`, `requires_operator_approval`, `risk_level`, `estimated_cost`, `confidence`, `gating_reason`, `duplicate_of_existing_evidence`, plus rationale fields (`normalization_reason`, `safety_reason`, `approval_reason`, `duplicate_reason`, `blocking_reason`) so downstream UI/API slices can show an inspectable, non-executing advisory before any automation path is considered.
    The UI index now captures review-enrichment provenance as part of every run. The `run` entry exposes `review_enrichment_config` (the `enabled`/`provider` state that produced that run) alongside `review_enrichment_status`, which is derived by comparing the current config that generated the index, the stored run config, and the presence or absence of a `purpose: review-enrichment` artifact. The new status values (`policy-disabled`, `provider-missing`, `adapter-unavailable`, `awaiting-next-run`, `not-attempted`, `unknown`) replace the old generic `pending` signal and link each operator message to a specific fact set: policy settings, adapter availability, whether the run enabled enrichment, and whether an artifact was recorded. Success, failure, and skip statuses remain anchored in the artifact itself so the UI can show the outcome alongside the explanation.
+
+### Batch next-check execution
+
+   Operators can execute eligible next-check candidates in batch via `scripts/run_batch_next_checks.py`. The script loads the `next_check_plan` from the latest health run's UI index, filters candidates by eligibility constraints, and executes each eligible candidate using the same `manual_next_check` flow that powers individual executions.
+
+   **Eligibility constraints:**
+   - `safeToAutomate` must be true
+   - Must have a valid `suggestedCommandFamily` (kubectl-get, kubectl-describe, kubectl-logs, etc.)
+   - Must have a `description` and `targetContext`
+   - Must not have already been executed in this run (tracked via existing `purpose: next-check-execution` artifacts)
+   - Must not require operator approval unless `approvalStatus` is "approved"
+   - Must not be marked as `duplicateOfExistingEvidence`
+
+   The script writes standard `purpose: next-check-execution` artifacts to `runs/health/external-analysis/`, tracks execution statistics (total, eligible, executed, skipped, failed), and optionally refreshes the diagnostic pack mirror after execution. Use `--dry-run` to preview which candidates would execute without actually running them.
+
+### Usefulness review loop
+
+   After batch execution, operators can evaluate the usefulness of executed checks through a dedicated export → review → import loop:
+
+   1. **Export:** `scripts/export_next_check_usefulness_review.py` collects all `purpose: next-check-execution` artifacts for a run and writes `runs/health/diagnostic-packs/latest/next_check_usefulness_review.json`. Each entry includes candidate ID, command preview, execution status, result summary, and any existing usefulness classification.
+
+   2. **Review:** Operators review the exported JSON and add `usefulness_class` (one of: useful, partial, noisy, empty) and optional `usefulness_summary` to each entry. This file can be sent to an external reviewer model for batch evaluation.
+
+   3. **Import:** `scripts/import_next_check_usefulness_feedback.py` reads the reviewed JSON and writes the usefulness classifications back into the original execution artifacts. The artifacts then carry the feedback for future analysis.
+
+   This loop closes the operational feedback cycle: health runs produce next-check candidates, batch execution runs them, and usefulness review lets operators improve recommendation quality over time.
 - The same adapters drive the standalone CLI commands `assess-drilldown` (runs against `runs/health/drilldowns/*.json`) and `assess-snapshots` (pairs sanitized snapshots) so maintainers can exercise LLM reasoning without altering the deterministic run. Each provider invocation writes an artifact, which also records `status`/`findings`/`suggested_next_checks` for audit or future review.
 
 ## Stage-by-stage lifecycle

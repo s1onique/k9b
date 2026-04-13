@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
 from ..health.freshness import freshness_status
@@ -1398,3 +1400,158 @@ def _filter_related_notifications(label: str | None, notifications: tuple[Notifi
         if matching:
             return [_serialize_notification(entry) for entry in matching[:3]]
     return [_serialize_notification(entry) for entry in notifications[:3]]
+
+
+class RunsListEntry(TypedDict):
+    runId: str
+    runLabel: str
+    timestamp: str
+    clusterCount: int
+    triaged: bool
+    executionCount: int
+    reviewedCount: int
+    reviewStatus: str
+
+
+class RunsListPayload(TypedDict):
+    runs: list[RunsListEntry]
+    totalCount: int
+
+
+def _derive_review_status(execution_count: int, reviewed_count: int) -> str:
+    """Derive review status from execution and reviewed counts.
+
+    Returns one of:
+    - "no-executions": run has no executed next checks
+    - "unreviewed": has executions but none reviewed
+    - "partially-reviewed": some executions reviewed, some not
+    - "fully-reviewed": all executions reviewed
+    """
+    if execution_count == 0:
+        return "no-executions"
+    if reviewed_count == 0:
+        return "unreviewed"
+    if reviewed_count < execution_count:
+        return "partially-reviewed"
+    return "fully-reviewed"
+
+
+def build_runs_list(runs_dir: Path) -> RunsListPayload:
+    """Build a list of available runs with their review coverage status.
+
+    A run's review status is derived from execution artifacts in the
+    external-analysis/ directory. The status indicates:
+    - "no-executions": run has no executed next checks
+    - "unreviewed": has executions but none reviewed
+    - "partially-reviewed": some executions reviewed, some not
+    - "fully-reviewed": all executions reviewed
+
+    Runs are discovered from review artifacts in the reviews/ directory.
+    """
+    from datetime import UTC, datetime
+    from typing import cast
+
+    run_health_dir = runs_dir / "health"
+    reviews_dir = run_health_dir / "reviews"
+
+    # Collect runs from review artifacts
+    run_entries: dict[str, dict[str, object]] = {}
+
+    if reviews_dir.is_dir():
+        for review_path in reviews_dir.glob("*-review.json"):
+            try:
+                raw = json.loads(review_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            run_id = raw.get("run_id")
+            timestamp = raw.get("timestamp")
+            run_label = raw.get("run_label")
+            cluster_count = raw.get("cluster_count", 0)
+
+            if not isinstance(run_id, str):
+                continue
+            if not isinstance(timestamp, str):
+                continue
+
+            try:
+                parsed_time = datetime.fromisoformat(timestamp)
+            except ValueError:
+                parsed_time = datetime.now(UTC)
+
+            run_entries[run_id] = {
+                "run_id": run_id,
+                "run_label": str(run_label) if run_label else run_id,
+                "timestamp": timestamp,
+                "cluster_count": cluster_count if isinstance(cluster_count, int) else 0,
+                "parsed_time": parsed_time,
+                "execution_count": 0,
+                "reviewed_count": 0,
+            }
+
+    # For each run, count executions and reviewed executions
+    external_analysis_dir = run_health_dir / "external-analysis"
+
+    if external_analysis_dir.is_dir():
+        # Find all execution artifacts
+        for artifact_path in external_analysis_dir.glob("*-next-check-execution*.json"):
+            try:
+                raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            # Check if this is an execution artifact
+            purpose = raw.get("purpose")
+            if purpose != "next-check-execution":
+                continue
+
+            # Extract run_id from filename (format: {run_id}-next-check-execution-*.json)
+            filename = artifact_path.name
+            matched_run_id = None
+            for run_id in run_entries:
+                if filename.startswith(run_id):
+                    matched_run_id = run_id
+                    break
+
+            if matched_run_id is None:
+                continue
+
+            # Increment execution count
+            current_exec_count = run_entries[matched_run_id].get("execution_count", 0)
+            run_entries[matched_run_id]["execution_count"] = cast(int, current_exec_count) + 1
+
+            # Check if this execution has usefulness feedback
+            usefulness = raw.get("usefulness_class")
+            if usefulness and isinstance(usefulness, str) and usefulness.strip():
+                current_reviewed_count = run_entries[matched_run_id].get("reviewed_count", 0)
+                run_entries[matched_run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
+
+    # Build the runs list sorted by timestamp (most recent first)
+    runs_list: list[RunsListEntry] = []
+    for run_id, entry in run_entries.items():
+        execution_count = cast(int, entry.get("execution_count", 0))
+        reviewed_count = cast(int, entry.get("reviewed_count", 0))
+        review_status = _derive_review_status(execution_count, reviewed_count)
+        # triaged is true only if there are executions AND at least one has been reviewed
+        # A run with no executions should NOT be marked as triaged
+        triaged = execution_count > 0 and reviewed_count > 0
+
+        runs_list.append(
+            RunsListEntry(
+                runId=cast(str, entry["run_id"]),
+                runLabel=cast(str, entry["run_label"]),
+                timestamp=cast(str, entry["timestamp"]),
+                clusterCount=cast(int, entry["cluster_count"]),
+                triaged=triaged,
+                executionCount=execution_count,
+                reviewedCount=reviewed_count,
+                reviewStatus=review_status,
+            )
+        )
+
+    # Sort by timestamp descending (most recent first)
+    runs_list.sort(key=lambda r: r["timestamp"], reverse=True)
+
+    return RunsListPayload(
+        runs=runs_list,
+        totalCount=len(runs_list),
+    )

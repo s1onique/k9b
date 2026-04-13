@@ -12,6 +12,7 @@ import {
   sampleNotifications,
   sampleProposals,
   sampleRun,
+  sampleRunsList,
 } from "./fixtures";
 
 const createStorageMock = () => {
@@ -32,6 +33,7 @@ const createStorageMock = () => {
 
 const defaultPayloads = {
   "/api/run": sampleRun,
+  "/api/runs": sampleRunsList,
   "/api/fleet": sampleFleet,
   "/api/proposals": sampleProposals,
   "/api/notifications": sampleNotifications,
@@ -232,6 +234,75 @@ describe("App", () => {
     expect(screen.getByText(/Executed \(success\) · 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Awaiting approval · 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Not used · 1/i)).toBeInTheDocument();
+  });
+
+  test("recent-runs panel displays runs with triage status and allows selection", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Find the recent runs panel
+    const recentRunsPanel = await screen.findByText(/Recent runs/i);
+    expect(recentRunsPanel).toBeInTheDocument();
+
+    // Verify runs list is rendered
+    const runsList = document.querySelector(".runs-list");
+    expect(runsList).not.toBeNull();
+
+    // Verify runs are displayed with review status pills - use getAll since there may be multiple
+    const unreviewedPills = screen.getAllByText("unreviewed");
+    expect(unreviewedPills.length).toBeGreaterThan(0);
+    const partiallyReviewedPills = screen.getAllByText("partially-reviewed");
+    expect(partiallyReviewedPills.length).toBeGreaterThan(0);
+
+    // Verify runs list has items - the run items are rendered
+    const runItems = screen.getAllByTestId("run-entry");
+    expect(runItems.length).toBeGreaterThan(0);
+  });
+
+  test("recent-runs panel filter buttons filter runs by review status", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Find the recent runs panel
+    await screen.findByText(/Recent runs/i);
+
+    // Verify the filter buttons exist
+    const noExecutionsFilter = document.querySelector(".runs-filter-button") as HTMLButtonElement;
+    expect(noExecutionsFilter).not.toBeNull();
+
+    // Initially should show all 4 runs
+    const allRunItems = document.querySelectorAll(".run-entry");
+    expect(allRunItems.length).toBe(4);
+
+    // Test "no-executions" filter button - should show runs with no executions
+    // From fixtures: run-120 (reviewStatus: "no-executions") = 1 run
+    // The filter buttons are in order: All runs, No executions yet, Awaiting review, etc.
+    const noExecutionsFilterButton = document.querySelectorAll(".runs-filter-button")[1] as HTMLButtonElement;
+    await act(async () => {
+      await user.click(noExecutionsFilterButton);
+    });
+    let filteredItems = document.querySelectorAll(".run-entry");
+    expect(filteredItems.length).toBe(1);
+
+    // Test "Awaiting review" filter - should show runs with reviewStatus "unreviewed"
+    // From fixtures: run-122 (reviewStatus: "unreviewed") = 1 run
+    const awaitingReviewFilter = document.querySelectorAll(".runs-filter-button")[2] as HTMLButtonElement;
+    await act(async () => {
+      await user.click(awaitingReviewFilter);
+    });
+    filteredItems = document.querySelectorAll(".run-entry");
+    expect(filteredItems.length).toBe(1);
+    expect(screen.getByText(/Showing 1 of 4/)).toBeInTheDocument();
+
+    // Test "all" filter button - should show all runs again, no summary text
+    const allFilterButton = document.querySelectorAll(".runs-filter-button")[0] as HTMLButtonElement;
+    await act(async () => {
+      await user.click(allFilterButton);
+    });
+    filteredItems = document.querySelectorAll(".run-entry");
+    expect(filteredItems.length).toBe(4);
   });
 
   test("run summary surfaces next-check discovery actions", async () => {

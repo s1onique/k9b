@@ -9,7 +9,54 @@ import type {
   ReviewEnrichment,
   ReviewEnrichmentStatus,
   RunPayload,
+  RunsListPayload,
 } from "../types";
+
+export const sampleRunsList: RunsListPayload = {
+  runs: [
+    {
+      runId: "run-123",
+      runLabel: "2026-04-07-1200",
+      timestamp: "2026-04-07T12:00:00Z",
+      clusterCount: 3,
+      triaged: true,
+      executionCount: 5,
+      reviewedCount: 5,
+      reviewStatus: "fully-reviewed",
+    },
+    {
+      runId: "run-122",
+      runLabel: "2026-04-07-1100",
+      timestamp: "2026-04-07T11:00:00Z",
+      clusterCount: 3,
+      triaged: false,
+      executionCount: 3,
+      reviewedCount: 0,
+      reviewStatus: "unreviewed",
+    },
+    {
+      runId: "run-121",
+      runLabel: "2026-04-07-1000",
+      timestamp: "2026-04-07T10:00:00Z",
+      clusterCount: 2,
+      triaged: true,
+      executionCount: 2,
+      reviewedCount: 1,
+      reviewStatus: "partially-reviewed",
+    },
+    {
+      runId: "run-120",
+      runLabel: "2026-04-07-0900",
+      timestamp: "2026-04-07T09:00:00Z",
+      clusterCount: 1,
+      triaged: false,
+      executionCount: 0,
+      reviewedCount: 0,
+      reviewStatus: "no-executions",
+    },
+  ],
+  totalCount: 4,
+};
 
 export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
   {
