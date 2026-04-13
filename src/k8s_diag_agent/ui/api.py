@@ -1411,6 +1411,7 @@ class RunsListEntry(TypedDict):
     executionCount: int
     reviewedCount: int
     reviewStatus: str
+    reviewDownloadPath: str | None
 
 
 class RunsListPayload(TypedDict):
@@ -1527,6 +1528,8 @@ def build_runs_list(runs_dir: Path) -> RunsListPayload:
 
     # Build the runs list sorted by timestamp (most recent first)
     runs_list: list[RunsListEntry] = []
+    diagnostic_packs_dir = run_health_dir / "diagnostic-packs"
+
     for run_id, entry in run_entries.items():
         execution_count = cast(int, entry.get("execution_count", 0))
         reviewed_count = cast(int, entry.get("reviewed_count", 0))
@@ -1534,6 +1537,18 @@ def build_runs_list(runs_dir: Path) -> RunsListPayload:
         # triaged is true only if there are executions AND at least one has been reviewed
         # A run with no executions should NOT be marked as triaged
         triaged = execution_count > 0 and reviewed_count > 0
+
+        # Determine review download path for runs with executions
+        # Only provide a path for runs that need review: unreviewed or partially-reviewed
+        review_download_path: str | None = None
+        if review_status in ("unreviewed", "partially-reviewed"):
+            # Check if the run-scoped export exists
+            run_scoped_path = diagnostic_packs_dir / run_id / "next_check_usefulness_review.json"
+            if run_scoped_path.exists():
+                review_download_path = str(run_scoped_path.relative_to(runs_dir))
+            else:
+                # Fallback: provide the path where it should be created
+                review_download_path = f"health/diagnostic-packs/{run_id}/next_check_usefulness_review.json"
 
         runs_list.append(
             RunsListEntry(
@@ -1545,6 +1560,7 @@ def build_runs_list(runs_dir: Path) -> RunsListPayload:
                 executionCount=execution_count,
                 reviewedCount=reviewed_count,
                 reviewStatus=review_status,
+                reviewDownloadPath=review_download_path,
             )
         )
 

@@ -602,6 +602,7 @@ export type RunsListEntry = {
   executionCount: number;
   reviewedCount: number;
   reviewStatus: string;
+  reviewDownloadPath: string | null;
 };
 
 export type RunsListPayload = {

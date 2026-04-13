@@ -33,6 +33,7 @@ export const sampleRunsList: RunsListPayload = {
       executionCount: 3,
       reviewedCount: 0,
       reviewStatus: "unreviewed",
+      reviewDownloadPath: "health/diagnostic-packs/run-122/next_check_usefulness_review.json",
     },
     {
       runId: "run-121",

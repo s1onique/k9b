@@ -37,6 +37,7 @@ def export_next_check_usefulness_review(
     runs_dir: Path,
     *,
     run_id: str | None = None,
+    use_run_scoped_path: bool = False,
 ) -> Path:
     """Export next-check execution artifacts for batch review.
 
@@ -44,6 +45,8 @@ def export_next_check_usefulness_review(
         runs_dir: Path to the runs directory (contains health/)
         run_id: Optional specific run_id to filter by. If not provided,
                 uses the latest run from ui-index.json.
+        use_run_scoped_path: If True, write to a run-scoped path instead of latest.
+                             The run-scoped path is: health/diagnostic-packs/{run_id}/next_check_usefulness_review.json
 
     Returns:
         Path to the exported JSON file.
@@ -102,11 +105,17 @@ def export_next_check_usefulness_review(
         "entries": entries,
     }
 
-    # Write to latest pack directory
-    latest_dir = run_health_dir / "diagnostic-packs" / LATEST_PACK_DIR_NAME
-    latest_dir.mkdir(parents=True, exist_ok=True)
+    # Determine output directory based on use_run_scoped_path flag
+    if use_run_scoped_path:
+        # Run-scoped path: health/diagnostic-packs/{run_id}/next_check_usefulness_review.json
+        output_dir = run_health_dir / "diagnostic-packs" / run_id
+    else:
+        # Latest path: health/diagnostic-packs/latest/next_check_usefulness_review.json
+        output_dir = run_health_dir / "diagnostic-packs" / LATEST_PACK_DIR_NAME
 
-    output_path = latest_dir / "next_check_usefulness_review.json"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / "next_check_usefulness_review.json"
     output_path.write_text(json.dumps(export_data, indent=2), encoding="utf-8")
 
     return output_path

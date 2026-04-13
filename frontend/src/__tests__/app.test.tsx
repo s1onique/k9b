@@ -305,6 +305,25 @@ describe("App", () => {
     expect(filteredItems.length).toBe(4);
   });
 
+  test("recent-runs review download link uses /artifact endpoint not /api/artifacts", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    // Find the recent runs panel
+    await screen.findByText(/Recent runs/i);
+
+    // Find the download link - it's in the Review column
+    // The fixture has run-122 with reviewDownloadPath set
+    const downloadLinks = document.querySelectorAll(".run-row a.btn");
+    expect(downloadLinks.length).toBeGreaterThan(0);
+
+    // Check that the href contains /artifact?path= and not /api/artifacts
+    const downloadLink = downloadLinks[0] as HTMLAnchorElement;
+    const href = downloadLink.href;
+    expect(href).toContain("/artifact?path=");
+    expect(href).not.toContain("/api/artifacts");
+  });
+
   test("run summary surfaces next-check discovery actions", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);

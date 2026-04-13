@@ -358,6 +358,7 @@ const ALLOWED_MANUAL_FAMILIES = new Set([
   "kubectl-describe",
   "kubectl-logs",
   "kubectl-get-crd",
+  "kubectl-top",
 ]);
 
 type ExecutionErrorResult = {
@@ -3077,11 +3078,12 @@ const App = () => {
           <p className="muted">No runs match the current filter.</p>
         ) : (
           <div className="runs-table-wrapper">
-            <table className="runs-table" aria-label="Recent runs">
+                <table className="runs-table" aria-label="Recent runs">
               <thead>
                 <tr>
                   <th>Run</th>
                   <th>Status</th>
+                  <th>Review</th>
                   <th>Timestamp</th>
                 </tr>
               </thead>
@@ -3116,6 +3118,21 @@ const App = () => {
                         <span className={statusClass(runEntry.reviewStatus)}>
                           {runEntry.reviewStatus}
                         </span>
+                      </td>
+                      <td>
+                        {runEntry.reviewDownloadPath ? (
+                          <a
+                            href={artifactUrl(runEntry.reviewDownloadPath)}
+                            className="btn btn-small"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Download
+                          </a>
+                        ) : (
+                          <span className="muted small">—</span>
+                        )}
                       </td>
                       <td>
                         {runEntry.timestamp ? (

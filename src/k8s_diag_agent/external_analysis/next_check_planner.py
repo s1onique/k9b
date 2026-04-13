@@ -18,6 +18,7 @@ class CommandFamily(StrEnum):
     KUBECTL_DESCRIBE = "kubectl-describe"
     KUBECTL_LOGS = "kubectl-logs"
     KUBECTL_GET_CRD = "kubectl-get-crd"
+    KUBECTL_TOP = "kubectl-top"
     UNKNOWN = "unknown"
 
 
@@ -92,6 +93,8 @@ def detect_command_family(text: str) -> CommandFamily:
         return CommandFamily.KUBECTL_LOGS
     if "kubectl describe" in normalized or "describe" in normalized:
         return CommandFamily.KUBECTL_DESCRIBE
+    if "kubectl top" in normalized:
+        return CommandFamily.KUBECTL_TOP
     if "kubectl get" in normalized:
         if "crd" in normalized:
             return CommandFamily.KUBECTL_GET_CRD
@@ -156,7 +159,7 @@ def _mentions_mutation(text: str) -> bool:
 
 
 def _risk_from_family(family: CommandFamily) -> RiskLevel:
-    if family in (CommandFamily.KUBECTL_LOGS, CommandFamily.KUBECTL_DESCRIBE):
+    if family in (CommandFamily.KUBECTL_LOGS, CommandFamily.KUBECTL_DESCRIBE, CommandFamily.KUBECTL_TOP):
         return RiskLevel.LOW
     if family in (CommandFamily.KUBECTL_GET, CommandFamily.KUBECTL_GET_CRD):
         return RiskLevel.MEDIUM
