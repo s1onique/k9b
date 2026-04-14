@@ -83,7 +83,7 @@ _SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 _SLOW_REQUEST_THRESHOLD_MS = 1000
 
 
-def _single_flight_acquire(key: str) -> tuple[bool, tuple[object, list] | None, float]:
+def _single_flight_acquire(key: str, request_path: str = "", cache_key: str = "") -> tuple[bool, tuple[object, list] | None, float]:
     """Acquire single-flight lock for the given key.
 
     Returns:
@@ -98,10 +98,19 @@ def _single_flight_acquire(key: str) -> tuple[bool, tuple[object, list] | None, 
     with _single_flight_lock:
         if key in _single_flight_events:
             # There's already an in-flight request - return event to wait on
-            # Log this for debugging single-flight behavior
-            logger.debug(
-                f"Single-flight waiter acquiring for key: {key[:50]}...",
-                extra={"key": key[:100], "action": "waiter_acquire"},
+            # Emit structured log for waiter acquire
+            emit_structured_log(
+                component="single-flight",
+                message="Single-flight waiter acquiring",
+                run_id="",
+                run_label="",
+                severity="DEBUG",
+                metadata={
+                    "single_flight_key": key[:100],
+                    "acquire_result": "waiter",
+                    "cache_key": cache_key[:100] if cache_key else "",
+                    "request_path": request_path,
+                },
             )
             return False, _single_flight_events[key], wait_start
         else:
@@ -110,21 +119,31 @@ def _single_flight_acquire(key: str) -> tuple[bool, tuple[object, list] | None, 
             result_holder: list = [None]
             event = result_holder  # Use list as mutable container for result
             _single_flight_events[key] = (event, result_holder)
-            # Log builder acquisition for debugging
-            logger.debug(
-                f"Single-flight builder acquiring for key: {key[:50]}...",
-                extra={"key": key[:100], "action": "builder_acquire"},
+            # Emit structured log for builder acquire
+            emit_structured_log(
+                component="single-flight",
+                message="Single-flight builder acquiring",
+                run_id="",
+                run_label="",
+                severity="DEBUG",
+                metadata={
+                    "single_flight_key": key[:100],
+                    "acquire_result": "builder",
+                    "cache_key": cache_key[:100] if cache_key else "",
+                    "request_path": request_path,
+                },
             )
             return True, (event, result_holder), wait_start
 
 
-def _single_flight_release(key: str, result: object, success: bool = True) -> None:
+def _single_flight_release(key: str, result: object, success: bool = True, result_type: str = "built") -> None:
     """Release single-flight lock and set result.
 
     Args:
         key: The single-flight key
         result: The result to store (can be None on failure)
         success: Whether the build succeeded - if False, also clean up the entry
+        result_type: Type of result - "built" (freshly built), "cached" (served from cache), "error" (build failed)
     """
     import time as time_module
     
@@ -144,6 +163,20 @@ def _single_flight_release(key: str, result: object, success: bool = True) -> No
             
             # Now delete to allow retries after waiters have had a chance
             del _single_flight_events[key]
+            
+            # Emit structured log for release
+            emit_structured_log(
+                component="single-flight",
+                message="Single-flight released",
+                run_id="",
+                run_label="",
+                severity="DEBUG",
+                metadata={
+                    "single_flight_key": key[:100],
+                    "release_success": success,
+                    "result_type": result_type,
+                },
+            )
             
             # Log release for debugging
             logger.debug(
