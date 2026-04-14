@@ -126,12 +126,30 @@ def _single_flight_release(key: str, result: object, success: bool = True) -> No
         result: The result to store (can be None on failure)
         success: Whether the build succeeded - if False, also clean up the entry
     """
+    import time as time_module
+    
     with _single_flight_lock:
         if key in _single_flight_events:
             event, result_holder = _single_flight_events[key]
             result_holder[0] = result  # Store result in the holder
-            # Always delete to allow retries after failure
+            
+            # Give waiters a moment to read the result before cleaning up
+            # This prevents the race where a waiter checks right after we set result but before it reads
+            # We keep the entry in the dict with a sentinel marker to indicate "ready"
+            result_holder.append("_READY_")  # Marker to indicate result is ready
+            
+            # Brief delay to allow waiters to pick up the result (max 50ms)
+            # This is a tradeoff - we trade a small delay for correctness
+            time_module.sleep(0.005)  # 5ms to let waiters wake up and read
+            
+            # Now delete to allow retries after waiters have had a chance
             del _single_flight_events[key]
+            
+            # Log release for debugging
+            logger.debug(
+                f"Single-flight released for key: {key[:50]}...",
+                extra={"key": key[:100], "action": "release", "success": success},
+            )
 
 
 def _single_flight_wait(event_holder: tuple[object, list], wait_start: float) -> tuple[object | None, float]:
@@ -147,11 +165,20 @@ def _single_flight_wait(event_holder: tuple[object, list], wait_start: float) ->
     import time as time_module
 
     # Brief spin-wait for result (max ~100ms)
-    for _ in range(10):
+    # Check for both result[0] being non-None AND the _READY_ marker
+    for i in range(10):
         time_module.sleep(0.01)
-        if event_holder[1][0] is not None:
+        result_holder = event_holder[1]
+        # Check if result is ready: either marker present or result is not None
+        if len(result_holder) >= 2 and result_holder[-1] == "_READY_":
+            # Result is ready, return it
             wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
-            return event_holder[1][0], wait_duration_ms
+            # Return the actual result (first element)
+            return result_holder[0], wait_duration_ms
+        if result_holder[0] is not None:
+            # Fallback: result was set but marker not yet added (race condition)
+            wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
+            return result_holder[0], wait_duration_ms
 
     # If still not ready, return None (caller will handle)
     wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
@@ -2073,7 +2100,23 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "runId is required"}, 400)
             return
 
-        dry_run = payload.get("dryRun", True)
+        # Default to False (actual execution) - UI Execute button should send dryRun: false
+        # Preview/dry-run can be triggered by explicitly sending dryRun: true
+        dry_run = payload.get("dryRun", False)
+
+        # Log the parsed dry_run value for observability
+        emit_structured_log(
+            component="batch-execution",
+            message="Batch execution request parsed",
+            run_id=run_id,
+            run_label="",
+            severity="INFO",
+            metadata={
+                "run_id": run_id,
+                "dry_run_parsed": dry_run,
+                "dry_run_source": "request_payload" if "dryRun" in payload else "default_false",
+            },
+        )
 
         # Import the batch execution function from the package
         try:
@@ -2096,9 +2139,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             return
 
         # Convert result to response
+        # Use "would_execute" for dry-run mode to clearly distinguish from actual execution
+        execution_mode = "would_execute" if dry_run else "executed"
         response = {
             "status": "success",
-            "summary": f"Batch execution {'simulation' if dry_run else 'completed'} for run {run_id}",
+            "summary": f"Batch execution {execution_mode} for run {run_id}",
             "runId": run_id,
             "dryRun": dry_run,
             "totalCandidates": result.total_candidates,

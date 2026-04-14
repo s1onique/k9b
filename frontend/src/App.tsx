@@ -2143,7 +2143,9 @@ const App = () => {
       return next;
     });
     try {
-      await runBatchExecution({ runId });
+      // Explicitly send dryRun: false for actual execution
+      // The backend defaults to False, but being explicit improves clarity and debugging
+      await runBatchExecution({ runId, dryRun: false });
       // Refresh runs list after successful execution
       const payload: RunsListPayload = await fetchRunsList();
       setRunsList(payload.runs);
