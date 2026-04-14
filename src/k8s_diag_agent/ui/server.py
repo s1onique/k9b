@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs
 
 from ..external_analysis.artifact import (
@@ -83,59 +83,79 @@ _SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 _SLOW_REQUEST_THRESHOLD_MS = 1000
 
 
-def _single_flight_acquire(key: str) -> tuple[bool, object | None]:
+def _single_flight_acquire(key: str) -> tuple[bool, tuple[object, list] | None, float]:
     """Acquire single-flight lock for the given key.
 
     Returns:
-        Tuple of (should_build, result_holder_or_event).
+        Tuple of (should_build, result_holder_or_event, wait_start_time).
         - should_build=True means this caller should build the result
         - should_build=False means wait for the in-flight build and use its result
+        - wait_start_time is the timestamp when waiting started (for measuring wait duration)
     """
+    import time as time_module
+
+    wait_start = time_module.perf_counter()
     with _single_flight_lock:
         if key in _single_flight_events:
             # There's already an in-flight request - return event to wait on
-            return False, _single_flight_events[key]
+            # Log this for debugging single-flight behavior
+            logger.debug(
+                f"Single-flight waiter acquiring for key: {key[:50]}...",
+                extra={"key": key[:100], "action": "waiter_acquire"},
+            )
+            return False, _single_flight_events[key], wait_start
         else:
             # Create new in-flight state
             # result_holder: list with one element to hold result when ready
             result_holder: list = [None]
             event = result_holder  # Use list as mutable container for result
             _single_flight_events[key] = (event, result_holder)
-            return True, (event, result_holder)
+            # Log builder acquisition for debugging
+            logger.debug(
+                f"Single-flight builder acquiring for key: {key[:50]}...",
+                extra={"key": key[:100], "action": "builder_acquire"},
+            )
+            return True, (event, result_holder), wait_start
 
 
-def _single_flight_release(key: str, result: object) -> None:
-    """Release single-flight lock and set result."""
+def _single_flight_release(key: str, result: object, success: bool = True) -> None:
+    """Release single-flight lock and set result.
+
+    Args:
+        key: The single-flight key
+        result: The result to store (can be None on failure)
+        success: Whether the build succeeded - if False, also clean up the entry
+    """
     with _single_flight_lock:
         if key in _single_flight_events:
             event, result_holder = _single_flight_events[key]
             result_holder[0] = result  # Store result in the holder
+            # Always delete to allow retries after failure
             del _single_flight_events[key]
 
 
-def _single_flight_wait(event_holder: tuple[object, list]) -> object:
+def _single_flight_wait(event_holder: tuple[object, list], wait_start: float) -> tuple[object | None, float]:
     """Wait for single-flight result to be ready.
 
     Args:
         event_holder: Tuple of (event, result_holder) from _single_flight_acquire
+        wait_start: Timestamp when waiting started (from _single_flight_acquire)
 
     Returns:
-        The computed result from the in-flight build.
+        Tuple of (result, wait_duration_ms)
     """
-    event, result_holder = event_holder
-    # Wait for result - in a real implementation, this would use threading.Event.wait()
-    # For simplicity, we poll the result_holder (the actual build should be fast enough
-    # that this is a rare case, or the caller will have released the lock by the time we check)
     import time as time_module
 
     # Brief spin-wait for result (max ~100ms)
     for _ in range(10):
         time_module.sleep(0.01)
-        if result_holder[0] is not None:
-            return result_holder[0]
+        if event_holder[1][0] is not None:
+            wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
+            return event_holder[1][0], wait_duration_ms
 
     # If still not ready, return None (caller will handle)
-    return None
+    wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
+    return None, wait_duration_ms
 
 
 def _log_request_access(
@@ -742,9 +762,104 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         return
 
     def _handle_api(self, route: str, query: str) -> None:
-        # Handle /api/runs endpoint specially - it doesn't need context from latest run
+        # Handle /api/runs endpoint with caching and single-flight protection
         if route == "/api/runs":
+            # CRITICAL: Acquire single-flight FIRST, then compute cache key inside critical section
+            # This ensures all concurrent requests for the same logical resource see the same key
+            # (filesystems have millisecond precision, so requests within same ms need same key)
+            
+            # First, acquire single-flight lock with a provisional key
+            # We'll use a time-based key that ensures coalescing for requests within same second
+            provisional_key = f"/api/runs:{self.runs_dir}"
+            should_build, sf_result, sf_wait_start = _single_flight_acquire(provisional_key)
+
+            if not should_build and sf_result is not None:
+                # Wait for in-flight result (waiter role)
+                result, wait_ms = _single_flight_wait(sf_result, sf_wait_start)
+                if result is not None:
+                    emit_structured_log(
+                        component="ui-runs-list",
+                        message="/api/runs payload served from single-flight waiter",
+                        run_id="",
+                        run_label="",
+                        severity="DEBUG",
+                        metadata={
+                            "path": "/api/runs",
+                            "cache_hit": True,
+                            "single_flight_role": "waiter",
+                            "single_flight_key": provisional_key[:100],
+                            "single_flight_wait_ms": round(wait_ms, 2),
+                        },
+                    )
+                    self._send_json(result)
+                    return
+                # If result is None (timeout or builder failed), fall through to build
+
+            # Now compute cache key INSIDE the critical section (we hold single-flight)
+            health_root = self.runs_dir / "health"
+            cache_mtime = 0.0
+            if health_root.exists():
+                try:
+                    reviews_dir = health_root / "reviews"
+                    external_analysis_dir = health_root / "external-analysis"
+                    diagnostic_packs_dir = health_root / "diagnostic-packs"
+                    mtimes = []
+                    for d in [reviews_dir, external_analysis_dir, diagnostic_packs_dir]:
+                        if d.exists():
+                            mtimes.append(d.stat().st_mtime)
+                    if mtimes:
+                        cache_mtime = max(mtimes)
+                except OSError:
+                    pass
+
+            runs_cache_key = f"{self.runs_dir}:{cache_mtime}"
+            
+            # Check cache under lock
+            with _runs_list_cache_lock:
+                cached = _runs_list_cache.get(str(self.runs_dir))
+                if cached is not None:
+                    cached_payload, cached_mtime = cached
+                    if cached_mtime == cache_mtime:
+                        # Cache hit - release single-flight and return cached
+                        _single_flight_release(provisional_key, cached_payload, success=True)
+                        emit_structured_log(
+                            component="ui-runs-list",
+                            message="/api/runs payload served from cache",
+                            run_id="",
+                            run_label="",
+                            severity="DEBUG",
+                            metadata={
+                                "path": "/api/runs",
+                                "cache_hit": True,
+                                "single_flight_role": "builder",
+                                "cache_key": runs_cache_key[:100],
+                            },
+                        )
+                        self._send_json(cached_payload)
+                        return
+
+            # Build the payload (builder role) - or rebuild if single-flight failed
+            # Note: _build_runs_list_payload already emits its own timing log with inner timings
             runs_payload = self._build_runs_list_payload()
+
+            # Release single-flight with the result and log as builder
+            _single_flight_release(provisional_key, runs_payload, success=True)
+            
+            # Log as builder (this happens once while waiters are coalesced)
+            emit_structured_log(
+                component="ui-runs-list",
+                message="/api/runs payload built as single-flight builder",
+                run_id="",
+                run_label="",
+                severity="INFO",
+                metadata={
+                    "path": "/api/runs",
+                    "cache_hit": False,
+                    "single_flight_role": "builder",
+                    "cache_key": runs_cache_key[:100],
+                },
+            )
+
             self._send_json(runs_payload)
             return
 
@@ -770,12 +885,27 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
             # Try single-flight to avoid duplicate concurrent builds
             sf_key = f"/api/notifications:{notifications_cache_key}"
-            should_build, sf_result = _single_flight_acquire(sf_key)
+            should_build, sf_result, sf_wait_start = _single_flight_acquire(sf_key)
 
-            if not should_build:
+            if not should_build and sf_result is not None:
                 # Wait for in-flight result
-                result = _single_flight_wait(sf_result)  # type: ignore[arg-type]
+                result, wait_ms = _single_flight_wait(sf_result, sf_wait_start)
                 if result is not None:
+                    emit_structured_log(
+                        component="ui-notifications",
+                        message="/api/notifications payload served from single-flight waiter",
+                        run_id="",
+                        run_label="",
+                        severity="DEBUG",
+                        metadata={
+                            "path": "/api/notifications",
+                            "cache_hit": True,
+                            "single_flight_role": "waiter",
+                            "single_flight_key": sf_key[:100],
+                            "single_flight_wait_ms": round(wait_ms, 2),
+                            "cache_key": notifications_cache_key[:50],  # Truncate for safety
+                        },
+                    )
                     self._send_json(result)
                     return
 
@@ -797,6 +927,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                             metadata={
                                 "path": "/api/notifications",
                                 "cache_hit": True,
+                                "single_flight_role": "waiter",
+                                "cache_key": notifications_cache_key[:50],
                             },
                         )
                         self._send_json(notifications_payload)
@@ -827,6 +959,19 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             # Release single-flight with result
             if should_build:
                 _single_flight_release(sf_key, payload)
+                emit_structured_log(
+                    component="ui-notifications",
+                    message="/api/notifications payload built as builder",
+                    run_id="",
+                    run_label="",
+                    severity="DEBUG",
+                    metadata={
+                        "path": "/api/notifications",
+                        "cache_hit": False,
+                        "single_flight_role": "builder",
+                        "cache_key": notifications_cache_key[:50],
+                    },
+                )
 
             self._send_json(payload)
             return
@@ -840,7 +985,39 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if context is None:
             return
         if route == "/api/run":
-            # Add structured timing for /api/run to identify hot sub-stages
+            # CRITICAL: Acquire single-flight FIRST, then compute cache key inside critical section
+            # This ensures all concurrent requests for the same run see the same key
+            
+            # First, acquire single-flight lock with a provisional key based on run_id only
+            # This ensures all concurrent requests for the same run coalesce
+            provisional_key = f"/api/run:{context.run.run_id}"
+            should_build, sf_result, sf_wait_start = _single_flight_acquire(provisional_key)
+
+            if not should_build and sf_result is not None:
+                # Wait for in-flight result (waiter role)
+                result, wait_ms = _single_flight_wait(sf_result, sf_wait_start)
+                if result is not None:
+                    emit_structured_log(
+                        component="ui-run-payload",
+                        message="/api/run payload served from single-flight waiter",
+                        run_id=context.run.run_id,
+                        run_label=context.run.run_label,
+                        severity="DEBUG",
+                        metadata={
+                            "path": "/api/run",
+                            "run_id": context.run.run_id,
+                            "run_label": context.run.run_label,
+                            "cache_hit": True,
+                            "single_flight_role": "waiter",
+                            "single_flight_key": provisional_key[:100],
+                            "single_flight_wait_ms": round(wait_ms, 2),
+                        },
+                    )
+                    self._send_json(result)
+                    return
+                # If result is None (timeout or builder failed), fall through to build
+
+            # Now compute cache key INSIDE the critical section (we hold single-flight)
             timings: dict[str, float] = {}
             total_start = time.perf_counter()
 
@@ -851,14 +1028,17 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 ui_index_mtime = ui_index_path.stat().st_mtime
             timings["ui_index_read_ms"] = (time.perf_counter() - total_start) * 1000
 
-            # Stage 2: Check cache for existing payload
-            cache_key = (context.run.run_id, ui_index_mtime)
+            # Build cache key using the mtime we just read (inside single-flight)
+            run_cache_key = (context.run.run_id, ui_index_mtime)
+            
+            # Check regular cache for existing payload (under the lock)
             with _run_payload_cache_lock:
-                cached = _run_payload_cache.get(cache_key)
+                cached_run_payload: tuple[dict[str, Any], list[dict[str, object]]] | None = _run_payload_cache.get(run_cache_key)
 
-            if cached is not None:
-                # Cache hit - return cached payload directly
-                cached_payload, _ = cached
+            if cached_run_payload is not None:
+                # Cache hit - release single-flight and return cached
+                cached_payload, _ = cached_run_payload
+                _single_flight_release(provisional_key, cached_payload, success=True)
                 total_duration = (time.perf_counter() - total_start) * 1000
                 emit_structured_log(
                     component="ui-run-payload",
@@ -872,12 +1052,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         "run_label": context.run.run_label,
                         "total_duration_ms": round(total_duration, 2),
                         "cache_hit": True,
+                        "single_flight_role": "builder",
+                        "cache_key": str(run_cache_key)[:100],
                     },
                 )
                 self._send_json(cached_payload)
                 return
 
-            # Cache miss - build the payload with timing
+            # Cache miss - build the payload (builder role)
             context_load_start = time.perf_counter()
             # _load_context was already called above, so context is already loaded
             timings["context_load_ms"] = (time.perf_counter() - context_load_start) * 1000
@@ -919,7 +1101,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     cache_keys = list(_run_payload_cache.keys())
                     oldest_cache_key: tuple[str, float] = cache_keys[0]
                     del _run_payload_cache[oldest_cache_key]
-                _run_payload_cache[cache_key] = (run_payload, promotions)  # type: ignore[assignment]
+                _run_payload_cache[run_cache_key] = (run_payload, promotions)  # type: ignore[assignment]
+
+            # Release single-flight with result and log as builder
+            _single_flight_release(provisional_key, run_payload, success=True)
 
             total_duration = (time.perf_counter() - total_start) * 1000
             timings["total_duration_ms"] = total_duration
@@ -945,6 +1130,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     "notification_files_scanned": timings.get("notification_files_scanned", 0),
                     "promotions_count": timings.get("promotions_count", 0),
                     "cache_hit": False,
+                    "single_flight_role": "builder",
+                    "cache_key": str(run_cache_key)[:100],
+                    "single_flight_key": provisional_key[:100],
                 },
             )
 
@@ -2288,10 +2476,19 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         timings["external_analysis_scan_ms"] = (time.perf_counter() - external_analysis_scan_start) * 1000
         timings["execution_files_scanned"] = execution_count
         
-        # Stage 3: Build the runs list payload
+        # Stage 3: Build the runs list payload with inner timings
         payload_build_start = time.perf_counter()
+        payload: dict[str, object]
         try:
-            payload = dict(build_runs_list(self.runs_dir))
+            result = build_runs_list(self.runs_dir, _timings=True)
+            if isinstance(result, tuple):
+                raw_payload, inner_timings = result
+                payload = cast(dict[str, object], raw_payload)
+                # Merge inner timings into outer timings (cast values to float)
+                for key, value in inner_timings.items():
+                    timings[key] = cast(float, value)
+            else:
+                payload = cast(dict[str, object], result)
         except Exception as exc:
             logger.warning(
                 "Failed to build runs list payload",
@@ -2322,12 +2519,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             if len(_runs_list_cache) >= _MAX_CACHE_ENTRIES:
                 oldest_key = next(iter(_runs_list_cache))
                 del _runs_list_cache[oldest_key]
-            _runs_list_cache[cache_key] = (payload, cache_mtime)
+            _runs_list_cache[cache_key] = (cast(dict[str, Any], payload), cache_mtime)
         
         total_duration = (time.perf_counter() - total_start) * 1000
         timings["total_duration_ms"] = total_duration
         
-        # Emit structured timing log
+        # Emit structured timing log with all inner timings from build_runs_list()
         emit_structured_log(
             component="ui-runs-list",
             message="/api/runs payload built with timing",
@@ -2344,8 +2541,37 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 "serialize_ms": round(timings.get("serialize_ms", 0), 2),
                 "review_files_count": timings.get("review_files_count", 0),
                 "execution_files_scanned": timings.get("execution_files_scanned", 0),
-                "runs_count": len(payload.get("runs", [])),  # type: ignore[arg-type]
+                "runs_count": len(cast(list, payload.get("runs", []))),
                 "cache_hit": False,
+                # Inner timings from build_runs_list()
+                "reviews_glob_ms": round(timings.get("reviews_glob_ms", 0), 2),
+                "reviews_parsed": timings.get("reviews_parsed", 0),
+                "execution_artifacts_glob_ms": round(timings.get("execution_artifacts_glob_ms", 0), 2),
+                "execution_artifacts_scanned": timings.get("execution_artifacts_scanned", 0),
+                "execution_count_derivation_ms": round(timings.get("execution_count_derivation_ms", 0), 2),
+                "execution_count_derivation_matches": timings.get("execution_count_derivation_matches", 0),
+                "row_assembly_ms": round(timings.get("row_assembly_ms", 0), 2),
+                "sort_ms": round(timings.get("sort_ms", 0), 2),
+                "batch_eligible_runs": timings.get("batch_eligible_runs", 0),
+                # Pre-scan timings (Stage 3a/3b)
+                "review_artifact_prescan_ms": round(timings.get("review_artifact_prescan_ms", 0), 2),
+                "batch_eligibility_prescan_ms": round(timings.get("batch_eligibility_prescan_ms", 0), 2),
+                # Row assembly sub-stages (detailed breakdown of row_assembly_ms)
+                "review_status_row_ms": round(timings.get("review_status_row_ms", 0), 2),
+                "review_download_path_row_ms": round(timings.get("review_download_path_row_ms", 0), 2),
+                "batch_eligibility_row_ms": round(timings.get("batch_eligibility_row_ms", 0), 2),
+                "artifact_lookup_row_ms": round(timings.get("artifact_lookup_row_ms", 0), 2),
+                "timestamp_normalization_row_ms": round(timings.get("timestamp_normalization_row_ms", 0), 2),
+                "label_normalization_row_ms": round(timings.get("label_normalization_row_ms", 0), 2),
+                "per_row_fs_checks_ms": round(timings.get("per_row_fs_checks_ms", 0), 2),
+                "rows_built": timings.get("rows_built", 0),
+                # Per-row filesystem call counters (prove no per-row FS work)
+                "path_exists_calls": timings.get("path_exists_calls", 0),
+                "stat_calls": timings.get("stat_calls", 0),
+                "diagnostic_pack_path_checks": timings.get("diagnostic_pack_path_checks", 0),
+                "run_scoped_review_path_checks": timings.get("run_scoped_review_path_checks", 0),
+                "per_run_glob_calls": timings.get("per_run_glob_calls", 0),
+                "per_run_directory_list_calls": timings.get("per_run_directory_list_calls", 0),
             },
         )
         

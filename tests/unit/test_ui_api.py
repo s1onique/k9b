@@ -17,6 +17,7 @@ from k8s_diag_agent.external_analysis.config import (
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.ui.api import (
+    RunsListPayload,
     _build_freshness_payload,
     _serialize_next_check_queue,
     build_cluster_detail_payload,
@@ -24,6 +25,7 @@ from k8s_diag_agent.ui.api import (
     build_notifications_payload,
     build_proposals_payload,
     build_run_payload,
+    build_runs_list,
 )
 from k8s_diag_agent.ui.model import build_ui_context
 from tests.fixtures.ui_index_sample import sample_ui_index
@@ -505,7 +507,6 @@ class RunsListTests(unittest.TestCase):
 
     def test_build_runs_list_no_executions_not_triaged(self) -> None:
         """Test that runs with no executions are NOT marked as triaged."""
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -524,7 +525,7 @@ class RunsListTests(unittest.TestCase):
             review_path.write_text(json.dumps(review_content), encoding="utf-8")
 
             # Build the runs list - no execution artifacts exist
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -537,7 +538,6 @@ class RunsListTests(unittest.TestCase):
 
     def test_build_runs_list_unreviewed_not_triaged(self) -> None:
         """Test that runs with executions but none reviewed are NOT marked as triaged."""
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -567,7 +567,7 @@ class RunsListTests(unittest.TestCase):
             exec_path.write_text(json.dumps(execution_content), encoding="utf-8")
 
             # Build the runs list
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -580,7 +580,6 @@ class RunsListTests(unittest.TestCase):
 
     def test_build_runs_list_reviewed_is_triaged(self) -> None:
         """Test that runs with reviewed executions ARE marked as triaged."""
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -611,7 +610,7 @@ class RunsListTests(unittest.TestCase):
             exec_path.write_text(json.dumps(execution_content), encoding="utf-8")
 
             # Build the runs list
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -624,7 +623,6 @@ class RunsListTests(unittest.TestCase):
 
     def test_build_runs_list_partial_review_is_triaged(self) -> None:
         """Test that runs with partially reviewed executions ARE marked as triaged."""
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -663,7 +661,7 @@ class RunsListTests(unittest.TestCase):
             exec2_path.write_text(json.dumps(exec2_content), encoding="utf-8")
 
             # Build the runs list
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -679,7 +677,6 @@ class RunsListTests(unittest.TestCase):
         
         This verifies the fix for the bug where historical runs all pointed to /latest/.
         """
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -748,7 +745,7 @@ class RunsListTests(unittest.TestCase):
             )
 
             # Build the runs list
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 2)
             
@@ -777,7 +774,6 @@ class RunsListTests(unittest.TestCase):
         
         This verifies that when only /latest/ exists, historical rows don't show misleading links.
         """
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -818,7 +814,7 @@ class RunsListTests(unittest.TestCase):
             )
 
             # Build the runs list
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -833,7 +829,6 @@ class RunsListTests(unittest.TestCase):
         
         This verifies the frontend will only show Download when the artifact actually exists.
         """
-        from k8s_diag_agent.ui.api import build_runs_list
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -874,7 +869,7 @@ class RunsListTests(unittest.TestCase):
             )
 
             # Build the runs list
-            result = build_runs_list(runs_dir)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
