@@ -242,7 +242,7 @@ describe("App", () => {
     render(<App />);
 
     // Find the recent runs panel
-    const recentRunsPanel = await screen.findByText(/Recent runs/i);
+    const recentRunsPanel = (await screen.findAllByText(/Recent runs/i))[0];
     expect(recentRunsPanel).toBeInTheDocument();
 
     // Verify runs list is rendered
@@ -265,8 +265,14 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    // Find the recent runs panel
-    await screen.findByText(/Recent runs/i);
+    // Find the recent runs panel and wait for run rows to appear
+    await screen.findAllByText(/Recent runs/i)[0];
+
+    // Wait for the runs to render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
 
     // Verify the filter buttons exist
     const noExecutionsFilter = document.querySelector(".runs-filter-button") as HTMLButtonElement;
@@ -307,10 +313,23 @@ describe("App", () => {
 
   test("recent-runs review download link uses /artifact endpoint not /api/artifacts", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
     render(<App />);
 
-    // Find the recent runs panel
-    await screen.findByText(/Recent runs/i);
+    // Find the recent runs panel and ensure "All runs" filter is active
+    await screen.findAllByText(/Recent runs/i)[0];
+    const allFilterButton = document.querySelectorAll(".runs-filter-button")[0] as HTMLButtonElement;
+    if (allFilterButton) {
+      await act(async () => {
+        await user.click(allFilterButton);
+      });
+    }
+
+    // Wait for the run rows to appear
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
 
     // Find the download link - it's in the Review column
     // The fixture has run-122 with reviewDownloadPath set
@@ -1126,9 +1145,9 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const panel = await screen.findByRole("heading", { name: /Execution review/i });
+    const panel = await screen.findByRole("heading", { name: /Check execution review/i });
     expect(panel).toBeInTheDocument();
-    expect(screen.getByText(/Execution review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Check execution review/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Collect kubelet logs for control-plane pods/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Timed out/i, { selector: ".execution-history-badge" })).toBeInTheDocument();
   });
@@ -1838,5 +1857,145 @@ describe("App", () => {
 
     expect(screen.getByText(/Loading operator data/i)).toBeInTheDocument();
     await screen.findByText(/network boom/i);
+  });
+});
+
+describe("App panel order regression", () => {
+  /**
+   * Enforces the intended high-level panel order in the main App render.
+   * Tests key relations rather than the full list to avoid brittle DOM coupling.
+   */
+  test("panel order: Provider-assisted advisory before Deterministic next checks", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Provider-assisted advisory/i });
+    
+    // Wait for all sections to be fully rendered
+    await waitFor(() => {
+      const sections = document.querySelectorAll("section[id]");
+      expect(sections.length).toBeGreaterThan(10);
+    });
+
+    const providerPanel = document.getElementById("review-enrichment");
+    const deterministicPanel = document.getElementById("deterministic-next-checks");
+
+    console.log("providerPanel:", providerPanel?.tagName, providerPanel?.id);
+    console.log("deterministicPanel:", deterministicPanel?.tagName, deterministicPanel?.id);
+    
+    expect(providerPanel).not.toBeNull();
+    expect(deterministicPanel).not.toBeNull();
+    
+    // Get document positions using treeWalker approach as alternative
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let posA = -1, posB = -1, count = 0;
+    let node: Node | null = walker.currentNode;
+    while (node) {
+      if ((node as Element).id === "review-enrichment") posA = count;
+      if ((node as Element).id === "deterministic-next-checks") posB = count;
+      if (posA !== -1 && posB !== -1) break;
+      count++;
+      node = walker.nextNode();
+    }
+    console.log("TreeWalker positions - review-enrichment:", posA, "deterministic-next-checks:", posB);
+    
+    // Assert order via treeWalker
+    expect(posA).toBeLessThan(posB);
+  });
+
+  test("panel order: Check execution review before Work list", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Check execution review/i });
+    
+    await waitFor(() => {
+      const sections = document.querySelectorAll("section[id]");
+      expect(sections.length).toBeGreaterThan(10);
+    });
+    
+    const executionPanel = document.getElementById("execution-history");
+    const workListPanel = document.getElementById("next-check-queue");
+
+    expect(executionPanel).not.toBeNull();
+    expect(workListPanel).not.toBeNull();
+    
+    // Use TreeWalker approach
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let posA = -1, posB = -1, count = 0;
+    let node: Node | null = walker.currentNode;
+    while (node) {
+      if ((node as Element).id === "execution-history") posA = count;
+      if ((node as Element).id === "next-check-queue") posB = count;
+      if (posA !== -1 && posB !== -1) break;
+      count++;
+      node = walker.nextNode();
+    }
+    
+    expect(posA).toBeLessThan(posB);
+  });
+
+  test("panel order: Notification history before LLM policy", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Notification history/i });
+    
+    await waitFor(() => {
+      const sections = document.querySelectorAll("section[id]");
+      expect(sections.length).toBeGreaterThan(10);
+    });
+    
+    const notificationPanel = document.getElementById("notifications");
+    const llmPolicyPanel = document.getElementById("llm-policy");
+
+    expect(notificationPanel).not.toBeNull();
+    expect(llmPolicyPanel).not.toBeNull();
+    
+    // Use TreeWalker approach
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let posA = -1, posB = -1, count = 0;
+    let node: Node | null = walker.currentNode;
+    while (node) {
+      if ((node as Element).id === "notifications") posA = count;
+      if ((node as Element).id === "llm-policy") posB = count;
+      if (posA !== -1 && posB !== -1) break;
+      count++;
+      node = walker.nextNode();
+    }
+    
+    expect(posA).toBeLessThan(posB);
+  });
+
+  test("panel order: LLM policy before LLM activity", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /LLM policy/i });
+    
+    await waitFor(() => {
+      const sections = document.querySelectorAll("section[id]");
+      expect(sections.length).toBeGreaterThan(10);
+    });
+    
+    const llmPolicyPanel = document.getElementById("llm-policy");
+    const llmActivityPanel = document.getElementById("llm-activity");
+
+    expect(llmPolicyPanel).not.toBeNull();
+    expect(llmActivityPanel).not.toBeNull();
+    
+    // Use TreeWalker approach
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let posA = -1, posB = -1, count = 0;
+    let node: Node | null = walker.currentNode;
+    while (node) {
+      if ((node as Element).id === "llm-policy") posA = count;
+      if ((node as Element).id === "llm-activity") posB = count;
+      if (posA !== -1 && posB !== -1) break;
+      count++;
+      node = walker.nextNode();
+    }
+    
+    expect(posA).toBeLessThan(posB);
   });
 });

@@ -1557,7 +1557,7 @@ const ExecutionHistoryPanel = ({
     <div className="section-head">
       <div>
         <p className="eyebrow">Execution history</p>
-        <h2>Execution review</h2>
+        <h2>Check execution review</h2>
         <p className="muted small">Audit surface for what actually ran; review results and signal quality.</p>
       </div>
     </div>
@@ -3090,15 +3090,23 @@ const App = () => {
         </div>
       </header>
       <nav className="floating-nav">
+        <a href="#recent-runs">Recent runs</a>
+        <a href="#run-detail">Run summary</a>
+        <a href="#review-enrichment">Provider-assisted advisory</a>
+        <a href="#provider-execution">Provider-assisted branches</a>
+      <a href="#diagnostic-pack-download">Run diagnostic package archive</a>
+      {run.diagnosticPackReview && (
+        <a href="#diagnostic-pack-review">Automated review insights</a>
+      )}
+      <a href="#deterministic-next-checks">Deterministic next checks</a>
+        <a href="#execution-history">Execution review</a>
+        <a href="#next-check-queue">Work list</a>
         <a href="#fleet">Fleet overview</a>
         <a href="#cluster">Cluster detail</a>
         <a href="#proposals">Action proposals</a>
-        <a href="#run-detail">Run summary</a>
-        <a href="#execution-history">Execution history</a>
-        <a href="#review-enrichment">Review enrichment</a>
-        <a href="#llm-activity">LLM activity</a>
+        <a href="#notifications">Notification history</a>
         <a href="#llm-policy">LLM policy</a>
-        <a href="#notifications">Notifications</a>
+        <a href="#llm-activity">LLM activity</a>
       </nav>
       {error && <div className="alert">{error}</div>}
       {/* Recent runs panel */}
@@ -3436,33 +3444,30 @@ const App = () => {
             <p className="muted small">Planner created no candidates for this run.</p>
           )}
         </div>
-      {!runFresh && (
-        <div className="alert alert-inline">
-          Latest run is {runAgeMinutes} minute{runAgeMinutes === 1 ? "" : "s"} old; ensure the scheduler is running.
+        {!runFresh && (
+          <div className="alert alert-inline">
+            Latest run is {runAgeMinutes} minute{runAgeMinutes === 1 ? "" : "s"} old; ensure the scheduler is running.
+          </div>
+        )}
+      </section>
+      {/* Workflow Lane: Diagnose Now */}
+      <div className="workflow-lane-header">
+        <div className="workflow-lane-label">
+          <span className="workflow-lane-icon">🔍</span>
+          <span className="workflow-lane-title">{WORKFLOW_LANES.diagnose.label}</span>
         </div>
-      )}
-    </section>
-    {/* LLM and Advisory Panels */}
-    <LLMPolicyPanel policy={run.llmPolicy} />
-    <LLMActivityPanel activity={run.llmActivity} />
-    <ReviewEnrichmentPanel
-      reviewEnrichment={run.reviewEnrichment}
-      reviewEnrichmentStatus={run.reviewEnrichmentStatus}
-      nextCheckPlan={run.nextCheckPlan}
-      onNavigateToQueue={() => scrollToSection("next-check-queue")}
-      onFocusQueueReview={() => setQueueFocusMode("review")}
-    />
-    <ProviderExecutionPanel execution={run.providerExecution} />
-    <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
-    <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
-    {/* Workflow Lane: Diagnose Now */}
-    <div className="workflow-lane-header">
-      <div className="workflow-lane-label">
-        <span className="workflow-lane-icon">🔍</span>
-        <span className="workflow-lane-title">{WORKFLOW_LANES.diagnose.label}</span>
+        <p className="workflow-lane-description muted small">{WORKFLOW_LANES.diagnose.description}</p>
       </div>
-      <p className="workflow-lane-description muted small">{WORKFLOW_LANES.diagnose.description}</p>
-    </div>
+      <ReviewEnrichmentPanel
+        reviewEnrichment={run.reviewEnrichment}
+        reviewEnrichmentStatus={run.reviewEnrichmentStatus}
+        nextCheckPlan={run.nextCheckPlan}
+        onNavigateToQueue={() => scrollToSection("next-check-queue")}
+        onFocusQueueReview={() => setQueueFocusMode("review")}
+      />
+      <ProviderExecutionPanel execution={run.providerExecution} />
+      <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
+      <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
     <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
       <div className="section-head">
         <div>
@@ -5008,6 +5013,8 @@ const App = () => {
         </div>
         <NotificationHistoryTable />
       </section>
+      <LLMPolicyPanel policy={run.llmPolicy} />
+      <LLMActivityPanel activity={run.llmActivity} />
     </div>
   );
 };
