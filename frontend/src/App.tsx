@@ -4015,7 +4015,7 @@ const App = () => {
                           {item.priorityRationale ? (
                             <div className="next-check-queue-item-rationale">
                               <span className="priority-rationale-label">
-                                Why not top priority:
+                                Why not actionable now:
                               </span>
                               <span className="priority-rationale-badge">
                                 {item.priorityRationale}
@@ -4689,7 +4689,7 @@ const App = () => {
                               {candidate.priorityRationale ? (
                                 <div className="next-check-queue-item-rationale">
                                   <span className="priority-rationale-label">
-                                    Why not top priority:
+                                    Why not actionable now:
                                   </span>
                                   <span className="priority-rationale-badge">
                                     {candidate.priorityRationale}

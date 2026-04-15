@@ -732,8 +732,8 @@ describe("App", () => {
       .getByText(/Describe diag CRD for control plane/i)
       .closest("article");
     expect(approvalCard).not.toBeNull();
-    // Verify the "Why not top priority:" label is present
-    expect(queueScoped.getByText(/Why not top priority:/i)).toBeInTheDocument();
+    // Verify the "Why not actionable now:" label is present
+    expect(queueScoped.getByText(/Why not actionable now:/i)).toBeInTheDocument();
     // Verify the rationale content appears
     expect(queueScoped.getByText(/Approval required before execution/i)).toBeInTheDocument();
   });
