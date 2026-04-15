@@ -3684,7 +3684,7 @@ const App = () => {
       ) : (
         <div className="deterministic-empty-state">
           <p className="muted small">No evidence-based checks are available for this run.</p>
-          <p className="muted tiny">Review the cluster detail to generate candidate checks.</p>
+          <p className="muted tiny">Review the cluster detail for evidence-based checks to promote.</p>
         </div>
       )}
     </section>
@@ -3829,7 +3829,7 @@ const App = () => {
         </div>
         {runQueue.length === 0 ? (
           <div className="queue-empty-state queue-empty-explanation">
-            <p className="muted small">Planner queue is empty for this run.</p>
+            <p className="muted small">Work list is empty for this run.</p>
             {queueExplanation ? (
               <div className="queue-explanation-block">
                 <div className="queue-explanation-header">
@@ -4939,9 +4939,9 @@ const App = () => {
       <section className="panel" id="proposals">
         <div className="section-head">
           <div>
-            <p className="eyebrow">Investigations</p>
+            <p className="eyebrow">Actionable findings</p>
             <h2>Action proposals</h2>
-            <p className="muted small">Findings surfaced for triage; durable improvements worth implementing.</p>
+            <p className="muted small">Findings surfaced for triage; actionable improvements for the system.</p>
           </div>
         </div>
         <div className="proposal-controls">

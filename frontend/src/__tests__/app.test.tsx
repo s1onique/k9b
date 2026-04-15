@@ -518,9 +518,9 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
 
-    // Updated wording: "No evidence-based checks" and "Review the cluster detail to generate"
+    // Updated wording: "No evidence-based checks" and "Review the cluster detail for evidence-based checks to promote"
     expect(await screen.findByText(/No evidence-based checks are available/i)).toBeInTheDocument();
-    expect(screen.getByText(/Review the cluster detail to generate/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the cluster detail for evidence-based checks to promote/i)).toBeInTheDocument();
   });
 
   test("renders next-check queue panel with queue items", async () => {
