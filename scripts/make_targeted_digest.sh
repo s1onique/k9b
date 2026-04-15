@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # Default mode: staged changes (current index)
-MODE="${MODE:-staged}"
-OUT="/tmp/targeted-digest.txt"
+MODE="staged"
+OUT=""
 RANGE_ARG=""
-FILE_ARGS=()
+declare -a FILE_ARGS=()
 
-# Parse arguments - first non-flag non-path is output, rest are file args
+# Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --staged)
@@ -27,6 +27,10 @@ while [[ $# -gt 0 ]]; do
       RANGE_ARG="$2"
       shift 2
       ;;
+    --output)
+      OUT="$2"
+      shift 2
+      ;;
     --)
       shift
       break
@@ -36,21 +40,21 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
     *)
-      # Non-flag argument
-      # Heuristic: if OUT is still default and this looks like a path (contains / or is absolute)
-      # then it's the output file; otherwise it's a file argument
-      if [[ "$OUT" == "/tmp/targeted-digest.txt" && ("$1" == */* || ! -f "$1") ]]; then
-        OUT="$1"
-      else
-        FILE_ARGS+=("$1")
-      fi
+      FILE_ARGS+=("$1")
       shift
       ;;
   esac
 done
 
-# Set file args for explicit file restriction
-set -- "${FILE_ARGS[@]+"${FILE_ARGS[@]}"}"
+# Add remaining positional args as file arguments
+for arg in "$@"; do
+  FILE_ARGS+=("$arg")
+done
+
+if [[ -z "$OUT" ]]; then
+  echo "ERROR: --output is required" >&2
+  exit 1
+fi
 
 if ! command -v git >/dev/null 2>&1; then
   echo "ERROR: git not found" >&2
@@ -62,9 +66,9 @@ cd "$repo_root"
 
 # Determine files based on mode
 declare -a FILES=()
-if [[ $# -gt 0 ]]; then
+if [[ ${#FILE_ARGS[@]} -gt 0 ]]; then
   # Explicit file args always take precedence
-  FILES=("$@")
+  FILES=("${FILE_ARGS[@]}")
 else
   case "$MODE" in
     staged)
@@ -152,6 +156,7 @@ unstaged_diff() {
   echo "Repo: $repo_root"
   echo "Mode: $MODE"
   [[ -n "$RANGE_ARG" ]] && echo "Range: $RANGE_ARG"
+  [[ ${#FILE_ARGS[@]} -gt 0 ]] && echo "File filter: ${FILE_ARGS[*]}"
   echo
 
   echo "## Changed files"
