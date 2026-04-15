@@ -842,7 +842,7 @@ const LLMActivityPanel = ({
   const availableCount = entries.length;
 
   return (
-    <div>
+    <section className="panel llm-activity-panel" id="llm-activity">
       <div className="section-head">
         <div>
           <h2>LLM activity</h2>
@@ -964,7 +964,7 @@ const LLMActivityPanel = ({
       ) : (
         <p className="muted">No retained LLM activity matches the current filters.</p>
       )}
-    </div>
+    </section>
   );
 };
 
@@ -3442,6 +3442,19 @@ const App = () => {
         </div>
       )}
     </section>
+    {/* LLM and Advisory Panels */}
+    <LLMPolicyPanel policy={run.llmPolicy} />
+    <LLMActivityPanel activity={run.llmActivity} />
+    <ReviewEnrichmentPanel
+      reviewEnrichment={run.reviewEnrichment}
+      reviewEnrichmentStatus={run.reviewEnrichmentStatus}
+      nextCheckPlan={run.nextCheckPlan}
+      onNavigateToQueue={() => scrollToSection("next-check-queue")}
+      onFocusQueueReview={() => setQueueFocusMode("review")}
+    />
+    <ProviderExecutionPanel execution={run.providerExecution} />
+    <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
+    <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
     {/* Workflow Lane: Diagnose Now */}
     <div className="workflow-lane-header">
       <div className="workflow-lane-label">
@@ -3986,6 +3999,13 @@ const App = () => {
                           <span>Approval: {item.approvalState ?? "unknown"}</span>
                           <span>Execution: {item.executionState ?? "unknown"}</span>
                           <span>Outcome: {item.outcomeStatus ?? "unknown"}</span>
+                          {item.priorityRationale ? (
+                            <div className="next-check-queue-item-rationale">
+                              <span className="priority-rationale-badge">
+                                {item.priorityRationale}
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       <div className="next-check-queue-item-flags">

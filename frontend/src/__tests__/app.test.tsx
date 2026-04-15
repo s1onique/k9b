@@ -589,6 +589,35 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  test("queue card shows priorityRationale when present", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    // candidate-vague has priorityRationale: "Approval required before execution"
+    const approvalCard = queueScoped
+      .getByText(/Describe diag CRD for control plane/i)
+      .closest("article");
+    expect(approvalCard).not.toBeNull();
+    await queueScoped.findByText(/Approval required before execution/i);
+  });
+
+  test("queue card omits priorityRationale label when field is absent", async () => {
+    const runWithoutRationale = JSON.parse(JSON.stringify(sampleRun));
+    // candidate-vague is at nextCheckQueue[0] and normally has priorityRationale
+    // Remove it to test absence
+    delete runWithoutRationale.nextCheckQueue[0].priorityRationale;
+    const payloads = { ...defaultPayloads, "/api/run": runWithoutRationale };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    // After removing priorityRationale from candidate-vague, the "Approval required before execution"
+    // text should NOT appear anywhere in the queue
+    expect(queueScoped.queryByText(/Approval required before execution/i)).toBeNull();
+  });
+
   test("queue metadata shows deterministic origin label", async () => {
     const runWithSource = JSON.parse(JSON.stringify(sampleRun));
     runWithSource.nextCheckQueue[0].sourceType = "deterministic";

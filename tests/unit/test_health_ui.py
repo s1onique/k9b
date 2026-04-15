@@ -50,6 +50,7 @@ from k8s_diag_agent.health.ui import (
     _classify_deterministic_next_check,
     _classify_execution_failure,
     _classify_execution_success,
+    _derive_priority_rationale,
     _serialize_review_enrichment,
     write_health_ui_index,
 )
@@ -2116,3 +2117,98 @@ class HealthUITests(unittest.TestCase):
         assert follow_up is not None
         self.assertEqual(follow_up.failure_class, "approval-missing-or-stale")
         self.assertEqual(follow_up.suggested_next_operator_move, "Review approval state")
+
+    def test_derive_priority_rationale_duplicate(self) -> None:
+        entry: dict[str, object] = {"duplicateOfExistingEvidence": True, "duplicateReason": "logs already collected"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Already covered by existing evidence")
+
+    def test_derive_priority_rationale_stale_approval(self) -> None:
+        entry: dict[str, object] = {"approvalState": "approval-stale"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Approval is stale")
+
+    def test_derive_priority_rationale_orphaned_approval(self) -> None:
+        entry: dict[str, object] = {"approvalState": "approval-orphaned"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Approval record orphaned")
+
+    def test_derive_priority_rationale_approval_required(self) -> None:
+        entry: dict[str, object] = {"requiresOperatorApproval": True, "approvalReason": "high-risk command"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Approval required before execution")
+
+    def test_derive_priority_rationale_safety_gating(self) -> None:
+        entry: dict[str, object] = {"safetyReason": "requires root access"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Blocked by safety gating")
+
+    def test_derive_priority_rationale_blocking_reason(self) -> None:
+        entry: dict[str, object] = {"blockingReason": "unauthenticated"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Blocked by execution gating")
+
+    def test_derive_priority_rationale_gating_reason(self) -> None:
+        entry: dict[str, object] = {"gatingReason": "namespace denied"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Blocked by planner gating")
+
+    def test_derive_priority_rationale_secondary(self) -> None:
+        entry: dict[str, object] = {"priorityLabel": "secondary"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Secondary follow-up")
+
+    def test_derive_priority_rationale_fallback(self) -> None:
+        entry: dict[str, object] = {"priorityLabel": "fallback"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Fallback candidate")
+
+    def test_derive_priority_rationale_executed_success(self) -> None:
+        entry: dict[str, object] = {"executionState": "executed-success"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Already executed")
+
+    def test_derive_priority_rationale_executed_failed(self) -> None:
+        entry: dict[str, object] = {"executionState": "executed-failed"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Execution failed")
+
+    def test_derive_priority_rationale_timed_out(self) -> None:
+        entry: dict[str, object] = {"executionState": "timed-out"}
+        result = _derive_priority_rationale(entry)
+        self.assertEqual(result, "Execution failed")
+
+    def test_derive_priority_rationale_returns_null_when_no_rationale(self) -> None:
+        entry: dict[str, object] = {"description": "kubectl get pods"}
+        result = _derive_priority_rationale(entry)
+        self.assertIsNone(result)
+
+    def test_build_next_check_queue_populates_priority_rationale(self) -> None:
+        plan_entry: dict[str, object] = {
+            "candidates": [
+                {"description": "Safe candidate", "requiresOperatorApproval": False, "safeToAutomate": True, "executionState": "unexecuted", "priorityLabel": "primary"},
+                {"description": "Needs approval", "requiresOperatorApproval": True, "approvalState": "approval-required", "executionState": "unexecuted", "safeToAutomate": False, "approvalReason": "high-risk"},
+                {"description": "Duplicate", "duplicateOfExistingEvidence": True, "duplicateReason": "already covered"},
+                {"description": "Failed", "safeToAutomate": True, "executionState": "executed-failed", "priorityLabel": "secondary"},
+            ],
+            "artifactPath": "external-analysis/queue-plan.json",
+        }
+        queue = _build_next_check_queue(plan_entry, {})
+        # Find each entry by description and verify its rationale independently
+        by_description: dict[str, dict[str, object]] = {str(entry.get("description") or ""): entry for entry in queue}
+        safe_entry = by_description.get("Safe candidate")
+        self.assertIsNotNone(safe_entry)
+        assert safe_entry is not None
+        self.assertIsNone(safe_entry.get("priorityRationale"))
+        approval_entry = by_description.get("Needs approval")
+        self.assertIsNotNone(approval_entry)
+        assert approval_entry is not None
+        self.assertEqual(approval_entry.get("priorityRationale"), "Approval required before execution")
+        failed_entry = by_description.get("Failed")
+        self.assertIsNotNone(failed_entry)
+        assert failed_entry is not None
+        self.assertEqual(failed_entry.get("priorityRationale"), "Execution failed")
+        dup_entry = by_description.get("Duplicate")
+        self.assertIsNotNone(dup_entry)
+        assert dup_entry is not None
+        self.assertEqual(dup_entry.get("priorityRationale"), "Already covered by existing evidence")

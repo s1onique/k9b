@@ -514,6 +514,7 @@ export const sampleRun: RunPayload = {
       planArtifactPath: "external-analysis/run-123-next-check-plan.json",
       queueStatus: "approval-needed",
       failureClass: "approval-missing-or-stale",
+      priorityRationale: "Approval required before execution",
       failureSummary: "Candidate requires operator approval before execution.",
       suggestedNextOperatorMove: "Review approval state",
     },

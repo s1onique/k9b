@@ -311,6 +311,7 @@ export type NextCheckPlanCandidate = {
 export type NextCheckQueueItem = NextCheckPlanCandidate & {
   queueStatus: string;
   sourceType?: string | null;
+  priorityRationale?: string | null;
 };
 
 export type NextCheckQueueCandidateAccounting = {
