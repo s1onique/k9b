@@ -503,11 +503,27 @@ def _export_usefulness_review_for_run(run_id: str, runs_dir: Path) -> bool:
 
         # Export to run-scoped path only (not /latest/ mirror)
         # The /latest/ mirror is already created by build_diagnostic_pack.py
-        output_path = export_next_check_usefulness_review(
+        export_result = export_next_check_usefulness_review(
             runs_dir,
             run_id=run_id,
             use_run_scoped_path=True,
         )
+
+        # Extract output path from result
+        output_path = export_result.output_path
+        if output_path is None:
+            emit_structured_log(
+                component="pack-refresh",
+                message="Export returned no output path",
+                run_id=run_id,
+                run_label="",
+                severity="WARNING",
+                metadata={
+                    "run_id": run_id,
+                    "operation": "export_usefulness_review",
+                },
+            )
+            return False
 
         # Verify the file was written
         file_exists = output_path.exists()

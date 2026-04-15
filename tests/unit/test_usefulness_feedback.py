@@ -22,6 +22,8 @@ from scripts.export_next_check_usefulness_review import (  # noqa: E402
 from scripts.import_next_check_usefulness_feedback import (  # noqa: E402
     _build_summary,
     _generate_dedupe_key,
+    _resolve_artifact_path,
+    _set_allowed_roots,
     import_next_check_usefulness_feedback,
 )  # noqa: E402
 
@@ -172,6 +174,170 @@ class TestExportSchemaStability(unittest.TestCase):
         assert result.output_path is not None
         expected_path = (self.health_dir / "diagnostic-packs" / "latest" / "next_check_usefulness_review.json").resolve()
         self.assertEqual(result.output_path.resolve(), expected_path)
+
+
+class TestFlatExport(unittest.TestCase):
+    """Tests for flat reviewer-friendly export functionality."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.runs_dir = self.tmpdir / "runs"
+        self.health_dir = self.runs_dir / "health"
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+        self.external_dir = self.health_dir / "external-analysis"
+        self.external_dir.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _create_ui_index(self, run_id: str, run_label: str) -> None:
+        """Create a minimal ui-index.json for testing."""
+        index_data = {
+            "run": {
+                "run_id": run_id,
+                "run_label": run_label,
+            }
+        }
+        (self.health_dir / "ui-index.json").write_text(json.dumps(index_data), encoding="utf-8")
+
+    def _create_execution_artifact(
+        self,
+        run_id: str,
+        index: int,
+        command_family: str = "kubectl-logs",
+        description: str = "Get pod logs",
+        cluster_label: str = "cluster-a",
+        status: str = "success",
+    ) -> Path:
+        """Create a mock execution artifact."""
+        artifact_data = {
+            "purpose": "next-check-execution",
+            "run_id": run_id,
+            "run_label": f"{run_id}-label",
+            "cluster_label": cluster_label,
+            "status": status,
+            "tool_name": "test-runner",
+            "payload": {
+                "candidateIndex": index,
+                "candidateId": f"candidate-{index}",
+                "command_family": command_family,
+                "description": description,
+                "command_preview": f"kubectl logs -n default {index}",
+            },
+            "summary": f"Captured logs for candidate {index}",
+        }
+        artifact_path = self.external_dir / f"{run_id}-next-check-execution-{index}.json"
+        artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
+        return artifact_path
+
+    def test_flat_export_writes_reviewer_friendly_copy(self) -> None:
+        """Test that flat export writes a reviewer-friendly copy."""
+        run_id = "test-flat-export"
+        self._create_ui_index(run_id, "Test Flat Export")
+        self._create_execution_artifact(run_id, 0)
+
+        result = export_next_check_usefulness_review(
+            self.runs_dir,
+            run_id=run_id,
+        )
+
+        # Canonical file should still be written
+        assert result.output_path is not None
+        self.assertTrue(result.output_path.exists())
+
+        # Flat export should also be written
+        assert result.flat_output_path is not None
+        self.assertTrue(result.flat_output_path.exists())
+
+        # Content should be identical
+        canonical_data = json.loads(result.output_path.read_text(encoding="utf-8"))
+        flat_data = json.loads(result.flat_output_path.read_text(encoding="utf-8"))
+        self.assertEqual(canonical_data, flat_data)
+
+    def test_flat_export_filename_includes_run_id(self) -> None:
+        """Test that flat export filename includes run_id for uniqueness."""
+        run_id = "unique-run-20240115-001"
+        self._create_ui_index(run_id, "Test Run ID in Filename")
+        self._create_execution_artifact(run_id, 0)
+
+        result = export_next_check_usefulness_review(
+            self.runs_dir,
+            run_id=run_id,
+        )
+
+        assert result.flat_output_path is not None
+        self.assertIn(run_id, result.flat_output_path.name)
+        self.assertTrue(result.flat_output_path.name.endswith("-next_check_usefulness_review.json"))
+
+    def test_flat_export_idempotent(self) -> None:
+        """Test that repeated export is idempotent - same content, no errors."""
+        run_id = "test-idempotent"
+        self._create_ui_index(run_id, "Test Idempotent")
+        self._create_execution_artifact(run_id, 0)
+        self._create_execution_artifact(run_id, 1)
+
+        # First export
+        result1 = export_next_check_usefulness_review(
+            self.runs_dir,
+            run_id=run_id,
+        )
+        assert result1.flat_output_path is not None
+        first_data = json.loads(result1.flat_output_path.read_text(encoding="utf-8"))
+
+        # Second export (should overwrite, be idempotent)
+        result2 = export_next_check_usefulness_review(
+            self.runs_dir,
+            run_id=run_id,
+        )
+        assert result2.flat_output_path is not None
+        second_data = json.loads(result2.flat_output_path.read_text(encoding="utf-8"))
+
+        # Content should be identical except for generated_at and entry timestamps
+        # (these change between runs, which is expected)
+        self.assertEqual(first_data["run_id"], second_data["run_id"])
+        self.assertEqual(first_data["run_label"], second_data["run_label"])
+        self.assertEqual(first_data["entry_count"], second_data["entry_count"])
+        self.assertEqual(len(first_data["entries"]), len(second_data["entries"]))
+        self.assertEqual(first_data["schema_version"], second_data["schema_version"])
+
+        # Entry count should match
+        self.assertEqual(result1.entry_count, result2.entry_count)
+
+    def test_flat_export_disabled_by_flag(self) -> None:
+        """Test that flat export can be disabled with flag."""
+        run_id = "test-no-flat"
+        self._create_ui_index(run_id, "Test No Flat")
+        self._create_execution_artifact(run_id, 0)
+
+        result = export_next_check_usefulness_review(
+            self.runs_dir,
+            run_id=run_id,
+            export_flat_review_copy=False,
+        )
+
+        # Canonical file should still be written
+        assert result.output_path is not None
+        self.assertTrue(result.output_path.exists())
+
+        # Flat export should NOT be written
+        self.assertIsNone(result.flat_output_path)
+
+    def test_flat_export_to_dedicated_directory(self) -> None:
+        """Test that flat exports go to dedicated review-exports directory."""
+        run_id = "test-review-exports"
+        self._create_ui_index(run_id, "Test Review Exports")
+        self._create_execution_artifact(run_id, 0)
+
+        result = export_next_check_usefulness_review(
+            self.runs_dir,
+            run_id=run_id,
+        )
+
+        assert result.flat_output_path is not None
+        # Should be in review-exports subdirectory
+        self.assertIn("review-exports", str(result.flat_output_path))
+        # Filename should include run_id
+        self.assertTrue(result.flat_output_path.name.startswith(run_id))
 
 
 class TestDuplicateDetection(unittest.TestCase):
@@ -567,13 +733,217 @@ class TestIdempotentImport(unittest.TestCase):
         self.assertIn("schema_version", result.summary)
         self.assertEqual(result.summary["schema_version"], "usefulness-summary/v1")
 
-        # Check summary artifact exists
+        # Check summary artifact exists at run-scoped path
         summary_path = self.health_dir / "diagnostic-packs" / run_id / "usefulness_summary.json"
         self.assertTrue(summary_path.exists())
 
         summary_data = json.loads(summary_path.read_text(encoding="utf-8"))
         self.assertEqual(summary_data["schema_version"], "usefulness-summary/v1")
         self.assertEqual(summary_data["usefulness_class_counts"]["useful"], 1)
+        # Verify run_id in the summary matches the run_id from entries
+        self.assertEqual(summary_data["run_id"], run_id)
+
+    def test_import_multiple_runs_creates_separate_summaries(self) -> None:
+        """Test that import with entries for multiple runs creates separate summary artifacts."""
+        run_id_1 = "health-run-20260413T153347Z"
+        run_id_2 = "health-run-20260415T114432Z"
+
+        # Create artifacts for both runs
+        artifact_path_1 = self._create_execution_artifact(run_id_1, 0)
+        artifact_path_2 = self._create_execution_artifact(run_id_2, 0)
+        relative_path_1 = str(artifact_path_1.relative_to(self.health_dir))
+        relative_path_2 = str(artifact_path_2.relative_to(self.health_dir))
+
+        # Create feedback file with entries for multiple runs
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": relative_path_1,
+                    "run_id": run_id_1,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs for run 1",
+                    "command_family": "kubectl-logs",
+                },
+                {
+                    "artifact_path": relative_path_2,
+                    "run_id": run_id_2,
+                    "usefulness_class": "noisy",
+                    "usefulness_summary": "Too many logs for run 2",
+                    "command_family": "kubectl-logs",
+                },
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result.success_count, 2)
+
+        # Check that separate summary artifacts exist for each run
+        summary_path_1 = self.health_dir / "diagnostic-packs" / run_id_1 / "usefulness_summary.json"
+        summary_path_2 = self.health_dir / "diagnostic-packs" / run_id_2 / "usefulness_summary.json"
+
+        self.assertTrue(summary_path_1.exists(), f"Summary should exist at {summary_path_1}")
+        self.assertTrue(summary_path_2.exists(), f"Summary should exist at {summary_path_2}")
+
+        # Verify content of each summary
+        summary_data_1 = json.loads(summary_path_1.read_text(encoding="utf-8"))
+        self.assertEqual(summary_data_1["run_id"], run_id_1)
+        self.assertEqual(summary_data_1["usefulness_class_counts"]["useful"], 1)
+
+        summary_data_2 = json.loads(summary_path_2.read_text(encoding="utf-8"))
+        self.assertEqual(summary_data_2["run_id"], run_id_2)
+        self.assertEqual(summary_data_2["usefulness_class_counts"]["noisy"], 1)
+
+    def test_import_does_not_create_unknown_bucket_with_valid_run_ids(self) -> None:
+        """Test that 'unknown' bucket is NOT created when entries have valid run_ids."""
+        run_id_1 = "health-run-20260413T153347Z"
+        run_id_2 = "health-run-20260415T114432Z"
+
+        # Create artifacts for both runs
+        artifact_path_1 = self._create_execution_artifact(run_id_1, 0)
+        artifact_path_2 = self._create_execution_artifact(run_id_2, 0)
+        relative_path_1 = str(artifact_path_1.relative_to(self.health_dir))
+        relative_path_2 = str(artifact_path_2.relative_to(self.health_dir))
+
+        # Create feedback file with entries for multiple runs (no "unknown" entries)
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": relative_path_1,
+                    "run_id": run_id_1,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs",
+                    "command_family": "kubectl-logs",
+                },
+                {
+                    "artifact_path": relative_path_2,
+                    "run_id": run_id_2,
+                    "usefulness_class": "partial",
+                    "usefulness_summary": "Some logs",
+                    "command_family": "kubectl-get",
+                },
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result.success_count, 2)
+
+        # Verify NO "unknown" bucket was created
+        unknown_summary_path = self.health_dir / "diagnostic-packs" / "unknown" / "usefulness_summary.json"
+        self.assertFalse(unknown_summary_path.exists(), "Should NOT create 'unknown' bucket when valid run_ids exist")
+
+        # Verify both run-scoped summaries exist
+        summary_path_1 = self.health_dir / "diagnostic-packs" / run_id_1 / "usefulness_summary.json"
+        summary_path_2 = self.health_dir / "diagnostic-packs" / run_id_2 / "usefulness_summary.json"
+        self.assertTrue(summary_path_1.exists())
+        self.assertTrue(summary_path_2.exists())
+
+    def test_idempotent_reimport_rebuilds_summaries(self) -> None:
+        """Test that idempotent re-import rebuilds summary artifacts."""
+        run_id = "test-run-idempotent"
+
+        # Create artifact
+        artifact_path = self._create_execution_artifact(run_id, 0)
+        relative_path = str(artifact_path.relative_to(self.health_dir))
+
+        # First import
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": relative_path,
+                    "run_id": run_id,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs",
+                    "command_family": "kubectl-logs",
+                }
+            ]
+        )
+
+        result1 = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result1.success_count, 1)
+
+        # Verify summary exists after first import
+        summary_path = self.health_dir / "diagnostic-packs" / run_id / "usefulness_summary.json"
+        self.assertTrue(summary_path.exists())
+
+        # Store original mtime
+        original_mtime = summary_path.stat().st_mtime
+
+        # Second import with identical feedback (idempotent re-import)
+        result2 = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        # Should be idempotent: skipped_count = 1, success_count = 0
+        self.assertEqual(result2.skipped_count, 1)
+        self.assertEqual(result2.success_count, 0)
+
+        # Summary should STILL exist after idempotent re-import
+        self.assertTrue(summary_path.exists(), "Summary should exist after idempotent re-import")
+
+        # The summary should be rebuilt (mtime should be updated)
+        new_mtime = summary_path.stat().st_mtime
+        self.assertNotEqual(original_mtime, new_mtime, "Summary should be rebuilt on idempotent re-import")
+
+    def test_delete_summary_and_reimport_recreates(self) -> None:
+        """Test that deleting summary and re-importing recreates it."""
+        run_id = "test-run-delete-recreate"
+
+        # Create artifact
+        artifact_path = self._create_execution_artifact(run_id, 0)
+        relative_path = str(artifact_path.relative_to(self.health_dir))
+
+        # First import
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": relative_path,
+                    "run_id": run_id,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs",
+                    "command_family": "kubectl-logs",
+                }
+            ]
+        )
+
+        result1 = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result1.success_count, 1)
+
+        # Verify summary exists
+        summary_path = self.health_dir / "diagnostic-packs" / run_id / "usefulness_summary.json"
+        self.assertTrue(summary_path.exists())
+
+        # Delete the summary file
+        summary_path.unlink()
+        self.assertFalse(summary_path.exists())
+
+        # Re-import (idempotent - same feedback)
+        result2 = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        # Should be skipped (idempotent)
+        self.assertEqual(result2.skipped_count, 1)
+
+        # Summary should be recreated
+        self.assertTrue(summary_path.exists(), "Summary should be recreated after re-import")
 
 
 class TestDedupeKey(unittest.TestCase):
@@ -653,6 +1023,253 @@ class TestSummaryGeneration(unittest.TestCase):
         recommendations = [c["recommendation"] for c in planner["candidates"]]
         self.assertTrue(any("false positives" in r for r in recommendations))
         self.assertTrue(any("connectivity" in r for r in recommendations))
+
+
+class TestArtifactResolution(unittest.TestCase):
+    """Tests for backward-compatible artifact path resolution."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.runs_dir = self.tmpdir / "runs"
+        self.health_dir = self.runs_dir / "health"
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create modern health/external-analysis layout
+        self.modern_external_dir = self.health_dir / "external-analysis"
+        self.modern_external_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create legacy runs/external-analysis layout
+        self.legacy_external_dir = self.runs_dir / "external-analysis"
+        self.legacy_external_dir.mkdir(parents=True, exist_ok=True)
+
+        # Set allowed roots for testing
+        _set_allowed_roots(self.runs_dir)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _create_execution_artifact(self, artifact_path: Path) -> None:
+        """Create a mock execution artifact at the given path."""
+        artifact_data = {
+            "purpose": "next-check-execution",
+            "run_id": "test-run",
+            "run_label": "test-run-label",
+            "cluster_label": "cluster-a",
+            "status": "success",
+            "tool_name": "test-runner",
+            "payload": {"candidateIndex": 0},
+        }
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
+
+    def test_modern_health_root_artifact_resolution(self) -> None:
+        """Test resolution of modern health-root artifact layout."""
+        # Create artifact in modern location: runs/health/external-analysis/
+        artifact_path = self.modern_external_dir / "test-run-next-check-execution-0.json"
+        self._create_execution_artifact(artifact_path)
+
+        # Resolve with relative path from health directory
+        result = _resolve_artifact_path(
+            "external-analysis/test-run-next-check-execution-0.json",
+            self.runs_dir,
+            self.health_dir,
+        )
+
+        self.assertTrue(result.exists)
+        self.assertEqual(result.resolution_mode, "modern")
+        self.assertEqual(result.resolved_path, artifact_path)
+
+    def test_legacy_runs_root_artifact_resolution(self) -> None:
+        """Test resolution of legacy runs-root artifact layout."""
+        # Create artifact in legacy location: runs/external-analysis/
+        artifact_path = self.legacy_external_dir / "test-run-next-check-execution-0.json"
+        self._create_execution_artifact(artifact_path)
+
+        # Resolve with relative path that was used in legacy layout
+        result = _resolve_artifact_path(
+            "external-analysis/test-run-next-check-execution-0.json",
+            self.runs_dir,
+            self.health_dir,
+        )
+
+        self.assertTrue(result.exists)
+        self.assertEqual(result.resolution_mode, "legacy")
+        self.assertEqual(result.resolved_path, artifact_path)
+
+    def test_modern_takes_precedence_over_legacy(self) -> None:
+        """Test that modern layout takes precedence when artifact exists in both."""
+        # Create artifact in both locations
+        modern_artifact = self.modern_external_dir / "test-run-next-check-execution-0.json"
+        self._create_execution_artifact(modern_artifact)
+
+        legacy_artifact = self.legacy_external_dir / "test-run-next-check-execution-0.json"
+        self._create_execution_artifact(legacy_artifact)
+
+        # Should resolve to modern location first
+        result = _resolve_artifact_path(
+            "external-analysis/test-run-next-check-execution-0.json",
+            self.runs_dir,
+            self.health_dir,
+        )
+
+        self.assertTrue(result.exists)
+        self.assertEqual(result.resolution_mode, "modern")
+        self.assertEqual(result.resolved_path, modern_artifact)
+
+    def test_unresolved_artifact_failure(self) -> None:
+        """Test that unresolved artifact returns clear error."""
+        result = _resolve_artifact_path(
+            "external-analysis/nonexistent.json",
+            self.runs_dir,
+            self.health_dir,
+        )
+
+        self.assertFalse(result.exists)
+        self.assertEqual(result.resolution_mode, "unresolved")
+
+    def test_absolute_path_within_allowed_root(self) -> None:
+        """Test that absolute paths within allowed roots are accepted."""
+        # Create artifact in modern location
+        artifact_path = self.modern_external_dir / "test-run-next-check-execution-0.json"
+        self._create_execution_artifact(artifact_path)
+
+        # Use absolute path
+        result = _resolve_artifact_path(
+            str(artifact_path),
+            self.runs_dir,
+            self.health_dir,
+        )
+
+        self.assertTrue(result.exists)
+        self.assertEqual(result.resolution_mode, "absolute")
+        # Use resolved paths to handle macOS /private/var/folders symlink
+        self.assertEqual(result.resolved_path.resolve(), artifact_path.resolve())
+
+    def test_absolute_path_outside_allowed_root_rejected(self) -> None:
+        """Test that absolute paths outside allowed roots are rejected."""
+        # Create artifact in a temporary location outside allowed roots
+        other_dir = Path(tempfile.mkdtemp())
+        try:
+            artifact_path = other_dir / "external-analysis" / "test.json"
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            self._create_execution_artifact(artifact_path)
+
+            # Try to resolve absolute path outside allowed roots
+            result = _resolve_artifact_path(
+                str(artifact_path),
+                self.runs_dir,
+                self.health_dir,
+            )
+
+            self.assertFalse(result.exists)
+            self.assertEqual(result.resolution_mode, "unresolved")
+        finally:
+            shutil.rmtree(other_dir, ignore_errors=True)
+
+
+class TestImportWithLegacyArtifactLayout(unittest.TestCase):
+    """Tests for import with legacy artifact layout."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.runs_dir = self.tmpdir / "runs"
+        self.health_dir = self.runs_dir / "health"
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create legacy runs/external-analysis layout (not under health/)
+        self.legacy_external_dir = self.runs_dir / "external-analysis"
+        self.legacy_external_dir.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _create_execution_artifact(self, artifact_path: Path) -> None:
+        """Create a mock execution artifact."""
+        artifact_data = {
+            "purpose": "next-check-execution",
+            "run_id": "test-run",
+            "run_label": "test-run-label",
+            "cluster_label": "cluster-a",
+            "status": "success",
+            "tool_name": "test-runner",
+            "payload": {"candidateIndex": 0},
+        }
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
+
+    def _create_feedback_file(self, entries: list[dict]) -> Path:
+        """Create a feedback file with given entries."""
+        feedback_data = {
+            "schema_version": "next-check-usefulness-feedback/v2",
+            "run_id": "test-run",
+            "run_label": "Test Run",
+            "entries": entries,
+        }
+        feedback_path = self.tmpdir / "feedback.json"
+        feedback_path.write_text(json.dumps(feedback_data), encoding="utf-8")
+        return feedback_path
+
+    def test_import_legacy_artifact_path_succeeds(self) -> None:
+        """Test that import works with legacy artifact paths."""
+        run_id = "test-run"
+
+        # Create artifact in legacy location
+        artifact_path = self.legacy_external_dir / f"{run_id}-next-check-execution-0.json"
+        self._create_execution_artifact(artifact_path)
+
+        # Feedback file references legacy path
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": "external-analysis/test-run-next-check-execution-0.json",
+                    "run_id": run_id,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs in legacy location",
+                }
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+            dry_run=True,
+        )
+
+        self.assertEqual(result.error_count, 0)
+        self.assertEqual(result.success_count, 1)
+
+    def test_import_modern_artifact_path_succeeds(self) -> None:
+        """Test that import still works with modern artifact paths."""
+        run_id = "test-run"
+
+        # Create modern health/external-analysis directory
+        modern_dir = self.health_dir / "external-analysis"
+        modern_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifact in modern location
+        artifact_path = modern_dir / f"{run_id}-next-check-execution-0.json"
+        self._create_execution_artifact(artifact_path)
+
+        # Feedback file references modern path
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": f"external-analysis/{run_id}-next-check-execution-0.json",
+                    "run_id": run_id,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs in modern location",
+                }
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+            dry_run=True,
+        )
+
+        self.assertEqual(result.error_count, 0)
+        self.assertEqual(result.success_count, 1)
 
 
 if __name__ == "__main__":

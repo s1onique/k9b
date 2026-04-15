@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import cast
 
 
 class ExternalAnalysisStatus(StrEnum):
@@ -35,6 +36,46 @@ class UsefulnessClass(StrEnum):
     EMPTY = "empty"
 
 
+class ReviewStage(StrEnum):
+    INITIAL_TRIAGE = "initial_triage"
+    FOCUSED_INVESTIGATION = "focused_investigation"
+    PARITY_VALIDATION = "parity_validation"
+    FOLLOW_UP = "follow_up"
+    UNKNOWN = "unknown"
+
+
+class Workstream(StrEnum):
+    INCIDENT = "incident"
+    EVIDENCE = "evidence"
+    DRIFT = "drift"
+    UNKNOWN = "unknown"
+
+
+class ProblemClass(StrEnum):
+    WORKLOAD_FAILURE = "workload_failure"
+    READINESS_PROBE = "readiness_probe"
+    LIVENESS_PROBE = "liveness_probe"
+    CRASHLOOP = "crashloop"
+    IMAGE_PULL = "image_pull"
+    JOB_FAILURE = "job_failure"
+    NODE_CONDITION = "node_condition"
+    PLATFORM_DRIFT = "platform_drift"
+    NETWORKING = "networking"
+    STORAGE = "storage"
+    UNKNOWN = "unknown"
+
+
+class JudgmentScope(StrEnum):
+    RUN_CONTEXT = "run_context"
+    PATTERN_LEVEL = "pattern_level"
+
+
+class ReviewerConfidence(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 def _coerce_optional_int(value: object | None) -> int | None:
     if value is None:
         return None
@@ -46,6 +87,19 @@ def _coerce_optional_int(value: object | None) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_optional_enum(
+    value: object | None,
+    enum_type: type[StrEnum],
+) -> StrEnum | None:
+    """Parse an optional enum value from raw input."""
+    if value is None:
+        return None
+    try:
+        return enum_type(str(value))
+    except ValueError:
+        return None
 
 
 class PackRefreshStatus(StrEnum):
@@ -82,6 +136,12 @@ class ExternalAnalysisArtifact:
     pack_refresh_warning: str | None = None
     usefulness_class: UsefulnessClass | None = None
     usefulness_summary: str | None = None
+    # Context fields for stage-aware usefulness feedback
+    review_stage: ReviewStage | None = None
+    workstream: Workstream | None = None
+    problem_class: ProblemClass | None = None
+    judgment_scope: JudgmentScope | None = None
+    reviewer_confidence: ReviewerConfidence | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -114,6 +174,17 @@ class ExternalAnalysisArtifact:
             result["usefulness_class"] = self.usefulness_class.value
         if self.usefulness_summary is not None:
             result["usefulness_summary"] = self.usefulness_summary
+        # Add context fields as nullable when present
+        if self.review_stage is not None:
+            result["review_stage"] = self.review_stage.value
+        if self.workstream is not None:
+            result["workstream"] = self.workstream.value
+        if self.problem_class is not None:
+            result["problem_class"] = self.problem_class.value
+        if self.judgment_scope is not None:
+            result["judgment_scope"] = self.judgment_scope.value
+        if self.reviewer_confidence is not None:
+            result["reviewer_confidence"] = self.reviewer_confidence.value
         return result
 
     @classmethod
@@ -140,6 +211,15 @@ class ExternalAnalysisArtifact:
                 usefulness_class = UsefulnessClass(str(usefulness_class_raw))
             except ValueError:
                 pass
+
+        # Parse context fields for stage-aware usefulness feedback
+        # Use cast() to help mypy understand the specific enum type
+        review_stage = cast(ReviewStage | None, _parse_optional_enum(raw.get("review_stage"), ReviewStage))
+        workstream = cast(Workstream | None, _parse_optional_enum(raw.get("workstream"), Workstream))
+        problem_class = cast(ProblemClass | None, _parse_optional_enum(raw.get("problem_class"), ProblemClass))
+        judgment_scope = cast(JudgmentScope | None, _parse_optional_enum(raw.get("judgment_scope"), JudgmentScope))
+        reviewer_confidence = cast(ReviewerConfidence | None, _parse_optional_enum(raw.get("reviewer_confidence"), ReviewerConfidence))
+
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -167,6 +247,11 @@ class ExternalAnalysisArtifact:
             pack_refresh_warning=str(raw.get("pack_refresh_warning")) if raw.get("pack_refresh_warning") else None,
             usefulness_class=usefulness_class,
             usefulness_summary=str(raw.get("usefulness_summary")) if raw.get("usefulness_summary") else None,
+            review_stage=review_stage,
+            workstream=workstream,
+            problem_class=problem_class,
+            judgment_scope=judgment_scope,
+            reviewer_confidence=reviewer_confidence,
         )
 
 

@@ -69,6 +69,65 @@ next-check-usefulness-feedback/v2
 | `timestamp` | string | No | RFC3339 timestamp of the execution |
 | `usefulness_class` | string | **Yes** | Usefulness classification (see below) |
 | `usefulness_summary` | string | **Yes** | Summary explanation of the usefulness judgment |
+| `review_stage` | string | No | Stage of investigation (see Context Fields below) |
+| `workstream` | string | No | Type of diagnostic workstream (see Context Fields below) |
+| `problem_class` | string | No | Problem category (see Context Fields below) |
+| `judgment_scope` | string | No | Scope of judgment (see Context Fields below) |
+| `reviewer_confidence` | string | No | Reviewer's confidence level (see Context Fields below) |
+
+### Context Fields (Optional)
+
+These optional fields enable stage-aware usefulness feedback. They are not required for backward compatibility but enable more nuanced analysis when provided.
+
+#### review_stage
+
+| Value | Description |
+|-------|-------------|
+| `initial_triage` | Initial assessment phase |
+| `focused_investigation` | Deep-dive investigation |
+| `parity_validation` | Verification against baseline |
+| `follow_up` | Post-resolution check |
+| `unknown` | Unspecified stage |
+
+#### workstream
+
+| Value | Description |
+|-------|-------------|
+| `incident` | Incident response |
+| `evidence` | Evidence gathering |
+| `drift` | Configuration drift detection |
+| `unknown` | Unspecified workstream |
+
+#### problem_class
+
+| Value | Description |
+|-------|-------------|
+| `workload_failure` | Pod/deployment failures |
+| `readiness_probe` | Readiness probe issues |
+| `liveness_probe` | Liveness probe issues |
+| `crashloop` | CrashLoopBackOff state |
+| `image_pull` | Image pull failures |
+| `job_failure` | Job execution failures |
+| `node_condition` | Node-level issues |
+| `platform_drift` | Platform configuration drift |
+| `networking` | Network-related issues |
+| `storage` | Storage/PVC issues |
+| `unknown` | Unspecified problem |
+
+#### judgment_scope
+
+| Value | Description |
+|-------|-------------|
+| `run_context` | Judgment applies to this specific run |
+| `pattern_level` | Judgment represents a broader pattern |
+
+#### reviewer_confidence
+
+| Value | Description |
+|-------|-------------|
+| `low` | Low confidence in judgment |
+| `medium` | Medium confidence in judgment |
+| `high` | High confidence in judgment |
 
 ### Usefulness Classes
 
@@ -98,6 +157,13 @@ This artifact contains:
 - Counts by command family
 - Duplicate group statistics
 - Top candidates flagged for planner improvement
+- Context-aware conditional rollups (when context fields are provided):
+  - by command_family
+  - by command_family + workstream
+  - by command_family + review_stage
+  - by command_family + problem_class
+
+> **Note**: Command-family judgments are context-sensitive. A command family that appears "noisy" in one stage (e.g., `initial_triage`) may be very useful in another (e.g., `focused_investigation`). Do not treat command-family judgments as global by default. Use the context-aware rollups to make informed decisions.
 
 ## Export Schema (Reference)
 
@@ -123,9 +189,62 @@ The export schema (`next-check-usefulness-review/v1`) is the inverse contract us
   "suggested_next_operator_move": "Check memory limits on the affected deployment",
   "timestamp": "2026-04-08T06:20:00Z",
   "usefulness_class": null,
-  "usefulness_summary": null
+  "usefulness_summary": null,
+  "result_digest": "OK (1234B)",
+  "result_digest_lines": ["pod-xyz 1/1 Running 0 2d"],
+  "stderr_digest": null,
+  "stdout_digest": "pod-xyz 1/1 Running 0 2d",
+  "signal_markers": ["OOMKilled", "CrashLoopBackOff"],
+  "failure_class": null,
+  "exit_code": 0,
+  "output_bytes_captured": 1234,
+  "stdout_truncated": false,
+  "stderr_truncated": false
 }
 ```
+
+### Result Digest Fields
+
+The export includes compact result digest fields derived from execution artifacts. These enable high-quality reviewer judgment without exposing full stdout/stderr dumps.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `result_digest` | string | Yes | Compact primary digest summarizing result (e.g., "OK (1234B)", "TIMED_OUT", error excerpt) |
+| `result_digest_lines` | array | No | Up to 5 most useful output lines; includes `[+N more lines]` indicator if truncated |
+| `stderr_digest` | string | No | Compact stderr summary if stderr was non-empty (first error line, max 100 chars) |
+| `stdout_digest` | string | No | Compact stdout summary (first non-error line, max 100 chars) |
+| `signal_markers` | array | No | K8s diagnostic markers extracted from output (e.g., CrashLoopBackOff, OOMKilled, Forbidden) |
+| `failure_class` | string | No | Failure classification if command failed (e.g., "timeout", "not_found", "permission_denied") |
+| `exit_code` | integer | No | Command exit code if available |
+| `output_bytes_captured` | integer | No | Total bytes captured from stdout+stderr |
+| `stdout_truncated` | boolean | No | Whether stdout was truncated during capture |
+| `stderr_truncated` | boolean | No | Whether stderr was truncated during capture |
+
+### Signal Markers
+
+The following diagnostic markers may be extracted from execution output:
+
+| Marker | Description |
+|--------|-------------|
+| `CrashLoopBackOff` | Pod is in CrashLoopBackOff state |
+| `ImagePullBackOff` | Image pull failed |
+| `ErrImagePull` | Image pull error |
+| `OOMKilled` | Pod was killed due to memory limit |
+| `Evicted` | Pod was evicted |
+| `FailedScheduling` | Pod failed to schedule |
+| `ReadinessProbeFailed` | Readiness probe failed |
+| `LivenessProbeFailed` | Liveness probe failed |
+| `StartupProbeFailed` | Startup probe failed |
+| `ProbeFailed` | Generic probe failure |
+| `Forbidden` | Permission forbidden |
+| `Unauthorized` | Unauthorized access |
+| `NotFound` | Resource not found |
+| `DNSError` | DNS resolution failed |
+| `ConnectionRefused` | Connection refused |
+| `TLSCertError` | TLS/certificate error |
+| `Timeout` | Command timed out |
+| `ResourceQuota` | Resource quota exceeded |
+| `ResourceLimit` | Resource limit hit |
 
 ### Duplicate Detection
 

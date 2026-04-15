@@ -28,12 +28,19 @@ from k8s_diag_agent.external_analysis.artifact import (  # noqa: E402
     ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
 )
+from k8s_diag_agent.external_analysis.result_digest import (  # noqa: E402
+    build_result_digest,
+    digest_to_dict,
+)
 
 # Schema version for the export file
 EXPORT_SCHEMA_VERSION = "next-check-usefulness-review/v1"
 
 # Directory name for the stable "latest" unpacked pack mirror
 LATEST_PACK_DIR_NAME = "latest"
+
+# Directory name for reviewer-friendly flat exports
+REVIEW_EXPORTS_DIR_NAME = "review-exports"
 
 
 class ExportResult:
@@ -45,12 +52,14 @@ class ExportResult:
         duplicate_group_count: int = 0,
         duplicate_entry_count: int = 0,
         output_path: Path | None = None,
+        flat_output_path: Path | None = None,
         run_id: str | None = None,
     ) -> None:
         self.entry_count = entry_count
         self.duplicate_group_count = duplicate_group_count
         self.duplicate_entry_count = duplicate_entry_count
         self.output_path = output_path
+        self.flat_output_path = flat_output_path
         self.run_id = run_id
 
 
@@ -60,6 +69,7 @@ def export_next_check_usefulness_review(
     run_id: str | None = None,
     use_run_scoped_path: bool = True,
     detect_duplicates: bool = True,
+    export_flat_review_copy: bool = True,
 ) -> ExportResult:
     """Export next-check execution artifacts for batch review.
 
@@ -72,9 +82,11 @@ def export_next_check_usefulness_review(
                              If False, writes to: health/diagnostic-packs/latest/next_check_usefulness_review.json
         detect_duplicates: If True (default), detect and group duplicate execution results.
                           Adds duplicate metadata to entries and optionally groups them.
+        export_flat_review_copy: If True (default), write a reviewer-friendly flat export copy
+                                 to: health/review-exports/{run_id}-next_check_usefulness_review.json
 
     Returns:
-        ExportResult with counts and metadata
+        ExportResult with counts and metadata, including flat_output_path if enabled
     """
     runs_dir = runs_dir.expanduser().resolve()
     run_health_dir = runs_dir / "health"
@@ -158,7 +170,30 @@ def export_next_check_usefulness_review(
     output_path = output_dir / "next_check_usefulness_review.json"
     output_path.write_text(json.dumps(export_data, indent=2), encoding="utf-8")
 
-    # Log structured event for observability
+    # Write flat reviewer-friendly export copy if enabled
+    flat_output_path: Path | None = None
+    if export_flat_review_copy:
+        flat_export_dir = run_health_dir / REVIEW_EXPORTS_DIR_NAME
+        flat_export_dir.mkdir(parents=True, exist_ok=True)
+        flat_output_path = flat_export_dir / f"{run_id}-next_check_usefulness_review.json"
+        flat_output_path.write_text(json.dumps(export_data, indent=2), encoding="utf-8")
+
+        # Log structured event for flat export
+        _log_flat_export_event(
+            event="usefulness-review-flat-exported",
+            message=f"Exported flat review copy to {flat_output_path}",
+            run_id=run_id,
+            run_label=run_label,
+            metadata={
+                "canonical_output_path": str(output_path),
+                "flat_output_path": str(flat_output_path),
+                "flat_output_dir": str(flat_export_dir),
+                "file_exists": flat_output_path.exists(),
+                "entry_count": len(entries),
+            },
+        )
+
+    # Log structured event for canonical export
     _log_export_event(
         event="usefulness-review-exported",
         message=f"Exported usefulness review to {output_path}",
@@ -172,6 +207,8 @@ def export_next_check_usefulness_review(
             "duplicate_group_count": duplicate_group_count,
             "duplicate_entry_count": duplicate_entry_count,
             "file_exists": output_path.exists(),
+            "flat_output_path": str(flat_output_path) if flat_output_path else None,
+            "flat_export_enabled": export_flat_review_copy,
         },
     )
 
@@ -180,6 +217,7 @@ def export_next_check_usefulness_review(
         duplicate_group_count=duplicate_group_count,
         duplicate_entry_count=duplicate_entry_count,
         output_path=output_path,
+        flat_output_path=flat_output_path,
         run_id=run_id,
     )
 
@@ -296,6 +334,42 @@ def _log_export_event(
         print(f"[{severity}] {message}: {metadata}")
 
 
+def _log_flat_export_event(
+    *,
+    event: str,
+    message: str,
+    run_id: str,
+    run_label: str,
+    metadata: dict[str, object],
+    severity: str = "INFO",
+) -> None:
+    """Emit a structured log event for flat review export."""
+    # Import here to avoid circular imports
+    import sys
+    from pathlib import Path as PathLocal
+
+    ROOT = PathLocal(__file__).resolve().parents[1]
+    SRC_PATH = ROOT / "src"
+    if str(SRC_PATH) not in sys.path:
+        sys.path.insert(0, str(SRC_PATH))
+
+    try:
+        from k8s_diag_agent.structured_logging import emit_structured_log
+
+        emit_structured_log(
+            component="usefulness-review-flat-export",
+            message=message,
+            severity=severity,
+            run_id=run_id,
+            run_label=run_label,
+            metadata=metadata,
+            event=event,
+        )
+    except ImportError:
+        # Fallback to print if structured logging not available
+        print(f"[{severity}] {message}: {metadata}")
+
+
 def _find_latest_run_id(run_health_dir: Path) -> str | None:
     """Find the run_id from the current ui-index.json."""
     index_path = run_health_dir / "ui-index.json"
@@ -318,14 +392,14 @@ def _build_export_entry(
     # Extract payload data
     payload = artifact.payload or {}
 
-    # Get candidate info from payload
+    # Get candidate info from payload (handle camelCase and snake_case variants)
     candidate_id = payload.get("candidateId") or payload.get("candidate_id")
     candidate_index = payload.get("candidateIndex") or payload.get("candidate_index")
 
-    # Build command preview
-    description = payload.get("candidate_description") or payload.get("description")
-    command_family = payload.get("command_family") or payload.get("suggested_command_family")
-    command_preview = payload.get("command_preview")
+    # Build command preview (handle camelCase and snake_case variants)
+    description = payload.get("candidateDescription") or payload.get("candidate_description") or payload.get("description")
+    command_family = payload.get("commandFamily") or payload.get("command_family") or payload.get("suggestedCommandFamily") or payload.get("suggested_command_family")
+    command_preview = payload.get("commandPreview") or payload.get("command_preview")
 
     # Determine execution status
     execution_status = _determine_execution_status(artifact)
@@ -341,6 +415,18 @@ def _build_export_entry(
             artifact_path = str(Path(artifact.artifact_path).relative_to(run_health_dir))
         except ValueError:
             artifact_path = str(artifact.artifact_path)
+
+    # Build result digest for enriched export
+    digest = build_result_digest(artifact)
+    digest_dict = digest_to_dict(digest)
+
+    # Build context fields for stage-aware usefulness feedback
+    # These are nullable - include only if set, otherwise None as placeholder
+    review_stage = artifact.review_stage.value if artifact.review_stage else None
+    workstream = artifact.workstream.value if artifact.workstream else None
+    problem_class = artifact.problem_class.value if artifact.problem_class else None
+    judgment_scope = artifact.judgment_scope.value if artifact.judgment_scope else None
+    reviewer_confidence = artifact.reviewer_confidence.value if artifact.reviewer_confidence else None
 
     return {
         "artifact_path": artifact_path,
@@ -361,6 +447,14 @@ def _build_export_entry(
         # Include usefulness if already set (for incremental review)
         "usefulness_class": artifact.usefulness_class.value if artifact.usefulness_class else None,
         "usefulness_summary": artifact.usefulness_summary,
+        # Context fields for stage-aware feedback (nullable placeholders)
+        "review_stage": review_stage,
+        "workstream": workstream,
+        "problem_class": problem_class,
+        "judgment_scope": judgment_scope,
+        "reviewer_confidence": reviewer_confidence,
+        # Result digest fields for reviewer inspection
+        **digest_dict,
     }
 
 
@@ -414,21 +508,54 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable duplicate detection during export",
     )
+    parser.add_argument(
+        "--no-flat-export",
+        action="store_true",
+        help="Disable flat reviewer-friendly export copy to review-exports/",
+    )
+    parser.add_argument(
+        "--list-exports",
+        action="store_true",
+        help="List existing flat export files and exit",
+    )
     return parser.parse_args()
+
+
+def list_flat_exports(runs_dir: Path) -> list[Path]:
+    """List all existing flat export files in the review-exports directory."""
+    runs_dir = runs_dir.expanduser().resolve()
+    review_exports_dir = runs_dir / "health" / REVIEW_EXPORTS_DIR_NAME
+    if not review_exports_dir.exists():
+        return []
+    return sorted(review_exports_dir.glob("*-next_check_usefulness_review.json"))
 
 
 def main() -> None:
     args = _parse_args()
     runs_dir = Path(args.runs_dir)
 
+    # Handle list exports mode
+    if args.list_exports:
+        exports = list_flat_exports(runs_dir)
+        if not exports:
+            print("No flat export files found.")
+        else:
+            print(f"Found {len(exports)} flat export file(s):")
+            for export_path in exports:
+                print(f"  {export_path}")
+        return
+
     try:
         result = export_next_check_usefulness_review(
             runs_dir,
             run_id=args.run_id,
             detect_duplicates=not args.no_deduplicate,
+            export_flat_review_copy=not args.no_flat_export,
         )
 
         print(f"Exported to: {result.output_path}")
+        if result.flat_output_path:
+            print(f"Flat export: {result.flat_output_path}")
         print(f"  - Total entries: {result.entry_count}")
         print(f"  - Duplicate groups: {result.duplicate_group_count}")
         print(f"  - Duplicate entries: {result.duplicate_entry_count}")
