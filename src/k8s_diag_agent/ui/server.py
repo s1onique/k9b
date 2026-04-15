@@ -881,7 +881,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     cached_payload, cached_mtime = cached
                     if cached_mtime == cache_mtime:
                         # Cache hit - release single-flight and return cached
-                        _single_flight_release(provisional_key, cached_payload, success=True)
+                        _single_flight_release(provisional_key, cached_payload, success=True, result_type="cached")
                         emit_structured_log(
                             component="ui-runs-list",
                             message="/api/runs payload served from cache",
@@ -891,7 +891,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                             metadata={
                                 "path": "/api/runs",
                                 "cache_hit": True,
-                                "single_flight_role": "builder",
+                                "single_flight_acquire": "builder",
+                                "single_flight_result": "cache_hit",
                                 "cache_key": runs_cache_key[:100],
                             },
                         )
@@ -903,7 +904,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             runs_payload = self._build_runs_list_payload()
 
             # Release single-flight with the result and log as builder
-            _single_flight_release(provisional_key, runs_payload, success=True)
+            _single_flight_release(provisional_key, runs_payload, success=True, result_type="built")
             
             # Log as builder (this happens once while waiters are coalesced)
             emit_structured_log(
@@ -915,7 +916,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 metadata={
                     "path": "/api/runs",
                     "cache_hit": False,
-                    "single_flight_role": "builder",
+                    "single_flight_acquire": "builder",
+                    "single_flight_result": "built",
                     "cache_key": runs_cache_key[:100],
                 },
             )
@@ -960,7 +962,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         metadata={
                             "path": "/api/notifications",
                             "cache_hit": True,
-                            "single_flight_role": "waiter",
+                            "single_flight_acquire": "waiter",
+                            "single_flight_result": "waited",
                             "single_flight_key": sf_key[:100],
                             "single_flight_wait_ms": round(wait_ms, 2),
                             "cache_key": notifications_cache_key[:50],  # Truncate for safety
@@ -977,7 +980,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     if notifications_mtime == cache_mtime:
                         # Release single-flight if we had it
                         if should_build:
-                            _single_flight_release(sf_key, notifications_payload)
+                            _single_flight_release(sf_key, notifications_payload, success=True, result_type="cached")
                         emit_structured_log(
                             component="ui-notifications",
                             message="/api/notifications payload served from cache",
@@ -987,7 +990,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                             metadata={
                                 "path": "/api/notifications",
                                 "cache_hit": True,
-                                "single_flight_role": "waiter",
+                                "single_flight_acquire": "builder",
+                                "single_flight_result": "cache_hit",
                                 "cache_key": notifications_cache_key[:50],
                             },
                         )
@@ -1018,7 +1022,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
             # Release single-flight with result
             if should_build:
-                _single_flight_release(sf_key, payload)
+                _single_flight_release(sf_key, payload, success=True, result_type="built")
                 emit_structured_log(
                     component="ui-notifications",
                     message="/api/notifications payload built as builder",
@@ -1028,7 +1032,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     metadata={
                         "path": "/api/notifications",
                         "cache_hit": False,
-                        "single_flight_role": "builder",
+                        "single_flight_acquire": "builder",
+                        "single_flight_result": "built",
                         "cache_key": notifications_cache_key[:50],
                     },
                 )
@@ -1068,7 +1073,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                             "run_id": context.run.run_id,
                             "run_label": context.run.run_label,
                             "cache_hit": True,
-                            "single_flight_role": "waiter",
+                            "single_flight_acquire": "waiter",
+                            "single_flight_result": "waited",
                             "single_flight_key": provisional_key[:100],
                             "single_flight_wait_ms": round(wait_ms, 2),
                         },
@@ -1098,7 +1104,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             if cached_run_payload is not None:
                 # Cache hit - release single-flight and return cached
                 cached_payload, _ = cached_run_payload
-                _single_flight_release(provisional_key, cached_payload, success=True)
+                _single_flight_release(provisional_key, cached_payload, success=True, result_type="cached")
                 total_duration = (time.perf_counter() - total_start) * 1000
                 emit_structured_log(
                     component="ui-run-payload",
@@ -1112,7 +1118,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         "run_label": context.run.run_label,
                         "total_duration_ms": round(total_duration, 2),
                         "cache_hit": True,
-                        "single_flight_role": "builder",
+                        "single_flight_acquire": "builder",
+                        "single_flight_result": "cache_hit",
                         "cache_key": str(run_cache_key)[:100],
                     },
                 )
@@ -1164,7 +1171,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 _run_payload_cache[run_cache_key] = (run_payload, promotions)  # type: ignore[assignment]
 
             # Release single-flight with result and log as builder
-            _single_flight_release(provisional_key, run_payload, success=True)
+            _single_flight_release(provisional_key, run_payload, success=True, result_type="built")
 
             total_duration = (time.perf_counter() - total_start) * 1000
             timings["total_duration_ms"] = total_duration
@@ -1190,7 +1197,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     "notification_files_scanned": timings.get("notification_files_scanned", 0),
                     "promotions_count": timings.get("promotions_count", 0),
                     "cache_hit": False,
-                    "single_flight_role": "builder",
+                    "single_flight_acquire": "builder",
+                    "single_flight_result": "built",
                     "cache_key": str(run_cache_key)[:100],
                     "single_flight_key": provisional_key[:100],
                 },
