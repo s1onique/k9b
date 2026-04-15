@@ -1624,10 +1624,26 @@ class RunsListTimings(TypedDict, total=False):
     execution_artifacts_scanned: int
     execution_count_derivation_ms: float
     execution_count_derivation_matches: int
+    # Stage 1 sub-stages (breakdown of reviews_glob_ms)
+    reviews_glob_only_ms: float
+    reviews_files_found: int
+    reviews_parse_ms: float
+    # Stage 2 sub-stages (breakdown of execution_artifacts_glob_ms)
+    execution_glob_only_ms: float
+    execution_parse_ms: float
     review_artifact_prescan_ms: float
     review_download_path_checks_ms: float
     review_download_paths_found: int
     batch_eligibility_prescan_ms: float
+    # Stage 3b sub-stages (breakdown of batch_eligibility_prescan_ms)
+    batch_plan_glob_ms: float
+    batch_plan_parse_ms: float
+    batch_plan_files_found: int
+    batch_exec_glob_ms: float
+    batch_exec_parse_ms: float
+    batch_exec_files_found: int
+    batch_run_id_matching_ms: float
+    batch_cache_construction_ms: float
     batch_eligible_runs: int
     # Row assembly sub-stages (detailed breakdown of row_assembly_ms)
     review_status_row_ms: float
@@ -1686,37 +1702,47 @@ def build_runs_list(
     run_entries: dict[str, dict[str, object]] = {}
     reviews_parsed = 0
 
+    # Sub-stage: reviews glob (just find files)
+    reviews_glob_only_start = time_module.perf_counter()
+    review_files: list[Path] = []
     if reviews_dir.is_dir():
-        for review_path in reviews_dir.glob("*-review.json"):
-            try:
-                raw = json.loads(review_path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            reviews_parsed += 1
-            run_id = raw.get("run_id")
-            timestamp = raw.get("timestamp")
-            run_label = raw.get("run_label")
-            cluster_count = raw.get("cluster_count", 0)
+        review_files = list(reviews_dir.glob("*-review.json"))
+    timings["reviews_glob_only_ms"] = (time_module.perf_counter() - reviews_glob_only_start) * 1000
+    timings["reviews_files_found"] = len(review_files)
+    
+    # Sub-stage: reviews parse (read and parse JSON)
+    reviews_parse_start = time_module.perf_counter()
+    for review_path in review_files:
+        try:
+            raw = json.loads(review_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        reviews_parsed += 1
+        run_id = raw.get("run_id")
+        timestamp = raw.get("timestamp")
+        run_label = raw.get("run_label")
+        cluster_count = raw.get("cluster_count", 0)
 
-            if not isinstance(run_id, str):
-                continue
-            if not isinstance(timestamp, str):
-                continue
+        if not isinstance(run_id, str):
+            continue
+        if not isinstance(timestamp, str):
+            continue
 
-            try:
-                parsed_time = datetime.fromisoformat(timestamp)
-            except ValueError:
-                parsed_time = datetime.now(UTC)
+        try:
+            parsed_time = datetime.fromisoformat(timestamp)
+        except ValueError:
+            parsed_time = datetime.now(UTC)
 
-            run_entries[run_id] = {
-                "run_id": run_id,
-                "run_label": str(run_label) if run_label else run_id,
-                "timestamp": timestamp,
-                "cluster_count": cluster_count if isinstance(cluster_count, int) else 0,
-                "parsed_time": parsed_time,
-                "execution_count": 0,
-                "reviewed_count": 0,
-            }
+        run_entries[run_id] = {
+            "run_id": run_id,
+            "run_label": str(run_label) if run_label else run_id,
+            "timestamp": timestamp,
+            "cluster_count": cluster_count if isinstance(cluster_count, int) else 0,
+            "parsed_time": parsed_time,
+            "execution_count": 0,
+            "reviewed_count": 0,
+        }
+    timings["reviews_parse_ms"] = (time_module.perf_counter() - reviews_parse_start) * 1000
 
     timings["reviews_glob_ms"] = (time_module.perf_counter() - reviews_scan_start) * 1000
     timings["reviews_parsed"] = reviews_parsed
@@ -1727,48 +1753,57 @@ def build_runs_list(
     execution_artifacts_scanned = 0
     execution_count_matches = 0
 
+    # Sub-stage: execution glob (just find files)
+    execution_glob_only_start = time_module.perf_counter()
+    exec_artifact_files: list[Path] = []
     if external_analysis_dir.is_dir():
         # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
         # e.g., "run-2024-01-15" should match before "run-2024"
         sorted_run_ids = sorted(run_entries.keys(), key=len, reverse=True)
         
         # Find all execution artifacts
-        for artifact_path in external_analysis_dir.glob("*-next-check-execution*.json"):
-            execution_artifacts_scanned += 1
-            try:
-                raw = json.loads(artifact_path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
+        exec_artifact_files = list(external_analysis_dir.glob("*-next-check-execution*.json"))
+    timings["execution_glob_only_ms"] = (time_module.perf_counter() - execution_glob_only_start) * 1000
+    
+    # Sub-stage: execution parse (read and parse JSON)
+    execution_parse_start = time_module.perf_counter()
+    for artifact_path in exec_artifact_files:
+        execution_artifacts_scanned += 1
+        try:
+            raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
 
-            # Check if this is an execution artifact
-            purpose = raw.get("purpose")
-            if purpose != "next-check-execution":
-                continue
+        # Check if this is an execution artifact
+        purpose = raw.get("purpose")
+        if purpose != "next-check-execution":
+            continue
 
-            # Extract run_id from filename using prefix matching (O(N) instead of O(N*M))
-            # Format: {run_id}-next-check-execution-*.json
-            filename = artifact_path.name
-            matched_run_id = None
-            for run_id in sorted_run_ids:
-                if filename.startswith(run_id):
-                    matched_run_id = run_id
-                    break
+        # Extract run_id from filename using prefix matching (O(N) instead of O(N*M))
+        # Format: {run_id}-next-check-execution-*.json
+        filename = artifact_path.name
+        matched_run_id = None
+        for run_id in sorted_run_ids:
+            if filename.startswith(run_id):
+                matched_run_id = run_id
+                break
 
-            if matched_run_id is None:
-                continue
+        if matched_run_id is None:
+            continue
 
-            execution_count_matches += 1
+        execution_count_matches += 1
 
-            # Increment execution count
-            current_exec_count = run_entries[matched_run_id].get("execution_count", 0)
-            run_entries[matched_run_id]["execution_count"] = cast(int, current_exec_count) + 1
+        # Increment execution count
+        current_exec_count = run_entries[matched_run_id].get("execution_count", 0)
+        run_entries[matched_run_id]["execution_count"] = cast(int, current_exec_count) + 1
 
-            # Check if this execution has usefulness feedback
-            usefulness = raw.get("usefulness_class")
-            if usefulness and isinstance(usefulness, str) and usefulness.strip():
-                current_reviewed_count = run_entries[matched_run_id].get("reviewed_count", 0)
-                run_entries[matched_run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
+        # Check if this execution has usefulness feedback
+        usefulness = raw.get("usefulness_class")
+        if usefulness and isinstance(usefulness, str) and usefulness.strip():
+            current_reviewed_count = run_entries[matched_run_id].get("reviewed_count", 0)
+            run_entries[matched_run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
 
+    timings["execution_parse_ms"] = (time_module.perf_counter() - execution_parse_start) * 1000
     timings["execution_artifacts_glob_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
     timings["execution_artifacts_scanned"] = execution_artifacts_scanned
     timings["execution_count_derivation_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
@@ -1798,39 +1833,59 @@ def build_runs_list(
     # e.g., "run-2024-01-15" should match before "run-2024"
     sorted_run_ids_3b = sorted(run_entries.keys(), key=len, reverse=True)
 
-    # Pre-load all next-check-plan artifacts for all runs
-    all_plan_data: dict[str, dict[str, object]] = {}
+    # Sub-stage: next-check-plan glob
+    batch_plan_glob_start = time_module.perf_counter()
+    plan_files: list[Path] = []
     if external_analysis_dir.is_dir():
-        for plan_path in external_analysis_dir.glob("*-next-check-plan*.json"):
-            # Extract run_id from filename (format: {run_id}-next-check-plan*.json)
-            filename = plan_path.stem
-            # Find which run_id this belongs to by checking known run_ids
-            for run_id in sorted_run_ids_3b:
-                if filename.startswith(f"{run_id}-next-check-plan"):
-                    try:
-                        raw = json.loads(plan_path.read_text(encoding="utf-8"))
-                        if raw.get("purpose") == "next-check-planning":
-                            all_plan_data[run_id] = raw
-                            break
-                    except Exception:
-                        continue
+        plan_files = list(external_analysis_dir.glob("*-next-check-plan*.json"))
+    timings["batch_plan_glob_ms"] = (time_module.perf_counter() - batch_plan_glob_start) * 1000
+    timings["batch_plan_files_found"] = len(plan_files)
     
-    # Pre-load all execution indices for all runs
-    all_execution_indices: dict[str, set[int]] = {run_id: set() for run_id in run_entries}
+    # Sub-stage: next-check-plan parse and matching
+    batch_plan_parse_start = time_module.perf_counter()
+    all_plan_data: dict[str, dict[str, object]] = {}
+    for plan_path in plan_files:
+        filename = plan_path.stem
+        for run_id in sorted_run_ids_3b:
+            if filename.startswith(f"{run_id}-next-check-plan"):
+                try:
+                    raw = json.loads(plan_path.read_text(encoding="utf-8"))
+                    if raw.get("purpose") == "next-check-planning":
+                        all_plan_data[run_id] = raw
+                        break
+                except Exception:
+                    continue
+    timings["batch_plan_parse_ms"] = (time_module.perf_counter() - batch_plan_parse_start) * 1000
+    
+    # Sub-stage: execution artifact glob
+    batch_exec_glob_start = time_module.perf_counter()
+    exec_files: list[Path] = []
     if external_analysis_dir.is_dir():
-        for exec_path in external_analysis_dir.glob("*-next-check-execution*.json"):
-            filename = exec_path.stem
-            for run_id in sorted_run_ids_3b:
-                if filename.startswith(f"{run_id}-next-check-execution"):
-                    try:
-                        raw = json.loads(exec_path.read_text(encoding="utf-8"))
-                        if raw.get("purpose") == "next-check-execution":
-                            payload = raw.get("payload", {})
-                            candidate_index = payload.get("candidateIndex")
-                            if isinstance(candidate_index, int):
-                                all_execution_indices[run_id].add(candidate_index)
-                    except Exception:
-                        continue
+        exec_files = list(external_analysis_dir.glob("*-next-check-execution*.json"))
+    timings["batch_exec_glob_ms"] = (time_module.perf_counter() - batch_exec_glob_start) * 1000
+    timings["batch_exec_files_found"] = len(exec_files)
+    
+    # Sub-stage: execution artifact parse and matching
+    batch_exec_parse_start = time_module.perf_counter()
+    all_execution_indices: dict[str, set[int]] = {run_id: set() for run_id in run_entries}
+    for exec_path in exec_files:
+        filename = exec_path.stem
+        for run_id in sorted_run_ids_3b:
+            if filename.startswith(f"{run_id}-next-check-execution"):
+                try:
+                    raw = json.loads(exec_path.read_text(encoding="utf-8"))
+                    if raw.get("purpose") == "next-check-execution":
+                        payload = raw.get("payload", {})
+                        candidate_index = payload.get("candidateIndex")
+                        if isinstance(candidate_index, int):
+                            all_execution_indices[run_id].add(candidate_index)
+                except Exception:
+                    continue
+    timings["batch_exec_parse_ms"] = (time_module.perf_counter() - batch_exec_parse_start) * 1000
+    
+    # Matching and cache construction are included in parse stages above (they're interleaved)
+    timings["batch_run_id_matching_ms"] = 0.0  # Included in parse stages
+    timings["batch_cache_construction_ms"] = 0.0  # Included in parse stages
     
     timings["batch_eligibility_prescan_ms"] = (time_module.perf_counter() - batch_eligibility_prescan_start) * 1000
     
