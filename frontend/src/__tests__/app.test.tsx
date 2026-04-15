@@ -364,7 +364,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: /Deterministic next checks/i });
-    const promoteButtons = await screen.findAllByRole("button", { name: /Promote to queue/i });
+    const promoteButtons = await screen.findAllByRole("button", { name: /Add to work list/i });
     expect(promoteButtons.length).toBeGreaterThan(0);
     await act(async () => {
       await user.click(promoteButtons[0]);
@@ -389,7 +389,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: /Deterministic next checks/i });
-    const promoteButtons = await screen.findAllByRole("button", { name: /Promote to queue/i });
+    const promoteButtons = await screen.findAllByRole("button", { name: /Add to work list/i });
     await act(async () => {
       await user.click(promoteButtons[0]);
     });
@@ -401,8 +401,8 @@ describe("App", () => {
       ).toBeInTheDocument()
     );
 
-    // Verify "View in queue →" link is present
-    const viewInQueueLink = await screen.findByRole("button", { name: /View in queue →/i });
+    // Verify "View in work list →" link is present
+    const viewInQueueLink = await screen.findByRole("button", { name: /View in work list →/i });
     expect(viewInQueueLink).toBeInTheDocument();
 
     // Click the link and verify queue status filter changes
@@ -433,7 +433,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: /Deterministic next checks/i });
-    const promoteButtons = await screen.findAllByRole("button", { name: /Promote to queue/i });
+    const promoteButtons = await screen.findAllByRole("button", { name: /Add to work list/i });
     await act(async () => {
       await user.click(promoteButtons[0]);
     });
@@ -454,7 +454,7 @@ describe("App", () => {
     const originalScrollIntoView = queueSection!.scrollIntoView;
     queueSection!.scrollIntoView = scrollMock;
 
-    const viewInQueueLink = await screen.findByRole("button", { name: /View in queue →/i });
+    const viewInQueueLink = await screen.findByRole("button", { name: /View in work list →/i });
 
     // Click the link
     await act(async () => {

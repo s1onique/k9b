@@ -3092,7 +3092,7 @@ const App = () => {
       <nav className="floating-nav">
         <a href="#fleet">Fleet overview</a>
         <a href="#cluster">Cluster detail</a>
-        <a href="#proposals">Proposal queue</a>
+        <a href="#proposals">Action proposals</a>
         <a href="#run-detail">Run summary</a>
         <a href="#execution-history">Execution history</a>
         <a href="#review-enrichment">Review enrichment</a>
@@ -3534,7 +3534,7 @@ const App = () => {
                         }
                         disabled={isPromoting}
                       >
-                        {isPromoting ? "Promoting…" : "Promote to queue"}
+                        {isPromoting ? "Promoting…" : "Add to work list"}
                       </button>
                     )}
                     {promotionEntry?.message ? (
@@ -3552,7 +3552,7 @@ const App = () => {
                           scrollToSection("next-check-queue");
                         }}
                       >
-                        View in queue →
+                        View in work list →
                       </button>
                     ) : null}
                   </div>
