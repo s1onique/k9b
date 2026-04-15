@@ -881,7 +881,13 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     cached_payload, cached_mtime = cached
                     if cached_mtime == cache_mtime:
                         # Cache hit - release single-flight and return cached
+                        # This happens when: (1) this request got single-flight lock but cache was populated
+                        # by another thread, or (2) single-flight coalesced with an in-flight build
                         _single_flight_release(provisional_key, cached_payload, success=True, result_type="cached")
+                        
+                        # Determine the true outcome based on result_type:
+                        # - "builder" role with "cached" result = acquired lock but served from existing cache
+                        #   (no new work done, result was already built by a previous request)
                         emit_structured_log(
                             component="ui-runs-list",
                             message="/api/runs payload served from cache",
@@ -890,7 +896,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                             severity="DEBUG",
                             metadata={
                                 "path": "/api/runs",
-                                "cache_hit": True,
+                                "request_outcome": "cache_hit",
                                 "single_flight_acquire": "builder",
                                 "single_flight_result": "cache_hit",
                                 "cache_key": runs_cache_key[:100],
@@ -903,24 +909,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             # Note: _build_runs_list_payload already emits its own timing log with inner timings
             runs_payload = self._build_runs_list_payload()
 
-            # Release single-flight with the result and log as builder
+            # Release single-flight with the result - _single_flight_release handles the release log
             _single_flight_release(provisional_key, runs_payload, success=True, result_type="built")
             
-            # Log as builder (this happens once while waiters are coalesced)
-            emit_structured_log(
-                component="ui-runs-list",
-                message="/api/runs payload built as single-flight builder",
-                run_id="",
-                run_label="",
-                severity="INFO",
-                metadata={
-                    "path": "/api/runs",
-                    "cache_hit": False,
-                    "single_flight_acquire": "builder",
-                    "single_flight_result": "built",
-                    "cache_key": runs_cache_key[:100],
-                },
-            )
+            # The canonical payload outcome log is now emitted by _build_runs_list_payload()
+            # which has all the detailed timing information. We don't duplicate here.
 
             self._send_json(runs_payload)
             return
@@ -981,6 +974,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         # Release single-flight if we had it
                         if should_build:
                             _single_flight_release(sf_key, notifications_payload, success=True, result_type="cached")
+                        # Log with explicit outcome - builder role but cache hit
                         emit_structured_log(
                             component="ui-notifications",
                             message="/api/notifications payload served from cache",
@@ -989,7 +983,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                             severity="DEBUG",
                             metadata={
                                 "path": "/api/notifications",
-                                "cache_hit": True,
+                                "request_outcome": "cache_hit",
                                 "single_flight_acquire": "builder",
                                 "single_flight_result": "cache_hit",
                                 "cache_key": notifications_cache_key[:50],
@@ -1025,25 +1019,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     del _notifications_cache[oldest_key]
                 _notifications_cache[notifications_cache_key] = (payload, cache_mtime)
 
-            # Release single-flight with result
+            # Release single-flight with result - _single_flight_release handles the release log
             if should_build:
                 _single_flight_release(sf_key, payload, success=True, result_type="built")
-                emit_structured_log(
-                    component="ui-notifications",
-                    message="/api/notifications payload built as builder",
-                    run_id="",
-                    run_label="",
-                    severity="DEBUG",
-                    metadata={
-                        "path": "/api/notifications",
-                        "notification_files_scanned": notification_count,
-                        "cache_hit": False,
-                        "single_flight_acquire": "builder",
-                        "single_flight_result": "built",
-                        "cache_key": notifications_cache_key[:50],
-                        "single_flight_key": sf_key[:100],
-                    },
-                )
+                # The canonical payload outcome logging is handled by _single_flight_release
+                # No additional log needed here - _build_runs_list_payload style
 
             self._send_json(payload)
             return
