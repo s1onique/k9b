@@ -345,9 +345,8 @@ describe("App", () => {
 
     const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
     expect(heading).toBeInTheDocument();
-    expect(
-      screen.getByText(/evidence-gathering idea.*derived from assessments/i)
-    ).toBeInTheDocument();
+    // Updated wording: "candidate check to review and promote"
+    expect(screen.getByText(/candidate check.*to review and promote/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Review cluster detail/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View assessment artifact/i })).toBeInTheDocument();
     expect(screen.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
@@ -519,8 +518,9 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
 
-    expect(await screen.findByText(/No deterministic next checks were generated for this run./i)).toBeInTheDocument();
-    expect(screen.getByText(/Review cluster detail to inspect evidence-derived work./i)).toBeInTheDocument();
+    // Updated wording: "No evidence-based checks" and "Review the cluster detail to generate"
+    expect(await screen.findByText(/No evidence-based checks are available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the cluster detail to generate/i)).toBeInTheDocument();
   });
 
   test("renders next-check queue panel with queue items", async () => {

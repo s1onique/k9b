@@ -2999,10 +2999,10 @@ const App = () => {
   const deterministicClusters = deterministicChecks?.clusters ?? [];
   const hasDeterministicNextChecks = deterministicClusters.length > 0;
   const deterministicSummary = hasDeterministicNextChecks
-    ? `${deterministicChecks?.totalNextCheckCount ?? 0} evidence-gathering idea${
-        deterministicChecks?.totalNextCheckCount === 1 ? "" : "s"
-      } derived from assessments; promote to queue for execution`
-    : "Deterministic evidence is not available for this run.";
+    ? `${deterministicChecks?.totalNextCheckCount ?? 0} candidate check${
+        (deterministicChecks?.totalNextCheckCount ?? 0) === 1 ? "" : "s"
+      } to review and promote to the work list`
+    : "Review the cluster detail to generate candidate checks.";
 
   const focusClusterForNextChecks = (clusterLabel?: string | null) => {
     const target =
@@ -3683,8 +3683,8 @@ const App = () => {
         </div>
       ) : (
         <div className="deterministic-empty-state">
-          <p className="muted small">No deterministic next checks were generated for this run.</p>
-          <p className="muted tiny">Review cluster detail to inspect evidence-derived work.</p>
+          <p className="muted small">No evidence-based checks are available for this run.</p>
+          <p className="muted tiny">Review the cluster detail to generate candidate checks.</p>
         </div>
       )}
     </section>
