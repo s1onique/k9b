@@ -1057,19 +1057,87 @@ def _build_command_preview(description: object | None, target_context: str | Non
     return " ".join(shlex.quote(token) for token in preview_tokens)
 
 
+def _derive_ranking_reason(entry: Mapping[str, object]) -> str | None:
+    """Derive a structured ranking-reason/provenance category.
+
+    Returns a compact machine-readable category that explains why a check
+    is in its current ranking position. This complements priorityRationale
+    (human-readable) with provenance metadata.
+
+    Returns one of:
+    - "duplicate": candidate is a duplicate of existing evidence
+    - "approval-gated": requires operator approval before execution
+    - "stale-approval": approval record is stale or orphaned
+    - "execution-gated": blocked by execution gating (blockingReason)
+    - "planner-gated": blocked by planner gating (gatingReason)
+    - "safety-gated": blocked by safety gating (safetyReason)
+    - "deterministic-secondary": secondary priority from deterministic checks
+    - "fallback": fallback priority candidate
+    - "already-executed": execution completed successfully
+    - "execution-failed": execution failed or timed out
+    - None: no structured ranking reason applies
+
+    This provides provenance metadata distinct from priorityRationale.
+    """
+    # 1. Duplicate
+    if bool(entry.get("duplicateOfExistingEvidence")):
+        return "duplicate"
+
+    # 2. Stale or orphaned approval
+    approval_state = str(entry.get("approvalState") or "").lower()
+    if approval_state == "approval-stale":
+        return "stale-approval"
+    if approval_state == "approval-orphaned":
+        return "stale-approval"
+
+    # 3. Approval required
+    if bool(entry.get("requiresOperatorApproval")):
+        return "approval-gated"
+
+    # 4. Blocked by gating reasons (checked in order of specificity)
+    if entry.get("safetyReason"):
+        return "safety-gated"
+    if entry.get("blockingReason"):
+        return "execution-gated"
+    if entry.get("gatingReason"):
+        return "planner-gated"
+
+    # 5. Execution state
+    execution_state = str(entry.get("executionState") or "").lower()
+    if execution_state == "executed-success":
+        return "already-executed"
+    if execution_state in ("executed-failed", "timed-out"):
+        return "execution-failed"
+
+    # 6. Priority label
+    priority_label = str(entry.get("priorityLabel") or "").lower()
+    if priority_label == "secondary":
+        return "deterministic-secondary"
+    if priority_label == "fallback":
+        return "fallback"
+
+    return None
+
+
 def _derive_priority_rationale(entry: Mapping[str, object]) -> str | None:
     """Derive a compact operator-facing explanation for why an item is in its current state.
 
     Precedence:
-    1. duplicate / already covered
-    2. approval required / stale approval
-    3. blocked by safety or normalization gating
-    4. completed / already executed
-    5. secondary / lower-priority follow-up
-    6. null if no meaningful rationale exists
+    1. If original priorityRationale exists: preserve it (from planner/enrichment)
+    2. duplicate / already covered
+    3. approval required / stale approval
+    4. blocked by safety or normalization gating
+    5. completed / already executed
+    6. secondary / lower-priority follow-up
+    7. null if no meaningful rationale exists
 
     This is presentation normalization, not a new policy layer.
     """
+    # 0. Preserve original priorityRationale from planner/enrichment if present
+    original_priority_rationale = entry.get("priorityRationale")
+    if isinstance(original_priority_rationale, str) and original_priority_rationale.strip():
+        return original_priority_rationale.strip()
+
     # 1. Duplicate / already covered
     if bool(entry.get("duplicateOfExistingEvidence")):
         dup_reason = entry.get("duplicateReason")
@@ -1157,6 +1225,7 @@ def _build_next_check_queue(
         queue_entry["planArtifactPath"] = plan_artifact_path
         queue_entry["commandPreview"] = _build_command_preview(entry.get("description"), target_context)
         queue_entry["priorityRationale"] = _derive_priority_rationale(queue_entry)
+        queue_entry["rankingReason"] = _derive_ranking_reason(queue_entry)
         queue.append(queue_entry)
     queue.sort(key=_queue_sort_key)
     return queue

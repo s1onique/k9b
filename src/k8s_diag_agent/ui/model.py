@@ -325,6 +325,7 @@ class NextCheckCandidateView:
     latest_artifact_path: str | None
     latest_timestamp: str | None
     priority_rationale: str | None
+    ranking_reason: str | None
 
 
 @dataclass(frozen=True)
@@ -1444,7 +1445,7 @@ def _build_outcome_count_view(raw: Mapping[str, object]) -> NextCheckOutcomeCoun
 
 def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
     # Import here to avoid circular dependency at module level
-    from ..health.ui import _derive_priority_rationale
+    from ..health.ui import _derive_priority_rationale, _derive_ranking_reason
 
     return NextCheckCandidateView(
         candidate_id=_coerce_optional_str(raw.get("candidateId")),
@@ -1479,6 +1480,7 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
         latest_timestamp=_coerce_optional_str(raw.get("latestTimestamp")),
         priority_label=_coerce_optional_str(raw.get("priorityLabel")),
         priority_rationale=_derive_priority_rationale(raw),
+        ranking_reason=_derive_ranking_reason(raw),
     )
 
 

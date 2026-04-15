@@ -307,6 +307,7 @@ export type NextCheckPlanCandidate = {
     resultClass?: string | null;
     resultSummary?: string | null;
     priorityRationale?: string | null;
+    rankingReason?: string | null;
 };
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {

@@ -232,6 +232,7 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     targetContext: str | None
     commandPreview: str | None
     priorityRationale: str | None
+    rankingReason: str | None
 
 
 class NextCheckQueueItemPayload(TypedDict, total=False):
@@ -1340,6 +1341,8 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         payload["priorityLabel"] = view.priority_label
     if view.priority_rationale is not None:
         payload["priorityRationale"] = view.priority_rationale
+    if view.ranking_reason is not None:
+        payload["rankingReason"] = view.ranking_reason
     return payload
 
 

@@ -4012,6 +4012,11 @@ const App = () => {
                               <span className="priority-rationale-badge">
                                 {item.priorityRationale}
                               </span>
+                              {item.rankingReason ? (
+                                <span className="ranking-reason-badge">
+                                  {item.rankingReason}
+                                </span>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
@@ -4681,6 +4686,11 @@ const App = () => {
                                   <span className="priority-rationale-badge">
                                     {candidate.priorityRationale}
                                   </span>
+                                  {candidate.rankingReason ? (
+                                    <span className="ranking-reason-badge">
+                                      {candidate.rankingReason}
+                                    </span>
+                                  ) : null}
                                 </div>
                               ) : null}
                               <div className="next-check-outcome-meta">

@@ -51,6 +51,7 @@ from k8s_diag_agent.health.ui import (
     _classify_execution_failure,
     _classify_execution_success,
     _derive_priority_rationale,
+    _derive_ranking_reason,
     _serialize_review_enrichment,
     write_health_ui_index,
 )
@@ -2212,3 +2213,109 @@ class HealthUITests(unittest.TestCase):
         self.assertIsNotNone(dup_entry)
         assert dup_entry is not None
         self.assertEqual(dup_entry.get("priorityRationale"), "Already covered by existing evidence")
+
+    # Tests for _derive_ranking_reason - structured categories
+    def test_derive_ranking_reason_duplicate(self) -> None:
+        entry: dict[str, object] = {"duplicateOfExistingEvidence": True}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "duplicate")
+
+    def test_derive_ranking_reason_approval_gated(self) -> None:
+        entry: dict[str, object] = {"requiresOperatorApproval": True, "approvalState": "approval-required"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "approval-gated")
+
+    def test_derive_ranking_reason_stale_approval(self) -> None:
+        entry: dict[str, object] = {"approvalState": "approval-stale"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "stale-approval")
+
+    def test_derive_ranking_reason_orphaned_approval(self) -> None:
+        entry: dict[str, object] = {"approvalState": "approval-orphaned"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "stale-approval")
+
+    def test_derive_ranking_reason_safety_gated(self) -> None:
+        entry: dict[str, object] = {"safetyReason": "requires root access"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "safety-gated")
+
+    def test_derive_ranking_reason_execution_gated(self) -> None:
+        entry: dict[str, object] = {"blockingReason": "unauthenticated"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "execution-gated")
+
+    def test_derive_ranking_reason_planner_gated(self) -> None:
+        entry: dict[str, object] = {"gatingReason": "namespace denied"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "planner-gated")
+
+    def test_derive_ranking_reason_already_executed(self) -> None:
+        entry: dict[str, object] = {"executionState": "executed-success"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "already-executed")
+
+    def test_derive_ranking_reason_execution_failed(self) -> None:
+        entry: dict[str, object] = {"executionState": "executed-failed"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "execution-failed")
+
+    def test_derive_ranking_reason_timed_out(self) -> None:
+        entry: dict[str, object] = {"executionState": "timed-out"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "execution-failed")
+
+    def test_derive_ranking_reason_deterministic_secondary(self) -> None:
+        entry: dict[str, object] = {"priorityLabel": "secondary"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "deterministic-secondary")
+
+    def test_derive_ranking_reason_fallback(self) -> None:
+        entry: dict[str, object] = {"priorityLabel": "fallback"}
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "fallback")
+
+    def test_derive_ranking_reason_null_when_no_category(self) -> None:
+        entry: dict[str, object] = {"description": "kubectl logs", "priorityLabel": "primary"}
+        result = _derive_ranking_reason(entry)
+        self.assertIsNone(result)
+
+    def test_derive_ranking_reason_priority_order(self) -> None:
+        """Duplicate takes precedence over approval-gated."""
+        entry: dict[str, object] = {
+            "duplicateOfExistingEvidence": True,
+            "requiresOperatorApproval": True,
+        }
+        result = _derive_ranking_reason(entry)
+        self.assertEqual(result, "duplicate")
+
+    def test_build_next_check_queue_populates_structured_ranking_reason(self) -> None:
+        plan_entry: dict[str, object] = {
+            "candidates": [
+                {"description": "Check duplicate", "duplicateOfExistingEvidence": True},
+                {"description": "Check approval", "requiresOperatorApproval": True, "approvalState": "approval-required"},
+                {"description": "Check secondary", "priorityLabel": "secondary"},
+                {"description": "Check no reason", "priorityLabel": "primary"},
+            ],
+            "artifactPath": "external-analysis/queue-plan.json",
+        }
+        queue = _build_next_check_queue(plan_entry, {})
+        by_description: dict[str, dict[str, object]] = {
+            str(entry.get("description") or ""): entry for entry in queue
+        }
+        dup = by_description.get("Check duplicate")
+        self.assertIsNotNone(dup)
+        assert dup is not None
+        self.assertEqual(dup.get("rankingReason"), "duplicate")
+        approval = by_description.get("Check approval")
+        self.assertIsNotNone(approval)
+        assert approval is not None
+        self.assertEqual(approval.get("rankingReason"), "approval-gated")
+        secondary = by_description.get("Check secondary")
+        self.assertIsNotNone(secondary)
+        assert secondary is not None
+        self.assertEqual(secondary.get("rankingReason"), "deterministic-secondary")
+        no_reason = by_description.get("Check no reason")
+        self.assertIsNotNone(no_reason)
+        assert no_reason is not None
+        self.assertIsNone(no_reason.get("rankingReason"))
