@@ -1794,6 +1794,10 @@ def build_runs_list(
     # This eliminates O(runs * files) per-row filesystem access
     batch_eligibility_prescan_start = time_module.perf_counter()
     
+    # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
+    # e.g., "run-2024-01-15" should match before "run-2024"
+    sorted_run_ids_3b = sorted(run_entries.keys(), key=len, reverse=True)
+
     # Pre-load all next-check-plan artifacts for all runs
     all_plan_data: dict[str, dict[str, object]] = {}
     if external_analysis_dir.is_dir():
@@ -1801,7 +1805,7 @@ def build_runs_list(
             # Extract run_id from filename (format: {run_id}-next-check-plan*.json)
             filename = plan_path.stem
             # Find which run_id this belongs to by checking known run_ids
-            for run_id in run_entries:
+            for run_id in sorted_run_ids_3b:
                 if filename.startswith(f"{run_id}-next-check-plan"):
                     try:
                         raw = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -1816,7 +1820,7 @@ def build_runs_list(
     if external_analysis_dir.is_dir():
         for exec_path in external_analysis_dir.glob("*-next-check-execution*.json"):
             filename = exec_path.stem
-            for run_id in run_entries:
+            for run_id in sorted_run_ids_3b:
                 if filename.startswith(f"{run_id}-next-check-execution"):
                     try:
                         raw = json.loads(exec_path.read_text(encoding="utf-8"))
