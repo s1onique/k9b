@@ -89,6 +89,7 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     duplicateReason: null,
     blockingReason: null,
     targetContext: "cluster-a · control-plane pods",
+    priorityRationale: null,
     commandPreview: "kubectl logs deployment/control-plane --context cluster-a",
   },
   {
@@ -121,6 +122,7 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     blockingReason: "unknown_command",
     targetContext: "cluster-b · diag CRD",
     commandPreview: "kubectl describe diag customresourcedefinition --context cluster-b",
+    priorityRationale: "Approval required before execution",
   },
   {
     description: "Capture kubelet metrics for control-plane nodes",

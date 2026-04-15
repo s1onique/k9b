@@ -637,6 +637,70 @@ describe("App", () => {
     expect(queueScoped.queryByText(/Approval required before execution/i)).toBeNull();
   });
 
+  test("plan card shows priorityRationale when present", async () => {
+    // candidate-describe (candidate[1]) has priorityRationale: "Approval required before execution"
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Navigate to cluster detail via the Review next checks button
+    const reviewButton = await screen.findByRole("button", { name: /Review next checks/i });
+    await act(async () => {
+      await user.click(reviewButton);
+    });
+
+    // Open findings to expose the Next check plan section
+    const details = screen.getByText(/Tap to expand findings/i).closest("details");
+    await act(async () => {
+      if (details) details.setAttribute("open", "");
+    });
+
+    await screen.findByRole("heading", { name: /Next check plan/i });
+
+    // Verify the rationale appears inside the plan section (scoped to the plan heading)
+    const planHeading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planSection = planHeading.closest("section") ?? planHeading.parentElement;
+    expect(planSection).not.toBeNull();
+    // The approval rationale for candidate-describe should appear in the plan
+    expect(within(planSection!).queryByText(/Approval required before execution/i)).toBeInTheDocument();
+  });
+
+  test("plan card omits priorityRationale when field is absent", async () => {
+    // Remove priorityRationale from candidate-describe to test absence
+    const detailWithoutRationale = {
+      ...sampleClusterDetail,
+      nextCheckPlan: sampleClusterDetail.nextCheckPlan.map((c) =>
+        c.candidateId === "candidate-describe"
+          ? { ...c, priorityRationale: undefined }
+          : c
+      ),
+    };
+    const payloads = { ...defaultPayloads, "/api/cluster-detail": detailWithoutRationale };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Navigate to cluster detail
+    const reviewButton = await screen.findByRole("button", { name: /Review next checks/i });
+    await act(async () => {
+      await user.click(reviewButton);
+    });
+
+    // Open findings to expose the Next check plan section
+    const details = screen.getByText(/Tap to expand findings/i).closest("details");
+    await act(async () => {
+      if (details) details.setAttribute("open", "");
+    });
+
+    await screen.findByRole("heading", { name: /Next check plan/i });
+
+    const planHeading = await screen.findByRole("heading", { name: /Next check plan/i });
+    const planSection = planHeading.closest("section") ?? planHeading.parentElement;
+    expect(planSection).not.toBeNull();
+    // The approval rationale text should NOT appear anywhere in the plan
+    expect(within(planSection!).queryByText(/Approval required before execution/i)).toBeNull();
+  });
+
   test("queue metadata shows deterministic origin label", async () => {
     const runWithSource = JSON.parse(JSON.stringify(sampleRun));
     runWithSource.nextCheckQueue[0].sourceType = "deterministic";
