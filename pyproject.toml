@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Fixture-driven Kubernetes diagnostics pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["requests>=2.31.0"]
+dependencies = [
+    "ijson>=3.2",
+    "requests>=2.31.0",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: System :: Monitoring",

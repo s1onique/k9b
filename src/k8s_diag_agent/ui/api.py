@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
+import ijson
+
 from ..health.freshness import freshness_status
 from .model import (
     AssessmentHypothesisView,
@@ -1616,6 +1618,40 @@ def _compute_batch_eligibility_from_cache(
     return eligible_count > 0, eligible_count
 
 
+def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] | None:
+    """Extract only the required fields from review artifact using ijson streaming.
+    
+    This is a fast-path for extracting run_id, timestamp, run_label, and cluster_count
+    without loading the entire JSON file into memory.
+    
+    Returns:
+        Dictionary with extracted fields, or None if extraction fails.
+    """
+    try:
+        with open(review_path, "rb") as f:
+            # Use ijson to stream-parse only the fields we need
+            parser = ijson.kvitems(f, "")
+            extracted: dict[str, object] = {}
+            for key, value in parser:
+                if key in ("run_id", "timestamp", "run_label", "cluster_count"):
+                    extracted[key] = value
+                # Early exit once we have all required fields
+                if len(extracted) >= 4:
+                    break
+            
+            # Validate we got the required fields
+            if "run_id" not in extracted or "timestamp" not in extracted:
+                return None
+            if not isinstance(extracted["run_id"], str):
+                return None
+            if not isinstance(extracted["timestamp"], str):
+                return None
+            
+            return extracted
+    except Exception:
+        return None
+
+
 class RunsListTimings(TypedDict, total=False):
     """Timing metrics from build_runs_list()."""
     reviews_glob_ms: float
@@ -1628,6 +1664,13 @@ class RunsListTimings(TypedDict, total=False):
     reviews_glob_only_ms: float
     reviews_files_found: int
     reviews_parse_ms: float
+    # Fast path telemetry for ijson streaming
+    review_fast_path_attempted: int
+    review_fast_path_succeeded: int
+    review_fast_path_fallbacks: int
+    review_fast_path_failure_json: int
+    review_fast_path_failure_missing_field: int
+    review_fast_path_failure_other: int
     # Stage 2 sub-stages (breakdown of execution_artifacts_glob_ms)
     execution_glob_only_ms: float
     execution_parse_ms: float
@@ -1711,12 +1754,47 @@ def build_runs_list(
     timings["reviews_files_found"] = len(review_files)
     
     # Sub-stage: reviews parse (read and parse JSON)
+    # Use ijson streaming fast-path with fallback to full parse
     reviews_parse_start = time_module.perf_counter()
+    
+    # Initialize fast-path telemetry
+    review_fast_path_attempted = 0
+    review_fast_path_succeeded = 0
+    review_fast_path_fallbacks = 0
+    review_fast_path_failure_json = 0
+    review_fast_path_failure_missing_field = 0
+    review_fast_path_failure_other = 0
+    
     for review_path in review_files:
-        try:
-            raw = json.loads(review_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
+        raw: dict[str, object] | None = None
+        fast_path_used = False
+        
+        # Try ijson streaming fast-path first
+        review_fast_path_attempted += 1
+        extracted = _extract_review_metadata_streaming(review_path)
+        
+        if extracted is not None:
+            # Fast path succeeded
+            raw = extracted
+            fast_path_used = True
+            review_fast_path_succeeded += 1
+        else:
+            # Fast path failed, fall back to full JSON parse
+            review_fast_path_fallbacks += 1
+            try:
+                raw = json.loads(review_path.read_text(encoding="utf-8"))
+            except Exception:
+                review_fast_path_failure_json += 1
+                continue
+            
+            # Verify required fields exist in full parse result
+            run_id = raw.get("run_id")
+            timestamp = raw.get("timestamp")
+            if not isinstance(run_id, str) or not isinstance(timestamp, str):
+                review_fast_path_failure_missing_field += 1
+                continue
+        
+        # Process the extracted/parsed data
         reviews_parsed += 1
         run_id = raw.get("run_id")
         timestamp = raw.get("timestamp")
@@ -1724,8 +1802,12 @@ def build_runs_list(
         cluster_count = raw.get("cluster_count", 0)
 
         if not isinstance(run_id, str):
+            if fast_path_used:
+                review_fast_path_failure_missing_field += 1
             continue
         if not isinstance(timestamp, str):
+            if fast_path_used:
+                review_fast_path_failure_missing_field += 1
             continue
 
         try:
@@ -1742,6 +1824,15 @@ def build_runs_list(
             "execution_count": 0,
             "reviewed_count": 0,
         }
+    
+    # Record fast-path telemetry
+    timings["review_fast_path_attempted"] = review_fast_path_attempted
+    timings["review_fast_path_succeeded"] = review_fast_path_succeeded
+    timings["review_fast_path_fallbacks"] = review_fast_path_fallbacks
+    timings["review_fast_path_failure_json"] = review_fast_path_failure_json
+    timings["review_fast_path_failure_missing_field"] = review_fast_path_failure_missing_field
+    timings["review_fast_path_failure_other"] = review_fast_path_failure_other
+    
     timings["reviews_parse_ms"] = (time_module.perf_counter() - reviews_parse_start) * 1000
 
     timings["reviews_glob_ms"] = (time_module.perf_counter() - reviews_scan_start) * 1000
@@ -1875,8 +1966,8 @@ def build_runs_list(
                 try:
                     raw = json.loads(exec_path.read_text(encoding="utf-8"))
                     if raw.get("purpose") == "next-check-execution":
-                        payload = raw.get("payload", {})
-                        candidate_index = payload.get("candidateIndex")
+                        exec_payload: dict[str, object] = raw.get("payload", {})  # type: ignore[assignment]
+                        candidate_index = exec_payload.get("candidateIndex")
                         if isinstance(candidate_index, int):
                             all_execution_indices[run_id].add(candidate_index)
                 except Exception:

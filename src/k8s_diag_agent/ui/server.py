@@ -2644,7 +2644,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 # Inner timings from build_runs_list()
                 "reviews_glob_ms": round(timings.get("reviews_glob_ms", 0), 2),
                 "reviews_parsed": timings.get("reviews_parsed", 0),
+                # Stage 1 sub-stages (breakdown of reviews_glob_ms)
+                "reviews_glob_only_ms": round(timings.get("reviews_glob_only_ms", 0), 2),
+                "reviews_files_found": timings.get("reviews_files_found", 0),
+                "reviews_parse_ms": round(timings.get("reviews_parse_ms", 0), 2),
                 "execution_artifacts_glob_ms": round(timings.get("execution_artifacts_glob_ms", 0), 2),
+                # Stage 2 sub-stages (breakdown of execution_artifacts_glob_ms)
+                "execution_glob_only_ms": round(timings.get("execution_glob_only_ms", 0), 2),
+                "execution_parse_ms": round(timings.get("execution_parse_ms", 0), 2),
                 "execution_artifacts_scanned": timings.get("execution_artifacts_scanned", 0),
                 "execution_count_derivation_ms": round(timings.get("execution_count_derivation_ms", 0), 2),
                 "execution_count_derivation_matches": timings.get("execution_count_derivation_matches", 0),
@@ -2654,6 +2661,15 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 # Pre-scan timings (Stage 3a/3b)
                 "review_artifact_prescan_ms": round(timings.get("review_artifact_prescan_ms", 0), 2),
                 "batch_eligibility_prescan_ms": round(timings.get("batch_eligibility_prescan_ms", 0), 2),
+                # Stage 3b sub-stages (breakdown of batch_eligibility_prescan_ms)
+                "batch_plan_glob_ms": round(timings.get("batch_plan_glob_ms", 0), 2),
+                "batch_plan_files_found": timings.get("batch_plan_files_found", 0),
+                "batch_plan_parse_ms": round(timings.get("batch_plan_parse_ms", 0), 2),
+                "batch_exec_glob_ms": round(timings.get("batch_exec_glob_ms", 0), 2),
+                "batch_exec_files_found": timings.get("batch_exec_files_found", 0),
+                "batch_exec_parse_ms": round(timings.get("batch_exec_parse_ms", 0), 2),
+                "batch_run_id_matching_ms": round(timings.get("batch_run_id_matching_ms", 0), 2),
+                "batch_cache_construction_ms": round(timings.get("batch_cache_construction_ms", 0), 2),
                 # Row assembly sub-stages (detailed breakdown of row_assembly_ms)
                 "review_status_row_ms": round(timings.get("review_status_row_ms", 0), 2),
                 "review_download_path_row_ms": round(timings.get("review_download_path_row_ms", 0), 2),
