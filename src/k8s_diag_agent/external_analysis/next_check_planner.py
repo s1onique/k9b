@@ -9,7 +9,7 @@ from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
 
-from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
+from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus, ReviewStage, Workstream
 from .review_input import ReviewEnrichmentInput, ReviewSelectionContext, build_review_enrichment_input
 
 
@@ -118,6 +118,12 @@ def detect_expected_signal(text: str) -> str | None:
         return "storage"
     return None
 
+
+# Context-gated ranking penalty for kubectl-get-crd in early incident triage.
+# Evidence: usefulness learning report shows kubectl-get-crd performs poorly in
+# incident + initial_triage but well in parity_validation + drift contexts.
+# This penalty ensures targeted diagnostics outrank broad CRD inventory in early triage.
+_CRD_DEMOTION_IN_EARLY_INCIDENT_PENALTY = -120
 
 # These are kubectl verbs that are genuinely mutating and should require approval.
 # Important: Order matters for the regex-based detection to avoid false positives.
@@ -312,8 +318,29 @@ def _determine_priority_label(
     return "secondary"
 
 
-def _compute_candidate_sort_score(candidate: NextCheckCandidate) -> int:
+def _is_early_incident_triage(workstream: Workstream | None, review_stage: ReviewStage | None) -> bool:
+    """Detect early incident triage context where CRD checks should be demoted.
+    
+    Evidence: kubectl-get-crd performs poorly in incident + initial_triage
+    but well in parity_validation + drift contexts.
+    """
+    return (
+        workstream == Workstream.INCIDENT
+        and review_stage == ReviewStage.INITIAL_TRIAGE
+    )
+
+
+def _compute_candidate_sort_score(
+    candidate: NextCheckCandidate,
+    workstream: Workstream | None = None,
+    review_stage: ReviewStage | None = None,
+) -> tuple[int, bool]:
+    """Compute ranking score for a candidate.
+    
+    Returns tuple of (score, crd_demotion_applied) for observability.
+    """
     score = 0
+    crd_demotion_applied = False
     if candidate.target_cluster:
         score += 250
     if candidate.suggested_command_family != CommandFamily.UNKNOWN:
@@ -332,16 +359,62 @@ def _compute_candidate_sort_score(candidate: NextCheckCandidate) -> int:
         score -= 160
     if _is_generic_candidate(candidate.description, candidate.suggested_command_family):
         score -= 80
-    return score
+    # Context-gated CRD demotion: apply penalty only in early incident triage
+    # Evidence: kubectl-get-crd is low-yield in incident + initial_triage
+    if (
+        candidate.suggested_command_family == CommandFamily.KUBECTL_GET_CRD
+        and _is_early_incident_triage(workstream, review_stage)
+    ):
+        score += _CRD_DEMOTION_IN_EARLY_INCIDENT_PENALTY
+        crd_demotion_applied = True
+    return score, crd_demotion_applied
 
 
-def _rank_candidates(candidates: Sequence[NextCheckCandidate]) -> tuple[NextCheckCandidate, ...]:
-    scored: list[tuple[int, NextCheckCandidate]] = []
+def _rank_candidates(
+    candidates: Sequence[NextCheckCandidate],
+    workstream: Workstream | None = None,
+    review_stage: ReviewStage | None = None,
+) -> tuple[NextCheckCandidate, ...]:
+    """Rank candidates and attach ranking policy reasons for observability."""
+    scored: list[tuple[int, NextCheckCandidate, bool]] = []
     for candidate in candidates:
-        score = _compute_candidate_sort_score(candidate)
-        scored.append((score, candidate))
+        score, demotion_applied = _compute_candidate_sort_score(candidate, workstream, review_stage)
+        scored.append((score, candidate, demotion_applied))
     scored.sort(key=lambda entry: (-entry[0], entry[1].description))
-    return tuple(entry[1] for entry in scored)
+    # Reconstruct candidates with ranking policy reason if demotion was applied
+    ranked: list[NextCheckCandidate] = []
+    for score, candidate, demotion_applied in scored:
+        if demotion_applied:
+            # Create new candidate with ranking policy reason set
+            ranked.append(
+                NextCheckCandidate(
+                    candidate_id=candidate.candidate_id,
+                    description=candidate.description,
+                    target_cluster=candidate.target_cluster,
+                    target_context=candidate.target_context,
+                    source_reason=candidate.source_reason,
+                    expected_signal=candidate.expected_signal,
+                    suggested_command_family=candidate.suggested_command_family,
+                    safe_to_automate=candidate.safe_to_automate,
+                    requires_operator_approval=candidate.requires_operator_approval,
+                    risk_level=candidate.risk_level,
+                    estimated_cost=candidate.estimated_cost,
+                    confidence=candidate.confidence,
+                    gating_reason=candidate.gating_reason,
+                    duplicate_of_existing_evidence=candidate.duplicate_of_existing_evidence,
+                    duplicate_evidence_description=candidate.duplicate_evidence_description,
+                    normalization_reason=candidate.normalization_reason,
+                    safety_reason=candidate.safety_reason,
+                    approval_reason=candidate.approval_reason,
+                    duplicate_reason=candidate.duplicate_reason,
+                    blocking_reason=candidate.blocking_reason,
+                    priority_label=candidate.priority_label,
+                    ranking_policy_reason=f"crd-demoted-early-incident-triage:{workstream.value if workstream else 'none'}:{review_stage.value if review_stage else 'none'}",
+                )
+            )
+        else:
+            ranked.append(candidate)
+    return tuple(ranked)
 
 
 @dataclass(frozen=True)
@@ -367,9 +440,11 @@ class NextCheckCandidate:
     duplicate_reason: str | None
     blocking_reason: str | None
     priority_label: str
+    # Observability: why ranking policy was applied (if any)
+    ranking_policy_reason: str | None = None
 
     def to_dict(self) -> dict[str, object | str | bool]:
-        return {
+        result: dict[str, object | str | bool] = {
             "description": self.description,
             "targetCluster": self.target_cluster,
             "sourceReason": self.source_reason,
@@ -392,6 +467,9 @@ class NextCheckCandidate:
             "candidateId": self.candidate_id,
             "priorityLabel": self.priority_label,
         }
+        if self.ranking_policy_reason is not None:
+            result["rankingPolicyReason"] = self.ranking_policy_reason
+        return result
 
 
 @dataclass(frozen=True)
@@ -545,7 +623,11 @@ def plan_next_checks(
         candidates.append(candidate)
     if not candidates:
         return None
-    sorted_candidates = _rank_candidates(candidates)
+    # Extract context for ranking policy adjustments
+    # The enrichment artifact carries workstream/review_stage from the original assessment
+    workstream = enrichment_artifact.workstream
+    review_stage = enrichment_artifact.review_stage
+    sorted_candidates = _rank_candidates(candidates, workstream, review_stage)
     return NextCheckPlan(
         run_id=run_id,
         review_path=review_path,

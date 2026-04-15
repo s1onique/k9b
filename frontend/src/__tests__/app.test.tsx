@@ -346,7 +346,7 @@ describe("App", () => {
     const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
     expect(heading).toBeInTheDocument();
     expect(
-      screen.getByText(/deterministic check.*derived from assessments/i)
+      screen.getByText(/evidence-gathering idea.*derived from assessments/i)
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Review cluster detail/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View assessment artifact/i })).toBeInTheDocument();
@@ -531,7 +531,7 @@ describe("App", () => {
     const queuePanel = eyebrow.closest(".next-check-queue-panel");
     expect(queuePanel).not.toBeNull();
     const queueScoped = within(queuePanel!);
-    expect(queueScoped.getByRole("heading", { name: /Planner queue/i })).toBeInTheDocument();
+    expect(queueScoped.getByRole("heading", { name: /Work list/i })).toBeInTheDocument();
     expect(queueScoped.getAllByRole("button", { name: /Approve candidate/i }).length).toBeGreaterThan(0);
     expect(queueScoped.getAllByRole("link", { name: /View latest artifact/i }).length).toBeGreaterThan(0);
   });
@@ -1097,9 +1097,9 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const panel = await screen.findByRole("heading", { name: /Manual next-check runs/i });
+    const panel = await screen.findByRole("heading", { name: /Execution review/i });
     expect(panel).toBeInTheDocument();
-    expect(screen.getByText(/Manual next-check runs/i)).toBeInTheDocument();
+    expect(screen.getByText(/Execution review/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Collect kubelet logs for control-plane pods/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Timed out/i, { selector: ".execution-history-badge" })).toBeInTheDocument();
   });

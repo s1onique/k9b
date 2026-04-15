@@ -104,6 +104,22 @@ const DETERMINISTIC_WORKSTREAM_DESCRIPTIONS: Record<string, string> = {
   evidence: "Collect supporting telemetry and context",
   drift: "Log drift, parity, and toil follow-up",
 };
+
+// Workflow lanes for operator guidance
+const WORKFLOW_LANES = {
+  diagnose: {
+    label: "Diagnose now",
+    description: "Understand the current problem and review candidate evidence to gather",
+  },
+  work: {
+    label: "Work next checks",
+    description: "Run or review the shortlist of actionable checks",
+  },
+  improve: {
+    label: "Improve the system",
+    description: "Review durable policy and config changes suggested by what we learned",
+  },
+};
 const INCIDENT_PREVIEW_LIMIT = 3;
 
 const FAILURE_FOLLOW_UP_LABELS: Record<string, string> = {
@@ -1541,8 +1557,8 @@ const ExecutionHistoryPanel = ({
     <div className="section-head">
       <div>
         <p className="eyebrow">Execution history</p>
-        <h2>Manual next-check runs</h2>
-        <p className="muted small">Bounded artifacts recorded after each manual execution.</p>
+        <h2>Execution review</h2>
+        <p className="muted small">Audit surface for what actually ran; review results and signal quality.</p>
       </div>
     </div>
     {history.length ? (
@@ -1644,7 +1660,7 @@ const ExecutionHistoryPanel = ({
         })}
       </div>
     ) : (
-      <p className="muted">Manual next-check executions appear here once recorded.</p>
+      <p className="muted">Recorded check results appear here after manual execution.</p>
     )}
   </section>
 );
@@ -2983,10 +2999,10 @@ const App = () => {
   const deterministicClusters = deterministicChecks?.clusters ?? [];
   const hasDeterministicNextChecks = deterministicClusters.length > 0;
   const deterministicSummary = hasDeterministicNextChecks
-    ? `${deterministicChecks?.totalNextCheckCount ?? 0} deterministic check${
+    ? `${deterministicChecks?.totalNextCheckCount ?? 0} evidence-gathering idea${
         deterministicChecks?.totalNextCheckCount === 1 ? "" : "s"
-      } derived from assessments`
-    : "Deterministic next checks are not available for this run.";
+      } derived from assessments; promote to queue for execution`
+    : "Deterministic evidence is not available for this run.";
 
   const focusClusterForNextChecks = (clusterLabel?: string | null) => {
     const target =
@@ -3426,6 +3442,14 @@ const App = () => {
         </div>
       )}
     </section>
+    {/* Workflow Lane: Diagnose Now */}
+    <div className="workflow-lane-header">
+      <div className="workflow-lane-label">
+        <span className="workflow-lane-icon">🔍</span>
+        <span className="workflow-lane-title">{WORKFLOW_LANES.diagnose.label}</span>
+      </div>
+      <p className="workflow-lane-description muted small">{WORKFLOW_LANES.diagnose.description}</p>
+    </div>
     <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
       <div className="section-head">
         <div>
@@ -3664,12 +3688,25 @@ const App = () => {
         </div>
       )}
     </section>
+    {/* Workflow Lane: Work Next Checks */}
+    <div className="workflow-lane-header">
+      <div className="workflow-lane-label">
+        <span className="workflow-lane-icon">⚡</span>
+        <span className="workflow-lane-title">{WORKFLOW_LANES.work.label}</span>
+      </div>
+      <p className="workflow-lane-description muted small">{WORKFLOW_LANES.work.description}</p>
+    </div>
+    <ExecutionHistoryPanel
+      history={executionHistory}
+      highlightedKey={executionHistoryHighlightKey}
+      onSubmitFeedback={handleUsefulnessFeedback}
+    />
     <section className="panel next-check-queue-panel" id="next-check-queue">
         <div className="section-head">
           <div>
             <p className="eyebrow">Next-check queue</p>
-            <h2>Planner queue</h2>
-            <p className="muted tiny">Work through planner candidates from most actionable to low priority.</p>
+            <h2>Work list</h2>
+            <p className="muted tiny">Curated shortlist for execution; approve, run, or review what already ran.</p>
           </div>
           <span className="muted tiny">{runQueue.length} candidate{runQueue.length === 1 ? "" : "s"}</span>
         </div>
@@ -4113,32 +4150,6 @@ const App = () => {
           ))
         )}
       </section>
-    <ExecutionHistoryPanel
-      history={executionHistory}
-      highlightedKey={executionHistoryHighlightKey}
-      onSubmitFeedback={handleUsefulnessFeedback}
-    />
-      <ReviewEnrichmentPanel
-        reviewEnrichment={run.reviewEnrichment}
-        reviewEnrichmentStatus={run.reviewEnrichmentStatus}
-        nextCheckPlan={run.nextCheckPlan}
-        onFocusQueueReview={() => {
-          setQueueFocusMode("review");
-          // Extract cluster from first candidate if available
-          const firstCandidate = run.nextCheckPlan?.candidates?.[0];
-          if (firstCandidate?.targetCluster) {
-            setQueueClusterFilter(firstCandidate.targetCluster);
-          }
-        }}
-        onNavigateToQueue={() => scrollToSection("next-check-queue")}
-      />
-      <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
-      <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
-      <ProviderExecutionPanel execution={run.providerExecution} />
-      <section className="panel llm-activity-panel" id="llm-activity">
-        <LLMActivityPanel activity={run.llmActivity} />
-      </section>
-      <LLMPolicyPanel policy={run.llmPolicy} />
       <section className="panel" id="fleet">
         <div className="section-head">
           <div>
@@ -4917,37 +4928,49 @@ const App = () => {
           </div>
         </details>
       </section>
+    {/* Workflow Lane: Improve the System */}
+    <div className="workflow-lane-header">
+      <div className="workflow-lane-label">
+        <span className="workflow-lane-icon">📈</span>
+        <span className="workflow-lane-title">{WORKFLOW_LANES.improve.label}</span>
+      </div>
+      <p className="workflow-lane-description muted small">{WORKFLOW_LANES.improve.description}</p>
+    </div>
       <section className="panel" id="proposals">
         <div className="section-head">
-          <h2>Proposal queue</h2>
-          <div className="proposal-controls">
-            <label>
-              Status
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Sort
-              <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-                <option value="proposalId">Proposal ID</option>
-                <option value="confidence">Confidence</option>
-                <option value="status">Status</option>
-              </select>
-            </label>
-            <label>
-              Search
-              <input
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Target or rationale"
-              />
-            </label>
+          <div>
+            <p className="eyebrow">Investigations</p>
+            <h2>Action proposals</h2>
+            <p className="muted small">Findings surfaced for triage; durable improvements worth implementing.</p>
           </div>
+        </div>
+        <div className="proposal-controls">
+          <label>
+            Status
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Sort
+            <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
+              <option value="proposalId">Proposal ID</option>
+              <option value="confidence">Confidence</option>
+              <option value="status">Status</option>
+            </select>
+          </label>
+          <label>
+            Search
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Target or rationale"
+            />
+          </label>
         </div>
         <ProposalList
           proposals={proposals.proposals}
