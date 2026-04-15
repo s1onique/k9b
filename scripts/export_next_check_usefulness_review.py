@@ -4,16 +4,19 @@
 This script creates a reviewer-friendly JSON file containing executed next-check
 artifacts that can be sent to an external reviewer model for batch usefulness evaluation.
 
-Output: runs/health/diagnostic-packs/latest/next_check_usefulness_review.json
+Output: runs/health/diagnostic-packs/{run_id}/next_check_usefulness_review.json
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = ROOT / "src"
@@ -33,12 +36,31 @@ EXPORT_SCHEMA_VERSION = "next-check-usefulness-review/v1"
 LATEST_PACK_DIR_NAME = "latest"
 
 
+class ExportResult:
+    """Result of an export operation."""
+
+    def __init__(
+        self,
+        entry_count: int = 0,
+        duplicate_group_count: int = 0,
+        duplicate_entry_count: int = 0,
+        output_path: Path | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        self.entry_count = entry_count
+        self.duplicate_group_count = duplicate_group_count
+        self.duplicate_entry_count = duplicate_entry_count
+        self.output_path = output_path
+        self.run_id = run_id
+
+
 def export_next_check_usefulness_review(
     runs_dir: Path,
     *,
     run_id: str | None = None,
     use_run_scoped_path: bool = True,
-) -> Path:
+    detect_duplicates: bool = True,
+) -> ExportResult:
     """Export next-check execution artifacts for batch review.
 
     Args:
@@ -48,9 +70,11 @@ def export_next_check_usefulness_review(
         use_run_scoped_path: If True (default), write to a run-scoped path.
                              The run-scoped path is: health/diagnostic-packs/{run_id}/next_check_usefulness_review.json
                              If False, writes to: health/diagnostic-packs/latest/next_check_usefulness_review.json
+        detect_duplicates: If True (default), detect and group duplicate execution results.
+                          Adds duplicate metadata to entries and optionally groups them.
 
     Returns:
-        Path to the exported JSON file.
+        ExportResult with counts and metadata
     """
     runs_dir = runs_dir.expanduser().resolve()
     run_health_dir = runs_dir / "health"
@@ -91,20 +115,35 @@ def export_next_check_usefulness_review(
             continue
 
     # Build export entries
-    entries = []
+    entries: list[dict[str, Any]] = []
     for artifact in sorted(execution_artifacts, key=lambda a: a.timestamp):
         entry = _build_export_entry(artifact, run_health_dir)
         entries.append(entry)
 
+    # Detect duplicates if requested
+    duplicate_groups: dict[str, list[int]] = defaultdict(list)
+    if detect_duplicates and entries:
+        duplicate_groups = _detect_duplicate_groups(entries)
+        _add_duplicate_metadata(entries, duplicate_groups)
+
+    # Count duplicates
+    duplicate_group_count = len(duplicate_groups)
+    duplicate_entry_count = sum(len(indices) - 1 for indices in duplicate_groups.values() if len(indices) > 1)
+
     # Build export document
-    export_data = {
+    export_data: dict[str, Any] = {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "run_id": run_id,
         "run_label": run_label,
         "generated_at": datetime.now(UTC).isoformat(),
         "entry_count": len(entries),
+        "duplicate_group_count": duplicate_group_count,
         "entries": entries,
     }
+
+    # Add duplicate groups summary if any
+    if duplicate_groups:
+        export_data["duplicate_groups"] = _build_duplicate_groups_summary(entries, duplicate_groups)
 
     # Determine output directory based on use_run_scoped_path flag
     if use_run_scoped_path:
@@ -130,11 +169,95 @@ def export_next_check_usefulness_review(
             "output_dir": str(output_dir),
             "use_run_scoped_path": use_run_scoped_path,
             "entry_count": len(entries),
+            "duplicate_group_count": duplicate_group_count,
+            "duplicate_entry_count": duplicate_entry_count,
             "file_exists": output_path.exists(),
         },
     )
 
-    return output_path
+    return ExportResult(
+        entry_count=len(entries),
+        duplicate_group_count=duplicate_group_count,
+        duplicate_entry_count=duplicate_entry_count,
+        output_path=output_path,
+        run_id=run_id,
+    )
+
+
+def _detect_duplicate_groups(
+    entries: list[dict[str, Any]],
+) -> dict[str, list[int]]:
+    """Detect duplicate entries based on deterministic key.
+
+    A duplicate is identified by the combination of:
+    - command_family
+    - description (normalized)
+
+    Returns a dict mapping group_id -> list of entry indices
+    """
+    groups: dict[str, list[int]] = defaultdict(list)
+
+    for idx, entry in enumerate(entries):
+        # Generate a deterministic key for duplicate detection
+        command_family = entry.get("command_family", "")
+        description = entry.get("description", "")
+        cluster_label = entry.get("cluster_label", "")
+
+        # Create a normalized key
+        key_parts = [
+            command_family or "",
+            description or "",
+            cluster_label or "",
+        ]
+        key_str = "|".join(key_parts).lower().strip()
+
+        if not key_str:
+            continue
+
+        # Create a hash-based group ID for readability
+        key_hash = hashlib.sha256(key_str.encode()).hexdigest()[:12]
+        group_id = f"dup-{key_hash}"
+
+        groups[group_id].append(idx)
+
+    # Filter to only groups with actual duplicates (more than 1 entry)
+    return {gid: indices for gid, indices in groups.items() if len(indices) > 1}
+
+
+def _add_duplicate_metadata(
+    entries: list[dict[str, Any]],
+    duplicate_groups: dict[str, list[int]],
+) -> None:
+    """Add duplicate metadata to entries in-place."""
+    for group_id, indices in duplicate_groups.items():
+        representative_idx = indices[0]
+        sibling_paths = [entries[i].get("artifact_path") for i in indices]
+
+        for idx in indices:
+            entries[idx]["duplicate_group_id"] = group_id
+            entries[idx]["duplicate_count"] = len(indices)
+            entries[idx]["duplicate_siblings"] = sibling_paths
+            entries[idx]["is_representative"] = (idx == representative_idx)
+
+
+def _build_duplicate_groups_summary(
+    entries: list[dict[str, Any]],
+    duplicate_groups: dict[str, list[int]],
+) -> list[dict[str, Any]]:
+    """Build a summary of duplicate groups for the export."""
+    summary = []
+    for group_id, indices in sorted(duplicate_groups.items()):
+        representative = entries[indices[0]]
+        summary.append({
+            "group_id": group_id,
+            "count": len(indices),
+            "command_family": representative.get("command_family"),
+            "description": representative.get("description"),
+            "cluster_label": representative.get("cluster_label"),
+            "representative_artifact_path": representative.get("artifact_path"),
+            "artifact_paths": [entries[i].get("artifact_path") for i in indices],
+        })
+    return summary
 
 
 def _log_export_event(
@@ -190,7 +313,7 @@ def _find_latest_run_id(run_health_dir: Path) -> str | None:
 def _build_export_entry(
     artifact: ExternalAnalysisArtifact,
     run_health_dir: Path,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Build a single export entry from an execution artifact."""
     # Extract payload data
     payload = artifact.payload or {}
@@ -286,6 +409,11 @@ def _parse_args() -> argparse.Namespace:
         "--run-id",
         help="Specific run_id to export. If not provided, uses latest run from ui-index.json",
     )
+    parser.add_argument(
+        "--no-deduplicate",
+        action="store_true",
+        help="Disable duplicate detection during export",
+    )
     return parser.parse_args()
 
 
@@ -294,11 +422,17 @@ def main() -> None:
     runs_dir = Path(args.runs_dir)
 
     try:
-        output_path = export_next_check_usefulness_review(
+        result = export_next_check_usefulness_review(
             runs_dir,
             run_id=args.run_id,
+            detect_duplicates=not args.no_deduplicate,
         )
-        print(f"Exported to: {output_path}")
+
+        print(f"Exported to: {result.output_path}")
+        print(f"  - Total entries: {result.entry_count}")
+        print(f"  - Duplicate groups: {result.duplicate_group_count}")
+        print(f"  - Duplicate entries: {result.duplicate_entry_count}")
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
