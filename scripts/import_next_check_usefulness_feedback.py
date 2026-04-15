@@ -334,14 +334,54 @@ def import_next_check_usefulness_feedback(
             run_usefulness_counts: dict[str, int] = defaultdict(int)
             run_command_counts: dict[str, int] = defaultdict(int)
 
+            # Build context-aware rollups
+            context_aggregates: dict[str, dict[str, dict[str, int]]] = {
+                "by_command_family": defaultdict(lambda: defaultdict(int)),
+                "by_command_family_workstream": defaultdict(lambda: defaultdict(int)),
+                "by_command_family_review_stage": defaultdict(lambda: defaultdict(int)),
+                "by_command_family_problem_class": defaultdict(lambda: defaultdict(int)),
+            }
+
             for entry in run_entries:
                 usefulness_class = entry.get("usefulness_class")
                 if usefulness_class:
                     run_usefulness_counts[str(usefulness_class)] += 1
 
-                command_family = entry.get("command_family")
+                command_family = str(entry.get("command_family", ""))
                 if command_family:
-                    run_command_counts[str(command_family)] += 1
+                    run_command_counts[command_family] += 1
+
+                    # by_command_family: usefulness_class counts per command_family
+                    context_aggregates["by_command_family"][command_family][str(usefulness_class)] += 1
+
+                    # by_command_family_workstream
+                    workstream = str(entry.get("workstream", ""))
+                    if workstream:
+                        key = f"{command_family}:{workstream}"
+                        context_aggregates["by_command_family_workstream"][key][str(usefulness_class)] += 1
+
+                    # by_command_family_review_stage
+                    review_stage = str(entry.get("review_stage", ""))
+                    if review_stage:
+                        key = f"{command_family}:{review_stage}"
+                        context_aggregates["by_command_family_review_stage"][key][str(usefulness_class)] += 1
+
+                    # by_command_family_problem_class
+                    problem_class = str(entry.get("problem_class", ""))
+                    if problem_class:
+                        key = f"{command_family}:{problem_class}"
+                        context_aggregates["by_command_family_problem_class"][key][str(usefulness_class)] += 1
+
+            # Convert nested defaultdicts to regular dicts for JSON serialization
+            context_aggregates_serializable: dict[str, dict[str, dict[str, int]]] = {}
+            has_context_data = False
+
+            for rollup_name, rollup_data in context_aggregates.items():
+                if rollup_data:  # Only include if there's data
+                    has_context_data = True
+                    context_aggregates_serializable[rollup_name] = {
+                        k: dict(v) for k, v in rollup_data.items()
+                    }
 
             # Build summary for this specific run
             run_summary = _build_summary(
@@ -352,6 +392,7 @@ def import_next_check_usefulness_feedback(
                 total_entries=len(run_entries),
                 success_count=len(run_entries),
                 error_count=0,  # Errors already counted in global result
+                context_aggregates=context_aggregates_serializable if has_context_data else None,
             )
 
             # Write per-run summary artifact with structured logging

@@ -616,6 +616,18 @@ class TestIdempotentImport(unittest.TestCase):
         feedback_path.write_text(json.dumps(feedback_data), encoding="utf-8")
         return feedback_path
 
+    def _create_feedback_file_with_run_id(self, run_id: str, entries: list[dict]) -> Path:
+        """Create a feedback file with given run_id."""
+        feedback_data = {
+            "schema_version": "next-check-usefulness-feedback/v2",
+            "run_id": run_id,
+            "run_label": "Test Run",
+            "entries": entries,
+        }
+        feedback_path = self.tmpdir / f"feedback_{run_id}.json"
+        feedback_path.write_text(json.dumps(feedback_data), encoding="utf-8")
+        return feedback_path
+
     def test_reimport_same_feedback_skips(self) -> None:
         """Test that reimporting the same feedback skips without changes."""
         run_id = "test-run"
@@ -944,6 +956,157 @@ class TestIdempotentImport(unittest.TestCase):
 
         # Summary should be recreated
         self.assertTrue(summary_path.exists(), "Summary should be recreated after re-import")
+
+    def test_import_with_context_fields_produces_context_aggregates(self) -> None:
+        """Test that feedback with context fields produces context_aggregates in summary."""
+        import time
+        run_id = f"test-run-context-{int(time.time() * 1000)}"
+
+        # Create artifact
+        artifact_path = self._create_execution_artifact(run_id, 0)
+        relative_path = str(artifact_path.relative_to(self.health_dir))
+
+        # Create feedback file with context fields (use valid enum values)
+        feedback_file = self._create_feedback_file_with_run_id(
+            run_id,
+            [
+                {
+                    "artifact_path": relative_path,
+                    "run_id": run_id,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs",
+                    "command_family": "kubectl-logs",
+                    "workstream": "incident",
+                    "review_stage": "initial_triage",
+                    "problem_class": "crashloop",
+                }
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result.success_count, 1)
+
+        # Verify summary exists and contains context_aggregates
+        summary_path = self.health_dir / "diagnostic-packs" / run_id / "usefulness_summary.json"
+        self.assertTrue(summary_path.exists())
+
+        summary_data = json.loads(summary_path.read_text(encoding="utf-8"))
+        self.assertIn("context_aggregates", summary_data)
+
+        # Verify the structure of context_aggregates
+        context_aggs = summary_data["context_aggregates"]
+        self.assertIn("by_command_family", context_aggs)
+        self.assertIn("by_command_family_workstream", context_aggs)
+        self.assertIn("by_command_family_review_stage", context_aggs)
+        self.assertIn("by_command_family_problem_class", context_aggs)
+
+        # Verify the actual counts
+        self.assertEqual(context_aggs["by_command_family"]["kubectl-logs"]["useful"], 1)
+        self.assertEqual(context_aggs["by_command_family_workstream"]["kubectl-logs:incident"]["useful"], 1)
+        self.assertEqual(context_aggs["by_command_family_review_stage"]["kubectl-logs:initial_triage"]["useful"], 1)
+        self.assertEqual(context_aggs["by_command_family_problem_class"]["kubectl-logs:crashloop"]["useful"], 1)
+
+    def test_import_without_context_fields_no_context_aggregates(self) -> None:
+        """Test that feedback without context fields does not include context_aggregates."""
+        run_id = "test-run-no-context"
+
+        # Create artifact
+        artifact_path = self._create_execution_artifact(run_id, 0)
+        relative_path = str(artifact_path.relative_to(self.health_dir))
+
+        # Create feedback file WITHOUT context fields
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": relative_path,
+                    "run_id": run_id,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Found logs",
+                    "command_family": "kubectl-logs",
+                    # No workstream, review_stage, or problem_class
+                }
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result.success_count, 1)
+
+        # Verify summary exists
+        summary_path = self.health_dir / "diagnostic-packs" / run_id / "usefulness_summary.json"
+        self.assertTrue(summary_path.exists())
+
+        summary_data = json.loads(summary_path.read_text(encoding="utf-8"))
+
+        # by_command_family should exist since command_family is present
+        self.assertIn("by_command_family", summary_data["context_aggregates"])
+        # But the other rollups should not be present (no context to aggregate)
+        self.assertNotIn("by_command_family_workstream", summary_data["context_aggregates"])
+        self.assertNotIn("by_command_family_review_stage", summary_data["context_aggregates"])
+        self.assertNotIn("by_command_family_problem_class", summary_data["context_aggregates"])
+
+    def test_multi_run_import_produces_per_run_context_aggregates(self) -> None:
+        """Test that multi-run import produces separate context_aggregates for each run."""
+        run_id_1 = "health-run-A"
+        run_id_2 = "health-run-B"
+
+        # Create artifacts for both runs
+        artifact_path_1 = self._create_execution_artifact(run_id_1, 0)
+        artifact_path_2 = self._create_execution_artifact(run_id_2, 0)
+        relative_path_1 = str(artifact_path_1.relative_to(self.health_dir))
+        relative_path_2 = str(artifact_path_2.relative_to(self.health_dir))
+
+        # Create feedback file with different context for each run (valid enum values)
+        feedback_file = self._create_feedback_file(
+            [
+                {
+                    "artifact_path": relative_path_1,
+                    "run_id": run_id_1,
+                    "usefulness_class": "useful",
+                    "usefulness_summary": "Run A logs",
+                    "command_family": "kubectl-logs",
+                    "workstream": "incident",
+                },
+                {
+                    "artifact_path": relative_path_2,
+                    "run_id": run_id_2,
+                    "usefulness_class": "noisy",
+                    "usefulness_summary": "Run B noisy",
+                    "command_family": "kubectl-get",
+                    "workstream": "drift",
+                },
+            ]
+        )
+
+        result = import_next_check_usefulness_feedback(
+            self.runs_dir,
+            feedback_file,
+        )
+
+        self.assertEqual(result.success_count, 2)
+
+        # Check summary for run_id_1
+        summary_path_1 = self.health_dir / "diagnostic-packs" / run_id_1 / "usefulness_summary.json"
+        self.assertTrue(summary_path_1.exists())
+        summary_data_1 = json.loads(summary_path_1.read_text(encoding="utf-8"))
+
+        self.assertIn("context_aggregates", summary_data_1)
+        self.assertEqual(summary_data_1["context_aggregates"]["by_command_family"]["kubectl-logs"]["useful"], 1)
+
+        # Check summary for run_id_2
+        summary_path_2 = self.health_dir / "diagnostic-packs" / run_id_2 / "usefulness_summary.json"
+        self.assertTrue(summary_path_2.exists())
+        summary_data_2 = json.loads(summary_path_2.read_text(encoding="utf-8"))
+
+        self.assertIn("context_aggregates", summary_data_2)
+        self.assertEqual(summary_data_2["context_aggregates"]["by_command_family"]["kubectl-get"]["noisy"], 1)
 
 
 class TestDedupeKey(unittest.TestCase):
