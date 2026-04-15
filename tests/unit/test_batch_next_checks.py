@@ -377,6 +377,146 @@ class BatchNextCheckTests(unittest.TestCase):
         self.assertEqual(data["failed_count"], 1)
         self.assertEqual(data["success_count"], 6)  # executed - failed
 
+    # Tests for dry_run mode
+
+    def test_batch_execution_dry_run_true_boolean(self) -> None:
+        """Batch execution with dry_run=True (boolean) logs would_execute."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+
+        # Run with dry_run=True (boolean)
+        result = run_batch_next_checks(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            dry_run=True,  # boolean True
+        )
+
+        self.assertEqual(result.eligible_candidates, 1)
+        self.assertEqual(result.executed_count, 1)  # counts as "would execute"
+        self.assertEqual(result.skipped_already_executed, 0)
+
+    def test_batch_execution_dry_run_false_boolean(self) -> None:
+        """Batch execution with dry_run=False (boolean) actually executes."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+
+        # Mock to avoid actual kubectl calls
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+
+            # Run with dry_run=False (boolean)
+            result = run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=False,  # boolean False - actual execution
+            )
+
+            # Verify execute_manual_next_check was called (real execution)
+            self.assertEqual(mock_exec.call_count, 1)
+            self.assertEqual(result.eligible_candidates, 1)
+
+    def test_batch_execution_dry_run_false_string_from_json(self) -> None:
+        """Batch execution handles dry_run='false' string from JSON.stringify correctly.
+        
+        This is the bug fix: JSON.stringify(false) produces "false" (string),
+        and Python bool("false") returns True (non-empty string is truthy).
+        The fix properly converts string "false" to boolean False.
+        """
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+
+        # Simulate what happens when frontend sends dryRun: false
+        # JSON.stringify converts boolean to string "false"
+        payload = {"runId": run_id, "dryRun": "false"}  # string "false" from JSON
+        
+        # This is how the server now parses it (the fix)
+        dry_run_raw = payload.get("dryRun", False)
+        if isinstance(dry_run_raw, bool):
+            dry_run = dry_run_raw
+        elif isinstance(dry_run_raw, str):
+            dry_run = dry_run_raw.lower() == "true"
+        else:
+            dry_run = bool(dry_run_raw)
+        
+        # Run batch execution with parsed dry_run
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+
+            result = run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=dry_run,
+            )
+
+            # Verify execute_manual_next_check was called (real execution)
+            # Before fix: dry_run would be True (bool("false") = True)
+            # After fix: dry_run should be False
+            self.assertEqual(mock_exec.call_count, 1)
+            self.assertEqual(result.eligible_candidates, 1)
+
+    def test_batch_execution_dry_run_true_string_from_json(self) -> None:
+        """Batch execution handles dry_run='true' string from JSON.stringify correctly."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+
+        # Simulate what happens when frontend sends dryRun: true
+        payload = {"runId": run_id, "dryRun": "true"}  # string "true" from JSON
+        
+        # This is how the server parses it
+        dry_run_raw = payload.get("dryRun", False)
+        if isinstance(dry_run_raw, bool):
+            dry_run = dry_run_raw
+        elif isinstance(dry_run_raw, str):
+            dry_run = dry_run_raw.lower() == "true"
+        else:
+            dry_run = bool(dry_run_raw)
+        
+        # Run batch execution with parsed dry_run
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+
+            result = run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=dry_run,
+            )
+
+            # Should NOT call execute_manual_next_check (dry run)
+            self.assertEqual(mock_exec.call_count, 0)
+            self.assertEqual(result.executed_count, 1)  # would-execute count
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -998,6 +998,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         self._send_json(notifications_payload)
                         return
 
+            # Count notification files for observability
+            notification_count = 0
+            if notifications_dir.exists():
+                notification_count = len(list(notifications_dir.glob("*.json")))
+            
             # Build the payload
             try:
                 payload = query_notifications(
@@ -1031,10 +1036,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     severity="DEBUG",
                     metadata={
                         "path": "/api/notifications",
+                        "notification_files_scanned": notification_count,
                         "cache_hit": False,
                         "single_flight_acquire": "builder",
                         "single_flight_result": "built",
                         "cache_key": notifications_cache_key[:50],
+                        "single_flight_key": sf_key[:100],
                     },
                 )
 
@@ -2160,7 +2167,15 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         # Default to False (actual execution) - UI Execute button should send dryRun: false
         # Preview/dry-run can be triggered by explicitly sending dryRun: true
-        dry_run = payload.get("dryRun", False)
+        # Handle both boolean and string values - JSON.stringify converts boolean to "true"/"false" strings
+        dry_run_raw = payload.get("dryRun", False)
+        if isinstance(dry_run_raw, bool):
+            dry_run = dry_run_raw
+        elif isinstance(dry_run_raw, str):
+            # Handle string "true"/"false" from JSON.stringify (converts boolean to string)
+            dry_run = dry_run_raw.lower() == "true"
+        else:
+            dry_run = bool(dry_run_raw)
 
         # Log the parsed dry_run value for observability
         emit_structured_log(
