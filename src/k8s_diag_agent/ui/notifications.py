@@ -38,6 +38,7 @@ def query_notifications(
         "notification_files_fully_parsed": 0,
         "notification_records_matched": 0,
         "notification_records_returned": 0,
+        "early_termination": 0,
     }
 
     notifications_dir = root_dir / "notifications"
@@ -52,16 +53,49 @@ def query_notifications(
     page_value = page if isinstance(page, int) and page > 0 else 1
     offset = (page_value - 1) * limit_value
     
-    # Timing: load phase - optimized with filtering during load
+    # Determine if we can use early termination optimization
+    # Safe when: no cluster filter, no search term, page 1
+    # For other cases, we need full scan for accurate total
+    use_early_termination = (
+        page_value == 1 
+        and not cluster_filter 
+        and not search_term
+    )
+    needed_for_page1 = offset + limit_value if use_early_termination else None
+    
+    # Timing: load phase - optimized with early termination for common case
     load_start = time_module.perf_counter()
-    records = _load_notification_records_optimized(
+    records, preliminary_count = _load_notification_records_optimized(
         notifications_dir,
         kind_filter=kind_filter,
         cluster_filter=cluster_filter,
         search_term=search_term,
         counters=counters,
+        max_records=needed_for_page1,
     )
     load_duration_ms = (time_module.perf_counter() - load_start) * 1000
+    
+    # If early termination was used but we need accurate total, do count pass
+    # This happens when early_termination was triggered but caller needs exact total
+    if counters.get("early_termination") and not use_early_termination:
+        # This case shouldn't happen as use_early_termination controls max_records
+        pass
+    elif counters.get("early_termination"):
+        # Early termination was used - need count pass for accurate total
+        count_start = time_module.perf_counter()
+        total_count = _count_matching_records(
+            notifications_dir,
+            kind_filter=kind_filter,
+            cluster_filter=cluster_filter,
+            search_term=search_term,
+        )
+        count_duration_ms = (time_module.perf_counter() - count_start) * 1000
+        # Add count timing to load for reporting
+        load_duration_ms = load_duration_ms + count_duration_ms
+        counters["count_pass_duration_ms"] = int(round(count_duration_ms, 2))
+    else:
+        # No early termination - preliminary count is accurate
+        total_count = preliminary_count
     
     # Timing: filter phase (now lightweight - records already filtered during load)
     filter_start = time_module.perf_counter()
@@ -83,7 +117,8 @@ def query_notifications(
     
     # Timing: pagination phase
     paginate_start = time_module.perf_counter()
-    total = len(filtered)
+    # Use total_count if we did count pass (accurate), otherwise len(filtered)
+    total = total_count if counters.get("early_termination") else len(filtered)
     sliced = filtered[offset : offset + limit_value]
     
     # Timing: payload build phase
@@ -234,15 +269,15 @@ def _load_notification_records_optimized(
     cluster_filter: str = "",
     search_term: str = "",
     counters: dict[str, int] | None = None,
-) -> list[tuple[NotificationArtifact, Path]]:
-    """Optimized notification loading with filtering during load.
+    max_records: int | None = None,
+) -> tuple[list[tuple[NotificationArtifact, Path]], int]:
+    """Optimized notification loading with early termination.
     
     Key optimizations:
-    1. Filter during load - apply filters as we parse, not after (eliminates post-load filtering)
-    2. Skip sorting when possible - files are already in reverse chronological order
-    3. Metadata-first rejection - skip full parse when kind filter can be determined from filename
-    
-    Note: Early termination was removed to preserve total count accuracy.
+    1. Early termination - stop once we have enough for page 1 (when safe)
+    2. Filter during load - apply filters as we parse, not after
+    3. Skip sorting when possible - files already in reverse chronological order
+    4. Metadata-first rejection - skip full parse when kind filter in filename
     
     Args:
         directory: Path to the notifications directory
@@ -250,20 +285,33 @@ def _load_notification_records_optimized(
         cluster_filter: Normalized cluster filter (empty = no filter)
         search_term: Normalized search term (empty = no filter)
         counters: Optional dict to track observability metrics
+        max_records: Early termination hint - stop after this many matches if set
         
     Returns:
-        List of (NotificationArtifact, Path) tuples in reverse chronological order
+        Tuple of (list of (NotificationArtifact, Path) tuples, total count)
+        Total count is accurate when early termination is NOT used.
     """
     entries: list[tuple[NotificationArtifact, Path]] = []
+    total_count = 0
+    
     if not directory.is_dir():
-        return entries
+        return entries, 0
+    
+    # Early termination is only safe when:
+    # - max_records is set (page 1 of unfiltered query)
+    # - no cluster filter (cluster is in content)
+    # - no search term (search is in content)
+    # When these conditions aren't met, we need full scan for accurate total
+    use_early_termination = (
+        max_records is not None 
+        and not cluster_filter 
+        and not search_term
+    )
     
     # Can skip full parse based on metadata alone if only kind filter (no cluster, no search)
-    # This is an optimization to avoid parsing files that won't match
     use_filename_kind_filter = bool(kind_filter and not cluster_filter and not search_term)
     
     # Use reversed sorted glob to get newest first
-    # This avoids needing to sort later for the common case
     all_files = sorted(directory.glob("*.json"), reverse=True)
     
     for path in all_files:
@@ -278,26 +326,23 @@ def _load_notification_records_optimized(
         filename_kind = ""
         
         # Try to extract kind from filename for metadata-based filtering
-        # Filename format: {timestamp}-{kind}.json (e.g., 20260406T130007-degraded-health.json)
         if "-" in filename:
             parts = filename.split("-", 1)
             if len(parts) == 2:
                 filename_kind = parts[1].lower()
                 
-                # If we can use metadata filter and filename kind doesn't match, skip full parse
-                # This is safe because kind is in the filename
+                # Metadata-based rejection: skip full parse when kind filter is in filename
                 if use_filename_kind_filter and filename_kind != kind_filter:
                     if counters is not None:
                         counters["notification_files_rejected_by_metadata"] += 1
                     continue
         
-        # Full parse required - either no metadata filter, or metadata passed
+        # Full parse required
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
         
-        # Update parse counter
         if counters is not None:
             counters["notification_files_fully_parsed"] += 1
         
@@ -306,28 +351,103 @@ def _load_notification_records_optimized(
         except ValueError:
             continue
         
-        # Apply filters during load (not after) - this ensures correctness for all filter combinations
-        
-        # Kind filter - always apply (even if metadata filter was skipped due to cluster/search)
+        # Apply filters during load
         if kind_filter:
             artifact_kind = artifact.kind.lower()
             if artifact_kind != kind_filter:
                 continue
         
-        # Cluster filter (requires content)
         if cluster_filter:
             artifact_cluster = _normalize_filter_value(artifact.cluster_label)
             if artifact_cluster != cluster_filter:
                 continue
         
-        # Search term (requires content)
         if search_term and not _matches_search(artifact, search_term):
             continue
         
-        # All filters passed - add to results
+        # All filters passed
         entries.append((artifact, path))
+        total_count += 1
+        
+        # Early termination: stop once we have enough for page 1
+        # Safe ONLY when no content-based filters (cluster, search) - they need full scan
+        if use_early_termination and max_records is not None and len(entries) >= max_records:
+            if counters is not None:
+                counters["early_termination"] = 1
+            # Note: total_count is incomplete when early termination triggers
+            # Caller must do count pass if accurate total is needed
+            break
     
-    return entries
+    # If we didn't use early termination, total_count is accurate
+    return entries, total_count
+
+
+def _count_matching_records(
+    directory: Path,
+    *,
+    kind_filter: str = "",
+    cluster_filter: str = "",
+    search_term: str = "",
+) -> int:
+    """Lightweight count pass to get accurate total after early termination.
+    
+    Uses metadata from filename where possible to avoid full parse.
+    For cluster/search filters, must do full parse but only counts, doesn't build artifacts.
+    """
+    if not directory.is_dir():
+        return 0
+    
+    count = 0
+    use_filename_kind_filter = bool(kind_filter and not cluster_filter and not search_term)
+    all_files = directory.glob("*.json")
+    
+    for path in all_files:
+        if not path.is_file():
+            continue
+        
+        filename = path.stem
+        filename_kind = ""
+        
+        # Try metadata-based filtering first
+        if "-" in filename:
+            parts = filename.split("-", 1)
+            if len(parts) == 2:
+                filename_kind = parts[1].lower()
+                
+                if use_filename_kind_filter and filename_kind != kind_filter:
+                    continue
+        
+        # For unfiltered case, just count files (all match)
+        if not kind_filter and not cluster_filter and not search_term:
+            count += 1
+            continue
+        
+        # Need content-based filtering - do minimal parse
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        
+        try:
+            artifact = NotificationArtifact.from_dict(raw)
+        except ValueError:
+            continue
+        
+        # Apply remaining filters
+        if kind_filter:
+            if artifact.kind.lower() != kind_filter:
+                continue
+        
+        if cluster_filter:
+            if _normalize_filter_value(artifact.cluster_label) != cluster_filter:
+                continue
+        
+        if search_term and not _matches_search(artifact, search_term):
+            continue
+        
+        count += 1
+    
+    return count
 
 
 def _normalize_filter_value(value: str | None) -> str:
