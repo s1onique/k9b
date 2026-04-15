@@ -2207,3 +2207,168 @@ describe("App panel order regression", () => {
     expect(posA).toBeLessThan(posB);
   });
 });
+
+describe("Recent runs review status badges", () => {
+  test("recent-runs fully-reviewed status renders with green badge style", async () => {
+    // Build a runs list with only fully-reviewed runs
+    const fullyReviewedRuns = {
+      runs: [
+        {
+          runId: "run-200",
+          runLabel: "2026-04-07-1400",
+          timestamp: "2026-04-07T14:00:00Z",
+          clusterCount: 2,
+          triaged: true,
+          executionCount: 4,
+          reviewedCount: 4,
+          reviewStatus: "fully-reviewed",
+          batchExecutable: false,
+          batchEligibleCount: 0,
+        },
+        {
+          runId: "run-201",
+          runLabel: "2026-04-07-1500",
+          timestamp: "2026-04-07T15:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 6,
+          reviewedCount: 6,
+          reviewStatus: "fully-reviewed",
+          batchExecutable: false,
+          batchEligibleCount: 0,
+        },
+      ],
+      totalCount: 2,
+    };
+    const payloads = {
+      ...defaultPayloads,
+      "/api/runs": fullyReviewedRuns,
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(2);
+    });
+
+    // Find the status pill for fully-reviewed runs - should have the green class
+    const fullyReviewedPills = document.querySelectorAll(".status-pill-fully-reviewed");
+    expect(fullyReviewedPills.length).toBe(2);
+
+    // Verify each pill has both the base status-pill class and the specific fully-reviewed class
+    fullyReviewedPills.forEach((pill) => {
+      expect(pill).toHaveClass("status-pill");
+      expect(pill).toHaveClass("status-pill-fully-reviewed");
+      // Verify it does NOT have the unreviewed class (different color)
+      expect(pill).not.toHaveClass("status-pill-unreviewed");
+    });
+  });
+
+  test("recent-runs unreviewed status renders with non-green badge style", async () => {
+    // Build a runs list with only unreviewed runs
+    const unreviewedRuns = {
+      runs: [
+        {
+          runId: "run-300",
+          runLabel: "2026-04-07-1400",
+          timestamp: "2026-04-07T14:00:00Z",
+          clusterCount: 2,
+          triaged: false,
+          executionCount: 3,
+          reviewedCount: 0,
+          reviewStatus: "unreviewed",
+          reviewDownloadPath: "health/diagnostic-packs/run-300/next_check_usefulness_review.json",
+          batchExecutable: false,
+          batchEligibleCount: 0,
+        },
+      ],
+      totalCount: 1,
+    };
+    const payloads = {
+      ...defaultPayloads,
+      "/api/runs": unreviewedRuns,
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(1);
+    });
+
+    // Find the status pill for unreviewed runs - should have the amber class
+    const unreviewedPills = document.querySelectorAll(".status-pill-unreviewed");
+    expect(unreviewedPills.length).toBe(1);
+
+    // Verify the pill has both base class and specific unreviewed class
+    const pill = unreviewedPills[0];
+    expect(pill).toHaveClass("status-pill");
+    expect(pill).toHaveClass("status-pill-unreviewed");
+    // Verify it does NOT have the fully-reviewed class (green color)
+    expect(pill).not.toHaveClass("status-pill-fully-reviewed");
+  });
+
+  test("recent-runs badges distinguish fully-reviewed (green) from unreviewed (amber)", async () => {
+    // Build a mixed runs list to compare badge styles
+    const mixedRuns = {
+      runs: [
+        {
+          runId: "run-400",
+          runLabel: "2026-04-07-1400",
+          timestamp: "2026-04-07T14:00:00Z",
+          clusterCount: 2,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+          batchExecutable: false,
+          batchEligibleCount: 0,
+        },
+        {
+          runId: "run-401",
+          runLabel: "2026-04-07-1500",
+          timestamp: "2026-04-07T15:00:00Z",
+          clusterCount: 2,
+          triaged: false,
+          executionCount: 3,
+          reviewedCount: 0,
+          reviewStatus: "unreviewed",
+          batchExecutable: false,
+          batchEligibleCount: 0,
+        },
+      ],
+      totalCount: 2,
+    };
+    const payloads = {
+      ...defaultPayloads,
+      "/api/runs": mixedRuns,
+    };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(2);
+    });
+
+    // Find both pill types
+    const fullyReviewedPill = document.querySelector(".status-pill-fully-reviewed");
+    const unreviewedPill = document.querySelector(".status-pill-unreviewed");
+
+    expect(fullyReviewedPill).not.toBeNull();
+    expect(unreviewedPill).not.toBeNull();
+
+    // Verify they have different CSS classes (different styles)
+    expect(fullyReviewedPill).toHaveClass("status-pill-fully-reviewed");
+    expect(unreviewedPill).toHaveClass("status-pill-unreviewed");
+
+    // Verify they are distinct from each other
+    expect(fullyReviewedPill).not.toHaveClass("status-pill-unreviewed");
+    expect(unreviewedPill).not.toHaveClass("status-pill-fully-reviewed");
+
+    // Both should have the base status-pill class
+    expect(fullyReviewedPill).toHaveClass("status-pill");
+    expect(unreviewedPill).toHaveClass("status-pill");
+  });
+});
