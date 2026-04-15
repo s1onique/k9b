@@ -1131,8 +1131,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             # _load_context was already called above, so context is already loaded
             timings["context_load_ms"] = (time.perf_counter() - context_load_start) * 1000
 
-            # Stage 3: Load promotions (this scans external-analysis directory)
+            # Stage 3: Load promotions (optimized with glob pattern + early run_id filter)
             promotions_load_start = time.perf_counter()
+            
+            # Sub-stage 3a: Find promotion files with glob pattern
+            promoted_glob_start = time.perf_counter()
+            external_analysis_dir = self._health_root / "external-analysis"
+            promotion_glob_count = 0
+            if external_analysis_dir.exists():
+                promotion_files = list(external_analysis_dir.glob("*-next-check-promotion-*.json"))
+                promotion_glob_count = len(promotion_files)
+            timings["promoted_glob_ms"] = (time.perf_counter() - promoted_glob_start) * 1000
+            timings["promotion_glob_count"] = promotion_glob_count
+            
+            # Sub-stage 3b: Load promotions (uses optimized collect_promoted_queue_entries)
             promotions = collect_promoted_queue_entries(self._health_root, context.run.run_id)
             timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
             timings["promotions_count"] = len(promotions)
@@ -1176,7 +1188,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             total_duration = (time.perf_counter() - total_start) * 1000
             timings["total_duration_ms"] = total_duration
 
-            # Emit structured timing log
+            # Emit structured timing log with deeper cold-path breakdown
             emit_structured_log(
                 component="ui-run-payload",
                 message="/api/run payload built with timing",
@@ -1190,9 +1202,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     "total_duration_ms": round(timings.get("total_duration_ms", 0), 2),
                     "context_load_ms": round(timings.get("context_load_ms", 0), 2),
                     "ui_index_read_ms": round(timings.get("ui_index_read_ms", 0), 2),
+                    # Cold-path breakdown: promotions loading
                     "promotions_load_ms": round(timings.get("promotions_load_ms", 0), 2),
+                    "promoted_glob_ms": round(timings.get("promoted_glob_ms", 0), 2),
+                    "promotion_glob_count": timings.get("promotion_glob_count", 0),
+                    # Payload building
                     "payload_build_ms": round(timings.get("payload_build_ms", 0), 2),
                     "serialize_ms": round(timings.get("serialize_ms", 0), 2),
+                    # File counts (observability)
                     "external_analysis_files_scanned": timings.get("external_analysis_files_scanned", 0),
                     "notification_files_scanned": timings.get("notification_files_scanned", 0),
                     "promotions_count": timings.get("promotions_count", 0),

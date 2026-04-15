@@ -173,23 +173,51 @@ def collect_promoted_next_check_payloads(
     runs_dir: Path,
     run_id: str,
 ) -> list[tuple[DeterministicNextCheckPromotionPayload, str]]:
+    """Collect promotion payloads for a specific run.
+    
+    This optimized version uses glob pattern to filter promotion files first,
+    then checks run_id before loading the full artifact. This significantly
+    reduces I/O for cold requests by avoiding scanning unrelated files.
+    """
     collected: list[tuple[DeterministicNextCheckPromotionPayload, str]] = []
     directory = runs_dir / "external-analysis"
     if not directory.exists():
         return collected
-    for candidate in sorted(directory.iterdir() if directory.exists() else (), key=lambda item: item.name):
-        if not candidate.is_file() or candidate.suffix.lower() != ".json":
+    
+    # OPTIMIZATION: Use glob pattern to filter to only promotion files first
+    # This avoids iterating over all files in the directory
+    # Pattern matches: *-next-check-promotion-*.json
+    promotion_files = list(directory.glob("*-next-check-promotion-*.json"))
+    
+    for candidate in sorted(promotion_files, key=lambda item: item.name):
+        if not candidate.is_file():
             continue
         try:
             data = json.loads(candidate.read_text(encoding="utf-8"))
         except Exception:
             continue
-        artifact = ExternalAnalysisArtifact.from_dict(data)
+        
+        # OPTIMIZATION: Check run_id in raw data before parsing full artifact
+        # This avoids the overhead of creating ExternalAnalysisArtifact for non-matching runs
+        payload = data.get("payload")
+        if not isinstance(payload, Mapping):
+            continue
+        payload_run_id = payload.get("runId")
+        if payload_run_id != run_id:
+            continue
+            
+        try:
+            artifact = ExternalAnalysisArtifact.from_dict(data)
+        except Exception:
+            continue
+            
         if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_PROMOTION:
             continue
+            
+        # Already verified run_id matches above, double-check for safety
         if not artifact_matches_run(artifact, run_id):
             continue
-        payload = artifact.payload
+            
         if not isinstance(payload, Mapping):
             continue
         entry: DeterministicNextCheckPromotionPayload = {
