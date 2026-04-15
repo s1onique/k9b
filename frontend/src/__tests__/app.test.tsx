@@ -608,7 +608,7 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  test("queue card shows priorityRationale when present", async () => {
+  test("queue card shows priorityRationale with label when present", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     const user = userEvent.setup();
     render(<App />);
@@ -619,7 +619,10 @@ describe("App", () => {
       .getByText(/Describe diag CRD for control plane/i)
       .closest("article");
     expect(approvalCard).not.toBeNull();
-    await queueScoped.findByText(/Approval required before execution/i);
+    // Verify the "Why not top priority:" label is present
+    expect(queueScoped.getByText(/Why not top priority:/i)).toBeInTheDocument();
+    // Verify the rationale content appears
+    expect(queueScoped.getByText(/Approval required before execution/i)).toBeInTheDocument();
   });
 
   test("queue card omits priorityRationale label when field is absent", async () => {

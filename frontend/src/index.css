@@ -1446,6 +1446,33 @@ body {
   margin-right: 0.25rem;
 }
 
+/* Priority rationale label and badge */
+.next-check-queue-item-rationale {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.priority-rationale-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.9);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.priority-rationale-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-style: italic;
+}
+
 .next-check-command-preview {
   font-family: var(--font-mono, 'JetBrains Mono', 'SFMono-Regular', monospace);
 }

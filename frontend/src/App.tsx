@@ -4006,6 +4006,9 @@ const App = () => {
                           <span>Outcome: {item.outcomeStatus ?? "unknown"}</span>
                           {item.priorityRationale ? (
                             <div className="next-check-queue-item-rationale">
+                              <span className="priority-rationale-label">
+                                Why not top priority:
+                              </span>
                               <span className="priority-rationale-badge">
                                 {item.priorityRationale}
                               </span>
@@ -4672,6 +4675,9 @@ const App = () => {
                               ) : null}
                               {candidate.priorityRationale ? (
                                 <div className="next-check-queue-item-rationale">
+                                  <span className="priority-rationale-label">
+                                    Why not top priority:
+                                  </span>
                                   <span className="priority-rationale-badge">
                                     {candidate.priorityRationale}
                                   </span>
