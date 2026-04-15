@@ -371,6 +371,7 @@ describe("App", () => {
     expect(screen.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
     const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
     expect(driftNodes.length).toBeGreaterThan(0);
+    // Drift bucket is closed by default (user must expand to see drift checks)
     const driftDetails = driftNodes[0].closest("details");
     expect(driftDetails).not.toHaveAttribute("open");
   });
@@ -524,6 +525,118 @@ describe("App", () => {
     expect(
       within(incidentSection!).getByRole("button", { name: /Show fewer incident checks/i })
     ).toBeInTheDocument();
+  });
+
+  test("all three workstream bucket headings render when deterministic checks exist", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // All three workstream headings must be present
+    expect(within(panel!).getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
+    expect(within(panel!).getAllByText(/Evidence gathering/i).length).toBeGreaterThan(0);
+    expect(within(panel!).getAllByText(/Drift \/ toil follow-up/i).length).toBeGreaterThan(0);
+  });
+
+  test("workstream bucket counts are shown per bucket", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // Find each workstream bucket section and verify the count label appears within it
+    // Incident bucket - section with class "deterministic-group" (first one)
+    const incidentSection = panel!.querySelector("section.deterministic-group");
+    expect(incidentSection).not.toBeNull();
+    const incidentHeadDiv = incidentSection!.querySelector(".deterministic-group-head");
+    expect(incidentHeadDiv).not.toBeNull();
+    expect(within(incidentHeadDiv!).getByText(/Firefight now/i)).toBeInTheDocument();
+    expect(incidentHeadDiv!.textContent).toMatch(/\d+ check/);
+
+    // Evidence bucket - section with class "deterministic-group" (second one)
+    const evidenceSection = panel!.querySelectorAll("section.deterministic-group")[1];
+    expect(evidenceSection).not.toBeNull();
+    const evidenceHeadDiv = evidenceSection.querySelector(".deterministic-group-head");
+    expect(evidenceHeadDiv).not.toBeNull();
+    expect(within(evidenceHeadDiv!).getByText(/Evidence gathering/i)).toBeInTheDocument();
+    expect(evidenceHeadDiv!.textContent).toMatch(/\d+ check/);
+
+    // Drift bucket - details element with class "deterministic-group--drift"
+    const driftDetails = panel!.querySelector("details.deterministic-group--drift");
+    expect(driftDetails).not.toBeNull();
+    const driftHeadDiv = driftDetails!.querySelector(".deterministic-group-head");
+    expect(driftHeadDiv).not.toBeNull();
+    expect(within(driftHeadDiv!).getByText(/Drift \/ toil follow-up/i)).toBeInTheDocument();
+    expect(driftHeadDiv!.textContent).toMatch(/\d+ check/);
+  });
+
+  test("evidence cards appear in the correct workstream bucket", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // Find the incident bucket and verify incident checks appear there
+    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const incidentSection = incidentLabel.closest("section");
+    expect(incidentSection).not.toBeNull();
+    // "Capture tcpdump" is an incident workstream check from fixtures
+    expect(within(incidentSection!).getByText(/Capture tcpdump/i)).toBeInTheDocument();
+
+    // Find the evidence bucket and verify evidence check appears there
+    const evidenceLabel = within(panel!).getAllByText(/Evidence gathering/i)[0];
+    const evidenceSection = evidenceLabel.closest("section");
+    expect(evidenceSection).not.toBeNull();
+    // "Collect kubelet metrics from nodes" is an evidence workstream check from fixtures
+    expect(within(evidenceSection!).getByText(/Collect kubelet metrics from nodes/i)).toBeInTheDocument();
+
+    // Find the drift bucket (it's a <details> element)
+    const driftLabel = within(panel!).getAllByText(/Drift \/ toil follow-up/i)[0];
+    const driftSection = driftLabel.closest("details");
+    expect(driftSection).not.toBeNull();
+    // "Compare baseline release parity" is a drift workstream check from fixtures
+    expect(within(driftSection!).getByText(/Compare baseline release parity/i)).toBeInTheDocument();
+  });
+
+  test("empty workstream bucket shows empty state message", async () => {
+    // Build a payload with only incident workstream checks
+    const runWithIncidentOnly = JSON.parse(JSON.stringify(sampleRun));
+    if (runWithIncidentOnly.deterministicNextChecks) {
+      runWithIncidentOnly.deterministicNextChecks.clusters.forEach((cluster: { deterministicNextCheckSummaries?: Array<{ workstream: string }> }) => {
+        if (cluster.deterministicNextCheckSummaries) {
+          cluster.deterministicNextCheckSummaries.forEach((check: { workstream: string }) => {
+            check.workstream = "incident";
+          });
+        }
+      });
+    }
+    const payloads = { ...defaultPayloads, "/api/run": runWithIncidentOnly };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // Incident bucket should have checks
+    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const incidentSection = incidentLabel.closest("section");
+    expect(incidentSection).not.toBeNull();
+    const incidentItems = within(incidentSection!).getAllByRole("listitem");
+    expect(incidentItems.length).toBeGreaterThan(0);
+
+    // Evidence bucket should show empty state
+    const evidenceLabel = within(panel!).getAllByText(/Evidence gathering/i)[0];
+    const evidenceSection = evidenceLabel.closest("section");
+    expect(evidenceSection).not.toBeNull();
+    expect(within(evidenceSection!).getByText(/No evidence gathering checks/i)).toBeInTheDocument();
   });
 
   test("deterministic panel empty state is obvious when data is absent", async () => {

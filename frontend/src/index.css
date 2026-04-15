@@ -1015,6 +1015,12 @@ body {
   background: rgba(15, 23, 42, 0.8);
 }
 
+.deterministic-empty-bucket {
+  padding: 0.5rem 0;
+  color: rgba(148, 163, 184, 0.7);
+  font-style: italic;
+}
+
 .next-check-queue-controls {
   display: flex;
   flex-direction: column;

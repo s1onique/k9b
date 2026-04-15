@@ -3607,71 +3607,79 @@ const App = () => {
                   </span>
                 </div>
                 <div className="deterministic-group-list">
-                  {incidentChecks.length ? (
-                    <section className="deterministic-group">
-                      <div className="deterministic-group-head">
-                        <div>
-                          <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.incident}</p>
-                          <p className="muted tiny">
-                            {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.incident}
-                          </p>
-                        </div>
-                        <span className="muted tiny">
-                          {buildCheckCountLabel(incidentChecks.length)}
-                        </span>
+                  <section className="deterministic-group">
+                    <div className="deterministic-group-head">
+                      <div>
+                        <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.incident}</p>
+                        <p className="muted tiny">
+                          {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.incident}
+                        </p>
                       </div>
-                      <ul className="deterministic-check-list">
-                        {incidentPreview.map(renderCheckItem)}
-                      </ul>
-                      {incidentHasMore ? (
-                        <button
-                          type="button"
-                          className="text-button deterministic-show-more"
-                          onClick={() => toggleIncidentExpansion(cluster.label)}
-                        >
-                          {isIncidentExpanded
-                            ? "Show fewer incident checks"
-                            : `Show all ${incidentChecks.length} incident checks`}
-                        </button>
-                      ) : null}
-                    </section>
-                  ) : null}
-                  {evidenceChecks.length ? (
-                    <section className="deterministic-group">
-                      <div className="deterministic-group-head">
-                        <div>
-                          <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.evidence}</p>
-                          <p className="muted tiny">
-                            {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.evidence}
-                          </p>
-                        </div>
-                        <span className="muted tiny">
-                          {buildCheckCountLabel(evidenceChecks.length)}
-                        </span>
+                      <span className="muted tiny">
+                        {buildCheckCountLabel(incidentChecks.length)}
+                      </span>
+                    </div>
+                    {incidentChecks.length ? (
+                      <>
+                        <ul className="deterministic-check-list">
+                          {incidentPreview.map(renderCheckItem)}
+                        </ul>
+                        {incidentHasMore ? (
+                          <button
+                            type="button"
+                            className="text-button deterministic-show-more"
+                            onClick={() => toggleIncidentExpansion(cluster.label)}
+                          >
+                            {isIncidentExpanded
+                              ? "Show fewer incident checks"
+                              : `Show all ${incidentChecks.length} incident checks`}
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="muted tiny deterministic-empty-bucket">No firefight checks for this cluster.</p>
+                    )}
+                  </section>
+                  <section className="deterministic-group">
+                    <div className="deterministic-group-head">
+                      <div>
+                        <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.evidence}</p>
+                        <p className="muted tiny">
+                          {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.evidence}
+                        </p>
                       </div>
+                      <span className="muted tiny">
+                        {buildCheckCountLabel(evidenceChecks.length)}
+                      </span>
+                    </div>
+                    {evidenceChecks.length ? (
                       <ul className="deterministic-check-list">
                         {evidenceChecks.map(renderCheckItem)}
                       </ul>
-                    </section>
-                  ) : null}
-                  {driftChecks.length ? (
-                    <details className="deterministic-group deterministic-group--drift">
-                      <summary className="deterministic-group-head">
-                        <div>
-                          <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.drift}</p>
-                          <p className="muted tiny">
-                            {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.drift}
-                          </p>
-                        </div>
-                        <span className="muted tiny">
-                          {buildCheckCountLabel(driftChecks.length)}
-                        </span>
-                      </summary>
+                    ) : (
+                      <p className="muted tiny deterministic-empty-bucket">No evidence gathering checks for this cluster.</p>
+                    )}
+                  </section>
+                  <details className="deterministic-group deterministic-group--drift">
+                    <summary className="deterministic-group-head">
+                      <div>
+                        <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.drift}</p>
+                        <p className="muted tiny">
+                          {DETERMINISTIC_WORKSTREAM_DESCRIPTIONS.drift}
+                        </p>
+                      </div>
+                      <span className="muted tiny">
+                        {buildCheckCountLabel(driftChecks.length)}
+                      </span>
+                    </summary>
+                    {driftChecks.length ? (
                       <ul className="deterministic-check-list">
                         {driftChecks.map(renderCheckItem)}
                       </ul>
-                    </details>
-                  ) : null}
+                    ) : (
+                      <p className="muted tiny deterministic-empty-bucket">No drift/toil checks for this cluster.</p>
+                    )}
+                  </details>
                 </div>
                 <div className="deterministic-cluster-attachments">
                   {cluster.assessmentArtifactPath ? (
