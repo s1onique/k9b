@@ -519,6 +519,7 @@ export const sampleRun: RunPayload = {
       priorityRationale: "Approval required before execution",
       failureSummary: "Candidate requires operator approval before execution.",
       suggestedNextOperatorMove: "Review approval state",
+      rankingReason: "approval-gated",
     },
     {
       candidateId: "candidate-logs",

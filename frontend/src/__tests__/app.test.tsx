@@ -640,6 +640,34 @@ describe("App", () => {
     expect(queueScoped.queryByText(/Approval required before execution/i)).toBeNull();
   });
 
+  test("queue card shows rankingReason badge when present", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    // candidate-vague has rankingReason: "approval-gated"
+    const approvalCard = queueScoped
+      .getByText(/Describe diag CRD for control plane/i)
+      .closest("article");
+    expect(approvalCard).not.toBeNull();
+    // Verify the rankingReason badge appears with the structured category
+    expect(within(approvalCard!).getByText(/approval-gated/i)).toBeInTheDocument();
+  });
+
+  test("queue card omits rankingReason badge when field is absent", async () => {
+    const runWithoutRanking = JSON.parse(JSON.stringify(sampleRun));
+    // candidate-vague is at nextCheckQueue[0] and normally has rankingReason: "approval-gated"
+    // Remove it to test absence
+    delete runWithoutRanking.nextCheckQueue[0].rankingReason;
+    const payloads = { ...defaultPayloads, "/api/run": runWithoutRanking };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    const queueScoped = await getQueuePanel();
+    // After removing rankingReason from candidate-vague, "approval-gated" should NOT appear in the queue
+    expect(queueScoped.queryByText(/approval-gated/i)).toBeNull();
+  });
+
   test("plan card shows priorityRationale when present", async () => {
     // candidate-describe (candidate[1]) has priorityRationale: "Approval required before execution"
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
