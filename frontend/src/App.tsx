@@ -4670,6 +4670,13 @@ const App = () => {
                                   ))}
                                 </div>
                               ) : null}
+                              {candidate.priorityRationale ? (
+                                <div className="next-check-queue-item-rationale">
+                                  <span className="priority-rationale-badge">
+                                    {candidate.priorityRationale}
+                                  </span>
+                                </div>
+                              ) : null}
                               <div className="next-check-outcome-meta">
                                 <span className={outcomeStatusClass(candidate.outcomeStatus)}>
                                   {outcomeStatusDisplay(candidate.outcomeStatus)}

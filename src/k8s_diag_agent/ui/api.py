@@ -231,6 +231,7 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     candidateIndex: int | None
     targetContext: str | None
     commandPreview: str | None
+    priorityRationale: str | None
 
 
 class NextCheckQueueItemPayload(TypedDict, total=False):
@@ -1337,6 +1338,8 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         payload["candidateIndex"] = view.candidate_index
     if view.priority_label is not None:
         payload["priorityLabel"] = view.priority_label
+    if view.priority_rationale is not None:
+        payload["priorityRationale"] = view.priority_rationale
     return payload
 
 

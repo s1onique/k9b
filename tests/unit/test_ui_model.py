@@ -16,18 +16,18 @@ def _sample_deterministic_next_checks() -> dict[str, object]:
                 "topProblem": "warning_event_threshold",
                 "deterministicNextCheckCount": 1,
                 "deterministicNextCheckSummaries": [
-                {
-                    "description": "capture tcpdump",
-                    "owner": "platform",
-                    "method": "kubectl exec",
-                    "evidenceNeeded": ["tcpdump"],
-                    "priorityScore": 85,
-                    "workstream": "incident",
-                    "urgency": "high",
-                    "isPrimaryTriage": True,
-                    "whyNow": "Immediate triage for warning_event_threshold",
-                }
-            ],
+                    {
+                        "description": "capture tcpdump",
+                        "owner": "platform",
+                        "method": "kubectl exec",
+                        "evidenceNeeded": ["tcpdump"],
+                        "priorityScore": 85,
+                        "workstream": "incident",
+                        "urgency": "high",
+                        "isPrimaryTriage": True,
+                        "whyNow": "Immediate triage for warning_event_threshold",
+                    }
+                ],
                 "drilldownAvailable": True,
                 "assessmentArtifactPath": "assessments/cluster-a.json",
                 "drilldownArtifactPath": "drilldowns/cluster-a.json",
@@ -209,3 +209,26 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(review_branch.eligible, 1)
         self.assertEqual(review_branch.attempted, 1)
         self.assertEqual(review_branch.succeeded, 1)
+
+    def test_plan_candidate_priority_rationale_populated(self) -> None:
+        """Verify priority_rationale is derived for non-queue plan candidates."""
+        index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            # Inject deterministic next checks so the index is valid
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
+        context = build_ui_context(index)
+        plan = context.run.next_check_plan
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        # At least one candidate should have a populated priority_rationale
+        rationale_values = [c.priority_rationale for c in plan.candidates]
+        self.assertTrue(
+            any(r is not None for r in rationale_values),
+            f"Expected at least one candidate with priority_rationale, got {rationale_values}",
+        )
+        # Spot-check: duplicate candidates get "Already covered by existing evidence"
+        dup = next((c for c in plan.candidates if c.duplicate_of_existing_evidence), None)
+        self.assertIsNotNone(dup)
+        assert dup is not None
+        self.assertEqual(dup.priority_rationale, "Already covered by existing evidence")

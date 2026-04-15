@@ -306,6 +306,7 @@ export type NextCheckPlanCandidate = {
     suggestedNextOperatorMove?: string | null;
     resultClass?: string | null;
     resultSummary?: string | null;
+    priorityRationale?: string | null;
 };
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {
