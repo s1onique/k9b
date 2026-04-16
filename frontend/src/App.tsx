@@ -76,6 +76,14 @@ const FRESHNESS_EMOJI: Record<FreshnessLevel, string> = {
   stale: "🔴",
 };
 
+// Page/data freshness uses same thresholds but tracks lastRefresh timestamp
+const getPageFreshnessLevel = (lastRefreshTime: dayjs.Dayjs): FreshnessLevel => {
+  const seconds = dayjs().diff(lastRefreshTime, "second");
+  if (seconds <= 30) return "fresh";
+  if (seconds < 180) return "warning";
+  return "stale";
+};
+
 const FRESHNESS_LABEL: Record<FreshnessLevel, string> = {
   fresh: "Fresh",
   warning: "Delayed",
@@ -3813,6 +3821,13 @@ const App = () => {
         </div>
         <div className="hero-actions">
           <div className="refresh-controls">
+            <span
+              className={`page-freshness-indicator page-freshness-indicator--${getPageFreshnessLevel(lastRefresh)}`}
+              title={`Page data refreshed ${relativeRecency(lastRefresh.toISOString())}`}
+              aria-label={`Page data freshness: ${getPageFreshnessLevel(lastRefresh)}`}
+            >
+              {FRESHNESS_EMOJI[getPageFreshnessLevel(lastRefresh)]}
+            </span>
             <button type="button" onClick={refresh}>
               Refresh
             </button>
