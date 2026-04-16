@@ -882,6 +882,116 @@ body {
   font-weight: 600;
 }
 
+/* Run action cell - semantic clarity */
+.run-action-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+
+/* Primary action button - more prominent */
+.run-action-cell .btn-primary,
+.run-action-cell button[class*='primary'] {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #7dd3fc;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.run-action-cell .btn-primary:hover,
+.run-action-cell button[class*='primary']:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.7);
+}
+
+.run-action-cell .btn-primary:focus-visible,
+.run-action-cell button[class*='primary']:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* Secondary action button - download, subordinate styling */
+.run-action-cell .btn-secondary,
+.run-action-cell a.btn,
+.run-action-cell a[class*='btn'] {
+  background: rgba(71, 85, 105, 0.3);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  color: rgba(148, 163, 184, 0.9);
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.run-action-cell .btn-secondary:hover,
+.run-action-cell a.btn:hover,
+.run-action-cell a[class*='btn']:hover {
+  background: rgba(71, 85, 105, 0.5);
+  border-color: rgba(100, 116, 139, 0.6);
+  color: #e2e8f0;
+}
+
+.run-action-cell .btn-secondary:focus-visible,
+.run-action-cell a.btn:focus-visible,
+.run-action-cell a[class*='btn']:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* No action available - deliberate, not broken */
+.run-action-empty {
+  color: rgba(100, 116, 139, 0.5);
+  font-size: 0.7rem;
+  font-style: italic;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Run cell review column - semantic grouping */
+.run-cell-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+}
+
+.run-cell-review .review-action-hint {
+  font-size: 0.6rem;
+  color: rgba(100, 116, 139, 0.6);
+  margin-top: 0.1rem;
+}
+
+/* Action column - primary vs secondary visual hierarchy */
+.run-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+
+.run-row-actions .action-primary {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.run-row-actions .action-secondary {
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+
+.run-row-actions .action-tertiary {
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
 .fleet-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

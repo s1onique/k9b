@@ -3956,7 +3956,7 @@ const App = () => {
                         {runEntry.reviewDownloadPath ? (
                           <a
                             href={artifactUrl(runEntry.reviewDownloadPath)}
-                            className="btn btn-small"
+                            className="btn btn-small btn-secondary"
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -3964,7 +3964,7 @@ const App = () => {
                             Download
                           </a>
                         ) : (
-                          <span className="muted small">—</span>
+                          <span className="run-action-empty" aria-label="No action available">—</span>
                         )}
                       </td>
                       <td>
@@ -3983,7 +3983,7 @@ const App = () => {
                         {runEntry.reviewStatus === "no-executions" ? (
                           <button
                             type="button"
-                            className="btn btn-small"
+                            className="btn btn-small btn-primary"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleBatchExecution(runEntry.runId);
@@ -3993,7 +3993,7 @@ const App = () => {
                             {executingBatchRunId === runEntry.runId ? "Running…" : "Execute"}
                           </button>
                         ) : (
-                          <span className="muted small">—</span>
+                          <span className="run-action-empty" aria-label="No action available">—</span>
                         )}
                         {batchExecutionError[runEntry.runId] && (
                           <p className="runs-execution-error">
