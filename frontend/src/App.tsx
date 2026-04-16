@@ -1757,6 +1757,8 @@ const ExecutionHistoryPanel = ({
   onSubmitFeedback,
   filter,
   onFilterChange,
+  runQueue,
+  onHighlightQueueCard,
 }: {
   history: NextCheckExecutionHistoryEntry[];
   runId: string;
@@ -1766,6 +1768,8 @@ const ExecutionHistoryPanel = ({
   onSubmitFeedback?: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
   filter: ExecutionHistoryFilterState;
   onFilterChange: (filter: ExecutionHistoryFilterState) => void;
+  runQueue?: NextCheckQueueItem[];
+  onHighlightQueueCard?: (key: string) => void;
 }) => {
   const filteredHistory = useMemo(
     () => filterExecutionHistory(history, filter),
@@ -1922,7 +1926,7 @@ const ExecutionHistoryPanel = ({
                 )}
               </div>
               {/* Provenance traceability: jump link back to work list */}
-              {entry.candidateId && (
+              {entry.candidateId && runQueue && onHighlightQueueCard && (
                 <div className="execution-history-provenance">
                   <button
                     type="button"
@@ -1934,7 +1938,7 @@ const ExecutionHistoryPanel = ({
                       );
                       if (queueItemKey) {
                         const key = buildCandidateKey(queueItemKey, queueItemKey.candidateIndex ?? runQueue.indexOf(queueItemKey));
-                        highlightQueueCard(key);
+                        onHighlightQueueCard(key);
                       }
                     }}
                     title={`View candidate ${entry.candidateId} in work list`}
@@ -4123,6 +4127,8 @@ const App = () => {
       onSubmitFeedback={handleUsefulnessFeedback}
       filter={executionHistoryFilter}
       onFilterChange={setExecutionHistoryFilter}
+      runQueue={runQueue}
+      onHighlightQueueCard={highlightQueueCard}
     />
     <section className="panel next-check-queue-panel" id="next-check-queue">
         <div className="section-head">
