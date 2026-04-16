@@ -254,14 +254,97 @@ body {
   cursor: pointer;
 }
 
-.floating-nav {
+/* ==========================================================================
+   Cockpit Navigation Strip
+   ========================================================================== */
+
+/* Primary navigation container - wraps as chip bar */
+.cockpit-nav {
   display: flex;
-  gap: 0.75rem;
   flex-wrap: wrap;
-  padding: 0.5rem 1rem;
-  border-radius: 0.75rem;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(14, 165, 233, 0.4);
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.85) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  box-shadow: 0 4px 20px rgba(2, 6, 23, 0.3), inset 0 1px 0 rgba(148, 163, 184, 0.1);
+  margin: 0.25rem 0;
+}
+
+/* Navigation chip - individual link styling */
+.cockpit-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Hover state */
+.cockpit-nav__item:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e0f2fe;
+  transform: translateY(-1px);
+}
+
+/* Focus state for accessibility */
+.cockpit-nav__item:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* Active/current section state */
+.cockpit-nav__item--active {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.25) 0%, rgba(56, 189, 248, 0.15) 100%);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #7dd3fc;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+
+/* Icon support within nav chips */
+.cockpit-nav__icon {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+/* Section label for grouping hint */
+.cockpit-nav__label {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.5);
+  padding: 0.25rem 0.5rem;
+  align-self: center;
+}
+
+/* Legacy class for backward compatibility */
+.floating-nav {
+  /* Deprecated: use .cockpit-nav instead */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.85) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  box-shadow: 0 4px 20px rgba(2, 6, 23, 0.3), inset 0 1px 0 rgba(148, 163, 184, 0.1);
+  margin: 0.25rem 0;
 }
 
 .floating-nav a {

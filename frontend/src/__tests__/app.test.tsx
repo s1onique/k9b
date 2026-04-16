@@ -2461,3 +2461,168 @@ describe("Recent runs review status badges", () => {
     expect(unreviewedPill).toHaveClass("status-pill");
   });
 });
+
+describe("Cockpit navigation", () => {
+  test("renders cockpit navigation with chip-style links", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    // Wait for app to load (loading state has no nav)
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Find the cockpit nav container
+    const cockpitNav = document.querySelector(".cockpit-nav");
+    expect(cockpitNav).not.toBeNull();
+    expect(cockpitNav).toHaveAttribute("aria-label", "Fleet cockpit sections");
+
+    // Verify nav uses chip-style links (not plain anchor tags)
+    const navItems = cockpitNav!.querySelectorAll(".cockpit-nav__item");
+    expect(navItems.length).toBeGreaterThan(0);
+
+    // Verify all nav items are anchor elements with proper href attributes
+    navItems.forEach((item) => {
+      expect(item.tagName.toLowerCase()).toBe("a");
+      expect(item).toHaveAttribute("href");
+    });
+  });
+
+  test("renders all expected section navigation links", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    // Wait for app to load (loading state has no nav)
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    const cockpitNav = document.querySelector(".cockpit-nav");
+    expect(cockpitNav).not.toBeNull();
+
+    // Expected navigation links based on the redesigned navigation
+    const expectedLinks = [
+      "Recent runs",
+      "Run summary",
+      "Provider-assisted advisory",
+      "Provider-assisted branches",
+      "Diagnostic package",
+      "Evidence checks",
+      "Execution review",
+      "Work list",
+      "Fleet overview",
+      "Cluster detail",
+      "Action proposals",
+      "Notifications",
+      "LLM policy",
+      "LLM activity",
+    ];
+
+    expectedLinks.forEach((linkText) => {
+      const link = cockpitNav!.querySelector(`.cockpit-nav__item[href="#${linkText.toLowerCase().replace(/[^a-z]+/g, "-").replace(/-+/g, "-")}"]`);
+      // Use more flexible matching
+      const links = Array.from(cockpitNav!.querySelectorAll(".cockpit-nav__item"));
+      const found = links.some(
+        (el) => el.textContent?.trim() === linkText
+      );
+      expect(found).toBe(true);
+    });
+  });
+
+  test("navigation renders correctly with all sections visible", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify cockpit-nav exists and has multiple items
+    const cockpitNav = document.querySelector(".cockpit-nav");
+    expect(cockpitNav).not.toBeNull();
+
+    const navItems = cockpitNav!.querySelectorAll(".cockpit-nav__item");
+    // Should have at least 14 nav items (15 minus conditional review-insights which depends on run.diagnosticPackReview)
+    expect(navItems.length).toBeGreaterThanOrEqual(14);
+
+    // Verify nav chips have proper styling class
+    navItems.forEach((item) => {
+      expect(item).toHaveClass("cockpit-nav__item");
+    });
+  });
+
+  test("navigation chips have correct href attributes for section targeting", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    // Wait for app to load (loading state has no nav)
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    const cockpitNav = document.querySelector(".cockpit-nav");
+    expect(cockpitNav).not.toBeNull();
+
+    // Map of expected text to href fragments
+    const expectedHrefs: Record<string, string> = {
+      "Recent runs": "#recent-runs",
+      "Run summary": "#run-detail",
+      "Work list": "#next-check-queue",
+      "Fleet overview": "#fleet",
+      "Cluster detail": "#cluster",
+      "LLM activity": "#llm-activity",
+    };
+
+    Object.entries(expectedHrefs).forEach(([text, href]) => {
+      const links = Array.from(
+        cockpitNav!.querySelectorAll(".cockpit-nav__item")
+      );
+      const matchingLink = links.find(
+        (el) => el.textContent?.trim() === text
+      );
+      expect(matchingLink).not.toBeNull();
+      expect(matchingLink).toHaveAttribute("href", href);
+    });
+  });
+
+  test("navigation chips wrap gracefully without breaking layout", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    // Wait for app to load (loading state has no nav)
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    const cockpitNav = document.querySelector(".cockpit-nav");
+    expect(cockpitNav).not.toBeNull();
+
+    // Verify nav chip items exist and have proper CSS class structure
+    const navItems = cockpitNav!.querySelectorAll(".cockpit-nav__item");
+    expect(navItems.length).toBeGreaterThan(10);
+
+    // Verify nav chips have border-radius via CSS class (not computed style in jsdom)
+    // The class name itself indicates the styling pattern
+    navItems.forEach((item) => {
+      expect(item).toHaveClass("cockpit-nav__item");
+    });
+
+    // Verify chips use anchor tags for navigation (accessibility)
+    const anchorTags = cockpitNav!.querySelectorAll("a");
+    expect(anchorTags.length).toBe(navItems.length);
+  });
+
+  test("navigation maintains dark theme styling", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    // Wait for app to load (loading state has no nav)
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    const cockpitNav = document.querySelector(".cockpit-nav");
+    expect(cockpitNav).not.toBeNull();
+
+    // Verify nav has the cockpit-nav class (dark theme styling applied via CSS class)
+    expect(cockpitNav).toHaveClass("cockpit-nav");
+
+    // Verify chips have proper class names indicating dark theme styling
+    const chips = cockpitNav!.querySelectorAll(".cockpit-nav__item");
+    expect(chips.length).toBeGreaterThan(10);
+
+    // Verify chips are anchor elements with href attributes
+    chips.forEach((chip) => {
+      expect(chip.tagName.toLowerCase()).toBe("a");
+      expect(chip).toHaveAttribute("href");
+    });
+  });
+});

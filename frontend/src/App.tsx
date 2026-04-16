@@ -3431,24 +3431,24 @@ const App = () => {
           <span className="small">Updated {dayjs(lastRefresh).fromNow()}</span>
         </div>
       </header>
-      <nav className="floating-nav">
-        <a href="#recent-runs">Recent runs</a>
-        <a href="#run-detail">Run summary</a>
-        <a href="#review-enrichment">Provider-assisted advisory</a>
-        <a href="#provider-execution">Provider-assisted branches</a>
-      <a href="#diagnostic-pack-download">Run diagnostic package archive</a>
-      {run.diagnosticPackReview && (
-        <a href="#diagnostic-pack-review">Automated review insights</a>
-      )}
-      <a href="#deterministic-next-checks">Deterministic next checks</a>
-        <a href="#execution-history">Execution review</a>
-        <a href="#next-check-queue">Work list</a>
-        <a href="#fleet">Fleet overview</a>
-        <a href="#cluster">Cluster detail</a>
-        <a href="#proposals">Action proposals</a>
-        <a href="#notifications">Notification history</a>
-        <a href="#llm-policy">LLM policy</a>
-        <a href="#llm-activity">LLM activity</a>
+      <nav className="cockpit-nav" aria-label="Fleet cockpit sections">
+        <a className="cockpit-nav__item" href="#recent-runs">Recent runs</a>
+        <a className="cockpit-nav__item" href="#run-detail">Run summary</a>
+        <a className="cockpit-nav__item" href="#review-enrichment">Provider-assisted advisory</a>
+        <a className="cockpit-nav__item" href="#provider-execution">Provider-assisted branches</a>
+        <a className="cockpit-nav__item" href="#diagnostic-pack-download">Diagnostic package</a>
+        {run.diagnosticPackReview && (
+          <a className="cockpit-nav__item" href="#diagnostic-pack-review">Review insights</a>
+        )}
+        <a className="cockpit-nav__item" href="#deterministic-next-checks">Evidence checks</a>
+        <a className="cockpit-nav__item" href="#execution-history">Execution review</a>
+        <a className="cockpit-nav__item" href="#next-check-queue">Work list</a>
+        <a className="cockpit-nav__item" href="#fleet">Fleet overview</a>
+        <a className="cockpit-nav__item" href="#cluster">Cluster detail</a>
+        <a className="cockpit-nav__item" href="#proposals">Action proposals</a>
+        <a className="cockpit-nav__item" href="#notifications">Notifications</a>
+        <a className="cockpit-nav__item" href="#llm-policy">LLM policy</a>
+        <a className="cockpit-nav__item" href="#llm-activity">LLM activity</a>
       </nav>
       {error && <div className="alert">{error}</div>}
       {/* Recent runs panel */}
