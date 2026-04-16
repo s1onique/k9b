@@ -1810,6 +1810,55 @@ body {
   color: #fbbf24;
 }
 
+/* Usefulness indicator - shows usefulness review status on execution history cards */
+.usefulness-indicator {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.2);
+}
+
+.usefulness-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.usefulness-badge-useful {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.usefulness-badge-partial {
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde047;
+}
+
+.usefulness-badge-noisy {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
+.usefulness-badge-empty {
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+.usefulness-indicator.unreviewed {
+  border-top-style: dashed;
+}
+
 .follow-up-block {
   border-radius: 0.65rem;
   border: 1px solid rgba(59, 130, 246, 0.3);

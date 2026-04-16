@@ -1957,7 +1957,7 @@ const ExecutionHistoryPanel = ({
               </div>
               <ResultInterpretationBlock
                 resultClass={entry.resultClass}
-                resultSummary={entry.resultSummary}
+                resultSummary={entry.resultSummary ? truncateText(entry.resultSummary, 120) : null}
                 suggestedNextOperatorMove={entry.suggestedNextOperatorMove}
               />
               <FailureFollowUpBlock
@@ -1965,12 +1965,18 @@ const ExecutionHistoryPanel = ({
                 failureSummary={entry.failureSummary}
                 suggestedNextOperatorMove={entry.suggestedNextOperatorMove}
               />
-              {entry.usefulnessClass && (
+              {entry.usefulnessClass ? (
                 <div className="usefulness-indicator">
-                  <span className="muted small">Usefulness: {entry.usefulnessClass}</span>
+                  <span className={`usefulness-badge usefulness-badge-${entry.usefulnessClass}`}>
+                    {entry.usefulnessClass}
+                  </span>
                   {entry.usefulnessSummary && (
-                    <span className="muted small"> — {entry.usefulnessSummary}</span>
+                    <span className="muted small"> — {truncateText(entry.usefulnessSummary, 80)}</span>
                   )}
+                </div>
+              ) : (
+                <div className="usefulness-indicator unreviewed">
+                  <span className="muted small">Not reviewed</span>
                 </div>
               )}
               {entry.packRefreshStatus && (
