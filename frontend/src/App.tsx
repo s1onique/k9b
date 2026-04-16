@@ -3970,8 +3970,8 @@ const App = () => {
                       <td>
                         {runEntry.timestamp ? (
                           <div className="run-cell-timestamp">
-                            <span className="muted small">{relativeRecency(runEntry.timestamp)}</span>
-                            <span className="muted tiny" title={formatTimestamp(runEntry.timestamp)}>
+                            <span className="recency">{relativeRecency(runEntry.timestamp)}</span>
+                            <span className="absolute" title={formatTimestamp(runEntry.timestamp)}>
                               {formatTimestamp(runEntry.timestamp)}
                             </span>
                           </div>
@@ -3996,7 +3996,7 @@ const App = () => {
                           <span className="muted small">—</span>
                         )}
                         {batchExecutionError[runEntry.runId] && (
-                          <p className="muted tiny runs-execution-error">
+                          <p className="runs-execution-error">
                             {batchExecutionError[runEntry.runId]}
                           </p>
                         )}

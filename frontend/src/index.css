@@ -534,17 +534,79 @@ body {
 }
 
 /* Recent runs panel */
-.recent-runs-panel {
+.recent-runs {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.75rem;
 }
 
-.recent-runs-panel .eyebrow {
-  margin-bottom: 0.25rem;
+/* Runs filter bar - cleaner chip-based design */
+.runs-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-/* Recent runs filter row */
+.runs-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.runs-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  background: rgba(30, 41, 59, 0.6);
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.runs-filter-button:hover {
+  background: rgba(71, 85, 105, 0.4);
+  border-color: rgba(100, 116, 139, 0.6);
+  color: #e2e8f0;
+}
+
+.runs-filter-button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.runs-filter-button.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #bae6fd;
+  font-weight: 600;
+}
+
+.runs-filter-label {
+  white-space: nowrap;
+}
+
+.runs-filter-count {
+  color: rgba(148, 163, 184, 0.6);
+  font-size: 0.7rem;
+}
+
+.runs-filter-button.active .runs-filter-count {
+  color: rgba(186, 230, 253, 0.7);
+}
+
+.runs-filter-summary {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.7);
+  padding-left: 0.15rem;
+}
+
+/* Recent runs filter row - deprecated, using runs-filter-bar instead */
 .recent-runs-filter-row {
   display: flex;
   align-items: center;
@@ -569,11 +631,6 @@ body {
 
 .runs-filter-select:hover {
   border-color: rgba(100, 116, 139, 0.8);
-}
-
-.runs-filter-summary {
-  margin-bottom: 0.5rem;
-  padding-left: 0.25rem;
 }
 
 /* Recent runs list */
@@ -619,9 +676,11 @@ body {
   margin-left: auto;
 }
 
-/* Runs table and pagination */
+/* Runs table and pagination - improved scannability */
 .runs-table-wrapper {
   overflow-x: auto;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
 .runs-table {
@@ -630,20 +689,24 @@ body {
   min-width: 500px;
 }
 
-.runs-table th,
-.runs-table td {
-  padding: 0.65rem 0.75rem;
+.runs-table th {
+  padding: 0.5rem 0.75rem;
   text-align: left;
   vertical-align: middle;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  color: rgba(148, 163, 184, 0.7);
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
 }
 
-.runs-table th {
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  color: rgba(148, 163, 184, 0.8);
-  font-weight: 600;
+.runs-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .runs-table tbody tr {
@@ -652,29 +715,75 @@ body {
 }
 
 .runs-table tbody tr:hover {
-  background: rgba(71, 85, 105, 0.4);
+  background: rgba(71, 85, 105, 0.35);
 }
 
 .runs-table tbody tr.run-row-selected {
-  background: rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.runs-table tbody tr.run-row-selected td:first-child {
+  border-left: 3px solid rgba(56, 189, 248, 0.6);
+}
+
+.runs-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .runs-table td strong {
   display: block;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f1f5f9;
 }
 
+/* Run identity cell - clean block layout */
 .run-cell-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.run-cell-main strong {
+  font-size: 0.85rem;
+}
+
+.run-cell-id {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.6);
+}
+
+/* Timestamp cell - aligned for scanning */
+.run-cell-timestamp {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
-.run-cell-timestamp {
+.run-cell-timestamp .recency {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.run-cell-timestamp .absolute {
+  font-size: 0.65rem;
+  color: rgba(148, 163, 184, 0.5);
+}
+
+/* Action cell - deliberate placement */
+.run-action-cell {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+
+.runs-execution-error {
+  margin: 0;
+  font-size: 0.65rem;
+  color: #fca5a5;
 }
 
 .runs-pagination {
