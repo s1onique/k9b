@@ -1813,7 +1813,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 "commandFamily": candidate.get("suggestedCommandFamily") if candidate else None,
                 "status": artifact.status.value,
                 "durationMs": artifact.duration_ms,
-                "artifactPath": artifact_path or str(artifact_path),
+                # artifact_path is a string (from _relative_path) or None; serialize explicitly
+                "artifactPath": str(artifact_path) if artifact_path else None,
                 "timedOut": artifact.timed_out or False,
                 "stdoutTruncated": artifact.stdout_truncated or False,
                 "stderrTruncated": artifact.stderr_truncated or False,
