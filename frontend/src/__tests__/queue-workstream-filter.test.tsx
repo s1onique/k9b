@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import App, { QUEUE_VIEW_STORAGE_KEY } from "../App";
-import { createFetchMock, createStorageMock, makeRunWithOverrides, sampleClusterDetail, sampleFleet, sampleNotifications, sampleProposals, sampleRun, sampleRunsList } from "./fixtures";
+import { createFetchMock, createStorageMock, getQueuePanel, makeRunWithOverrides, sampleClusterDetail, sampleFleet, sampleNotifications, sampleProposals, sampleRun, sampleRunsList } from "./fixtures";
 
 // Default payloads for API mocking - must include cluster-detail for queue section to render
 const defaultPayloads = {
@@ -23,17 +23,6 @@ const defaultPayloads = {
     runEnabled: true,
     runProvider: "k8sgpt",
   },
-};
-
-
-// Helper to get the queue panel with proper scoping
-const getQueuePanel = async () => {
-  const eyebrow = await screen.findByText(/Next-check queue/i);
-  const queuePanel = eyebrow.closest(".next-check-queue-panel");
-  if (!queuePanel) {
-    throw new Error("Queue panel is not rendered");
-  }
-  return within(queuePanel);
 };
 
 // Helper to find workstream filter within queue panel scope
@@ -75,7 +64,7 @@ describe("Queue workstream filter", () => {
     }));
     render(<App />);
 
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
     expect(workstreamSelect).toBeTruthy();
   });
@@ -88,7 +77,7 @@ describe("Queue workstream filter", () => {
     }));
     render(<App />);
 
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     // Default workstream filter should be "all" - all 6 items should be visible
     const queueItems = queueScoped.getAllByRole("article");
     expect(queueItems.length).toBe(6);
@@ -103,7 +92,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     await user.selectOptions(workstreamSelect, "incident");
@@ -122,7 +111,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     await user.selectOptions(workstreamSelect, "evidence");
@@ -140,7 +129,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     await user.selectOptions(workstreamSelect, "drift");
@@ -158,7 +147,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     await user.selectOptions(workstreamSelect, "drift");
@@ -183,7 +172,7 @@ describe("Queue workstream filter", () => {
     }));
     render(<App />);
 
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     // Verify filter was restored from localStorage
@@ -199,7 +188,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     let workstreamSelect = getWorkstreamSelect(queueScoped);
 
     // Set a workstream filter first
@@ -225,7 +214,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     // All 6 items are incident, only 'all' and 'incident' options exist
@@ -246,7 +235,7 @@ describe("Queue workstream filter", () => {
     }));
     render(<App />);
 
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
     const options = Array.from(workstreamSelect.options).map((o) => o.value);
 
@@ -266,7 +255,7 @@ describe("Queue workstream filter", () => {
     render(<App />);
 
     const user = userEvent.setup();
-    const queueScoped = await getQueuePanel();
+    const queueScoped = await getQueuePanel(screen);
     const workstreamSelect = getWorkstreamSelect(queueScoped);
 
     // First set to incident

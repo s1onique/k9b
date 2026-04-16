@@ -1,3 +1,4 @@
+import { within } from "@testing-library/react";
 import type {
   ClusterDetailPayload,
   DiagnosticPackReview,
@@ -1027,12 +1028,18 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
   }) as unknown as (input: RequestInfo) => Promise<unknown>;
 
 /**
- * Helper to get the queue panel with proper scoping.
- * @returns a scoped query function for the queue panel
+ * Finds the queue panel element and returns a within-scoped query function.
+ * @param screen - The screen object from @testing-library/react
+ * @param within - The within function from @testing-library/react
+ * @returns a within-scoped query function bound to the queue panel element
  */
-export const getQueuePanelHelper = async () => {
-  // Import within is only available in test files with @testing-library/react
-  // This function is provided as a pattern - actual implementation requires
-  // importing `screen` and `within` from "@testing-library/react" in the test file
-  throw new Error("getQueuePanelHelper requires screen and within from @testing-library/react");
+export const getQueuePanel = async (
+  screen: import("@testing-library/react").Screen
+): Promise<ReturnType<typeof within>> => {
+  const eyebrow = await screen.findByText(/Next-check queue/i);
+  const queuePanel = eyebrow.closest(".next-check-queue-panel");
+  if (!queuePanel) {
+    throw new Error("Queue panel is not rendered");
+  }
+  return within(queuePanel);
 };
