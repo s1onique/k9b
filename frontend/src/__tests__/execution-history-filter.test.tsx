@@ -428,9 +428,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       
       await screen.findByText(/Check execution review/i);
       
-      // Should show execution cards
+      // Should show execution cards (text may appear in summary strip and/or grid cards)
       await waitFor(() => {
-        expect(screen.getByText(/Check pod status/i)).toBeInTheDocument();
+        const matches = screen.queryAllByText(/Check pod status/i);
+        expect(matches.length).toBeGreaterThan(0);
       });
       
       // Should show at least one status badge with "success" in the panel
@@ -470,8 +471,9 @@ describe("ExecutionHistoryPanel UI tests", () => {
       
       // The filter should be applied (fewer cards should show)
       await waitFor(() => {
-        // Should still show some entries
-        expect(screen.getByText(/Check pod status/i)).toBeInTheDocument();
+        // Should still show some entries (text may appear in summary strip and/or grid cards)
+        const matches = screen.queryAllByText(/Check pod status/i);
+        expect(matches.length).toBeGreaterThan(0);
       });
     });
 
@@ -486,9 +488,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const usefulnessSelect = panel.getByLabelText(/Reviewed/i);
       await user.selectOptions(usefulnessSelect, "useful");
       
-      // Should show only useful entries
+      // Should show only useful entries (text may appear in summary strip and/or grid cards)
       await waitFor(() => {
-        expect(screen.getByText(/Check pod status/i)).toBeInTheDocument();
+        const matches = screen.queryAllByText(/Check pod status/i);
+        expect(matches.length).toBeGreaterThan(0);
       });
     });
 

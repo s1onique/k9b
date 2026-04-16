@@ -1629,6 +1629,288 @@ export const computeExecutionHistoryFilterCounts = (
   return { outcome, usefulness };
 };
 
+// ==========================================================================
+// Execution History Summary - derived run-scoped highlights
+// ==========================================================================
+
+// Types for execution history summary
+export type RepeatedFailureGroup = {
+  failurePattern: string; // e.g., "timed-out", "command-failed", "kubectl-get failures"
+  count: number;
+  entries: NextCheckExecutionHistoryEntry[];
+  label: string; // Human-friendly label for the pattern
+};
+
+export type ExecutionHistorySummary = {
+  usefulChecks: NextCheckExecutionHistoryEntry[];
+  noisyEmptyChecks: NextCheckExecutionHistoryEntry[];
+  repeatedFailures: RepeatedFailureGroup[];
+};
+
+/**
+ * Compute a run-scoped summary of execution history entries.
+ * This is derived data computed entirely from existing entry fields.
+ */
+export const computeExecutionHistorySummary = (
+  entries: NextCheckExecutionHistoryEntry[]
+): ExecutionHistorySummary => {
+  // Most useful checks: entries with usefulnessClass = "useful"
+  const usefulChecks = entries.filter((e) => e.usefulnessClass === "useful");
+
+  // Noisy/empty checks: entries with usefulnessClass in ["noisy", "empty"]
+  const noisyEmptyChecks = entries.filter((e) => e.usefulnessClass === "noisy" || e.usefulnessClass === "empty");
+
+  // Repeated failures: detect patterns of repeated failures in the current run
+  const repeatedFailures = detectRepeatedFailures(entries);
+
+  return { usefulChecks, noisyEmptyChecks, repeatedFailures };
+};
+
+/**
+ * Detect repeated failure patterns using a simple deterministic heuristic.
+ * Groups entries that share:
+ * - Same failureClass (e.g., "timed-out")
+ * - Same commandFamily + timedOut
+ * - Same candidate description prefix (first 30 chars)
+ */
+const detectRepeatedFailures = (entries: NextCheckExecutionHistoryEntry[]): RepeatedFailureGroup[] => {
+  // Only consider failed or timed-out entries
+  const failureEntries = entries.filter((e) => {
+    const isFailure = e.status === "failed" || e.status === "error";
+    const isTimeout = e.timedOut === true;
+    const hasFailureClass = Boolean(e.failureClass);
+    return isFailure || isTimeout || hasFailureClass;
+  });
+
+  if (failureEntries.length === 0) {
+    return [];
+  }
+
+  // Build a key for grouping similar failures
+  const getFailureKey = (entry: NextCheckExecutionHistoryEntry): string => {
+    if (entry.failureClass) {
+      return `class:${entry.failureClass}`;
+    }
+    if (entry.timedOut) {
+      return entry.commandFamily ? `timeout:${entry.commandFamily}` : "timeout:generic";
+    }
+    if (entry.status === "failed" || entry.status === "error") {
+      return entry.commandFamily ? `failed:${entry.commandFamily}` : "failed:generic";
+    }
+    const prefix = (entry.candidateDescription || "").slice(0, 30).toLowerCase().trim();
+    return `desc:${prefix}`;
+  };
+
+  const getFailureLabel = (entry: NextCheckExecutionHistoryEntry, key: string): string => {
+    if (key.startsWith("class:")) {
+      const failureClass = key.slice(6);
+      const labels: Record<string, string> = {
+        "timed-out": "Timed out",
+        "command-unavailable": "Command unavailable",
+        "context-unavailable": "Context unavailable",
+        "command-failed": "Command failed",
+        "blocked-by-gating": "Blocked",
+        "approval-missing-or-stale": "Approval needed",
+        "unknown-failure": "Unknown failure",
+      };
+      return labels[failureClass] || failureClass.replace(/-/g, " ");
+    }
+    if (key.startsWith("timeout:")) {
+      const cmd = key.slice(8);
+      return cmd === "generic" ? "Timed out" : `${cmd} timed out`;
+    }
+    if (key.startsWith("failed:")) {
+      const cmd = key.slice(7);
+      return cmd === "generic" ? "Command failed" : `${cmd} failed`;
+    }
+    return "Similar failures";
+  };
+
+  // Group entries by failure key
+  const groups = new Map<string, NextCheckExecutionHistoryEntry[]>();
+  failureEntries.forEach((entry) => {
+    const key = getFailureKey(entry);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key)!.push(entry);
+  });
+
+  // Only include groups with 2+ entries (repeated)
+  const repeated: RepeatedFailureGroup[] = [];
+  groups.forEach((groupEntries, key) => {
+    if (groupEntries.length >= 2) {
+      repeated.push({
+        failurePattern: key,
+        count: groupEntries.length,
+        entries: groupEntries,
+        label: getFailureLabel(groupEntries[0], key),
+      });
+    }
+  });
+
+  // Sort by count descending, then by label
+  repeated.sort((a, b) => {
+    if (b.count !== a.count) {
+      return b.count - a.count;
+    }
+    return a.label.localeCompare(b.label);
+  });
+
+  return repeated;
+};
+
+// ==========================================================================
+// Execution History Summary Component
+// ==========================================================================
+
+type ExecutionHistorySummaryProps = {
+  summary: ExecutionHistorySummary;
+  onHighlightEntry?: (entryKey: string | null) => void;
+  onFilterChange?: (filter: Partial<ExecutionHistoryFilterState>) => void;
+};
+
+// Limit displayed items in summary strips
+const SUMMARY_ITEM_LIMIT = 3;
+
+const ExecutionHistorySummaryStrip = ({
+  summary,
+  onHighlightEntry,
+  onFilterChange,
+}: ExecutionHistorySummaryProps) => {
+  const hasUseful = summary.usefulChecks.length > 0;
+  const hasNoisyEmpty = summary.noisyEmptyChecks.length > 0;
+  const hasRepeated = summary.repeatedFailures.length > 0;
+
+  // Don't render if no summary categories have content
+  if (!hasUseful && !hasNoisyEmpty && !hasRepeated) {
+    return null;
+  }
+
+  const handleEntryClick = (entry: NextCheckExecutionHistoryEntry) => {
+    if (onHighlightEntry) {
+      const key = buildExecutionEntryKey(entry);
+      onHighlightEntry(key);
+    }
+  };
+
+  const handleFilterClick = (usefulnessFilter?: UsefulnessReviewFilter) => {
+    if (onFilterChange) {
+      onFilterChange({
+        usefulnessFilter: usefulnessFilter || "all",
+      });
+    }
+  };
+
+  return (
+    <div className="execution-history-summary">
+      {hasUseful && (
+        <div className="exec-summary-strip exec-summary-strip--useful">
+          <div className="exec-summary-header">
+            <span className="exec-summary-label">Most useful</span>
+            <span className="exec-summary-count">{summary.usefulChecks.length}</span>
+          </div>
+          <div className="exec-summary-items">
+            {summary.usefulChecks.slice(0, SUMMARY_ITEM_LIMIT).map((entry) => (
+              <button
+                key={buildExecutionEntryKey(entry)}
+                type="button"
+                className="exec-summary-item"
+                onClick={() => handleEntryClick(entry)}
+                title={entry.candidateDescription || "Check"}
+              >
+                <span className="exec-summary-item-text">
+                  {truncateText(entry.candidateDescription || "Check", 40)}
+                </span>
+                {entry.clusterLabel && (
+                  <span className="exec-summary-item-meta">{entry.clusterLabel}</span>
+                )}
+              </button>
+            ))}
+            {summary.usefulChecks.length > SUMMARY_ITEM_LIMIT && (
+              <button
+                type="button"
+                className="exec-summary-more"
+                onClick={() => handleFilterClick("useful")}
+              >
+                +{summary.usefulChecks.length - SUMMARY_ITEM_LIMIT} more
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hasNoisyEmpty && (
+        <div className="exec-summary-strip exec-summary-strip--noisy">
+          <div className="exec-summary-header">
+            <span className="exec-summary-label">Noisy / empty</span>
+            <span className="exec-summary-count">{summary.noisyEmptyChecks.length}</span>
+          </div>
+          <div className="exec-summary-items">
+            {summary.noisyEmptyChecks.slice(0, SUMMARY_ITEM_LIMIT).map((entry) => (
+              <button
+                key={buildExecutionEntryKey(entry)}
+                type="button"
+                className="exec-summary-item"
+                onClick={() => handleEntryClick(entry)}
+                title={entry.candidateDescription || "Check"}
+              >
+                <span className={`exec-summary-item-badge usefulness-badge-${entry.usefulnessClass}`}>
+                  {entry.usefulnessClass}
+                </span>
+                <span className="exec-summary-item-text">
+                  {truncateText(entry.candidateDescription || "Check", 35)}
+                </span>
+              </button>
+            ))}
+            {summary.noisyEmptyChecks.length > SUMMARY_ITEM_LIMIT && (
+              <button
+                type="button"
+                className="exec-summary-more"
+                onClick={() => handleFilterClick("noisy")}
+              >
+                +{summary.noisyEmptyChecks.length - SUMMARY_ITEM_LIMIT} more
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hasRepeated && (
+        <div className="exec-summary-strip exec-summary-strip--repeated">
+          <div className="exec-summary-header">
+            <span className="exec-summary-label">Repeated failures</span>
+            <span className="exec-summary-count">
+              {summary.repeatedFailures.reduce((sum, g) => sum + g.count, 0)}
+            </span>
+          </div>
+          <div className="exec-summary-items">
+            {summary.repeatedFailures.slice(0, SUMMARY_ITEM_LIMIT).map((group) => (
+              <button
+                key={group.failurePattern}
+                type="button"
+                className="exec-summary-item"
+                onClick={() => handleEntryClick(group.entries[0])}
+                title={`${group.count} similar failures: ${group.label}`}
+              >
+                <span className="exec-summary-item-badge exec-summary-item-badge--repeated">
+                  ×{group.count}
+                </span>
+                <span className="exec-summary-item-text">{group.label}</span>
+              </button>
+            ))}
+            {summary.repeatedFailures.length > SUMMARY_ITEM_LIMIT && (
+              <span className="exec-summary-more">
+                +{summary.repeatedFailures.length - SUMMARY_ITEM_LIMIT} more patterns
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 type UsefulnessFeedbackState = {
   artifactPath: string;
   isSubmitting: boolean;
@@ -1779,6 +2061,9 @@ const ExecutionHistoryPanel = ({
   const clusters = useMemo(() => extractClustersFromHistory(history), [history]);
   const commandFamilies = useMemo(() => extractCommandFamiliesFromHistory(history), [history]);
   const counts = useMemo(() => computeExecutionHistoryFilterCounts(history), [history]);
+  
+  // Compute run-scoped summary for the summary strips (based on filtered entries)
+  const summary = useMemo(() => computeExecutionHistorySummary(filteredHistory), [filteredHistory]);
 
   const handleOutcomeChange = (value: ExecutionOutcomeFilter) => {
     onFilterChange({ ...filter, outcomeFilter: value });
@@ -1882,6 +2167,12 @@ const ExecutionHistoryPanel = ({
         </span>
       )}
     </div>
+    <ExecutionHistorySummaryStrip
+      summary={summary}
+      onHighlightEntry={highlightedKey !== undefined ? (key) => {
+        // Bubble up highlight request if onHighlightEntry prop is provided in the future
+      } : undefined}
+    />
     {filteredHistory.length ? (
       <div className="execution-history-grid">
         {filteredHistory.map((entry) => {

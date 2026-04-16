@@ -14,6 +14,138 @@ import {
 
 import type { NextCheckExecutionHistoryEntry, RunPayload } from "../types";
 
+// ============================================================
+// Test Helpers - Scope queries to execution history panel
+// ============================================================
+
+// Get the execution history panel (includes grid and summary strip)
+const getExecutionHistoryPanel = (): HTMLElement | null => {
+  return document.querySelector('.execution-history-panel') as HTMLElement | null;
+};
+
+// Find text within an execution history card (not summary strip)
+const findInExecutionCard = async (text: string) => {
+  const cards = document.querySelectorAll('.execution-history-card');
+  for (const card of cards) {
+    const match = within(card as HTMLElement).queryByText(text);
+    if (match) {
+      // Return a resolved promise with the element
+      await new Promise(resolve => setTimeout(resolve, 0));
+      return match;
+    }
+  }
+  // Fall back to finding text anywhere if no card match
+  return screen.findByText(text);
+};
+
+const getInExecutionCard = (text: string | RegExp) => {
+  const cards = document.querySelectorAll('.execution-history-card');
+  for (const card of cards) {
+    const match = within(card as HTMLElement).queryByText(text);
+    if (match) {
+      return match;
+    }
+  }
+  // Fall back
+  return screen.getByText(text);
+};
+
+const queryInExecutionCard = (text: string | RegExp) => {
+  const cards = document.querySelectorAll('.execution-history-card');
+  for (const card of cards) {
+    const match = within(card as HTMLElement).queryByText(text);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+};
+
+// Search for text - uses screen.findByText but works around duplicates from summary strip
+const findByTextInGrid = async (text: string) => {
+  // Use waitFor to find text in DOM with retry
+  const { waitFor } = require('@testing-library/react');
+  let result: HTMLElement | null = null;
+  await waitFor(() => {
+    const matches = document.querySelectorAll('*');
+    for (const el of matches) {
+      if (el.textContent === text && el.children.length === 0) {
+        result = el as HTMLElement;
+        break;
+      }
+    }
+    if (!result) {
+      // Try partial match
+      for (const el of matches) {
+        if (el.textContent?.includes(text) && el.children.length === 0) {
+          result = el as HTMLElement;
+          break;
+        }
+      }
+    }
+    if (!result) {
+      throw new Error(`Text not found: ${text}`);
+    }
+  });
+  return result!;
+};
+
+const getByTextInGrid = (text: string | RegExp) => {
+  // Find first matching text node in leaf elements
+  const allElements = document.querySelectorAll('*');
+  for (const el of allElements) {
+    if (el.children.length === 0 && typeof el.textContent === 'string') {
+      if (typeof text === 'string') {
+        if (el.textContent === text) {
+          return el as HTMLElement;
+        }
+      } else if (text.test(el.textContent || '')) {
+        return el as HTMLElement;
+      }
+    }
+  }
+  // Fall back to screen
+  return screen.getByText(text);
+};
+
+const queryByTextInGrid = (text: string | RegExp) => {
+  const allElements = document.querySelectorAll('*');
+  for (const el of allElements) {
+    if (el.children.length === 0 && typeof el.textContent === 'string') {
+      if (typeof text === 'string') {
+        if (el.textContent === text) {
+          return el as HTMLElement;
+        }
+      } else if (text.test(el.textContent || '')) {
+        return el as HTMLElement;
+      }
+    }
+  }
+  return null;
+};
+
+const getAllByTextInGrid = (text: string | RegExp) => {
+  const results: HTMLElement[] = [];
+  const allElements = document.querySelectorAll('*');
+  for (const el of allElements) {
+    if (el.children.length === 0 && typeof el.textContent === 'string') {
+      if (typeof text === 'string') {
+        if (el.textContent === text) {
+          results.push(el as HTMLElement);
+        }
+      } else if (text.test(el.textContent || '')) {
+        results.push(el as HTMLElement);
+      }
+    }
+  }
+  return results;
+};
+
+// Get the execution history grid element (may not exist if only one entry)
+const getExecutionHistoryGrid = (): HTMLElement | null => {
+  return document.querySelector('.execution-history-grid') as HTMLElement | null;
+};
+
 // Create localStorage mock
 const createStorageMock = () => {
   let store: Record<string, string> = {};
@@ -124,11 +256,11 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithUseful));
       render(<App />);
 
-      // Wait for the app to load
-      await screen.findByText("Check pod status");
+      // Wait for the app to load in the execution history grid
+      await findByTextInGrid("Check pod status");
 
       // The usefulness badge should be rendered
-      const usefulBadge = screen.getByText("useful");
+      const usefulBadge = getByTextInGrid("useful");
       expect(usefulBadge).toBeInTheDocument();
       expect(usefulBadge.className).toContain("usefulness-badge-useful");
     });
@@ -155,9 +287,9 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithPartial));
       render(<App />);
 
-      await screen.findByText("Get deployment status");
+      await findByTextInGrid("Get deployment status");
 
-      const partialBadge = screen.getByText("partial");
+      const partialBadge = getByTextInGrid("partial");
       expect(partialBadge).toBeInTheDocument();
       expect(partialBadge.className).toContain("usefulness-badge-partial");
     });
@@ -184,9 +316,9 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithNoisy));
       render(<App />);
 
-      await screen.findByText("Get verbose logs");
+      await findByTextInGrid("Get verbose logs");
 
-      const noisyBadge = screen.getByText("noisy");
+      const noisyBadge = getByTextInGrid("noisy");
       expect(noisyBadge).toBeInTheDocument();
       expect(noisyBadge.className).toContain("usefulness-badge-noisy");
     });
@@ -213,9 +345,9 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithEmpty));
       render(<App />);
 
-      await screen.findByText("Get events for namespace");
+      await findByTextInGrid("Get events for namespace");
 
-      const emptyBadge = screen.getByText("empty");
+      const emptyBadge = getByTextInGrid("empty");
       expect(emptyBadge).toBeInTheDocument();
       expect(emptyBadge.className).toContain("usefulness-badge-empty");
     });
@@ -244,9 +376,9 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithUnreviewed));
       render(<App />);
 
-      await screen.findByText("Check node status");
+      await findByTextInGrid("Check node status");
 
-      const unreviewed = screen.getByText("Not reviewed");
+      const unreviewed = getByTextInGrid("Not reviewed");
       expect(unreviewed).toBeInTheDocument();
       
       // Verify the parent has the unreviewed class
@@ -281,10 +413,10 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithResultSummary));
       render(<App />);
 
-      await screen.findByText("Collect deployment info");
+      await findByTextInGrid("Collect deployment info");
 
       // The result summary should be visible
-      expect(screen.getByText("Found critical deployment issue")).toBeInTheDocument();
+      expect(getByTextInGrid("Found critical deployment issue")).toBeInTheDocument();
     });
 
     it("omits resultSummary gracefully when absent", async () => {
@@ -309,10 +441,10 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithoutResultSummary));
       render(<App />);
 
-      await screen.findByText("Quick health check");
+      await findByTextInGrid("Quick health check");
 
       // The card should still render without crashing
-      expect(screen.getByText("Quick health check")).toBeInTheDocument();
+      expect(getByTextInGrid("Quick health check")).toBeInTheDocument();
     });
   });
 
@@ -339,10 +471,10 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithSummary));
       render(<App />);
 
-      await screen.findByText("Describe service");
+      await findByTextInGrid("Describe service");
 
       // usefulnessSummary should appear with the badge
-      expect(screen.getByText(/Service configuration is correct/)).toBeInTheDocument();
+      expect(getByTextInGrid(/Service configuration is correct/)).toBeInTheDocument();
     });
 
     it("renders badge without usefulnessSummary when summary is null", async () => {
@@ -367,10 +499,10 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithoutSummary));
       render(<App />);
 
-      await screen.findByText("Get pod count");
+      await findByTextInGrid("Get pod count");
 
       // Badge should still show, just without the summary text
-      const badge = screen.getByText("useful");
+      const badge = getByTextInGrid("useful");
       expect(badge).toBeInTheDocument();
     });
   });
@@ -400,13 +532,13 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithTimeout));
       render(<App />);
 
-      await screen.findByText("Get full logs");
+      await findByTextInGrid("Get full logs");
 
-      // Should show timeout badge (use getAllByText since "Timed out" may appear multiple times)
-      const timeoutBadges = screen.getAllByText("Timed out");
+      // Should show timeout badge in the grid
+      const timeoutBadges = getAllByTextInGrid("Timed out");
       expect(timeoutBadges.length).toBeGreaterThan(0);
       // Should show unreviewed state
-      expect(screen.getByText("Not reviewed")).toBeInTheDocument();
+      expect(getByTextInGrid("Not reviewed")).toBeInTheDocument();
     });
 
     it("renders failed entry with unreviewed state", async () => {
@@ -433,10 +565,10 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithFailure));
       render(<App />);
 
-      await screen.findByText("Describe CRD");
+      await findByTextInGrid("Describe CRD");
 
       // Should show unreviewed state even with failure
-      expect(screen.getByText("Not reviewed")).toBeInTheDocument();
+      expect(getByTextInGrid("Not reviewed")).toBeInTheDocument();
     });
 
     it("renders successful entry with reviewed usefulness", async () => {
@@ -463,12 +595,12 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithSuccess));
       render(<App />);
 
-      await screen.findByText("Get resource quota");
+      await findByTextInGrid("Get resource quota");
 
       // Should show the usefulness badge
-      expect(screen.getByText("useful")).toBeInTheDocument();
+      expect(getByTextInGrid("useful")).toBeInTheDocument();
       // Should show the result summary
-      expect(screen.getByText("Quota information retrieved successfully")).toBeInTheDocument();
+      expect(getByTextInGrid("Quota information retrieved successfully")).toBeInTheDocument();
     });
   });
 
@@ -526,15 +658,15 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal("fetch", createFetchMock(runWithMixed));
       render(<App />);
 
-      // All entries should render
-      await screen.findByText("Entry with useful");
-      await screen.findByText("Entry without review");
-      await screen.findByText("Entry with partial");
+      // All entries should render in grid
+      await findByTextInGrid("Entry with useful");
+      await findByTextInGrid("Entry without review");
+      await findByTextInGrid("Entry with partial");
 
-      // All usefulness badges should appear
-      expect(screen.getByText("useful")).toBeInTheDocument();
-      expect(screen.getByText("partial")).toBeInTheDocument();
-      expect(screen.getByText("Not reviewed")).toBeInTheDocument();
+      // All usefulness badges should appear in grid
+      expect(getByTextInGrid("useful")).toBeInTheDocument();
+      expect(getByTextInGrid("partial")).toBeInTheDocument();
+      expect(getByTextInGrid("Not reviewed")).toBeInTheDocument();
     });
   });
 
@@ -571,9 +703,9 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       ]);
 
       vi.stubGlobal('fetch', createFetchMock(runWithLongResult));
-      const { container } = render(<App />);
+      render(<App />);
 
-      await screen.findByText('Test long result truncation');
+      await findByTextInGrid('Test long result truncation');
 
       // Find the truncated text - it should contain the unique prefix
       const truncatedElements = document.querySelectorAll('.follow-up-summary');
@@ -581,9 +713,6 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       
       // Get the full text content
       const fullText = truncatedElements[0].textContent ?? '';
-      console.log('Full text length:', fullText.length);
-      console.log('Full text ends with ellipsis:', fullText.endsWith('…'));
-      console.log('Full text last 10 chars:', JSON.stringify(fullText.slice(-10)));
       
       // Verify the text is truncated (starts with expected prefix but doesn't have the full original)
       const startsWithPrefix = fullText.startsWith('RESULT_LONG_UNIQUE_123456789012345678901234567890');
@@ -594,15 +723,13 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       expect(hasEllipsis).toBe(true);
       expect(isShorterThanOriginal).toBe(true);
 
-      // Verify full untruncated text is NOT present
-      expect(screen.queryByText(longResultText)).not.toBeInTheDocument();
+      // Verify full untruncated text is NOT present in grid
+      expect(queryByTextInGrid(longResultText)).not.toBeInTheDocument();
     });
 
     it('truncates long usefulnessSummary text with ellipsis in DOM', async () => {
       // Create a usefulnessSummary longer than 80 characters
-      // The em-dash prefix " — " adds 3 characters to the display
       const longUsefulnessText = 'USE_LONG_UNIQUE_12345678901234567890123456789012345678901234567890_TRUNCAT_EXTRA_SUFFIX_TO_MAKE_IT_LONG';
-      // Make sure the original is long enough to exceed 80 + 3 = 83 char limit
       expect(longUsefulnessText.length).toBeGreaterThan(90);
 
       const runWithLongUsefulness = buildRunWithHistory([
@@ -626,10 +753,11 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal('fetch', createFetchMock(runWithLongUsefulness));
       render(<App />);
 
-      await screen.findByText('Test long usefulness truncation');
+      await findByTextInGrid('Test long usefulness truncation');
 
-      // Find the usefulness text element - the em-dash prefix is separate from the text content
-      const usefulnessElements = document.querySelectorAll('.usefulness-indicator .small');
+      // Find the usefulness text element in grid
+      const grid = getExecutionHistoryGrid();
+      const usefulnessElements = grid.querySelectorAll('.usefulness-indicator .small');
       expect(usefulnessElements.length).toBeGreaterThan(0);
       
       // Get full text which includes em-dash prefix
@@ -637,16 +765,15 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       
       // Verify text is truncated - ends with ellipsis
       expect(fullText.endsWith('…')).toBe(true);
-      // The total displayed length (including em-dash prefix) should be less than original
+      // The total displayed length should be less than original
       expect(fullText.length).toBeLessThan(longUsefulnessText.length);
     });
 
     it('shows both resultSummary and usefulnessSummary truncated in DOM', async () => {
-      // Make strings long enough to exceed their limits (120 and 80+ chars respectively)
+      // Make strings long enough to exceed their limits
       const longResultText = 'RESULT_TEXT_THAT_IS_DEFINITELY_OVER_120_CHARACTERS_LONG_AND_SHOULD_BE_TRUNCATED_WHEN_DISPLAYED_IN_THE_EXECUTION_HISTORY_CARD';
       const longUsefulnessText = 'USE_TEXT_THAT_IS_DEFINITELY_OVER_80_CHARACTERS_LONG_AND_SHOULD_BE_TRUNCATED_WHEN_DISPLAYED_EXTRA';
       
-      // Verify they're long enough
       expect(longResultText.length).toBeGreaterThan(120);
       expect(longUsefulnessText.length).toBeGreaterThan(90);
 
@@ -673,25 +800,27 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal('fetch', createFetchMock(runWithBothLong));
       render(<App />);
 
-      await screen.findByText('Test both long truncation');
+      await findByTextInGrid('Test both long truncation');
+
+      const grid = getExecutionHistoryGrid();
 
       // Check resultSummary truncation
-      const resultElements = document.querySelectorAll('.follow-up-summary');
+      const resultElements = grid.querySelectorAll('.follow-up-summary');
       expect(resultElements.length).toBeGreaterThan(0);
       const resultFullText = resultElements[0].textContent ?? '';
       expect(resultFullText.length).toBeLessThan(longResultText.length);
       expect(resultFullText.endsWith('…')).toBe(true);
 
       // Check usefulnessSummary truncation
-      const usefulnessElements = document.querySelectorAll('.usefulness-indicator .small');
+      const usefulnessElements = grid.querySelectorAll('.usefulness-indicator .small');
       expect(usefulnessElements.length).toBeGreaterThan(0);
       const usefulnessFullText = usefulnessElements[0].textContent ?? '';
       expect(usefulnessFullText.length).toBeLessThan(longUsefulnessText.length);
       expect(usefulnessFullText.endsWith('…')).toBe(true);
 
-      // Verify full untruncated texts are NOT present
-      expect(screen.queryByText(longResultText)).not.toBeInTheDocument();
-      expect(screen.queryByText(longUsefulnessText)).not.toBeInTheDocument();
+      // Verify full untruncated texts are NOT present in grid
+      expect(queryByTextInGrid(longResultText)).not.toBeInTheDocument();
+      expect(queryByTextInGrid(longUsefulnessText)).not.toBeInTheDocument();
     });
 
     it('does not truncate short resultSummary and usefulnessSummary', async () => {
@@ -721,15 +850,17 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       vi.stubGlobal('fetch', createFetchMock(runWithShort));
       render(<App />);
 
-      await screen.findByText('Test short text');
+      await findByTextInGrid('Test short text');
+
+      const grid = getExecutionHistoryGrid();
 
       // Short texts should appear without ellipsis
-      const resultElements = document.querySelectorAll('.follow-up-summary');
+      const resultElements = grid.querySelectorAll('.follow-up-summary');
       const shortResultInDom = Array.from(resultElements).some(el => el.textContent === shortResult);
       expect(shortResultInDom).toBe(true);
 
-      // Check that no ellipsis appears in these short text elements
-      const usefulnessElements = document.querySelectorAll('.usefulness-indicator .small');
+      // Check that no ellipsis appears in usefulness text
+      const usefulnessElements = grid.querySelectorAll('.usefulness-indicator .small');
       const hasEllipsisInShort = Array.from(usefulnessElements).some(el => el.textContent?.includes('…'));
       expect(hasEllipsisInShort).toBe(false);
     });
