@@ -2626,3 +2626,480 @@ describe("Cockpit navigation", () => {
     });
   });
 });
+
+describe("Recent runs selection", () => {
+  test("first load defaults to latest run", async () => {
+    // The sampleRunsList has run-123 as the first (latest) run
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // The latest run should be selected by default
+    const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
+    expect(latestRunRow).not.toBeNull();
+    expect(latestRunRow).toHaveClass("run-row-selected");
+
+    // Hero section should show "Current run" label for the latest run
+    const heroLabel = await screen.findByText(/Current run/i);
+    expect(heroLabel).toBeInTheDocument();
+  });
+
+  test("selecting a run from Recent runs changes selectedRunId", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for runs to render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Initially run-123 should be selected
+    const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
+    expect(latestRunRow).toHaveClass("run-row-selected");
+
+    // Click on a different run (run-122)
+    const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(olderRunRow).not.toBeNull();
+
+    await act(async () => {
+      await user.click(olderRunRow!);
+    });
+
+    // Now run-122 should be selected
+    await waitFor(() => {
+      expect(olderRunRow).toHaveClass("run-row-selected");
+    });
+
+    // run-123 should no longer be selected
+    expect(latestRunRow).not.toHaveClass("run-row-selected");
+
+    // Hero section should show "Selected run" label (not "Current run" since it's older)
+    const selectedLabel = await screen.findByText(/Selected run/i);
+    expect(selectedLabel).toBeInTheDocument();
+  });
+
+  test("selected row is visually obvious with selected class", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Find the selected row
+    const selectedRow = document.querySelector(".run-row-selected");
+    expect(selectedRow).not.toBeNull();
+
+    // Verify it has the correct class for visual styling
+    expect(selectedRow).toHaveClass("run-row-selected");
+
+    // Verify aria-pressed attribute indicates selection
+    expect(selectedRow).toHaveAttribute("aria-pressed", "true");
+
+    // Find a non-selected row
+    const allRows = document.querySelectorAll(".run-row");
+    const nonSelectedRows = Array.from(allRows).filter(
+      (row) => !row.classList.contains("run-row-selected")
+    );
+    expect(nonSelectedRows.length).toBeGreaterThan(0);
+
+    // Non-selected rows should have aria-pressed="false"
+    nonSelectedRows.forEach((row) => {
+      expect(row).toHaveAttribute("aria-pressed", "false");
+    });
+  });
+
+  test("selecting a run updates Execution History to show that run's history", async () => {
+    // Create different execution histories for different runs
+    const run122WithHistory = makeRunWithOverrides({
+      runId: "run-122",
+      label: "2026-04-07-1100",
+      nextCheckExecutionHistory: [
+        {
+          timestamp: "2026-04-07T11:05:00Z",
+          clusterLabel: "cluster-x",
+          candidateId: "candidate-122",
+          candidateIndex: 0,
+          candidateDescription: "Check for run-122 specific data",
+          commandFamily: "kubectl-get",
+          status: "success",
+          durationMs: 100,
+          artifactPath: "/artifacts/run-122-exec-0.json",
+          timedOut: false,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+          outputBytesCaptured: 1024,
+          resultClass: "useful-signal",
+          resultSummary: "Run-122 specific execution result.",
+        },
+      ],
+      nextCheckQueue: [],
+    });
+
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": run122WithHistory,
+    };
+
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for runs to render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Click on run-122 (which has different execution history)
+    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(run122Row).not.toBeNull();
+
+    await act(async () => {
+      await user.click(run122Row!);
+    });
+
+    // Execution history should update to show run-122's history
+    await waitFor(() => {
+      const execHistory = document.getElementById("execution-history");
+      expect(execHistory).toBeInTheDocument();
+    });
+
+    // Should show run-122 specific description
+    const runSpecificHistory = await screen.findByText(/Check for run-122 specific data/i);
+    expect(runSpecificHistory).toBeInTheDocument();
+  });
+
+  test("selecting a run updates Work list to show that run's queue", async () => {
+    // Create different queue for run-122
+    const run122WithQueue = makeRunWithOverrides({
+      runId: "run-122",
+      label: "2026-04-07-1100",
+      nextCheckExecutionHistory: [],
+      nextCheckQueue: [
+        {
+          candidateId: "candidate-122-queue",
+          candidateIndex: 0,
+          description: "Run-122 specific queue item",
+          targetCluster: "cluster-x",
+          priorityLabel: "primary",
+          suggestedCommandFamily: "kubectl-get",
+          safeToAutomate: true,
+          requiresOperatorApproval: false,
+          approvalState: "not-required",
+          executionState: "unexecuted",
+          outcomeStatus: "pending",
+          latestArtifactPath: null,
+          sourceReason: "test",
+          expectedSignal: "test",
+          normalizationReason: "test",
+          safetyReason: "test",
+          approvalReason: null,
+          duplicateReason: null,
+          blockingReason: null,
+          targetContext: "cluster-x",
+          commandPreview: "kubectl get all",
+          planArtifactPath: null,
+          queueStatus: "safe-ready",
+          workstream: "incident",
+        },
+      ],
+    });
+
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": run122WithQueue,
+    };
+
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for runs to render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Click on run-122
+    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(run122Row).not.toBeNull();
+
+    await act(async () => {
+      await user.click(run122Row!);
+    });
+
+    // Work list should update to show run-122's queue
+    await waitFor(() => {
+      const queueSection = document.getElementById("next-check-queue");
+      expect(queueSection).toBeInTheDocument();
+    });
+
+    // Should show run-122 specific queue item
+    const runSpecificQueue = await screen.findByText(/Run-122 specific queue item/i);
+    expect(runSpecificQueue).toBeInTheDocument();
+  });
+
+  test("jump-to-latest returns to current/latest run", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Select an older run first
+    const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(olderRunRow).not.toBeNull();
+
+    await act(async () => {
+      await user.click(olderRunRow!);
+    });
+
+    // Verify older run is selected
+    await waitFor(() => {
+      expect(olderRunRow).toHaveClass("run-row-selected");
+    });
+
+    // Should show "Selected run" label (not "Current run")
+    const selectedLabel = screen.queryByText(/Selected run/i);
+    expect(selectedLabel).toBeInTheDocument();
+
+    // Should show "Jump to latest" button
+    const jumpButton = await screen.findByText(/← Jump to latest/i);
+    expect(jumpButton).toBeInTheDocument();
+
+    // Click jump to latest
+    await act(async () => {
+      await user.click(jumpButton);
+    });
+
+    // Should now show latest run selected
+    const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
+    expect(latestRunRow).toHaveClass("run-row-selected");
+
+    // Should show "Current run" label
+    const currentRunLabel = await screen.findByText(/Current run/i);
+    expect(currentRunLabel).toBeInTheDocument();
+
+    // "Jump to latest" button should be hidden
+    const jumpButtonAfter = screen.queryByText(/← Jump to latest/i);
+    expect(jumpButtonAfter).not.toBeInTheDocument();
+  });
+
+  test("selected run remains stable when runs list updates with new latest run", async () => {
+    // This test simulates a poll that adds a new run
+    // The selected run should remain selected even when the list changes
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Select an older run (run-122)
+    const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(olderRunRow).not.toBeNull();
+
+    await act(async () => {
+      await user.click(olderRunRow!);
+    });
+
+    // Verify run-122 is selected
+    await waitFor(() => {
+      expect(olderRunRow).toHaveClass("run-row-selected");
+    });
+
+    // Simulate a new run appearing (e.g., via auto-refresh)
+    // Create a new runs list with run-124 added as latest
+    const newRunsList = {
+      runs: [
+        {
+          runId: "run-124",
+          runLabel: "2026-04-07-1400",
+          timestamp: "2026-04-07T14:00:00Z",
+          clusterCount: 2,
+          triaged: false,
+          executionCount: 0,
+          reviewedCount: 0,
+          reviewStatus: "no-executions",
+          batchExecutable: true,
+          batchEligibleCount: 3,
+        },
+        ...sampleRunsList.runs,
+      ],
+      totalCount: 5,
+    };
+
+    // Mock the new response
+    let callCount = 0;
+    vi.stubGlobal("fetch", createFetchMock({
+      ...defaultPayloads,
+      "/api/runs": newRunsList,
+    }));
+
+    // Trigger a refresh (simulate auto-refresh or manual refresh)
+    const refreshButton = await screen.findByRole("button", { name: /Refresh data/i });
+    await act(async () => {
+      await user.click(refreshButton);
+    });
+
+    // Selected run should still be run-122
+    const selectedAfterRefresh = document.querySelector('.run-row-selected');
+    expect(selectedAfterRefresh).toHaveAttribute("data-run-id", "run-122");
+
+    // Jump to latest button should be visible since we now have a newer run
+    const jumpButton = await screen.findByText(/← Jump to latest/i);
+    expect(jumpButton).toBeInTheDocument();
+  });
+
+  test("empty states are selected-run-specific for Execution History", async () => {
+    // Create a run with no execution history
+    const runWithNoHistory = makeRunWithOverrides({
+      runId: "run-122",
+      label: "2026-04-07-1100",
+      nextCheckExecutionHistory: [],
+      nextCheckQueue: [],
+    });
+
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": runWithNoHistory,
+    };
+
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Click on run-122 (which has no execution history)
+    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(run122Row).not.toBeNull();
+
+    await act(async () => {
+      await user.click(run122Row!);
+    });
+
+    // Wait for panel update
+    await waitFor(() => {
+      const execHistory = document.getElementById("execution-history");
+      expect(execHistory).toBeInTheDocument();
+    });
+
+    // Empty state should reference "this run"
+    const emptyState = await screen.findByText(/No execution history for this run yet/i);
+    expect(emptyState).toBeInTheDocument();
+  });
+
+  test("empty states are selected-run-specific for Work list", async () => {
+    // Create a run with no queue
+    const runWithNoQueue = makeRunWithOverrides({
+      runId: "run-122",
+      label: "2026-04-07-1100",
+      nextCheckExecutionHistory: [],
+      nextCheckQueue: [],
+    });
+
+    const payloads = {
+      ...defaultPayloads,
+      "/api/run": runWithNoQueue,
+    };
+
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Click on run-122 (which has no queue)
+    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(run122Row).not.toBeNull();
+
+    await act(async () => {
+      await user.click(run122Row!);
+    });
+
+    // Wait for panel update
+    await waitFor(() => {
+      const queueSection = document.getElementById("next-check-queue");
+      expect(queueSection).toBeInTheDocument();
+    });
+
+    // Empty state should reference "this run"
+    const emptyState = await screen.findByText(/Work list is empty for this run/i);
+    expect(emptyState).toBeInTheDocument();
+  });
+
+  test("keyboard navigation works for run selection", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Focus the first run row
+    const firstRunRow = document.querySelector('.run-row[data-run-id="run-123"]') as HTMLElement;
+    expect(firstRunRow).not.toBeNull();
+    firstRunRow.focus();
+
+    // Verify it's focusable
+    expect(document.activeElement).toBe(firstRunRow);
+
+    // Press Enter to select (should already be selected, but verifies keyboard works)
+    await act(async () => {
+      firstRunRow.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+
+    // Run should still be selected
+    expect(firstRunRow).toHaveClass("run-row-selected");
+
+    // Tab to another run row
+    const secondRunRow = document.querySelector('.run-row[data-run-id="run-122"]') as HTMLElement;
+    secondRunRow.focus();
+
+    // Press Space to select
+    await act(async () => {
+      secondRunRow.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    });
+
+    // Second run should now be selected
+    await waitFor(() => {
+      expect(secondRunRow).toHaveClass("run-row-selected");
+    });
+  });
+});

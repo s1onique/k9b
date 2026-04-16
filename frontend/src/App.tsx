@@ -2572,9 +2572,29 @@ const App = () => {
       active = false;
     };
   }, []);
-  
+
   // Compute filter counts
   const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runsList), [runsList]);
+
+  // Initialize selectedRunId to latest run on first load when no explicit selection exists
+  const latestRunId = runsList.length > 0 ? runsList[0].runId : null;
+  const isSelectedRunLatest = selectedRunId === latestRunId;
+  const handleJumpToLatest = useCallback(() => {
+    if (latestRunId) {
+      persistSelectedRunId(latestRunId);
+      setSelectedRunId(latestRunId);
+    }
+  }, [latestRunId]);
+
+  // Effect to initialize selectedRunId from latest run when no stored selection exists
+  useEffect(() => {
+    if (runsList.length > 0 && selectedRunId === null) {
+      const storedSelection = readStoredSelectedRunId();
+      if (!storedSelection && latestRunId) {
+        setSelectedRunId(latestRunId);
+      }
+    }
+  }, [runsList, selectedRunId, latestRunId]);
   
   // Filter runs based on selected filter
   const filteredRunsList = useMemo(() => {
@@ -2622,8 +2642,9 @@ const App = () => {
     refreshInProgress.current = true;
     try {
       setError(null);
+      // Fetch data for the selected run if one is selected, otherwise latest run
       const [runPayload, fleetPayload, proposalsPayload] = await Promise.all([
-        fetchRun(),
+        fetchRun(selectedRunId ?? undefined),
         fetchFleet(),
         fetchProposals(),
       ]);
@@ -2657,7 +2678,7 @@ const App = () => {
     } finally {
       refreshInProgress.current = false;
     }
-  }, [selectedClusterLabel]);
+  }, [selectedClusterLabel, selectedRunId]);
 
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
     `${clusterLabel}::${description}::${index}`;
@@ -3444,17 +3465,34 @@ const App = () => {
           <h1>Fleet triage cockpit</h1>
           <div className="hero-run">
             <div className="hero-run-identity">
-              <p className="eyebrow hero-run-label">Current run</p>
+              <p className="eyebrow hero-run-label">
+                {isSelectedRunLatest ? "Current run" : "Selected run"}
+              </p>
               <div className="hero-run-title">
                 <strong>Run {run.label}</strong>
                 <span className="hero-run-id">ID {run.runId}</span>
               </div>
+              {!isSelectedRunLatest && latestRunId && (
+                <button
+                  type="button"
+                  className="link tiny"
+                  onClick={handleJumpToLatest}
+                  title="Jump back to the latest run"
+                >
+                  ← Jump to latest
+                </button>
+              )}
             </div>
             <div className="hero-run-freshness">
               <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
                 {runFresh ? "Fresh data" : "Stale data"}
               </span>
               <p className="hero-run-recency small muted">Last run {runRecency}</p>
+              {!isSelectedRunLatest && (
+                <p className="hero-run-recency small muted">
+                  <span className="text-warning">Viewing older run</span>
+                </p>
+              )}
             </div>
           </div>
         </div>
