@@ -110,12 +110,17 @@ body {
   box-shadow: 0 25px 60px rgba(2, 6, 23, 0.35);
 }
 
+/* ==========================================================================
+   Hero / Cockpit Header
+   ========================================================================== */
+
 .hero {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
   flex-wrap: wrap;
+  padding: 0.75rem 1rem;
 }
 
 .hero.compact {
@@ -127,71 +132,128 @@ body {
   min-width: 200px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.85rem;
   flex-wrap: wrap;
 }
 
+/* Title block - first anchor: "Fleet triage" + "Cockpit" */
 .hero-title-block {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  min-width: 100px;
+  gap: 0.05rem;
+  min-width: 90px;
 }
 
+.hero-title-block .eyebrow {
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.hero-title-block h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #e2e8f0;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+/* Run block - second anchor: selected run info */
 .hero-run {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
   flex-wrap: wrap;
+  padding-left: 0.75rem;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .hero-run-identity {
   flex: 0 1 auto;
 }
 
+.hero-run-label {
+  font-size: 0.68rem;
+  margin: 0;
+  line-height: 1.2;
+}
+
 .hero-run-title {
   display: flex;
   flex-direction: column;
   gap: 0.05rem;
+  line-height: 1.2;
 }
 
 .hero-run-title strong {
-  font-size: 1.05rem;
+  font-size: 1rem;
   display: block;
   color: #f1f5f9;
-  line-height: 1.3;
+  line-height: 1.25;
   font-weight: 600;
 }
 
 .hero-run-id {
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.7);
-  line-height: 1.3;
+  color: rgba(148, 163, 184, 0.65);
+  line-height: 1.2;
 }
 
+/* Freshness block - integrated with run info */
 .hero-run-freshness {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .hero-run-recency {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
   text-transform: none;
-  color: rgba(148, 163, 184, 0.65);
+  color: rgba(148, 163, 184, 0.6);
+  line-height: 1.2;
+}
+
+/* Freshness emoji indicator */
+.freshness-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.freshness-indicator .emoji {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.freshness-indicator .label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.freshness-indicator.fresh .label {
+  color: rgba(34, 197, 94, 0.9);
+}
+
+.freshness-indicator.stale .label {
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.freshness-indicator.warning .label {
+  color: rgba(251, 191, 36, 0.9);
 }
 
 .run-header-inline-stats {
-  margin: 0 0 0.35rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  color: rgba(248, 250, 252, 0.6);
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: rgba(248, 250, 252, 0.55);
   text-transform: none;
 }
 
@@ -210,15 +272,6 @@ body {
   margin: 0;
   font-size: 0.65rem;
   letter-spacing: 0.1em;
-}
-
-.hero h1 {
-  margin: 0;
-  font-size: 1.3rem;
-  color: #e2e8f0;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
 }
 
 .hero-actions {
@@ -296,8 +349,8 @@ body {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.75rem;
+  gap: 0.3rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 0.5rem;
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(71, 85, 105, 0.35);
@@ -308,19 +361,20 @@ body {
 .cockpit-nav__item {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.3rem 0.65rem;
-  border-radius: 0.35rem;
+  gap: 0.2rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.3rem;
   border: 1px solid transparent;
   background: transparent;
   color: rgba(148, 163, 184, 0.85);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
   text-decoration: none;
   transition: all 0.15s ease;
   cursor: pointer;
   white-space: nowrap;
+  line-height: 1.4;
 }
 
 /* Hover state */
@@ -342,7 +396,7 @@ body {
   border-color: rgba(56, 189, 248, 0.4);
   color: #7dd3fc;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 /* Icon support within nav chips */
@@ -353,11 +407,11 @@ body {
 
 /* Section label for grouping hint - visually quieter */
 .cockpit-nav__label {
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(148, 163, 184, 0.5);
-  padding: 0.2rem 0.4rem;
+  padding: 0.15rem 0.35rem;
   align-self: center;
 }
 

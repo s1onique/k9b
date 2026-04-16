@@ -61,6 +61,27 @@ const truncateText = (value: string, length = 160) => {
   return `${value.slice(0, length).trim()}…`;
 };
 
+type FreshnessLevel = "fresh" | "warning" | "stale";
+
+const getFreshnessLevel = (timestamp: string): FreshnessLevel => {
+  const seconds = dayjs().diff(dayjs(timestamp), "second");
+  if (seconds <= 30) return "fresh";
+  if (seconds < 180) return "warning";
+  return "stale";
+};
+
+const FRESHNESS_EMOJI: Record<FreshnessLevel, string> = {
+  fresh: "🟢",
+  warning: "🟡",
+  stale: "🔴",
+};
+
+const FRESHNESS_LABEL: Record<FreshnessLevel, string> = {
+  fresh: "Fresh",
+  warning: "Delayed",
+  stale: "Stale",
+};
+
 const FRESHNESS_THRESHOLD_MINUTES = 10;
 const relativeRecency = (timestamp: string) => dayjs(timestamp).fromNow();
 const isStaleTimestamp = (timestamp: string) =>
@@ -3767,9 +3788,15 @@ const App = () => {
               </div>
             </div>
             <div className="hero-run-freshness">
-              <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
-                {runFresh ? "Fresh" : "Stale"}
-              </span>
+              {(() => {
+                const freshnessLevel = getFreshnessLevel(run.timestamp);
+                return (
+                  <span className={`freshness-indicator freshness-indicator--${freshnessLevel}`}>
+                    <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[freshnessLevel]}</span>
+                    <span className="freshness-indicator__label">{FRESHNESS_LABEL[freshnessLevel]}</span>
+                  </span>
+                );
+              })()}
               <p className="hero-run-recency">Last {runRecency}</p>
               {!isSelectedRunLatest && (
                 <button

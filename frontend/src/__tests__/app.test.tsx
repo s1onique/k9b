@@ -1542,7 +1542,7 @@ describe("App", () => {
     expect(screen.getByText(/^Current$/i, { selector: ".hero-run-label" })).toBeInTheDocument();
     expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/(Fresh|Stale)$/i, { selector: ".freshness-pill" })
+      screen.getByText(/(Fresh|Delayed|Stale)$/i, { selector: ".freshness-indicator__label" })
     ).toBeInTheDocument();
     expect(screen.getByText(/LLM telemetry/i)).toBeInTheDocument();
     expect(screen.getByText(/Collector collector:v1.2.0/i)).toBeInTheDocument();
