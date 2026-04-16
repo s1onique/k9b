@@ -1915,7 +1915,34 @@ const ExecutionHistoryPanel = ({
                 <span>Cluster: {entry.clusterLabel || "unknown"}</span>
                 <span>Command: {entry.commandFamily || "—"}</span>
                 <span>Duration: {formatDuration(durationSeconds)}</span>
+                {entry.candidateId && (
+                  <span className="provenance-hint" title={`Candidate ID: ${entry.candidateId}`}>
+                    #{entry.candidateIndex != null ? entry.candidateIndex + 1 : "?"}
+                  </span>
+                )}
               </div>
+              {/* Provenance traceability: jump link back to work list */}
+              {entry.candidateId && (
+                <div className="execution-history-provenance">
+                  <button
+                    type="button"
+                    className="provenance-jump"
+                    onClick={() => {
+                      // Find the corresponding work list item and highlight it
+                      const queueItemKey = runQueue.find(
+                        (q) => q.candidateId === entry.candidateId
+                      );
+                      if (queueItemKey) {
+                        const key = buildCandidateKey(queueItemKey, queueItemKey.candidateIndex ?? runQueue.indexOf(queueItemKey));
+                        highlightQueueCard(key);
+                      }
+                    }}
+                    title={`View candidate ${entry.candidateId} in work list`}
+                  >
+                    From work list #{entry.candidateIndex != null ? entry.candidateIndex + 1 : "?"}
+                  </button>
+                </div>
+              )}
               <div className="execution-history-badges">
                 {badges.map((badge) => (
                   <span key={badge} className="execution-history-badge">

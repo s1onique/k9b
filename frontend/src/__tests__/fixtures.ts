@@ -680,6 +680,8 @@ export const sampleRun: RunPayload = {
     {
       timestamp: "2026-04-06T12:05:00Z",
       clusterLabel: "cluster-a",
+      candidateId: "candidate-logs",
+      candidateIndex: 0,
       candidateDescription: "Collect kubelet logs for control-plane pods",
       commandFamily: "kubectl-logs",
       status: "success",
@@ -696,6 +698,8 @@ export const sampleRun: RunPayload = {
     {
       timestamp: "2026-04-06T12:03:00Z",
       clusterLabel: "cluster-b",
+      candidateId: "candidate-describe",
+      candidateIndex: 1,
       candidateDescription: "Describe diag status",
       commandFamily: "kubectl-describe",
       status: "failed",

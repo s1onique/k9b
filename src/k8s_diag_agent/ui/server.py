@@ -3242,6 +3242,16 @@ def _build_execution_history(
 
             payload = artifact_data.get("payload", {})
 
+            # Extract provenance fields from payload
+            candidate_id = _get_field_with_fallback(payload, "candidateId", "candidate_id")
+            candidate_index_raw = _get_field_with_default(payload, None, "candidateIndex", "candidate_index")
+            candidate_index: int | None = None
+            if candidate_index_raw is not None:
+                try:
+                    candidate_index = int(str(candidate_index_raw))
+                except (ValueError, TypeError):
+                    candidate_index = None
+
             history.append({
                 "timestamp": artifact_data.get("timestamp"),
                 "clusterLabel": _get_field_with_fallback(payload, "clusterLabel", "cluster_label"),
@@ -3254,6 +3264,8 @@ def _build_execution_history(
                 "stdoutTruncated": _get_field_with_default(artifact_data, False, "stdout_truncated", "stdoutTruncated"),
                 "stderrTruncated": _get_field_with_default(artifact_data, False, "stderr_truncated", "stderrTruncated"),
                 "outputBytesCaptured": _get_field_with_default(artifact_data, 0, "output_bytes_captured", "outputBytesCaptured"),
+                "candidateId": candidate_id,
+                "candidateIndex": candidate_index,
             })
         except Exception:
             continue

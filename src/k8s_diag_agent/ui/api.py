@@ -80,6 +80,9 @@ class NextCheckExecutionHistoryEntry(TypedDict, total=False):
     resultSummary: str | None
     usefulnessClass: str | None
     usefulnessSummary: str | None
+    # Provenance fields for traceability
+    candidateId: str | None
+    candidateIndex: int | None
 
 
 class FreshnessPayload(TypedDict, total=False):
@@ -1304,6 +1307,9 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
             "resultSummary": entry.result_summary,
             "usefulnessClass": entry.usefulness_class,
             "usefulnessSummary": entry.usefulness_summary,
+            # Provenance fields for traceability
+            "candidateId": entry.candidate_id,
+            "candidateIndex": entry.candidate_index,
         }
         for entry in entries
     ]

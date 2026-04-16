@@ -382,6 +382,9 @@ class NextCheckExecutionHistoryEntryView:
     result_summary: str | None = None
     usefulness_class: str | None = None
     usefulness_summary: str | None = None
+    # Provenance fields for traceability
+    candidate_id: str | None = None
+    candidate_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1268,6 +1271,9 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 result_summary=_coerce_optional_str(entry.get("resultSummary")),
                 usefulness_class=_coerce_optional_str(entry.get("usefulnessClass")),
                 usefulness_summary=_coerce_optional_str(entry.get("usefulnessSummary")),
+                # Provenance fields for traceability
+                candidate_id=_coerce_optional_str(entry.get("candidateId")),
+                candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
             )
         )
     return tuple(entries)

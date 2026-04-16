@@ -37,6 +37,9 @@ export type NextCheckExecutionHistoryEntry = {
   resultSummary?: string | null;
   usefulnessClass?: string | null;
   usefulnessSummary?: string | null;
+  // Provenance fields for traceability
+  candidateId?: string | null;
+  candidateIndex?: number | null;
 };
 
 export type StatusCount = {

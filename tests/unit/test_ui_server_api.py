@@ -464,6 +464,128 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(entry.get("candidateDescription"), "Inspect control-plane logs")
         self.assertEqual(entry.get("status"), "success")
 
+    def test_execution_history_provenance_fields(self) -> None:
+        """Verify that execution history entries include candidateId and candidateIndex from payload."""
+        artifact = self._build_artifact(run_id="run-provenance", status=ExternalAnalysisStatus.SUCCESS)
+        execution_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="run-provenance",
+            run_label="run-provenance",
+            cluster_label="cluster-a",
+            summary="Executed with provenance",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-provenance-next-check-execution-0.json",
+            provider="runner",
+            duration_ms=45,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            payload={
+                "candidateId": "candidate-logs-001",
+                "candidateIndex": 0,
+                "candidateDescription": "Collect kubelet logs",
+                "commandFamily": "kubectl-logs",
+                "clusterLabel": "cluster-a",
+            },
+        )
+        # Write the artifact file directly so _build_execution_history can read it
+        external_analysis_dir = self.health_dir / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = external_analysis_dir / "run-provenance-next-check-execution-0.json"
+        artifact_data = {
+            "tool_name": "next-check-runner",
+            "run_id": "run-provenance",
+            "run_label": "run-provenance",
+            "cluster_label": "cluster-a",
+            "summary": "Executed with provenance",
+            "status": "success",
+            "purpose": "next-check-execution",
+            "provider": "runner",
+            "duration_ms": 45,
+            "timestamp": "2024-01-15T10:00:00Z",
+            "payload": {
+                "candidateId": "candidate-logs-001",
+                "candidateIndex": 0,
+                "candidateDescription": "Collect kubelet logs",
+                "commandFamily": "kubectl-logs",
+                "clusterLabel": "cluster-a",
+            },
+        }
+        artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
+        self._write_index(artifact, extra_external_analysis=(execution_artifact,))
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server)
+        finally:
+            self._shutdown_server(server, thread)
+        history = payload.get("nextCheckExecutionHistory")
+        self.assertIsInstance(history, list)
+        assert isinstance(history, list)
+        self.assertTrue(history)
+        entry = history[0]
+        # Verify provenance fields are present
+        self.assertEqual(entry.get("candidateId"), "candidate-logs-001")
+        self.assertEqual(entry.get("candidateIndex"), 0)
+        self.assertEqual(entry.get("candidateDescription"), "Collect kubelet logs")
+        self.assertEqual(entry.get("clusterLabel"), "cluster-a")
+
+    def test_execution_history_provenance_omission_when_missing(self) -> None:
+        """Verify that provenance fields are omitted when not present in payload."""
+        artifact = self._build_artifact(run_id="run-no-provenance", status=ExternalAnalysisStatus.SUCCESS)
+        execution_artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id="run-no-provenance",
+            run_label="run-no-provenance",
+            cluster_label="cluster-a",
+            summary="Executed without provenance",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/run-no-provenance-next-check-execution-0.json",
+            provider="runner",
+            duration_ms=45,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            payload={
+                "candidateDescription": "Collect kubelet logs",
+                "commandFamily": "kubectl-logs",
+                # No candidateId or candidateIndex
+            },
+        )
+        # Write the artifact file directly so _build_execution_history can read it
+        external_analysis_dir = self.health_dir / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = external_analysis_dir / "run-no-provenance-next-check-execution-0.json"
+        artifact_data = {
+            "tool_name": "next-check-runner",
+            "run_id": "run-no-provenance",
+            "run_label": "run-no-provenance",
+            "cluster_label": "cluster-a",
+            "summary": "Executed without provenance",
+            "status": "success",
+            "purpose": "next-check-execution",
+            "provider": "runner",
+            "duration_ms": 45,
+            "timestamp": "2024-01-15T10:00:00Z",
+            "payload": {
+                "candidateDescription": "Collect kubelet logs",
+                "commandFamily": "kubectl-logs",
+                # No candidateId or candidateIndex
+            },
+        }
+        artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
+        self._write_index(artifact, extra_external_analysis=(execution_artifact,))
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server)
+        finally:
+            self._shutdown_server(server, thread)
+        history = payload.get("nextCheckExecutionHistory")
+        self.assertIsInstance(history, list)
+        assert isinstance(history, list)
+        self.assertTrue(history)
+        entry = history[0]
+        # Verify provenance fields are not present (None or absent)
+        self.assertIsNone(entry.get("candidateId"))
+        self.assertIsNone(entry.get("candidateIndex"))
+        # But other fields should still be present
+        self.assertEqual(entry.get("candidateDescription"), "Collect kubelet logs")
+
     def test_execution_history_prefix_isolation(self) -> None:
         """Verify that run IDs with shared prefixes don't leak into each other.
         

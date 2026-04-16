@@ -1397,6 +1397,9 @@ def _build_next_check_execution_history(
             "outputBytesCaptured": artifact.output_bytes_captured,
             "packRefreshStatus": pack_refresh_status,
             "packRefreshWarning": artifact.pack_refresh_warning,
+            # Provenance fields for traceability
+            "candidateId": payload.get("candidateId"),
+            "candidateIndex": payload.get("candidateIndex"),
         }
         # Include persisted usefulness if available
         if artifact.usefulness_class is not None:
