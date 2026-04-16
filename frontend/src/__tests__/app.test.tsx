@@ -371,9 +371,98 @@ describe("App", () => {
     expect(screen.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
     const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
     expect(driftNodes.length).toBeGreaterThan(0);
-    // Drift bucket is closed by default (user must expand to see drift checks)
+    // Drift bucket is closed by default when degraded clusters exist
+    // (sampleFleet has cluster-a as Degraded, so drift bucket should be collapsed)
     const driftDetails = driftNodes[0].closest("details");
     expect(driftDetails).not.toHaveAttribute("open");
+  });
+
+  test("drift bucket is collapsed during active degraded runs", async () => {
+    // sampleFleet has 1 degraded cluster (cluster-a is "Degraded")
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // Find the drift bucket
+    const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
+    expect(driftNodes.length).toBeGreaterThan(0);
+
+    const driftDetails = driftNodes[0].closest("details") as HTMLElement;
+    expect(driftDetails).not.toBeNull();
+
+    // During active degraded run (sampleFleet has degraded cluster), drift bucket should be collapsed
+    expect(driftDetails).not.toHaveAttribute("open");
+
+    // Verify drift items still exist in the DOM (not removed)
+    // "Compare baseline release parity" is a drift workstream check from fixtures
+    expect(panel!.textContent).toContain("Compare baseline release parity");
+  });
+
+  test("drift bucket is expanded by default when no degraded clusters exist", async () => {
+    // Create a fleet with no degraded clusters
+    const healthyFleet = JSON.parse(JSON.stringify(sampleFleet));
+    healthyFleet.fleetStatus = {
+      ratingCounts: [
+        { rating: "healthy", count: 2 },
+        { rating: "degraded", count: 0 },
+      ],
+      degradedClusters: [],
+    };
+
+    const payloads = { ...defaultPayloads, "/api/fleet": healthyFleet };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // Find the drift bucket
+    const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
+    expect(driftNodes.length).toBeGreaterThan(0);
+
+    const driftDetails = driftNodes[0].closest("details") as HTMLElement;
+    expect(driftDetails).not.toBeNull();
+
+    // When no degraded clusters, drift bucket should be expanded by default
+    expect(driftDetails).toHaveAttribute("open");
+
+    // Verify drift items are visible
+    // "Compare baseline release parity" is a drift workstream check from fixtures
+    expect(within(driftDetails).getByText(/Compare baseline release parity/i)).toBeInTheDocument();
+  });
+
+  test("drift bucket can be manually expanded by the operator", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Find the deterministic panel first
+    const heading = await screen.findByRole("heading", { name: /Deterministic next checks/i });
+    const panel = heading.closest("section");
+    expect(panel).not.toBeNull();
+
+    // Find the drift bucket within the panel
+    const driftDetails = panel!.querySelector("details.deterministic-group--drift") as HTMLElement;
+    expect(driftDetails).not.toBeNull();
+
+    // Initially should be collapsed (degraded cluster exists)
+    expect(driftDetails).not.toHaveAttribute("open");
+
+    // Click the summary to expand
+    const summaryElement = driftDetails.querySelector("summary") as HTMLElement;
+    await act(async () => {
+      await user.click(summaryElement);
+    });
+
+    // Now it should be expanded
+    expect(driftDetails).toHaveAttribute("open");
+
+    // Drift items should be visible
+    expect(within(driftDetails).getByText(/Compare baseline release parity/i)).toBeInTheDocument();
   });
 
   test("promote deterministic next check button triggers API and shows status", async () => {

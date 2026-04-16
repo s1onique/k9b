@@ -2938,6 +2938,7 @@ const App = () => {
   const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
+  const hasDegradedClusters = degradedCount > 0;
   const headerStats = [
     { label: "Last", value: formatDuration(run.runStats.lastRunDurationSeconds) },
     { label: "Runs", value: String(run.runStats.totalRuns) },
@@ -3691,7 +3692,10 @@ const App = () => {
                       <p className="muted tiny deterministic-empty-bucket">No evidence gathering checks for this cluster.</p>
                     )}
                   </section>
-                  <details className="deterministic-group deterministic-group--drift">
+                  <details
+                    className="deterministic-group deterministic-group--drift"
+                    open={!hasDegradedClusters}
+                  >
                     <summary className="deterministic-group-head">
                       <div>
                         <p className="eyebrow">{DETERMINISTIC_WORKSTREAM_LABELS.drift}</p>
