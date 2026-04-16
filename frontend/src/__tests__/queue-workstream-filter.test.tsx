@@ -2,23 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import App, { QUEUE_VIEW_STORAGE_KEY } from "../App";
-import { makeRunWithOverrides, sampleClusterDetail, sampleFleet, sampleNotifications, sampleProposals, sampleRun, sampleRunsList } from "./fixtures";
-
-const createStorageMock = () => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => (key in store ? store[key] : null),
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-};
+import { createFetchMock, createStorageMock, makeRunWithOverrides, sampleClusterDetail, sampleFleet, sampleNotifications, sampleProposals, sampleRun, sampleRunsList } from "./fixtures";
 
 // Default payloads for API mocking - must include cluster-detail for queue section to render
 const defaultPayloads = {
@@ -41,22 +25,6 @@ const defaultPayloads = {
   },
 };
 
-// Create fetch mock from payloads
-const createFetchMock = (payloads: Record<string, unknown>) =>
-  vi.fn((input: RequestInfo) => {
-    const url = typeof input === "string" ? input : input.url;
-    const base = url.split("?")[0];
-    const payload = payloads[url] ?? payloads[base];
-    if (!payload) {
-      return Promise.reject(new Error(`Unexpected fetch ${url}`));
-    }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
-  });
 
 // Helper to get the queue panel with proper scoping
 const getQueuePanel = async () => {

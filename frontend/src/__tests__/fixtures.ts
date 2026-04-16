@@ -979,3 +979,60 @@ export const sampleClusterDetail: ClusterDetailPayload = {
     detail: "gRPC queues are growing",
   },
 };
+
+// ============================================================
+// Shared test helpers - extracted from multiple test files
+// ============================================================
+
+/**
+ * Creates a mock localStorage object for testing.
+ * Used in app.test.tsx, panel-selection-binding.test.tsx,
+ * queue-workstream-filter.test.tsx, execution-history-filter.test.tsx
+ */
+export const createStorageMock = () => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => (key in store ? store[key] : null),
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+  };
+};
+
+/**
+ * Creates a mock fetch function that returns payloads based on URL.
+ * @param payloads - Record of URL patterns to return values
+ */
+export const createFetchMock = (payloads: Record<string, unknown>) =>
+  // Note: vi.fn is from vitest and must be provided by the test file
+  ((input: RequestInfo) => {
+    const url = typeof input === "string" ? input : input.url;
+    const base = url.split("?")[0];
+    const payload = payloads[url] ?? payloads[base];
+    if (!payload) {
+      return Promise.reject(new Error(`Unexpected fetch ${url}`));
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => Promise.resolve(payload),
+    });
+  }) as unknown as (input: RequestInfo) => Promise<unknown>;
+
+/**
+ * Helper to get the queue panel with proper scoping.
+ * @returns a scoped query function for the queue panel
+ */
+export const getQueuePanelHelper = async () => {
+  // Import within is only available in test files with @testing-library/react
+  // This function is provided as a pattern - actual implementation requires
+  // importing `screen` and `within` from "@testing-library/react" in the test file
+  throw new Error("getQueuePanelHelper requires screen and within from @testing-library/react");
+};

@@ -11,7 +11,7 @@ import type {
   ReviewEnrichmentStatus,
   RunPayload,
 } from "../types";
-import { makeRunWithOverrides, sampleFleet, sampleProposals, sampleClusterDetail, sampleNotifications } from "./fixtures";
+import { createStorageMock, makeRunWithOverrides, sampleFleet, sampleProposals, sampleClusterDetail, sampleNotifications } from "./fixtures";
 
 // Helper to create a smart fetch mock that returns run-specific data
 const createRunAwareFetchMock = (
@@ -233,16 +233,6 @@ const createRun122Payload = (overrides: Partial<RunPayload> = {}): RunPayload =>
     deterministicNextChecks: null,
     ...overrides,
   } as RunPayload);
-
-const createStorageMock = () => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => (key in store ? store[key] : null),
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { store = {}; },
-  };
-};
 
 let setIntervalSpy: ReturnType<typeof vi.fn>;
 let clearIntervalSpy: ReturnType<typeof vi.fn>;

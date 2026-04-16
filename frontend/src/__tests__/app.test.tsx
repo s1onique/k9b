@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { AUTOREFRESH_STORAGE_KEY, QUEUE_VIEW_STORAGE_KEY } from "../App";
 import type { NotificationEntry } from "../types";
 import {
+  createFetchMock,
+  createStorageMock,
   makeDiagnosticPackReview,
   makeRunWithOverrides,
   sampleClusterDetail,
@@ -14,22 +16,6 @@ import {
   sampleRun,
   sampleRunsList,
 } from "./fixtures";
-
-const createStorageMock = () => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => (key in store ? store[key] : null),
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-};
 
 const defaultPayloads = {
   "/api/run": sampleRun,

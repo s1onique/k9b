@@ -329,6 +329,8 @@ import App, {
   EXECUTION_HISTORY_FILTER_STORAGE_KEY,
 } from "../App";
 import {
+  createFetchMock,
+  createStorageMock,
   makeRunWithOverrides,
   sampleFleet,
   sampleProposals,
@@ -341,23 +343,6 @@ import {
 const createExecutionHistoryPayload = (history: NextCheckExecutionHistoryEntry[]) =>
   makeRunWithOverrides({ nextCheckExecutionHistory: history });
 
-// Helper to create a mock fetch that handles execution history
-const createFetchMock = (payloads: Record<string, unknown>) =>
-  vi.fn((input: RequestInfo) => {
-    const url = typeof input === "string" ? input : input.url;
-    const base = url.split("?")[0];
-    const payload = payloads[url] ?? payloads[base];
-    if (!payload) {
-      return Promise.reject(new Error(`Unexpected fetch ${url}`));
-    }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
-  });
-
 const defaultPayloads = {
   "/api/run": createExecutionHistoryPayload(mockEntries),
   "/api/runs": sampleRunsList,
@@ -366,22 +351,6 @@ const defaultPayloads = {
   "/api/notifications": sampleNotifications,
   "/api/notifications?limit=50&page=1": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
-};
-
-const createStorageMock = () => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => (key in store ? store[key] : null),
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
 };
 
 let storageMock: ReturnType<typeof createStorageMock>;
