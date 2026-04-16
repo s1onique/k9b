@@ -2645,8 +2645,47 @@ describe("Recent runs selection", () => {
     expect(heroLabel).toBeInTheDocument();
   });
 
-  test("selecting a run from Recent runs changes selectedRunId", async () => {
-    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+  test("selecting a run from Recent runs changes selectedRunId and fetches correct data", async () => {
+    // Create a smarter mock that returns run-specific data based on run_id query param
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      
+      // Handle run-specific payloads based on run_id query param
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-122") {
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve({
+              ...sampleRun,
+              runId: "run-122",
+              label: "Run 122 specific",
+              nextCheckExecutionHistory: [],
+              nextCheckQueue: [],
+            }),
+          });
+        }
+        if (runId === "run-123" || !runId) {
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve(sampleRun),
+          });
+        }
+      }
+      
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+    
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
 
@@ -2658,9 +2697,20 @@ describe("Recent runs selection", () => {
       expect(runRows.length).toBeGreaterThan(0);
     });
 
-    // Initially run-123 should be selected
+    // Initially run-123 should be selected - verify it fetches correct data
     const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
     expect(latestRunRow).toHaveClass("run-row-selected");
+    
+    // Wait for initial fetch to complete and verify it was called
+    await waitFor(() => {
+      const runCalls = fetchMock.mock.calls.filter(
+        ([input]) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          return url.includes("/api/run");
+        }
+      );
+      expect(runCalls.length).toBeGreaterThan(0);
+    });
 
     // Click on a different run (run-122)
     const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
@@ -2677,6 +2727,17 @@ describe("Recent runs selection", () => {
 
     // run-123 should no longer be selected
     expect(latestRunRow).not.toHaveClass("run-row-selected");
+    
+    // Verify that fetch was called with run-122's run_id
+    await waitFor(() => {
+      const runCalls = fetchMock.mock.calls.filter(
+        ([input]) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          return url.includes("/api/run") && url.includes("run_id=run-122");
+        }
+      );
+      expect(runCalls.length).toBeGreaterThan(0);
+    });
 
     // Hero section should show "Selected run" label (not "Current run" since it's older)
     const selectedLabel = await screen.findByText(/Selected run/i);
@@ -2717,111 +2778,62 @@ describe("Recent runs selection", () => {
     });
   });
 
-  test("selecting a run updates Execution History to show that run's history", async () => {
-    // Create different execution histories for different runs
-    const run122WithHistory = makeRunWithOverrides({
-      runId: "run-122",
-      label: "2026-04-07-1100",
-      nextCheckExecutionHistory: [
-        {
-          timestamp: "2026-04-07T11:05:00Z",
-          clusterLabel: "cluster-x",
-          candidateId: "candidate-122",
-          candidateIndex: 0,
-          candidateDescription: "Check for run-122 specific data",
-          commandFamily: "kubectl-get",
-          status: "success",
-          durationMs: 100,
-          artifactPath: "/artifacts/run-122-exec-0.json",
-          timedOut: false,
-          stdoutTruncated: false,
-          stderrTruncated: false,
-          outputBytesCaptured: 1024,
-          resultClass: "useful-signal",
-          resultSummary: "Run-122 specific execution result.",
-        },
-      ],
-      nextCheckQueue: [],
+  test("selecting a run updates Execution History and verifies correct run_id in fetch", async () => {
+    // Create a fetch mock that returns run-specific data based on run_id query param
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-122") {
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve(makeRunWithOverrides({
+              runId: "run-122",
+              label: "2026-04-07-1100",
+              nextCheckExecutionHistory: [
+                {
+                  timestamp: "2026-04-07T11:05:00Z",
+                  clusterLabel: "cluster-x",
+                  candidateId: "candidate-122",
+                  candidateIndex: 0,
+                  candidateDescription: "Check for run-122 specific data",
+                  commandFamily: "kubectl-get",
+                  status: "success",
+                  durationMs: 100,
+                  artifactPath: "/artifacts/run-122-exec-0.json",
+                  timedOut: false,
+                  stdoutTruncated: false,
+                  stderrTruncated: false,
+                  outputBytesCaptured: 1024,
+                  resultClass: "useful-signal",
+                  resultSummary: "Run-122 specific execution result.",
+                },
+              ],
+              nextCheckQueue: [],
+            })),
+          });
+        }
+        // Default to sampleRun for any other run_id
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(sampleRun),
+        });
+      }
+      
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
     });
 
-    const payloads = {
-      ...defaultPayloads,
-      "/api/run": run122WithHistory,
-    };
-
-    vi.stubGlobal("fetch", createFetchMock(payloads));
-    const user = userEvent.setup();
-    render(<App />);
-
-    await screen.findByRole("heading", { name: /Fleet overview/i });
-
-    // Wait for runs to render
-    await waitFor(() => {
-      const runRows = document.querySelectorAll(".run-row");
-      expect(runRows.length).toBeGreaterThan(0);
-    });
-
-    // Click on run-122 (which has different execution history)
-    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
-    expect(run122Row).not.toBeNull();
-
-    await act(async () => {
-      await user.click(run122Row!);
-    });
-
-    // Execution history should update to show run-122's history
-    await waitFor(() => {
-      const execHistory = document.getElementById("execution-history");
-      expect(execHistory).toBeInTheDocument();
-    });
-
-    // Should show run-122 specific description
-    const runSpecificHistory = await screen.findByText(/Check for run-122 specific data/i);
-    expect(runSpecificHistory).toBeInTheDocument();
-  });
-
-  test("selecting a run updates Work list to show that run's queue", async () => {
-    // Create different queue for run-122
-    const run122WithQueue = makeRunWithOverrides({
-      runId: "run-122",
-      label: "2026-04-07-1100",
-      nextCheckExecutionHistory: [],
-      nextCheckQueue: [
-        {
-          candidateId: "candidate-122-queue",
-          candidateIndex: 0,
-          description: "Run-122 specific queue item",
-          targetCluster: "cluster-x",
-          priorityLabel: "primary",
-          suggestedCommandFamily: "kubectl-get",
-          safeToAutomate: true,
-          requiresOperatorApproval: false,
-          approvalState: "not-required",
-          executionState: "unexecuted",
-          outcomeStatus: "pending",
-          latestArtifactPath: null,
-          sourceReason: "test",
-          expectedSignal: "test",
-          normalizationReason: "test",
-          safetyReason: "test",
-          approvalReason: null,
-          duplicateReason: null,
-          blockingReason: null,
-          targetContext: "cluster-x",
-          commandPreview: "kubectl get all",
-          planArtifactPath: null,
-          queueStatus: "safe-ready",
-          workstream: "incident",
-        },
-      ],
-    });
-
-    const payloads = {
-      ...defaultPayloads,
-      "/api/run": run122WithQueue,
-    };
-
-    vi.stubGlobal("fetch", createFetchMock(payloads));
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
 
@@ -2839,6 +2851,123 @@ describe("Recent runs selection", () => {
 
     await act(async () => {
       await user.click(run122Row!);
+    });
+
+    // Verify fetch was called with run-122's run_id
+    await waitFor(() => {
+      const runCalls = fetchMock.mock.calls.filter(
+        ([input]) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          return url.includes("/api/run") && url.includes("run_id=run-122");
+        }
+      );
+      expect(runCalls.length).toBeGreaterThan(0);
+    });
+
+    // Execution history should update to show run-122's history
+    await waitFor(() => {
+      const execHistory = document.getElementById("execution-history");
+      expect(execHistory).toBeInTheDocument();
+    });
+
+    // Should show run-122 specific description
+    const runSpecificHistory = await screen.findByText(/Check for run-122 specific data/i);
+    expect(runSpecificHistory).toBeInTheDocument();
+  });
+
+  test("selecting a run updates Work list to show that run's queue and verifies run_id in fetch", async () => {
+    // Create a smart mock that returns run-specific queue based on run_id query param
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-122") {
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve(makeRunWithOverrides({
+              runId: "run-122",
+              label: "2026-04-07-1100",
+              nextCheckExecutionHistory: [],
+              nextCheckQueue: [
+                {
+                  candidateId: "candidate-122-queue",
+                  candidateIndex: 0,
+                  description: "Run-122 specific queue item",
+                  targetCluster: "cluster-x",
+                  priorityLabel: "primary",
+                  suggestedCommandFamily: "kubectl-get",
+                  safeToAutomate: true,
+                  requiresOperatorApproval: false,
+                  approvalState: "not-required",
+                  executionState: "unexecuted",
+                  outcomeStatus: "pending",
+                  latestArtifactPath: null,
+                  sourceReason: "test",
+                  expectedSignal: "test",
+                  normalizationReason: "test",
+                  safetyReason: "test",
+                  approvalReason: null,
+                  duplicateReason: null,
+                  blockingReason: null,
+                  targetContext: "cluster-x",
+                  commandPreview: "kubectl get all",
+                  planArtifactPath: null,
+                  queueStatus: "safe-ready",
+                  workstream: "incident",
+                },
+              ],
+            })),
+          });
+        }
+        // Default to sampleRun for any other run_id
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(sampleRun),
+        });
+      }
+      
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for runs to render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    // Click on run-122
+    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(run122Row).not.toBeNull();
+
+    await act(async () => {
+      await user.click(run122Row!);
+    });
+
+    // Verify fetch was called with run-122's run_id
+    await waitFor(() => {
+      const runCalls = fetchMock.mock.calls.filter(
+        ([input]) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          return url.includes("/api/run") && url.includes("run_id=run-122");
+        }
+      );
+      expect(runCalls.length).toBeGreaterThan(0);
     });
 
     // Work list should update to show run-122's queue
@@ -2973,21 +3102,45 @@ describe("Recent runs selection", () => {
     expect(jumpButton).toBeInTheDocument();
   });
 
-  test("empty states are selected-run-specific for Execution History", async () => {
-    // Create a run with no execution history
-    const runWithNoHistory = makeRunWithOverrides({
-      runId: "run-122",
-      label: "2026-04-07-1100",
-      nextCheckExecutionHistory: [],
-      nextCheckQueue: [],
+  test("empty states are selected-run-specific for Execution History and verifies run_id", async () => {
+    // Create a smart mock that returns run-specific empty data based on run_id query param
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-122") {
+          // Return run with empty execution history
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve(makeRunWithOverrides({
+              runId: "run-122",
+              label: "2026-04-07-1100",
+              nextCheckExecutionHistory: [],
+              nextCheckQueue: [],
+            })),
+          });
+        }
+        // Default to sampleRun for any other run_id
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(sampleRun),
+        });
+      }
+      
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
     });
 
-    const payloads = {
-      ...defaultPayloads,
-      "/api/run": runWithNoHistory,
-    };
-
-    vi.stubGlobal("fetch", createFetchMock(payloads));
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
 
@@ -3006,6 +3159,17 @@ describe("Recent runs selection", () => {
       await user.click(run122Row!);
     });
 
+    // Verify fetch was called with run-122's run_id
+    await waitFor(() => {
+      const runCalls = fetchMock.mock.calls.filter(
+        ([input]) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          return url.includes("/api/run") && url.includes("run_id=run-122");
+        }
+      );
+      expect(runCalls.length).toBeGreaterThan(0);
+    });
+
     // Wait for panel update
     await waitFor(() => {
       const execHistory = document.getElementById("execution-history");
@@ -3017,21 +3181,45 @@ describe("Recent runs selection", () => {
     expect(emptyState).toBeInTheDocument();
   });
 
-  test("empty states are selected-run-specific for Work list", async () => {
-    // Create a run with no queue
-    const runWithNoQueue = makeRunWithOverrides({
-      runId: "run-122",
-      label: "2026-04-07-1100",
-      nextCheckExecutionHistory: [],
-      nextCheckQueue: [],
+  test("empty states are selected-run-specific for Work list and verifies run_id", async () => {
+    // Create a smart mock that returns run-specific empty data based on run_id query param
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-122") {
+          // Return run with empty queue
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve(makeRunWithOverrides({
+              runId: "run-122",
+              label: "2026-04-07-1100",
+              nextCheckExecutionHistory: [],
+              nextCheckQueue: [],
+            })),
+          });
+        }
+        // Default to sampleRun for any other run_id
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(sampleRun),
+        });
+      }
+      
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
     });
 
-    const payloads = {
-      ...defaultPayloads,
-      "/api/run": runWithNoQueue,
-    };
-
-    vi.stubGlobal("fetch", createFetchMock(payloads));
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
 
@@ -3048,6 +3236,17 @@ describe("Recent runs selection", () => {
 
     await act(async () => {
       await user.click(run122Row!);
+    });
+
+    // Verify fetch was called with run-122's run_id
+    await waitFor(() => {
+      const runCalls = fetchMock.mock.calls.filter(
+        ([input]) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          return url.includes("/api/run") && url.includes("run_id=run-122");
+        }
+      );
+      expect(runCalls.length).toBeGreaterThan(0);
     });
 
     // Wait for panel update
