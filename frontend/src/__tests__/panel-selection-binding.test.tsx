@@ -340,6 +340,18 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(within(providerPanel!).getByText(/Auto drilldown/i)).toBeInTheDocument();
     });
 
+    // --- STRENGTHENED: Assert run-123 specific content BEFORE switching ---
+    // Run-123 autoDrilldown: eligible=2, attempted=1, succeeded=1, failed=0, skipped=0, unattempted=1
+    // Run-123 reviewEnrichment: eligible=1, attempted=1, succeeded=1, failed=0, skipped=0, unattempted=0
+    // Unique differentiator: unattempted 1 (autoDrilldown) vs unattempted 0 (reviewEnrichment)
+    await waitFor(() => {
+      // Check both branches exist with expected titles
+      expect(within(providerPanel!).getByText(/Auto drilldown/i)).toBeInTheDocument();
+      expect(within(providerPanel!).getByText(/Review enrichment/i)).toBeInTheDocument();
+      // Use unattempted 1 as unique marker for autoDrilldown in run-123
+      expect(within(providerPanel!).getByText(/unattempted 1/i)).toBeInTheDocument();
+    });
+
     // Click on run-122
     const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
     expect(run122Row).not.toBeNull();
@@ -359,7 +371,18 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(runCalls.length).toBe(1);
     });
 
-    // Panel should still be visible with updated data
+    // --- STRENGTHENED: Assert run-122 specific content AFTER switching ---
+    // Run-122 autoDrilldown: eligible=1, attempted=0, succeeded=0, failed=0, skipped=1, unattempted=0
+    // Run-122 reviewEnrichment: eligible=1, attempted=1, succeeded=0, failed=1, skipped=0
+    // Unique differentiators for run-122: skipped 1 and failed 1
+    await waitFor(() => {
+      // Check skipped=1 for autoDrilldown (unique to run-122 vs run-123 which has skipped 0)
+      expect(within(providerPanel!).getByText(/skipped 1/i)).toBeInTheDocument();
+      // Check failed=1 for reviewEnrichment (unique to run-122 vs run-123 which has failed 0)
+      expect(within(providerPanel!).getByText(/failed 1/i)).toBeInTheDocument();
+    });
+
+    // Panel should still be visible
     await waitFor(() => {
       expect(within(providerPanel!).getByText(/Auto drilldown/i)).toBeInTheDocument();
     });
@@ -390,8 +413,19 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(within(packPanel!).getByRole("heading", { name: /Run diagnostic package archive/i })).toBeInTheDocument();
     });
 
-    // Verify Download link exists
-    expect(within(packPanel!).getByText(/Download diagnostic pack/i)).toBeInTheDocument();
+    // --- STRENGTHENED: Assert run-123 specific content BEFORE switching ---
+    // Run-123 diagnosticPack: timestamp 2026-04-07T12:00:00Z (Apr 7, 2026 12:00 UTC)
+    await waitFor(() => {
+      // Verify run-123 timestamp is rendered
+      expect(within(packPanel!).getByText(/Apr 7, 2026 12:00 UTC/i)).toBeInTheDocument();
+    });
+
+    // Verify Download link exists with run-123 path (URL-encoded)
+    const run123Link = within(packPanel!).getByText(/Download diagnostic pack/i);
+    expect(run123Link).toBeInTheDocument();
+    // The href is URL-encoded: /artifact?path=%2Fartifacts%2Frun-123-diagnostic-pack.zip
+    const run123Href = run123Link.getAttribute("href") || "";
+    expect(decodeURIComponent(run123Href)).toContain("/artifacts/run-123-diagnostic-pack.zip");
 
     // Click on run-122
     const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
@@ -412,7 +446,20 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(runCalls.length).toBeGreaterThan(0);
     });
 
-    // Panel should still be visible with run-122 data
+    // --- STRENGTHENED: Assert run-122 specific content AFTER switching ---
+    // Run-122 diagnosticPack: timestamp 2026-04-07T11:00:00Z (Apr 7, 2026 11:00 UTC)
+    await waitFor(() => {
+      // Verify timestamp changed to run-122
+      expect(within(packPanel!).getByText(/Apr 7, 2026 11:00 UTC/i)).toBeInTheDocument();
+    });
+
+    // Verify download link changed to run-122 path (URL-encoded)
+    const run122Link = within(packPanel!).getByText(/Download diagnostic pack/i);
+    expect(run122Link).toBeInTheDocument();
+    const run122Href = run122Link.getAttribute("href") || "";
+    expect(decodeURIComponent(run122Href)).toContain("/artifacts/run-122-diagnostic-pack.zip");
+
+    // Panel should still be visible
     await waitFor(() => {
       expect(within(packPanel!).getByRole("heading", { name: /Run diagnostic package archive/i })).toBeInTheDocument();
     });
@@ -588,9 +635,32 @@ describe("Panel selection binding - Per-run panels", () => {
     const llmPolicyPanel = document.getElementById("llm-policy");
     expect(llmPolicyPanel).toBeInTheDocument();
 
-    // Should show run-123 usedThisRun: 1
+    // --- STRENGTHENED: Assert run-123 specific content BEFORE switching ---
+    // Run-123 llmPolicy.autoDrilldown: enabled=true, provider=default, usedThisRun=1, success/failed/skipped=1/0/0
     await waitFor(() => {
       expect(within(llmPolicyPanel!).getByText(/used this run/i)).toBeInTheDocument();
+    });
+
+    // Check enabled status pill
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/Auto drilldown enabled/i)).toBeInTheDocument();
+    });
+
+    // Check provider name (rendered as separate elements: "Provider" label + "default" value)
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/^Provider$/i)).toBeInTheDocument();
+      // The value is rendered as <strong>default</strong>
+      expect(within(llmPolicyPanel!).getByText(/^default$/)).toBeInTheDocument();
+    });
+
+    // Check success count (run-123: 1 successful, 0 failed, 0 skipped)
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/1 \/ 0 \/ 0/i)).toBeInTheDocument();
+    });
+
+    // Check budget status
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/Within budget/i)).toBeInTheDocument();
     });
 
     // Click on run-122
@@ -612,7 +682,27 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(runCalls.length).toBeGreaterThan(0);
     });
 
-    // Should show run-122 usedThisRun: 0
+    // --- STRENGTHENED: Assert run-122 specific content AFTER switching ---
+    // Run-122 llmPolicy.autoDrilldown: enabled=false, provider=stub, usedThisRun=0, success/failed/skipped=0/0/0
+
+    // Check disabled status pill
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/Auto drilldown disabled/i)).toBeInTheDocument();
+    });
+
+    // Check provider changed to stub (rendered as separate elements)
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/^Provider$/i)).toBeInTheDocument();
+      // The value is rendered as <strong>stub</strong>
+      expect(within(llmPolicyPanel!).getByText(/^stub$/)).toBeInTheDocument();
+    });
+
+    // Check success/failed/skipped changed to 0/0/0
+    await waitFor(() => {
+      expect(within(llmPolicyPanel!).getByText(/0 \/ 0 \/ 0/i)).toBeInTheDocument();
+    });
+
+    // Panel should still be visible
     await waitFor(() => {
       expect(within(llmPolicyPanel!).getByText(/used this run/i)).toBeInTheDocument();
     });
