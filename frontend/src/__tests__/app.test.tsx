@@ -1542,7 +1542,7 @@ describe("App", () => {
     expect(screen.getByText(/^Current$/i, { selector: ".hero-run-label" })).toBeInTheDocument();
     expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/(Fresh|Delayed|Stale)$/i, { selector: ".freshness-indicator__label" })
+      screen.getByText(/(Fresh|Aging|Stale)$/i, { selector: ".freshness-indicator__label" })
     ).toBeInTheDocument();
     expect(screen.getByText(/LLM telemetry/i)).toBeInTheDocument();
     expect(screen.getByText(/Collector collector:v1.2.0/i)).toBeInTheDocument();
@@ -3290,5 +3290,269 @@ describe("Recent runs selection", () => {
     await waitFor(() => {
       expect(secondRunRow).toHaveClass("run-row-selected");
     });
+  });
+});
+
+describe("Run freshness thresholds", () => {
+  /**
+   * Run freshness thresholds:
+   * - green/Fresh: run age <= 15 minutes
+   * - yellow/Aging: run age > 15 minutes and <= 45 minutes
+   * - red/Stale: run age > 45 minutes
+   */
+  
+  const NOW = new Date();
+  const MINUTES = 60 * 1000;
+  
+  test("run freshness is green/Fresh when run age <= 15 minutes", async () => {
+    // Create a run timestamp that is 10 minutes old (well within 15m threshold)
+    const freshTimestamp = new Date(NOW.getTime() - 10 * MINUTES).toISOString();
+    const freshRun = makeRunWithOverrides({ timestamp: freshTimestamp });
+    const payloads = { ...defaultPayloads, "/api/run": freshRun };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify freshness indicator shows green emoji and Fresh label
+    const freshnessIndicator = await screen.findByText(/Fresh$/i, { selector: ".freshness-indicator__label" });
+    expect(freshnessIndicator).toBeInTheDocument();
+    expect(freshnessIndicator.textContent).toBe("Fresh");
+    
+    // Verify the emoji is green (🟢)
+    const emoji = document.querySelector(".freshness-indicator__emoji");
+    expect(emoji).toHaveTextContent("🟢");
+  });
+
+  test("run freshness is yellow/Aging when run age > 15 minutes and <= 45 minutes", async () => {
+    // Create a run timestamp that is 30 minutes old (within aging threshold)
+    const agingTimestamp = new Date(NOW.getTime() - 30 * MINUTES).toISOString();
+    const agingRun = makeRunWithOverrides({ timestamp: agingTimestamp });
+    const payloads = { ...defaultPayloads, "/api/run": agingRun };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify freshness indicator shows yellow emoji and Aging label
+    const freshnessIndicator = await screen.findByText(/Aging$/i, { selector: ".freshness-indicator__label" });
+    expect(freshnessIndicator).toBeInTheDocument();
+    expect(freshnessIndicator.textContent).toBe("Aging");
+    
+    // Verify the emoji is yellow (🟡)
+    const emoji = document.querySelector(".freshness-indicator__emoji");
+    expect(emoji).toHaveTextContent("🟡");
+  });
+
+  test("run freshness is red/Stale when run age > 45 minutes", async () => {
+    // Create a run timestamp that is 60 minutes old (well past aging threshold)
+    const staleTimestamp = new Date(NOW.getTime() - 60 * MINUTES).toISOString();
+    const staleRun = makeRunWithOverrides({ timestamp: staleTimestamp });
+    const payloads = { ...defaultPayloads, "/api/run": staleRun };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify freshness indicator shows red emoji and Stale label
+    const freshnessIndicator = await screen.findByText(/Stale$/i, { selector: ".freshness-indicator__label" });
+    expect(freshnessIndicator).toBeInTheDocument();
+    expect(freshnessIndicator.textContent).toBe("Stale");
+    
+    // Verify the emoji is red (🔴)
+    const emoji = document.querySelector(".freshness-indicator__emoji");
+    expect(emoji).toHaveTextContent("🔴");
+  });
+
+  test("selecting a different run updates the run freshness indicator accordingly", async () => {
+    // Create runs with different freshness levels
+    const freshTimestamp = new Date(NOW.getTime() - 5 * MINUTES).toISOString();
+    const staleTimestamp = new Date(NOW.getTime() - 50 * MINUTES).toISOString();
+    
+    const runsWithDifferentFreshness = {
+      runs: [
+        { ...sampleRunsList.runs[0], timestamp: freshTimestamp, runId: "run-fresh", label: "fresh-run" },
+        { ...sampleRunsList.runs[1], timestamp: staleTimestamp, runId: "run-stale", label: "stale-run" },
+        ...sampleRunsList.runs.slice(2),
+      ],
+      totalCount: sampleRunsList.totalCount,
+    };
+
+    // Start with fresh run
+    const freshRun = makeRunWithOverrides({ timestamp: freshTimestamp });
+    const staleRun = makeRunWithOverrides({ 
+      timestamp: staleTimestamp, 
+      runId: "run-stale", 
+      label: "stale-run" 
+    });
+    
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      const params = new URLSearchParams(url.split("?")[1] || "");
+      const runId = params.get("run_id");
+      
+      if (base === "/api/run") {
+        if (runId === "run-stale") {
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve(staleRun),
+          });
+        }
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(freshRun),
+        });
+      }
+      
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsWithDifferentFreshness),
+        });
+      }
+      
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Initially should show Fresh for the latest run
+    const freshIndicator = await screen.findByText(/Fresh$/i, { selector: ".freshness-indicator__label" });
+    expect(freshIndicator).toBeInTheDocument();
+
+    // Find and click on the stale run row
+    const staleRunRow = document.querySelector('.run-row[data-run-id="run-stale"]');
+    expect(staleRunRow).not.toBeNull();
+
+    await act(async () => {
+      await user.click(staleRunRow!);
+    });
+
+    // Wait for the fetch to complete and UI to update
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    // Now freshness should show Stale
+    const staleIndicator = await screen.findByText(/Stale$/i, { selector: ".freshness-indicator__label" });
+    expect(staleIndicator).toBeInTheDocument();
+    
+    // Verify the emoji changed to red
+    const emoji = document.querySelector(".freshness-indicator__emoji");
+    expect(emoji).toHaveTextContent("🔴");
+  });
+
+  test("page freshness uses separate <=30s/<3m/>=3m thresholds, independent of run freshness", async () => {
+    // Create a run that is stale (60 minutes old)
+    const staleTimestamp = new Date(NOW.getTime() - 60 * MINUTES).toISOString();
+    const staleRun = makeRunWithOverrides({ timestamp: staleTimestamp });
+    const payloads = { ...defaultPayloads, "/api/run": staleRun };
+    vi.stubGlobal("fetch", createFetchMock(payloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Run freshness should be Stale (red) due to 60 minute age
+    const runIndicator = await screen.findByText(/Stale$/i, { selector: ".freshness-indicator__label" });
+    expect(runIndicator).toBeInTheDocument();
+    
+    const runEmoji = document.querySelector(".freshness-indicator__emoji");
+    expect(runEmoji).toHaveTextContent("🔴");
+    
+    // Page freshness indicator should still be present (fresh/green) near Refresh button
+    // This is the emoji-only indicator in the header
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    const refreshControls = refreshButton.closest(".refresh-controls");
+    expect(refreshControls).not.toBeNull();
+    
+    // Page freshness indicator exists with aria-label
+    const pageIndicator = refreshControls!.querySelector(".page-freshness-indicator");
+    expect(pageIndicator).not.toBeNull();
+    
+    // Page freshness should be fresh/green since lastRefresh is current
+    const pageIndicatorClasses = pageIndicator!.className;
+    expect(pageIndicatorClasses).toContain("page-freshness-indicator--fresh");
+  });
+
+  test("refresh controls remain present and queryable in header", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Refresh button should be present
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    expect(refreshButton).toBeInTheDocument();
+    expect(refreshButton).not.toBeDisabled();
+
+    // Auto-refresh dropdown should be present
+    const autoRefreshSelect = await screen.findByLabelText(/Auto/i);
+    expect(autoRefreshSelect).toBeInTheDocument();
+
+    // Page freshness indicator should be present
+    const pageFreshness = document.querySelector(".page-freshness-indicator");
+    expect(pageFreshness).not.toBeNull();
+  });
+
+  test("panel switching behavior still works after run selection", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Navigate to a cluster detail tab
+    const clusterSection = await screen.findByRole("heading", { name: /Cluster detail/i });
+    expect(clusterSection).toBeInTheDocument();
+
+    // Verify tabs are present
+    const tabList = await screen.findByRole("tablist", { name: /Cluster detail tabs/i });
+    expect(tabList).toBeInTheDocument();
+
+    // Click Hypotheses tab
+    await act(async () => {
+      await user.click(within(tabList).getByRole("button", { name: /Hypotheses/i }));
+    });
+    expect(screen.getByText(sampleClusterDetail.hypotheses[0].description)).toBeInTheDocument();
+
+    // Now select a different run
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
+    const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
+    expect(run122Row).not.toBeNull();
+
+    await act(async () => {
+      await user.click(run122Row!);
+    });
+
+    // Wait for UI to update
+    await waitFor(() => {
+      const updatedTabList = document.querySelector('[role="tablist"]');
+      expect(updatedTabList).toBeInTheDocument();
+    });
+
+    // Tab list should still be functional after run selection
+    const updatedTabList = await screen.findByRole("tablist", { name: /Cluster detail tabs/i });
+    await act(async () => {
+      await user.click(within(updatedTabList).getByRole("button", { name: /Next checks/i }));
+    });
+
+    // Should show next checks tab content
+    expect(within(updatedTabList).getByRole("button", { name: /Next checks/i })).toBeInTheDocument();
   });
 });

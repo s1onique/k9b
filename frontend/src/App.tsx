@@ -63,10 +63,19 @@ const truncateText = (value: string, length = 160) => {
 
 type FreshnessLevel = "fresh" | "warning" | "stale";
 
-const getFreshnessLevel = (timestamp: string): FreshnessLevel => {
-  const seconds = dayjs().diff(dayjs(timestamp), "second");
+// Page/data freshness thresholds: <=30s fresh, >30s and <3m warning, >=3m stale
+const getPageFreshnessLevel = (lastRefreshTime: dayjs.Dayjs): FreshnessLevel => {
+  const seconds = dayjs().diff(lastRefreshTime, "second");
   if (seconds <= 30) return "fresh";
   if (seconds < 180) return "warning";
+  return "stale";
+};
+
+// Run freshness thresholds: <=15m fresh, >15m and <=45m warning (Aging), >45m stale
+const getRunFreshnessLevel = (timestamp: string): FreshnessLevel => {
+  const minutes = dayjs().diff(dayjs(timestamp), "minute");
+  if (minutes <= 15) return "fresh";
+  if (minutes <= 45) return "warning";
   return "stale";
 };
 
@@ -76,17 +85,10 @@ const FRESHNESS_EMOJI: Record<FreshnessLevel, string> = {
   stale: "🔴",
 };
 
-// Page/data freshness uses same thresholds but tracks lastRefresh timestamp
-const getPageFreshnessLevel = (lastRefreshTime: dayjs.Dayjs): FreshnessLevel => {
-  const seconds = dayjs().diff(lastRefreshTime, "second");
-  if (seconds <= 30) return "fresh";
-  if (seconds < 180) return "warning";
-  return "stale";
-};
-
+// Run freshness labels: green=Fresh, yellow=Aging, red=Stale
 const FRESHNESS_LABEL: Record<FreshnessLevel, string> = {
   fresh: "Fresh",
-  warning: "Delayed",
+  warning: "Aging",
   stale: "Stale",
 };
 
@@ -3797,7 +3799,7 @@ const App = () => {
             </div>
             <div className="hero-run-freshness">
               {(() => {
-                const freshnessLevel = getFreshnessLevel(run.timestamp);
+                const freshnessLevel = getRunFreshnessLevel(run.timestamp);
                 return (
                   <span className={`freshness-indicator freshness-indicator--${freshnessLevel}`}>
                     <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[freshnessLevel]}</span>
