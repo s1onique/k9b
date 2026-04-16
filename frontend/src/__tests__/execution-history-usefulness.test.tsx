@@ -537,4 +537,201 @@ describe("Execution History Usefulness Rendering - Real UI", () => {
       expect(screen.getByText("Not reviewed")).toBeInTheDocument();
     });
   });
+
+  // ============================================================
+  // Real DOM Truncation Tests
+  // ============================================================
+
+  describe('DOM truncation for long text in real UI', () => {
+    it('truncates long resultSummary text with ellipsis in DOM', async () => {
+      // Create a resultSummary longer than 120 characters
+      // Using a unique string to avoid false matches
+      const longResultText = 'RESULT_LONG_UNIQUE_1234567890123456789012345678901234567890123456789012345678901234567890_EXTRA_CHARS_TO_MAKE_IT_LONG_ENOUGH';
+      // Verify the text is longer than 120
+      expect(longResultText.length).toBeGreaterThan(120);
+
+      const runWithLongResult = buildRunWithHistory([
+        {
+          timestamp: '2024-01-15T10:00:00Z',
+          clusterLabel: 'prod-cluster',
+          candidateDescription: 'Test long result truncation',
+          commandFamily: 'kubectl-get',
+          status: 'success',
+          durationMs: 100,
+          artifactPath: '/artifacts/long-result.json',
+          timedOut: false,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+          outputBytesCaptured: 2048,
+          resultClass: 'useful-signal',
+          resultSummary: longResultText,
+          usefulnessClass: 'useful',
+          usefulnessSummary: 'Good',
+        },
+      ]);
+
+      vi.stubGlobal('fetch', createFetchMock(runWithLongResult));
+      const { container } = render(<App />);
+
+      await screen.findByText('Test long result truncation');
+
+      // Find the truncated text - it should contain the unique prefix
+      const truncatedElements = document.querySelectorAll('.follow-up-summary');
+      expect(truncatedElements.length).toBeGreaterThan(0);
+      
+      // Get the full text content
+      const fullText = truncatedElements[0].textContent ?? '';
+      console.log('Full text length:', fullText.length);
+      console.log('Full text ends with ellipsis:', fullText.endsWith('…'));
+      console.log('Full text last 10 chars:', JSON.stringify(fullText.slice(-10)));
+      
+      // Verify the text is truncated (starts with expected prefix but doesn't have the full original)
+      const startsWithPrefix = fullText.startsWith('RESULT_LONG_UNIQUE_123456789012345678901234567890');
+      const hasEllipsis = fullText.endsWith('…');
+      const isShorterThanOriginal = fullText.length < longResultText.length;
+      
+      expect(startsWithPrefix).toBe(true);
+      expect(hasEllipsis).toBe(true);
+      expect(isShorterThanOriginal).toBe(true);
+
+      // Verify full untruncated text is NOT present
+      expect(screen.queryByText(longResultText)).not.toBeInTheDocument();
+    });
+
+    it('truncates long usefulnessSummary text with ellipsis in DOM', async () => {
+      // Create a usefulnessSummary longer than 80 characters
+      // The em-dash prefix " — " adds 3 characters to the display
+      const longUsefulnessText = 'USE_LONG_UNIQUE_12345678901234567890123456789012345678901234567890_TRUNCAT_EXTRA_SUFFIX_TO_MAKE_IT_LONG';
+      // Make sure the original is long enough to exceed 80 + 3 = 83 char limit
+      expect(longUsefulnessText.length).toBeGreaterThan(90);
+
+      const runWithLongUsefulness = buildRunWithHistory([
+        {
+          timestamp: '2024-01-15T10:00:00Z',
+          clusterLabel: 'prod-cluster',
+          candidateDescription: 'Test long usefulness truncation',
+          commandFamily: 'kubectl-get',
+          status: 'success',
+          durationMs: 100,
+          artifactPath: '/artifacts/long-usefulness.json',
+          timedOut: false,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+          outputBytesCaptured: 2048,
+          usefulnessClass: 'useful',
+          usefulnessSummary: longUsefulnessText,
+        },
+      ]);
+
+      vi.stubGlobal('fetch', createFetchMock(runWithLongUsefulness));
+      render(<App />);
+
+      await screen.findByText('Test long usefulness truncation');
+
+      // Find the usefulness text element - the em-dash prefix is separate from the text content
+      const usefulnessElements = document.querySelectorAll('.usefulness-indicator .small');
+      expect(usefulnessElements.length).toBeGreaterThan(0);
+      
+      // Get full text which includes em-dash prefix
+      const fullText = usefulnessElements[0].textContent ?? '';
+      
+      // Verify text is truncated - ends with ellipsis
+      expect(fullText.endsWith('…')).toBe(true);
+      // The total displayed length (including em-dash prefix) should be less than original
+      expect(fullText.length).toBeLessThan(longUsefulnessText.length);
+    });
+
+    it('shows both resultSummary and usefulnessSummary truncated in DOM', async () => {
+      // Make strings long enough to exceed their limits (120 and 80+ chars respectively)
+      const longResultText = 'RESULT_TEXT_THAT_IS_DEFINITELY_OVER_120_CHARACTERS_LONG_AND_SHOULD_BE_TRUNCATED_WHEN_DISPLAYED_IN_THE_EXECUTION_HISTORY_CARD';
+      const longUsefulnessText = 'USE_TEXT_THAT_IS_DEFINITELY_OVER_80_CHARACTERS_LONG_AND_SHOULD_BE_TRUNCATED_WHEN_DISPLAYED_EXTRA';
+      
+      // Verify they're long enough
+      expect(longResultText.length).toBeGreaterThan(120);
+      expect(longUsefulnessText.length).toBeGreaterThan(90);
+
+      const runWithBothLong = buildRunWithHistory([
+        {
+          timestamp: '2024-01-15T10:00:00Z',
+          clusterLabel: 'prod-cluster',
+          candidateDescription: 'Test both long truncation',
+          commandFamily: 'kubectl-get',
+          status: 'success',
+          durationMs: 100,
+          artifactPath: '/artifacts/both-long.json',
+          timedOut: false,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+          outputBytesCaptured: 2048,
+          resultClass: 'useful-signal',
+          resultSummary: longResultText,
+          usefulnessClass: 'useful',
+          usefulnessSummary: longUsefulnessText,
+        },
+      ]);
+
+      vi.stubGlobal('fetch', createFetchMock(runWithBothLong));
+      render(<App />);
+
+      await screen.findByText('Test both long truncation');
+
+      // Check resultSummary truncation
+      const resultElements = document.querySelectorAll('.follow-up-summary');
+      expect(resultElements.length).toBeGreaterThan(0);
+      const resultFullText = resultElements[0].textContent ?? '';
+      expect(resultFullText.length).toBeLessThan(longResultText.length);
+      expect(resultFullText.endsWith('…')).toBe(true);
+
+      // Check usefulnessSummary truncation
+      const usefulnessElements = document.querySelectorAll('.usefulness-indicator .small');
+      expect(usefulnessElements.length).toBeGreaterThan(0);
+      const usefulnessFullText = usefulnessElements[0].textContent ?? '';
+      expect(usefulnessFullText.length).toBeLessThan(longUsefulnessText.length);
+      expect(usefulnessFullText.endsWith('…')).toBe(true);
+
+      // Verify full untruncated texts are NOT present
+      expect(screen.queryByText(longResultText)).not.toBeInTheDocument();
+      expect(screen.queryByText(longUsefulnessText)).not.toBeInTheDocument();
+    });
+
+    it('does not truncate short resultSummary and usefulnessSummary', async () => {
+      const shortResult = 'Short result';
+      const shortUsefulness = 'Short usefulness';
+
+      const runWithShort = buildRunWithHistory([
+        {
+          timestamp: '2024-01-15T10:00:00Z',
+          clusterLabel: 'prod-cluster',
+          candidateDescription: 'Test short text',
+          commandFamily: 'kubectl-get',
+          status: 'success',
+          durationMs: 100,
+          artifactPath: '/artifacts/short.json',
+          timedOut: false,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+          outputBytesCaptured: 2048,
+          resultClass: 'useful-signal',
+          resultSummary: shortResult,
+          usefulnessClass: 'useful',
+          usefulnessSummary: shortUsefulness,
+        },
+      ]);
+
+      vi.stubGlobal('fetch', createFetchMock(runWithShort));
+      render(<App />);
+
+      await screen.findByText('Test short text');
+
+      // Short texts should appear without ellipsis
+      const resultElements = document.querySelectorAll('.follow-up-summary');
+      const shortResultInDom = Array.from(resultElements).some(el => el.textContent === shortResult);
+      expect(shortResultInDom).toBe(true);
+
+      // Check that no ellipsis appears in these short text elements
+      const usefulnessElements = document.querySelectorAll('.usefulness-indicator .small');
+      const hasEllipsisInShort = Array.from(usefulnessElements).some(el => el.textContent?.includes('…'));
+      expect(hasEllipsisInShort).toBe(false);
+    });
+  });
 });
