@@ -9,6 +9,7 @@ import mimetypes
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
@@ -1796,6 +1797,46 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
+        # Persist the execution history entry to ui-index.json so load_ui_index() picks it up
+        # This is the authoritative source for the UI's read model.
+        ui_index_path = self.runs_dir / "health" / "ui-index.json"
+        try:
+            index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+            run_entry = index_data.get("run") or {}
+            history_list: list[dict[str, object]] = list(run_entry.get("next_check_execution_history") or [])
+            # Append the execution history entry (same format as _build_execution_history produces)
+            # Use target_cluster (the validated cluster from candidate) and candidate (the resolved candidate dict)
+            history_entry: dict[str, object] = {
+                "timestamp": artifact.timestamp.isoformat() if hasattr(artifact, "timestamp") and artifact.timestamp else datetime.now(UTC).isoformat(),
+                "clusterLabel": target_cluster if target_cluster else cluster_label,
+                "candidateDescription": candidate.get("description") if candidate else None,
+                "commandFamily": candidate.get("suggestedCommandFamily") if candidate else None,
+                "status": artifact.status.value,
+                "durationMs": artifact.duration_ms,
+                "artifactPath": artifact_path or str(artifact_path),
+                "timedOut": artifact.timed_out or False,
+                "stdoutTruncated": artifact.stdout_truncated or False,
+                "stderrTruncated": artifact.stderr_truncated or False,
+            }
+            history_list.append(history_entry)
+            run_entry["next_check_execution_history"] = history_list
+            index_data["run"] = run_entry
+            ui_index_path.write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.debug(
+                "Persisted execution history to ui-index.json",
+                extra={"ui_index": str(ui_index_path), "run_id": context.run.run_id, "history_count": len(history_list)},
+            )
+        except Exception as exc:
+            # Fallback: just touch the file to invalidate cache (history won't appear until next health loop)
+            logger.warning(
+                "Failed to persist execution history to ui-index.json, falling back to touch-only invalidation",
+                extra={"ui_index": str(ui_index_path), "error": str(exc)},
+            )
+            try:
+                ui_index_path.touch()
+            except Exception:
+                pass
+
         self._send_json(response_payload)
 
     def _handle_deterministic_promotion(self) -> None:
@@ -3132,16 +3173,57 @@ def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, obj
     return queue
 
 
+def _get_field_with_fallback(data: dict[str, object], *keys: str) -> object | None:
+    """Get a value from dict with fallback keys, preserving false/0 values.
+    
+    Checks each key in order and returns the first one that exists (even if falsy).
+    Returns None if no key is found.
+    """
+    for key in keys:
+        if key in data:
+            return data[key]
+    return None
+
+
+def _get_field_with_default(data: dict[str, object], default: object, *keys: str) -> object:
+    """Get a value from dict with fallback keys, returning default if not found.
+    
+    Checks each key in order and returns the first one that exists (even if falsy).
+    Returns the provided default value if no key is found.
+    """
+    for key in keys:
+        if key in data:
+            return data[key]
+    return default
+
+
 def _build_execution_history(
     external_analysis_dir: Path, run_id: str
 ) -> list[dict[str, object]]:
-    """Build next-check execution history from execution artifacts."""
+    """Build next-check execution history from execution artifacts.
+    
+    Uses prefix-based matching to handle any artifact naming pattern,
+    matching any file starting with run_id and ending with '-next-check-execution'.
+    This mirrors the approach used in build_runs_list() for consistency.
+    """
     history: list[dict[str, object]] = []
 
     if not external_analysis_dir.exists():
         return history
 
-    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")):
+    # Pre-sort files by length (longest first) to handle prefixed run_ids correctly
+    # e.g., "run-2024-01-15" should match before "run-2024"
+    all_files = sorted(external_analysis_dir.glob("*-next-check-execution*.json"), key=lambda p: len(p.name), reverse=True)
+
+    for artifact_file in all_files:
+        filename = artifact_file.stem  # filename without extension
+        # Verify run_id boundary: must be followed by hyphen (for child runs) or end of string
+        # Without this check, "run-2024" would match "run-20240-execution.json"
+        if not filename.startswith(run_id):
+            continue
+        if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+            continue
+        
         try:
             artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
             if not isinstance(artifact_data, dict):
@@ -3151,26 +3233,32 @@ def _build_execution_history(
             if purpose != "next-check-execution":
                 continue
 
+            # Verify run_id matches in artifact data as additional safety check
+            # Only enforce if artifact has a run_id field (backward compatibility)
+            artifact_run_id = artifact_data.get("run_id")
+            if artifact_run_id is not None and artifact_run_id != run_id:
+                continue
+
             payload = artifact_data.get("payload", {})
 
             history.append({
                 "timestamp": artifact_data.get("timestamp"),
-                "clusterLabel": payload.get("clusterLabel"),
-                "candidateDescription": payload.get("candidateDescription"),
-                "commandFamily": payload.get("commandFamily"),
+                "clusterLabel": _get_field_with_fallback(payload, "clusterLabel", "cluster_label"),
+                "candidateDescription": _get_field_with_fallback(payload, "candidateDescription", "candidate_description"),
+                "commandFamily": _get_field_with_fallback(payload, "commandFamily", "command_family"),
                 "status": artifact_data.get("status", "unknown"),
-                "durationMs": artifact_data.get("duration_ms"),
+                "durationMs": _get_field_with_default(artifact_data, 0, "duration_ms", "durationMs"),
                 "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
-                "timedOut": artifact_data.get("timed_out"),
-                "stdoutTruncated": artifact_data.get("stdout_truncated"),
-                "stderrTruncated": artifact_data.get("stderr_truncated"),
-                "outputBytesCaptured": artifact_data.get("output_bytes_captured"),
+                "timedOut": _get_field_with_default(artifact_data, False, "timed_out", "timedOut"),
+                "stdoutTruncated": _get_field_with_default(artifact_data, False, "stdout_truncated", "stdoutTruncated"),
+                "stderrTruncated": _get_field_with_default(artifact_data, False, "stderr_truncated", "stderrTruncated"),
+                "outputBytesCaptured": _get_field_with_default(artifact_data, 0, "output_bytes_captured", "outputBytesCaptured"),
             })
         except Exception:
             continue
 
-    # Sort by timestamp descending (most recent first)
-    history.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
+    # Sort by timestamp descending (most recent first) using ISO timestamp comparison
+    history.sort(key=lambda x: cast(str, x.get("timestamp") or ""), reverse=True)
 
     return history[:5]  # Limit to 5 most recent
 

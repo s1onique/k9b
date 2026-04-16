@@ -464,6 +464,125 @@ class RunApiServerTests(unittest.TestCase):
         self.assertEqual(entry.get("candidateDescription"), "Inspect control-plane logs")
         self.assertEqual(entry.get("status"), "success")
 
+    def test_execution_history_prefix_isolation(self) -> None:
+        """Verify that run IDs with shared prefixes don't leak into each other.
+        
+        This test verifies that _build_execution_history correctly filters
+        execution artifacts by run_id using prefix-based matching.
+        """
+        # Create external-analysis directory
+        external_analysis_dir = self.health_dir / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write execution artifacts for two runs with shared prefix
+        exec_artifact_data_1 = {
+            "tool_name": "next-check-runner",
+            "run_id": "run-2024",
+            "run_label": "run-2024",
+            "cluster_label": "cluster-a",
+            "summary": "Executed run-2024",
+            "status": "success",
+            "purpose": "next-check-execution",
+            "provider": "runner",
+            "duration_ms": 45,
+            "timestamp": "2024-01-15T10:00:00Z",
+            "payload": {"candidateDescription": "Check run-2024"},
+        }
+        exec_artifact_data_2 = {
+            "tool_name": "next-check-runner",
+            "run_id": "run-2024-01",
+            "run_label": "run-2024-01",
+            "cluster_label": "cluster-a",
+            "summary": "Executed run-2024-01",
+            "status": "success",
+            "purpose": "next-check-execution",
+            "provider": "runner",
+            "duration_ms": 45,
+            "timestamp": "2024-01-15T11:00:00Z",
+            "payload": {"candidateDescription": "Check run-2024-01"},
+        }
+
+        (external_analysis_dir / "run-2024-next-check-execution-0.json").write_text(
+            json.dumps(exec_artifact_data_1), encoding="utf-8"
+        )
+        (external_analysis_dir / "run-2024-01-next-check-execution-0.json").write_text(
+            json.dumps(exec_artifact_data_2), encoding="utf-8"
+        )
+
+        # Test the _build_execution_history function directly
+        from k8s_diag_agent.ui.server import _build_execution_history
+
+        # Build history for run-2024
+        history_2024 = _build_execution_history(external_analysis_dir, "run-2024")
+        self.assertEqual(len(history_2024), 1)
+        self.assertEqual(history_2024[0].get("candidateDescription"), "Check run-2024")
+
+        # Build history for run-2024-01
+        history_2024_01 = _build_execution_history(external_analysis_dir, "run-2024-01")
+        self.assertEqual(len(history_2024_01), 1)
+        self.assertEqual(history_2024_01[0].get("candidateDescription"), "Check run-2024-01")
+
+
+    def test_execution_history_timestamp_sorting(self) -> None:
+        """Verify that execution history is sorted by timestamp descending."""
+        artifact = self._build_artifact(run_id="run-sort", status=ExternalAnalysisStatus.SUCCESS)
+
+        # Create multiple execution artifacts with different timestamps
+        exec_artifacts = []
+        for i, offset in enumerate([0, 3600, 7200]):  # 0s, 1h, 2h offsets
+            timestamp = "2024-01-15T10:00:00Z"
+            if i == 1:
+                timestamp = "2024-01-15T11:00:00Z"  # 1 hour later
+            elif i == 2:
+                timestamp = "2024-01-15T12:00:00Z"  # 2 hours later
+            exec_artifact = ExternalAnalysisArtifact(
+                tool_name="next-check-runner",
+                run_id="run-sort",
+                run_label="run-sort",
+                cluster_label="cluster-a",
+                summary=f"Executed {i}",
+                status=ExternalAnalysisStatus.SUCCESS,
+                artifact_path=f"external-analysis/run-sort-next-check-execution-{i}.json",
+                provider="runner",
+                duration_ms=45,
+                purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+                payload={"candidateDescription": f"Check {i}"},
+            )
+            # Manually set timestamp by writing the artifact
+            external_analysis_dir = self.health_dir / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = external_analysis_dir / f"run-sort-next-check-execution-{i}.json"
+            artifact_data = {
+                "tool_name": "next-check-runner",
+                "run_id": "run-sort",
+                "run_label": "run-sort",
+                "cluster_label": "cluster-a",
+                "summary": f"Executed {i}",
+                "status": "success",
+                "purpose": "next-check-execution",
+                "provider": "runner",
+                "duration_ms": 45,
+                "timestamp": timestamp,
+                "payload": {"candidateDescription": f"Check {i}"},
+            }
+            artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
+            exec_artifacts.append(exec_artifact)
+
+        self._write_index(artifact, extra_external_analysis=tuple(exec_artifacts))
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server)
+        finally:
+            self._shutdown_server(server, thread)
+        history = payload.get("nextCheckExecutionHistory")
+        self.assertIsInstance(history, list)
+        self.assertEqual(len(cast(list, history)), 3)
+        # Most recent should be first (12:00, 11:00, 10:00)
+        history_list = cast(list[dict[str, object]], history)
+        self.assertEqual(history_list[0].get("candidateDescription"), "Check 2")
+        self.assertEqual(history_list[1].get("candidateDescription"), "Check 1")
+        self.assertEqual(history_list[2].get("candidateDescription"), "Check 0")
+
     def test_run_endpoint_exposes_next_check_queue(self) -> None:
         run_id = "queue-run"
         plan_payload = {

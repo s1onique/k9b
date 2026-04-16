@@ -1750,12 +1750,18 @@ const UsefulnessFeedbackControl = ({
 
 const ExecutionHistoryPanel = ({
   history,
+  runId,
+  runLabel,
+  queueCandidateCount,
   highlightedKey,
   onSubmitFeedback,
   filter,
   onFilterChange,
 }: {
   history: NextCheckExecutionHistoryEntry[];
+  runId: string;
+  runLabel: string;
+  queueCandidateCount: number;
   highlightedKey: string | null;
   onSubmitFeedback?: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
   filter: ExecutionHistoryFilterState;
@@ -1792,7 +1798,15 @@ const ExecutionHistoryPanel = ({
       <div>
         <p className="eyebrow">Execution history</p>
         <h2>Check execution review</h2>
-        <p className="muted small">Audit surface for what actually ran; review results and signal quality.</p>
+        <p className="muted small">Checks that ran in this run; review results and signal quality. Work list candidates appear here after execution.</p>
+      </div>
+      <div className="execution-history-context">
+        <span className="muted tiny">Run {runLabel}</span>
+        <span className="muted tiny">ID {runId}</span>
+        <span className="muted tiny">{history.length} executed</span>
+        {queueCandidateCount > 0 && history.length === 0 && (
+          <span className="muted tiny">{queueCandidateCount} in work list</span>
+        )}
       </div>
     </div>
     <div className="execution-history-filters">
@@ -1963,7 +1977,7 @@ const ExecutionHistoryPanel = ({
         })}
       </div>
     ) : history.length === 0 ? (
-      <p className="muted">No execution history for this run. Run checks manually to populate history.</p>
+      <p className="muted">No execution history for this run yet. Execute a check from the Work list above.</p>
     ) : (
       <p className="muted">No entries match the current filters. Try adjusting your filters.</p>
     )}
@@ -4069,6 +4083,9 @@ const App = () => {
     </div>
     <ExecutionHistoryPanel
       history={executionHistory}
+      runId={run.runId}
+      runLabel={run.label}
+      queueCandidateCount={runQueue.length}
       highlightedKey={executionHistoryHighlightKey}
       onSubmitFeedback={handleUsefulnessFeedback}
       filter={executionHistoryFilter}
