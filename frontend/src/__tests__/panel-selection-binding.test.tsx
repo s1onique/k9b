@@ -11,7 +11,15 @@ import type {
   ReviewEnrichmentStatus,
   RunPayload,
 } from "../types";
-import { createStorageMock, makeRunWithOverrides, sampleFleet, sampleProposals, sampleClusterDetail, sampleNotifications } from "./fixtures";
+import {
+  createPanelSelectionRun122,
+  createPanelSelectionRun123,
+  createStorageMock,
+  sampleClusterDetail,
+  sampleFleet,
+  sampleNotifications,
+  sampleProposals,
+} from "./fixtures";
 
 // Helper to create a smart fetch mock that returns run-specific data
 const createRunAwareFetchMock = (
@@ -67,172 +75,12 @@ const createRunAwareFetchMock = (
   });
 };
 
-// Create run-specific payloads for testing
+// Wrapper functions that delegate to shared builders in fixtures.ts
 const createRun123Payload = (overrides: Partial<RunPayload> = {}): RunPayload =>
-  makeRunWithOverrides({
-    runId: "run-123",
-    label: "Run 123",
-    reviewEnrichment: {
-      status: "success",
-      provider: "k8sgpt",
-      timestamp: "2026-04-07T12:00:00Z",
-      summary: "Run 123 enrichment summary",
-      triageOrder: ["cluster-a", "cluster-b"],
-      topConcerns: ["Run 123 concern 1", "Run 123 concern 2"],
-      evidenceGaps: [],
-      nextChecks: [],
-      focusNotes: [],
-      artifactPath: "/artifacts/run-123-review-enrichment.json",
-      errorSummary: null,
-      skipReason: null,
-    },
-    reviewEnrichmentStatus: {
-      status: "success",
-      reason: "Run 123 enrichment succeeded.",
-      provider: "k8sgpt",
-      policyEnabled: true,
-      providerConfigured: true,
-      adapterAvailable: true,
-      runEnabled: true,
-      runProvider: "k8sgpt",
-    },
-    providerExecution: {
-      autoDrilldown: { enabled: true, provider: "default", maxPerRun: 3, eligible: 2, attempted: 1, succeeded: 1, failed: 0, skipped: 0, unattempted: 1, budgetLimited: null, notes: null },
-      reviewEnrichment: { enabled: true, provider: "k8sgpt", maxPerRun: 1, eligible: 1, attempted: 1, succeeded: 1, failed: 0, skipped: 0, unattempted: 0, budgetLimited: null, notes: null },
-    },
-    diagnosticPack: {
-      path: "/artifacts/run-123-diagnostic-pack.zip",
-      timestamp: "2026-04-07T12:00:00Z",
-      sizeBytes: 123456,
-    },
-    diagnosticPackReview: {
-      timestamp: "2026-04-07T12:00:00Z",
-      summary: "Run 123 diagnostic review summary",
-      majorDisagreements: ["Run 123 disagreement 1"],
-      missingChecks: ["Run 123 missing check 1"],
-      rankingIssues: [],
-      genericChecks: [],
-      recommendedNextActions: [],
-      driftMisprioritized: false,
-      confidence: "high",
-      providerStatus: "provider-ok",
-      providerSummary: "Run 123 provider summary",
-      providerErrorSummary: null,
-      providerSkipReason: null,
-      providerReview: null,
-      artifactPath: "/artifacts/run-123-diagnostic-review.json",
-    },
-    llmPolicy: {
-      autoDrilldown: {
-        enabled: true,
-        provider: "default",
-        maxPerRun: 3,
-        usedThisRun: 1,
-        successfulThisRun: 1,
-        failedThisRun: 0,
-        skippedThisRun: 0,
-        budgetExhausted: false,
-      },
-    },
-    llmActivity: {
-      entries: [
-        { timestamp: "2026-04-07T12:00:00Z", runId: "run-123", runLabel: "Run 123", clusterLabel: "cluster-a", toolName: "k8sgpt", provider: "k8sgpt", purpose: "review-enrichment", status: "success", latencyMs: 100, artifactPath: "/artifacts/run-123-llm.json", summary: "Run 123 LLM activity", errorSummary: null, skipReason: null },
-      ],
-      summary: { retainedEntries: 5 },
-    },
-    deterministicNextChecks: {
-      clusterCount: 1,
-      clusters: [
-        {
-          clusterLabel: "cluster-a",
-          context: "cluster-a",
-          topProblem: "Run 123 problem",
-          assessmentArtifactPath: "/artifacts/run-123-assessment.json",
-          drilldownArtifactPath: "/artifacts/run-123-drilldown.json",
-          deterministicNextCheckSummaries: [
-            { description: "Run 123 deterministic check", workstream: "incident", urgency: "high", isPrimaryTriage: true, method: "kubectl", owner: "platform", whyNow: "Run 123 rationale", evidenceNeeded: ["evidence1"] },
-          ],
-        },
-      ],
-    },
-    ...overrides,
-  } as RunPayload);
+  createPanelSelectionRun123(overrides as Parameters<typeof createPanelSelectionRun123>[0]);
 
 const createRun122Payload = (overrides: Partial<RunPayload> = {}): RunPayload =>
-  makeRunWithOverrides({
-    runId: "run-122",
-    label: "Run 122",
-    reviewEnrichment: {
-      status: "success",
-      provider: "llamacpp",
-      timestamp: "2026-04-07T11:00:00Z",
-      summary: "Run 122 enrichment summary",
-      triageOrder: ["cluster-b"],
-      topConcerns: ["Run 122 concern 1"],
-      evidenceGaps: [],
-      nextChecks: [],
-      focusNotes: [],
-      artifactPath: "/artifacts/run-122-review-enrichment.json",
-      errorSummary: null,
-      skipReason: null,
-    },
-    reviewEnrichmentStatus: {
-      status: "not-attempted",
-      reason: "Run 122 not attempted.",
-      provider: "llamacpp",
-      policyEnabled: true,
-      providerConfigured: true,
-      adapterAvailable: true,
-      runEnabled: true,
-      runProvider: "llamacpp",
-    },
-    providerExecution: {
-      autoDrilldown: { enabled: true, provider: "stub", maxPerRun: 3, eligible: 1, attempted: 0, succeeded: 0, failed: 0, skipped: 1, unattempted: 0, budgetLimited: null, notes: null },
-      reviewEnrichment: { enabled: true, provider: "llamacpp", maxPerRun: 1, eligible: 1, attempted: 1, succeeded: 0, failed: 1, skipped: 0, unattempted: 0, budgetLimited: null, notes: null },
-    },
-    diagnosticPack: {
-      path: "/artifacts/run-122-diagnostic-pack.zip",
-      timestamp: "2026-04-07T11:00:00Z",
-      sizeBytes: 78901,
-    },
-    diagnosticPackReview: {
-      timestamp: "2026-04-07T11:00:00Z",
-      summary: "Run 122 diagnostic review summary",
-      majorDisagreements: ["Run 122 disagreement 1", "Run 122 disagreement 2"],
-      missingChecks: ["Run 122 missing check 1", "Run 122 missing check 2"],
-      rankingIssues: [],
-      genericChecks: [],
-      recommendedNextActions: [],
-      driftMisprioritized: true,
-      confidence: "low",
-      providerStatus: "provider-ok",
-      providerSummary: "Run 122 provider summary",
-      providerErrorSummary: null,
-      providerSkipReason: null,
-      providerReview: null,
-      artifactPath: "/artifacts/run-122-diagnostic-review.json",
-    },
-    llmPolicy: {
-      autoDrilldown: {
-        enabled: false,
-        provider: "stub",
-        maxPerRun: 3,
-        usedThisRun: 0,
-        successfulThisRun: 0,
-        failedThisRun: 0,
-        skippedThisRun: 0,
-        budgetExhausted: false,
-      },
-    },
-    llmActivity: {
-      entries: [
-        { timestamp: "2026-04-07T11:00:00Z", runId: "run-122", runLabel: "Run 122", clusterLabel: "cluster-b", toolName: "llamacpp", provider: "llamacpp", purpose: "manual", status: "failed", latencyMs: 200, artifactPath: "/artifacts/run-122-llm.json", summary: "Run 122 LLM activity", errorSummary: "timeout", skipReason: null },
-      ],
-      summary: { retainedEntries: 3 },
-    },
-    deterministicNextChecks: null,
-    ...overrides,
-  } as RunPayload);
+  createPanelSelectionRun122(overrides as Parameters<typeof createPanelSelectionRun122>[0]);
 
 let setIntervalSpy: ReturnType<typeof vi.fn>;
 let clearIntervalSpy: ReturnType<typeof vi.fn>;

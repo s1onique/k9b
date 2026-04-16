@@ -1030,11 +1030,10 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
 /**
  * Finds the queue panel element and returns a within-scoped query function.
  * @param screen - The screen object from @testing-library/react
- * @param within - The within function from @testing-library/react
  * @returns a within-scoped query function bound to the queue panel element
  */
 export const getQueuePanel = async (
-  screen: import("@testing-library/react").Screen
+  screen: import("@testing-library/react").Screen,
 ): Promise<ReturnType<typeof within>> => {
   const eyebrow = await screen.findByText(/Next-check queue/i);
   const queuePanel = eyebrow.closest(".next-check-queue-panel");
@@ -1042,4 +1041,350 @@ export const getQueuePanel = async (
     throw new Error("Queue panel is not rendered");
   }
   return within(queuePanel);
+};
+
+/**
+ * Shared builder options used by createPanelSelectionRun123 and createPanelSelectionRun122.
+ */
+interface PanelSelectionRunOptions {
+  runId: string;
+  label: string;
+  enrichmentProvider: string;
+  enrichmentStatus: "success" | "not-attempted";
+  enrichmentStatusReason: string;
+  enrichmentTriageOrder: string[];
+  enrichmentTopConcerns: string[];
+  autoDrilldownEligible: number;
+  autoDrilldownAttempted: number;
+  autoDrilldownSucceeded: number;
+  autoDrilldownFailed: number;
+  autoDrilldownSkipped: number;
+  autoDrilldownUnattempted: number;
+  autoDrilldownEnabled: boolean;
+  autoDrilldownProvider: string;
+  reviewEnrichmentEligible: number;
+  reviewEnrichmentAttempted: number;
+  reviewEnrichmentSucceeded: number;
+  reviewEnrichmentFailed: number;
+  reviewEnrichmentProvider: string;
+  diagnosticPackTimestamp: string;
+  diagnosticPackSizeBytes: number;
+  diagnosticReviewSummary: string;
+  diagnosticReviewDisagreements: string[];
+  diagnosticReviewMissingChecks: string[];
+  diagnosticReviewDriftMisprioritized: boolean;
+  diagnosticReviewConfidence: "high" | "low";
+  llmAutoDrilldownEnabled: boolean;
+  llmAutoDrilldownProvider: string;
+  llmAutoDrilldownUsed: number;
+  llmAutoDrilldownSuccessful: number;
+  llmAutoDrilldownFailed: number;
+  llmActivityStatus: "success" | "failed";
+  llmActivityLatencyMs: number;
+  llmActivitySummary: string;
+  llmActivityErrorSummary: string | null;
+  deterministicNextChecks: import("../types").DeterministicNextChecksPayload | null;
+}
+
+/**
+ * Shared builder for run-123 shape in panel-selection-binding tests.
+ * Accepts optional overrides to customize the run payload.
+ * Pass { reviewEnrichment: undefined, reviewEnrichmentStatus: undefined } to simulate
+ * a run without enrichment data (triggers empty-state rendering).
+ */
+export const createPanelSelectionRun123 = (
+  overrides: Partial<RunPayload> = {}
+): RunPayload => {
+  const run = makeRunWithOverrides({});
+
+  // Build run-123 specific enrichment with summary "Run 123 enrichment summary"
+  const run123Enrichment = {
+    status: "success" as const,
+    provider: "k8sgpt",
+    timestamp: "2026-04-07T12:00:00Z",
+    summary: "Run 123 enrichment summary",
+    triageOrder: ["cluster-a", "cluster-b"],
+    topConcerns: ["Run 123 concern 1", "Run 123 concern 2"],
+    evidenceGaps: [],
+    nextChecks: [],
+    focusNotes: [],
+    artifactPath: "/artifacts/run-123-review-enrichment.json",
+    errorSummary: null,
+    skipReason: null,
+  };
+
+  const result: RunPayload = {
+    ...run,
+    runId: "run-123",
+    label: "Run 123",
+    reviewEnrichment:
+      overrides.reviewEnrichment !== undefined
+        ? { ...overrides.reviewEnrichment }
+        : run123Enrichment,
+    reviewEnrichmentStatus:
+      overrides.reviewEnrichmentStatus !== undefined
+        ? { ...overrides.reviewEnrichmentStatus }
+        : { ...run.reviewEnrichmentStatus },
+    providerExecution: {
+      autoDrilldown: {
+        enabled: true,
+        provider: "default",
+        maxPerRun: 3,
+        eligible: 2,
+        attempted: 1,
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        unattempted: 1,
+        budgetLimited: null,
+        notes: null,
+      },
+      reviewEnrichment: {
+        enabled: true,
+        provider: "k8sgpt",
+        maxPerRun: 1,
+        eligible: 1,
+        attempted: 1,
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        unattempted: 0,
+        budgetLimited: null,
+        notes: null,
+      },
+    },
+    diagnosticPack: {
+      path: "/artifacts/run-123-diagnostic-pack.zip",
+      timestamp: "2026-04-07T12:00:00Z",
+      label: "Run 123 pack",
+    },
+    diagnosticPackReview: {
+      timestamp: "2026-04-07T12:00:00Z",
+      summary: "Run 123 diagnostic review summary",
+      majorDisagreements: ["Run 123 disagreement 1"],
+      missingChecks: ["Run 123 missing check 1"],
+      rankingIssues: [],
+      genericChecks: [],
+      recommendedNextActions: [],
+      driftMisprioritized: false,
+      confidence: "high",
+      providerStatus: "provider-ok",
+      providerSummary: "Run 123 provider summary",
+      providerErrorSummary: null,
+      providerSkipReason: null,
+      providerReview: null,
+      artifactPath: "/artifacts/run-123-diagnostic-review.json",
+    },
+    llmPolicy: {
+      autoDrilldown: {
+        enabled: true,
+        provider: "default",
+        maxPerRun: 3,
+        usedThisRun: 1,
+        successfulThisRun: 1,
+        failedThisRun: 0,
+        skippedThisRun: 0,
+        budgetExhausted: false,
+      },
+    },
+    llmActivity: {
+      entries: [
+        {
+          timestamp: "2026-04-07T12:00:00Z",
+          runId: "run-123",
+          runLabel: "Run 123",
+          clusterLabel: "cluster-a",
+          toolName: "k8sgpt",
+          provider: "k8sgpt",
+          purpose: "review-enrichment",
+          status: "success",
+          latencyMs: 100,
+          artifactPath: "/artifacts/run-123-llm.json",
+          summary: "Run 123 LLM activity",
+          errorSummary: null,
+          skipReason: null,
+        },
+      ],
+      summary: { retainedEntries: 5 },
+    },
+    deterministicNextChecks:
+      overrides.deterministicNextChecks !== undefined
+        ? overrides.deterministicNextChecks
+        : {
+            clusterCount: 1,
+            totalNextCheckCount: 1,
+            clusters: [
+              {
+                label: "cluster-a",
+                context: "cluster-a",
+                topProblem: "Run 123 problem",
+                deterministicNextCheckCount: 1,
+                deterministicNextCheckSummaries: [
+                  {
+                    description: "Run 123 deterministic check",
+                    workstream: "incident",
+                    urgency: "high",
+                    isPrimaryTriage: true,
+                    method: "kubectl",
+                    owner: "platform",
+                    whyNow: "Run 123 rationale",
+                    evidenceNeeded: ["evidence1"],
+                  },
+                ],
+                drilldownAvailable: true,
+                assessmentArtifactPath: "/artifacts/run-123-assessment.json",
+                drilldownArtifactPath: "/artifacts/run-123-drilldown.json",
+              },
+            ],
+          },
+  };
+
+  // Apply any remaining overrides (e.g., reviewEnrichment: undefined to remove it)
+  if ("reviewEnrichment" in overrides && overrides.reviewEnrichment === undefined) {
+    delete result.reviewEnrichment;
+  }
+  if ("reviewEnrichmentStatus" in overrides && overrides.reviewEnrichmentStatus === undefined) {
+    delete result.reviewEnrichmentStatus;
+  }
+  if ("deterministicNextChecks" in overrides && overrides.deterministicNextChecks === undefined) {
+    delete result.deterministicNextChecks;
+  }
+
+  return result;
+};
+
+/**
+ * Shared builder for run-122 shape in panel-selection-binding tests.
+ * Delegates to createPanelSelectionRun123 with run-122 defaults overridden.
+ */
+export const createPanelSelectionRun122 = (
+  overrides: Partial<RunPayload> = {}
+): RunPayload => {
+  const run = makeRunWithOverrides({});
+
+  // Build run-122 specific enrichment with summary "Run 122 enrichment summary"
+  const run122Enrichment = {
+    status: "success" as const,
+    provider: "llamacpp",
+    timestamp: "2026-04-07T11:00:00Z",
+    summary: "Run 122 enrichment summary",
+    triageOrder: ["cluster-b"],
+    topConcerns: ["Run 122 concern 1"],
+    evidenceGaps: [],
+    nextChecks: [],
+    focusNotes: [],
+    artifactPath: "/artifacts/run-122-review-enrichment.json",
+    errorSummary: null,
+    skipReason: null,
+  };
+
+  const result: RunPayload = {
+    ...run,
+    runId: "run-122",
+    label: "Run 122",
+    reviewEnrichment:
+      overrides.reviewEnrichment !== undefined
+        ? { ...overrides.reviewEnrichment }
+        : run122Enrichment,
+    reviewEnrichmentStatus:
+      overrides.reviewEnrichmentStatus !== undefined
+        ? { ...overrides.reviewEnrichmentStatus }
+        : { ...run.reviewEnrichmentStatus, status: "not-attempted", provider: "llamacpp", reason: "Run 122 not attempted." },
+    providerExecution: {
+      autoDrilldown: {
+        enabled: true,
+        provider: "stub",
+        maxPerRun: 3,
+        eligible: 1,
+        attempted: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 1,
+        unattempted: 0,
+        budgetLimited: null,
+        notes: null,
+      },
+      reviewEnrichment: {
+        enabled: true,
+        provider: "llamacpp",
+        maxPerRun: 1,
+        eligible: 1,
+        attempted: 1,
+        succeeded: 0,
+        failed: 1,
+        skipped: 0,
+        unattempted: 0,
+        budgetLimited: null,
+        notes: null,
+      },
+    },
+    diagnosticPack: {
+      path: "/artifacts/run-122-diagnostic-pack.zip",
+      timestamp: "2026-04-07T11:00:00Z",
+      label: "Run 122 pack",
+    },
+    diagnosticPackReview: {
+      timestamp: "2026-04-07T11:00:00Z",
+      summary: "Run 122 diagnostic review summary",
+      majorDisagreements: ["Run 122 disagreement 1", "Run 122 disagreement 2"],
+      missingChecks: ["Run 122 missing check 1", "Run 122 missing check 2"],
+      rankingIssues: [],
+      genericChecks: [],
+      recommendedNextActions: [],
+      driftMisprioritized: true,
+      confidence: "low",
+      providerStatus: "provider-ok",
+      providerSummary: "Run 122 provider summary",
+      providerErrorSummary: null,
+      providerSkipReason: null,
+      providerReview: null,
+      artifactPath: "/artifacts/run-122-diagnostic-review.json",
+    },
+    llmPolicy: {
+      autoDrilldown: {
+        enabled: false,
+        provider: "stub",
+        maxPerRun: 3,
+        usedThisRun: 0,
+        successfulThisRun: 0,
+        failedThisRun: 0,
+        skippedThisRun: 0,
+        budgetExhausted: false,
+      },
+    },
+    llmActivity: {
+      entries: [
+        {
+          timestamp: "2026-04-07T11:00:00Z",
+          runId: "run-122",
+          runLabel: "Run 122",
+          clusterLabel: "cluster-b",
+          toolName: "llamacpp",
+          provider: "llamacpp",
+          purpose: "manual",
+          status: "failed",
+          latencyMs: 200,
+          artifactPath: "/artifacts/run-122-llm.json",
+          summary: "Run 122 LLM activity",
+          errorSummary: "timeout",
+          skipReason: null,
+        },
+      ],
+      summary: { retainedEntries: 3 },
+    },
+    deterministicNextChecks: undefined,
+  };
+
+  // Apply any remaining overrides (e.g., deterministicNextChecks: null to remove it)
+  if ("reviewEnrichment" in overrides && overrides.reviewEnrichment === undefined) {
+    delete result.reviewEnrichment;
+  }
+  if ("reviewEnrichmentStatus" in overrides && overrides.reviewEnrichmentStatus === undefined) {
+    delete result.reviewEnrichmentStatus;
+  }
+  if ("deterministicNextChecks" in overrides && overrides.deterministicNextChecks === undefined) {
+    delete result.deterministicNextChecks;
+  }
+
+  return result;
 };
