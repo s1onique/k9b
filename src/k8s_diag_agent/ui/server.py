@@ -2266,9 +2266,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "successCount": result.success_count,
         }
 
-        # If not dry run, refresh diagnostic pack
+        # If not dry run, refresh diagnostic pack and update UI read model
         if not dry_run and result.executed_count > 0:
             _refresh_diagnostic_pack_latest(run_id, self.runs_dir)
+            _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
 
         self._send_json(response)
 
@@ -3363,6 +3364,103 @@ def _build_proposal_status_summary(proposals: list[dict[str, object]]) -> dict[s
     status_counts = [{"status": status, "count": count} for status, count in sorted(counts.items())]
 
     return {"status_counts": status_counts}
+
+
+def _persist_batch_execution_history_to_ui_index(runs_dir: Path, run_id: str) -> None:
+    """Update ui-index.json with execution history entries from batch execution.
+
+    This mirrors the behavior of single next-check execution, which also updates
+    the UI read model directly. Without this, batch executions would not appear
+    in the Execution History section until the next health loop.
+
+    Uses the same entry-building logic as _build_execution_history to ensure
+    consistent field handling (candidateId, provenance fields, etc.).
+
+    Args:
+        runs_dir: Path to the runs directory
+        run_id: The run ID to update
+    """
+    health_root = runs_dir / "health"
+    ui_index_path = health_root / "ui-index.json"
+
+    # Load existing ui-index.json
+    try:
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning(
+            "Failed to read ui-index.json for batch execution history update",
+            extra={"ui_index": str(ui_index_path), "run_id": run_id},
+        )
+        return
+
+    run_entry = index_data.get("run") or {}
+    existing_history = list(run_entry.get("next_check_execution_history") or [])
+
+    # Build complete history from current artifacts using the same logic
+    # as _build_execution_history for consistency
+    external_dir = health_root / "external-analysis"
+    if not external_dir.exists():
+        return
+
+    # Use _build_execution_history to get properly-shaped entries with all fields
+    fresh_history = _build_execution_history(external_dir, run_id)
+
+    if not fresh_history:
+        return
+
+    # Track existing entries by (candidateIndex, timestamp) to avoid duplicates
+    existing_keys: set[tuple[int | None, str]] = set()
+    for entry in existing_history:
+        idx = entry.get("candidateIndex")
+        if isinstance(idx, int):
+            idx_key: int | None = idx
+        else:
+            idx_key = None
+        ts_val: str = cast(str, _get_field_with_fallback(entry, "timestamp") or "")
+        existing_keys.add((idx_key, ts_val))
+
+    # Merge: add entries not already present
+    merged_history = list(existing_history)
+    new_count = 0
+    for entry in fresh_history:
+        idx = entry.get("candidateIndex")
+        if isinstance(idx, int):
+            fresh_idx_key: int | None = idx
+        else:
+            fresh_idx_key = None
+        fresh_ts: str = cast(str, entry.get("timestamp") or "")
+        key = (fresh_idx_key, fresh_ts)
+        if key not in existing_keys:
+            merged_history.append(entry)
+            new_count += 1
+            existing_keys.add(key)
+
+    # Sort by timestamp descending (most recent first), consistent with _build_execution_history
+    merged_history.sort(key=lambda x: cast(str, x.get("timestamp") or ""), reverse=True)
+
+    # Limit to 5 most recent, consistent with _build_execution_history
+    merged_history = merged_history[:5]
+
+    if new_count > 0:
+        run_entry["next_check_execution_history"] = merged_history
+        index_data["run"] = run_entry
+
+        try:
+            ui_index_path.write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.debug(
+                "Persisted batch execution history to ui-index.json",
+                extra={
+                    "ui_index": str(ui_index_path),
+                    "run_id": run_id,
+                    "new_entries": new_count,
+                    "total_entries": len(merged_history),
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to persist batch execution history to ui-index.json",
+                extra={"ui_index": str(ui_index_path), "run_id": run_id, "error": str(exc)},
+            )
 
 
 def _determine_execution_state_from_artifact(artifact: ExternalAnalysisArtifact) -> str:

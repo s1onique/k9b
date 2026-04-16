@@ -54,14 +54,31 @@ class BatchNextCheckTests(unittest.TestCase):
         plan_path.write_text(json.dumps(plan_data), encoding="utf-8")
         return plan_path
 
-    def _create_execution_artifact(self, run_id: str, candidate_index: int) -> None:
-        """Create a mock execution artifact to simulate already-executed candidate."""
+    def _create_execution_artifact(self, run_id: str, candidate_index: int, timestamp: str | None = None) -> None:
+        """Create a mock execution artifact to simulate already-executed candidate.
+        
+        Args:
+            run_id: The run ID
+            candidate_index: The candidate index
+            timestamp: Optional timestamp string for testing ordering
+        """
+        from datetime import UTC, datetime
+        
         artifact_data = {
             "purpose": "next-check-execution",
             "run_id": run_id,
             "status": "success",
+            "timestamp": timestamp or datetime.now(UTC).isoformat(),
             "payload": {
                 "candidateIndex": candidate_index,
+                "candidateId": f"{run_id}-candidate-{candidate_index}",
+                "candidateDescription": f"kubectl get pods -n default {candidate_index}",
+                "commandFamily": "kubectl-get",
+                "clusterLabel": "test-cluster",
+                "timedOut": False,
+                "stdoutTruncated": False,
+                "stderrTruncated": False,
+                "outputBytesCaptured": 1024,
             },
         }
         artifact_path = self.external_dir / f"{run_id}-next-check-execution-{candidate_index}.json"
@@ -516,6 +533,198 @@ class BatchNextCheckTests(unittest.TestCase):
             # Should NOT call execute_manual_next_check (dry run)
             self.assertEqual(mock_exec.call_count, 0)
             self.assertEqual(result.executed_count, 1)  # would-execute count
+
+
+
+
+    def test_batch_execution_updates_ui_index_execution_history(self) -> None:
+        """Batch execution updates ui-index.json with execution history entries."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+        ui_index_path = self.health_dir / "ui-index.json"
+        
+        # Ensure no execution history initially
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        self.assertEqual(index_data["run"].get("next_check_execution_history"), None)
+        
+        # Run batch execution
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+            result = run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=False,
+            )
+        
+        self.assertEqual(result.executed_count, 1)
+        
+        # The batch execution with mocked execute_manual_next_check doesn't create artifacts
+        # So we need to create a mock execution artifact that matches what would be created
+        self._create_execution_artifact(run_id, 0)
+        
+        # Simulate calling the persist function
+        from k8s_diag_agent.ui.server import _persist_batch_execution_history_to_ui_index
+        _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
+        
+        # Verify execution history was updated
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        history = index_data["run"].get("next_check_execution_history", [])
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].get("candidateIndex"), 0)
+        self.assertEqual(history[0].get("candidateId"), "test-run-candidate-0")
+
+    def test_batch_execution_preserves_candidate_id_in_history(self) -> None:
+        """Batch execution preserves candidateId and all provenance fields in execution history."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+        ui_index_path = self.health_dir / "ui-index.json"
+        
+        # Run batch execution
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+            run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=False,
+            )
+        
+        # Create the execution artifact that would have been created
+        self._create_execution_artifact(run_id, 0)
+        
+        # Persist and verify
+        from k8s_diag_agent.ui.server import _persist_batch_execution_history_to_ui_index
+        _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
+        
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        history = index_data["run"].get("next_check_execution_history", [])
+        self.assertEqual(len(history), 1)
+        entry = history[0]
+        # Verify all provenance fields are present
+        self.assertIn("candidateIndex", entry)
+        self.assertIn("candidateId", entry)
+        self.assertIn("timestamp", entry)
+        self.assertIn("clusterLabel", entry)
+        self.assertIn("candidateDescription", entry)
+        self.assertIn("commandFamily", entry)
+        self.assertIn("status", entry)
+        self.assertIn("durationMs", entry)
+        self.assertIn("artifactPath", entry)
+        self.assertIn("timedOut", entry)
+        self.assertIn("stdoutTruncated", entry)
+        self.assertIn("stderrTruncated", entry)
+        self.assertIn("outputBytesCaptured", entry)
+        # Verify specific values
+        self.assertEqual(entry["candidateId"], "test-run-candidate-0")
+        self.assertEqual(entry["candidateIndex"], 0)
+
+    def test_batch_execution_skips_duplicates_in_history(self) -> None:
+        """Batch execution skips entries already in execution history."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        candidates = [self._base_candidate(0)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+        ui_index_path = self.health_dir / "ui-index.json"
+        
+        # Pre-populate with an existing history entry
+        existing_entry = {
+            "candidateIndex": 0,
+            "candidateId": "test-run-candidate-0",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "clusterLabel": "test-cluster",
+            "status": "success",
+        }
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        index_data["run"]["next_check_execution_history"] = [existing_entry]
+        ui_index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
+        
+        # Run batch execution
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+            run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=False,
+            )
+        
+        # Create the execution artifact with the SAME timestamp as the existing entry
+        # so it will be detected as a duplicate
+        self._create_execution_artifact(run_id, 0, timestamp="2024-01-01T00:00:00Z")
+        
+        # Persist and verify - should not duplicate since timestamps match
+        from k8s_diag_agent.ui.server import _persist_batch_execution_history_to_ui_index
+        _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
+        
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        history = index_data["run"].get("next_check_execution_history", [])
+        # Should have exactly 1 entry (not 2)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].get("timestamp"), "2024-01-01T00:00:00Z")
+
+    def test_batch_execution_maintains_timestamp_ordering(self) -> None:
+        """Batch execution maintains timestamp ordering (most recent first)."""
+        run_id = "test-run"
+        run_label = "test-run"
+        
+        # Create candidates with different indices
+        candidates = [self._base_candidate(0), self._base_candidate(1)]
+        plan_path = self._create_plan_artifact(run_id, candidates)
+        plan_data = {
+            "artifact_path": str(plan_path),
+            "candidates": candidates,
+        }
+        self._create_ui_index(run_id, run_label, plan_data)
+        ui_index_path = self.health_dir / "ui-index.json"
+        
+        # Run batch execution for both candidates
+        with patch("k8s_diag_agent.batch.execute_manual_next_check") as mock_exec:
+            mock_exec.return_value = None
+            run_batch_next_checks(
+                runs_dir=self.runs_dir,
+                run_id=run_id,
+                dry_run=False,
+            )
+        
+        # Create execution artifacts for both candidates
+        self._create_execution_artifact(run_id, 0)
+        self._create_execution_artifact(run_id, 1)
+        
+        # Persist
+        from k8s_diag_agent.ui.server import _persist_batch_execution_history_to_ui_index
+        _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
+        
+        index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        history = index_data["run"].get("next_check_execution_history", [])
+        
+        # Should have 2 entries
+        self.assertEqual(len(history), 2)
+        
+        # Entries should be sorted by timestamp descending (most recent first)
+        # The actual timestamps depend on execution order
+        timestamps = [e.get("timestamp") for e in history]
+        self.assertEqual(timestamps, sorted(timestamps, reverse=True))
+
 
 
 if __name__ == "__main__":
