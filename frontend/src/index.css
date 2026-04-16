@@ -1606,6 +1606,58 @@ body {
   gap: 0.75rem;
 }
 
+/* Execution History Filters */
+.execution-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  align-items: center;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-label {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.filter-select {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  color: #f8fafc;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.filter-select:hover {
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.filter-count {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-left: auto;
+  font-style: italic;
+}
+
 .execution-history-grid {
   display: grid;
   gap: 0.75rem;

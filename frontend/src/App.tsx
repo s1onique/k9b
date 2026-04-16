@@ -1431,6 +1431,204 @@ const USEFULNESS_CLASSES = [
   { value: "empty", label: "Empty" },
 ] as const;
 
+// Execution history filter types
+// Filters for execution outcome/status: success, failure, timeout
+export type ExecutionOutcomeFilter = "all" | "success" | "failure" | "timeout";
+
+// Filters for usefulness/review classification: useful, partial, noisy, empty, unreviewed
+export type UsefulnessReviewFilter = "all" | "useful" | "partial" | "noisy" | "empty" | "unreviewed";
+
+const EXECUTION_OUTCOME_FILTER_OPTIONS: { label: string; value: ExecutionOutcomeFilter }[] = [
+  { label: "All outcomes", value: "all" },
+  { label: "Success", value: "success" },
+  { label: "Failure", value: "failure" },
+  { label: "Timeout", value: "timeout" },
+];
+
+const USEFULNESS_REVIEW_FILTER_OPTIONS: { label: string; value: UsefulnessReviewFilter }[] = [
+  { label: "Any classification", value: "all" },
+  { label: "Useful", value: "useful" },
+  { label: "Partial", value: "partial" },
+  { label: "Noisy", value: "noisy" },
+  { label: "Empty", value: "empty" },
+  { label: "Unreviewed", value: "unreviewed" },
+];
+
+// Execution history filter state
+export const EXECUTION_HISTORY_FILTER_STORAGE_KEY = "dashboard-execution-history-filter";
+const DEFAULT_EXECUTION_HISTORY_FILTER: ExecutionHistoryFilterState = {
+  outcomeFilter: "all",
+  usefulnessFilter: "all",
+  commandFamilyFilter: "all",
+  clusterFilter: "all",
+};
+
+export type ExecutionHistoryFilterState = {
+  outcomeFilter: ExecutionOutcomeFilter;
+  usefulnessFilter: UsefulnessReviewFilter;
+  commandFamilyFilter: string;
+  clusterFilter: string;
+};
+
+const EXECUTION_OUTCOME_FILTER_VALUES: ExecutionOutcomeFilter[] = ["all", "success", "failure", "timeout"];
+const USEFULNESS_REVIEW_FILTER_VALUES: UsefulnessReviewFilter[] = ["all", "useful", "partial", "noisy", "empty", "unreviewed"];
+
+const isExecutionOutcomeFilterValue = (value: unknown): value is ExecutionOutcomeFilter =>
+  typeof value === "string" && EXECUTION_OUTCOME_FILTER_VALUES.includes(value as ExecutionOutcomeFilter);
+
+const isUsefulnessReviewFilterValue = (value: unknown): value is UsefulnessReviewFilter =>
+  typeof value === "string" && USEFULNESS_REVIEW_FILTER_VALUES.includes(value as UsefulnessReviewFilter);
+
+const readStoredExecutionHistoryFilter = (): ExecutionHistoryFilterState => {
+  if (typeof window === "undefined") {
+    return DEFAULT_EXECUTION_HISTORY_FILTER;
+  }
+  const stored = window.localStorage.getItem(EXECUTION_HISTORY_FILTER_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_EXECUTION_HISTORY_FILTER;
+  }
+  try {
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object") {
+      return DEFAULT_EXECUTION_HISTORY_FILTER;
+    }
+    const candidate = parsed as Record<string, unknown>;
+    return {
+      outcomeFilter: isExecutionOutcomeFilterValue(candidate.outcomeFilter)
+        ? candidate.outcomeFilter
+        : DEFAULT_EXECUTION_HISTORY_FILTER.outcomeFilter,
+      usefulnessFilter: isUsefulnessReviewFilterValue(candidate.usefulnessFilter)
+        ? candidate.usefulnessFilter
+        : DEFAULT_EXECUTION_HISTORY_FILTER.usefulnessFilter,
+      commandFamilyFilter: typeof candidate.commandFamilyFilter === "string"
+        ? candidate.commandFamilyFilter
+        : DEFAULT_EXECUTION_HISTORY_FILTER.commandFamilyFilter,
+      clusterFilter: typeof candidate.clusterFilter === "string"
+        ? candidate.clusterFilter
+        : DEFAULT_EXECUTION_HISTORY_FILTER.clusterFilter,
+    };
+  } catch {
+    return DEFAULT_EXECUTION_HISTORY_FILTER;
+  }
+};
+
+const persistExecutionHistoryFilter = (filter: ExecutionHistoryFilterState) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(EXECUTION_HISTORY_FILTER_STORAGE_KEY, JSON.stringify(filter));
+};
+
+// Filter execution history entries based on current filter state
+export const filterExecutionHistory = (
+  entries: NextCheckExecutionHistoryEntry[],
+  filter: ExecutionHistoryFilterState,
+): NextCheckExecutionHistoryEntry[] => {
+  return entries.filter((entry) => {
+    // Outcome filter: success, failure, timeout
+    if (filter.outcomeFilter !== "all") {
+      if (filter.outcomeFilter === "timeout") {
+        if (!entry.timedOut) return false;
+      } else if (filter.outcomeFilter === "failure") {
+        if (entry.status !== "failed" && entry.status !== "error") return false;
+        if (entry.timedOut) return false; // timeout is its own category
+      } else if (filter.outcomeFilter === "success") {
+        if (entry.status !== "success" && entry.status !== "ok") return false;
+        if (entry.timedOut) return false; // timed out is its own category
+      }
+    }
+
+    // Usefulness/review filter
+    if (filter.usefulnessFilter !== "all") {
+      if (filter.usefulnessFilter === "unreviewed") {
+        if (entry.usefulnessClass != null) return false;
+      } else {
+        if (entry.usefulnessClass !== filter.usefulnessFilter) return false;
+      }
+    }
+
+    // Command family filter
+    if (filter.commandFamilyFilter !== "all") {
+      if (entry.commandFamily !== filter.commandFamilyFilter) return false;
+    }
+
+    // Cluster filter
+    if (filter.clusterFilter !== "all") {
+      if (entry.clusterLabel !== filter.clusterFilter) return false;
+    }
+
+    return true;
+  });
+};
+
+// Extract unique clusters from history entries
+export const extractClustersFromHistory = (entries: NextCheckExecutionHistoryEntry[]): string[] => {
+  const clusters = new Set<string>();
+  entries.forEach((entry) => {
+    if (entry.clusterLabel) {
+      clusters.add(entry.clusterLabel);
+    }
+  });
+  return Array.from(clusters).sort();
+};
+
+// Extract unique command families from history entries
+export const extractCommandFamiliesFromHistory = (entries: NextCheckExecutionHistoryEntry[]): string[] => {
+  const families = new Set<string>();
+  entries.forEach((entry) => {
+    if (entry.commandFamily) {
+      families.add(entry.commandFamily);
+    }
+  });
+  return Array.from(families).sort();
+};
+
+// Compute filter counts for execution history
+export const computeExecutionHistoryFilterCounts = (
+  entries: NextCheckExecutionHistoryEntry[],
+): { outcome: Record<ExecutionOutcomeFilter, number>; usefulness: Record<UsefulnessReviewFilter, number> } => {
+  const outcome: Record<ExecutionOutcomeFilter, number> = {
+    all: entries.length,
+    success: 0,
+    failure: 0,
+    timeout: 0,
+  };
+  const usefulness: Record<UsefulnessReviewFilter, number> = {
+    all: entries.length,
+    useful: 0,
+    partial: 0,
+    noisy: 0,
+    empty: 0,
+    unreviewed: 0,
+  };
+
+  entries.forEach((entry) => {
+    // Outcome counts
+    if (entry.timedOut) {
+      outcome.timeout++;
+    } else if (entry.status === "failed" || entry.status === "error") {
+      outcome.failure++;
+    } else if (entry.status === "success" || entry.status === "ok") {
+      outcome.success++;
+    }
+
+    // Usefulness counts
+    if (entry.usefulnessClass == null) {
+      usefulness.unreviewed++;
+    } else if (entry.usefulnessClass === "useful") {
+      usefulness.useful++;
+    } else if (entry.usefulnessClass === "partial") {
+      usefulness.partial++;
+    } else if (entry.usefulnessClass === "noisy") {
+      usefulness.noisy++;
+    } else if (entry.usefulnessClass === "empty") {
+      usefulness.empty++;
+    }
+  });
+
+  return { outcome, usefulness };
+};
+
 type UsefulnessFeedbackState = {
   artifactPath: string;
   isSubmitting: boolean;
@@ -1554,11 +1752,41 @@ const ExecutionHistoryPanel = ({
   history,
   highlightedKey,
   onSubmitFeedback,
+  filter,
+  onFilterChange,
 }: {
   history: NextCheckExecutionHistoryEntry[];
   highlightedKey: string | null;
   onSubmitFeedback?: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
-}) => (
+  filter: ExecutionHistoryFilterState;
+  onFilterChange: (filter: ExecutionHistoryFilterState) => void;
+}) => {
+  const filteredHistory = useMemo(
+    () => filterExecutionHistory(history, filter),
+    [history, filter],
+  );
+
+  const clusters = useMemo(() => extractClustersFromHistory(history), [history]);
+  const commandFamilies = useMemo(() => extractCommandFamiliesFromHistory(history), [history]);
+  const counts = useMemo(() => computeExecutionHistoryFilterCounts(history), [history]);
+
+  const handleOutcomeChange = (value: ExecutionOutcomeFilter) => {
+    onFilterChange({ ...filter, outcomeFilter: value });
+  };
+
+  const handleUsefulnessChange = (value: UsefulnessReviewFilter) => {
+    onFilterChange({ ...filter, usefulnessFilter: value });
+  };
+
+  const handleClusterChange = (value: string) => {
+    onFilterChange({ ...filter, clusterFilter: value });
+  };
+
+  const handleCommandFamilyChange = (value: string) => {
+    onFilterChange({ ...filter, commandFamilyFilter: value });
+  };
+
+  return (
   <section className="panel execution-history-panel" id="execution-history">
     <div className="section-head">
       <div>
@@ -1567,9 +1795,78 @@ const ExecutionHistoryPanel = ({
         <p className="muted small">Audit surface for what actually ran; review results and signal quality.</p>
       </div>
     </div>
-    {history.length ? (
+    <div className="execution-history-filters">
+      <div className="filter-group">
+        <label className="filter-label" htmlFor="exec-outcome-filter">Outcome:</label>
+        <select
+          id="exec-outcome-filter"
+          className="filter-select"
+          value={filter.outcomeFilter}
+          onChange={(e) => handleOutcomeChange(e.target.value as ExecutionOutcomeFilter)}
+        >
+          {EXECUTION_OUTCOME_FILTER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label} ({counts.outcome[opt.value]})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="filter-group">
+        <label className="filter-label" htmlFor="exec-usefulness-filter">Reviewed:</label>
+        <select
+          id="exec-usefulness-filter"
+          className="filter-select"
+          value={filter.usefulnessFilter}
+          onChange={(e) => handleUsefulnessChange(e.target.value as UsefulnessReviewFilter)}
+        >
+          {USEFULNESS_REVIEW_FILTER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label} ({counts.usefulness[opt.value]})
+            </option>
+          ))}
+        </select>
+      </div>
+      {clusters.length > 1 && (
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="exec-cluster-filter">Cluster:</label>
+          <select
+            id="exec-cluster-filter"
+            className="filter-select"
+            value={filter.clusterFilter}
+            onChange={(e) => handleClusterChange(e.target.value)}
+          >
+            <option value="all">All clusters</option>
+            {clusters.map((cluster) => (
+              <option key={cluster} value={cluster}>{cluster}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {commandFamilies.length > 1 && (
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="exec-cmd-family-filter">Command:</label>
+          <select
+            id="exec-cmd-family-filter"
+            className="filter-select"
+            value={filter.commandFamilyFilter}
+            onChange={(e) => handleCommandFamilyChange(e.target.value)}
+          >
+            <option value="all">All commands</option>
+            {commandFamilies.map((family) => (
+              <option key={family} value={family}>{family}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {filteredHistory.length !== history.length && (
+        <span className="filter-count">
+          Showing {filteredHistory.length} of {history.length}
+        </span>
+      )}
+    </div>
+    {filteredHistory.length ? (
       <div className="execution-history-grid">
-        {history.map((entry) => {
+        {filteredHistory.map((entry) => {
           const key = `${entry.timestamp}-${entry.artifactPath ?? entry.candidateDescription ?? ""}`;
           const badges = [
             entry.timedOut ? "Timed out" : null,
@@ -1665,11 +1962,14 @@ const ExecutionHistoryPanel = ({
           );
         })}
       </div>
+    ) : history.length === 0 ? (
+      <p className="muted">No execution history for this run. Run checks manually to populate history.</p>
     ) : (
-      <p className="muted">Recorded check results appear here after manual execution.</p>
+      <p className="muted">No entries match the current filters. Try adjusting your filters.</p>
     )}
   </section>
 );
+};
 
 export const ProposalList = ({
   proposals,
@@ -2120,6 +2420,11 @@ const App = () => {
   const [executionHistoryHighlightKey, setExecutionHistoryHighlightKey] = useState<string | null>(null);
   const [queueHighlightKey, setQueueHighlightKey] = useState<string | null>(null);
   const clusterHighlightTimer = useRef<number | null>(null);
+  
+  // Execution history filter state
+  const [executionHistoryFilter, setExecutionHistoryFilter] = useState<ExecutionHistoryFilterState>(
+    readStoredExecutionHistoryFilter
+  );
   const executionHighlightTimer = useRef<number | null>(null);
   const queueHighlightTimer = useRef<number | null>(null);
   // Track the last executed candidate key so we can highlight it after refresh
@@ -2731,6 +3036,11 @@ const App = () => {
     queueFocusMode,
     queueSortOption,
   ]);
+
+  // Persist execution history filter state
+  useEffect(() => {
+    persistExecutionHistoryFilter(executionHistoryFilter);
+  }, [executionHistoryFilter]);
 
   const [expandedQueueItems, setExpandedQueueItems] = useState<Record<string, boolean>>({});
   const toggleQueueDetails = useCallback((key: string) => {
@@ -3761,6 +4071,8 @@ const App = () => {
       history={executionHistory}
       highlightedKey={executionHistoryHighlightKey}
       onSubmitFeedback={handleUsefulnessFeedback}
+      filter={executionHistoryFilter}
+      onFilterChange={setExecutionHistoryFilter}
     />
     <section className="panel next-check-queue-panel" id="next-check-queue">
         <div className="section-head">
