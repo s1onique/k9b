@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 # Default mode: staged changes (current index)
 MODE="staged"
@@ -110,17 +110,28 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-# Helper to check if file has staged changes
+# Helper: check if a file is tracked by git
+is_tracked() {
+  git ls-files --error-unmatch "$1" >/dev/null 2>&1
+}
+
+# Helper: check if file has staged changes (returns 0 if present, 1 if absent)
 has_staged() {
-  git diff --cached --quiet -- "$1" 2>/dev/null && return 1 || return 0
+  if git diff --cached --quiet -- "$1" 2>/dev/null; then
+    return 1
+  fi
+  return 0
 }
 
-# Helper to check if file has unstaged changes
+# Helper: check if file has unstaged changes (returns 0 if present, 1 if absent)
 has_unstaged() {
-  git diff --quiet -- "$1" 2>/dev/null && return 1 || return 0
+  if git diff --quiet -- "$1" 2>/dev/null; then
+    return 1
+  fi
+  return 0
 }
 
-# Helper to run diff based on mode
+# Helper: run diff based on mode
 diff_cmd() {
   case "$MODE" in
     staged)
@@ -149,6 +160,39 @@ unstaged_diff() {
   git diff "$@"
 }
 
+# Helper: format file entry for Changed files list
+format_file_entry() {
+  local file="$1"
+  
+  if is_tracked "$file"; then
+    local tracked_state="tracked"
+    local staged_yes="no"
+    local unstaged_yes="no"
+    if has_staged "$file"; then staged_yes="yes"; fi
+    if has_unstaged "$file"; then unstaged_yes="yes"; fi
+    printf '%s  [%s, staged present: %s, unstaged present: %s]\n' \
+      "$file" "$tracked_state" "$staged_yes" "$unstaged_yes"
+  else
+    printf '%s  [untracked, staged present: no, unstaged present: yes]\n' "$file"
+  fi
+}
+
+# Helper: format file metadata for Diffs section
+format_file_metadata() {
+  local file="$1"
+  
+  if is_tracked "$file"; then
+    local tracked_state="tracked"
+    local staged_yes="no"
+    local unstaged_yes="no"
+    if has_staged "$file"; then staged_yes="yes"; fi
+    if has_unstaged "$file"; then unstaged_yes="yes"; fi
+    echo "Metadata: $tracked_state, staged present: $staged_yes, unstaged present: $unstaged_yes"
+  else
+    echo "Metadata: untracked, staged present: no, unstaged present: yes"
+  fi
+}
+
 {
   echo "# Targeted digest"
   echo
@@ -160,42 +204,24 @@ unstaged_diff() {
   echo
 
   echo "## Changed files"
-  printf '%s\n' "${FILES[@]}"
+  for file in "${FILES[@]}"; do
+    format_file_entry "$file"
+  done
   echo
 
   if [[ "$MODE" == "dirty" ]]; then
-    # For dirty mode, show which category each file falls into
-    echo "## File state summary"
-    for file in "${FILES[@]}"; do
-      if [[ -f "$file" ]] && git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
-        # Tracked file
-        staged_flag=""
-        unstaged_flag=""
-        has_staged "$file" && staged_flag="+staged"
-        has_unstaged "$file" && unstaged_flag="+unstaged"
-        echo "$file: tracked${staged_flag}${unstaged_flag}"
-      else
-        echo "$file: untracked"
-      fi
-    done
-    echo
-
-    echo "## Diff stat (staged)"
-    staged_diff --stat -- "${FILES[@]}" 2>/dev/null || echo "(no staged changes)"
-    echo
-
-    echo "## Diff stat (unstaged)"
-    unstaged_diff --stat -- "${FILES[@]}" 2>/dev/null || echo "(no unstaged changes)"
-    echo
-
+    # Unified diffs section - organized per file, not per Git area
     echo "## Diffs"
     for file in "${FILES[@]}"; do
       echo
+      echo "=== $file ==="
+      format_file_metadata "$file"
+      echo
+
       # Untracked files: show full content as new
-      if [[ ! -f "$file" ]] || ! git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
-        echo "### FILE (untracked): $file"
+      if ! is_tracked "$file"; then
+        echo "--- untracked file preview ---"
         if [[ -f "$file" ]]; then
-          echo "--- $file (new file)"
           cat "$file"
         else
           echo "(file not present)"
@@ -203,16 +229,16 @@ unstaged_diff() {
         continue
       fi
 
-      # Tracked files: show staged diff if any
+      # Tracked files with staged changes
       if has_staged "$file"; then
-        echo "### FILE (staged): $file"
+        echo "--- staged diff ---"
         staged_diff --unified=3 -- "$file"
         echo
       fi
 
-      # Tracked files: show unstaged diff if any
+      # Tracked files with unstaged changes
       if has_unstaged "$file"; then
-        echo "### FILE (unstaged): $file"
+        echo "--- unstaged diff ---"
         unstaged_diff --unified=3 -- "$file"
       fi
     done
@@ -224,7 +250,7 @@ unstaged_diff() {
     echo "## Diffs"
     for file in "${FILES[@]}"; do
       echo
-      echo "### FILE: $file"
+      echo "=== $file ==="
       diff_cmd --unified=3 -- "$file" || true
     done
   fi
