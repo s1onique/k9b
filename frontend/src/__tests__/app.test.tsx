@@ -1539,10 +1539,10 @@ describe("App", () => {
       screen.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/Retained history stats/i)).toBeInTheDocument();
-    expect(screen.getByText(/Current run/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Current$/i, { selector: ".hero-run-label" })).toBeInTheDocument();
     expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/(Fresh|Stale) data/i, { selector: ".freshness-pill" })
+      screen.getByText(/(Fresh|Stale)$/i, { selector: ".freshness-pill" })
     ).toBeInTheDocument();
     expect(screen.getByText(/LLM telemetry/i)).toBeInTheDocument();
     expect(screen.getByText(/Collector collector:v1.2.0/i)).toBeInTheDocument();
@@ -2126,7 +2126,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
-    const select = await screen.findByLabelText(/auto refresh/i);
+    const select = await screen.findByLabelText(/Auto/i);
     expect(select).toHaveValue("30");
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
 
@@ -2135,7 +2135,7 @@ describe("App", () => {
     });
     await waitFor(() => expect(localStorage.getItem(AUTOREFRESH_STORAGE_KEY)).toBe("off"));
     await waitFor(() => expect(clearIntervalSpy).toHaveBeenCalled());
-    await screen.findByText(/Auto refresh is off/i);
+    
   });
 
   test("shows loading and surfaces API errors", async () => {
@@ -2630,8 +2630,8 @@ describe("Recent runs selection", () => {
     expect(latestRunRow).not.toBeNull();
     expect(latestRunRow).toHaveClass("run-row-selected");
 
-    // Hero section should show "Current run" label for the latest run
-    const heroLabel = await screen.findByText(/Current run/i);
+    // Hero section should show "Current" label for the latest run
+    const heroLabel = await screen.findByText(/^Current$/i);
     expect(heroLabel).toBeInTheDocument();
   });
 
@@ -2729,8 +2729,8 @@ describe("Recent runs selection", () => {
       expect(runCalls.length).toBeGreaterThan(0);
     });
 
-    // Hero section should show "Selected run" label (not "Current run" since it's older)
-    const selectedLabel = await screen.findByText(/Selected run/i);
+    // Hero section should show "Selected" label (not "Current" since it's older)
+    const selectedLabel = await screen.findByText(/^Selected$/i);
     expect(selectedLabel).toBeInTheDocument();
   });
 
@@ -2996,12 +2996,12 @@ describe("Recent runs selection", () => {
       expect(olderRunRow).toHaveClass("run-row-selected");
     });
 
-    // Should show "Selected run" label (not "Current run")
-    const selectedLabel = screen.queryByText(/Selected run/i);
+    // Should show "Selected" label (not "Current")
+    const selectedLabel = screen.queryByText(/^Selected$/i);
     expect(selectedLabel).toBeInTheDocument();
 
     // Should show "Jump to latest" button
-    const jumpButton = await screen.findByText(/← Jump to latest/i);
+    const jumpButton = await screen.findByText(/← Latest/i);
     expect(jumpButton).toBeInTheDocument();
 
     // Click jump to latest
@@ -3013,12 +3013,12 @@ describe("Recent runs selection", () => {
     const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
     expect(latestRunRow).toHaveClass("run-row-selected");
 
-    // Should show "Current run" label
-    const currentRunLabel = await screen.findByText(/Current run/i);
+    // Should show "Current" label
+    const currentRunLabel = await screen.findByText(/^Current$/i);
     expect(currentRunLabel).toBeInTheDocument();
 
     // "Jump to latest" button should be hidden
-    const jumpButtonAfter = screen.queryByText(/← Jump to latest/i);
+    const jumpButtonAfter = screen.queryByText(/← Latest/i);
     expect(jumpButtonAfter).not.toBeInTheDocument();
   });
 
@@ -3078,17 +3078,17 @@ describe("Recent runs selection", () => {
     }));
 
     // Trigger a refresh (simulate auto-refresh or manual refresh)
-    const refreshButton = await screen.findByRole("button", { name: /Refresh data/i });
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
     await act(async () => {
       await user.click(refreshButton);
     });
 
-    // Selected run should still be run-122
+    // Selected should still be run-122
     const selectedAfterRefresh = document.querySelector('.run-row-selected');
     expect(selectedAfterRefresh).toHaveAttribute("data-run-id", "run-122");
 
     // Jump to latest button should be visible since we now have a newer run
-    const jumpButton = await screen.findByText(/← Jump to latest/i);
+    const jumpButton = await screen.findByText(/← Latest/i);
     expect(jumpButton).toBeInTheDocument();
   });
 

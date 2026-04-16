@@ -3752,37 +3752,34 @@ const App = () => {
     <div className="app-shell">
       <header className="panel hero compact">
         <div className="hero-content">
-          <p className="eyebrow">Operator console</p>
-          <h1>Fleet triage cockpit</h1>
+          <div className="hero-title-block">
+            <p className="eyebrow">Fleet triage</p>
+            <h1>Cockpit</h1>
+          </div>
           <div className="hero-run">
             <div className="hero-run-identity">
               <p className="eyebrow hero-run-label">
-                {isSelectedRunLatest ? "Current run" : "Selected run"}
+                {isSelectedRunLatest ? "Current" : "Selected"}
               </p>
               <div className="hero-run-title">
                 <strong>Run {run.label}</strong>
                 <span className="hero-run-id">ID {run.runId}</span>
               </div>
-              {!isSelectedRunLatest && latestRunId && (
+            </div>
+            <div className="hero-run-freshness">
+              <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
+                {runFresh ? "Fresh" : "Stale"}
+              </span>
+              <p className="hero-run-recency">Last {runRecency}</p>
+              {!isSelectedRunLatest && (
                 <button
                   type="button"
                   className="link tiny"
                   onClick={handleJumpToLatest}
                   title="Jump back to the latest run"
                 >
-                  ← Jump to latest
+                  ← Latest
                 </button>
-              )}
-            </div>
-            <div className="hero-run-freshness">
-              <span className={`freshness-pill ${runFresh ? "fresh" : "stale"}`}>
-                {runFresh ? "Fresh data" : "Stale data"}
-              </span>
-              <p className="hero-run-recency small muted">Last run {runRecency}</p>
-              {!isSelectedRunLatest && (
-                <p className="hero-run-recency small muted">
-                  <span className="text-warning">Viewing older run</span>
-                </p>
               )}
             </div>
           </div>
@@ -3790,10 +3787,10 @@ const App = () => {
         <div className="hero-actions">
           <div className="refresh-controls">
             <button type="button" onClick={refresh}>
-              Refresh data
+              Refresh
             </button>
             <div className="autorefresh-control">
-              <label htmlFor="auto-refresh-interval">Auto refresh</label>
+              <label htmlFor="auto-refresh-interval">Auto</label>
               <select
                 id="auto-refresh-interval"
                 value={autoRefreshSelectValue}
@@ -3805,10 +3802,8 @@ const App = () => {
                   </option>
                 ))}
               </select>
-              <span className="autorefresh-status muted small">{autoRefreshStatusText}</span>
             </div>
           </div>
-          <span className="small">Updated {dayjs(lastRefresh).fromNow()}</span>
         </div>
       </header>
       <nav className="cockpit-nav" aria-label="Fleet cockpit sections">
