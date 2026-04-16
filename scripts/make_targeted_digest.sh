@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 # Default mode: staged changes (current index)
 MODE="staged"
@@ -116,19 +116,14 @@ is_tracked() {
 }
 
 # Helper: check if file has staged changes (returns 0 if present, 1 if absent)
+# Uses || true to prevent set -e from triggering on git's non-zero exit
 has_staged() {
-  if git diff --cached --quiet -- "$1" 2>/dev/null; then
-    return 1
-  fi
-  return 0
+  git diff --cached --quiet -- "$1" 2>/dev/null && return 1 || return 0
 }
 
 # Helper: check if file has unstaged changes (returns 0 if present, 1 if absent)
 has_unstaged() {
-  if git diff --quiet -- "$1" 2>/dev/null; then
-    return 1
-  fi
-  return 0
+  git diff --quiet -- "$1" 2>/dev/null && return 1 || return 0
 }
 
 # Helper: run diff based on mode
@@ -160,36 +155,40 @@ unstaged_diff() {
   git diff "$@"
 }
 
-# Helper: format file entry for Changed files list
-format_file_entry() {
+# Shared helper: compute and print file metadata for a given file
+# Usage: print_file_metadata "path/to/file"
+print_file_metadata() {
   local file="$1"
-  
   if is_tracked "$file"; then
-    local tracked_state="tracked"
     local staged_yes="no"
     local unstaged_yes="no"
     if has_staged "$file"; then staged_yes="yes"; fi
     if has_unstaged "$file"; then unstaged_yes="yes"; fi
-    printf '%s  [%s, staged present: %s, unstaged present: %s]\n' \
-      "$file" "$tracked_state" "$staged_yes" "$unstaged_yes"
+    echo "Metadata: tracked, staged present: $staged_yes, unstaged present: $unstaged_yes"
   else
-    printf '%s  [untracked, staged present: no, unstaged present: yes]\n' "$file"
+    echo "Metadata: untracked, staged present: no, unstaged present: yes"
   fi
 }
 
-# Helper: format file metadata for Diffs section
-format_file_metadata() {
+# Shared helper: check if file is untracked
+# Usage: is_file_untracked "path/to/file" && echo "untracked" || echo "tracked"
+is_file_untracked() {
+  ! is_tracked "$1"
+}
+
+# Helper: print file entry line for Changed files section
+# Usage: print_file_entry "path/to/file"
+print_file_entry() {
   local file="$1"
-  
   if is_tracked "$file"; then
-    local tracked_state="tracked"
     local staged_yes="no"
     local unstaged_yes="no"
     if has_staged "$file"; then staged_yes="yes"; fi
     if has_unstaged "$file"; then unstaged_yes="yes"; fi
-    echo "Metadata: $tracked_state, staged present: $staged_yes, unstaged present: $unstaged_yes"
+    printf '%s  [tracked, staged present: %s, unstaged present: %s]\n' \
+      "$file" "$staged_yes" "$unstaged_yes"
   else
-    echo "Metadata: untracked, staged present: no, unstaged present: yes"
+    printf '%s  [untracked, staged present: no, unstaged present: yes]\n' "$file"
   fi
 }
 
@@ -205,7 +204,7 @@ format_file_metadata() {
 
   echo "## Changed files"
   for file in "${FILES[@]}"; do
-    format_file_entry "$file"
+    print_file_entry "$file"
   done
   echo
 
@@ -215,11 +214,11 @@ format_file_metadata() {
     for file in "${FILES[@]}"; do
       echo
       echo "=== $file ==="
-      format_file_metadata "$file"
+      print_file_metadata "$file"
       echo
 
       # Untracked files: show full content as new
-      if ! is_tracked "$file"; then
+      if is_file_untracked "$file"; then
         echo "--- untracked file preview ---"
         if [[ -f "$file" ]]; then
           cat "$file"
