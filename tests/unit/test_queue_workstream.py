@@ -74,5 +74,73 @@ class QueueWorkstreamBackendTests(unittest.TestCase):
         self.assertEqual(serialized[-1]["workstream"], "drift")
 
 
+class CRDWorkstreamRoutingTests(unittest.TestCase):
+    """Tests for CRD demotion and drift workstream routing in queue building."""
+
+    def test_demoted_crd_gets_drift_workstream(self) -> None:
+        """Demoted CRD candidates (rankingPolicyReason contains crd-demoted) should get drift workstream."""
+        # Simulate a plan_entry with a demoted CRD candidate
+        plan_entry = {
+            "artifactPath": "external-analysis/plan.json",
+            "candidates": [
+                {
+                    "candidateId": "crd-demoted-1",
+                    "description": "kubectl get crd",
+                    "suggestedCommandFamily": "kubectl-get-crd",
+                    "rankingPolicyReason": "crd-demoted-early-incident-triage:incident:initial_triage",
+                    "priorityLabel": "secondary",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                },
+                {
+                    "candidateId": "describe-1",
+                    "description": "kubectl describe pod",
+                    "suggestedCommandFamily": "kubectl-describe",
+                    "priorityLabel": "primary",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                },
+            ],
+        }
+        from k8s_diag_agent.health.ui import _build_next_check_queue
+        queue = _build_next_check_queue(plan_entry, {})
+        
+        # Find the CRD demoted entry
+        crd_entry = next((e for e in queue if e.get("candidateId") == "crd-demoted-1"), None)
+        self.assertIsNotNone(crd_entry)
+        assert crd_entry is not None  # for mypy
+        # CRD demoted entry should have workstream = "drift"
+        self.assertEqual(crd_entry.get("workstream"), "drift")
+        
+        # Describe entry should NOT have workstream (not demoted)
+        describe_entry = next((e for e in queue if e.get("candidateId") == "describe-1"), None)
+        self.assertIsNotNone(describe_entry)
+        # Cast to dict to help mypy understand the type
+        describe_dict: dict[str, object] = describe_entry  # type: ignore[assignment]
+        self.assertNotIn("workstream", describe_dict)
+
+    def test_non_demoted_crd_keeps_original_workstream(self) -> None:
+        """Non-demoted CRD candidates should not have workstream assigned by queue builder."""
+        plan_entry = {
+            "artifactPath": "external-analysis/plan.json",
+            "candidates": [
+                {
+                    "candidateId": "crd-normal",
+                    "description": "kubectl get crd",
+                    "suggestedCommandFamily": "kubectl-get-crd",
+                    "priorityLabel": "secondary",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                },
+            ],
+        }
+        from k8s_diag_agent.health.ui import _build_next_check_queue
+        queue = _build_next_check_queue(plan_entry, {})
+        
+        crd_entry = queue[0]
+        # No rankingPolicyReason, so no workstream assignment
+        self.assertNotIn("workstream", crd_entry)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -318,5 +318,61 @@ class TestGlobalBehaviorUnchanged(unittest.TestCase):
             self.assertIsNone(candidate.ranking_policy_reason)
 
 
+class TestCRDWorkstreamRouting(unittest.TestCase):
+    """Tests for CRD workstream assignment in queue building.
+
+    When a CRD candidate is demoted due to early incident triage context,
+    it should be assigned to 'drift' workstream for visibility.
+    """
+
+    def test_demoted_crd_has_drift_workstream_in_dict(self) -> None:
+        """Demoted CRD candidates should have drift workstream in to_dict()."""
+        candidates = [
+            _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD),
+        ]
+        ranked = _rank_candidates(
+            candidates,
+            workstream=Workstream.INCIDENT,
+            review_stage=ReviewStage.INITIAL_TRIAGE,
+        )
+        # Verify ranking_policy_reason is set
+        reason = ranked[0].ranking_policy_reason
+        self.assertIsNotNone(reason)
+        assert reason is not None  # for mypy
+        self.assertIn("crd-demoted-early-incident-triage", reason)
+
+    def test_non_demoted_crd_has_no_workstream_assignment(self) -> None:
+        """Non-demoted CRD candidates should not have workstream in ranking_policy_reason."""
+        candidates = [
+            _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD),
+        ]
+        ranked = _rank_candidates(
+            candidates,
+            workstream=Workstream.DRIFT,
+            review_stage=ReviewStage.PARITY_VALIDATION,
+        )
+        # No demotion, so no ranking_policy_reason
+        self.assertIsNone(ranked[0].ranking_policy_reason)
+
+    def test_demoted_crd_ranking_policy_reason_format(self) -> None:
+        """Demoted CRD should have properly formatted ranking_policy_reason."""
+        candidates = [
+            _make_candidate("kubectl get crds", CommandFamily.KUBECTL_GET_CRD),
+        ]
+        ranked = _rank_candidates(
+            candidates,
+            workstream=Workstream.INCIDENT,
+            review_stage=ReviewStage.INITIAL_TRIAGE,
+        )
+        reason = ranked[0].ranking_policy_reason
+        self.assertIsNotNone(reason)
+        assert reason is not None  # for mypy
+        # Format: crd-demoted-early-incident-triage:incident:initial_triage
+        parts = reason.split(":")
+        self.assertEqual(parts[0], "crd-demoted-early-incident-triage")
+        self.assertEqual(parts[1], "incident")
+        self.assertEqual(parts[2], "initial_triage")
+
+
 if __name__ == "__main__":
     unittest.main()

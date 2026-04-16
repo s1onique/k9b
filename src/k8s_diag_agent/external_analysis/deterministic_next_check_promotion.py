@@ -94,7 +94,7 @@ def _build_queue_entry(
     expected_signal = detect_expected_signal(command_hint)
     description = str(payload.get("description") or "Deterministic next check").strip()
     cluster_label = payload.get("clusterLabel") or ""
-    return {
+    entry: dict[str, object] = {
         "candidateId": payload.get("candidateId"),
         "candidateIndex": payload.get("promotionIndex"),
         "description": description,
@@ -120,6 +120,11 @@ def _build_queue_entry(
         "approvalReason": "deterministic-promoted",
         "blockingReason": "awaiting-review",
     }
+    # Preserve workstream from promotion payload for drift/parity visibility
+    workstream = payload.get("workstream")
+    if isinstance(workstream, str) and workstream:
+        entry["workstream"] = workstream
+    return entry
 
 
 def write_deterministic_next_check_promotion(

@@ -1226,6 +1226,12 @@ def _build_next_check_queue(
         queue_entry["commandPreview"] = _build_command_preview(entry.get("description"), target_context)
         queue_entry["priorityRationale"] = _derive_priority_rationale(queue_entry)
         queue_entry["rankingReason"] = _derive_ranking_reason(queue_entry)
+        # Route demoted CRD checks to drift/parity workstream for visibility
+        # When a candidate is demoted due to early incident triage context,
+        # it should still be visible in drift-oriented workstream
+        ranking_policy_reason = entry.get("rankingPolicyReason")
+        if isinstance(ranking_policy_reason, str) and "crd-demoted-early-incident-triage" in ranking_policy_reason:
+            queue_entry["workstream"] = "drift"
         queue.append(queue_entry)
     queue.sort(key=_queue_sort_key)
     return queue
