@@ -1718,6 +1718,123 @@ body {
   align-items: center;
 }
 
+/* ==========================================================================
+   Queue Item New Structure - Header, Title, Context, Actions
+   ========================================================================== */
+
+/* Header block with title and status badges */
+.next-check-queue-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Title block containing the h4 title and source pill */
+.queue-item-title-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Prominent title (h4) */
+.queue-item-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+/* Status badges container */
+.queue-item-status-badges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Context block: rationale and meta row */
+.next-check-queue-item-context {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Rationale line: "Why: <reason>" */
+.queue-item-rationale-line {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+/* "Why:" label */
+.queue-item-rationale-label {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Horizontal meta tags row */
+.queue-item-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Individual meta tag pills */
+.queue-item-meta-tag {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(71, 85, 105, 0.3);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+/* Blocker/priority rationale note */
+.queue-item-blocker-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #fde047;
+}
+
+.queue-item-blocker-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.queue-item-blocker-text {
+  line-height: 1.4;
+}
+
+/* Secondary actions group */
+.queue-item-secondary-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Primary action button styling */
+.queue-item-primary-action {
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
+}
+
 .action-state-badge {
   display: inline-flex;
   align-items: center;

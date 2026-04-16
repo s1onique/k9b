@@ -4771,54 +4771,58 @@ const App = () => {
                       data-queue-key={queueCandidateKey}
                       data-highlighted={isQueueCardHighlighted ? "true" : undefined}
                     >
-                      <div className="next-check-queue-item-meta">
-                        <div>
-                          <div className="queue-card-title">
-                            <strong>{item.description}</strong>
-                            {formatSourceType(item.sourceType) ? (
-                              <span className="queue-source-pill">
-                                {formatSourceType(item.sourceType)}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="queue-card-reason">
-                            <span className="queue-card-reason-label">Why this check: </span>
-                            {humanizeReason(item.sourceReason) || item.sourceReason || humanizeReason(item.normalizationReason) || "—"}{" "}
-                            {item.expectedSignal ? <span className="queue-card-signal">→ {item.expectedSignal}</span> : null}
-                          </p>
-                          <p className="tiny">
-                            Cluster: {item.targetCluster ?? "Unassigned"}
-                          </p>
-                          <p className="tiny">
-                            Priority: {formatCandidatePriority((item.priorityLabel ?? "secondary").toLowerCase())} · Command: {item.suggestedCommandFamily ?? "—"}
-                          </p>
-                        </div>
-                        <div className="next-check-queue-item-status">
-                          <span>Approval: {item.approvalState ?? "unknown"}</span>
-                          <span>Execution: {item.executionState ?? "unknown"}</span>
-                          <span>Outcome: {item.outcomeStatus ?? "unknown"}</span>
-                          {item.priorityRationale ? (
-                            <div className="next-check-queue-item-rationale">
-                              <span className="priority-rationale-label">
-                                Why not actionable now:
-                              </span>
-                              <span className="priority-rationale-badge">
-                                {item.priorityRationale}
-                              </span>
-                              {item.rankingReason ? (
-                                <span className="ranking-reason-badge">
-                                  {item.rankingReason}
-                                </span>
-                              ) : null}
-                            </div>
+                      <div className="next-check-queue-item-header">
+                        <div className="queue-item-title-block">
+                          <h4 className="queue-item-title">{item.description}</h4>
+                          {formatSourceType(item.sourceType) ? (
+                            <span className="queue-source-pill">
+                              {formatSourceType(item.sourceType)}
+                            </span>
                           ) : null}
                         </div>
+                        <div className="queue-item-status-badges">
+                          <span className={`action-state-badge action-state-${item.approvalState === "approved" ? "ready" : item.approvalState === "approval-required" ? "approval" : "inactive"}`}>
+                            {item.approvalState === "approved" ? "Approved" : item.approvalState === "approval-required" ? "Needs approval" : "Pending"}
+                          </span>
+                          {item.executionState && (
+                            <span className={`execution-state-badge execution-state-${item.executionState}`}>
+                              {item.executionState.replace(/[-]/g, " ")}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="next-check-queue-item-flags">
-                        <span>Safe to automate: <strong>{item.safeToAutomate ? "Yes" : "No"}</strong></span>
-                        <span>Requires approval: <strong>{item.requiresOperatorApproval ? "Yes" : "No"}</strong></span>
+                      <div className="next-check-queue-item-context">
+                        <p className="queue-item-rationale-line">
+                          <span className="queue-item-rationale-label">Why: </span>
+                          {humanizeReason(item.sourceReason) || item.sourceReason || humanizeReason(item.normalizationReason) || "—"}{" "}
+                          {item.expectedSignal ? <span className="queue-card-signal">→ {item.expectedSignal}</span> : null}
+                        </p>
+                        <div className="queue-item-meta-row">
+                          <span className="queue-item-meta-tag">Cluster: {item.targetCluster ?? "Unassigned"}</span>
+                          <span className="queue-item-meta-tag">{formatCandidatePriority((item.priorityLabel ?? "secondary").toLowerCase())}</span>
+                          <span className="queue-item-meta-tag">{item.suggestedCommandFamily ?? "—"}</span>
+                        </div>
+                        {item.priorityRationale ? (
+                          <div className="queue-item-blocker-note">
+                            <span className="queue-item-blocker-icon">⏸</span>
+                            <span className="queue-item-blocker-text">{item.priorityRationale}</span>
+                            {item.rankingReason ? (
+                              <span className="ranking-reason-badge">{item.rankingReason}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="next-check-queue-item-actions">
+                        {allowRun && (
+                          <button
+                            type="button"
+                            className="button primary small queue-item-primary-action"
+                            onClick={() => handleManualExecution(item, queueCandidateKey)}
+                            disabled={executingCandidate === queueCandidateKey}
+                          >
+                            {executingCandidate === queueCandidateKey ? "Running…" : "Run candidate"}
+                          </button>
+                        )}
                         {item.requiresOperatorApproval && item.approvalState !== "approved" && (
                           <button
                             type="button"
@@ -4826,17 +4830,7 @@ const App = () => {
                             onClick={() => handleApproveCandidate(item, queueCandidateKey)}
                             disabled={approvingCandidate === queueCandidateKey}
                           >
-                            {approvingCandidate === queueCandidateKey ? "Approving…" : "Approve candidate"}
-                          </button>
-                        )}
-                        {allowRun && (
-                          <button
-                            type="button"
-                            className="button primary small"
-                            onClick={() => handleManualExecution(item, queueCandidateKey)}
-                            disabled={executingCandidate === queueCandidateKey}
-                          >
-                            {executingCandidate === queueCandidateKey ? "Running…" : "Run candidate"}
+                            {approvingCandidate === queueCandidateKey ? "Approving…" : "Approve"}
                           </button>
                         )}
                         {!allowRun && (
@@ -4844,40 +4838,42 @@ const App = () => {
                             {getNotRunnableExplanation(item)}
                           </span>
                         )}
-                        {latestArtifactLink && (
-                          <a
-                            className="link"
-                            href={latestArtifactLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View latest artifact
-                          </a>
-                        )}
-                        <button
-                          type="button"
-                          className="queue-action-button"
-                          onClick={() => handleQueueClusterJump(item)}
-                          disabled={!item.targetCluster}
-                        >
-                          Open cluster detail
-                        </button>
-                        {executionEntry ? (
+                        <div className="queue-item-secondary-actions">
+                          {latestArtifactLink && (
+                            <a
+                              className="link tiny"
+                              href={latestArtifactLink}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Artifact
+                            </a>
+                          )}
                           <button
                             type="button"
                             className="queue-action-button"
-                            onClick={() => handleQueueExecutionJump(item)}
+                            onClick={() => handleQueueClusterJump(item)}
+                            disabled={!item.targetCluster}
                           >
-                            View latest execution
+                            Cluster
                           </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="toggle-details-button"
-                          onClick={() => toggleQueueDetails(queueCandidateKey)}
-                        >
-                          {detailsExpanded ? "Hide details" : "Show details"}
-                        </button>
+                          {executionEntry ? (
+                            <button
+                              type="button"
+                              className="queue-action-button"
+                              onClick={() => handleQueueExecutionJump(item)}
+                            >
+                              Execution
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="toggle-details-button"
+                            onClick={() => toggleQueueDetails(queueCandidateKey)}
+                          >
+                            {detailsExpanded ? "Less" : "More"}
+                          </button>
+                        </div>
                       </div>
                       {approvalResult ? (
                         <p className={`next-check-approval-note next-check-approval-note-${approvalResult.status}`}>

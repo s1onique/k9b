@@ -743,8 +743,7 @@ describe("App", () => {
     expect(queuePanel).not.toBeNull();
     const queueScoped = within(queuePanel!);
     expect(queueScoped.getByRole("heading", { name: /Work list/i })).toBeInTheDocument();
-    expect(queueScoped.getAllByRole("button", { name: /Approve candidate/i }).length).toBeGreaterThan(0);
-    expect(queueScoped.getAllByRole("link", { name: /View latest artifact/i }).length).toBeGreaterThan(0);
+    expect(queueScoped.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
   });
 
   test("queue item details toggle reveals metadata and command preview", async () => {
@@ -760,7 +759,7 @@ describe("App", () => {
       .getByText(/Describe diag CRD for control plane/i)
       .closest("article");
     expect(describeCard).not.toBeNull();
-    const showButton = within(describeCard!).getByRole("button", { name: /Show details/i });
+    const showButton = within(describeCard!).getByRole("button", { name: /More/i });
     await act(async () => {
       await user.click(showButton);
     });
@@ -788,7 +787,7 @@ describe("App", () => {
       .getByText(/Collect kubelet logs for control-plane pods/i)
       .closest("article");
     expect(logsCard).not.toBeNull();
-    const showButton = within(logsCard!).getByRole("button", { name: /Show details/i });
+    const showButton = within(logsCard!).getByRole("button", { name: /More/i });
     await act(async () => {
       await user.click(showButton);
     });
@@ -811,10 +810,10 @@ describe("App", () => {
       .getByText(/Describe diag CRD for control plane/i)
       .closest("article");
     expect(approvalCard).not.toBeNull();
-    // Verify the "Why not actionable now:" label is present
-    expect(queueScoped.getByText(/Why not actionable now:/i)).toBeInTheDocument();
-    // Verify the rationale content appears
-    expect(queueScoped.getByText(/Approval required before execution/i)).toBeInTheDocument();
+    // Verify the blocker note with icon is present (displays priorityRationale with ⏸ icon)
+    expect(within(approvalCard!).getByText(/⏸/i)).toBeInTheDocument();
+    // Verify the rationale content appears in the blocker note
+    expect(within(approvalCard!).getByText(/Approval required before execution/i)).toBeInTheDocument();
   });
 
   test("queue card omits priorityRationale label when field is absent", async () => {
@@ -1454,7 +1453,7 @@ describe("App", () => {
     const queueCard = await screen.findByText(/Inspect etcd leader/i);
     const queueArticle = queueCard.closest("article");
     expect(queueArticle).not.toBeNull();
-    const showDetails = within(queueArticle!).getByRole("button", { name: /Show details/i });
+    const showDetails = within(queueArticle!).getByRole("button", { name: /More/i });
     await act(async () => {
       await user.click(showDetails);
     });
@@ -1472,37 +1471,33 @@ describe("App", () => {
       .closest("article");
     expect(queueCard).not.toBeNull();
 
-    // Verify the title/reason block exists (left column content)
+    // Verify the title block exists (h4 element with queue-item-title class)
     const titleBlock = within(queueCard!).getByText(/Describe diag CRD for control plane/i);
     expect(titleBlock).toBeInTheDocument();
 
-    // Verify the "Why this check" label exists (part of the left column)
-    expect(within(queueCard!).getByText(/Why this check:/i)).toBeInTheDocument();
+    // Verify the "Why:" label exists (part of the rationale line)
+    expect(within(queueCard!).getByText(/Why:/i)).toBeInTheDocument();
 
-    // Verify the status block exists (right column: Approval, Execution, Outcome)
-    const statusBlock = queueCard!.querySelector(".next-check-queue-item-status");
-    expect(statusBlock).not.toBeNull();
-    expect(within(statusBlock!).getByText(/Approval:/i)).toBeInTheDocument();
-    expect(within(statusBlock!).getByText(/Execution:/i)).toBeInTheDocument();
-    expect(within(statusBlock!).getByText(/Outcome:/i)).toBeInTheDocument();
+    // Verify the status badges container exists (right column: status badges)
+    const statusBadges = queueCard!.querySelector(".queue-item-status-badges");
+    expect(statusBadges).not.toBeNull();
 
-    // Verify the status block is a separate DOM element from the title
-    // The status block should be a sibling to the left content div, not nested inside it
-    const metaContainer = within(queueCard!).getByText(/Why this check:/i).closest(".next-check-queue-item-meta");
-    expect(metaContainer).not.toBeNull();
+    // Verify the header block separates title from status badges
+    const headerBlock = queueCard!.querySelector(".next-check-queue-item-header");
+    expect(headerBlock).not.toBeNull();
 
-    // The meta container should have two direct children: the left content div and the status div
-    const metaChildren = metaContainer!.children;
-    expect(metaChildren.length).toBe(2);
+    // The header block should have two direct children: the title block and the status badges
+    const headerChildren = headerBlock!.children;
+    expect(headerChildren.length).toBe(2);
 
-    // First child should contain the title/reason (left column)
-    const leftColumn = metaChildren[0];
-    expect(leftColumn.textContent).toContain("Describe diag CRD");
-    expect(leftColumn.textContent).toContain("Why this check:");
+    // First child should be the title block containing the h4 title
+    const titleColumn = headerChildren[0];
+    expect(titleColumn.className).toContain("queue-item-title-block");
+    expect(titleColumn.textContent).toContain("Describe diag CRD");
 
-    // Second child should be the status block (right column)
-    const rightColumn = metaChildren[1];
-    expect(rightColumn.className).toContain("next-check-queue-item-status");
+    // Second child should be the status badges container (right column)
+    const statusColumn = headerChildren[1];
+    expect(statusColumn.className).toContain("queue-item-status-badges");
   });
 
   test("hides next check plan section when planner data is absent", async () => {
