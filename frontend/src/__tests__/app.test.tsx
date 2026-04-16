@@ -15,6 +15,7 @@ import {
   sampleProposals,
   sampleRun,
   sampleRunsList,
+  UI_STRINGS,
 } from "./fixtures";
 
 const defaultPayloads = {
@@ -204,11 +205,14 @@ describe("App", () => {
     const planPanel = heading.closest(".next-check-plan");
     expect(planPanel).not.toBeNull();
     const scoped = within(planPanel!);
-    expect(scoped.getAllByText(/Safe candidate/i).length).toBeGreaterThan(0);
-    expect(scoped.getByText(/Approval needed/i)).toBeInTheDocument();
-    expect(scoped.getByText(/Command not recognized or too vague/i)).toBeInTheDocument();
+    expect(scoped.getAllByText(UI_STRINGS.queueStatus.safeCandidate, { exact: false }).length).toBeGreaterThan(0);
+    expect(scoped.getByText(UI_STRINGS.queueStatus.approvalNeeded, { exact: false })).toBeInTheDocument();
+    expect(scoped.getByText(UI_STRINGS.gating.commandNotRecognized, { exact: false })).toBeInTheDocument();
     expect(
-      scoped.getByText(/Matches deterministic next check: Collect kubelet metrics/i)
+      scoped.getByText(
+        UI_STRINGS.gating.matchesDeterministicNextCheck("Collect kubelet metrics"),
+        { exact: false }
+      )
     ).toBeInTheDocument();
   });
 

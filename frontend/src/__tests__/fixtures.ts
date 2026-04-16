@@ -1028,6 +1028,38 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
   }) as unknown as (input: RequestInfo) => Promise<unknown>;
 
 /**
+ * Centralized workflow-critical text strings used in UI assertions.
+ * These are fragile to copy changes and should be centralized.
+ */
+export const UI_STRINGS = {
+  // Queue item status labels
+  queueStatus: {
+    approvalNeeded: "Approval needed",
+    awaitingApproval: "Awaiting approval",
+    notUsed: "Not used",
+    executedSuccess: "Executed (success)",
+    safeCandidate: "Safe candidate",
+    awaitingApprovalWithCount: (count: number) => `Awaiting approval · ${count}`,
+    notUsedWithCount: (count: number) => `Not used · ${count}`,
+  },
+  // Gating/blocking reasons
+  gating: {
+    commandNotRecognized: "Command not recognized or too vague",
+    matchesDeterministicNextCheck: (checkName: string) =>
+      `Matches deterministic next check: ${checkName}`,
+  },
+  // Promotion messages
+  promotion: {
+    deterministicPromoted: "Deterministic next check promoted to the queue",
+  },
+  // Empty states
+  emptyState: {
+    noEvidenceBasedChecks: "No evidence-based checks are available for this run",
+    notConfiguredForThisRun: "not configured for this run",
+  },
+} as const;
+
+/**
  * Finds the queue panel element and returns a within-scoped query function.
  * @param screen - The screen object from @testing-library/react
  * @returns a within-scoped query function bound to the queue panel element
@@ -1042,49 +1074,6 @@ export const getQueuePanel = async (
   }
   return within(queuePanel);
 };
-
-/**
- * Shared builder options used by createPanelSelectionRun123 and createPanelSelectionRun122.
- */
-interface PanelSelectionRunOptions {
-  runId: string;
-  label: string;
-  enrichmentProvider: string;
-  enrichmentStatus: "success" | "not-attempted";
-  enrichmentStatusReason: string;
-  enrichmentTriageOrder: string[];
-  enrichmentTopConcerns: string[];
-  autoDrilldownEligible: number;
-  autoDrilldownAttempted: number;
-  autoDrilldownSucceeded: number;
-  autoDrilldownFailed: number;
-  autoDrilldownSkipped: number;
-  autoDrilldownUnattempted: number;
-  autoDrilldownEnabled: boolean;
-  autoDrilldownProvider: string;
-  reviewEnrichmentEligible: number;
-  reviewEnrichmentAttempted: number;
-  reviewEnrichmentSucceeded: number;
-  reviewEnrichmentFailed: number;
-  reviewEnrichmentProvider: string;
-  diagnosticPackTimestamp: string;
-  diagnosticPackSizeBytes: number;
-  diagnosticReviewSummary: string;
-  diagnosticReviewDisagreements: string[];
-  diagnosticReviewMissingChecks: string[];
-  diagnosticReviewDriftMisprioritized: boolean;
-  diagnosticReviewConfidence: "high" | "low";
-  llmAutoDrilldownEnabled: boolean;
-  llmAutoDrilldownProvider: string;
-  llmAutoDrilldownUsed: number;
-  llmAutoDrilldownSuccessful: number;
-  llmAutoDrilldownFailed: number;
-  llmActivityStatus: "success" | "failed";
-  llmActivityLatencyMs: number;
-  llmActivitySummary: string;
-  llmActivityErrorSummary: string | null;
-  deterministicNextChecks: import("../types").DeterministicNextChecksPayload | null;
-}
 
 /**
  * Shared builder for run-123 shape in panel-selection-binding tests.
