@@ -415,6 +415,7 @@ class NextCheckQueueItemView:
     suggested_next_operator_move: str | None = None
     result_class: str | None = None
     result_summary: str | None = None
+    workstream: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1310,6 +1311,7 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
                 command_preview=_coerce_optional_str(entry.get("commandPreview")),
                 plan_artifact_path=_coerce_optional_str(entry.get("planArtifactPath")),
                 queue_status=_coerce_str(entry.get("queueStatus")),
+                workstream=_coerce_optional_str(entry.get("workstream")),
             )
         )
     return tuple(entries)

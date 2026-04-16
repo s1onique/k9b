@@ -516,6 +516,7 @@ export const sampleRun: RunPayload = {
       planArtifactPath: "external-analysis/run-123-next-check-plan.json",
       queueStatus: "approval-needed",
       failureClass: "approval-missing-or-stale",
+      workstream: "incident",
       priorityRationale: "Approval required before execution",
       failureSummary: "Candidate requires operator approval before execution.",
       suggestedNextOperatorMove: "Review approval state",
@@ -548,6 +549,7 @@ export const sampleRun: RunPayload = {
       resultClass: "useful-signal",
       resultSummary: "Captured control-plane logs that highlight recent kubelet errors.",
       suggestedNextOperatorMove: "Correlate this output with the target incident.",
+      workstream: "evidence",
     },
     {
       candidateId: "candidate-metrics",
@@ -573,6 +575,7 @@ export const sampleRun: RunPayload = {
       commandPreview: "kubectl get nodes --context cluster-a",
       planArtifactPath: "external-analysis/run-123-next-check-plan.json",
       queueStatus: "duplicate-or-stale",
+      workstream: "drift",
     },
     {
       candidateId: "candidate-storage",
@@ -599,6 +602,7 @@ export const sampleRun: RunPayload = {
       commandPreview: "kubectl get pv --context cluster-b",
       planArtifactPath: "external-analysis/run-123-next-check-plan.json",
       queueStatus: "safe-ready",
+      workstream: "incident",
     },
     {
       candidateId: "candidate-approved",
@@ -625,6 +629,7 @@ export const sampleRun: RunPayload = {
       commandPreview: "kubectl get networkpolicies --context cluster-a",
       planArtifactPath: "external-analysis/run-123-next-check-plan.json",
       queueStatus: "approved-ready",
+      workstream: "evidence",
     },
     {
       candidateId: "candidate-failed",
@@ -654,6 +659,7 @@ export const sampleRun: RunPayload = {
       failureClass: "command-failed",
       failureSummary: "Command returned a non-zero exit code.",
       suggestedNextOperatorMove: "Inspect artifact output",
+      workstream: "drift",
     },
   ],
   plannerAvailability: {

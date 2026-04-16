@@ -636,6 +636,7 @@ type QueueViewState = {
   statusFilter: NextCheckQueueStatus | "all";
   commandFamilyFilter: string;
   priorityFilter: string;
+  workstreamFilter: string;
   searchText: string;
   focusMode: QueueFocusMode;
   sortOption: QueueSortOption;
@@ -646,6 +647,7 @@ const DEFAULT_QUEUE_VIEW_STATE: QueueViewState = {
   statusFilter: "all",
   commandFamilyFilter: "all",
   priorityFilter: "all",
+  workstreamFilter: "all",
   searchText: "",
   focusMode: "none",
   sortOption: "default",
@@ -692,6 +694,10 @@ const readStoredQueueViewState = (): QueueViewState => {
         typeof candidate.priorityFilter === "string"
           ? candidate.priorityFilter
           : DEFAULT_QUEUE_VIEW_STATE.priorityFilter,
+      workstreamFilter:
+        typeof candidate.workstreamFilter === "string"
+          ? candidate.workstreamFilter
+          : DEFAULT_QUEUE_VIEW_STATE.workstreamFilter,
       searchText:
         typeof candidate.searchText === "string"
           ? candidate.searchText
@@ -2099,6 +2105,9 @@ const App = () => {
   const [queuePriorityFilter, setQueuePriorityFilter] = useState(
     initialQueueViewState.priorityFilter
   );
+  const [queueWorkstreamFilter, setQueueWorkstreamFilter] = useState(
+    initialQueueViewState.workstreamFilter
+  );
   const [queueSearch, setQueueSearch] = useState(initialQueueViewState.searchText);
   const [queueSortOption, setQueueSortOption] = useState<QueueSortOption>(
     initialQueueViewState.sortOption
@@ -2583,6 +2592,19 @@ const App = () => {
     return Array.from(values).sort();
   }, [runQueue]);
 
+  const queueWorkstreamOptions = useMemo(() => {
+    const values = new Set<string>();
+    runQueue.forEach((entry) => {
+      if (entry.workstream && entry.workstream.trim()) {
+        values.add(entry.workstream);
+      }
+    });
+    return Array.from(values).sort();
+  }, [runQueue]);
+
+  const formatWorkstream = (value: string | null | undefined) =>
+    value && value.trim() ? value : "Unassigned";
+
   const queueSearchTerm = queueSearch.trim().toLowerCase();
   const filteredQueue = useMemo(() => {
     const focusStatuses = QUEUE_FOCUS_FILTERS[queueFocusMode];
@@ -2606,6 +2628,10 @@ const App = () => {
       if (queuePriorityFilter !== "all" && priorityValue !== queuePriorityFilter) {
         return false;
       }
+      const workstreamValue = formatWorkstream(item.workstream);
+      if (queueWorkstreamFilter !== "all" && workstreamValue !== queueWorkstreamFilter) {
+        return false;
+      }
       if (!queueSearchTerm) {
         return true;
       }
@@ -2621,6 +2647,7 @@ const App = () => {
     queueStatusFilter,
     queueCommandFamilyFilter,
     queuePriorityFilter,
+    queueWorkstreamFilter,
     queueSearchTerm,
     queueFocusMode,
   ]);
@@ -2651,6 +2678,7 @@ const App = () => {
     queueStatusFilter !== "all" ||
     queueCommandFamilyFilter !== "all" ||
     queuePriorityFilter !== "all" ||
+    queueWorkstreamFilter !== "all" ||
     Boolean(queueSearchTerm) ||
     queueFocusMode !== "none";
 
@@ -2671,6 +2699,7 @@ const App = () => {
     setQueueStatusFilter(DEFAULT_QUEUE_VIEW_STATE.statusFilter);
     setQueueCommandFamilyFilter(DEFAULT_QUEUE_VIEW_STATE.commandFamilyFilter);
     setQueuePriorityFilter(DEFAULT_QUEUE_VIEW_STATE.priorityFilter);
+    setQueueWorkstreamFilter(DEFAULT_QUEUE_VIEW_STATE.workstreamFilter);
     setQueueSearch(DEFAULT_QUEUE_VIEW_STATE.searchText);
     setQueueSortOption(DEFAULT_QUEUE_VIEW_STATE.sortOption);
     setQueueFocusMode(DEFAULT_QUEUE_VIEW_STATE.focusMode);
@@ -2687,6 +2716,7 @@ const App = () => {
       statusFilter: queueStatusFilter,
       commandFamilyFilter: queueCommandFamilyFilter,
       priorityFilter: queuePriorityFilter,
+      workstreamFilter: queueWorkstreamFilter,
       searchText: queueSearch,
       focusMode: queueFocusMode,
       sortOption: queueSortOption,
@@ -2696,6 +2726,7 @@ const App = () => {
     queueStatusFilter,
     queueCommandFamilyFilter,
     queuePriorityFilter,
+    queueWorkstreamFilter,
     queueSearch,
     queueFocusMode,
     queueSortOption,
@@ -3790,6 +3821,20 @@ const App = () => {
               >
                 <option value="all">All priorities</option>
                 {queuePriorityOptions.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Workstream
+              <select
+                value={queueWorkstreamFilter}
+                onChange={(event) => setQueueWorkstreamFilter(event.target.value)}
+              >
+                <option value="all">All workstreams</option>
+                {queueWorkstreamOptions.map((entry) => (
                   <option key={entry} value={entry}>
                     {entry}
                   </option>

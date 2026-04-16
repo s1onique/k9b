@@ -265,6 +265,7 @@ class NextCheckQueueItemPayload(TypedDict, total=False):
     suggestedNextOperatorMove: str | None
     resultClass: str | None
     resultSummary: str | None
+    workstream: str | None
 
 
 class NextCheckQueueCandidateAccountingPayload(TypedDict):
@@ -1113,6 +1114,7 @@ def _serialize_next_check_queue(
             "commandPreview": item.command_preview,
             "planArtifactPath": item.plan_artifact_path,
             "queueStatus": item.queue_status,
+            "workstream": item.workstream,
         }
         for item in queue
     ]
