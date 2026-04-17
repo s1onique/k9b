@@ -5031,3 +5031,171 @@ body {
 [data-theme="solarized-light"] .review-action-hint {
   color: #657b83;
 }
+
+/* ==========================================================================
+   SOLARIZED LIGHT - FINAL POLISH PASS
+   Selects, filters, and accent refinements for Solarized Light harmony
+   ========================================================================== */
+
+/* Queue filter selects - soften to match warm paper shell */
+[data-theme="solarized-light"] .next-check-filter-row select,
+[data-theme="solarized-light"] .next-check-control-row select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-filter-row select:hover,
+[data-theme="solarized-light"] .next-check-control-row select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
+
+/* LLM activity filter selects - harmonize with warm shell */
+[data-theme="solarized-light"] .llm-activity-filters select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .llm-activity-filters select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
+
+/* Proposal controls selects - warm paper background */
+[data-theme="solarized-light"] .proposal-controls select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+/* Cluster controls selects - warm paper background (already has partial override) */
+[data-theme="solarized-light"] .cluster-controls select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+/* Notification table filter selects - warm paper, softer opacity */
+[data-theme="solarized-light"] .notification-table-controls select {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #002b36;
+}
+
+/* Blue accent softening - reduce opacity slightly for better integration */
+[data-theme="solarized-light"] .eyebrow {
+  color: #268bd2;
+  opacity: 0.9;
+}
+
+/* Tab active state - softer blue accent */
+[data-theme="solarized-light"] .tab.active {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+/* Focus preset button active - softer blue */
+[data-theme="solarized-light"] .focus-preset-button.active,
+[data-theme="solarized-light"] .focus-preset-button:focus-visible {
+  border-color: rgba(38, 139, 210, 0.6);
+  background: rgba(38, 139, 210, 0.1);
+  color: #268bd2;
+}
+
+/* Notification table artifact links - softer treatment */
+[data-theme="solarized-light"] .notification-table td a.artifact-link {
+  background: rgba(38, 139, 210, 0.06);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+[data-theme="solarized-light"] .notification-table td a.artifact-link:hover {
+  background: rgba(38, 139, 210, 0.12);
+  color: #1a5f8a;
+}
+
+/* Action links - softer blue for Download, View artifact, Show details, Back to queue */
+[data-theme="solarized-light"] .toggle-details-button {
+  color: #268bd2;
+  opacity: 0.85;
+}
+
+[data-theme="solarized-light"] .toggle-details-button:hover {
+  opacity: 1;
+}
+
+/* Text button - softer accent */
+[data-theme="solarized-light"] .text-button {
+  color: #268bd2;
+  opacity: 0.85;
+}
+
+[data-theme="solarized-light"] .text-button:hover {
+  color: #1a5f8a;
+  opacity: 1;
+}
+
+/* Queue search input - warm paper background */
+[data-theme="solarized-light"] .queue-search input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-search input::placeholder {
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .queue-search input:focus {
+  border-color: rgba(38, 139, 210, 0.6);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.1);
+}
+
+/* Execution history filter count - softer muted */
+[data-theme="solarized-light"] .filter-count {
+  color: #839496;
+}
+
+/* Proposal controls inputs - warm paper */
+[data-theme="solarized-light"] .proposal-controls input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+/* Notification table search input - warm paper, softer */
+[data-theme="solarized-light"] .notification-table-controls input {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .notification-table-controls input::placeholder {
+  color: #93a1a1;
+}
+
+/* Cluster detail body - harmonized with light shell */
+[data-theme="solarized-light"] .cluster-detail-body {
+  color: #002b36;
+}
+
+/* Proposal row actions - softer secondary actions */
+[data-theme="solarized-light"] .proposal-row-actions {
+  color: #586e75;
+}
+
+/* Proposal artifacts - softer chip styling */
+[data-theme="solarized-light"] .artifact-chip {
+  background: rgba(38, 139, 210, 0.06);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .artifact-chip:hover {
+  background: rgba(38, 139, 210, 0.12);
+  color: #1a5f8a;
+}
