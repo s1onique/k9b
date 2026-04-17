@@ -36,6 +36,76 @@ from ..external_analysis.next_check_approval import (
     record_next_check_approval,
 )
 from ..health.ui import _derive_outcome_status
+
+
+def _build_review_enrichment_status_for_past_run(
+    run_config: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Build review enrichment status for past runs using run-scoped config.
+
+    This is a simplified version of health/ui's _build_review_enrichment_status
+    that only checks run-level config (from review artifact), not current policy.
+    For past runs, we want to show the status based on what was configured
+    for that specific run, independent of the current policy.
+
+    Args:
+        run_config: The review_enrichment config dict from the review artifact,
+                    or None if not present.
+
+    Returns:
+        Status dict with fields: status, reason, policyEnabled, providerConfigured,
+        adapterAvailable, runEnabled, runProvider.
+        Returns None only if run_config is None (no info available).
+    """
+    if run_config is None:
+        return None
+
+    enabled = run_config.get("enabled")
+    provider = run_config.get("provider")
+
+    # Strict boolean parsing: only treat actual booleans as authoritative.
+    # Values like "false", 1, 0, or other junk are treated as unknown,
+    # preventing misleading truth values.
+    run_enabled: bool | None
+    if isinstance(enabled, bool):
+        run_enabled = enabled
+    else:
+        # Non-bool values (including "false", 1, 0) are treated as unknown
+        run_enabled = None
+
+    # Normalize values
+    policy_enabled = True  # For past runs, we don't check current policy
+    provider_configured = bool(provider)
+    run_provider = str(provider).strip() if provider else None
+
+    # Determine status based on run-level config
+    if run_enabled is False:
+        status = "disabled-for-run"
+        reason = "Review enrichment was explicitly disabled for this run."
+    elif run_enabled is None:
+        status = "unknown"
+        reason = "Review enrichment configuration is missing for this run."
+    elif not run_provider:
+        status = "provider-missing"
+        reason = "Review enrichment was enabled but no provider was configured."
+    else:
+        # Enabled and has provider - but no artifact was produced
+        status = "not-attempted"
+        reason = (
+            f"Review enrichment was enabled for '{run_provider}' in this run, "
+            "but no artifact was recorded."
+        )
+
+    return {
+        "status": status,
+        "reason": reason,
+        "provider": None,  # Current provider - not relevant for past runs
+        "policyEnabled": policy_enabled,
+        "providerConfigured": provider_configured,
+        "adapterAvailable": None,  # Can't check without live adapter registry
+        "runEnabled": run_enabled,
+        "runProvider": run_provider,
+    }
 from ..structured_logging import emit_structured_log
 from .api import (
     build_cluster_detail_payload,
@@ -2491,6 +2561,26 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Find review enrichment artifact
         review_enrichment = _find_review_enrichment(external_analysis_dir, run_id)
 
+        # Build review_enrichment_status for past runs.
+        # For past runs, we derive status from the enrichment artifact and
+        # the review artifact's config metadata, independent of current policy.
+        has_enrichment_artifact = review_enrichment is not None
+        review_enrichment_status: dict[str, object] | None = None
+
+        if not has_enrichment_artifact:
+            # Derive status from run config in review artifact.
+            # Use the dedicated helper that only checks run-level config,
+            # not current policy (which may have changed since the run).
+            external_analysis_config = review_data.get("external_analysis_settings")
+            run_config: dict[str, object] | None = None
+            if isinstance(external_analysis_config, dict):
+                candidate = external_analysis_config.get("review_enrichment")
+                # Guard against malformed nested config (e.g., "review_enrichment": "bogus")
+                if isinstance(candidate, dict):
+                    run_config = candidate
+
+            review_enrichment_status = _build_review_enrichment_status_for_past_run(run_config)
+
         # Find next-check plan artifact
         next_check_plan = _find_next_check_plan(external_analysis_dir, run_id)
 
@@ -2519,7 +2609,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "llm_activity": {"entries": [], "summary": {"retainedEntries": 0}},
             "llm_policy": None,
             "review_enrichment": review_enrichment,
-            "review_enrichment_status": None,
+            "review_enrichment_status": review_enrichment_status,
             "provider_execution": None,
             "next_check_plan": next_check_plan,
             "next_check_queue": next_check_queue,
