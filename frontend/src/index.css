@@ -963,86 +963,6 @@ body {
    Legacy Runs Pagination (backward compatibility wrapper)
    Maps old class names to new canonical pagination styles
    ========================================================================== */
-
-/* Runs pagination - inherits .pagination styles via class chain */
-.runs-pagination {
-  /* Legacy wrapper - uses same visual styles as .pagination */
-}
-
-.runs-pagination-controls {
-  /* Maps to .pagination-controls */
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.runs-pagination-controls button {
-  /* Maps to .pagination-btn */
-  padding: 0.45rem 0.9rem;
-  border: 1px solid var(--color-border-default, rgba(148, 163, 184, 0.5));
-  border-radius: 0.5rem;
-  background: var(--color-btn-secondary-bg, rgba(30, 41, 59, 0.8));
-  color: var(--color-text-secondary, #e2e8f0);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.runs-pagination-controls button:hover:not(:disabled) {
-  background: var(--color-interactive-hover, rgba(71, 85, 105, 0.6));
-  border-color: var(--color-border-emphasis, rgba(100, 116, 139, 0.8));
-}
-
-.runs-pagination-controls button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.runs-pagination-controls button:focus-visible {
-  outline: 2px solid var(--color-interactive-focus, #38bdf8);
-  outline-offset: 2px;
-}
-
-.runs-pagination-controls span {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary, rgba(248, 250, 252, 0.8));
-  font-weight: 600;
-}
-
-/* Runs pagination size selector - maps to .pagination-size-selector */
-.runs-pagination-size-selector {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.6rem;
-  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
-  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.2));
-  border-radius: 0.4rem;
-}
-
-.runs-pagination-size-selector label {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
-  white-space: nowrap;
-}
-
-.runs-pagination-size-selector select {
-  padding: 0.25rem 0.4rem;
-  border: 1px solid var(--color-border-default, rgba(148, 163, 184, 0.4));
-  border-radius: 0.3rem;
-  background: var(--color-input-bg, rgba(15, 23, 42, 0.85));
-  color: var(--color-input-text, #f8fafc);
-  font-size: 0.78rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.runs-pagination-size-selector select:hover {
-  border-color: var(--color-border-emphasis, rgba(100, 116, 139, 0.6));
-}
-
 .status-pill {
   padding: 0.25rem 0.8rem;
   border-radius: 999px;
@@ -4349,23 +4269,6 @@ body {
 [data-theme="solarized-light"] .runs-filter-button.active .runs-filter-count {
   color: #268bd2;
 }
-
-/* Pagination - stronger text */
-[data-theme="solarized-light"] .runs-pagination-controls span {
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .runs-pagination-controls button {
-  background: rgba(147, 161, 161, 0.12);
-  border-color: rgba(147, 161, 161, 0.4);
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .runs-pagination-controls button:hover:not(:disabled) {
-  background: rgba(147, 161, 161, 0.22);
-  color: #002b36;
-}
-
 /* Muted text - improved readability */
 [data-theme="solarized-light"] .muted {
   color: #657b83;
@@ -5697,12 +5600,6 @@ body {
 
 [data-theme="solarized-light"] .notification-table-controls input::placeholder {
   color: #93a1a1;
-}
-
-/* Runs pagination buttons - Solarized Light styling */
-[data-theme="solarized-light"] .runs-pagination-controls button:disabled {
-  opacity: 0.55;
-  color: #839496;
 }
 
 /* Cluster detail body - harmonized with light shell */
