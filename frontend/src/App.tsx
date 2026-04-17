@@ -2892,32 +2892,14 @@ const NotificationHistoryTable = () => {
           )}
         </div>
       </div>
-      <div className="notification-pagination">
-        <div className="notification-pagination-controls">
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={loading || page <= 1}
-            aria-label="Previous notifications page"
-          >
-            Previous
-          </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={loading || page >= totalPages}
-            aria-label="Next notifications page"
-          >
-            Next
-          </button>
-        </div>
-        <p className="muted small">
-          Showing {displayStart}–{displayEnd} of {totalResults}
-        </p>
-      </div>
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={totalResults}
+        pageSize={perPage}
+        onPageChange={setPage}
+        label="Notifications"
+      />
     </>
   );
 };

@@ -921,6 +921,44 @@ body {
   font-weight: 600;
 }
 
+/* Responsive pagination: stack controls on narrow widths */
+@media (max-width: 600px) {
+  .pagination {
+    gap: 0.6rem;
+    padding-top: 0.75rem;
+  }
+
+  .pagination-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .pagination-page-indicator {
+    order: -1;
+    width: 100%;
+    text-align: center;
+    padding: 0.25rem 0;
+    min-width: unset;
+    border-bottom: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+    margin-bottom: 0.25rem;
+  }
+
+  .pagination-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .pagination-size-selector {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pagination-summary {
+    font-size: 0.72rem;
+  }
+}
+
 /* ==========================================================================
    Legacy Runs Pagination (backward compatibility wrapper)
    Maps old class names to new canonical pagination styles
@@ -3955,44 +3993,6 @@ body {
   color: rgba(248, 250, 252, 0.8);
 }
 
-.notification-pagination {
-  margin-top: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.notification-pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.notification-pagination-controls button {
-  border-radius: 999px;
-  padding: 0.35rem 0.85rem;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: transparent;
-  color: #f8fafc;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.notification-pagination-controls button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.notification-pagination-controls span {
-  font-size: 0.85rem;
-  font-weight: 600;
-  min-width: 110px;
-  text-align: center;
-  color: rgba(248, 250, 252, 0.8);
-}
-
 .alert {
   padding: 0.75rem 1rem;
   background: rgba(248, 113, 113, 0.2);
@@ -5697,29 +5697,6 @@ body {
 
 [data-theme="solarized-light"] .notification-table-controls input::placeholder {
   color: #93a1a1;
-}
-
-/* Notification pagination text - stronger contrast for legibility on warm paper */
-[data-theme="solarized-light"] .notification-pagination-controls span {
-  color: #586e75;
-}
-
-/* Notification pagination buttons - stronger contrast for active state */
-[data-theme="solarized-light"] .notification-pagination-controls button {
-  background: rgba(147, 161, 161, 0.15);
-  border: 1px solid rgba(147, 161, 161, 0.4);
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .notification-pagination-controls button:hover:not(:disabled) {
-  background: rgba(147, 161, 161, 0.25);
-  border-color: rgba(147, 161, 161, 0.6);
-}
-
-/* Notification pagination disabled buttons - visible but clearly disabled */
-[data-theme="solarized-light"] .notification-pagination-controls button:disabled {
-  opacity: 0.6;
-  color: #839496;
 }
 
 /* Runs pagination buttons - Solarized Light styling */

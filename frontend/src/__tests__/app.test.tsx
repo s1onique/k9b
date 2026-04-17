@@ -1917,29 +1917,31 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
-    await waitFor(() => expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument());
+    // Page indicator text is broken across elements, so we search for a parent that contains "Page 1 of 2"
+    const notificationSection = document.getElementById("notifications");
+    await waitFor(() => expect(notificationSection!.textContent).toMatch(/Page\s+1\s+of\s+2/));
     expect(fetchMock.mock.calls.some(([input]) => {
       const url = typeof input === "string" ? input : input.url;
       return url.includes("limit=50&page=1");
     })).toBe(true);
-    const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
+    const nextButton = screen.getByRole("button", { name: /notifications next page/i });
     expect(nextButton).not.toBeDisabled();
     await act(async () => {
       await user.click(nextButton);
     });
-    await waitFor(() => expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument());
+    await waitFor(() => expect(notificationSection!.textContent).toMatch(/Page\s+2\s+of\s+2/));
     expect(fetchMock.mock.calls.some(([input]) => {
       const url = typeof input === "string" ? input : input.url;
       return url.includes("/api/notifications?limit=50&page=2");
     })).toBe(true);
     const pageTwoRows = await screen.findAllByTestId("notification-row");
     expect(pageTwoRows).toHaveLength(10);
-    const prevButton = screen.getByRole("button", { name: /Previous notifications page/i });
+    const prevButton = screen.getByRole("button", { name: /notifications previous page/i });
     expect(prevButton).not.toBeDisabled();
     await act(async () => {
       await user.click(prevButton);
     });
-    await waitFor(() => expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument());
+    await waitFor(() => expect(notificationSection!.textContent).toMatch(/Page\s+1\s+of\s+2/));
     expect(fetchMock.mock.calls.filter(([input]) => {
       const url = typeof input === "string" ? input : input.url;
       return url.includes("page=1");
@@ -1965,10 +1967,11 @@ describe("App", () => {
     await screen.findByRole("heading", { name: /Notification history/i });
     await screen.findAllByTestId("notification-row");
     await screen.findByRole("option", { name: /Warning/i });
-    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
-    const nextButton = screen.getByRole("button", { name: /Next notifications page/i });
-    expect(nextButton).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Previous notifications page/i })).toBeDisabled();
+    // Single-page pagination hides nav controls entirely - no next/prev buttons
+    // Verify only pagination summary is present (not page indicator)
+    const notificationSection = document.getElementById("notifications");
+    expect(notificationSection).not.toBeNull();
+    expect(within(notificationSection!).getByText(/Showing 1–30 of 30/i)).toBeInTheDocument();
   });
 
   test("filters notification history table by kind, cluster, and search", async () => {
@@ -2099,14 +2102,30 @@ describe("App", () => {
     };
     const payloads = {
       ...defaultPayloads,
+      // Override notifications entries to ensure multi-page initial state
       "/api/notifications": basePayload,
+      "/api/notifications?limit=50&page=1": basePayload,
       "/api/notifications?search=Entry&limit=50&page=1": searchPayload,
     };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: /Notification history/i });
-    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
+
+    // Wait for pagination to load - look for the page indicator first
+    const notificationSection = document.getElementById("notifications");
+    expect(notificationSection).not.toBeNull();
+    await waitFor(() => {
+      expect(notificationSection!.textContent).toMatch(/Page\s+1\s+of\s+2/);
+    });
+
+    // Initial state: 60 notifications across 2 pages, showing first 50
+    expect(notificationSection!.textContent).toMatch(/Showing.*1.*50.*of.*60/);
+    // Page indicator is split across elements: "Page ", <strong>1</strong>, " of ", <strong>2</strong>
+    // Use textContent match since it concatenates all text nodes
+    expect(notificationSection!.textContent).toMatch(/Page\s+1\s+of\s+2/);
+
+    // Now apply search filter
     const searchInput = screen.getByRole("searchbox", {
       name: /Notification text search/i,
     });
@@ -2114,9 +2133,12 @@ describe("App", () => {
       await user.type(searchInput, "Entry");
     });
     await waitFor(() => expect(screen.getAllByTestId("notification-row")).toHaveLength(30));
-    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Showing 1–30 of 30/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /Next notifications page/i })).toBeDisabled();
+
+    // Search reduces to 30 items (1 page): page indicator hidden, only range summary
+    // Check the pagination summary text content directly (split across strong elements)
+    expect(notificationSection!.textContent).toMatch(/Showing.*1.*30.*of.*30/);
+    // Single-page: no Next button exists (nav controls hidden when totalPages <= 1)
+    expect(screen.queryByRole("button", { name: /notifications next page/i })).toBeNull();
   });
 
   test("autorefresh dropdown persists selection and disables timer", async () => {

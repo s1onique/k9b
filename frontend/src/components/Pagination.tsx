@@ -89,8 +89,8 @@ const Pagination = ({
   );
 
   return (
-    <nav 
-      className="pagination" 
+    <nav
+      className="pagination"
       aria-label={paginationLabel}
       role="navigation"
     >
@@ -108,11 +108,7 @@ const Pagination = ({
             <span className="pagination-btn-label">Previous</span>
           </button>
 
-          <span 
-            className="pagination-page-indicator" 
-            aria-live="polite" 
-            aria-atomic="true"
-          >
+          <span className="pagination-page-indicator">
             Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
           </span>
 
@@ -132,7 +128,7 @@ const Pagination = ({
       {/* Page size selector - shown intentionally even on single-page datasets */}
       {showPageSizeSelector && (
         <div className="pagination-size-selector" role="group" aria-label="Items per page selector">
-          <label 
+          <label
             htmlFor={`pagination-${label?.toLowerCase().replace(/\s+/g, "-") || "default"}-page-size`}
             className="pagination-size-label"
           >
@@ -154,10 +150,10 @@ const Pagination = ({
         </div>
       )}
 
-      {/* Range summary - single announcement, only when items exist */}
-      <p 
-        className="pagination-summary" 
-        aria-live="polite" 
+      {/* Single live region: range summary that announces all pagination changes */}
+      <p
+        className="pagination-summary"
+        aria-live="polite"
         aria-atomic="true"
       >
         Showing <strong>{startItem}</strong>–<strong>{endItem}</strong> of <strong>{totalItems}</strong>
