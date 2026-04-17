@@ -3145,22 +3145,35 @@ const App = () => {
       return;
     }
     refreshInProgress.current = true;
+    let active = true;
     try {
       setError(null);
-      // Fetch data for the selected run if one is selected, otherwise latest run
-      const [runPayload, fleetPayload, proposalsPayload] = await Promise.all([
+      // Fetch runs list AND run data in parallel to update the runs list on refresh.
+      // This ensures new runs surface without requiring a full browser reload.
+      const [runsListPayload, runPayload, fleetPayload, proposalsPayload] = await Promise.all([
+        fetchRunsList(),
         fetchRun(selectedRunId ?? undefined),
         fetchFleet(),
         fetchProposals(),
       ]);
-      setRun(runPayload);
-      setFleet(fleetPayload);
-      setProposals(proposalsPayload);
-      if (!selectedClusterLabel) {
-        const fallbackLabel = fleetPayload.clusters[0]?.label ?? null;
-        if (fallbackLabel) {
-          setSelectedClusterLabel(fallbackLabel);
+      if (active) {
+        // Update runs list first so derived state (latestRunId) is consistent
+        setRunsList(runsListPayload.runs);
+      }
+      if (active) {
+        setRun(runPayload);
+      }
+      if (active) {
+        setFleet(fleetPayload);
+        if (!selectedClusterLabel) {
+          const fallbackLabel = fleetPayload.clusters[0]?.label ?? null;
+          if (fallbackLabel) {
+            setSelectedClusterLabel(fallbackLabel);
+          }
         }
+      }
+      if (active) {
+        setProposals(proposalsPayload);
       }
       setLastRefresh(dayjs());
       // Clear local execution results after successful refresh reconciliation.
@@ -3179,10 +3192,13 @@ const App = () => {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (active) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       refreshInProgress.current = false;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClusterLabel, selectedRunId]);
 
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>

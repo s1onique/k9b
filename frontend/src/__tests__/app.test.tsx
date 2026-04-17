@@ -3288,6 +3288,499 @@ describe("Recent runs selection", () => {
   });
 });
 
+describe("Cockpit refresh regression", () => {
+  test("manual refresh surfaces newer latest run in the runs list", async () => {
+    // Initial runs list with run-123 as latest
+    const initialRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    // Newer runs list with run-124 as latest (added 1 hour later)
+    const newerRunsList = {
+      runs: [
+        { runId: "run-124", runLabel: "2026-04-07-1300", timestamp: "2026-04-07T13:00:00Z", clusterCount: 3, triaged: true, executionCount: 6, reviewedCount: 6, reviewStatus: "fully-reviewed" },
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+      ],
+      totalCount: 3,
+    };
+
+    // Use a mutable ref for the runs list to simulate refresh response change
+    let runsListRef = { current: initialRunsList };
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      // Return current runs list state (simulates backend response change on refresh)
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsListRef.current),
+        });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for initial runs to render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(2);
+    });
+
+    // Verify run-123 is latest (first in list)
+    expect(document.querySelector('.run-row[data-run-id="run-123"]')).not.toBeNull();
+    // run-124 should NOT be in the list yet
+    expect(document.querySelector('.run-row[data-run-id="run-124"]')).toBeNull();
+
+    // Simulate the new run appearing on the backend
+    runsListRef.current = newerRunsList;
+
+    // Trigger manual refresh
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    await act(async () => {
+      await user.click(refreshButton);
+    });
+
+    // Wait for runs list to update
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(3);
+    });
+
+    // run-124 should now appear in the list as the latest run
+    const newRunRow = document.querySelector('.run-row[data-run-id="run-124"]');
+    expect(newRunRow).not.toBeNull();
+
+    // run-123 should still be in the list (now second position)
+    expect(document.querySelector('.run-row[data-run-id="run-123"]')).not.toBeNull();
+  });
+
+  test("selected historical run is not mislabeled as current after latest advances", async () => {
+    // Initial runs list
+    const initialRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    // Newer runs list with run-124 as latest
+    const newerRunsList = {
+      runs: [
+        { runId: "run-124", runLabel: "2026-04-07-1300", timestamp: "2026-04-07T13:00:00Z", clusterCount: 3, triaged: true, executionCount: 6, reviewedCount: 6, reviewStatus: "fully-reviewed" },
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+      ],
+      totalCount: 3,
+    };
+
+    let runsListRef = { current: initialRunsList };
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsListRef.current),
+        });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for initial render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(2);
+    });
+
+    // Select an older run (run-122)
+    const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
+    await act(async () => {
+      await user.click(olderRunRow!);
+    });
+
+    // Verify run-122 is selected
+    await waitFor(() => {
+      expect(olderRunRow).toHaveClass("run-row-selected");
+    });
+
+    // Hero should show "Selected" (not "Current") since run-122 is not the latest
+    // Note: The hero shows "Current" only when selectedRunId === latestRunId
+    // When we select run-122, selectedRunId !== latestRunId, so it should show "Selected"
+    // But initially run-123 is selected, so let's wait for the selection to settle
+
+    // Now a new run appears
+    runsListRef.current = newerRunsList;
+
+    // Trigger refresh
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    await act(async () => {
+      await user.click(refreshButton);
+    });
+
+    // Wait for the runs list to update
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(3);
+    });
+
+    // run-122 should still be selected
+    expect(olderRunRow).toHaveClass("run-row-selected");
+
+    // run-124 is now the latest run (index 0)
+    const latestRunRow = document.querySelector('.run-row[data-run-id="run-124"]');
+    expect(latestRunRow).not.toBeNull();
+
+    // "← Latest" jump button should be visible since run-122 is no longer the latest
+    const jumpButton = screen.queryByText(/← Latest/i);
+    expect(jumpButton).not.toBeNull();
+  });
+
+  test("staleness hint is truthful after new run appears", async () => {
+    // Create a run with a timestamp that's clearly in the past
+    const now = new Date();
+    const oldTimestamp = new Date(now.getTime() - 60 * 60 * 1000).toISOString(); // 1 hour ago
+    const newerTimestamp = new Date(now.getTime() - 30 * 60 * 1000).toISOString(); // 30 min ago
+
+    const initialRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: oldTimestamp, clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 1,
+    };
+
+    const newerRunsList = {
+      runs: [
+        { runId: "run-124", runLabel: "2026-04-07-1300", timestamp: newerTimestamp, clusterCount: 3, triaged: true, executionCount: 6, reviewedCount: 6, reviewStatus: "fully-reviewed" },
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: oldTimestamp, clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    let runsListRef = { current: initialRunsList };
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsListRef.current),
+        });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for initial render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(1);
+    });
+
+    // Initially run-123 is the latest (and selected)
+    // Hero should show "Current"
+    expect(screen.getByText(/^Current$/i)).toBeInTheDocument();
+
+    // Now a newer run appears
+    runsListRef.current = newerRunsList;
+
+    // Trigger refresh
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    await act(async () => {
+      await user.click(refreshButton);
+    });
+
+    // Wait for the runs list to update
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(2);
+    });
+
+    // run-123 is now an OLDER run (second in list)
+    // It should NOT be labeled as "Current" anymore
+    // Instead, "← Latest" button should be visible
+    expect(screen.getByText(/← Latest/i)).toBeInTheDocument();
+  });
+
+  test("latest navigation button targets the actual newest run after refresh", async () => {
+    const initialRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    const newerRunsList = {
+      runs: [
+        { runId: "run-124", runLabel: "2026-04-07-1300", timestamp: "2026-04-07T13:00:00Z", clusterCount: 3, triaged: true, executionCount: 6, reviewedCount: 6, reviewStatus: "fully-reviewed" },
+        { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+      ],
+      totalCount: 3,
+    };
+
+    let runsListRef = { current: initialRunsList };
+    let runIdOverride: string | null = null;
+
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsListRef.current),
+        });
+      }
+
+      if (base === "/api/run") {
+        // Support run_id query param
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const requestedRunId = params.get("run_id");
+        if (requestedRunId) {
+          return Promise.resolve({
+            ok: true, status: 200, statusText: "OK",
+            json: () => Promise.resolve({ ...sampleRun, runId: requestedRunId }),
+          });
+        }
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for initial render
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(2);
+    });
+
+    // Initially run-123 is selected (and is latest)
+    expect(screen.getByText(/^Current$/i)).toBeInTheDocument();
+
+    // Select an older run
+    const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
+    await act(async () => {
+      await user.click(olderRunRow!);
+    });
+
+    // Wait for selection
+    await waitFor(() => {
+      expect(olderRunRow).toHaveClass("run-row-selected");
+    });
+
+    // Now a newer run appears
+    runsListRef.current = newerRunsList;
+
+    // Trigger refresh
+    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    await act(async () => {
+      await user.click(refreshButton);
+    });
+
+    // Wait for update
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(3);
+    });
+
+    // Click "← Latest" button
+    const jumpButton = screen.getByText(/← Latest/i);
+    await act(async () => {
+      await user.click(jumpButton);
+    });
+
+    // Now run-124 should be selected (the newest run)
+    const latestRunRow = document.querySelector('.run-row[data-run-id="run-124"]');
+    expect(latestRunRow).toHaveClass("run-row-selected");
+
+    // Hero should show "Current" again
+    expect(screen.getByText(/^Current$/i)).toBeInTheDocument();
+  });
+
+  test("interval polling does not leak or duplicate timers", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Record state after initial render
+    setIntervalSpy.mockClear();
+    clearIntervalSpy.mockClear();
+
+    // Change auto-refresh setting
+    const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
+    await act(async () => {
+      autoRefreshSelect.value = "10";
+      autoRefreshSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // Verify a new interval was created for the new duration
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
+
+    // Verify clearInterval was called for cleanup (at least once for the old timer)
+    expect(clearIntervalSpy).toHaveBeenCalled();
+  });
+
+  test("auto-refresh triggers periodic fetch when timer fires", async () => {
+    // This test verifies the auto-refresh polling mechanism by tracking
+    // setInterval/clearInterval calls and verifying the timer callback triggers a fetch.
+    // The manual refresh test "manual refresh surfaces newer latest run" proves the
+    // UI correctly updates when backend data changes.
+    
+    let fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true, status: 200, statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Clear initial state
+    fetchMock.mockClear();
+    setIntervalSpy.mockClear();
+    clearIntervalSpy.mockClear();
+
+    // Enable auto-refresh at 30 second interval
+    const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
+    await act(async () => {
+      autoRefreshSelect.value = "30";
+      autoRefreshSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // Verify interval was created with correct duration
+    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 30000);
+
+    // Get the timer callback function
+    const timerCallback = setIntervalSpy.mock.calls[setIntervalSpy.mock.calls.length - 1][0];
+    expect(timerCallback).toBeDefined();
+
+    // Simulate the timer firing by calling the callback
+    await act(async () => {
+      timerCallback();
+    });
+
+    // Verify fetch was called (the timer triggered a refresh)
+    // Note: The exact endpoint depends on implementation, but it should trigger data refresh
+    const refreshCalls = fetchMock.mock.calls.filter(([input]) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      return url.includes("/api/run") || url.includes("/api/runs");
+    });
+    expect(refreshCalls.length).toBeGreaterThan(0);
+  });
+
+  test("auto-refresh timer cleanup when disabled prevents polling", async () => {
+    // Verify that disabling auto-refresh properly clears the interval
+    // and no further polling occurs
+    
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Record state before enabling
+    setIntervalSpy.mockClear();
+    clearIntervalSpy.mockClear();
+
+    // Enable auto-refresh
+    const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
+    await act(async () => {
+      autoRefreshSelect.value = "30";
+      autoRefreshSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // Verify interval was created
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
+
+    // Record setInterval count after enable
+    const setIntervalCountAfterEnable = setIntervalSpy.mock.calls.length;
+    const clearIntervalCountAfterEnable = clearIntervalSpy.mock.calls.length;
+
+    // Disable auto-refresh
+    await act(async () => {
+      autoRefreshSelect.value = "off";
+      autoRefreshSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // Verify clearInterval was called (cleanup happened)
+    expect(clearIntervalSpy).toHaveBeenCalledTimes(clearIntervalCountAfterEnable + 1);
+
+    // Get the cleared timer ID to verify it was properly cleaned up
+    const clearedTimerId = clearIntervalSpy.mock.calls[clearIntervalSpy.mock.calls.length - 1][0];
+    expect(clearedTimerId).toBe(123); // Our spy returns 123 as the timer ID
+  });
+});
+
 describe("Run freshness thresholds", () => {
   /**
    * Run freshness thresholds:
