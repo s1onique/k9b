@@ -116,35 +116,35 @@ class TestCRDDemotionInEarlyIncidentTriage(unittest.TestCase):
 
     def test_crd_demoted_in_incident_initial_triage(self) -> None:
         """CRD candidate should receive penalty in incident + initial_triage."""
-        score, demotion_applied = _compute_candidate_sort_score(
+        score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
             self.crd_candidate,
             workstream=Workstream.INCIDENT,
             review_stage=ReviewStage.INITIAL_TRIAGE,
         )
         self.assertTrue(demotion_applied)
         # Score should be significantly lower than without demotion
-        score_no_demotion, _ = _compute_candidate_sort_score(
+        score_no_demotion, _, _, _, _, _ = _compute_candidate_sort_score(
             self.crd_candidate, workstream=None, review_stage=None
         )
         self.assertLess(score, score_no_demotion)
 
     def test_crd_not_demoted_in_incident_focused(self) -> None:
         """CRD candidate should NOT be demoted in focused_investigation."""
-        score, demotion_applied = _compute_candidate_sort_score(
+        score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
             self.crd_candidate,
             workstream=Workstream.INCIDENT,
             review_stage=ReviewStage.FOCUSED_INVESTIGATION,
         )
         self.assertFalse(demotion_applied)
         # Score should be the same as baseline
-        score_no_context, _ = _compute_candidate_sort_score(
+        score_no_context, _, _, _, _, _ = _compute_candidate_sort_score(
             self.crd_candidate, workstream=None, review_stage=None
         )
         self.assertEqual(score, score_no_context)
 
     def test_crd_not_demoted_in_drift_parity_validation(self) -> None:
         """CRD candidate should NOT be demoted in drift + parity_validation."""
-        score, demotion_applied = _compute_candidate_sort_score(
+        score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
             self.crd_candidate,
             workstream=Workstream.DRIFT,
             review_stage=ReviewStage.PARITY_VALIDATION,
@@ -153,7 +153,7 @@ class TestCRDDemotionInEarlyIncidentTriage(unittest.TestCase):
 
     def test_crd_not_demoted_in_evidence_workstream(self) -> None:
         """CRD candidate should NOT be demoted in evidence workstream."""
-        score, demotion_applied = _compute_candidate_sort_score(
+        score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
             self.crd_candidate,
             workstream=Workstream.EVIDENCE,
             review_stage=ReviewStage.INITIAL_TRIAGE,
@@ -162,7 +162,7 @@ class TestCRDDemotionInEarlyIncidentTriage(unittest.TestCase):
 
     def test_describe_not_demoted_in_incident_initial_triage(self) -> None:
         """Non-CRD candidates should NOT be demoted in early incident triage."""
-        score, demotion_applied = _compute_candidate_sort_score(
+        score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
             self.describe_candidate,
             workstream=Workstream.INCIDENT,
             review_stage=ReviewStage.INITIAL_TRIAGE,
@@ -171,7 +171,7 @@ class TestCRDDemotionInEarlyIncidentTriage(unittest.TestCase):
 
     def test_logs_not_demoted_in_incident_initial_triage(self) -> None:
         """Non-CRD candidates should NOT be demoted in early incident triage."""
-        score, demotion_applied = _compute_candidate_sort_score(
+        score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
             self.logs_candidate,
             workstream=Workstream.INCIDENT,
             review_stage=ReviewStage.INITIAL_TRIAGE,
@@ -309,7 +309,7 @@ class TestGlobalBehaviorUnchanged(unittest.TestCase):
         ]
         for family in families:
             candidate = _make_candidate(f"kubectl test for {family.value}", family)
-            score, demotion_applied = _compute_candidate_sort_score(
+            score, demotion_applied, _, _, _, _ = _compute_candidate_sort_score(
                 candidate,
                 workstream=Workstream.INCIDENT,
                 review_stage=ReviewStage.INITIAL_TRIAGE,
