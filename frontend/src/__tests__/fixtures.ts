@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import { within } from "@testing-library/react";
 import type {
   ClusterDetailPayload,
@@ -13,12 +14,18 @@ import type {
   RunsListPayload,
 } from "../types";
 
+// Helper to generate timestamps relative to test execution time.
+// All fixtures use dynamic timestamps so freshness tests always have predictable
+// behavior regardless of when tests run.
+const minsAgo = (minutes: number) => dayjs().subtract(minutes, "minute").toISOString();
+const secsAgo = (seconds: number) => dayjs().subtract(seconds, "second").toISOString();
+
 export const sampleRunsList: RunsListPayload = {
   runs: [
     {
       runId: "run-123",
       runLabel: "2026-04-07-1200",
-      timestamp: "2026-04-07T12:00:00Z",
+      timestamp: minsAgo(5),
       clusterCount: 3,
       triaged: true,
       executionCount: 5,
@@ -28,7 +35,7 @@ export const sampleRunsList: RunsListPayload = {
     {
       runId: "run-122",
       runLabel: "2026-04-07-1100",
-      timestamp: "2026-04-07T11:00:00Z",
+      timestamp: minsAgo(70),  // 70 min ago → aging/warning
       clusterCount: 3,
       triaged: false,
       executionCount: 3,
@@ -268,7 +275,7 @@ export const makeProviderExecution = (
 export const sampleRun: RunPayload = {
   runId: "run-123",
   label: "Daily sweep",
-  timestamp: "2026-04-06T12:00:00Z",
+  timestamp: minsAgo(5),
   collectorVersion: "collector:v1.2.0",
   clusterCount: 2,
   drilldownCount: 5,

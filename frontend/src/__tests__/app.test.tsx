@@ -3752,11 +3752,18 @@ describe("Run freshness thresholds", () => {
 
   test("run shows Aging status when timestamp is > 15 and <= 45 minutes old", async () => {
     // Create a run with timestamp 30 minutes ago (should be Aging)
+    const agingTimestamp = minsAgo(30); // 30 minutes ago
     const agingRun = {
       ...sampleRun,
-      timestamp: minsAgo(30), // 30 minutes ago
+      timestamp: agingTimestamp,
     };
-    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": agingRun }));
+    const agingRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "Aging run", timestamp: agingTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 1,
+    };
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": agingRun, "/api/runs": agingRunsList }));
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
@@ -3776,11 +3783,18 @@ describe("Run freshness thresholds", () => {
 
   test("run shows Stale status when timestamp is > 45 minutes old", async () => {
     // Create a run with timestamp 60 minutes ago (should be Stale)
+    const staleTimestamp = minsAgo(60); // 60 minutes ago
     const staleRun = {
       ...sampleRun,
-      timestamp: minsAgo(60), // 60 minutes ago
+      timestamp: staleTimestamp,
     };
-    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun }));
+    const staleRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "Stale run", timestamp: staleTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 1,
+    };
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun, "/api/runs": staleRunsList }));
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
@@ -3819,7 +3833,13 @@ describe("Run freshness thresholds", () => {
       ...sampleRun,
       timestamp: agingTimestamp,
     };
-    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": agingRun }));
+    const agingRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "Aging boundary", timestamp: agingTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 1,
+    };
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": agingRun, "/api/runs": agingRunsList }));
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
@@ -4147,12 +4167,17 @@ describe("Cockpit header selection vs freshness semantics", () => {
   test("State 3: latest run itself is stale - shows Stale indicator for latest run", async () => {
     // Latest run is 1 hour old (Stale)
     const staleTimestamp = minsAgo(60);
-
     const staleRun = {
       ...sampleRun,
       timestamp: staleTimestamp,
     };
-    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun }));
+    const staleRunsList = {
+      runs: [
+        { runId: "run-123", runLabel: "Stale latest", timestamp: staleTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 1,
+    };
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun, "/api/runs": staleRunsList }));
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });

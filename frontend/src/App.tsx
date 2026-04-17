@@ -3859,7 +3859,15 @@ const App = () => {
     );
   }
 
-  const runRecency = relativeRecency(run.timestamp);
+  // Derive header display metadata directly from the runs list so that clicking
+  // "← Latest" or selecting a different run updates the header immediately, before
+  // the async run-detail fetch completes. runsList is always populated before this
+  // point (we are past the loading guard) and is updated on every refresh cycle.
+  const selectedRunListEntry = runsList.find((r) => r.runId === selectedRunId) ?? null;
+  const headerRunId = selectedRunListEntry?.runId ?? run.runId;
+  const headerRunLabel = selectedRunListEntry?.runLabel ?? run.label;
+  const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run.timestamp;
+  const runRecency = relativeRecency(headerRunTimestamp);
   const latestRunRecency = latestRunId ? relativeRecency(runsList.find(r => r.runId === latestRunId)?.timestamp ?? run.timestamp) : runRecency;
   const runFresh = !isStaleTimestamp(run.timestamp);
   const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
@@ -4019,16 +4027,16 @@ const App = () => {
                 </span>
               </div>
               <div className="hero-run-title">
-                <strong>Run {run.label}</strong>
-                <span className="hero-run-id">ID {run.runId}</span>
+                <strong>Run {headerRunLabel}</strong>
+                <span className="hero-run-id">ID {headerRunId}</span>
               </div>
               <p className="hero-run-captured">Captured {runRecency}</p>
             </div>
             <div className="hero-run-freshness">
               {isSelectedRunLatest && (
-                <span className={`freshness-indicator freshness-indicator--${getRunFreshnessLevel(run.timestamp)}`}>
-                  <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[getRunFreshnessLevel(run.timestamp)]}</span>
-                  <span className="freshness-indicator__label">{FRESHNESS_LABEL[getRunFreshnessLevel(run.timestamp)]}</span>
+                <span className={`freshness-indicator freshness-indicator--${getRunFreshnessLevel(headerRunTimestamp)}`}>
+                  <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[getRunFreshnessLevel(headerRunTimestamp)]}</span>
+                  <span className="freshness-indicator__label">{FRESHNESS_LABEL[getRunFreshnessLevel(headerRunTimestamp)]}</span>
                 </span>
               )}
               {!isSelectedRunLatest && (
