@@ -3294,7 +3294,7 @@ const App = () => {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, selectedRunId]);
 
   useEffect(() => {
     let timerId: ReturnType<typeof setInterval> | null = null;
