@@ -446,9 +446,9 @@ describe("Advisory Panel Components", () => {
         expect(childElements?.[2].className).toContain("advisory-summary-collapsible");
       }
 
-      // Then review-enrichment-grid with lists
+      // Then advisory-lower-sections container with new structured sections
       const gridIndex = Array.from(childElements || []).findIndex(
-        (el) => el.className.includes("review-enrichment-grid")
+        (el) => el.className.includes("advisory-lower-sections")
       );
       expect(gridIndex).toBeGreaterThan(0);
     });

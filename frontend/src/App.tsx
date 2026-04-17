@@ -1103,22 +1103,141 @@ const LLMPolicyPanel = ({ policy }: { policy?: LLMPolicy | null }) => {
   );
 };
 
-const ReviewEnrichmentList = ({
-  title,
-  entries,
-}: {
-  title: string;
-  entries: string[];
-}) => {
-  if (!entries.length) {
+// ==========================================================================
+// Advisory lower-section view-model helpers
+// ==========================================================================
+
+export type ParsedNextCheck = {
+  intent: string;
+  targetCluster: string | null;
+  commandPreview: string | null;
+};
+
+/**
+ * Parse a raw next-check string into structured fields.
+ * Handles:
+ *   - Optional [cluster-name] prefix → targetCluster
+ *   - Optional kubectl / k9s command in the text → commandPreview
+ *   - Remaining text → intent
+ * Keeps string surgery out of JSX.
+ */
+export const parseNextCheckEntry = (raw: string): ParsedNextCheck => {
+  const clusterPrefixMatch = raw.match(/^\[([^\]]{1,60})\]\s*/);
+  const withoutPrefix = clusterPrefixMatch ? raw.slice(clusterPrefixMatch[0].length) : raw;
+  const targetCluster = clusterPrefixMatch ? clusterPrefixMatch[1] : null;
+
+  const cmdMatch = withoutPrefix.match(/\b(kubectl\s+\S+(?:\s+[^\n]+)?|k9s\b[^\n]*)/);
+
+  if (!cmdMatch) {
+    return {
+      intent: withoutPrefix.slice(0, 120).trim(),
+      targetCluster,
+      commandPreview: null,
+    };
+  }
+
+  const commandRaw = cmdMatch[1].trim();
+  const cmdStart = withoutPrefix.indexOf(cmdMatch[0]);
+  const beforeCmd = withoutPrefix.slice(0, cmdStart).trim().replace(/[:\-–]+$/, "").trim();
+
+  if (!beforeCmd) {
+    // Whole entry is a command - show as intent, no separate preview
+    return {
+      intent: commandRaw.slice(0, 80).trim(),
+      targetCluster,
+      commandPreview: null,
+    };
+  }
+
+  return {
+    intent: beforeCmd,
+    targetCluster,
+    commandPreview: commandRaw.slice(0, 90),
+  };
+};
+
+// ==========================================================================
+// Specialized lower advisory section components
+// ==========================================================================
+
+/** Top concerns - compact concern rows with left accent */
+const AdvisoryTopConcernsSection = ({ concerns }: { concerns: string[] }) => {
+  if (!concerns.length) {
     return null;
   }
   return (
-    <div className="review-enrichment-item">
-      <p className="tiny">{title}</p>
-      <ul>
-        {entries.map((entry) => (
-          <li key={entry}>{entry}</li>
+    <div className="advisory-lower-section advisory-concerns-section">
+      <p className="advisory-lower-section-label">Top concerns</p>
+      <ul className="advisory-concerns-list">
+        {concerns.map((concern) => (
+          <li key={concern} className="advisory-concern-row">
+            {concern}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/** Evidence gaps - uncertainty-oriented rows with gap marker */
+const AdvisoryEvidenceGapsSection = ({ gaps }: { gaps: string[] }) => {
+  if (!gaps.length) {
+    return null;
+  }
+  return (
+    <div className="advisory-lower-section advisory-gaps-section">
+      <p className="advisory-lower-section-label advisory-gaps-label">Evidence gaps</p>
+      <ul className="advisory-gaps-list">
+        {gaps.map((gap) => (
+          <li key={gap} className="advisory-gap-row">
+            <span className="advisory-gap-marker" aria-hidden="true">?</span>
+            <span>{gap}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/** Next checks - action rows with parsed intent, cluster badge, and command preview */
+const AdvisoryNextChecksSection = ({ checks }: { checks: string[] }) => {
+  if (!checks.length) {
+    return null;
+  }
+  const parsed = checks.map(parseNextCheckEntry);
+  return (
+    <div className="advisory-lower-section advisory-next-checks-section">
+      <p className="advisory-lower-section-label">Next checks</p>
+      <ul className="advisory-checks-list">
+        {parsed.map((check, idx) => (
+          <li key={checks[idx]} className="advisory-check-row">
+            <span className="advisory-check-intent">{check.intent || checks[idx]}</span>
+            {check.targetCluster && (
+              <span className="advisory-check-cluster">{check.targetCluster}</span>
+            )}
+            {check.commandPreview && (
+              <code className="advisory-check-cmd">{check.commandPreview}</code>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/** Focus notes - demoted secondary guidance hints */
+const AdvisoryFocusNotesSection = ({ notes }: { notes: string[] }) => {
+  if (!notes.length) {
+    return null;
+  }
+  return (
+    <div className="advisory-lower-section advisory-focus-notes-section">
+      <p className="advisory-lower-section-label advisory-focus-notes-label">Focus guidance</p>
+      <ul className="advisory-focus-notes-list">
+        {notes.map((note) => (
+          <li key={note} className="advisory-focus-note-row muted">
+            {note}
+          </li>
         ))}
       </ul>
     </div>
@@ -1428,12 +1547,14 @@ const ReviewEnrichmentPanel = ({
             </details>
           )}
 
-          {/* Existing lower sections - minimal adaptation for new layout */}
-          <div className="review-enrichment-grid">
-            <ReviewEnrichmentList title="Top concerns" entries={reviewEnrichment.topConcerns} />
-            <ReviewEnrichmentList title="Evidence gaps" entries={reviewEnrichment.evidenceGaps} />
-            <ReviewEnrichmentList title="Next checks" entries={reviewEnrichment.nextChecks} />
-            <ReviewEnrichmentList title="Focus notes" entries={reviewEnrichment.focusNotes} />
+          {/* Lower advisory sections - compressed, structured, operator-friendly */}
+          <div className="advisory-lower-sections">
+            <div className="advisory-lower-row advisory-lower-row--top">
+              <AdvisoryTopConcernsSection concerns={reviewEnrichment.topConcerns} />
+              <AdvisoryEvidenceGapsSection gaps={reviewEnrichment.evidenceGaps} />
+            </div>
+            <AdvisoryNextChecksSection checks={reviewEnrichment.nextChecks} />
+            <AdvisoryFocusNotesSection notes={reviewEnrichment.focusNotes} />
           </div>
 
           {reviewEnrichment.errorSummary ? (
