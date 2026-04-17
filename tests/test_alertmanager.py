@@ -6,6 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from k8s_diag_agent.external_analysis.adapter import (
+    ExternalAnalysisAdapterConfig,
+    ExternalAnalysisRequest,
+    build_external_analysis_adapters,
+)
 from k8s_diag_agent.external_analysis.alertmanager_artifact import (
     alertmanager_artifacts_exist,
     read_alertmanager_compact,
@@ -22,10 +27,12 @@ from k8s_diag_agent.external_analysis.alertmanager_config import (
 from k8s_diag_agent.external_analysis.alertmanager_snapshot import (
     AlertmanagerSnapshot,
     AlertmanagerStatus,
+    _compute_deterministic_fingerprint,
     create_error_snapshot,
     normalize_alertmanager_payload,
     snapshot_to_compact,
 )
+from k8s_diag_agent.external_analysis.config import ExternalAnalysisSettings
 
 # --- Config tests ---
 
@@ -111,6 +118,18 @@ def test_normalize_active_alerts_success() -> None:
     assert snapshot.truncated is False
 
 
+def test_normalize_top_level_list_format() -> None:
+    """Test that direct list format from Alertmanager API v2 is handled."""
+    raw = [
+        _make_alert("HighCPU", "critical", namespace="monitoring"),
+        _make_alert("DiskFull", "warning", namespace="storage"),
+    ]
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert snapshot.alert_count == 2
+    assert len(snapshot.alerts) == 2
+
+
 def test_normalize_empty_alert_list() -> None:
     raw: dict[str, object] = {"data": {"alerts": []}}
     snapshot = normalize_alertmanager_payload(raw)
@@ -151,7 +170,8 @@ def test_normalize_auth_error_path() -> None:
 
 
 def test_normalize_invalid_response_non_dict() -> None:
-    snapshot = normalize_alertmanager_payload([1, 2, 3])
+    # A number is not a valid response format
+    snapshot = normalize_alertmanager_payload(42)
     assert snapshot.status == AlertmanagerStatus.INVALID_RESPONSE
 
 
@@ -162,6 +182,54 @@ def test_normalize_truncation() -> None:
     assert snapshot.truncated is True
     assert snapshot.alert_count == 250
     assert len(snapshot.alerts) == 200
+
+
+def test_deterministic_fingerprint() -> None:
+    """Test that fingerprints are deterministic across calls."""
+    labels = tuple(sorted([("alertname", "Test"), ("severity", "warning")]))
+    fp1 = _compute_deterministic_fingerprint(labels)
+    fp2 = _compute_deterministic_fingerprint(labels)
+    assert fp1 == fp2
+    assert len(fp1) == 32  # MD5 hex digest truncated to 32 chars
+
+
+def test_deterministic_fingerprint_different_inputs() -> None:
+    """Test that different labels produce different fingerprints."""
+    labels1 = tuple(sorted([("alertname", "Test1"), ("severity", "warning")]))
+    labels2 = tuple(sorted([("alertname", "Test2"), ("severity", "warning")]))
+    fp1 = _compute_deterministic_fingerprint(labels1)
+    fp2 = _compute_deterministic_fingerprint(labels2)
+    assert fp1 != fp2
+
+
+def test_fingerprint_used_when_not_provided() -> None:
+    """Test that computed fingerprint is used when labels.fingerprint is missing."""
+    alert_without_fp = {
+        "labels": {"alertname": "TestAlert", "severity": "warning"},
+        "annotations": {"summary": "Test alert"},
+        "state": "active",
+    }
+    raw = {"data": {"alerts": [alert_without_fp]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # Fingerprint should be computed from sorted labels
+    assert snapshot.alerts[0].fingerprint is not None
+    assert len(snapshot.alerts[0].fingerprint) == 32
+
+
+def test_explicit_fingerprint_preserved() -> None:
+    """Test that explicit fingerprint in labels is preserved."""
+    explicit_fp = "my-explicit-fingerprint-123"
+    alert_with_fp = {
+        "labels": {"alertname": "TestAlert", "severity": "warning", "fingerprint": explicit_fp},
+        "annotations": {"summary": "Test alert"},
+        "state": "active",
+    }
+    raw = {"data": {"alerts": [alert_with_fp]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert snapshot.alerts[0].fingerprint == explicit_fp
 
 
 # --- Compact summarization tests ---
@@ -323,6 +391,94 @@ def test_snapshot_roundtrip() -> None:
     assert restored.alert_count == original.alert_count
     assert len(restored.alerts) == len(original.alerts)
     assert restored.captured_at == original.captured_at
+
+
+# --- Adapter builder integration test ---
+
+def test_adapter_builder_wires_config() -> None:
+    """Test that adapter builder receives and uses AlertmanagerConfig from settings."""
+    # Create settings with custom Alertmanager config
+    settings = ExternalAnalysisSettings(
+        alertmanager=AlertmanagerConfig(
+            endpoint="http://custom-alertmanager:9093",
+            timeout_seconds=30.0,
+            max_alerts_in_snapshot=50,
+            max_alerts_in_compact=5,
+        )
+    )
+    
+    # Create adapter config that references alertmanager
+    adapter_config = ExternalAnalysisAdapterConfig(name="alertmanager", enabled=True)
+    
+    # Build adapters
+    adapters = build_external_analysis_adapters([adapter_config], settings=settings)
+    
+    # Verify adapter was built
+    assert "alertmanager" in adapters
+    
+    # Verify config was wired (adapter should use settings.alertmanager)
+    from k8s_diag_agent.external_analysis.alertmanager_adapter import AlertmanagerAdapter
+    adapter = adapters["alertmanager"]
+    assert isinstance(adapter, AlertmanagerAdapter)
+    assert adapter._config.endpoint == "http://custom-alertmanager:9093"
+    assert adapter._config.timeout_seconds == 30.0
+    assert adapter._config.max_alerts_in_snapshot == 50
+    assert adapter._config.max_alerts_in_compact == 5
+
+
+def test_adapter_builder_with_disabled_config() -> None:
+    """Test that disabled Alertmanager config is respected."""
+    settings = ExternalAnalysisSettings(
+        alertmanager=AlertmanagerConfig(
+            enabled=False,
+            endpoint="http://disabled:9093",
+        )
+    )
+    
+    adapter_config = ExternalAnalysisAdapterConfig(name="alertmanager", enabled=True)
+    adapters = build_external_analysis_adapters([adapter_config], settings=settings)
+    
+    assert "alertmanager" in adapters
+    
+    # Create request and run adapter
+    request = ExternalAnalysisRequest(
+        run_id="test-run",
+        cluster_label="test-cluster",
+        source_artifact=None,
+    )
+    artifact = adapters["alertmanager"].run(request)
+    
+    # Should return skipped status because integration is disabled
+    assert artifact.status.value == "skipped"
+    assert artifact.summary is not None and "disabled" in artifact.summary.lower()
+
+
+def test_adapter_run_produces_artifacts() -> None:
+    """Test that adapter.run() produces snapshot and compact in payload."""
+    settings = ExternalAnalysisSettings(
+        alertmanager=AlertmanagerConfig(
+            enabled=True,  # Enabled but not configured
+        )
+    )
+    
+    adapter_config = ExternalAnalysisAdapterConfig(name="alertmanager", enabled=True)
+    adapters = build_external_analysis_adapters([adapter_config], settings=settings)
+    
+    request = ExternalAnalysisRequest(
+        run_id="test-run",
+        cluster_label="test-cluster",
+        source_artifact=None,
+    )
+    artifact = adapters["alertmanager"].run(request)
+    
+    # Should have payload with snapshot and compact
+    assert artifact.payload is not None
+    assert "snapshot" in artifact.payload
+    assert "compact" in artifact.payload
+    
+    # Snapshot should indicate invalid response (no endpoint configured)
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "invalid_response"
 
 
 # --- Status enum values ---

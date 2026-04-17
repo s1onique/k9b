@@ -22,7 +22,7 @@ from .adapter import (
     register_external_analysis_adapter,
 )
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
-from .config import ExternalAnalysisAdapterConfig
+from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 from .review_input import ReviewEnrichmentInput, build_review_enrichment_input
 from .review_schema import ReviewEnrichmentPayload, ReviewEnrichmentPayloadError
 
@@ -387,5 +387,8 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
 
 
 @register_external_analysis_adapter("llamacpp")
-def _build_llamacpp_adapter(config: ExternalAnalysisAdapterConfig) -> ExternalAnalysisAdapter:
+def _build_llamacpp_adapter(
+    config: ExternalAnalysisAdapterConfig,
+    settings: ExternalAnalysisSettings,
+) -> ExternalAnalysisAdapter:
     return LlamaCppAdapter(command=config.command)

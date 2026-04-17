@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from .artifact import ExternalAnalysisArtifact
-from .config import ExternalAnalysisAdapterConfig
+from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 
 
 class ExternalAnalysisExecutionError(RuntimeError):
@@ -34,7 +34,7 @@ class ExternalAnalysisAdapter(ABC):
         ...
 
 
-AdapterBuilder = Callable[[ExternalAnalysisAdapterConfig], ExternalAnalysisAdapter | None]
+AdapterBuilder = Callable[[ExternalAnalysisAdapterConfig, ExternalAnalysisSettings], ExternalAnalysisAdapter | None]
 _ADAPTER_BUILDERS: dict[str, AdapterBuilder] = {}
 
 
@@ -48,7 +48,10 @@ def register_external_analysis_adapter(name: str) -> Callable[[AdapterBuilder], 
 
 def build_external_analysis_adapters(
     configs: Sequence[ExternalAnalysisAdapterConfig],
+    settings: ExternalAnalysisSettings | None = None,
 ) -> dict[str, ExternalAnalysisAdapter]:
+    if settings is None:
+        settings = ExternalAnalysisSettings()
     adapters: dict[str, ExternalAnalysisAdapter] = {}
     for entry in configs:
         if not entry.enabled:
@@ -56,7 +59,7 @@ def build_external_analysis_adapters(
         builder = _ADAPTER_BUILDERS.get(entry.name.lower())
         if not builder:
             continue
-        adapter = builder(entry)
+        adapter = builder(entry, settings)
         if adapter:
             adapters[adapter.name] = adapter
     return adapters

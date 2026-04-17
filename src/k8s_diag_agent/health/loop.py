@@ -2008,7 +2008,10 @@ class HealthLoopRunner:
         self._image_pull_secret_inspector = image_pull_secret_inspector or ImagePullSecretInspector()
         self._log_path = config.output_dir / "health" / "health.log"
         self._analysis_policy = config.external_analysis.policy
-        self._analysis_adapters = build_external_analysis_adapters(config.external_analysis.adapters)
+        self._analysis_adapters = build_external_analysis_adapters(
+            config.external_analysis.adapters,
+            settings=config.external_analysis,
+        )
         manual_analysis = manual_external_analysis or []
         self._manual_external_analysis_requests = tuple(manual_analysis)
         self._latest_external_artifacts: list[ExternalAnalysisArtifact] = []

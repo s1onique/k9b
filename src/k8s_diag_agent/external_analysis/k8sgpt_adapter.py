@@ -13,7 +13,7 @@ from .adapter import (
     register_external_analysis_adapter,
 )
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
-from .config import ExternalAnalysisAdapterConfig
+from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 
 
 class K8sGptAdapter(ExternalAnalysisAdapter):
@@ -83,5 +83,8 @@ class K8sGptAdapter(ExternalAnalysisAdapter):
 
 
 @register_external_analysis_adapter("k8sgpt")
-def _build_k8sgpt_adapter(config: ExternalAnalysisAdapterConfig) -> ExternalAnalysisAdapter:
+def _build_k8sgpt_adapter(
+    config: ExternalAnalysisAdapterConfig,
+    settings: ExternalAnalysisSettings,
+) -> ExternalAnalysisAdapter:
     return K8sGptAdapter(command=config.command)

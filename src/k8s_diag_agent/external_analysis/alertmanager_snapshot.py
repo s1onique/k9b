@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -19,6 +20,12 @@ class AlertmanagerStatus(StrEnum):
     UPSTREAM_ERROR = "upstream_error"
     DISABLED = "disabled"
     INVALID_RESPONSE = "invalid_response"
+
+
+def _compute_deterministic_fingerprint(labels_sorted: tuple[tuple[str, str], ...]) -> str:
+    """Compute deterministic fingerprint from sorted labels tuple using MD5."""
+    raw = json.dumps(dict(labels_sorted), sort_keys=True)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:32]
 
 
 @dataclass(frozen=True)
@@ -180,7 +187,12 @@ def normalize_alertmanager_payload(
     config_max_alerts: int = 200,
     config_max_string_length: int = 200,
 ) -> AlertmanagerSnapshot:
-    """Normalize raw Alertmanager API response into snapshot."""
+    """Normalize raw Alertmanager API response into snapshot.
+    
+    Handles two Alertmanager API response formats:
+    1. Top-level list: [{"labels": {...}, ...}, ...]  (direct from /api/v2/alerts)
+    2. Wrapped format: {"data": {"alerts": [...]}}  (some proxy responses)
+    """
     captured_at = datetime.now(UTC).isoformat()
     if raw is None:
         return AlertmanagerSnapshot(
@@ -203,18 +215,29 @@ def normalize_alertmanager_payload(
                 alerts=(),
                 errors=(f"Failed to parse JSON: {raw[:200]}",),
             )
-    if not isinstance(raw, Mapping):
+    
+    # Handle top-level list format (Alertmanager API v2 returns list directly)
+    if isinstance(raw, list):
+        alerts_raw: Any = raw
+    elif isinstance(raw, Mapping):
+        # Try to extract from nested data structure
+        data = raw.get("data")
+        if isinstance(data, Mapping):
+            alerts_raw = data.get("alerts")
+        else:
+            alerts_raw = raw.get("alerts")
+        if alerts_raw is None:
+            alerts_raw = []
+    else:
         return AlertmanagerSnapshot(
             status=AlertmanagerStatus.INVALID_RESPONSE,
             captured_at=captured_at,
             source=None,
             alert_count=0,
             alerts=(),
-            errors=(f"Expected dict response, got {type(raw).__name__}",),
+            errors=(f"Expected list or dict response, got {type(raw).__name__}",),
         )
-    alerts_raw = raw.get("data", {}).get("alerts") if isinstance(raw.get("data"), Mapping) else raw.get("alerts")
-    if alerts_raw is None:
-        alerts_raw = []
+    
     if not isinstance(alerts_raw, list):
         return AlertmanagerSnapshot(
             status=AlertmanagerStatus.INVALID_RESPONSE,
@@ -224,6 +247,7 @@ def normalize_alertmanager_payload(
             alerts=(),
             errors=("Alerts field is not a list",),
         )
+    
     total_count = len(alerts_raw)
     truncated = total_count > config_max_alerts
     alerts_to_process = alerts_raw[:config_max_alerts]
@@ -237,8 +261,12 @@ def normalize_alertmanager_payload(
         labels_sorted = tuple(sorted(
             (str(k), str(v)) for k, v in labels_raw.items()
         ))
+        # Use deterministic MD5 fingerprint if not provided
+        fingerprint = _truncate_string(labels_raw.get("fingerprint"), 64)
+        if not fingerprint:
+            fingerprint = _compute_deterministic_fingerprint(labels_sorted)
         alert = NormalizedAlert(
-            fingerprint=_truncate_string(labels_raw.get("fingerprint"), 64) or str(hash(str(labels_raw)) % 10**12),
+            fingerprint=fingerprint,
             alertname=_truncate_string(labels_raw.get("alertname"), config_max_string_length) or "unknown",
             state=_truncate_string(alert_raw.get("status") or labels_raw.get("state"), config_max_string_length) or "inactive",
             severity=_truncate_string(labels_raw.get("severity"), config_max_string_length) or "info",
