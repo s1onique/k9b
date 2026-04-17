@@ -1383,22 +1383,18 @@ const ReviewEnrichmentPanel = ({
 
   return (
     <section className="panel review-enrichment" id="review-enrichment">
-      {/* Header row with title, metadata, timestamp, and status badge */}
-      <div className="advisory-panel-header">
-        <div className="advisory-header-left">
-          <div>
-            <p className="eyebrow">Review enrichment</p>
-            <h2>Provider-assisted advisory</h2>
-          </div>
+      {/* Header row with title, metadata, timestamp, and status badge - aligned to section-head pattern */}
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Review enrichment</p>
+          <h2>Provider-assisted advisory</h2>
         </div>
-        <div className="advisory-header-meta">
-          <span className="advisory-meta-timestamp">
-            {reviewEnrichment?.timestamp
-              ? formatTimestamp(reviewEnrichment.timestamp)
-              : "Timestamp unavailable"}
-          </span>
+        <div className="status-badges">
+          <span className={`status-pill ${statusClass(status)}`}>{status}</span>
+          {reviewEnrichment?.timestamp && (
+            <span className="muted small">{formatTimestamp(reviewEnrichment.timestamp)}</span>
+          )}
         </div>
-        <span className={`status-pill ${statusClass(status)}`}>{status}</span>
       </div>
 
       {reviewEnrichment ? (

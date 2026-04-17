@@ -64,7 +64,7 @@ describe("Advisory Panel Components", () => {
   });
 
   describe("Header Structure", () => {
-    it("renders advisory-panel-header with title and timestamp", async () => {
+    it("renders section-head header with title and timestamp", async () => {
       const runPayload = {
         ...sampleRun,
         reviewEnrichment: createMockEnrichment(),
@@ -85,24 +85,24 @@ describe("Advisory Panel Components", () => {
         expect(screen.getAllByText("Provider-assisted advisory")[0]).toBeInTheDocument();
       });
 
-      // Check for the header structure
+      // Check for the header structure - now uses shared section-head pattern
       const headerSection = document.querySelector(".review-enrichment");
       expect(headerSection).toBeTruthy();
 
-      // Verify advisory-panel-header exists
-      const header = headerSection?.querySelector(".advisory-panel-header");
+      // Verify section-head exists (shared header pattern)
+      const header = headerSection?.querySelector(".section-head");
       expect(header).toBeTruthy();
 
-      // Verify advisory-header-left contains the title
-      const headerLeft = header?.querySelector(".advisory-header-left");
-      expect(headerLeft).toBeTruthy();
-      expect(headerLeft?.textContent).toContain("Review enrichment");
-      expect(headerLeft?.textContent).toContain("Provider-assisted advisory");
+      // Verify eyebrow and title are present
+      expect(header?.textContent).toContain("Review enrichment");
+      expect(header?.textContent).toContain("Provider-assisted advisory");
 
-      // Verify advisory-meta-timestamp contains the timestamp
-      const headerMeta = header?.querySelector(".advisory-header-meta");
-      expect(headerMeta).toBeTruthy();
-      expect(headerMeta?.textContent).toContain("Apr 7, 2026 12:00 UTC");
+      // Verify status badges container exists
+      const statusBadges = header?.querySelector(".status-badges");
+      expect(statusBadges).toBeTruthy();
+
+      // Verify timestamp appears in the status badges area
+      expect(header?.textContent).toContain("Apr 7, 2026 12:00 UTC");
     });
 
     it("renders status badge in header", async () => {
