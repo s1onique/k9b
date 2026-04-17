@@ -3970,6 +3970,19 @@ body {
   margin-top: 0.4rem;
 }
 
+/* Past-run notice - amber/yellow informational styling for historical runs */
+.alert-past-run {
+  padding: 0.75rem 1rem;
+  background: rgba(251, 191, 36, 0.15);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: rgba(251, 191, 36, 0.95);
+}
+
+.alert-past-run.alert-inline {
+  margin-top: 0.4rem;
+}
+
 .loading {
   min-height: 200px;
   display: flex;

@@ -100,6 +100,46 @@ const relativeRecency = (timestamp: string) => dayjs(timestamp).fromNow();
 const isStaleTimestamp = (timestamp: string) =>
   dayjs().diff(timestamp, "minute") >= FRESHNESS_THRESHOLD_MINUTES;
 
+/**
+ * Format duration for age display in past-run notice.
+ * Rules:
+ * - under 1 hour: X minutes
+ * - under 1 day: X hours Y minutes
+ * - 1 day+: X days Y hours Z minutes
+ * - no seconds
+ */
+export const formatAgeDuration = (minutes: number): string => {
+  if (minutes < 0) {
+    return "—";
+  }
+  if (minutes < 60) {
+    return `${Math.round(minutes)} minute${Math.round(minutes) === 1 ? "" : "s"}`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = Math.round(minutes % 60);
+  if (hours < 24) {
+    const hourStr = `${hours} hour${hours === 1 ? "" : "s"}`;
+    if (remainingMinutes === 0) {
+      return hourStr;
+    }
+    return `${hourStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
+  }
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  const dayStr = `${days} day${days === 1 ? "" : "s"}`;
+  if (remainingHours === 0) {
+    if (remainingMinutes === 0) {
+      return dayStr;
+    }
+    return `${dayStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
+  }
+  const hourStr = `${remainingHours} hour${remainingHours === 1 ? "" : "s"}`;
+  if (remainingMinutes === 0) {
+    return `${dayStr} ${hourStr}`;
+  }
+  return `${dayStr} ${hourStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
+};
+
 const statusClass = (value: string) => {
   const normalized = value.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
   return `status-pill status-pill-${normalized}`;
@@ -4362,7 +4402,12 @@ const App = () => {
             <p className="muted small">Planner created no candidates for this run.</p>
           )}
         </div>
-        {!runFresh && (
+        {!isSelectedRunLatest && (
+          <div className="alert alert-inline alert-past-run">
+            This is a past run collected {formatAgeDuration(dayjs().diff(run.timestamp, "minute"))} ago.
+          </div>
+        )}
+        {isSelectedRunLatest && !runFresh && (
           <div className="alert alert-inline">
             Latest run is {runAgeMinutes} minute{runAgeMinutes === 1 ? "" : "s"} old; ensure the scheduler is running.
           </div>
