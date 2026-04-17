@@ -43,6 +43,7 @@ import type {
 } from "./types";
 import "./index.css";
 import { ThemeSwitch } from "./ThemeSwitch";
+import Pagination from "./components/Pagination";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -4208,48 +4209,16 @@ const App = () => {
             </table>
           </div>
         )}
-        {totalRunsPages > 1 && (
-          <div className="runs-pagination">
-            <div className="runs-pagination-controls">
-              <button
-                type="button"
-                onClick={() => setRunsPage((p) => Math.max(1, p - 1))}
-                disabled={runsPage <= 1}
-                aria-label="Previous page"
-              >
-                Previous
-              </button>
-              <span>
-                Page {runsPage} of {totalRunsPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setRunsPage((p) => Math.min(totalRunsPages, p + 1))}
-                disabled={runsPage >= totalRunsPages}
-                aria-label="Next page"
-              >
-                Next
-              </button>
-            </div>
-            <div className="runs-pagination-size-selector">
-              <label htmlFor="runs-page-size">Per page:</label>
-              <select
-                id="runs-page-size"
-                value={runsPageSize}
-                onChange={(event) => handleRunsPageSizeChange(Number(event.target.value))}
-              >
-                {RUNS_PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p className="muted small">
-              Showing {(runsPage - 1) * runsPageSize + 1}–{Math.min(runsPage * runsPageSize, filteredRunsList.length)} of {filteredRunsList.length}
-            </p>
-          </div>
-        )}
+        <Pagination
+          currentPage={runsPage}
+          totalPages={totalRunsPages}
+          totalItems={filteredRunsList.length}
+          pageSize={runsPageSize}
+          pageSizeOptions={RUNS_PAGE_SIZE_OPTIONS}
+          onPageChange={setRunsPage}
+          onPageSizeChange={handleRunsPageSizeChange}
+          label="Runs"
+        />
       </section>
       <section className="panel run-summary" id="run-detail">
         <div className="run-summary-head">
