@@ -32,6 +32,7 @@ import type {
   ProposalsPayload,
   ProviderExecution,
   ProviderExecutionBranch,
+  ReviewEnrichment,
   ReviewEnrichmentStatus,
   RunPayload,
   RunsListEntry,
@@ -1148,6 +1149,152 @@ type ReviewEnrichmentPanelProps = {
   onFocusQueueReview?: () => void;
 };
 
+// ==========================================================================
+// Advisory panel sub-components for improved scanability
+// ==========================================================================
+
+/**
+ * Executive summary strip - compact scan-friendly overview metrics
+ */
+const AdvisoryExecutiveSummary = ({
+  reviewEnrichment,
+  reviewEnrichmentStatus,
+}: {
+  reviewEnrichment: ReviewEnrichment;
+  reviewEnrichmentStatus?: ReviewEnrichmentStatus;
+}) => {
+  const clusterCount = reviewEnrichment.triageOrder.length;
+  const concernCount = reviewEnrichment.topConcerns.length;
+  const gapCount = reviewEnrichment.evidenceGaps.length;
+  const nextCheckCount = reviewEnrichment.nextChecks.length;
+  const hasFocusNotes = reviewEnrichment.focusNotes.length > 0;
+
+  // Collect notable tags from concerns
+  const concernTags = reviewEnrichment.topConcerns.slice(0, 2);
+
+  // Get provider info - prefer direct enrichment provider, fall back to status
+  const providerLabel = reviewEnrichment.provider ?? reviewEnrichmentStatus?.provider ?? reviewEnrichmentStatus?.runProvider;
+
+  if (clusterCount === 0) {
+    return null;
+  }
+
+  return (
+    <div className="advisory-summary-strip">
+      {/* Provider display - required for test compatibility */}
+      <div className="advisory-summary-provider">
+        <span className="muted small">
+          {providerLabel ? `Provider ${providerLabel}` : "Provider unspecified"}
+        </span>
+      </div>
+      <div className="advisory-summary-metrics">
+        <div className="advisory-summary-metric">
+          <span className="advisory-metric-value">{clusterCount}</span>
+          <span className="advisory-metric-label">Cluster{clusterCount !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="advisory-summary-metric">
+          <span className="advisory-metric-value">{concernCount}</span>
+          <span className="advisory-metric-label">Concern{concernCount !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="advisory-summary-metric">
+          <span className="advisory-metric-value">{nextCheckCount}</span>
+          <span className="advisory-metric-label">Check{nextCheckCount !== 1 ? "s" : ""}</span>
+        </div>
+        {gapCount > 0 && (
+          <div className="advisory-summary-metric advisory-summary-metric--warning">
+            <span className="advisory-metric-value">{gapCount}</span>
+            <span className="advisory-metric-label">Gap{gapCount !== 1 ? "s" : ""}</span>
+          </div>
+        )}
+      </div>
+      {concernTags.length > 0 && (
+        <div className="advisory-summary-tags">
+          {concernTags.map((tag) => (
+            <span key={tag} className="advisory-tag">{tag}</span>
+          ))}
+        </div>
+      )}
+      {hasFocusNotes && (
+        <div className="advisory-summary-hint">
+          <span className="advisory-hint-badge">Focus note</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Cluster overview card - compact triage card for each cluster
+ */
+const AdvisoryClusterCard = ({
+  clusterName,
+  rank,
+  topConcerns,
+  focusNotes,
+}: {
+  clusterName: string;
+  rank: number;
+  topConcerns: string[];
+  focusNotes: string[];
+}) => {
+  const primaryConcern = topConcerns[0];
+  const focusNote = focusNotes[0];
+
+  return (
+    <article className="advisory-cluster-card">
+      <header className="advisory-cluster-card-header">
+        <span className="advisory-cluster-rank">#{rank}</span>
+        <strong className="advisory-cluster-name">{clusterName}</strong>
+      </header>
+      {primaryConcern && (
+        <p className="advisory-cluster-concern">{primaryConcern}</p>
+      )}
+      {focusNote && (
+        <p className="advisory-cluster-focus">
+          <span className="advisory-focus-hint">Focus: </span>
+          {focusNote}
+        </p>
+      )}
+    </article>
+  );
+};
+
+/**
+ * Build cluster view-model from review enrichment data.
+ * Concerns that explicitly mention the cluster name are attached to that cluster.
+ * For the first cluster (index 0), if no cluster-specific concerns exist,
+ * attach the top concerns as generic (typically the top problems affecting triage order).
+ * Focus notes are matched if they contain the cluster name.
+ */
+const buildClusterViewModels = (reviewEnrichment: ReviewEnrichment) => {
+  return reviewEnrichment.triageOrder.map((clusterName, index) => {
+    const clusterLower = clusterName.toLowerCase();
+
+    // Concerns that explicitly reference this cluster by name
+    const clusterSpecificConcerns = reviewEnrichment.topConcerns.filter(
+      (concern) => concern.toLowerCase().includes(clusterLower)
+    );
+
+    // If no cluster-specific concerns, attach the first concern as generic
+    // (typically the top problem affecting triage order)
+    const clusterConcerns = clusterSpecificConcerns.length > 0
+      ? clusterSpecificConcerns.slice(0, 2)
+      : (index === 0 ? reviewEnrichment.topConcerns.slice(0, 2) : []);
+
+    // Focus notes that mention this cluster
+    const clusterFocusNotes = reviewEnrichment.focusNotes.filter(
+      (note) => note.toLowerCase().includes(clusterLower)
+    );
+
+    return {
+      clusterName,
+      rank: index + 1,
+      topConcerns: clusterConcerns,
+      focusNotes: clusterFocusNotes,
+    };
+  });
+};
+
 const ReviewEnrichmentPanel = ({
   reviewEnrichment,
   reviewEnrichmentStatus,
@@ -1169,6 +1316,10 @@ const ReviewEnrichmentPanel = ({
   const planCandidateCount = linkedPlan?.candidateCount ?? planCandidates.length;
   const topPlanCandidates = planCandidates.slice(0, 3);
   const hasLinkedPlan = Boolean(linkedPlan) && planCandidateCount > 0;
+
+  // Build cluster view models for cards
+  const clusterViewModels = reviewEnrichment ? buildClusterViewModels(reviewEnrichment) : [];
+
   const runConfigDescription = () => {
     if (!reviewEnrichmentStatus) {
       return null;
@@ -1184,39 +1335,70 @@ const ReviewEnrichmentPanel = ({
       : "";
     return `Run configuration enabled${runProvider}`;
   };
+
   const providerLabel =
     reviewEnrichmentStatus?.provider ?? reviewEnrichmentStatus?.runProvider;
   const providerDisplay = providerLabel ? `Provider ${providerLabel}` : "Provider unspecified";
+
   return (
     <section className="panel review-enrichment" id="review-enrichment">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Review enrichment</p>
-          <h2>Provider-assisted advisory</h2>
+      {/* Header row with title, metadata, timestamp, and status badge */}
+      <div className="advisory-panel-header">
+        <div className="advisory-header-left">
+          <div>
+            <p className="eyebrow">Review enrichment</p>
+            <h2>Provider-assisted advisory</h2>
+          </div>
+        </div>
+        <div className="advisory-header-meta">
+          <span className="advisory-meta-timestamp">
+            {reviewEnrichment?.timestamp
+              ? formatTimestamp(reviewEnrichment.timestamp)
+              : "Timestamp unavailable"}
+          </span>
         </div>
         <span className={`status-pill ${statusClass(status)}`}>{status}</span>
       </div>
+
       {reviewEnrichment ? (
         <div className="review-enrichment-body">
-          <p className="small">
-            {reviewEnrichment.provider
-              ? `Provider ${reviewEnrichment.provider}`
-              : "Provider unspecified"}{' '}
-            ·{' '}
-            {reviewEnrichment.timestamp
-              ? formatTimestamp(reviewEnrichment.timestamp)
-              : "Timestamp unavailable"}
-          </p>
-          <p className="review-enrichment-summary">
-            {reviewEnrichment.summary || "No advisory summary was generated."}
-          </p>
+          {/* Executive summary strip - compact scan-friendly overview */}
+          <AdvisoryExecutiveSummary
+            reviewEnrichment={reviewEnrichment}
+            reviewEnrichmentStatus={reviewEnrichmentStatus}
+          />
+
+          {/* Cluster overview cards */}
+          {clusterViewModels.length > 0 && (
+            <div className="advisory-cluster-grid">
+              {clusterViewModels.map((vm) => (
+                <AdvisoryClusterCard
+                  key={vm.clusterName}
+                  clusterName={vm.clusterName}
+                  rank={vm.rank}
+                  topConcerns={vm.topConcerns}
+                  focusNotes={vm.focusNotes}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Enrichment summary from provider - demoted to small muted text below cards */}
+          {reviewEnrichment.summary && (
+            <details className="advisory-summary-collapsible">
+              <summary className="muted small">View provider summary</summary>
+              <p className="review-enrichment-summary muted">{reviewEnrichment.summary}</p>
+            </details>
+          )}
+
+          {/* Existing lower sections - minimal adaptation for new layout */}
           <div className="review-enrichment-grid">
-            <ReviewEnrichmentList title="Triage order" entries={reviewEnrichment.triageOrder} />
             <ReviewEnrichmentList title="Top concerns" entries={reviewEnrichment.topConcerns} />
             <ReviewEnrichmentList title="Evidence gaps" entries={reviewEnrichment.evidenceGaps} />
             <ReviewEnrichmentList title="Next checks" entries={reviewEnrichment.nextChecks} />
             <ReviewEnrichmentList title="Focus notes" entries={reviewEnrichment.focusNotes} />
           </div>
+
           {reviewEnrichment.errorSummary ? (
             <p className="small muted">Error: {reviewEnrichment.errorSummary}</p>
           ) : null}
