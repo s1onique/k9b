@@ -3957,22 +3957,124 @@ describe("Run freshness thresholds", () => {
 
 describe("Auto-refresh polling behavior", () => {
   /**
-   * Tests for auto-refresh polling behavior using fake timers.
-   * Verifies that enabling auto-refresh triggers periodic refresh calls
-   * and disabling it stops the polling and cleans up the timer.
+   * Tests for auto-refresh polling behavior.
+   * IMPORTANT: Bootstrap the app on REAL timers first, then switch to fake timers.
+   * Do not use findBy* or waitFor after fake timers are enabled.
    */
 
-  test("enabling auto-refresh causes refresh to trigger on polling interval", async () => {
+  test("enabling auto-refresh fetches new data and updates UI with run-124 as latest", async () => {
+    // Build initial runs list with run-123 as latest
+    const initialRunsList: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+        {
+          runId: "run-122",
+          runLabel: "2026-04-07-1100",
+          timestamp: "2026-04-07T11:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 3,
+          reviewedCount: 0,
+          reviewStatus: "unreviewed",
+        },
+      ],
+      totalCount: 2,
+    };
+
+    // Build updated runs list with run-124 as latest
+    const updatedRunsList: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-124",
+          runLabel: "2026-04-07-1300",
+          timestamp: "2026-04-07T13:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 0,
+          reviewedCount: 0,
+          reviewStatus: "no-executions",
+        },
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+        {
+          runId: "run-122",
+          runLabel: "2026-04-07-1100",
+          timestamp: "2026-04-07T11:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 3,
+          reviewedCount: 0,
+          reviewStatus: "unreviewed",
+        },
+      ],
+      totalCount: 3,
+    };
+
+    // Mutable reference for the runs list response
+    let currentRunsList = initialRunsList;
+
+    // Create mutable fetch mock
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve({ ...currentRunsList }),
+        });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    // STEP 1: Bootstrap on REAL timers first
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify initial state on real timers
+    const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
+    expect(latestRunRow).not.toBeNull();
+    expect(latestRunRow).toHaveClass("run-row-selected");
+
+    // STEP 2: Now switch to fake timers
     vi.useFakeTimers();
     try {
-      vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<App />);
-
-      await screen.findByRole("heading", { name: /Fleet overview/i });
-
-      // Clear any initial setInterval calls
+      // Clear spy calls after initial render
       setIntervalSpy.mockClear();
+
+      // Setup userEvent with fake timer control
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
       // Select 10 second auto-refresh interval
       const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
@@ -3980,57 +4082,50 @@ describe("Auto-refresh polling behavior", () => {
         await user.selectOptions(autoRefreshSelect, "10");
       });
 
-      // Verify setInterval was called with 10 second (10000ms) interval
+      // Verify setInterval was called with 10 second interval
       expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
 
-      // Clear any calls from setup
-      setIntervalSpy.mockClear();
+      // STEP 3: Update the mock to return run-124 as latest
+      currentRunsList = updatedRunsList;
 
-      // Track refresh calls
-      let refreshCallCount = 0;
-      const originalFetch = window.fetch;
-      vi.stubGlobal("fetch", vi.fn((...args) => {
-        refreshCallCount++;
-        return originalFetch(...args);
-      }));
-
-      // Simulate time passing - advance by 10 seconds
-      vi.advanceTimersByTime(10000);
-
-      // Flush pending promises
-      await vi.advanceTimersByTimeAsync(0);
-
-      // Verify refresh was called (the interval callback triggers refresh)
-      expect(refreshCallCount).toBeGreaterThan(0);
-
-      // Advance another 10 seconds - should trigger again
+      // STEP 4: Advance one interval - use act wrapper for fake timers
       await act(async () => {
-        vi.advanceTimersByTime(10000);
+        await vi.advanceTimersByTimeAsync(10000);
       });
-      await vi.advanceTimersByTimeAsync(0);
 
-      // Should have called refresh again
-      const expectedCallCount = refreshCallCount;
-      expect(refreshCallCount).toBeGreaterThanOrEqual(expectedCallCount);
+      // STEP 5: Assert synchronously - NO waitFor/findBy after fake timers
+      const newLatestRunRow = document.querySelector('.run-row[data-run-id="run-124"]');
+      expect(newLatestRunRow).not.toBeNull();
+      expect(newLatestRunRow).toHaveClass("run-row-selected");
+
+      // Verify run-123 is no longer selected
+      expect(latestRunRow).not.toHaveClass("run-row-selected");
+
+      // Verify the total count shows 3 runs
+      const showingText = screen.getByText(/Showing \d+ of 3/i);
+      expect(showingText).toBeInTheDocument();
     } finally {
-      // Cleanup: run pending timers and restore real timers
+      // Cleanup
       vi.runOnlyPendingTimers();
       vi.useRealTimers();
     }
   });
 
   test("disabling auto-refresh stops further polling and cleans up interval", async () => {
+    // STEP 1: Bootstrap on REAL timers first
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Clear initial calls
+    setIntervalSpy.mockClear();
+    clearIntervalSpy.mockClear();
+
+    // STEP 2: Now switch to fake timers
     vi.useFakeTimers();
     try {
-      vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<App />);
-
-      await screen.findByRole("heading", { name: /Fleet overview/i });
-
-      // Clear initial calls
-      setIntervalSpy.mockClear();
-      clearIntervalSpy.mockClear();
 
       // Enable auto-refresh with 10 second interval
       const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
@@ -4054,18 +4149,15 @@ describe("Auto-refresh polling behavior", () => {
 
       // Clear spy tracking
       clearIntervalSpy.mockClear();
-
-      // Track that no new intervals are created
       setIntervalSpy.mockClear();
 
       // Advance time - no new interval should trigger
-      vi.advanceTimersByTime(20000);
-      await vi.advanceTimersByTimeAsync(0);
+      await act(async () => {
+        vi.advanceTimersByTime(20000);
+      });
 
-      // Should NOT have created any new intervals (since auto-refresh is off)
+      // Should NOT have created any new intervals
       expect(setIntervalSpy).not.toHaveBeenCalled();
-
-      // Should NOT have called clearInterval again (since there's no active timer)
       expect(clearIntervalSpy).not.toHaveBeenCalled();
     } finally {
       // Cleanup
@@ -4075,8 +4167,8 @@ describe("Auto-refresh polling behavior", () => {
   });
 
   test("changing auto-refresh interval cleans up old timer and creates new one", async () => {
+    // STEP 1: Bootstrap on REAL timers first
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
@@ -4085,36 +4177,47 @@ describe("Auto-refresh polling behavior", () => {
     setIntervalSpy.mockClear();
     clearIntervalSpy.mockClear();
 
-    // Enable auto-refresh with 30 second interval
-    const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
-    await act(async () => {
-      await user.selectOptions(autoRefreshSelect, "30");
-    });
+    // STEP 2: Now switch to fake timers
+    vi.useFakeTimers();
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    // Verify 30 second interval was created
-    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
-    const oldTimerId = setIntervalSpy.mock.results[0].value;
+      // Enable auto-refresh with 30 second interval
+      const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
+      await act(async () => {
+        await user.selectOptions(autoRefreshSelect, "30");
+      });
 
-    // Clear for next assertions
-    setIntervalSpy.mockClear();
-    clearIntervalSpy.mockClear();
+      // Verify 30 second interval was created
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
+      const oldTimerId = setIntervalSpy.mock.results[0].value;
 
-    // Change to 10 second interval
-    await act(async () => {
-      await user.selectOptions(autoRefreshSelect, "10");
-    });
+      // Clear for next assertions
+      setIntervalSpy.mockClear();
+      clearIntervalSpy.mockClear();
 
-    // Verify old timer was cleared
-    expect(clearIntervalSpy).toHaveBeenCalledWith(oldTimerId);
+      // Change to 10 second interval
+      await act(async () => {
+        await user.selectOptions(autoRefreshSelect, "10");
+      });
 
-    // Verify new 10 second interval was created
-    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
+      // Verify old timer was cleared
+      expect(clearIntervalSpy).toHaveBeenCalledWith(oldTimerId);
+
+      // Verify new 10 second interval was created
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
+    } finally {
+      // Cleanup
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
   });
 
   test("auto-refresh dropdown persists selection to localStorage", async () => {
+    // This test uses real timers only - no fake timers needed
     localStorage.removeItem(AUTOREFRESH_STORAGE_KEY);
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
