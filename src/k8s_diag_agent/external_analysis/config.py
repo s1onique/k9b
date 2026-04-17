@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from .alertmanager_config import AlertmanagerConfig, parse_alertmanager_config
+
 
 @dataclass(frozen=True)
 class ExternalAnalysisPolicy:
@@ -47,6 +49,7 @@ class ExternalAnalysisSettings:
     review_enrichment: ReviewEnrichmentPolicy = field(default_factory=ReviewEnrichmentPolicy)
     adapters: tuple[ExternalAnalysisAdapterConfig, ...] = field(default_factory=tuple)
     retention: ExternalAnalysisRetention = field(default_factory=ExternalAnalysisRetention)
+    alertmanager: AlertmanagerConfig = field(default_factory=AlertmanagerConfig)
 
 
 def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalAnalysisSettings:
@@ -124,10 +127,12 @@ def parse_external_analysis_settings(raw: Mapping[str, Any] | None) -> ExternalA
             configs.append(
                 ExternalAnalysisAdapterConfig(name=name, enabled=enabled, command=command)
             )
+    alertmanager = parse_alertmanager_config(raw.get("alertmanager"))
     return ExternalAnalysisSettings(
         policy=policy,
         auto_drilldown=auto_drilldown,
         review_enrichment=review_enrichment,
         adapters=tuple(configs),
         retention=retention,
+        alertmanager=alertmanager,
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 # Import adapters to ensure they register themselves.
 from . import (
+    alertmanager_adapter,  # noqa: F401
     k8sgpt_adapter,  # noqa: F401
     llamacpp_adapter,  # noqa: F401
 )
@@ -13,6 +14,28 @@ from .adapter import (
     ExternalAnalysisRequest,
     build_external_analysis_adapters,
     register_external_analysis_adapter,
+)
+from .alertmanager_artifact import (
+    alertmanager_artifacts_exist,
+    read_alertmanager_compact,
+    read_alertmanager_snapshot,
+    write_alertmanager_artifacts,
+    write_alertmanager_compact,
+    write_alertmanager_snapshot,
+)
+from .alertmanager_config import (
+    AlertmanagerAuth,
+    AlertmanagerConfig,
+    parse_alertmanager_auth,
+    parse_alertmanager_config,
+)
+from .alertmanager_snapshot import (
+    AlertmanagerCompact,
+    AlertmanagerSnapshot,
+    AlertmanagerStatus,
+    create_error_snapshot,
+    normalize_alertmanager_payload,
+    snapshot_to_compact,
 )
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus, write_external_analysis_artifact
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisPolicy, ExternalAnalysisSettings, parse_external_analysis_settings
@@ -30,4 +53,21 @@ __all__ = [
     "parse_external_analysis_settings",
     "register_external_analysis_adapter",
     "write_external_analysis_artifact",
+    # Alertmanager integration
+    "AlertmanagerAuth",
+    "AlertmanagerConfig",
+    "AlertmanagerStatus",
+    "AlertmanagerSnapshot",
+    "AlertmanagerCompact",
+    "parse_alertmanager_config",
+    "parse_alertmanager_auth",
+    "normalize_alertmanager_payload",
+    "snapshot_to_compact",
+    "create_error_snapshot",
+    "write_alertmanager_snapshot",
+    "write_alertmanager_compact",
+    "write_alertmanager_artifacts",
+    "read_alertmanager_snapshot",
+    "read_alertmanager_compact",
+    "alertmanager_artifacts_exist",
 ]
