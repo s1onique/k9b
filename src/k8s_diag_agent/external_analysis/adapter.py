@@ -12,6 +12,22 @@ from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 
 
 class ExternalAnalysisExecutionError(RuntimeError):
+    """Base exception for external analysis adapter failures."""
+    pass
+
+
+class TimeoutError(Exception):
+    """Raised when a request times out."""
+    pass
+
+
+class AuthError(Exception):
+    """Raised when authentication fails (401/403)."""
+    pass
+
+
+class InvalidResponseError(Exception):
+    """Raised when the response is malformed or invalid."""
     pass
 
 

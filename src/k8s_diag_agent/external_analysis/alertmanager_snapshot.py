@@ -11,6 +11,51 @@ from enum import StrEnum
 from typing import Any
 
 
+def _compute_deterministic_fingerprint(labels_sorted: tuple[tuple[str, str], ...]) -> str:
+    """Compute deterministic fingerprint from sorted labels tuple using MD5.
+    
+    This is the single source of truth for deterministic synthetic fingerprint generation.
+    Used when Alertmanager does not provide an explicit fingerprint.
+    """
+    raw = json.dumps(dict(labels_sorted), sort_keys=True)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def _extract_state(alert_raw: Mapping[str, Any], labels_raw: Mapping[str, Any], max_len: int) -> str:
+    """Extract alert state with robust precedence handling.
+    
+    Precedence:
+    1. alert_raw["status"]["state"] if status is a mapping
+    2. alert_raw["status"] if it is a string
+    3. alert_raw["state"] if present
+    4. labels_raw["state"] as fallback
+    5. "inactive" as deterministic default
+    """
+    # 1. Check nested status.state (if status is a mapping)
+    status = alert_raw.get("status")
+    if isinstance(status, Mapping) and "state" in status:
+        state_val = status.get("state")
+        if isinstance(state_val, str):
+            return _truncate_string(state_val, max_len) or "inactive"
+    
+    # 2. Check string status
+    if isinstance(status, str):
+        return _truncate_string(status, max_len) or "inactive"
+    
+    # 3. Check top-level state field
+    state = alert_raw.get("state")
+    if isinstance(state, str) and state:
+        return _truncate_string(state, max_len) or "inactive"
+    
+    # 4. Check labels state
+    label_state = labels_raw.get("state")
+    if isinstance(label_state, str) and label_state:
+        return _truncate_string(label_state, max_len) or "inactive"
+    
+    # 5. Deterministic fallback
+    return "inactive"
+
+
 class AlertmanagerStatus(StrEnum):
     """Status values for Alertmanager snapshot."""
     OK = "ok"
@@ -20,12 +65,6 @@ class AlertmanagerStatus(StrEnum):
     UPSTREAM_ERROR = "upstream_error"
     DISABLED = "disabled"
     INVALID_RESPONSE = "invalid_response"
-
-
-def _compute_deterministic_fingerprint(labels_sorted: tuple[tuple[str, str], ...]) -> str:
-    """Compute deterministic fingerprint from sorted labels tuple using MD5."""
-    raw = json.dumps(dict(labels_sorted), sort_keys=True)
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:32]
 
 
 @dataclass(frozen=True)
@@ -268,7 +307,7 @@ def normalize_alertmanager_payload(
         alert = NormalizedAlert(
             fingerprint=fingerprint,
             alertname=_truncate_string(labels_raw.get("alertname"), config_max_string_length) or "unknown",
-            state=_truncate_string(alert_raw.get("status") or labels_raw.get("state"), config_max_string_length) or "inactive",
+            state=_extract_state(alert_raw, labels_raw, config_max_string_length),
             severity=_truncate_string(labels_raw.get("severity"), config_max_string_length) or "info",
             cluster=labels_raw.get("cluster"),
             namespace=labels_raw.get("namespace"),

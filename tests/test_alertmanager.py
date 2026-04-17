@@ -500,3 +500,212 @@ def test_status_from_invalid_string_becomes_invalid_response() -> None:
     }
     snapshot = AlertmanagerSnapshot.from_dict(raw)
     assert snapshot.status == AlertmanagerStatus.INVALID_RESPONSE
+
+
+# --- State extraction precedence tests ---
+
+def _make_alert_with_state(alert_raw_state: str | None = None, status_mapping: dict | str | None = None, labels_state: str | None = None) -> dict[str, Any]:
+    """Create a test alert with specific state sources.
+    
+    Args:
+        alert_raw_state: Value for top-level "state" field
+        status_mapping: Value for "status" field (can be dict with "state" key, or string)
+        labels_state: Value for labels["state"] field
+    """
+    alert: dict[str, Any] = {
+        "labels": {
+            "alertname": "TestState",
+            "severity": "warning",
+        },
+        "annotations": {"summary": "Test alert"},
+    }
+    if labels_state is not None:
+        alert["labels"]["state"] = labels_state
+    if alert_raw_state is not None:
+        alert["state"] = alert_raw_state
+    if status_mapping is not None:
+        alert["status"] = status_mapping
+    return alert
+
+
+def test_state_extraction_precedence_nested_status_state() -> None:
+    """Precedence 1: alert_raw['status']['state'] if status is a mapping."""
+    alert = _make_alert_with_state(
+        alert_raw_state="top-level-state",
+        status_mapping={"state": "nested-state", "silencedBy": "abc"},
+        labels_state="labels-state",
+    )
+    raw = {"data": {"alerts": [alert]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # Nested status.state should win
+    assert snapshot.alerts[0].state == "nested-state"
+
+
+def test_state_extraction_precedence_string_status() -> None:
+    """Precedence 2: alert_raw['status'] if it is a string."""
+    alert = _make_alert_with_state(
+        alert_raw_state="top-level-state",
+        status_mapping="string-status-value",
+        labels_state="labels-state",
+    )
+    raw = {"data": {"alerts": [alert]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # String status should win over top-level state
+    assert snapshot.alerts[0].state == "string-status-value"
+
+
+def test_state_extraction_precedence_top_level_state() -> None:
+    """Precedence 3: alert_raw['state'] if present."""
+    alert = _make_alert_with_state(
+        alert_raw_state="top-level-state",
+        labels_state="labels-state",
+    )
+    # No status field
+    alert.pop("status", None)
+    raw = {"data": {"alerts": [alert]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # Top-level state should win over labels state
+    assert snapshot.alerts[0].state == "top-level-state"
+
+
+def test_state_extraction_precedence_labels_state() -> None:
+    """Precedence 4: labels_raw['state'] as fallback."""
+    alert = _make_alert_with_state(labels_state="labels-state")
+    # No status, no top-level state
+    alert.pop("status", None)
+    alert.pop("state", None)
+    raw = {"data": {"alerts": [alert]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # Labels state should be used
+    assert snapshot.alerts[0].state == "labels-state"
+
+
+def test_state_extraction_precedence_default_inactive() -> None:
+    """Precedence 5: 'inactive' as deterministic default when no state found."""
+    # Alert with no state fields at all
+    alert = {
+        "labels": {
+            "alertname": "NoState",
+            "severity": "info",
+        },
+        "annotations": {"summary": "No state here"},
+    }
+    raw = {"data": {"alerts": [alert]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # Default to "inactive"
+    assert snapshot.alerts[0].state == "inactive"
+
+
+def test_state_extraction_precedence_with_truncation() -> None:
+    """Test that long state values are truncated properly."""
+    long_state = "active" * 100  # Very long string
+    alert = _make_alert_with_state(alert_raw_state=long_state)
+    raw = {"data": {"alerts": [alert]}}
+    snapshot = normalize_alertmanager_payload(raw, config_max_string_length=50)
+    assert snapshot.status == AlertmanagerStatus.OK
+    assert len(snapshot.alerts) == 1
+    # State should be truncated
+    state = snapshot.alerts[0].state
+    assert len(state) == 50
+    assert state.endswith("...")
+
+
+# --- Error snapshot status mapping tests ---
+
+def test_error_snapshot_timeout_status() -> None:
+    """Test that timeout errors create TIMEOUT status."""
+    snapshot = create_error_snapshot(
+        AlertmanagerStatus.TIMEOUT,
+        "Connection timed out after 30s",
+        source="http://alertmanager:9093",
+    )
+    assert snapshot.status == AlertmanagerStatus.TIMEOUT
+    assert snapshot.alert_count == 0
+    assert snapshot.errors == ("Connection timed out after 30s",)
+    assert snapshot.source == "http://alertmanager:9093"
+    assert snapshot.truncated is False
+
+
+def test_error_snapshot_auth_error_status() -> None:
+    """Test that auth errors create AUTH_ERROR status."""
+    snapshot = create_error_snapshot(
+        AlertmanagerStatus.AUTH_ERROR,
+        "401 Unauthorized: Invalid bearer token",
+    )
+    assert snapshot.status == AlertmanagerStatus.AUTH_ERROR
+    assert snapshot.alert_count == 0
+    assert "Unauthorized" in snapshot.errors[0]
+
+
+def test_error_snapshot_upstream_error_status() -> None:
+    """Test that upstream errors create UPSTREAM_ERROR status."""
+    snapshot = create_error_snapshot(
+        AlertmanagerStatus.UPSTREAM_ERROR,
+        "Alertmanager returned 503 Service Unavailable",
+    )
+    assert snapshot.status == AlertmanagerStatus.UPSTREAM_ERROR
+    assert snapshot.alert_count == 0
+
+
+def test_error_snapshot_invalid_response_status() -> None:
+    """Test that invalid response errors create INVALID_RESPONSE status."""
+    snapshot = create_error_snapshot(
+        AlertmanagerStatus.INVALID_RESPONSE,
+        "Failed to parse JSON response",
+    )
+    assert snapshot.status == AlertmanagerStatus.INVALID_RESPONSE
+    assert snapshot.alert_count == 0
+
+
+def test_error_snapshot_disabled_status() -> None:
+    """Test that disabled integration creates DISABLED status."""
+    snapshot = create_error_snapshot(
+        AlertmanagerStatus.DISABLED,
+        "Alertmanager integration is disabled in config",
+    )
+    assert snapshot.status == AlertmanagerStatus.DISABLED
+    assert snapshot.alert_count == 0
+    assert "disabled" in snapshot.errors[0].lower()
+
+
+def test_error_snapshot_status_roundtrip() -> None:
+    """Test that error snapshots serialize/deserialize correctly."""
+    original = create_error_snapshot(
+        AlertmanagerStatus.TIMEOUT,
+        "Test timeout error",
+        source="http://test:9093",
+    )
+    serialized = original.to_dict()
+    restored = AlertmanagerSnapshot.from_dict(serialized)
+    assert restored.status == original.status
+    assert restored.errors == original.errors
+    assert restored.source == original.source
+    assert restored.alert_count == original.alert_count
+
+
+# --- Status enum coverage ---
+
+def test_all_error_statuses_have_corresponding_error_snapshots() -> None:
+    """Verify each error status can create an error snapshot."""
+    error_statuses = [
+        AlertmanagerStatus.TIMEOUT,
+        AlertmanagerStatus.AUTH_ERROR,
+        AlertmanagerStatus.UPSTREAM_ERROR,
+        AlertmanagerStatus.INVALID_RESPONSE,
+        AlertmanagerStatus.DISABLED,
+    ]
+    for status in error_statuses:
+        snapshot = create_error_snapshot(status, f"Test error for {status.value}")
+        assert snapshot.status == status
+        assert len(snapshot.errors) == 1
+        assert snapshot.alert_count == 0

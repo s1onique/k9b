@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 
 from .adapter import (
+    AuthError,
     ExternalAnalysisAdapter,
-    ExternalAnalysisExecutionError,
     ExternalAnalysisRequest,
+    InvalidResponseError,
+    TimeoutError,
     register_external_analysis_adapter,
 )
 from .alertmanager_config import AlertmanagerConfig
@@ -26,12 +26,6 @@ from .alertmanager_snapshot import (
 )
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
-
-
-def _compute_deterministic_fingerprint(labels_sorted: tuple[tuple[str, str], ...]) -> str:
-    """Compute deterministic fingerprint from sorted labels tuple using MD5."""
-    raw = json.dumps(dict(labels_sorted), sort_keys=True)
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:32]
 
 
 class AlertmanagerAdapter(ExternalAnalysisAdapter):
@@ -70,11 +64,23 @@ class AlertmanagerAdapter(ExternalAnalysisAdapter):
                     config_max_alerts=self._config.max_alerts_in_snapshot,
                     config_max_string_length=self._config.max_string_length,
                 )
-        except ExternalAnalysisExecutionError as exc:
-            # Fetch failures create error snapshots instead of crashing
+        except TimeoutError as exc:
+            # Distinct timeout handling
             snapshot = create_error_snapshot(
-                AlertmanagerStatus.UPSTREAM_ERROR,
-                f"Fetch failed: {exc}",
+                AlertmanagerStatus.TIMEOUT,
+                str(exc),
+            )
+        except AuthError as exc:
+            # Distinct auth failure handling
+            snapshot = create_error_snapshot(
+                AlertmanagerStatus.AUTH_ERROR,
+                str(exc),
+            )
+        except InvalidResponseError as exc:
+            # Distinct invalid response handling
+            snapshot = create_error_snapshot(
+                AlertmanagerStatus.INVALID_RESPONSE,
+                str(exc),
             )
         duration_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
         compact = snapshot_to_compact(
@@ -112,7 +118,13 @@ class AlertmanagerAdapter(ExternalAnalysisAdapter):
         )
 
     def _fetch_alerts(self) -> dict | list | None:
-        """Fetch alerts from Alertmanager endpoint."""
+        """Fetch alerts from Alertmanager endpoint.
+        
+        Raises:
+            TimeoutError: When the request times out
+            AuthError: When authentication fails (401/403)
+            InvalidResponseError: When response is malformed
+        """
         endpoint = self._config.endpoint
         if not endpoint:
             return None
@@ -135,20 +147,20 @@ class AlertmanagerAdapter(ExternalAnalysisAdapter):
                 return parsed
         except urllib.error.HTTPError as exc:
             if exc.code == 401 or exc.code == 403:
-                raise ExternalAnalysisExecutionError(
-                    f"Alertmanager auth failed: {exc.code}"
-                ) from exc
-            raise ExternalAnalysisExecutionError(
+                raise AuthError(f"Alertmanager auth failed: {exc.code}") from exc
+            # Other HTTP errors (500, 502, etc.) -> upstream error
+            raise InvalidResponseError(
                 f"Alertmanager returned {exc.code}: {exc.reason}"
             ) from exc
         except urllib.error.URLError as exc:
-            raise ExternalAnalysisExecutionError(
+            # Connection refused, DNS failure, etc. -> upstream error
+            raise InvalidResponseError(
                 f"Alertmanager unreachable: {exc.reason}"
             ) from exc
         except TimeoutError:
-            raise ExternalAnalysisExecutionError("Alertmanager request timed out")
+            raise TimeoutError("Alertmanager request timed out")
         except json.JSONDecodeError as exc:
-            raise ExternalAnalysisExecutionError(
+            raise InvalidResponseError(
                 f"Alertmanager returned invalid JSON: {exc}"
             ) from exc
 
