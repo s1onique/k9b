@@ -3826,7 +3826,12 @@ body {
 }
 
 [data-theme="solarized-light"] .runs-filter-count {
-  color: #839496;
+  color: #657b83;
+}
+
+/* Active filter chip count - stronger contrast for legibility on warm paper */
+[data-theme="solarized-light"] .runs-filter-button.active .runs-filter-count {
+  color: #268bd2;
 }
 
 /* Pagination - stronger text */
@@ -5176,6 +5181,11 @@ body {
 
 [data-theme="solarized-light"] .notification-table-controls input::placeholder {
   color: #93a1a1;
+}
+
+/* Notification pagination text - stronger contrast for legibility on warm paper */
+[data-theme="solarized-light"] .notification-pagination-controls span {
+  color: #586e75;
 }
 
 /* Cluster detail body - harmonized with light shell */
