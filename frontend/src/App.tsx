@@ -3869,8 +3869,8 @@ const App = () => {
   const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run.timestamp;
   const runRecency = relativeRecency(headerRunTimestamp);
   const latestRunRecency = latestRunId ? relativeRecency(runsList.find(r => r.runId === latestRunId)?.timestamp ?? run.timestamp) : runRecency;
-  const runFresh = !isStaleTimestamp(run.timestamp);
-  const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
+  const runFresh = !isStaleTimestamp(headerRunTimestamp);
+  const runAgeMinutes = Math.floor(dayjs().diff(headerRunTimestamp, "minute"));
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
   const hasDegradedClusters = degradedCount > 0;
