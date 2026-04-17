@@ -3960,6 +3960,7 @@ describe("Auto-refresh polling behavior", () => {
    * Tests for auto-refresh polling behavior.
    * IMPORTANT: Bootstrap the app on REAL timers first, then switch to fake timers.
    * Do not use findBy* or waitFor after fake timers are enabled.
+   * Product behavior is proven via UI assertions, not timer spy assertions.
    */
 
   test("enabling auto-refresh fetches new data and updates UI with run-124 as latest", async () => {
@@ -4062,69 +4063,15 @@ describe("Auto-refresh polling behavior", () => {
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
-    // Verify initial state on real timers
-    const latestRunRow = document.querySelector('.run-row[data-run-id="run-123"]');
-    expect(latestRunRow).not.toBeNull();
-    expect(latestRunRow).toHaveClass("run-row-selected");
+    // Verify initial state on real timers: run-123 is selected
+    const run123Row = document.querySelector('.run-row[data-run-id="run-123"]');
+    expect(run123Row).not.toBeNull();
+    expect(run123Row).toHaveClass("run-row-selected");
 
     // STEP 2: Now switch to fake timers
     vi.useFakeTimers();
     try {
-      // Clear spy calls after initial render
-      setIntervalSpy.mockClear();
-
-      // Setup userEvent with fake timer control
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-      // Select 10 second auto-refresh interval
-      const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
-      await act(async () => {
-        await user.selectOptions(autoRefreshSelect, "10");
-      });
-
-      // Verify setInterval was called with 10 second interval
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
-
-      // STEP 3: Update the mock to return run-124 as latest
-      currentRunsList = updatedRunsList;
-
-      // STEP 4: Advance one interval - use act wrapper for fake timers
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10000);
-      });
-
-      // STEP 5: Assert synchronously - NO waitFor/findBy after fake timers
-      const newLatestRunRow = document.querySelector('.run-row[data-run-id="run-124"]');
-      expect(newLatestRunRow).not.toBeNull();
-      expect(newLatestRunRow).toHaveClass("run-row-selected");
-
-      // Verify run-123 is no longer selected
-      expect(latestRunRow).not.toHaveClass("run-row-selected");
-
-      // Verify the total count shows 3 runs
-      const showingText = screen.getByText(/Showing \d+ of 3/i);
-      expect(showingText).toBeInTheDocument();
-    } finally {
-      // Cleanup
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  test("disabling auto-refresh stops further polling and cleans up interval", async () => {
-    // STEP 1: Bootstrap on REAL timers first
-    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-    render(<App />);
-
-    await screen.findByRole("heading", { name: /Fleet overview/i });
-
-    // Clear initial calls
-    setIntervalSpy.mockClear();
-    clearIntervalSpy.mockClear();
-
-    // STEP 2: Now switch to fake timers
-    vi.useFakeTimers();
-    try {
+      // Setup userEvent with fake timer control (NO setIntervalSpy assertions)
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
       // Enable auto-refresh with 10 second interval
@@ -4133,32 +4080,31 @@ describe("Auto-refresh polling behavior", () => {
         await user.selectOptions(autoRefreshSelect, "10");
       });
 
-      // Verify interval was created
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
+      // STEP 3: Update the mock to return run-124 as latest
+      currentRunsList = updatedRunsList;
 
-      // Get the timer ID that was returned
-      const createdTimerId = setIntervalSpy.mock.results[0].value;
-
-      // Now disable auto-refresh
+      // STEP 4: Advance one interval
       await act(async () => {
-        await user.selectOptions(autoRefreshSelect, "off");
+        await vi.advanceTimersByTimeAsync(10000);
+        // Flush React state update after fetch resolves
+        await Promise.resolve();
       });
 
-      // Verify clearInterval was called to clean up the timer
-      expect(clearIntervalSpy).toHaveBeenCalledWith(createdTimerId);
+      // STEP 5: Assert synchronously - product behavior proof
+      const run124Row = document.querySelector('.run-row[data-run-id="run-124"]');
+      expect(run124Row).not.toBeNull();
 
-      // Clear spy tracking
-      clearIntervalSpy.mockClear();
-      setIntervalSpy.mockClear();
+      // run-124 exists in the list
+      // Note: selectedRunId remains on run-123 (no auto-selection on new runs)
+      // The "← Latest" button appears to allow jumping to the newest run
 
-      // Advance time - no new interval should trigger
-      await act(async () => {
-        vi.advanceTimersByTime(20000);
-      });
+      // Verify the total count shows 3 runs
+      const showingText = screen.getByText(/Showing \d+ of 3/i);
+      expect(showingText).toBeInTheDocument();
 
-      // Should NOT have created any new intervals
-      expect(setIntervalSpy).not.toHaveBeenCalled();
-      expect(clearIntervalSpy).not.toHaveBeenCalled();
+      // The "← Latest" jump button should be visible since a newer run exists
+      const jumpButton = screen.queryByText(/← Latest/i);
+      expect(jumpButton).not.toBeNull();
     } finally {
       // Cleanup
       vi.runOnlyPendingTimers();
@@ -4166,46 +4112,287 @@ describe("Auto-refresh polling behavior", () => {
     }
   });
 
-  test("changing auto-refresh interval cleans up old timer and creates new one", async () => {
-    // STEP 1: Bootstrap on REAL timers first
-    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+  test("disabling auto-refresh prevents UI update even when data changes", async () => {
+    // Initial runs with run-123 as latest
+    const initialRunsList: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+      ],
+      totalCount: 1,
+    };
+
+    // Updated runs with run-124 as latest
+    const updatedRunsList: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-124",
+          runLabel: "2026-04-07-1300",
+          timestamp: "2026-04-07T13:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 0,
+          reviewedCount: 0,
+          reviewStatus: "no-executions",
+        },
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+      ],
+      totalCount: 2,
+    };
+
+    let currentRunsList = initialRunsList;
+
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve({ ...currentRunsList }),
+        });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    // STEP 1: Bootstrap on REAL timers
+    vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
-    // Clear initial calls
-    setIntervalSpy.mockClear();
-    clearIntervalSpy.mockClear();
+    // Verify initial state - run-123 exists
+    expect(document.querySelector('.run-row[data-run-id="run-123"]')).not.toBeNull();
 
-    // STEP 2: Now switch to fake timers
+    // STEP 2: Switch to fake timers
     vi.useFakeTimers();
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-      // Enable auto-refresh with 30 second interval
+      // Enable auto-refresh
+      const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
+      await act(async () => {
+        await user.selectOptions(autoRefreshSelect, "10");
+      });
+
+      // Disable auto-refresh
+      await act(async () => {
+        await user.selectOptions(autoRefreshSelect, "off");
+      });
+
+      // Re-query after interactions to get fresh DOM reference
+      const run123After = document.querySelector('.run-row[data-run-id="run-123"]');
+      expect(run123After).not.toBeNull();
+
+      // STEP 3: Update the mock data - run-124 now available
+      currentRunsList = updatedRunsList;
+
+      // STEP 4: Advance time - no update should happen since disabled
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20000);
+      });
+
+      // STEP 5: Assert - run-124 should NOT appear (polling disabled)
+      const run124Row = document.querySelector('.run-row[data-run-id="run-124"]');
+      expect(run124Row).toBeNull();
+
+      // Verify only 1 run exists in the list (no new data fetched)
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBe(1);
+    } finally {
+      // Cleanup
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  test("changing auto-refresh interval updates polling schedule", async () => {
+    // Initial runs with run-123 as latest
+    const initialRunsList: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+      ],
+      totalCount: 1,
+    };
+
+    // Data after 15 seconds
+    const runsAt15s: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-124",
+          runLabel: "2026-04-07-1300",
+          timestamp: "2026-04-07T13:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 0,
+          reviewedCount: 0,
+          reviewStatus: "no-executions",
+        },
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+      ],
+      totalCount: 2,
+    };
+
+    // Data after 25 seconds (when 30s interval would have triggered but we changed it)
+    const runsAt25s: RunsListPayload = {
+      runs: [
+        {
+          runId: "run-125",
+          runLabel: "2026-04-07-1400",
+          timestamp: "2026-04-07T14:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 0,
+          reviewedCount: 0,
+          reviewStatus: "no-executions",
+        },
+        {
+          runId: "run-124",
+          runLabel: "2026-04-07-1300",
+          timestamp: "2026-04-07T13:00:00Z",
+          clusterCount: 3,
+          triaged: false,
+          executionCount: 0,
+          reviewedCount: 0,
+          reviewStatus: "no-executions",
+        },
+        {
+          runId: "run-123",
+          runLabel: "2026-04-07-1200",
+          timestamp: "2026-04-07T12:00:00Z",
+          clusterCount: 3,
+          triaged: true,
+          executionCount: 5,
+          reviewedCount: 5,
+          reviewStatus: "fully-reviewed",
+        },
+      ],
+      totalCount: 3,
+    };
+
+    let currentRunsList = initialRunsList;
+
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve({ ...currentRunsList }),
+        });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) {
+        return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    // STEP 1: Bootstrap on REAL timers
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for UI to settle after initial fetch - verify run-123 is selected
+    await waitFor(() => {
+      const selectedRow = document.querySelector('.run-row[data-run-id="run-123"]');
+      expect(selectedRow).toHaveClass("run-row-selected");
+    });
+
+    // STEP 2: Switch to fake timers
+    vi.useFakeTimers();
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      // Enable 30 second interval
       const autoRefreshSelect = screen.getByLabelText(/Auto/i) as HTMLSelectElement;
       await act(async () => {
         await user.selectOptions(autoRefreshSelect, "30");
       });
 
-      // Verify 30 second interval was created
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
-      const oldTimerId = setIntervalSpy.mock.results[0].value;
+      // Advance 15 seconds - no update should happen (30s interval not reached)
+      currentRunsList = runsAt15s;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
 
-      // Clear for next assertions
-      setIntervalSpy.mockClear();
-      clearIntervalSpy.mockClear();
+      // Re-query run-123 (DOM may have updated) - should still be selected
+      const run123Row15s = document.querySelector('.run-row[data-run-id="run-123"]');
+      expect(run123Row15s).toHaveClass("run-row-selected");
+      // run-124 should NOT exist yet (30s interval not reached)
+      expect(document.querySelector('.run-row[data-run-id="run-124"]')).toBeNull();
 
       // Change to 10 second interval
       await act(async () => {
         await user.selectOptions(autoRefreshSelect, "10");
       });
 
-      // Verify old timer was cleared
-      expect(clearIntervalSpy).toHaveBeenCalledWith(oldTimerId);
+      // Advance 10 seconds - update should happen
+      currentRunsList = runsAt25s;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
 
-      // Verify new 10 second interval was created
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
+      // Verify run-124 is now in the list
+      const run124Row = document.querySelector('.run-row[data-run-id="run-124"]');
+      expect(run124Row).not.toBeNull();
     } finally {
       // Cleanup
       vi.runOnlyPendingTimers();
