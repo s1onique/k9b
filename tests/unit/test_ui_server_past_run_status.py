@@ -18,8 +18,8 @@ from typing import cast
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
-    ExternalAnalysisStatus,
     ExternalAnalysisPurpose,
+    ExternalAnalysisStatus,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.ui.server import HealthUIRequestHandler
@@ -365,7 +365,7 @@ class PastRunStatusHydrationTests(unittest.TestCase):
             ],
             # Malformed: "review_enrichment" is a string instead of a dict
             "external_analysis_settings": {
-                "review_enrichment": "bogus"  # type: ignore[dict-item]
+                "review_enrichment": "bogus"
             },
         }
         (reviews_dir / f"{past_run_id}-review.json").write_text(

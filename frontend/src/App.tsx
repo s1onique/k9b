@@ -3032,12 +3032,6 @@ const App = () => {
   
   // Selected run ID (persisted)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(() => readStoredSelectedRunId());
-  
-  // Handle run selection from the list
-  const handleRunSelection = useCallback((runId: string) => {
-    persistSelectedRunId(runId);
-    setSelectedRunId(runId);
-  }, []);
 
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
@@ -3104,27 +3098,7 @@ const App = () => {
   // Compute filter counts
   const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runsList), [runsList]);
 
-  // Initialize selectedRunId to latest run on first load when no explicit selection exists
-  const latestRunId = runsList.length > 0 ? runsList[0].runId : null;
-  const isSelectedRunLatest = selectedRunId === latestRunId;
-  const handleJumpToLatest = useCallback(() => {
-    if (latestRunId) {
-      persistSelectedRunId(latestRunId);
-      setSelectedRunId(latestRunId);
-    }
-  }, [latestRunId]);
-
-  // Effect to initialize selectedRunId from latest run when no stored selection exists
-  useEffect(() => {
-    if (runsList.length > 0 && selectedRunId === null) {
-      const storedSelection = readStoredSelectedRunId();
-      if (!storedSelection && latestRunId) {
-        setSelectedRunId(latestRunId);
-      }
-    }
-  }, [runsList, selectedRunId, latestRunId]);
-  
-  // Filter runs based on selected filter
+  // Filter runs based on selected filter (defined early so computePageForRunId can use it)
   const filteredRunsList = useMemo(() => {
     if (runsFilter === "all") {
       return runsList;
@@ -3148,6 +3122,51 @@ const App = () => {
       return true;
     });
   }, [runsList, runsFilter]);
+
+  // Initialize selectedRunId to latest run on first load when no explicit selection exists
+  const latestRunId = runsList.length > 0 ? runsList[0].runId : null;
+  const isSelectedRunLatest = selectedRunId === latestRunId;
+  // Compute the page number for a given runId within the filtered list
+  const computePageForRunId = useCallback((runId: string | null): number => {
+    if (!runId) return 1;
+    const index = filteredRunsList.findIndex((r) => r.runId === runId);
+    if (index === -1) return 1;
+    return Math.floor(index / runsPageSize) + 1;
+  }, [filteredRunsList, runsPageSize]);
+
+  // Navigate to the page containing the given runId
+  const navigateToPageContainingRun = useCallback((runId: string | null) => {
+    const page = computePageForRunId(runId);
+    setRunsPage(page);
+  }, [computePageForRunId]);
+
+  const handleJumpToLatest = useCallback(() => {
+    if (latestRunId) {
+      persistSelectedRunId(latestRunId);
+      setSelectedRunId(latestRunId);
+      // Also navigate to page 1 (where latest run is in default newest-first ordering)
+      setRunsPage(1);
+    }
+  }, [latestRunId]);
+
+  // Navigate to the page containing the selected run when it changes
+  // This ensures the table shows the row for the selected run
+  const handleRunSelection = useCallback((runId: string) => {
+    persistSelectedRunId(runId);
+    setSelectedRunId(runId);
+    // Navigate to the page containing the selected run
+    navigateToPageContainingRun(runId);
+  }, [navigateToPageContainingRun]);
+
+  // Effect to initialize selectedRunId from latest run when no stored selection exists
+  useEffect(() => {
+    if (runsList.length > 0 && selectedRunId === null) {
+      const storedSelection = readStoredSelectedRunId();
+      if (!storedSelection && latestRunId) {
+        setSelectedRunId(latestRunId);
+      }
+    }
+  }, [runsList, selectedRunId, latestRunId]);
 
   // Computed paginated runs list
   const paginatedRunsList = useMemo(() => {

@@ -36,6 +36,15 @@ from ..external_analysis.next_check_approval import (
     record_next_check_approval,
 )
 from ..health.ui import _derive_outcome_status
+from ..structured_logging import emit_structured_log
+from .api import (
+    build_cluster_detail_payload,
+    build_fleet_payload,
+    build_proposals_payload,
+    build_run_payload,
+)
+from .model import UIIndexContext, build_ui_context, load_ui_index
+from .notifications import query_notifications
 
 
 def _build_review_enrichment_status_for_past_run(
@@ -106,15 +115,7 @@ def _build_review_enrichment_status_for_past_run(
         "runEnabled": run_enabled,
         "runProvider": run_provider,
     }
-from ..structured_logging import emit_structured_log
-from .api import (
-    build_cluster_detail_payload,
-    build_fleet_payload,
-    build_proposals_payload,
-    build_run_payload,
-)
-from .model import UIIndexContext, build_ui_context, load_ui_index
-from .notifications import query_notifications
+
 
 logger = logging.getLogger(__name__)
 
