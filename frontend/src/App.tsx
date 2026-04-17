@@ -3820,6 +3820,7 @@ const App = () => {
   }
 
   const runRecency = relativeRecency(run.timestamp);
+  const latestRunRecency = latestRunId ? relativeRecency(runsList.find(r => r.runId === latestRunId)?.timestamp ?? run.timestamp) : runRecency;
   const runFresh = !isStaleTimestamp(run.timestamp);
   const runAgeMinutes = Math.floor(dayjs().diff(run.timestamp, "minute"));
   const degradedCount =
@@ -3971,25 +3972,25 @@ const App = () => {
           </div>
           <div className="hero-run">
             <div className="hero-run-identity">
-              <p className="eyebrow hero-run-label">
-                {isSelectedRunLatest ? "Current" : "Selected"}
-              </p>
+              <div className="hero-run-header">
+                <p className="eyebrow hero-run-label">Selected run</p>
+                <span className={`run-badge run-badge--${isSelectedRunLatest ? "latest" : "past"}`}>
+                  {isSelectedRunLatest ? "Latest" : "Past run"}
+                </span>
+              </div>
               <div className="hero-run-title">
                 <strong>Run {run.label}</strong>
                 <span className="hero-run-id">ID {run.runId}</span>
               </div>
+              <p className="hero-run-captured">Captured {runRecency}</p>
             </div>
             <div className="hero-run-freshness">
-              {(() => {
-                const freshnessLevel = getRunFreshnessLevel(run.timestamp);
-                return (
-                  <span className={`freshness-indicator freshness-indicator--${freshnessLevel}`}>
-                    <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[freshnessLevel]}</span>
-                    <span className="freshness-indicator__label">{FRESHNESS_LABEL[freshnessLevel]}</span>
-                  </span>
-                );
-              })()}
-              <p className="hero-run-recency">Last {runRecency}</p>
+              {isSelectedRunLatest && (
+                <span className={`freshness-indicator freshness-indicator--${getRunFreshnessLevel(run.timestamp)}`}>
+                  <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[getRunFreshnessLevel(run.timestamp)]}</span>
+                  <span className="freshness-indicator__label">{FRESHNESS_LABEL[getRunFreshnessLevel(run.timestamp)]}</span>
+                </span>
+              )}
               {!isSelectedRunLatest && (
                 <button
                   type="button"
@@ -4001,6 +4002,11 @@ const App = () => {
                 </button>
               )}
             </div>
+            {!isSelectedRunLatest && (
+              <p className="hero-run-latest-hint">
+                Latest run available: {latestRunRecency}
+              </p>
+            )}
           </div>
         </div>
         <div className="hero-actions">

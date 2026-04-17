@@ -1539,7 +1539,8 @@ describe("App", () => {
       screen.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/Retained history stats/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Current$/i, { selector: ".hero-run-label" })).toBeInTheDocument();
+    expect(screen.getByText(/^Selected run$/i, { selector: ".hero-run-label" })).toBeInTheDocument();
+    expect(screen.getByText(/^Latest$/i, { selector: ".run-badge" })).toBeInTheDocument();
     expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
     expect(
       screen.getByText(/(Fresh|Aging|Stale)$/i, { selector: ".freshness-indicator__label" })
@@ -2658,8 +2659,8 @@ describe("Recent runs selection", () => {
     expect(latestRunRow).not.toBeNull();
     expect(latestRunRow).toHaveClass("run-row-selected");
 
-    // Hero section should show "Current" label for the latest run
-    const heroLabel = await screen.findByText(/^Current$/i);
+    // Hero section should show "Latest" label for the latest run
+    const heroLabel = await screen.findByText(/^Latest$/i);
     expect(heroLabel).toBeInTheDocument();
   });
 
@@ -2757,8 +2758,8 @@ describe("Recent runs selection", () => {
       expect(runCalls.length).toBeGreaterThan(0);
     });
 
-    // Hero section should show "Selected" label (not "Current" since it's older)
-    const selectedLabel = await screen.findByText(/^Selected$/i);
+    // Hero section should show "Selected run" label (not "Latest" since it's older)
+    const selectedLabel = await screen.findByText(/^Selected run$/i);
     expect(selectedLabel).toBeInTheDocument();
   });
 
@@ -3024,8 +3025,8 @@ describe("Recent runs selection", () => {
       expect(olderRunRow).toHaveClass("run-row-selected");
     });
 
-    // Should show "Selected" label (not "Current")
-    const selectedLabel = screen.queryByText(/^Selected$/i);
+    // Should show "Selected run" label (not "Current")
+    const selectedLabel = screen.queryByText(/^Selected run$/i);
     expect(selectedLabel).toBeInTheDocument();
 
     // Should show "Jump to latest" button
@@ -3042,7 +3043,7 @@ describe("Recent runs selection", () => {
     expect(latestRunRow).toHaveClass("run-row-selected");
 
     // Should show "Current" label
-    const currentRunLabel = await screen.findByText(/^Current$/i);
+    const currentRunLabel = await screen.findByText(/^Latest$/i);
     expect(currentRunLabel).toBeInTheDocument();
 
     // "Jump to latest" button should be hidden
@@ -3560,7 +3561,7 @@ describe("Cockpit refresh regression", () => {
 
     // Initially run-123 is the latest (and selected)
     // Hero should show "Current"
-    expect(screen.getByText(/^Current$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
 
     // Now a newer run appears
     runsListRef.current = newerRunsList;
@@ -3650,7 +3651,7 @@ describe("Cockpit refresh regression", () => {
     });
 
     // Initially run-123 is selected (and is latest)
-    expect(screen.getByText(/^Current$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
 
     // Select an older run
     const olderRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
@@ -3688,8 +3689,8 @@ describe("Cockpit refresh regression", () => {
     const latestRunRow = document.querySelector('.run-row[data-run-id="run-124"]');
     expect(latestRunRow).toHaveClass("run-row-selected");
 
-    // Hero should show "Current" again
-    expect(screen.getByText(/^Current$/i)).toBeInTheDocument();
+    // Hero should show "Latest" again
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
   });
 
   test("interval polling does not leak or duplicate timers", async () => {
@@ -3825,8 +3826,10 @@ describe("Run freshness thresholds", () => {
     expect(screen.getByText(/^Aging$/i)).toBeInTheDocument();
   });
 
-  test("selecting a different run changes freshness indicator to match new run's timestamp", async () => {
+  test("selecting a past run hides freshness indicator but shows Past run badge", async () => {
     // Create two runs with different timestamps - one Fresh, one Stale
+    // The latest run (run-123) is Fresh (10 min ago)
+    // The past run (run-122) would be Stale (120 min ago) if freshness applied
     const freshRunTimestamp = minsAgo(10); // 10 min ago = Fresh
     const staleRunTimestamp = minsAgo(120); // 120 min ago = Stale
 
@@ -3877,26 +3880,37 @@ describe("Run freshness thresholds", () => {
       expect(screen.queryByText(/^Fresh$/i)).toBeInTheDocument();
     });
 
-    // Verify Fresh is shown initially
+    // Verify Fresh is shown initially (latest run is fresh)
     expect(screen.getByText(/^Fresh$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
     const freshIndicator = document.querySelector(".freshness-indicator--fresh");
     expect(freshIndicator).not.toBeNull();
 
-    // Select run-122 (Stale)
+    // Select run-122 (would be Stale but is NOT latest)
     const staleRunRow = document.querySelector('.run-row[data-run-id="run-122"]');
     await act(async () => {
       await user.click(staleRunRow!);
     });
 
-    // Wait for UI to update - should now show Stale
+    // Wait for UI to update - should show "Past run" badge
     await waitFor(() => {
-      expect(screen.queryByText(/^Stale$/i)).toBeInTheDocument();
+      expect(screen.queryByText(/^Past run$/i)).toBeInTheDocument();
     });
 
-    // Verify Stale is now shown
-    expect(screen.getByText(/^Stale$/i)).toBeInTheDocument();
-    const staleIndicator = document.querySelector(".freshness-indicator--stale");
-    expect(staleIndicator).not.toBeNull();
+    // Verify Past run badge is shown
+    expect(screen.getByText(/^Past run$/i)).toBeInTheDocument();
+
+    // CRITICAL: Freshness indicator should be HIDDEN when viewing past run
+    // The latest run is fresh, so we should NOT show "Stale" for a historical selection
+    expect(screen.queryByText(/^Stale$/i)).not.toBeInTheDocument();
+    const staleIndicator = document.querySelector(".freshness-indicator");
+    expect(staleIndicator).toBeNull();
+
+    // Should show jump to latest button
+    expect(screen.getByText(/← Latest/)).toBeInTheDocument();
+
+    // Should show helper text about latest run available
+    expect(screen.getByText(/Latest run available:/i)).toBeInTheDocument();
 
     // Verify that fetch was called with run_id=run-122
     const run122FetchCalls = fetchMock.mock.calls.filter(([input]) => {
@@ -3904,6 +3918,84 @@ describe("Run freshness thresholds", () => {
       return url.includes("run_id=run-122");
     });
     expect(run122FetchCalls.length).toBeGreaterThan(0);
+  });
+
+  test("selecting a stale latest run shows Stale indicator", async () => {
+    // Test case: both runs are stale (old timestamps), so whichever is latest IS stale
+    const staleRunTimestamp = minsAgo(60); // 60 min ago = Stale
+    const olderStaleTimestamp = minsAgo(120); // 120 min ago = Stale
+
+    const runsWithStaleLatest = {
+      runs: [
+        { runId: "run-123", runLabel: "Stale run (latest)", timestamp: staleRunTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-122", runLabel: "Older stale run", timestamp: olderStaleTimestamp, clusterCount: 2, triaged: true, executionCount: 3, reviewedCount: 3, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    const staleRun = { ...sampleRun, timestamp: staleRunTimestamp };
+    const olderStaleRun = { ...sampleRun, runId: "run-122", timestamp: olderStaleTimestamp };
+
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsWithStaleLatest),
+        });
+      }
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-122") {
+          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(olderStaleRun) });
+        }
+        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(staleRun) });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for initial state - latest run (run-123) should be selected and is stale
+    await waitFor(() => {
+      expect(screen.queryByText(/^Stale$/i)).toBeInTheDocument();
+    });
+
+    // Verify Stale is shown for the latest run
+    expect(screen.getByText(/^Stale$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
+    const staleIndicator = document.querySelector(".freshness-indicator--stale");
+    expect(staleIndicator).not.toBeNull();
+
+    // Select the older stale run
+    const olderStaleRow = document.querySelector('.run-row[data-run-id="run-122"]');
+    await act(async () => {
+      await user.click(olderStaleRow!);
+    });
+
+    // Wait for UI to update - should show "Past run" badge
+    await waitFor(() => {
+      expect(screen.queryByText(/^Past run$/i)).toBeInTheDocument();
+    });
+
+    // Verify Past run badge is shown
+    expect(screen.getByText(/^Past run$/i)).toBeInTheDocument();
+
+    // CRITICAL: Stale should be HIDDEN when viewing the past run, even though both runs are stale
+    // The freshness indicator only shows for the latest run
+    expect(screen.queryByText(/^Stale$/i)).not.toBeInTheDocument();
+    const hiddenStaleIndicator = document.querySelector(".freshness-indicator");
+    expect(hiddenStaleIndicator).toBeNull();
   });
 
   test("refresh controls remain present and queryable in header", async () => {
@@ -3924,6 +4016,237 @@ describe("Run freshness thresholds", () => {
     // Page freshness indicator should be present
     const pageFreshness = document.querySelector(".page-freshness-indicator");
     expect(pageFreshness).not.toBeNull();
+  });
+});
+
+describe("Cockpit header selection vs freshness semantics", () => {
+  /**
+   * These tests verify the semantic separation between:
+   * - Selection state: "Latest" / "Past run" badge indicates what the operator is viewing
+   * - Freshness state: "Fresh" / "Aging" / "Stale" describes the fleet/system status
+   *
+   * UX rule: Freshness wording must only describe true freshness of the fleet/latest,
+   * not merely the fact that the operator is browsing an older run.
+   *
+   * When viewing a past run but the latest run is fresh, we must NOT show "Stale"
+   * because that would confuse "historical browsing" with "system staleness".
+   */
+
+  test("State 1: selected run is latest and fresh - shows Latest badge and Fresh indicator", async () => {
+    const recentTimestamp = minsAgo(5); // 5 min ago = Fresh
+    const freshRun = {
+      ...sampleRun,
+      timestamp: recentTimestamp,
+    };
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": freshRun }));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Should show "Latest" badge (selected run is latest)
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
+
+    // Should show "Fresh" freshness indicator (selected run is fresh)
+    expect(screen.getByText(/^Fresh$/i)).toBeInTheDocument();
+
+    // Should show Captured text with recency
+    expect(screen.getByText(/Captured .* ago/i)).toBeInTheDocument();
+  });
+
+  test("State 2: past run selected but latest is fresh - shows Past run badge, NO Stale indicator", async () => {
+    // Selected run is 1 hour old (would be Stale if freshness applied to it)
+    const pastRunTimestamp = minsAgo(60);
+    // Latest run is 5 minutes old (Fresh)
+    const latestRunTimestamp = minsAgo(5);
+
+    const runsWithPastAndFreshLatest = {
+      runs: [
+        { runId: "run-fresh", runLabel: "Latest run", timestamp: latestRunTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-past", runLabel: "Past run", timestamp: pastRunTimestamp, clusterCount: 2, triaged: true, executionCount: 3, reviewedCount: 3, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    const pastRun = { ...sampleRun, runId: "run-past", timestamp: pastRunTimestamp };
+    const latestRun = { ...sampleRun, runId: "run-fresh", timestamp: latestRunTimestamp };
+
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsWithPastAndFreshLatest),
+        });
+      }
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-past") {
+          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(pastRun) });
+        }
+        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(latestRun) });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Initially show Latest run (fresh) - latest run should be auto-selected
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
+
+    // Select the past run (1 hour old)
+    const pastRunRow = document.querySelector('.run-row[data-run-id="run-past"]');
+    await act(async () => {
+      await user.click(pastRunRow!);
+    });
+
+    // Wait for UI to update
+    await waitFor(() => {
+      expect(screen.queryByText(/^Past run$/i)).toBeInTheDocument();
+    });
+
+    // Should show "Past run" badge
+    expect(screen.getByText(/^Past run$/i)).toBeInTheDocument();
+
+    // Should show "Latest run available: ..." helper text
+    expect(screen.getByText(/Latest run available:/i)).toBeInTheDocument();
+
+    // Should show "Captured X ago" for the selected run
+    expect(screen.getByText(/Captured .* ago/i)).toBeInTheDocument();
+
+    // CRITICAL: Should NOT show "Stale" - the latest run is fresh
+    // This is the key semantic separation: historical browsing ≠ system staleness
+    expect(screen.queryByText(/^Stale$/i)).not.toBeInTheDocument();
+
+    // Should NOT show freshness indicator at all when viewing past run
+    // (freshness indicator only shows when selected run is latest)
+    const freshnessIndicator = document.querySelector(".freshness-indicator");
+    expect(freshnessIndicator).toBeNull();
+
+    // Should show jump back to latest button
+    const jumpButton = screen.getByText(/← Latest/);
+    expect(jumpButton).toBeInTheDocument();
+
+    // Verify fetch was called for the past run
+    const pastRunFetchCalls = fetchMock.mock.calls.filter(([input]) => {
+      const url = typeof input === "string" ? input : input.url;
+      return url.includes("run_id=run-past");
+    });
+    expect(pastRunFetchCalls.length).toBeGreaterThan(0);
+  });
+
+  test("State 3: latest run itself is stale - shows Stale indicator for latest run", async () => {
+    // Latest run is 1 hour old (Stale)
+    const staleTimestamp = minsAgo(60);
+
+    const staleRun = {
+      ...sampleRun,
+      timestamp: staleTimestamp,
+    };
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun }));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Should show "Latest" badge (this IS the latest run)
+    expect(screen.getByText(/^Latest$/i)).toBeInTheDocument();
+
+    // Should show "Stale" because the latest run IS stale
+    // This is a true freshness concern, not just historical browsing
+    expect(screen.getByText(/^Stale$/i)).toBeInTheDocument();
+
+    // Should show freshness indicator with stale class
+    const staleIndicator = document.querySelector(".freshness-indicator--stale");
+    expect(staleIndicator).not.toBeNull();
+  });
+
+  test("jump to latest button returns to latest run and restores Fresh indicator", async () => {
+    // Selected run is 1 hour old (would be Stale)
+    const pastRunTimestamp = minsAgo(60);
+    // Latest run is 5 minutes old (Fresh)
+    const latestRunTimestamp = minsAgo(5);
+
+    const runsWithPastAndFreshLatest = {
+      runs: [
+        { runId: "run-fresh", runLabel: "Latest run", timestamp: latestRunTimestamp, clusterCount: 2, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+        { runId: "run-past", runLabel: "Past run", timestamp: pastRunTimestamp, clusterCount: 2, triaged: true, executionCount: 3, reviewedCount: 3, reviewStatus: "fully-reviewed" },
+      ],
+      totalCount: 2,
+    };
+
+    const pastRun = { ...sampleRun, runId: "run-past", timestamp: pastRunTimestamp };
+    const latestRun = { ...sampleRun, runId: "run-fresh", timestamp: latestRunTimestamp };
+
+    const fetchMock = vi.fn((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const base = url.split("?")[0];
+
+      if (base === "/api/runs") {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: "OK",
+          json: () => Promise.resolve(runsWithPastAndFreshLatest),
+        });
+      }
+      if (base === "/api/run") {
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        const runId = params.get("run_id");
+        if (runId === "run-past") {
+          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(pastRun) });
+        }
+        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(latestRun) });
+      }
+
+      const payload = defaultPayloads[url] ?? defaultPayloads[base];
+      if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Select the past run
+    const pastRunRow = document.querySelector('.run-row[data-run-id="run-past"]');
+    await act(async () => {
+      await user.click(pastRunRow!);
+    });
+
+    // Wait for past run to be selected
+    await waitFor(() => {
+      expect(screen.queryByText(/^Past run$/i)).toBeInTheDocument();
+    });
+
+    // Click jump to latest button
+    const jumpButton = screen.getByText(/← Latest/);
+    await act(async () => {
+      await user.click(jumpButton);
+    });
+
+    // Wait for UI to update to latest run
+    await waitFor(() => {
+      expect(screen.queryByText(/^Latest$/i)).toBeInTheDocument();
+    });
+
+    // Should now show Fresh (latest run is fresh)
+    expect(screen.getByText(/^Fresh$/i)).toBeInTheDocument();
+
+    // Should NOT show "Latest run available" hint anymore
+    expect(screen.queryByText(/Latest run available:/i)).not.toBeInTheDocument();
+
+    // Freshness indicator should be present (showing Fresh)
+    const freshIndicator = document.querySelector(".freshness-indicator--fresh");
+    expect(freshIndicator).not.toBeNull();
   });
 
   test("panel switching behavior still works after run selection", async () => {
