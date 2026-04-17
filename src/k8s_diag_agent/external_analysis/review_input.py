@@ -4,9 +4,51 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from .alertmanager_artifact import alertmanager_artifacts_exist, read_alertmanager_compact
+
+
+@dataclass(frozen=True)
+class AlertmanagerContext:
+    """Structured Alertmanager compact context for LLM prompts."""
+    available: bool
+    source: str  # "run_artifact" or "unavailable"
+    compact: dict[str, Any] | None
+    status: str | None  # Original Alertmanager status when available
+
+    @classmethod
+    def from_run_artifacts(cls, root_dir: Path, run_id: str) -> AlertmanagerContext:
+        """Load Alertmanager compact from run-scoped artifact path.
+        
+        Returns unavailable context if artifact does not exist or cannot be parsed.
+        No live Alertmanager fetch is performed.
+        """
+        snap_exists, compact_exists = alertmanager_artifacts_exist(root_dir, run_id)
+        if not compact_exists:
+            return cls(
+                available=False,
+                source="unavailable",
+                compact=None,
+                status=None,
+            )
+        compact_path = root_dir / f"{run_id}-alertmanager-compact.json"
+        compact = read_alertmanager_compact(compact_path)
+        if compact is None:
+            return cls(
+                available=False,
+                source="unavailable",
+                compact=None,
+                status=None,
+            )
+        return cls(
+            available=True,
+            source="run_artifact",
+            compact=compact.to_dict(),
+            status=compact.status,
+        )
 
 
 @dataclass(frozen=True)
@@ -31,6 +73,12 @@ class ReviewEnrichmentInput:
     missing_drilldowns: tuple[str, ...]
     missing_assessments: tuple[str, ...]
     missing_snapshots: tuple[str, ...]
+    alertmanager_context: AlertmanagerContext = field(default_factory=lambda: AlertmanagerContext(
+        available=False,
+        source="unavailable",
+        compact=None,
+        status=None,
+    ))
 
 
 def build_review_enrichment_input(
@@ -75,6 +123,7 @@ def build_review_enrichment_input(
                 snapshot=snapshot_data,
             )
         )
+    alertmanager_ctx = AlertmanagerContext.from_run_artifacts(root_dir, run_id)
     return ReviewEnrichmentInput(
         run_id=run_id,
         review_path=review_path,
@@ -83,6 +132,7 @@ def build_review_enrichment_input(
         missing_drilldowns=tuple(missing_drilldowns),
         missing_assessments=tuple(missing_assessments),
         missing_snapshots=tuple(missing_snapshots),
+        alertmanager_context=alertmanager_ctx,
     )
 
 

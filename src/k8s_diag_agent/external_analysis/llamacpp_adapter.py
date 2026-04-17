@@ -198,6 +198,23 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             "Review artifact:",
             json.dumps(context.review, indent=2),
         ]
+        # Inject Alertmanager compact context when available
+        if context.alertmanager_context.available:
+            prompt_parts.append("Alertmanager operational context:")
+            prompt_parts.append(json.dumps({
+                "available": True,
+                "source": context.alertmanager_context.source,
+                "status": context.alertmanager_context.status,
+                "compact": context.alertmanager_context.compact,
+            }, indent=2))
+        else:
+            prompt_parts.append("Alertmanager operational context:")
+            prompt_parts.append(json.dumps({
+                "available": False,
+                "source": context.alertmanager_context.source,
+                "status": context.alertmanager_context.status,
+                "compact": None,
+            }, indent=2))
         if context.selections:
             for selection in context.selections:
                 label = selection.label or selection.context or "<unknown>"
@@ -319,6 +336,12 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 "run_id": request.run_id,
                 "cluster_label": request.cluster_label,
                 "review_run_id": context.review.get("run_id"),
+                "alertmanager_context": {
+                    "available": context.alertmanager_context.available,
+                    "source": context.alertmanager_context.source,
+                    "compact": context.alertmanager_context.compact,
+                    "status": context.alertmanager_context.status,
+                },
             },
             collection_statuses=collection_statuses,
         )
@@ -383,7 +406,6 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             error_summary=error_summary,
             skip_reason=skip_reason,
         )
-
 
 
 @register_external_analysis_adapter("llamacpp")
