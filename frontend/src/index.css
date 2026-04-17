@@ -5188,6 +5188,30 @@ body {
   color: #586e75;
 }
 
+/* Notification pagination buttons - stronger contrast for active state */
+[data-theme="solarized-light"] .notification-pagination-controls button {
+  background: rgba(147, 161, 161, 0.15);
+  border: 1px solid rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .notification-pagination-controls button:hover:not(:disabled) {
+  background: rgba(147, 161, 161, 0.25);
+  border-color: rgba(147, 161, 161, 0.6);
+}
+
+/* Notification pagination disabled buttons - visible but clearly disabled */
+[data-theme="solarized-light"] .notification-pagination-controls button:disabled {
+  opacity: 0.6;
+  color: #839496;
+}
+
+/* Runs pagination buttons - Solarized Light styling */
+[data-theme="solarized-light"] .runs-pagination-controls button:disabled {
+  opacity: 0.55;
+  color: #839496;
+}
+
 /* Cluster detail body - harmonized with light shell */
 [data-theme="solarized-light"] .cluster-detail-body {
   color: #002b36;
