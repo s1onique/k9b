@@ -1,0 +1,322 @@
+/**
+ * Theme Token System
+ * 
+ * This file defines semantic theme tokens for the k9b dashboard.
+ * Tokens are organized into semantic categories rather than raw colors.
+ * 
+ * Theme Architecture:
+ * - Root data-theme attribute controls which theme is active
+ * - CSS custom properties cascade based on theme
+ * - Components use semantic tokens, not raw hex values
+ * 
+ * Token Categories:
+ * - Background: page, surface, elevated, canvas
+ * - Text: primary, secondary, muted, accent
+ * - Border: default, subtle, emphasis
+ * - Accent: primary, secondary, tertiary
+ * - State: success, warning, danger, info, neutral
+ * - Interactive: hover, focus, active, selected
+ */
+
+/* ============================================================
+   DARK THEME (Default)
+   ============================================================ */
+
+:root {
+  /* Background tokens */
+  --color-bg-page: #020617;
+  --color-bg-page-gradient: radial-gradient(circle at top, rgba(34, 197, 94, 0.18), transparent 40%),
+    linear-gradient(180deg, #020617 0%, #050911 100%);
+  --color-bg-surface: rgba(15, 23, 42, 0.9);
+  --color-bg-elevated: rgba(30, 41, 59, 0.85);
+  --color-bg-canvas: rgba(15, 23, 42, 0.75);
+  
+  /* Text tokens */
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #e2e8f0;
+  --color-text-muted: rgba(148, 163, 184, 0.8);
+  --color-text-accent: #93c5fd;
+  --color-text-link: #38bdf8;
+  
+  /* Border tokens */
+  --color-border-default: rgba(148, 163, 184, 0.3);
+  --color-border-subtle: rgba(148, 163, 184, 0.15);
+  --color-border-emphasis: rgba(148, 163, 184, 0.5);
+  
+  /* Accent tokens */
+  --color-accent-primary: rgba(56, 189, 248, 0.15);
+  --color-accent-primary-border: rgba(56, 189, 248, 0.4);
+  --color-accent-primary-text: #bae6fd;
+  --color-accent-secondary: rgba(59, 130, 246, 0.15);
+  --color-accent-secondary-border: rgba(59, 130, 246, 0.4);
+  --color-accent-secondary-text: #bfdbfe;
+  
+  /* State tokens - semantic status colors */
+  --color-state-success-bg: rgba(34, 197, 94, 0.15);
+  --color-state-success-border: rgba(34, 197, 94, 0.35);
+  --color-state-success-text: #86efac;
+  
+  --color-state-warning-bg: rgba(251, 191, 36, 0.15);
+  --color-state-warning-border: rgba(251, 191, 36, 0.35);
+  --color-state-warning-text: #fde047;
+  
+  --color-state-danger-bg: rgba(248, 113, 113, 0.15);
+  --color-state-danger-border: rgba(248, 113, 113, 0.35);
+  --color-state-danger-text: #fecaca;
+  
+  --color-state-info-bg: rgba(59, 130, 246, 0.15);
+  --color-state-info-border: rgba(59, 130, 246, 0.35);
+  --color-state-info-text: #bfdbfe;
+  
+  --color-state-neutral-bg: rgba(148, 163, 184, 0.15);
+  --color-state-neutral-border: rgba(148, 163, 184, 0.35);
+  --color-state-neutral-text: #cbd5e1;
+  
+  /* Interactive tokens */
+  --color-interactive-hover: rgba(71, 85, 105, 0.4);
+  --color-interactive-focus: #38bdf8;
+  --color-interactive-active: rgba(56, 189, 248, 0.2);
+  --color-interactive-selected-bg: rgba(56, 189, 248, 0.12);
+  --color-interactive-selected-border: rgba(56, 189, 248, 0.3);
+  
+  /* Selection tokens */
+  --color-selection-bg: rgba(56, 189, 248, 0.15);
+  --color-selection-border: rgba(56, 189, 248, 0.4);
+  --color-selection-text: #7dd3fc;
+  
+  /* Panel and card tokens */
+  --color-panel-bg: rgba(15, 23, 42, 0.9);
+  --color-panel-border: rgba(148, 163, 184, 0.3);
+  --color-card-bg: rgba(15, 23, 42, 0.85);
+  --color-card-border: rgba(148, 163, 184, 0.2);
+  
+  /* Nav tokens */
+  --color-nav-bg: rgba(15, 23, 42, 0.9);
+  --color-nav-border: rgba(71, 85, 105, 0.35);
+  --color-nav-item-text: rgba(148, 163, 184, 0.85);
+  --color-nav-item-hover-bg: rgba(56, 189, 248, 0.1);
+  --color-nav-item-hover-border: rgba(56, 189, 248, 0.3);
+  --color-nav-item-hover-text: #bae6fd;
+  
+  /* Input tokens */
+  --color-input-bg: rgba(2, 6, 23, 0.85);
+  --color-input-border: rgba(148, 163, 184, 0.6);
+  --color-input-text: #f8fafc;
+  --color-input-placeholder: rgba(148, 163, 184, 0.6);
+  
+  /* Button tokens */
+  --color-btn-primary-bg: rgba(56, 189, 248, 0.1);
+  --color-btn-primary-border: rgba(56, 189, 248, 0.5);
+  --color-btn-primary-text: #bae6fd;
+  --color-btn-primary-hover-bg: rgba(56, 189, 248, 0.2);
+  --color-btn-primary-hover-border: rgba(56, 189, 248, 0.4);
+  
+  --color-btn-secondary-bg: rgba(71, 85, 105, 0.3);
+  --color-btn-secondary-border: rgba(100, 116, 139, 0.4);
+  --color-btn-secondary-text: rgba(148, 163, 184, 0.9);
+  --color-btn-secondary-hover-bg: rgba(71, 85, 105, 0.5);
+  --color-btn-secondary-hover-border: rgba(100, 116, 139, 0.6);
+  
+  /* Freshness indicator tokens */
+  --color-freshness-fresh: rgba(34, 197, 94, 0.9);
+  --color-freshness-warning: rgba(251, 191, 36, 0.9);
+  --color-freshness-stale: rgba(248, 113, 113, 0.9);
+  
+  /* Status pill tokens - degraded */
+  --color-status-degraded-bg: rgba(248, 113, 113, 0.2);
+  --color-status-degraded-text: #fecaca;
+  
+  /* Status pill tokens - healthy */
+  --color-status-healthy-bg: rgba(34, 197, 94, 0.2);
+  --color-status-healthy-text: #86efac;
+  
+  /* Status pill tokens - pending/warning */
+  --color-status-pending-bg: rgba(251, 191, 36, 0.2);
+  --color-status-pending-text: #fde68a;
+  
+  /* Status pill tokens - review statuses */
+  --color-status-reviewed-bg: rgba(34, 197, 94, 0.2);
+  --color-status-reviewed-text: #86efac;
+  --color-status-unreviewed-bg: rgba(251, 191, 36, 0.2);
+  --color-status-unreviewed-text: #fde68a;
+  --color-status-partial-bg: rgba(148, 163, 184, 0.15);
+  --color-status-partial-text: #cbd5e1;
+  --color-status-no-exec-bg: rgba(59, 130, 246, 0.15);
+  --color-status-no-exec-text: #bfdbfe;
+  
+  /* Alert/warning tokens */
+  --color-alert-bg: rgba(248, 113, 113, 0.2);
+  --color-alert-border: rgba(248, 113, 113, 0.5);
+  --color-alert-text: #fecaca;
+  
+  /* Empty state tokens */
+  --color-empty-bg: rgba(15, 23, 42, 0.8);
+  --color-empty-border: rgba(148, 163, 184, 0.4);
+  --color-empty-text: rgba(148, 163, 184, 0.7);
+  
+  /* Table tokens */
+  --color-table-header-bg: rgba(15, 23, 42, 0.6);
+  --color-table-row-hover: rgba(71, 85, 105, 0.35);
+  --color-table-row-selected: rgba(56, 189, 248, 0.12);
+  --color-table-border: rgba(148, 163, 184, 0.15);
+  --color-table-header-text: rgba(148, 163, 184, 0.7);
+  
+  /* Card/panel selection tokens */
+  --color-card-selected-bg: rgba(56, 189, 248, 0.12);
+  --color-card-selected-border: rgba(56, 189, 248, 0.3);
+}
+
+/* ============================================================
+   SOLARIZED LIGHT THEME
+   Based on Solarized Light principles:
+   - warm paper-like light background (cream/ivory base)
+   - soft, low-glare surfaces
+   - muted, balanced contrast
+   - dark readable foregrounds
+   - restrained Solarized accent colors
+   ============================================================ */
+
+[data-theme="solarized-light"] {
+  /* Background tokens - Solarized Light base colors (warm cream/ivory) */
+  --color-bg-page: #fdf6e3;
+  --color-bg-page-gradient: linear-gradient(180deg, #fdf6e3 0%, #eee8d5 100%);
+  --color-bg-surface: rgba(253, 246, 227, 0.95);
+  --color-bg-elevated: rgba(238, 232, 213, 0.9);
+  --color-bg-canvas: rgba(253, 246, 227, 0.85);
+  
+  /* Text tokens - Solarized Light foreground colors (dark readable) */
+  --color-text-primary: #002b36;
+  --color-text-secondary: #657b83;
+  --color-text-muted: rgba(101, 123, 131, 0.8);
+  --color-text-accent: #cb4b16;
+  --color-text-link: #268bd2;
+  
+  /* Border tokens - subtle warm grays */
+  --color-border-default: rgba(147, 161, 161, 0.35);
+  --color-border-subtle: rgba(147, 161, 161, 0.2);
+  --color-border-emphasis: rgba(147, 161, 161, 0.55);
+  
+  /* Accent tokens - Solarized palette */
+  --color-accent-primary: rgba(38, 139, 210, 0.12);
+  --color-accent-primary-border: rgba(38, 139, 210, 0.4);
+  --color-accent-primary-text: #268bd2;
+  
+  --color-accent-secondary: rgba(181, 137, 0, 0.12);
+  --color-accent-secondary-border: rgba(181, 137, 0, 0.35);
+  --color-accent-secondary-text: #b58900;
+  
+  /* State tokens - Solarized Light status colors
+     Muted to maintain Solarized aesthetic while remaining semantically distinct */
+  --color-state-success-bg: rgba(133, 153, 0, 0.15);
+  --color-state-success-border: rgba(133, 153, 0, 0.4);
+  --color-state-success-text: #859900;
+  
+  --color-state-warning-bg: rgba(181, 137, 0, 0.15);
+  --color-state-warning-border: rgba(181, 137, 0, 0.4);
+  --color-state-warning-text: #b58900;
+  
+  --color-state-danger-bg: rgba(220, 50, 47, 0.12);
+  --color-state-danger-border: rgba(220, 50, 47, 0.35);
+  --color-state-danger-text: #dc322f;
+  
+  --color-state-info-bg: rgba(38, 139, 210, 0.12);
+  --color-state-info-border: rgba(38, 139, 210, 0.35);
+  --color-state-info-text: #268bd2;
+  
+  --color-state-neutral-bg: rgba(147, 161, 161, 0.12);
+  --color-state-neutral-border: rgba(147, 161, 161, 0.3);
+  --color-state-neutral-text: #93a1a1;
+  
+  /* Interactive tokens - subtle contrast for light mode */
+  --color-interactive-hover: rgba(147, 161, 161, 0.2);
+  --color-interactive-focus: #268bd2;
+  --color-interactive-active: rgba(38, 139, 210, 0.15);
+  --color-interactive-selected-bg: rgba(38, 139, 210, 0.1);
+  --color-interactive-selected-border: rgba(38, 139, 210, 0.3);
+  
+  /* Selection tokens */
+  --color-selection-bg: rgba(38, 139, 210, 0.12);
+  --color-selection-border: rgba(38, 139, 210, 0.4);
+  --color-selection-text: #268bd2;
+  
+  /* Panel and card tokens - warm cream surfaces */
+  --color-panel-bg: rgba(253, 246, 227, 0.95);
+  --color-panel-border: rgba(147, 161, 161, 0.35);
+  --color-card-bg: rgba(238, 232, 213, 0.9);
+  --color-card-border: rgba(147, 161, 161, 0.25);
+  
+  /* Nav tokens - Solarized Light navigation */
+  --color-nav-bg: rgba(253, 246, 227, 0.95);
+  --color-nav-border: rgba(147, 161, 161, 0.3);
+  --color-nav-item-text: rgba(7, 54, 66, 0.8);
+  --color-nav-item-hover-bg: rgba(38, 139, 210, 0.1);
+  --color-nav-item-hover-border: rgba(38, 139, 210, 0.25);
+  --color-nav-item-hover-text: #268bd2;
+  
+  /* Input tokens - light backgrounds with dark text */
+  --color-input-bg: rgba(253, 246, 227, 0.95);
+  --color-input-border: rgba(147, 161, 161, 0.5);
+  --color-input-text: #002b36;
+  --color-input-placeholder: rgba(101, 123, 131, 0.6);
+  
+  /* Button tokens - Solarized Light buttons */
+  --color-btn-primary-bg: rgba(38, 139, 210, 0.12);
+  --color-btn-primary-border: rgba(38, 139, 210, 0.5);
+  --color-btn-primary-text: #268bd2;
+  --color-btn-primary-hover-bg: rgba(38, 139, 210, 0.2);
+  --color-btn-primary-hover-border: rgba(38, 139, 210, 0.65);
+  
+  --color-btn-secondary-bg: rgba(147, 161, 161, 0.12);
+  --color-btn-secondary-border: rgba(147, 161, 161, 0.4);
+  --color-btn-secondary-text: #657b83;
+  --color-btn-secondary-hover-bg: rgba(147, 161, 161, 0.2);
+  --color-btn-secondary-hover-border: rgba(147, 161, 161, 0.55);
+  
+  /* Freshness indicator tokens - Solarized Light palette */
+  --color-freshness-fresh: #859900;
+  --color-freshness-warning: #b58900;
+  --color-freshness-stale: #dc322f;
+  
+  /* Status pill tokens - degraded (Solarized: red) */
+  --color-status-degraded-bg: rgba(220, 50, 47, 0.12);
+  --color-status-degraded-text: #dc322f;
+  
+  /* Status pill tokens - healthy (Solarized: green) */
+  --color-status-healthy-bg: rgba(133, 153, 0, 0.15);
+  --color-status-healthy-text: #859900;
+  
+  /* Status pill tokens - pending/warning (Solarized: yellow) */
+  --color-status-pending-bg: rgba(181, 137, 0, 0.15);
+  --color-status-pending-text: #b58900;
+  
+  /* Status pill tokens - review statuses (Solarized palette) */
+  --color-status-reviewed-bg: rgba(133, 153, 0, 0.15);
+  --color-status-reviewed-text: #859900;
+  --color-status-unreviewed-bg: rgba(181, 137, 0, 0.15);
+  --color-status-unreviewed-text: #b58900;
+  --color-status-partial-bg: rgba(147, 161, 161, 0.12);
+  --color-status-partial-text: #93a1a1;
+  --color-status-no-exec-bg: rgba(38, 139, 210, 0.1);
+  --color-status-no-exec-text: #268bd2;
+  
+  /* Alert/warning tokens (Solarized: red) */
+  --color-alert-bg: rgba(220, 50, 47, 0.1);
+  --color-alert-border: rgba(220, 50, 47, 0.4);
+  --color-alert-text: #dc322f;
+  
+  /* Empty state tokens - warm muted */
+  --color-empty-bg: rgba(238, 232, 213, 0.9);
+  --color-empty-border: rgba(147, 161, 161, 0.35);
+  --color-empty-text: rgba(101, 123, 131, 0.75);
+  
+  /* Table tokens - Solarized Light tables */
+  --color-table-header-bg: rgba(238, 232, 213, 0.8);
+  --color-table-row-hover: rgba(147, 161, 161, 0.15);
+  --color-table-row-selected: rgba(38, 139, 210, 0.08);
+  --color-table-border: rgba(147, 161, 161, 0.18);
+  --color-table-header-text: rgba(7, 54, 66, 0.7);
+  
+  /* Card/panel selection tokens */
+  --color-card-selected-bg: rgba(38, 139, 210, 0.08);
+  --color-card-selected-border: rgba(38, 139, 210, 0.3);
+}

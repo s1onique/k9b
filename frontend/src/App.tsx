@@ -41,6 +41,7 @@ import type {
   DeterministicNextCheckPromotionRequest,
 } from "./types";
 import "./index.css";
+import { ThemeSwitch } from "./ThemeSwitch";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -3848,6 +3849,7 @@ const App = () => {
               </select>
             </div>
           </div>
+          <ThemeSwitch />
         </div>
       </header>
       <nav className="cockpit-nav" aria-label="Fleet cockpit sections">
