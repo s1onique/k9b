@@ -3144,10 +3144,12 @@ def _find_review_enrichment(
 
             payload = artifact_data.get("payload", {})
 
-            def _list_from(key: str) -> list[str]:
-                value = payload.get(key)
-                if isinstance(value, list):
-                    return [str(item) for item in value]
+            def _list_from(*keys: str) -> list[str]:
+                """Get a list from payload, checking multiple key variants."""
+                for key in keys:
+                    value = payload.get(key)
+                    if isinstance(value, list):
+                        return [str(item) for item in value]
                 return []
 
             return {
@@ -3155,11 +3157,12 @@ def _find_review_enrichment(
                 "provider": artifact_data.get("provider"),
                 "timestamp": artifact_data.get("timestamp"),
                 "summary": artifact_data.get("summary"),
-                "triageOrder": _list_from("triageOrder"),
-                "topConcerns": _list_from("topConcerns"),
-                "evidenceGaps": _list_from("evidenceGaps"),
-                "nextChecks": _list_from("nextChecks"),
-                "focusNotes": _list_from("focusNotes"),
+                # Check both camelCase (ui-index format) and snake_case (artifact format)
+                "triageOrder": _list_from("triageOrder", "triage_order"),
+                "topConcerns": _list_from("topConcerns", "top_concerns"),
+                "evidenceGaps": _list_from("evidenceGaps", "evidence_gaps"),
+                "nextChecks": _list_from("nextChecks", "next_checks"),
+                "focusNotes": _list_from("focusNotes", "focus_notes"),
                 "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
                 "errorSummary": artifact_data.get("error_summary"),
                 "skipReason": artifact_data.get("skip_reason"),

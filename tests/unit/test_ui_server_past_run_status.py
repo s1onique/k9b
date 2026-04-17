@@ -25,6 +25,367 @@ from k8s_diag_agent.health.ui import write_health_ui_index
 from k8s_diag_agent.ui.server import HealthUIRequestHandler
 
 
+class PastRunEnrichmentKeyVariantTests(unittest.TestCase):
+    """Regression tests for snake_case vs camelCase key handling in review enrichment artifacts.
+
+    The review enrichment artifacts (external-analysis) use snake_case keys
+    (triage_order, top_concerns, etc.) while ui-index.json uses camelCase
+    (triageOrder, topConcerns, etc.). The server must handle both variants
+    to ensure past runs render full enrichment panels.
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.runs_dir = self.tmpdir / "runs"
+        self.health_dir = self.runs_dir / "health"
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+        self.static_dir = self.tmpdir / "static"
+        self.static_dir.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
+        from functools import partial
+        handler = partial(
+            HealthUIRequestHandler,
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
+
+    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    def _fetch_run_payload(self, server: ThreadingHTTPServer, run_id: str) -> dict:
+        import urllib.request
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
+        url = f"http://{host}:{port}/api/run?run_id={run_id}"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            assert isinstance(payload, dict)
+            return cast(dict, payload)
+
+    def _write_latest_run(self) -> None:
+        """Create a minimal latest run to satisfy server requirements."""
+        with mock.patch(
+            "k8s_diag_agent.health.ui._collect_historical_external_analysis_entries",
+            return_value=[],
+        ):
+            write_health_ui_index(
+                self.health_dir,
+                run_id="latest",
+                run_label="latest",
+                collector_version="tests",
+                records=(),
+                assessments=(),
+                drilldowns=(),
+                proposals=(),
+                external_analysis=(),
+                notifications=(),
+                available_adapters=(),
+            )
+
+    def test_past_run_with_snake_case_enrichment_artifact_has_full_fields(self) -> None:
+        """Verify past run with snake_case enrichment artifact loads all fields correctly.
+
+        This is the core regression test for the bug where past runs would render
+        thin panels because snake_case keys in artifacts weren't found - only camelCase
+        was checked.
+        """
+        self._write_latest_run()
+
+        past_run_id = "past-run-snake-case"
+        past_run_timestamp = datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC)
+
+        # Create drilldown artifact for the past run
+        drilldowns_dir = self.health_dir / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+        (drilldowns_dir / f"{past_run_id}-cluster-a-drilldown.json").write_text(
+            json.dumps({"run_id": past_run_id}), encoding="utf-8"
+        )
+
+        # Create review artifact with enrichment ENABLED
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_artifact = {
+            "run_id": past_run_id,
+            "run_label": f"Run {past_run_id}",
+            "timestamp": past_run_timestamp.isoformat(),
+            "collector_version": "1.0.0",
+            "selected_drilldowns": [
+                {"label": "cluster-a", "context": "prod"}
+            ],
+            "external_analysis_settings": {
+                "review_enrichment": {
+                    "enabled": True,
+                    "provider": "test-provider",
+                }
+            },
+        }
+        (reviews_dir / f"{past_run_id}-review.json").write_text(
+            json.dumps(review_artifact), encoding="utf-8"
+        )
+
+        # Create external-analysis artifact with SNAKE_CASE keys (artifact format)
+        external_analysis_dir = self.health_dir / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        snake_case_artifact = {
+            "run_id": past_run_id,
+            "purpose": "review-enrichment",
+            "status": "success",
+            "provider": "llm-reviewer",
+            "timestamp": past_run_timestamp.isoformat(),
+            "summary": "Snake case test artifact",
+            "payload": {
+                # These are SNAKE_CASE keys (artifact format)
+                "triage_order": ["Pod", "Node"],
+                "top_concerns": ["Memory pressure on node-1", "CrashLoopBackOff in default namespace"],
+                "evidence_gaps": ["Missing metrics for kube-proxy", "No network policy coverage data"],
+                "next_checks": ["kubectl describe node node-1", "kubectl logs -l app=failing-app"],
+                "focus_notes": ["Prioritize memory investigation", "Check recent deployments"],
+            },
+        }
+        (external_analysis_dir / f"{past_run_id}-review-enrichment-001.json").write_text(
+            json.dumps(snake_case_artifact), encoding="utf-8"
+        )
+
+        server, thread = self._start_server()
+        try:
+            past_run_payload = self._fetch_run_payload(server, past_run_id)
+        finally:
+            self._shutdown_server(server, thread)
+
+        # KEY ASSERTION: reviewEnrichment should NOT be None for snake_case artifact
+        review_enrichment = past_run_payload.get("reviewEnrichment")
+        self.assertIsNotNone(
+            review_enrichment,
+            "reviewEnrichment should not be None when snake_case artifact exists. "
+            f"Got payload: {json.dumps(past_run_payload, indent=2)}",
+        )
+        assert isinstance(review_enrichment, dict)
+
+        # Verify ALL fields are populated (not empty arrays)
+        self.assertEqual(
+            review_enrichment.get("status"),
+            "success",
+            "Status should be 'success' from artifact",
+        )
+
+        triage_order = review_enrichment.get("triageOrder")
+        assert isinstance(triage_order, list)
+        self.assertEqual(len(triage_order), 2, "triageOrder should have 2 items from snake_case artifact")
+        self.assertIn("Pod", triage_order)
+
+        top_concerns = review_enrichment.get("topConcerns")
+        assert isinstance(top_concerns, list)
+        self.assertEqual(
+            len(top_concerns), 2, "topConcerns should have 2 items from snake_case artifact"
+        )
+
+        evidence_gaps = review_enrichment.get("evidenceGaps")
+        assert isinstance(evidence_gaps, list)
+        self.assertEqual(
+            len(evidence_gaps), 2, "evidenceGaps should have 2 items from snake_case artifact"
+        )
+
+        next_checks = review_enrichment.get("nextChecks")
+        assert isinstance(next_checks, list)
+        self.assertEqual(
+            len(next_checks), 2, "nextChecks should have 2 items from snake_case artifact"
+        )
+
+        focus_notes = review_enrichment.get("focusNotes")
+        assert isinstance(focus_notes, list)
+        self.assertEqual(
+            len(focus_notes), 2, "focusNotes should have 2 items from snake_case artifact"
+        )
+
+    def test_past_run_with_camelcase_enrichment_artifact_still_works(self) -> None:
+        """Verify past run with camelCase enrichment artifact still loads correctly.
+
+        Ensures backward compatibility when artifacts are created with camelCase keys
+        (matching ui-index format).
+        """
+        self._write_latest_run()
+
+        past_run_id = "past-run-camel-case"
+        past_run_timestamp = datetime(2024, 7, 20, 11, 0, 0, tzinfo=UTC)
+
+        # Create drilldown artifact
+        drilldowns_dir = self.health_dir / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+        (drilldowns_dir / f"{past_run_id}-cluster-a-drilldown.json").write_text(
+            json.dumps({"run_id": past_run_id}), encoding="utf-8"
+        )
+
+        # Create review artifact with enrichment ENABLED
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_artifact = {
+            "run_id": past_run_id,
+            "run_label": f"Run {past_run_id}",
+            "timestamp": past_run_timestamp.isoformat(),
+            "collector_version": "1.0.0",
+            "selected_drilldowns": [
+                {"label": "cluster-a", "context": "prod"}
+            ],
+            "external_analysis_settings": {
+                "review_enrichment": {
+                    "enabled": True,
+                    "provider": "test-provider",
+                }
+            },
+        }
+        (reviews_dir / f"{past_run_id}-review.json").write_text(
+            json.dumps(review_artifact), encoding="utf-8"
+        )
+
+        # Create external-analysis artifact with CAMELCASE keys (ui-index format)
+        external_analysis_dir = self.health_dir / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        camelcase_artifact = {
+            "run_id": past_run_id,
+            "purpose": "review-enrichment",
+            "status": "success",
+            "provider": "llm-reviewer",
+            "timestamp": past_run_timestamp.isoformat(),
+            "summary": "Camel case test artifact",
+            "payload": {
+                # These are CAMELCASE keys (ui-index format)
+                "triageOrder": ["Node", "Workload"],
+                "topConcerns": ["High CPU usage on system workloads"],
+                "evidenceGaps": ["No pod resource quotas configured"],
+                "nextChecks": ["kubectl top nodes", "kubectl get resourcequota"],
+                "focusNotes": ["Scale investigation needed"],
+            },
+        }
+        (external_analysis_dir / f"{past_run_id}-review-enrichment-001.json").write_text(
+            json.dumps(camelcase_artifact), encoding="utf-8"
+        )
+
+        server, thread = self._start_server()
+        try:
+            past_run_payload = self._fetch_run_payload(server, past_run_id)
+        finally:
+            self._shutdown_server(server, thread)
+
+        # reviewEnrichment should be loaded correctly
+        review_enrichment = past_run_payload.get("reviewEnrichment")
+        self.assertIsNotNone(review_enrichment)
+        assert isinstance(review_enrichment, dict)
+
+        # Verify all fields are populated
+        triage_order = review_enrichment.get("triageOrder")
+        assert isinstance(triage_order, list)
+        self.assertEqual(len(triage_order), 2)
+        self.assertIn("Node", triage_order)
+
+        top_concerns = review_enrichment.get("topConcerns")
+        assert isinstance(top_concerns, list)
+        self.assertEqual(len(top_concerns), 1)
+
+        evidence_gaps = review_enrichment.get("evidenceGaps")
+        assert isinstance(evidence_gaps, list)
+        self.assertEqual(len(evidence_gaps), 1)
+
+        next_checks = review_enrichment.get("nextChecks")
+        assert isinstance(next_checks, list)
+        self.assertEqual(len(next_checks), 2)
+
+        focus_notes = review_enrichment.get("focusNotes")
+        assert isinstance(focus_notes, list)
+        self.assertEqual(len(focus_notes), 1)
+
+    def test_past_run_with_empty_enrichment_artifact_shows_limited_detail(self) -> None:
+        """Verify past run with empty enrichment artifact shows limited detail state.
+
+        When an artifact exists but has empty lists, the UI should show the
+        limited-detail state (explicit empty arrays) rather than a full panel.
+        """
+        self._write_latest_run()
+
+        past_run_id = "past-run-empty"
+        past_run_timestamp = datetime(2024, 8, 10, 12, 0, 0, tzinfo=UTC)
+
+        # Create drilldown artifact
+        drilldowns_dir = self.health_dir / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+        (drilldowns_dir / f"{past_run_id}-cluster-a-drilldown.json").write_text(
+            json.dumps({"run_id": past_run_id}), encoding="utf-8"
+        )
+
+        # Create review artifact with enrichment ENABLED
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_artifact = {
+            "run_id": past_run_id,
+            "run_label": f"Run {past_run_id}",
+            "timestamp": past_run_timestamp.isoformat(),
+            "collector_version": "1.0.0",
+            "selected_drilldowns": [
+                {"label": "cluster-a", "context": "prod"}
+            ],
+            "external_analysis_settings": {
+                "review_enrichment": {
+                    "enabled": True,
+                    "provider": "test-provider",
+                }
+            },
+        }
+        (reviews_dir / f"{past_run_id}-review.json").write_text(
+            json.dumps(review_artifact), encoding="utf-8"
+        )
+
+        # Create external-analysis artifact with EMPTY arrays
+        external_analysis_dir = self.health_dir / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        empty_artifact = {
+            "run_id": past_run_id,
+            "purpose": "review-enrichment",
+            "status": "success",
+            "provider": "llm-reviewer",
+            "timestamp": past_run_timestamp.isoformat(),
+            "summary": "Empty enrichment",
+            "payload": {
+                "triage_order": [],
+                "top_concerns": [],
+                "evidence_gaps": [],
+                "next_checks": [],
+                "focus_notes": [],
+            },
+        }
+        (external_analysis_dir / f"{past_run_id}-review-enrichment-001.json").write_text(
+            json.dumps(empty_artifact), encoding="utf-8"
+        )
+
+        server, thread = self._start_server()
+        try:
+            past_run_payload = self._fetch_run_payload(server, past_run_id)
+        finally:
+            self._shutdown_server(server, thread)
+
+        # reviewEnrichment should exist (artifact found) but with empty arrays
+        review_enrichment = past_run_payload.get("reviewEnrichment")
+        self.assertIsNotNone(review_enrichment)
+        assert isinstance(review_enrichment, dict)
+
+        # Status should be 'success' but all list fields should be empty
+        self.assertEqual(review_enrichment.get("status"), "success")
+        self.assertEqual(review_enrichment.get("triageOrder"), [])
+        self.assertEqual(review_enrichment.get("topConcerns"), [])
+        self.assertEqual(review_enrichment.get("evidenceGaps"), [])
+        self.assertEqual(review_enrichment.get("nextChecks"), [])
+        self.assertEqual(review_enrichment.get("focusNotes"), [])
+
+
 class PastRunStatusHydrationTests(unittest.TestCase):
     """Regression tests for past-run reviewEnrichmentStatus hydration."""
 
