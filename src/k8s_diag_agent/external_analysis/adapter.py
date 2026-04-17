@@ -31,6 +31,11 @@ class InvalidResponseError(Exception):
     pass
 
 
+class UpstreamError(Exception):
+    """Raised when upstream service returns an error (5xx) or is unreachable."""
+    pass
+
+
 @dataclass(frozen=True)
 class ExternalAnalysisRequest:
     run_id: str

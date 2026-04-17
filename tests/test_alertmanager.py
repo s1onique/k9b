@@ -5,12 +5,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from k8s_diag_agent.external_analysis.adapter import (
+    AuthError,
     ExternalAnalysisAdapterConfig,
     ExternalAnalysisRequest,
+    InvalidResponseError,
+    TimeoutError,
+    UpstreamError,
     build_external_analysis_adapters,
 )
+from k8s_diag_agent.external_analysis.alertmanager_adapter import AlertmanagerAdapter
 from k8s_diag_agent.external_analysis.alertmanager_artifact import (
     alertmanager_artifacts_exist,
     read_alertmanager_compact,
@@ -32,6 +38,7 @@ from k8s_diag_agent.external_analysis.alertmanager_snapshot import (
     normalize_alertmanager_payload,
     snapshot_to_compact,
 )
+from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisStatus
 from k8s_diag_agent.external_analysis.config import ExternalAnalysisSettings
 
 # --- Config tests ---
@@ -709,3 +716,282 @@ def test_all_error_statuses_have_corresponding_error_snapshots() -> None:
         assert snapshot.status == status
         assert len(snapshot.errors) == 1
         assert snapshot.alert_count == 0
+
+
+# --- Adapter-level exception/status mapping tests ---
+
+
+def _make_request() -> ExternalAnalysisRequest:
+    return ExternalAnalysisRequest(
+        run_id="test-run",
+        cluster_label="test-cluster",
+        source_artifact=None,
+    )
+
+
+def test_adapter_maps_timeout_exception_to_timeout_status() -> None:
+    """Test that TimeoutError from _fetch_alerts maps to TIMEOUT status."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    with patch.object(adapter, "_fetch_alerts", side_effect=TimeoutError("Connection timed out")):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.FAILED
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "timeout"
+    assert artifact.error_summary is not None and "timed out" in artifact.error_summary.lower()
+
+
+def test_adapter_maps_auth_error_exception_to_auth_error_status() -> None:
+    """Test that AuthError from _fetch_alerts maps to AUTH_ERROR status."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    with patch.object(adapter, "_fetch_alerts", side_effect=AuthError("401 Unauthorized")):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.FAILED
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "auth_error"
+    assert artifact.error_summary is not None and "auth" in artifact.error_summary.lower()
+
+
+def test_adapter_maps_upstream_error_exception_to_upstream_error_status() -> None:
+    """Test that UpstreamError from _fetch_alerts maps to UPSTREAM_ERROR status."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    with patch.object(adapter, "_fetch_alerts", side_effect=UpstreamError("503 Service Unavailable")):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.FAILED
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "upstream_error"
+    assert artifact.error_summary is not None and "503" in artifact.error_summary
+
+
+def test_adapter_maps_url_error_to_upstream_error() -> None:
+    """Test that URLError (connection refused) maps to UPSTREAM_ERROR, not INVALID_RESPONSE."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    with patch.object(adapter, "_fetch_alerts", side_effect=UpstreamError("Alertmanager unreachable: Connection refused")):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.FAILED
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "upstream_error"
+    # Ensure it's NOT mapped as invalid_response
+    assert artifact.error_summary is not None and "invalid" not in artifact.error_summary.lower()
+
+
+def test_adapter_maps_invalid_response_error_to_invalid_response_status() -> None:
+    """Test that InvalidResponseError from _fetch_alerts maps to INVALID_RESPONSE status."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    with patch.object(adapter, "_fetch_alerts", side_effect=InvalidResponseError("Malformed JSON")):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.FAILED
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "invalid_response"
+
+
+def test_adapter_maps_disabled_to_skipped() -> None:
+    """Test that disabled adapter produces SKIPPED status."""
+    config = AlertmanagerConfig(
+        enabled=False,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.SKIPPED
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "disabled"
+
+
+def test_adapter_maps_success_to_success() -> None:
+    """Test that successful fetch produces SUCCESS status."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    mock_response = [{"labels": {"alertname": "Test", "severity": "warning"}, "state": "active"}]
+    with patch.object(adapter, "_fetch_alerts", return_value=mock_response):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.SUCCESS
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict)
+    assert snapshot_data["status"] == "ok"
+    assert snapshot_data["alert_count"] == 1
+
+
+def test_adapter_maps_empty_response_to_success() -> None:
+    """Test that empty alert list produces SUCCESS status (empty is not an error)."""
+    config = AlertmanagerConfig(
+        enabled=True,
+        endpoint="http://localhost:9093",
+    )
+    adapter = AlertmanagerAdapter(config=config)
+    
+    with patch.object(adapter, "_fetch_alerts", return_value=[]):
+        artifact = adapter.run(_make_request())
+    
+    assert artifact.status == ExternalAnalysisStatus.SUCCESS
+    assert artifact.payload is not None
+    snapshot_data = artifact.payload["snapshot"]
+    assert isinstance(snapshot_data, dict) and snapshot_data["status"] == "empty"
+
+
+# --- Real persistence seam test ---
+
+def test_real_run_scoped_artifact_persistence_path(tmp_path: Path) -> None:
+    """Test that adapter produces artifacts that can be written and read via real persistence functions.
+    
+    This is an integration-style test that exercises the actual persistence seam:
+    1. Adapter produces snapshot + compact
+    2. Snapshot and compact are written to disk via alertmanager_artifact functions
+    3. Artifacts are read back and verified
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_adapter import create_alertmanager_artifact
+    from k8s_diag_agent.external_analysis.alertmanager_snapshot import normalize_alertmanager_payload, snapshot_to_compact
+    
+    # Step 1: Create a realistic snapshot via normalization
+    raw_alerts = {
+        "data": {
+            "alerts": [
+                {
+                    "labels": {
+                        "alertname": "HighCPU",
+                        "severity": "critical",
+                        "cluster": "prod",
+                        "namespace": "monitoring",
+                    },
+                    "annotations": {"summary": "High CPU usage"},
+                    "state": "active",
+                    "startsAt": "2024-01-01T00:00:00Z",
+                },
+                {
+                    "labels": {
+                        "alertname": "DiskFull",
+                        "severity": "warning",
+                        "cluster": "prod",
+                        "namespace": "storage",
+                    },
+                    "annotations": {"summary": "Disk is filling up"},
+                    "state": "suppressed",
+                    "startsAt": "2024-01-02T00:00:00Z",
+                },
+            ]
+        }
+    }
+    snapshot = normalize_alertmanager_payload(raw_alerts)
+    compact = snapshot_to_compact(snapshot, max_alerts=20)
+    
+    # Step 2: Create artifact via adapter
+    request = ExternalAnalysisRequest(
+        run_id="persistence-test-run",
+        cluster_label="prod-cluster",
+        source_artifact=None,
+    )
+    artifact = create_alertmanager_artifact(request, snapshot, compact)
+    
+    # Verify artifact structure
+    assert artifact.run_id == "persistence-test-run"
+    assert artifact.cluster_label == "prod-cluster"
+    assert artifact.provider == "alertmanager"
+    assert artifact.payload is not None
+    assert "snapshot" in artifact.payload
+    assert "compact" in artifact.payload
+    
+    # Step 3: Write snapshot and compact to disk
+    run_id = artifact.run_id
+    snap_path = write_alertmanager_snapshot(tmp_path, snapshot, run_id)
+    compact_path = write_alertmanager_compact(tmp_path, compact, run_id)
+    
+    assert snap_path.exists(), f"Snapshot not written to {snap_path}"
+    assert compact_path.exists(), f"Compact not written to {compact_path}"
+    
+    # Step 4: Read back and verify
+    loaded_snapshot = read_alertmanager_snapshot(snap_path)
+    loaded_compact = read_alertmanager_compact(compact_path)
+    
+    assert loaded_snapshot is not None
+    assert loaded_compact is not None
+    
+    # Verify snapshot contents
+    assert loaded_snapshot.status == snapshot.status
+    assert loaded_snapshot.alert_count == snapshot.alert_count
+    assert len(loaded_snapshot.alerts) == len(snapshot.alerts)
+    
+    # Verify compact contents
+    assert loaded_compact.status == compact.status
+    assert loaded_compact.alert_count == compact.alert_count
+    assert loaded_compact.severity_counts == compact.severity_counts
+    assert loaded_compact.state_counts == compact.state_counts
+    
+    # Step 5: Verify the artifact existence check works
+    snap_exists, compact_exists = alertmanager_artifacts_exist(tmp_path, run_id)
+    assert snap_exists is True
+    assert compact_exists is True
+
+
+def test_error_snapshot_persistence_and_roundtrip(tmp_path: Path) -> None:
+    """Test that error snapshots can be written and read via real persistence functions."""
+    from k8s_diag_agent.external_analysis.alertmanager_adapter import create_alertmanager_artifact
+    from k8s_diag_agent.external_analysis.alertmanager_snapshot import create_error_snapshot
+    
+    # Create an upstream error snapshot
+    snapshot = create_error_snapshot(
+        AlertmanagerStatus.UPSTREAM_ERROR,
+        "Alertmanager returned 503: Service Unavailable",
+        source="http://alertmanager:9093",
+    )
+    compact = snapshot_to_compact(snapshot, max_alerts=20)
+    
+    request = ExternalAnalysisRequest(
+        run_id="error-test-run",
+        cluster_label="prod-cluster",
+        source_artifact=None,
+    )
+    artifact = create_alertmanager_artifact(request, snapshot, compact)
+    
+    # Write and read back
+    run_id = artifact.run_id
+    snap_path = write_alertmanager_snapshot(tmp_path, snapshot, run_id)
+    loaded = read_alertmanager_snapshot(snap_path)
+    
+    assert loaded is not None
+    assert loaded.status == AlertmanagerStatus.UPSTREAM_ERROR
+    assert len(loaded.alerts) == 0
+    assert loaded.alert_count == 0
+    assert "503" in loaded.errors[0]

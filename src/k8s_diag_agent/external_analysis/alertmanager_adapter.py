@@ -13,6 +13,7 @@ from .adapter import (
     ExternalAnalysisRequest,
     InvalidResponseError,
     TimeoutError,
+    UpstreamError,
     register_external_analysis_adapter,
 )
 from .alertmanager_config import AlertmanagerConfig
@@ -74,6 +75,12 @@ class AlertmanagerAdapter(ExternalAnalysisAdapter):
             # Distinct auth failure handling
             snapshot = create_error_snapshot(
                 AlertmanagerStatus.AUTH_ERROR,
+                str(exc),
+            )
+        except UpstreamError as exc:
+            # Upstream service error (5xx, connection issues)
+            snapshot = create_error_snapshot(
+                AlertmanagerStatus.UPSTREAM_ERROR,
                 str(exc),
             )
         except InvalidResponseError as exc:
@@ -148,13 +155,13 @@ class AlertmanagerAdapter(ExternalAnalysisAdapter):
         except urllib.error.HTTPError as exc:
             if exc.code == 401 or exc.code == 403:
                 raise AuthError(f"Alertmanager auth failed: {exc.code}") from exc
-            # Other HTTP errors (500, 502, etc.) -> upstream error
-            raise InvalidResponseError(
+            # Other HTTP errors (500, 502, 503, etc.) -> upstream error
+            raise UpstreamError(
                 f"Alertmanager returned {exc.code}: {exc.reason}"
             ) from exc
         except urllib.error.URLError as exc:
             # Connection refused, DNS failure, etc. -> upstream error
-            raise InvalidResponseError(
+            raise UpstreamError(
                 f"Alertmanager unreachable: {exc.reason}"
             ) from exc
         except TimeoutError:
