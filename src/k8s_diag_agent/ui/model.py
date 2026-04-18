@@ -294,6 +294,21 @@ class DiagnosticPackView:
 
 
 @dataclass(frozen=True)
+class AlertmanagerCompactView:
+    """View model for Alertmanager compact context - run-scoped snapshot of alerts."""
+    status: str
+    alert_count: int
+    severity_counts: tuple[tuple[str, int], ...]
+    state_counts: tuple[tuple[str, int], ...]
+    top_alert_names: tuple[str, ...]
+    affected_namespaces: tuple[str, ...]
+    affected_clusters: tuple[str, ...]
+    affected_services: tuple[str, ...]
+    truncated: bool
+    captured_at: str
+
+
+@dataclass(frozen=True)
 class NextCheckCandidateView:
     candidate_id: str | None
     priority_label: str | None
@@ -585,6 +600,7 @@ class UIIndexContext:
     planner_availability: PlannerAvailabilityView | None
     diagnostic_pack: DiagnosticPackView | None
     next_check_queue: tuple[NextCheckQueueItemView, ...]
+    alertmanager_compact: AlertmanagerCompactView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -658,6 +674,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     auto_drilldown_interpretations = _build_auto_drilldown_interpretations(
         index.get("auto_drilldown_interpretations")
     )
+    alertmanager_compact = _build_alertmanager_compact_view(run_data.get("alertmanager_compact"))
     return UIIndexContext(
         run=run,
         clusters=clusters,
@@ -678,6 +695,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         planner_availability=run.planner_availability,
         diagnostic_pack=run.diagnostic_pack,
         next_check_queue=run.next_check_queue,
+        alertmanager_compact=alertmanager_compact,
     )
 
 
@@ -815,6 +833,14 @@ def _coerce_optional_str(value: object | None) -> str | None:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def _coerce_str_tuple(value: object | None) -> tuple[str, ...]:
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return tuple(str(item) for item in value)
+    if value is None:
+        return ()
+    return (str(value),)
 
 
 def _coerce_int(value: object | None) -> int:
@@ -1613,4 +1639,34 @@ def _build_recommended_action(raw: object | None) -> RecommendedActionView | Non
         description=_coerce_str(raw.get("description")),
         references=_coerce_sequence(raw.get("references")),
         safety_level=_coerce_str(raw.get("safety_level")),
+    )
+
+
+def _build_alertmanager_compact_view(raw: object | None) -> AlertmanagerCompactView | None:
+    """Build AlertmanagerCompactView from raw JSON data."""
+    if not isinstance(raw, Mapping):
+        return None
+    severity_raw = raw.get("severity_counts")
+    severity_counts: tuple[tuple[str, int], ...] = ()
+    if isinstance(severity_raw, Mapping):
+        severity_counts = tuple(
+            (str(k), int(v)) for k, v in severity_raw.items()
+        )
+    state_raw = raw.get("state_counts")
+    state_counts: tuple[tuple[str, int], ...] = ()
+    if isinstance(state_raw, Mapping):
+        state_counts = tuple(
+            (str(k), int(v)) for k, v in state_raw.items()
+        )
+    return AlertmanagerCompactView(
+        status=_coerce_str(raw.get("status")),
+        alert_count=_coerce_int(raw.get("alert_count")),
+        severity_counts=severity_counts,
+        state_counts=state_counts,
+        top_alert_names=_coerce_str_tuple(raw.get("top_alert_names")),
+        affected_namespaces=_coerce_str_tuple(raw.get("affected_namespaces")),
+        affected_clusters=_coerce_str_tuple(raw.get("affected_clusters")),
+        affected_services=_coerce_str_tuple(raw.get("affected_services")),
+        truncated=bool(raw.get("truncated")),
+        captured_at=_coerce_str(raw.get("captured_at")),
     )

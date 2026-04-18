@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..external_analysis.alertmanager_artifact import read_alertmanager_compact
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -205,6 +206,8 @@ def write_health_ui_index(
     diagnostic_pack_review_entry = _serialize_diagnostic_pack_review(
         external_analysis, output_dir, run_id
     )
+    # Read Alertmanager compact artifact if available
+    alertmanager_compact_entry = _serialize_alertmanager_compact(output_dir, run_id)
     run_entry = {
         "run_id": run_id,
         "run_label": run_label,
@@ -254,6 +257,7 @@ def write_health_ui_index(
             external_analysis, output_dir, run_id
         ),
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
+        "alertmanager_compact": alertmanager_compact_entry,
     }
     index = {
         "run": run_entry,
@@ -2763,3 +2767,25 @@ def _serialize_assessment(artifact: HealthAssessmentArtifact, root_dir: Path) ->
         }
     )
     return data
+
+
+def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, object] | None:
+    """Read and serialize Alertmanager compact artifact for UI.
+    
+    Returns None if the artifact is not available or cannot be read.
+    """
+    compact = read_alertmanager_compact(output_dir / f"{run_id}-alertmanager-compact.json")
+    if compact is None:
+        return None
+    return {
+        "status": compact.status,
+        "alert_count": compact.alert_count,
+        "severity_counts": {str(k): v for k, v in compact.severity_counts},
+        "state_counts": {str(k): v for k, v in compact.state_counts},
+        "top_alert_names": list(compact.top_alert_names),
+        "affected_namespaces": list(compact.affected_namespaces),
+        "affected_clusters": list(compact.affected_clusters),
+        "affected_services": list(compact.affected_services),
+        "truncated": compact.truncated,
+        "captured_at": compact.captured_at,
+    }

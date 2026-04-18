@@ -80,6 +80,7 @@ export type RunPayload = {
   plannerAvailability?: PlannerAvailability | null;
   diagnosticPackReview?: DiagnosticPackReview | null;
   diagnosticPack?: DiagnosticPack | null;
+  alertmanagerCompact?: AlertmanagerCompact | null;
 };
 
 export type RunStats = {
@@ -597,6 +598,19 @@ export type DiagnosticPack = {
   label: string | null;
   reviewBundlePath: string | null;
   reviewInput14bPath: string | null;
+};
+
+export type AlertmanagerCompact = {
+  status: string;
+  alert_count: number;
+  severity_counts: Record<string, number>;
+  state_counts: Record<string, number>;
+  top_alert_names: string[];
+  affected_namespaces: string[];
+  affected_clusters: string[];
+  affected_services: string[];
+  truncated: boolean;
+  captured_at: string;
 };
 
 export type RunsListEntry = {

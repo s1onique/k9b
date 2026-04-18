@@ -16,6 +16,7 @@ import {
   submitUsefulnessFeedback,
 } from "./api";
 import type {
+  AlertmanagerCompact,
   AutoInterpretation,
   ClusterDetailPayload,
   FleetPayload,
@@ -1667,6 +1668,146 @@ const RunDiagnosticPackPanel = ({
           <a className="link" href={reviewInput14bLink} target="_blank" rel="noreferrer">
             Review input (14b)
           </a>
+        </>
+      )}
+    </section>
+  );
+};
+
+// Status labels for Alertmanager compact capture status
+const ALERTMANAGER_STATUS_LABELS: Record<string, string> = {
+  ok: "OK",
+  available: "Available",
+  "no-artifact": "No artifact",
+  empty: "Empty",
+  disabled: "Disabled",
+  timeout: "Timeout",
+  upstream_error: "Upstream error",
+  invalid_response: "Invalid response",
+};
+
+const formatAlertmanagerStatus = (status: string) =>
+  ALERTMANAGER_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+
+const AlertmanagerSnapshotPanel = ({
+  compact,
+}: {
+  compact: AlertmanagerCompact | undefined | null;
+}) => {
+  const statusLabel = compact ? formatAlertmanagerStatus(compact.status) : "No data";
+  const isAvailable = compact?.status === "available";
+  const isOk = compact?.status === "ok";
+  const showAlertDetails = compact && (isAvailable || isOk);
+
+  return (
+    <section className="panel alertmanager-snapshot" id="alertmanager-snapshot">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Alertmanager context</p>
+          <h2>Alertmanager snapshot</h2>
+        </div>
+        <span className={`status-pill ${statusClass(statusLabel)}`}>
+          {statusLabel}
+        </span>
+      </div>
+      {!compact ? (
+        <p className="muted small">
+          Alertmanager snapshot data is not available for this run.
+        </p>
+      ) : !isAvailable && !isOk ? (
+        <p className="muted small">
+          Alertmanager snapshot is not available: {statusLabel.toLowerCase()}.
+        </p>
+      ) : (
+        <>
+          <p className="muted tiny">
+            Captured {compact.captured_at ? formatTimestamp(compact.captured_at) : "—"}
+            {compact.truncated ? " · Truncated" : ""}
+          </p>
+          {compact.alert_count > 0 ? (
+            <div className="alertmanager-snapshot-grid">
+              <div className="alertmanager-snapshot-metric">
+                <strong className="alertmanager-metric-value">{compact.alert_count}</strong>
+                <span className="alertmanager-metric-label">Total alerts</span>
+              </div>
+              {Object.keys(compact.severity_counts).length > 0 && (
+                <div className="alertmanager-snapshot-section">
+                  <p className="alertmanager-section-label">By severity</p>
+                  <div className="alertmanager-severity-list">
+                    {Object.entries(compact.severity_counts).map(([severity, count]) => (
+                      <span key={severity} className="alertmanager-severity-badge">
+                        {severity}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {Object.keys(compact.state_counts).length > 0 && (
+                <div className="alertmanager-snapshot-section">
+                  <p className="alertmanager-section-label">By state</p>
+                  <div className="alertmanager-state-list">
+                    {Object.entries(compact.state_counts).map(([state, count]) => (
+                      <span key={state} className="alertmanager-state-badge">
+                        {state}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {compact.top_alert_names.length > 0 && (
+                <div className="alertmanager-snapshot-section">
+                  <p className="alertmanager-section-label">Top alerts</p>
+                  <ul className="alertmanager-top-alerts">
+                    {compact.top_alert_names.slice(0, 5).map((name, idx) => (
+                      <li key={idx}>{name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {compact.affected_namespaces.length > 0 && (
+                <div className="alertmanager-snapshot-section">
+                  <p className="alertmanager-section-label">Affected namespaces ({compact.affected_namespaces.length})</p>
+                  <div className="alertmanager-tag-list">
+                    {compact.affected_namespaces.slice(0, 10).map((ns, idx) => (
+                      <span key={idx} className="alertmanager-tag">{ns}</span>
+                    ))}
+                    {compact.affected_namespaces.length > 10 && (
+                      <span className="alertmanager-tag alertmanager-tag--more">
+                        +{compact.affected_namespaces.length - 10} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {compact.affected_clusters.length > 0 && (
+                <div className="alertmanager-snapshot-section">
+                  <p className="alertmanager-section-label">Affected clusters ({compact.affected_clusters.length})</p>
+                  <div className="alertmanager-tag-list">
+                    {compact.affected_clusters.map((cluster, idx) => (
+                      <span key={idx} className="alertmanager-tag">{cluster}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {compact.affected_services.length > 0 && (
+                <div className="alertmanager-snapshot-section">
+                  <p className="alertmanager-section-label">Affected services ({compact.affected_services.length})</p>
+                  <div className="alertmanager-tag-list">
+                    {compact.affected_services.slice(0, 10).map((svc, idx) => (
+                      <span key={idx} className="alertmanager-tag">{svc}</span>
+                    ))}
+                    {compact.affected_services.length > 10 && (
+                      <span className="alertmanager-tag alertmanager-tag--more">
+                        +{compact.affected_services.length - 10} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="muted small">No active alerts captured.</p>
+          )}
         </>
       )}
     </section>
@@ -4575,6 +4716,7 @@ const App = () => {
       <ProviderExecutionPanel execution={run.providerExecution} />
       <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
       <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
+      <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} />
     <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
       <div className="section-head">
         <div>
@@ -5153,7 +5295,13 @@ const App = () => {
                             <span className="queue-item-blocker-icon">⏸</span>
                             <span className="queue-item-blocker-text">{item.priorityRationale}</span>
                             {item.rankingReason ? (
-                              <span className="ranking-reason-badge">{item.rankingReason}</span>
+                              item.rankingReason.startsWith("alertmanager-context:") ? (
+                                <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title="Ranking influenced by Alertmanager snapshot">
+                                  🔔 {item.rankingReason.slice("alertmanager-context:".length)}
+                                </span>
+                              ) : (
+                                <span className="ranking-reason-badge">{item.rankingReason}</span>
+                              )
                             ) : null}
                           </div>
                         ) : null}

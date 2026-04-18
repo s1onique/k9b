@@ -12,6 +12,7 @@ import ijson
 
 from ..health.freshness import freshness_status
 from .model import (
+    AlertmanagerCompactView,
     AssessmentHypothesisView,
     AssessmentNextCheckView,
     AssessmentView,
@@ -119,6 +120,7 @@ class RunPayload(TypedDict):
     plannerAvailability: PlannerAvailabilityPayload | None
     diagnosticPackReview: DiagnosticPackReviewPayload | None
     diagnosticPack: DiagnosticPackPayload | None
+    alertmanagerCompact: AlertmanagerCompactPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -407,6 +409,19 @@ class DiagnosticPackPayload(TypedDict, total=False):
     reviewInput14bPath: str | None
 
 
+class AlertmanagerCompactPayload(TypedDict, total=False):
+    status: str
+    alert_count: int
+    severity_counts: dict[str, int]
+    state_counts: dict[str, int]
+    top_alert_names: list[str]
+    affected_namespaces: list[str]
+    affected_clusters: list[str]
+    affected_services: list[str]
+    truncated: bool
+    captured_at: str
+
+
 class ProviderExecutionBranchPayload(TypedDict, total=False):
     enabled: bool | None
     provider: str | None
@@ -655,6 +670,24 @@ def build_run_payload(
         "nextCheckExecutionHistory": _serialize_execution_history(
             context.run.next_check_execution_history
         ),
+        "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
+    }
+
+
+def _serialize_alertmanager_compact(view: AlertmanagerCompactView | None) -> AlertmanagerCompactPayload | None:
+    if not view:
+        return None
+    return {
+        "status": view.status,
+        "alert_count": view.alert_count,
+        "severity_counts": {str(k): v for k, v in view.severity_counts},
+        "state_counts": {str(k): v for k, v in view.state_counts},
+        "top_alert_names": list(view.top_alert_names),
+        "affected_namespaces": list(view.affected_namespaces),
+        "affected_clusters": list(view.affected_clusters),
+        "affected_services": list(view.affected_services),
+        "truncated": view.truncated,
+        "captured_at": view.captured_at,
     }
 
 
