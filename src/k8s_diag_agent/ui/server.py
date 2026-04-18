@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 from ..external_analysis.alertmanager_source_actions import (
     AlertmanagerSourceOverrides,
@@ -893,7 +893,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             runs_am_source_match = _RUN_ALERTMANAGER_SOURCE_ACTION.match(route)
             if runs_am_source_match:
                 run_id = runs_am_source_match.group(1)
-                source_id = runs_am_source_match.group(2)
+                # Decode URL-encoded source_id before lookup/validation
+                # e.g., "crd%3Amonitoring%2Fkube-prometheus-stack-alertmanager" -> "crd:monitoring/kube-prometheus-stack-alertmanager"
+                source_id = unquote(runs_am_source_match.group(2))
                 self._handle_alertmanager_source_action(run_id, source_id)
                 return
             self._status_code = 404
