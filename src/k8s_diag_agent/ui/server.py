@@ -2807,8 +2807,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         llm_stats = _build_llm_stats_for_run(external_analysis_dir, run_id)
 
         # Load Alertmanager compact artifact if available
+        # Alertmanager artifacts are written at health_root, not external-analysis/
         alertmanager_compact_entry = None
-        compact_path = external_analysis_dir / f"{run_id}-alertmanager-compact.json"
+        compact_path = self._health_root / f"{run_id}-alertmanager-compact.json"
         if compact_path.exists():
             try:
                 import json as _json
@@ -2830,13 +2831,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         # Load Alertmanager sources inventory if available
         # Uses _serialize_alertmanager_sources from health/ui.py to apply operator overrides
+        # Alertmanager artifacts are written at health_root, not external-analysis/
         alertmanager_sources_entry = None
-        sources_path = external_analysis_dir / f"{run_id}-alertmanager-sources.json"
+        sources_path = self._health_root / f"{run_id}-alertmanager-sources.json"
         if sources_path.exists():
             # Import here to avoid circular import at module level
             from ..health.ui import _serialize_alertmanager_sources as _serialize_am_sources
             try:
-                alertmanager_sources_entry = _serialize_am_sources(external_analysis_dir, run_id)
+                alertmanager_sources_entry = _serialize_am_sources(self._health_root, run_id)
             except Exception:
                 pass  # Sources not available - non-fatal
 

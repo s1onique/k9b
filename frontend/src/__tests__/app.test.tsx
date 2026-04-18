@@ -4433,6 +4433,12 @@ describe("Auto-refresh polling behavior", () => {
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
+    // Wait for run rows to render and selection state to be applied
+    await waitFor(() => {
+      const runRows = document.querySelectorAll(".run-row");
+      expect(runRows.length).toBeGreaterThan(0);
+    });
+
     // Verify initial state on real timers: run-123 is selected
     const run123Row = document.querySelector('.run-row[data-run-id="run-123"]');
     expect(run123Row).not.toBeNull();
