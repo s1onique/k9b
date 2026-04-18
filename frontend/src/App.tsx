@@ -3554,6 +3554,22 @@ const App = () => {
     }
   }, [runsList, selectedRunId, latestRunId]);
 
+  // Effect: After runs list refresh, navigate to the page containing the selected run.
+  // This ensures the selected row remains visible after manual refresh or auto-refresh.
+  // If the selected run is filtered out, selection state is preserved but the row won't be visible.
+  useEffect(() => {
+    if (!selectedRunId) return;
+    // Check if selected run exists in the filtered list
+    const runInFilteredList = filteredRunsList.find((r) => r.runId === selectedRunId);
+    if (runInFilteredList) {
+      // Selected run is in filtered dataset - navigate to its page to keep it visible
+      navigateToPageContainingRun(selectedRunId);
+    }
+    // If not in filtered list, we intentionally do NOT change runsPage here.
+    // The selection state remains intact (for the header/detail view).
+    // The UI can show a notice about filtered-out state if needed in the future.
+  }, [selectedRunId, filteredRunsList, navigateToPageContainingRun]);
+
   // Computed paginated runs list
   const paginatedRunsList = useMemo(() => {
     const start = (runsPage - 1) * runsPageSize;

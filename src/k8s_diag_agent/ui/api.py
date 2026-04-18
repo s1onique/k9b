@@ -239,6 +239,7 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     priorityRationale: str | None
     rankingReason: str | None
 
+    alertmanagerProvenance: AlertmanagerProvenancePayload | None
 
 class AlertmanagerProvenancePayload(TypedDict, total=False):
     """Payload for alertmanager provenance data on next-check candidates/queue items."""
@@ -1133,7 +1134,7 @@ def _serialize_next_check_queue(
     entries: list[NextCheckQueueItemPayload] = []
     for item in queue:
         # Build provenance dict if present
-        provenance: dict[str, object] | None = None
+        provenance: AlertmanagerProvenancePayload | None = None
         if item.alertmanager_provenance is not None:
             provenance = {
                 "matchedDimensions": list(item.alertmanager_provenance.matched_dimensions),
@@ -1182,7 +1183,7 @@ def _serialize_next_check_queue(
             entry["alertmanagerProvenance"] = provenance
         entries.append(entry)
     if promotions:
-        for entry in promotions:
+        for promo_entry in promotions:
             if isinstance(entry, Mapping):
                 entries.append(cast(NextCheckQueueItemPayload, dict(entry)))
     return entries
@@ -1377,7 +1378,7 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
 
 def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCandidatePayload:
     # Build provenance dict if present
-    provenance: dict[str, object] | None = None
+    provenance: AlertmanagerProvenancePayload | None = None
     if view.alertmanager_provenance is not None:
         provenance = {
             "matchedDimensions": list(view.alertmanager_provenance.matched_dimensions),
