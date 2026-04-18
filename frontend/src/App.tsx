@@ -1942,6 +1942,150 @@ const AlertmanagerSnapshotPanel = ({
   );
 };
 
+/** AlertmanagerSourcesPanel - Read-only display of tracked alertmanager sources.
+ * Shows summary counts and a table of sources with visual state indicators.
+ * State color mapping:
+ * - manual/auto-tracked: green (healthy)
+ * - discovered: yellow (caution)
+ * - degraded: red (warning)
+ * - missing: muted
+ */
+export const AlertmanagerSourcesPanel = ({
+  sources,
+}: {
+  sources: AlertmanagerSources;
+}) => {
+  // State color class mapping based on display_state
+  const getSourceStateClass = (displayState: string): string => {
+    const normalized = (displayState || "").toLowerCase();
+    if (normalized === "manual" || normalized === "auto-tracked" || normalized === "tracked") {
+      return "alertmanager-source-healthy";
+    }
+    if (normalized === "discovered") {
+      return "alertmanager-source-caution";
+    }
+    if (normalized === "degraded") {
+      return "alertmanager-source-warning";
+    }
+    if (normalized === "missing") {
+      return "alertmanager-source-muted";
+    }
+    return "alertmanager-source-default";
+  };
+
+  // Truncate long text for table cells
+  const truncateSourceCell = (value: string | null | undefined, maxLength = 80): string => {
+    if (!value) return "—";
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength).trim()}…`;
+  };
+
+  const summaryItems = [
+    { label: "Total", value: sources.total_count },
+    { label: "Tracked", value: sources.tracked_count },
+    { label: "Manual", value: sources.manual_count },
+    { label: "Degraded", value: sources.degraded_count },
+    { label: "Missing", value: sources.missing_count },
+  ];
+
+  return (
+    <section className="panel alertmanager-sources" id="alertmanager-sources">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Alertmanager discovery</p>
+          <h2>Alertmanager sources</h2>
+        </div>
+        <span className="muted small">
+          {sources.cluster_context ? `Context: ${sources.cluster_context}` : ""}
+        </span>
+      </div>
+      
+      {/* Summary row with counts */}
+      <div className="alertmanager-sources-summary">
+        {summaryItems.map((item) => (
+          <div key={item.label} className="alertmanager-sources-summary-item">
+            <strong className="alertmanager-sources-metric-value">{item.value}</strong>
+            <span className="alertmanager-sources-metric-label">{item.label}</span>
+          </div>
+        ))}
+      </div>
+      
+      {/* Discovery timestamp */}
+      {sources.discovery_timestamp && (
+        <p className="muted tiny alertmanager-sources-timestamp">
+          Discovered {formatTimestamp(sources.discovery_timestamp)}
+        </p>
+      )}
+      
+      {/* Sources table */}
+      {sources.sources.length > 0 ? (
+        <div className="alertmanager-sources-table-wrapper">
+          <table className="alertmanager-sources-table">
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>Origin</th>
+                <th>Endpoint</th>
+                <th>Namespace / Name</th>
+                <th>Version</th>
+                <th>Provenance</th>
+                <th>Last Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sources.sources.map((source) => {
+                const stateClass = getSourceStateClass(source.display_state);
+                const namespaceName = [source.namespace, source.name]
+                  .filter(Boolean)
+                  .join(" / ") || "—";
+                
+                return (
+                  <tr key={source.source_id} className={`alertmanager-source-row ${stateClass}`}>
+                    <td>
+                      <span className={`alertmanager-source-state-pill alertmanager-source-state-pill-${stateClass}`}>
+                        {source.display_state || source.state || "unknown"}
+                      </span>
+                    </td>
+                    <td className="alertmanager-source-origin">
+                      {truncateSourceCell(source.display_origin || source.origin)}
+                    </td>
+                    <td className="alertmanager-source-endpoint">
+                      <code className="alertmanager-source-endpoint-code">
+                        {truncateSourceCell(source.endpoint, 50)}
+                      </code>
+                    </td>
+                    <td className="alertmanager-source-namespace">
+                      {namespaceName}
+                    </td>
+                    <td className="alertmanager-source-version">
+                      {source.verified_version || "—"}
+                    </td>
+                    <td className="alertmanager-source-provenance">
+                      <span className="muted tiny">
+                        {truncateSourceCell(source.provenance_summary, 60)}
+                      </span>
+                    </td>
+                    <td className="alertmanager-source-error">
+                      {source.last_error ? (
+                        <span className="alertmanager-source-error-text" title={source.last_error}>
+                          {truncateSourceCell(source.last_error, 40)}
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="muted small">No alertmanager sources discovered for this run.</p>
+      )}
+    </section>
+  );
+};
+
 const DiagnosticPackReviewPanel = ({
   review,
 }: {
@@ -4919,6 +5063,9 @@ const App = () => {
       <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
       <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
       <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} />
+      {run.alertmanagerSources && (
+        <AlertmanagerSourcesPanel sources={run.alertmanagerSources} />
+      )}
     <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
       <div className="section-head">
         <div>

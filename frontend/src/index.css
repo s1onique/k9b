@@ -5966,3 +5966,257 @@ body {
 [data-theme="solarized-light"] .runs-detached-notice .muted {
   color: #586e75;
 }
+
+/* Alertmanager Sources Panel */
+.alertmanager-sources {
+  /* panel styles inherited from .panel */
+}
+
+.alertmanager-sources .section-head {
+  margin-bottom: 0.75rem;
+}
+
+.alertmanager-sources-summary {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.alertmanager-sources-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 50px;
+}
+
+.alertmanager-sources-metric-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.95);
+  line-height: 1;
+}
+
+.alertmanager-sources-metric-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.alertmanager-sources-timestamp {
+  margin-bottom: 0.75rem;
+}
+
+.alertmanager-sources-table-wrapper {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.alertmanager-sources-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.alertmanager-sources-table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  color: rgba(148, 163, 184, 0.7);
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.alertmanager-sources-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 0.85rem;
+}
+
+.alertmanager-sources-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.alertmanager-source-row {
+  transition: background 0.15s ease;
+}
+
+.alertmanager-source-row:hover {
+  background: rgba(71, 85, 105, 0.35);
+}
+
+.alertmanager-source-state-pill {
+  display: inline-block;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.alertmanager-source-healthy,
+.alertmanager-source-state-pill-healthy {
+  background: rgba(0, 200, 83, 0.2);
+  color: #00c853;
+}
+
+.alertmanager-source-caution,
+.alertmanager-source-state-pill-caution {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.alertmanager-source-warning,
+.alertmanager-source-state-pill-warning {
+  background: rgba(255, 87, 34, 0.2);
+  color: #ff5722;
+}
+
+.alertmanager-source-muted,
+.alertmanager-source-state-pill-muted {
+  background: rgba(158, 158, 158, 0.2);
+  color: #9e9e9e;
+}
+
+.alertmanager-source-default,
+.alertmanager-source-state-pill-default {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.alertmanager-source-origin {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertmanager-source-endpoint {
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.alertmanager-source-endpoint-code {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertmanager-source-namespace {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertmanager-source-version {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.alertmanager-source-provenance {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertmanager-source-error {
+  max-width: 150px;
+}
+
+.alertmanager-source-error-text {
+  color: rgba(248, 113, 113, 0.9);
+  display: block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Solarized light theme for Alertmanager Sources */
+[data-theme="solarized-light"] .alertmanager-sources-summary {
+  background: rgba(238, 232, 213, 0.5);
+}
+
+[data-theme="solarized-light"] .alertmanager-sources-metric-value {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .alertmanager-sources-metric-label {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .alertmanager-sources-table {
+  background: rgba(238, 232, 213, 0.85);
+}
+
+[data-theme="solarized-light"] .alertmanager-sources-table th {
+  background: rgba(238, 232, 213, 0.9);
+  color: #586e75;
+  border-bottom-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .alertmanager-sources-table td {
+  color: #002b36;
+  border-bottom-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .alertmanager-sources-table tbody tr:hover {
+  background: rgba(147, 161, 161, 0.18);
+}
+
+[data-theme="solarized-light"] .alertmanager-source-healthy,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-healthy {
+  background: rgba(0, 100, 0, 0.15);
+  color: #2aa198;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-caution,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-caution {
+  background: rgba(180, 120, 0, 0.15);
+  color: #b08800;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-warning,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-warning {
+  background: rgba(180, 60, 0, 0.15);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-muted,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-muted {
+  background: rgba(88, 110, 117, 0.15);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-default,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-default {
+  background: rgba(38, 139, 210, 0.15);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-endpoint-code {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #073642;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-error-text {
+  color: #dc322f;
+}

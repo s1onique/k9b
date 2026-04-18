@@ -81,8 +81,8 @@ export type RunPayload = {
   diagnosticPackReview?: DiagnosticPackReview | null;
   diagnosticPack?: DiagnosticPack | null;
   alertmanagerCompact?: AlertmanagerCompact | null;
+  alertmanagerSources?: AlertmanagerSources | null;
 };
-
 export type RunStats = {
   lastRunDurationSeconds: number | null;
   totalRuns: number;
@@ -634,6 +634,38 @@ export type AlertmanagerCompact = {
   captured_at: string;
 };
 
+export type AlertmanagerSource = {
+  source_id: string;
+  endpoint: string;
+  namespace: string | null;
+  name: string | null;
+  origin: string;
+  state: string;
+  discovered_at: string | null;
+  verified_at: string | null;
+  last_check: string | null;
+  last_error: string | null;
+  verified_version: string | null;
+  confidence_hints: string[];
+  is_manual: boolean;
+  is_tracking: boolean;
+  can_disable: boolean;
+  can_promote: boolean;
+  display_origin: string;
+  display_state: string;
+  provenance_summary: string;
+};
+
+export type AlertmanagerSources = {
+  sources: AlertmanagerSource[];
+  total_count: number;
+  tracked_count: number;
+  manual_count: number;
+  degraded_count: number;
+  missing_count: number;
+  discovery_timestamp: string | null;
+  cluster_context: string | null;
+};
 export type RunsListEntry = {
   runId: string;
   runLabel: string;
