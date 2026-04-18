@@ -10,6 +10,8 @@ Tests cover:
 - Rationale/provenance clearly indicates Alertmanager-driven influence when applied
 - Deterministic repeated ranking with same input produces same order / same rationale
 - If multiple matches exist, the combined effect remains bounded and explainable
+- Severity-aware bonus refinement
+- Structured provenance for Alertmanager-driven ranking
 """
 
 import unittest
@@ -24,6 +26,9 @@ from k8s_diag_agent.external_analysis.next_check_planner import (
     _compute_alertmanager_bonus,
     _compute_candidate_sort_score,
     _rank_candidates,
+    build_alertmanager_provenance,
+    compute_alertmanager_match_bonus,
+    extract_alertmanager_severity_weight,
 )
 from k8s_diag_agent.external_analysis.review_input import AlertmanagerContext
 
@@ -71,6 +76,7 @@ def _make_alertmanager_context(
     namespaces: tuple[str, ...] = (),
     clusters: tuple[str, ...] = (),
     services: tuple[str, ...] = (),
+    severity_counts: dict[str, int] | None = None,
 ) -> AlertmanagerContext:
     """Create a mock AlertmanagerContext for testing."""
     compact: dict | None = None
@@ -81,7 +87,7 @@ def _make_alertmanager_context(
             "affected_namespaces": list(namespaces),
             "affected_clusters": list(clusters),
             "affected_services": list(services),
-            "severity_counts": {"warning": 1},
+            "severity_counts": severity_counts or {"warning": 1},
             "state_counts": {"active": 1},
             "top_alert_names": ["test-alert"],
             "truncated": False,
@@ -108,6 +114,7 @@ class TestAlertmanagerRankingSignalFromContext(unittest.TestCase):
         self.assertEqual(signal.affected_clusters, ())
         self.assertEqual(signal.affected_services, ())
         self.assertIsNone(signal.status)
+        self.assertEqual(signal.severity_counts, ())
 
     def test_empty_status_returns_empty_signal(self) -> None:
         """Empty status should return available but empty signal."""
@@ -119,6 +126,7 @@ class TestAlertmanagerRankingSignalFromContext(unittest.TestCase):
         self.assertEqual(signal.affected_clusters, ())
         self.assertEqual(signal.affected_services, ())
         self.assertEqual(signal.status, "empty")
+        self.assertEqual(signal.severity_counts, ())
 
     def test_disabled_status_returns_empty_signal(self) -> None:
         """Disabled status should return available but empty signal."""
@@ -130,6 +138,7 @@ class TestAlertmanagerRankingSignalFromContext(unittest.TestCase):
         self.assertEqual(signal.affected_clusters, ())
         self.assertEqual(signal.affected_services, ())
         self.assertEqual(signal.status, "disabled")
+        self.assertEqual(signal.severity_counts, ())
 
     def test_timeout_status_returns_empty_signal(self) -> None:
         """Timeout status should return available but empty signal."""
@@ -141,6 +150,7 @@ class TestAlertmanagerRankingSignalFromContext(unittest.TestCase):
         self.assertEqual(signal.affected_clusters, ())
         self.assertEqual(signal.affected_services, ())
         self.assertEqual(signal.status, "timeout")
+        self.assertEqual(signal.severity_counts, ())
 
     def test_upstream_error_status_returns_empty_signal(self) -> None:
         """Upstream error status should return available but empty signal."""
@@ -152,6 +162,7 @@ class TestAlertmanagerRankingSignalFromContext(unittest.TestCase):
         self.assertEqual(signal.affected_clusters, ())
         self.assertEqual(signal.affected_services, ())
         self.assertEqual(signal.status, "upstream_error")
+        self.assertEqual(signal.severity_counts, ())
 
     def test_ok_status_extracts_namespaces(self) -> None:
         """OK status with namespaces should extract them."""
@@ -190,6 +201,18 @@ class TestAlertmanagerRankingSignalFromContext(unittest.TestCase):
         self.assertTrue(signal.available)
         self.assertEqual(signal.affected_services, ("api-gateway", "auth-service"))
 
+    def test_ok_status_extracts_severity_counts(self) -> None:
+        """OK status with severity_counts should extract them."""
+        ctx = _make_alertmanager_context(
+            available=True,
+            status="ok",
+            severity_counts={"critical": 2, "warning": 5, "info": 3},
+        )
+        signal = AlertmanagerRankingSignal.from_alertmanager_context(ctx)
+        
+        self.assertTrue(signal.available)
+        self.assertEqual(signal.severity_counts, (("critical", 2), ("warning", 5), ("info", 3)))
+
 
 class TestAlertmanagerRankingSignalMatching(unittest.TestCase):
     """Tests for AlertmanagerRankingSignal matching methods."""
@@ -201,6 +224,7 @@ class TestAlertmanagerRankingSignalMatching(unittest.TestCase):
             affected_clusters=("prod-cluster",),
             affected_services=("api-gateway", "auth-service"),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
 
     def test_matches_namespace_in_target_cluster(self) -> None:
@@ -277,6 +301,70 @@ class TestAlertmanagerRankingSignalMatching(unittest.TestCase):
         )
 
 
+class TestExtractAlertmanagerSeverityWeight(unittest.TestCase):
+    """Tests for extract_alertmanager_severity_weight function."""
+
+    def test_empty_severity_returns_baseline(self) -> None:
+        """Empty severity_counts should return baseline weight (1.0)."""
+        weight = extract_alertmanager_severity_weight(())
+        self.assertEqual(weight, 1.0)
+
+    def test_critical_severity_boosts(self) -> None:
+        """Critical dominant severity should return 1.25."""
+        weight = extract_alertmanager_severity_weight((("critical", 5), ("warning", 2)))
+        self.assertEqual(weight, 1.25)
+
+    def test_warning_severity_baseline(self) -> None:
+        """Warning dominant severity should return 1.0."""
+        weight = extract_alertmanager_severity_weight((("warning", 10), ("info", 5)))
+        self.assertEqual(weight, 1.0)
+
+    def test_info_severity_weaker(self) -> None:
+        """Info dominant severity should return 0.9."""
+        weight = extract_alertmanager_severity_weight((("info", 8),))
+        self.assertEqual(weight, 0.9)
+
+    def test_unknown_severity_defaults_baseline(self) -> None:
+        """Unknown severity should default to baseline (1.0)."""
+        weight = extract_alertmanager_severity_weight((("unknown", 5),))
+        self.assertEqual(weight, 1.0)
+
+
+class TestComputeAlertmanagerMatchBonus(unittest.TestCase):
+    """Tests for compute_alertmanager_match_bonus function."""
+
+    def test_no_match_returns_zero(self) -> None:
+        """No dimension matches should return 0."""
+        bonus = compute_alertmanager_match_bonus(False, False, False, 1.25)
+        self.assertEqual(bonus, 0)
+
+    def test_namespace_only_baseline(self) -> None:
+        """Namespace match with warning severity should give 80."""
+        bonus = compute_alertmanager_match_bonus(True, False, False, 1.0)
+        self.assertEqual(bonus, 80)
+
+    def test_namespace_critical_boost(self) -> None:
+        """Namespace match with critical severity should give ~100 (80 * 1.25)."""
+        bonus = compute_alertmanager_match_bonus(True, False, False, 1.25)
+        self.assertEqual(bonus, 100)
+
+    def test_namespace_info_weaker(self) -> None:
+        """Namespace match with info severity should give ~72 (80 * 0.9)."""
+        bonus = compute_alertmanager_match_bonus(True, False, False, 0.9)
+        self.assertEqual(bonus, 72)
+
+    def test_all_three_matches_critical_capped(self) -> None:
+        """Namespace+cluster+service with critical should be capped at 150."""
+        # (80 + 60 + 50) * 1.25 = 237.5, rounded to 237, capped to 150
+        bonus = compute_alertmanager_match_bonus(True, True, True, 1.25)
+        self.assertEqual(bonus, 150)
+
+    def test_all_three_matches_warning(self) -> None:
+        """Namespace+cluster+service with warning should give 150."""
+        bonus = compute_alertmanager_match_bonus(True, True, True, 1.0)
+        self.assertEqual(bonus, 150)
+
+
 class TestComputeAlertmanagerBonus(unittest.TestCase):
     """Tests for _compute_alertmanager_bonus function."""
 
@@ -287,6 +375,7 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
             affected_clusters=("prod-cluster",),
             affected_services=("api-gateway",),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
 
     def test_unavailable_signal_returns_zero_bonus(self) -> None:
@@ -297,6 +386,7 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status=None,
+            severity_counts=(),
         )
         candidate = _make_candidate("kubectl logs", CommandFamily.KUBECTL_LOGS)
         
@@ -315,6 +405,7 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="empty",
+            severity_counts=(),
         )
         candidate = _make_candidate("kubectl logs", CommandFamily.KUBECTL_LOGS)
         
@@ -325,8 +416,8 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
         self.assertFalse(cluster)
         self.assertFalse(service)
 
-    def test_namespace_match_gives_bonus(self) -> None:
-        """Namespace match should give bonus."""
+    def test_namespace_match_gives_bonus_warning(self) -> None:
+        """Namespace match with warning severity should give bonus ~80."""
         candidate = _make_candidate(
             "kubectl logs monitoring pod",
             CommandFamily.KUBECTL_LOGS,
@@ -335,10 +426,55 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
         
         bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, self.signal)
         
+        # 80 * 1.0 = 80 for warning
         self.assertEqual(bonus, 80)
         self.assertTrue(ns)
         self.assertFalse(cluster)
         self.assertFalse(service)
+
+    def test_namespace_match_gives_bonus_critical(self) -> None:
+        """Namespace match with critical severity should give bonus ~100."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("critical", 3), ("warning", 1)),  # critical dominant
+        )
+        candidate = _make_candidate(
+            "kubectl logs monitoring pod",
+            CommandFamily.KUBECTL_LOGS,
+            target_cluster="monitoring",
+        )
+        
+        bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, signal)
+        
+        # 80 * 1.25 = 100 for critical
+        self.assertEqual(bonus, 100)
+        self.assertTrue(ns)
+
+    def test_namespace_match_gives_bonus_info(self) -> None:
+        """Namespace match with info severity should give bonus ~72."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("info", 5),),  # info dominant
+        )
+        candidate = _make_candidate(
+            "kubectl logs monitoring pod",
+            CommandFamily.KUBECTL_LOGS,
+            target_cluster="monitoring",
+        )
+        
+        bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, signal)
+        
+        # 80 * 0.9 = 72 for info
+        self.assertEqual(bonus, 72)
+        self.assertTrue(ns)
 
     def test_cluster_match_gives_bonus(self) -> None:
         """Cluster match should give bonus."""
@@ -350,6 +486,7 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
         
         bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, self.signal)
         
+        # 60 * 1.0 = 60 for warning
         self.assertEqual(bonus, 60)
         self.assertFalse(ns)
         self.assertTrue(cluster)
@@ -361,17 +498,10 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
             "kubectl logs api-gateway",
             CommandFamily.KUBECTL_LOGS,
         )
-        # Simulate service in description
-        signal_with_service = AlertmanagerRankingSignal(
-            available=True,
-            affected_namespaces=(),
-            affected_clusters=(),
-            affected_services=("api-gateway",),
-            status="ok",
-        )
         
-        bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, signal_with_service)
+        bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, self.signal)
         
+        # 50 * 1.0 = 50 for warning
         self.assertEqual(bonus, 50)
         self.assertFalse(ns)
         self.assertFalse(cluster)
@@ -387,28 +517,29 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
             target_cluster="monitoring",  # matches namespace
         )
         
-        signal_with_service = AlertmanagerRankingSignal(
+        signal = AlertmanagerRankingSignal(
             available=True,
             affected_namespaces=("monitoring",),
             affected_clusters=(),
             affected_services=("monitoring",),  # matches via description
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         
-        bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, signal_with_service)
+        bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, signal)
         
         # namespace match: "monitoring" in "monitoring" -> True (+80)
         # service match: "monitoring" in description -> True (+50)
-        # 80 + 50 = 130, which is under cap but meaningful bonus
+        # 80 + 50 = 130 * 1.0 = 130 (warning), which is under cap but meaningful bonus
         self.assertEqual(bonus, 130)
         self.assertTrue(ns)
         self.assertFalse(cluster)
         self.assertTrue(service)
 
-    def test_all_three_matches_hits_150_cap(self) -> None:
-        """Candidate matching all three dimensions should hit the 150 cap.
+    def test_all_three_matches_critical_capped_at_150(self) -> None:
+        """Candidate matching all three dimensions with critical should be capped at 150.
 
-        namespace (80) + cluster (60) + service (50) = 190, capped to 150.
+        namespace (80) + cluster (60) + service (50) = 190, * 1.25 = 237.5, capped to 150.
         """
         candidate = _make_candidate(
             "kubectl logs prod-gateway in prod-cluster",  # service match via description
@@ -416,18 +547,19 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
             target_cluster="prod-cluster",  # cluster match
         )
         
-        # Signal with all three dimensions
+        # Signal with all three dimensions and critical severity
         signal = AlertmanagerRankingSignal(
             available=True,
             affected_namespaces=("prod-cluster",),  # matches via namespace (exact in target_cluster)
             affected_clusters=("prod-cluster",),     # matches via cluster
             affected_services=("prod-gateway",),     # matches via description
             status="ok",
+            severity_counts=(("critical", 5),),
         )
         
         bonus, ns, cluster, service = _compute_alertmanager_bonus(candidate, signal)
         
-        # namespace: 80, cluster: 60, service: 50 = 190, capped to 150
+        # 190 * 1.25 = 237.5, capped to 150
         self.assertEqual(bonus, 150)
         self.assertTrue(ns)
         self.assertTrue(cluster)
@@ -449,6 +581,94 @@ class TestComputeAlertmanagerBonus(unittest.TestCase):
         self.assertFalse(service)
 
 
+class TestBuildAlertmanagerProvenance(unittest.TestCase):
+    """Tests for build_alertmanager_provenance function."""
+
+    def test_none_when_no_matches(self) -> None:
+        """Should return None when no matches occurred."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("warning", 5),),
+        )
+        
+        provenance = build_alertmanager_provenance(False, False, False, 0, 0, signal)
+        
+        self.assertIsNone(provenance)
+
+    def test_namespace_match_provenance(self) -> None:
+        """Should build provenance with namespace dimension."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring", "default"),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("critical", 2), ("warning", 3)),
+        )
+        
+        provenance = build_alertmanager_provenance(True, False, False, 80, 100, signal)
+        
+        self.assertIsNotNone(provenance)
+        assert provenance is not None  # for mypy
+        self.assertIn("namespace", provenance.matched_dimensions)
+        self.assertEqual(provenance.base_bonus, 80)
+        self.assertEqual(provenance.applied_bonus, 100)
+        self.assertEqual(provenance.severity_summary, {"critical": 2, "warning": 3})
+        self.assertEqual(provenance.signal_status, "ok")
+
+    def test_all_three_matches_provenance(self) -> None:
+        """Should build provenance with all three dimensions."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=("prod-cluster",),
+            affected_services=("api-gateway",),
+            status="ok",
+            severity_counts=(("warning", 5),),
+        )
+        
+        provenance = build_alertmanager_provenance(True, True, True, 190, 180, signal)
+        
+        self.assertIsNotNone(provenance)
+        assert provenance is not None  # for mypy
+        self.assertIn("namespace", provenance.matched_dimensions)
+        self.assertIn("cluster", provenance.matched_dimensions)
+        self.assertIn("service", provenance.matched_dimensions)
+        self.assertEqual(len(provenance.matched_dimensions), 3)
+        self.assertEqual(provenance.base_bonus, 190)
+        self.assertEqual(provenance.applied_bonus, 180)
+
+    def test_provenance_to_dict(self) -> None:
+        """Should convert to serializable dict."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("warning", 5),),
+        )
+        
+        provenance = build_alertmanager_provenance(True, False, False, 80, 80, signal)
+        
+        self.assertIsNotNone(provenance)
+        assert provenance is not None  # for mypy
+        d = provenance.to_dict()
+        
+        self.assertIn("matchedDimensions", d)
+        self.assertIn("matchedValues", d)
+        self.assertIn("baseBonus", d)
+        self.assertIn("appliedBonus", d)
+        self.assertIn("severitySummary", d)
+        self.assertIn("signalStatus", d)
+        self.assertEqual(d["baseBonus"], 80)
+        self.assertEqual(d["appliedBonus"], 80)
+
+
 class TestBuildAlertmanagerRationale(unittest.TestCase):
     """Tests for _build_alertmanager_rationale function."""
 
@@ -460,6 +680,7 @@ class TestBuildAlertmanagerRationale(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="ok",
+            severity_counts=(),
         )
         
         rationale = _build_alertmanager_rationale(False, False, False, signal)
@@ -474,6 +695,7 @@ class TestBuildAlertmanagerRationale(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="ok",
+            severity_counts=(),
         )
         
         rationale = _build_alertmanager_rationale(True, False, False, signal)
@@ -491,6 +713,7 @@ class TestBuildAlertmanagerRationale(unittest.TestCase):
             affected_clusters=("prod-cluster",),
             affected_services=(),
             status="ok",
+            severity_counts=(),
         )
         
         rationale = _build_alertmanager_rationale(False, True, False, signal)
@@ -507,6 +730,7 @@ class TestBuildAlertmanagerRationale(unittest.TestCase):
             affected_clusters=(),
             affected_services=("api-gateway", "auth-service"),
             status="ok",
+            severity_counts=(),
         )
         
         rationale = _build_alertmanager_rationale(False, False, True, signal)
@@ -523,6 +747,7 @@ class TestBuildAlertmanagerRationale(unittest.TestCase):
             affected_clusters=("prod-cluster",),
             affected_services=("api-gateway",),
             status="ok",
+            severity_counts=(),
         )
         
         rationale = _build_alertmanager_rationale(True, True, True, signal)
@@ -549,6 +774,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         # No ranking policy reason should be set
         for c in ranked:
             self.assertIsNone(c.ranking_policy_reason)
+            self.assertIsNone(c.alertmanager_provenance)
 
     def test_unavailable_signal_unchanged_ranking(self) -> None:
         """Unavailable signal should not affect ranking."""
@@ -558,6 +784,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status=None,
+            severity_counts=(),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD),
@@ -568,6 +795,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         
         for c in ranked:
             self.assertIsNone(c.ranking_policy_reason)
+            self.assertIsNone(c.alertmanager_provenance)
 
     def test_empty_status_unchanged_ranking(self) -> None:
         """Empty status should not affect ranking."""
@@ -577,6 +805,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="empty",
+            severity_counts=(),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD),
@@ -587,6 +816,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         
         for c in ranked:
             self.assertIsNone(c.ranking_policy_reason)
+            self.assertIsNone(c.alertmanager_provenance)
 
     def test_namespace_match_promotes_candidate(self) -> None:
         """Candidate matching namespace should be promoted."""
@@ -596,6 +826,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
@@ -610,9 +841,39 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         assert ranked[0].ranking_policy_reason is not None  # for mypy
         self.assertIn("alertmanager-context", ranked[0].ranking_policy_reason)
         
+        # Provenance should be set
+        self.assertIsNotNone(ranked[0].alertmanager_provenance)
+        
         # Non-matching candidate should be second
         self.assertEqual(ranked[1].description, "kubectl get crd")
         self.assertIsNone(ranked[1].ranking_policy_reason)
+        self.assertIsNone(ranked[1].alertmanager_provenance)
+
+    def test_namespace_match_critical_boost(self) -> None:
+        """Candidate matching namespace with critical severity should get boosted bonus."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("critical", 3),),  # critical dominant
+        )
+        candidates = [
+            _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
+            _make_candidate("kubectl describe pod", CommandFamily.KUBECTL_DESCRIBE, target_cluster="monitoring"),
+        ]
+        
+        ranked = _rank_candidates(candidates, workstream=None, review_stage=None, alertmanager_signal=signal)
+        
+        # Monitoring candidate should be first due to namespace match with critical boost
+        self.assertEqual(ranked[0].description, "kubectl describe pod")
+        self.assertIsNotNone(ranked[0].alertmanager_provenance)
+        assert ranked[0].alertmanager_provenance is not None  # for mypy
+        # base_bonus = 80, applied_bonus = 80 * 1.25 = 100
+        self.assertEqual(ranked[0].alertmanager_provenance.base_bonus, 80)
+        self.assertEqual(ranked[0].alertmanager_provenance.applied_bonus, 100)
+        self.assertEqual(ranked[0].alertmanager_provenance.severity_summary, {"critical": 3})
 
     def test_cluster_match_promotes_candidate(self) -> None:
         """Candidate matching cluster should be promoted."""
@@ -622,6 +883,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=("prod-cluster",),
             affected_services=(),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
@@ -635,6 +897,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         self.assertIsNotNone(ranked[0].ranking_policy_reason)
         assert ranked[0].ranking_policy_reason is not None  # for mypy
         self.assertIn("alertmanager-context", ranked[0].ranking_policy_reason)
+        self.assertIsNotNone(ranked[0].alertmanager_provenance)
 
     def test_service_match_promotes_candidate(self) -> None:
         """Candidate mentioning affected service should be promoted."""
@@ -644,6 +907,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=(),
             affected_services=("api-gateway",),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD),
@@ -657,6 +921,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         self.assertIsNotNone(ranked[0].ranking_policy_reason)
         assert ranked[0].ranking_policy_reason is not None  # for mypy
         self.assertIn("alertmanager-context", ranked[0].ranking_policy_reason)
+        self.assertIsNotNone(ranked[0].alertmanager_provenance)
 
     def test_multiple_matches_combined_bounded(self) -> None:
         """Candidate with multiple matches should get bounded bonus."""
@@ -666,6 +931,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=("prod-cluster",),
             affected_services=("api-gateway",),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         candidates = [
             _make_candidate(
@@ -684,15 +950,17 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         # Matching candidate should be first
         self.assertEqual(ranked[0].description, "kubectl logs api-gateway")
         self.assertIsNotNone(ranked[0].ranking_policy_reason)
+        self.assertIsNotNone(ranked[0].alertmanager_provenance)
 
     def test_deterministic_ranking(self) -> None:
-        """Same input should produce same ranking order."""
+        """Same input should produce same ranking order and provenance."""
         signal = AlertmanagerRankingSignal(
             available=True,
             affected_namespaces=("monitoring",),
             affected_clusters=(),
             affected_services=(),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         candidates = [
             _make_candidate("kubectl logs monitoring", CommandFamily.KUBECTL_LOGS, target_cluster="monitoring"),
@@ -714,15 +982,23 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             ranked1[0].ranking_policy_reason,
             ranked2[0].ranking_policy_reason
         )
+        
+        # Both should have same provenance
+        prov1 = ranked1[0].alertmanager_provenance
+        prov2 = ranked2[0].alertmanager_provenance
+        self.assertIsNotNone(prov1)
+        self.assertIsNotNone(prov2)
+        self.assertEqual(prov1.to_dict(), prov2.to_dict())  # type: ignore[union-attr]
 
     def test_unrelated_candidates_no_bonus(self) -> None:
-        """Unrelated candidates should not receive bonus."""
+        """Unrelated candidates should not receive bonus or provenance."""
         signal = AlertmanagerRankingSignal(
             available=True,
             affected_namespaces=("monitoring",),
             affected_clusters=("prod-cluster",),
             affected_services=(),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
@@ -731,9 +1007,10 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         
         ranked = _rank_candidates(candidates, workstream=None, review_stage=None, alertmanager_signal=signal)
         
-        # Neither should have ranking_policy_reason set
+        # Neither should have ranking_policy_reason or provenance set
         for c in ranked:
             self.assertIsNone(c.ranking_policy_reason)
+            self.assertIsNone(c.alertmanager_provenance)
 
     def test_timeout_status_no_promotion(self) -> None:
         """Timeout status should produce no promotion (bonus not applied).
@@ -748,6 +1025,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="timeout",
+            severity_counts=(),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
@@ -759,6 +1037,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         # No bonus applied due to timeout status
         for c in ranked:
             self.assertIsNone(c.ranking_policy_reason)
+            self.assertIsNone(c.alertmanager_provenance)
 
     def test_upstream_error_status_no_promotion(self) -> None:
         """Upstream error status should produce no promotion (bonus not applied).
@@ -773,6 +1052,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="upstream_error",
+            severity_counts=(),
         )
         candidates = [
             _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
@@ -784,6 +1064,33 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         # No bonus applied due to upstream_error status
         for c in ranked:
             self.assertIsNone(c.ranking_policy_reason)
+            self.assertIsNone(c.alertmanager_provenance)
+
+    def test_no_severity_data_preserves_baseline(self) -> None:
+        """No severity data should result in baseline behavior."""
+        signal = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(),  # empty severity
+        )
+        candidates = [
+            _make_candidate("kubectl get crd", CommandFamily.KUBECTL_GET_CRD, target_cluster="dev"),
+            _make_candidate("kubectl describe pod", CommandFamily.KUBECTL_DESCRIBE, target_cluster="monitoring"),
+        ]
+        
+        ranked = _rank_candidates(candidates, workstream=None, review_stage=None, alertmanager_signal=signal)
+        
+        # Monitoring candidate should be first
+        self.assertEqual(ranked[0].description, "kubectl describe pod")
+        self.assertIsNotNone(ranked[0].alertmanager_provenance)
+        assert ranked[0].alertmanager_provenance is not None  # for mypy
+        # With no severity, weight defaults to 1.0, so base = applied = 80
+        self.assertEqual(ranked[0].alertmanager_provenance.base_bonus, 80)
+        self.assertEqual(ranked[0].alertmanager_provenance.applied_bonus, 80)
+        self.assertEqual(ranked[0].alertmanager_provenance.severity_summary, {})
 
 
 class TestComputeCandidateSortScoreWithAlertmanager(unittest.TestCase):
@@ -803,6 +1110,7 @@ class TestComputeCandidateSortScoreWithAlertmanager(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         
         # Should not raise - function accepts optional alertmanager_signal
@@ -812,6 +1120,7 @@ class TestComputeCandidateSortScoreWithAlertmanager(unittest.TestCase):
         
         # Namespace match should have been detected (in both target_cluster and description)
         self.assertTrue(ns)
+        # Warning severity: 80 * 1.0 = 80
         self.assertEqual(am_bonus, 80)
 
     def test_none_signal_works(self) -> None:
@@ -840,6 +1149,7 @@ class TestComputeCandidateSortScoreWithAlertmanager(unittest.TestCase):
             affected_clusters=(),
             affected_services=(),
             status="ok",
+            severity_counts=(("warning", 5),),
         )
         
         score_with_bonus, _, am_bonus, _, _, _ = _compute_candidate_sort_score(
@@ -851,6 +1161,44 @@ class TestComputeCandidateSortScoreWithAlertmanager(unittest.TestCase):
         
         # Score with bonus should be higher by exactly the bonus amount
         self.assertEqual(score_with_bonus - score_without_bonus, am_bonus)
+
+    def test_severity_boost_in_score(self) -> None:
+        """Critical severity should result in higher bonus."""
+        candidate = _make_candidate(
+            "kubectl logs monitoring", 
+            CommandFamily.KUBECTL_LOGS, 
+            target_cluster="monitoring"
+        )
+        signal_warning = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("warning", 5),),
+        )
+        signal_critical = AlertmanagerRankingSignal(
+            available=True,
+            affected_namespaces=("monitoring",),
+            affected_clusters=(),
+            affected_services=(),
+            status="ok",
+            severity_counts=(("critical", 3),),
+        )
+        
+        _, _, bonus_warning, _, _, _ = _compute_candidate_sort_score(
+            candidate, alertmanager_signal=signal_warning
+        )
+        _, _, bonus_critical, _, _, _ = _compute_candidate_sort_score(
+            candidate, alertmanager_signal=signal_critical
+        )
+        
+        # Critical bonus should be higher than warning bonus
+        self.assertGreater(bonus_critical, bonus_warning)
+        # Warning: 80 * 1.0 = 80
+        self.assertEqual(bonus_warning, 80)
+        # Critical: 80 * 1.25 = 100
+        self.assertEqual(bonus_critical, 100)
 
 
 if __name__ == "__main__":

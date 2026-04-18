@@ -134,6 +134,15 @@ _ALERTMANAGER_SERVICE_MATCH_BONUS = 50
 # Maximum cumulative Alertmanager bonus to prevent any single signal dominating.
 _ALERTMANAGER_MAX_CUMULATIVE_BONUS = 150
 
+# Severity-aware bonus multipliers.
+# These are conservative multiplicative adjustments applied on top of dimension matches.
+# Require a real dimension match before severity matters (defensive by design).
+_ALERTMANAGER_SEVERITY_WEIGHTS = {
+    "critical": 1.25,  # modest boost for critical alerts
+    "warning": 1.0,    # baseline (no change)
+    "info": 0.9,        # slightly weaker lift for info-only alerts
+}
+
 
 @dataclass(frozen=True)
 class AlertmanagerRankingSignal:
@@ -143,6 +152,8 @@ class AlertmanagerRankingSignal:
     affected_clusters: tuple[str, ...]
     affected_services: tuple[str, ...]
     status: str | None
+    # Severity distribution for bonus tuning. Maps severity name to count.
+    severity_counts: tuple[tuple[str, int], ...]
 
     @classmethod
     def from_alertmanager_context(cls, ctx: AlertmanagerContext) -> AlertmanagerRankingSignal:
@@ -158,6 +169,7 @@ class AlertmanagerRankingSignal:
                 affected_clusters=(),
                 affected_services=(),
                 status=None,
+                severity_counts=(),
             )
         
         # Treat certain statuses as "no active alert signal" for ranking purposes
@@ -170,6 +182,7 @@ class AlertmanagerRankingSignal:
                 affected_clusters=(),
                 affected_services=(),
                 status=status,
+                severity_counts=(),
             )
         
         compact = ctx.compact
@@ -184,12 +197,21 @@ class AlertmanagerRankingSignal:
         services_raw = compact.get("affected_services", [])
         services: tuple[str, ...] = tuple(str(s) for s in services_raw) if isinstance(services_raw, (list, tuple)) else ()
         
+        # Extract severity counts from compact for bonus tuning
+        severity_raw = compact.get("severity_counts", {})
+        severity_counts: tuple[tuple[str, int], ...] = ()
+        if isinstance(severity_raw, dict):
+            severity_counts = tuple(
+                (str(k), int(v)) for k, v in severity_raw.items()
+            )
+        
         return cls(
             available=True,
             affected_namespaces=namespaces,
             affected_clusters=clusters,
             affected_services=services,
             status=status,
+            severity_counts=severity_counts,
         )
 
     def matches_namespace(self, candidate_target_cluster: str | None, candidate_target_context: str | None) -> bool:
@@ -282,6 +304,143 @@ class AlertmanagerRankingSignal:
         return False
 
 
+def extract_alertmanager_severity_weight(
+    severity_counts: tuple[tuple[str, int], ...],
+) -> float:
+    """Extract a single severity weight from alert severity distribution.
+    
+    Uses precedence-based severity determination (not count-weighted):
+    - critical present => 1.25
+    - warning present => 1.0 (baseline)
+    - info-only => 0.9
+    - no severity data => 1.0 (baseline)
+    
+    No live Alertmanager fetch is performed.
+    """
+    if not severity_counts:
+        return 1.0  # baseline when no severity info
+    
+    # Check for presence of severities in precedence order
+    severities_present: set[str] = {sev.lower() for sev, _ in severity_counts}
+    
+    if "critical" in severities_present:
+        return 1.25
+    if "warning" in severities_present:
+        return 1.0
+    if "info" in severities_present:
+        return 0.9
+    
+    return 1.0  # fallback baseline
+
+
+def compute_alertmanager_match_bonus(
+    ns_match: bool,
+    cluster_match: bool,
+    service_match: bool,
+    severity_multiplier: float,
+) -> int:
+    """Compute the severity-adjusted Alertmanager bonus.
+    
+    Applies dimension bonuses first, then scales by severity multiplier.
+    Hard cap of 150 prevents any single signal from dominating unrelated candidates.
+    
+    No live Alertmanager fetch is performed.
+    """
+    bonus = 0
+    if ns_match:
+        bonus += _ALERTMANAGER_NAMESPACE_MATCH_BONUS
+    if cluster_match:
+        bonus += _ALERTMANAGER_CLUSTER_MATCH_BONUS
+    if service_match:
+        bonus += _ALERTMANAGER_SERVICE_MATCH_BONUS
+    
+    if bonus == 0:
+        return 0
+    
+    # Apply severity multiplier (requires a real match first)
+    adjusted = int(bonus * severity_multiplier)
+    
+    # Hard cap to prevent any single signal from dominating unrelated candidates.
+    return min(adjusted, _ALERTMANAGER_MAX_CUMULATIVE_BONUS)
+
+
+@dataclass(frozen=True)
+class AlertmanagerRankingProvenance:
+    """Structured provenance for Alertmanager-driven ranking influence.
+    
+    Supports debugging, future UI use, and tuning.
+    """
+    # Dimensions that matched for this candidate
+    matched_dimensions: tuple[str, ...]
+    # Values that matched for each dimension
+    matched_values: dict[str, tuple[str, ...]]
+    # Bonus applied before severity adjustment
+    base_bonus: int
+    # Final bonus after severity adjustment
+    applied_bonus: int
+    # Severity distribution that influenced the bonus
+    severity_summary: dict[str, int]
+    # Signal status at time of ranking
+    signal_status: str | None
+    
+    def to_dict(self) -> dict[str, object]:
+        """Convert to serializable dict for UI/debugging."""
+        return {
+            "matchedDimensions": list(self.matched_dimensions),
+            "matchedValues": {k: list(v) for k, v in self.matched_values.items()},
+            "baseBonus": self.base_bonus,
+            "appliedBonus": self.applied_bonus,
+            "severitySummary": dict(self.severity_summary),
+            "signalStatus": self.signal_status,
+        }
+
+
+def build_alertmanager_provenance(
+    ns_match: bool,
+    cluster_match: bool,
+    service_match: bool,
+    base_bonus: int,
+    applied_bonus: int,
+    signal: AlertmanagerRankingSignal,
+) -> AlertmanagerRankingProvenance | None:
+    """Build structured Alertmanager provenance for a candidate.
+    
+    Returns None if no dimension match occurred (no provenance needed).
+    Supports debugging, future UI use, and tuning.
+    
+    No live Alertmanager fetch is performed.
+    """
+    if not (ns_match or cluster_match or service_match):
+        return None
+    
+    matched_dimensions: list[str] = []
+    matched_values: dict[str, tuple[str, ...]] = {}
+    
+    if ns_match and signal.affected_namespaces:
+        matched_dimensions.append("namespace")
+        matched_values["namespace"] = signal.affected_namespaces
+    if cluster_match and signal.affected_clusters:
+        matched_dimensions.append("cluster")
+        matched_values["cluster"] = signal.affected_clusters
+    if service_match and signal.affected_services:
+        matched_dimensions.append("service")
+        matched_values["service"] = signal.affected_services
+    
+    # Build severity summary dict from tuple format
+    severity_summary: dict[str, int] = {}
+    for sev, count in signal.severity_counts:
+        severity_summary[sev] = count
+    
+    return AlertmanagerRankingProvenance(
+        matched_dimensions=tuple(matched_dimensions),
+        matched_values=matched_values,
+        base_bonus=base_bonus,
+        applied_bonus=applied_bonus,
+        severity_summary=severity_summary,
+        signal_status=signal.status,
+    )
+
+
 def _compute_alertmanager_bonus(
     candidate: NextCheckCandidate,
     signal: AlertmanagerRankingSignal,
@@ -289,7 +448,7 @@ def _compute_alertmanager_bonus(
     """Compute Alertmanager-influenced bonus for a candidate.
     
     Returns tuple of (bonus, ns_match, cluster_match, service_match).
-    The bonus is bounded and additive but capped at _ALERTMANAGER_MAX_CUMULATIVE_BONUS.
+    The bonus is bounded, severity-aware, and additive but capped.
     
     No live Alertmanager fetch is performed - only run-scoped context is used.
     """
@@ -305,20 +464,20 @@ def _compute_alertmanager_bonus(
     if not signal.affected_namespaces and not signal.affected_clusters and not signal.affected_services:
         return 0, False, False, False
     
-    bonus = 0
     ns_match = signal.matches_namespace(candidate.target_cluster, candidate.target_context)
     cluster_match = signal.matches_cluster(candidate.target_cluster)
     service_match = signal.matches_service(candidate.description, candidate.target_context)
     
-    if ns_match:
-        bonus += _ALERTMANAGER_NAMESPACE_MATCH_BONUS
-    if cluster_match:
-        bonus += _ALERTMANAGER_CLUSTER_MATCH_BONUS
-    if service_match:
-        bonus += _ALERTMANAGER_SERVICE_MATCH_BONUS
+    if not (ns_match or cluster_match or service_match):
+        return 0, False, False, False
     
-    # Cap the bonus to prevent any signal from dominating
-    bonus = min(bonus, _ALERTMANAGER_MAX_CUMULATIVE_BONUS)
+    # Extract severity weight from alert distribution
+    severity_multiplier = extract_alertmanager_severity_weight(signal.severity_counts)
+    
+    # Compute severity-adjusted bonus
+    bonus = compute_alertmanager_match_bonus(
+        ns_match, cluster_match, service_match, severity_multiplier
+    )
     
     return bonus, ns_match, cluster_match, service_match
 
@@ -629,7 +788,7 @@ def _rank_candidates(
     review_stage: ReviewStage | None = None,
     alertmanager_signal: AlertmanagerRankingSignal | None = None,
 ) -> tuple[NextCheckCandidate, ...]:
-    """Rank candidates and attach ranking policy reasons for observability.
+    """Rank candidates and attach ranking policy reasons and provenance for observability.
     
     Args:
         candidates: Sequence of candidates to rank
@@ -639,7 +798,7 @@ def _rank_candidates(
             If None, ranking proceeds without Alertmanager influence.
             No live Alertmanager fetch is performed - only run-scoped context is used.
     """
-    scored: list[tuple[int, NextCheckCandidate, bool, int, str | None]] = []
+    scored: list[tuple[int, NextCheckCandidate, bool, int, str | None, bool, bool, bool]] = []
     for candidate in candidates:
         score, demotion_applied, am_bonus, am_ns_match, am_cluster_match, am_service_match = _compute_candidate_sort_score(
             candidate, workstream, review_stage, alertmanager_signal
@@ -652,16 +811,31 @@ def _rank_candidates(
         elif am_bonus > 0 and alertmanager_signal is not None:
             ranking_reason = _build_alertmanager_rationale(am_ns_match, am_cluster_match, am_service_match, alertmanager_signal)
         
-        scored.append((score, candidate, demotion_applied, am_bonus, ranking_reason))
+        scored.append((score, candidate, demotion_applied, am_bonus, ranking_reason, am_ns_match, am_cluster_match, am_service_match))
     
     # Sort by score (descending) then by description (ascending) for determinism
     scored.sort(key=lambda entry: (-entry[0], entry[1].description))
     
-    # Reconstruct candidates with ranking policy reason if any policy was applied
+    # Reconstruct candidates with ranking policy reason and provenance if any policy was applied
     ranked: list[NextCheckCandidate] = []
-    for score, candidate, demotion_applied, am_bonus, ranking_reason in scored:
-        if ranking_reason is not None:
-            # Create new candidate with ranking policy reason set
+    for score, candidate, demotion_applied, am_bonus, ranking_reason, am_ns_match, am_cluster_match, am_service_match in scored:
+        provenance: AlertmanagerRankingProvenance | None = None
+        if am_bonus > 0 and alertmanager_signal is not None and (am_ns_match or am_cluster_match or am_service_match):
+            # Compute base bonus (before severity adjustment) for provenance
+            base_bonus = 0
+            if am_ns_match:
+                base_bonus += _ALERTMANAGER_NAMESPACE_MATCH_BONUS
+            if am_cluster_match:
+                base_bonus += _ALERTMANAGER_CLUSTER_MATCH_BONUS
+            if am_service_match:
+                base_bonus += _ALERTMANAGER_SERVICE_MATCH_BONUS
+            provenance = build_alertmanager_provenance(
+                am_ns_match, am_cluster_match, am_service_match,
+                base_bonus, am_bonus, alertmanager_signal
+            )
+        
+        if ranking_reason is not None or provenance is not None:
+            # Create new candidate with ranking policy reason and provenance set
             ranked.append(
                 NextCheckCandidate(
                     candidate_id=candidate.candidate_id,
@@ -686,6 +860,7 @@ def _rank_candidates(
                     blocking_reason=candidate.blocking_reason,
                     priority_label=candidate.priority_label,
                     ranking_policy_reason=ranking_reason,
+                    alertmanager_provenance=provenance,
                 )
             )
         else:
@@ -718,6 +893,8 @@ class NextCheckCandidate:
     priority_label: str
     # Observability: why ranking policy was applied (if any)
     ranking_policy_reason: str | None = None
+    # Structured provenance for Alertmanager-driven ranking (if any)
+    alertmanager_provenance: AlertmanagerRankingProvenance | None = None
 
     def to_dict(self) -> dict[str, object | str | bool]:
         result: dict[str, object | str | bool] = {
@@ -745,6 +922,8 @@ class NextCheckCandidate:
         }
         if self.ranking_policy_reason is not None:
             result["rankingPolicyReason"] = self.ranking_policy_reason
+        if self.alertmanager_provenance is not None:
+            result["alertmanagerProvenance"] = self.alertmanager_provenance.to_dict()
         return result
 
 
