@@ -272,6 +272,25 @@ export type NextCheckEntry = {
   evidenceNeeded: string[];
 };
 
+/**
+ * Structured provenance for Alertmanager-driven ranking influence.
+ * Mirrors the AlertmanagerRankingProvenance dataclass from the backend planner.
+ */
+export type AlertmanagerProvenance = {
+  /** Dimensions that matched for this candidate (e.g., "namespace", "cluster", "service") */
+  matchedDimensions: string[];
+  /** Values that matched for each dimension */
+  matchedValues: Record<string, string[]>;
+  /** Bonus applied before severity adjustment */
+  baseBonus: number;
+  /** Final bonus after severity adjustment */
+  appliedBonus: number;
+  /** Severity distribution that influenced the bonus */
+  severitySummary: Record<string, number>;
+  /** Signal status at time of ranking */
+  signalStatus: string | null;
+};
+
 export type NextCheckPlanCandidate = {
     description: string;
     targetCluster: string | null;
@@ -312,6 +331,8 @@ export type NextCheckPlanCandidate = {
     resultSummary?: string | null;
     priorityRationale?: string | null;
     rankingReason?: string | null;
+    /** Structured Alertmanager provenance - preferred over rankingReason when present */
+    alertmanagerProvenance?: AlertmanagerProvenance | null;
 };
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {

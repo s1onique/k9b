@@ -309,6 +309,16 @@ class AlertmanagerCompactView:
 
 
 @dataclass(frozen=True)
+class AlertmanagerProvenanceView:
+    matched_dimensions: tuple[str, ...]
+    matched_values: dict[str, tuple[str, ...]]
+    applied_bonus: int
+    base_bonus: int = 0
+    severity_summary: dict[str, int] | None = None
+    signal_status: str | None = None
+
+
+@dataclass(frozen=True)
 class NextCheckCandidateView:
     candidate_id: str | None
     priority_label: str | None
@@ -341,6 +351,7 @@ class NextCheckCandidateView:
     latest_timestamp: str | None
     priority_rationale: str | None
     ranking_reason: str | None
+    alertmanager_provenance: AlertmanagerProvenanceView | None = None
 
 
 @dataclass(frozen=True)
@@ -434,6 +445,7 @@ class NextCheckQueueItemView:
     result_class: str | None = None
     result_summary: str | None = None
     workstream: str | None = None
+    alertmanager_provenance: AlertmanagerProvenanceView | None = None
 
 
 @dataclass(frozen=True)
@@ -1312,6 +1324,8 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
     for entry in raw:
         if not isinstance(entry, Mapping):
             continue
+        provenance_raw = entry.get("alertmanagerProvenance") or entry.get("alertmanager_provenance")
+        provenance = _build_alertmanager_provenance_view(provenance_raw)
         entries.append(
                 NextCheckQueueItemView(
                     candidate_id=_coerce_optional_str(entry.get("candidateId")),
@@ -1344,6 +1358,7 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
                 plan_artifact_path=_coerce_optional_str(entry.get("planArtifactPath")),
                 queue_status=_coerce_str(entry.get("queueStatus")),
                 workstream=_coerce_optional_str(entry.get("workstream")),
+                alertmanager_provenance=provenance,
             )
         )
     return tuple(entries)
@@ -1481,7 +1496,11 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
     # Import here to avoid circular dependency at module level
     from ..health.ui import _derive_priority_rationale, _derive_ranking_reason
 
+    provenance_raw = raw.get("alertmanagerProvenance") or raw.get("alertmanager_provenance")
+    provenance = _build_alertmanager_provenance_view(provenance_raw)
+
     return NextCheckCandidateView(
+        alertmanager_provenance=provenance,
         candidate_id=_coerce_optional_str(raw.get("candidateId")),
         description=_coerce_str(raw.get("description")),
         target_cluster=_coerce_optional_str(raw.get("targetCluster")),
@@ -1639,6 +1658,39 @@ def _build_recommended_action(raw: object | None) -> RecommendedActionView | Non
         description=_coerce_str(raw.get("description")),
         references=_coerce_sequence(raw.get("references")),
         safety_level=_coerce_str(raw.get("safety_level")),
+    )
+
+
+def _build_alertmanager_provenance_view(raw: object | None) -> AlertmanagerProvenanceView | None:
+    """Build AlertmanagerProvenanceView from raw JSON data (snake_case keys from planner)."""
+    if not isinstance(raw, Mapping):
+        return None
+    matched_dimensions_raw = raw.get("matchedDimensions") or raw.get("matched_dimensions") or ()
+    matched_dimensions: tuple[str, ...] = ()
+    if isinstance(matched_dimensions_raw, Sequence) and not isinstance(matched_dimensions_raw, str | bytes):
+        matched_dimensions = tuple(str(d) for d in matched_dimensions_raw)
+    
+    matched_values_raw = raw.get("matchedValues") or raw.get("matched_values") or {}
+    matched_values: dict[str, tuple[str, ...]] = {}
+    if isinstance(matched_values_raw, Mapping):
+        for dim, vals in matched_values_raw.items():
+            if isinstance(vals, Sequence) and not isinstance(vals, str | bytes):
+                matched_values[str(dim)] = tuple(str(v) for v in vals)
+            elif vals:
+                matched_values[str(dim)] = (str(vals),)
+    
+    severity_summary_raw = raw.get("severitySummary") or raw.get("severity_summary")
+    severity_summary: dict[str, int] | None = None
+    if isinstance(severity_summary_raw, Mapping):
+        severity_summary = {str(k): int(v) for k, v in severity_summary_raw.items()}
+    
+    return AlertmanagerProvenanceView(
+        matched_dimensions=matched_dimensions,
+        matched_values=matched_values,
+        applied_bonus=_coerce_int(raw.get("appliedBonus") or raw.get("applied_bonus")),
+        base_bonus=_coerce_int(raw.get("baseBonus") or raw.get("base_bonus") or 0),
+        severity_summary=severity_summary,
+        signal_status=_coerce_optional_str(raw.get("signalStatus") or raw.get("signal_status")),
     )
 
 

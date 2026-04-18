@@ -240,6 +240,16 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     rankingReason: str | None
 
 
+class AlertmanagerProvenancePayload(TypedDict, total=False):
+    """Payload for alertmanager provenance data on next-check candidates/queue items."""
+    matchedDimensions: list[str]
+    matchedValues: dict[str, list[str]]
+    appliedBonus: int
+    baseBonus: int
+    severitySummary: dict[str, int] | None
+    signalStatus: str | None
+
+
 class NextCheckQueueItemPayload(TypedDict, total=False):
     candidateId: str | None
     candidateIndex: int | None
@@ -271,6 +281,7 @@ class NextCheckQueueItemPayload(TypedDict, total=False):
     resultClass: str | None
     resultSummary: str | None
     workstream: str | None
+    alertmanagerProvenance: AlertmanagerProvenancePayload | None
 
 
 class NextCheckQueueCandidateAccountingPayload(TypedDict):
@@ -1119,23 +1130,38 @@ def _serialize_next_check_queue(
     queue: tuple[NextCheckQueueItemView, ...],
     promotions: Sequence[Mapping[str, object]] | None = None,
 ) -> list[NextCheckQueueItemPayload]:
-    entries: list[NextCheckQueueItemPayload] = [
-            {
-                "candidateId": item.candidate_id,
-                "candidateIndex": item.candidate_index,
-                "description": item.description,
-                "targetCluster": item.target_cluster,
-                "priorityLabel": item.priority_label,
-                "suggestedCommandFamily": item.suggested_command_family,
-                "safeToAutomate": item.safe_to_automate,
-                "requiresOperatorApproval": item.requires_operator_approval,
-                "approvalState": item.approval_state,
-                "executionState": item.execution_state,
-                "outcomeStatus": item.outcome_status,
-                "latestArtifactPath": item.latest_artifact_path,
-                "sourceReason": item.source_reason,
-                "sourceType": item.source_type,
-                "expectedSignal": item.expected_signal,
+    entries: list[NextCheckQueueItemPayload] = []
+    for item in queue:
+        # Build provenance dict if present
+        provenance: dict[str, object] | None = None
+        if item.alertmanager_provenance is not None:
+            provenance = {
+                "matchedDimensions": list(item.alertmanager_provenance.matched_dimensions),
+                "matchedValues": {k: list(v) for k, v in item.alertmanager_provenance.matched_values.items()},
+                "appliedBonus": item.alertmanager_provenance.applied_bonus,
+                "baseBonus": item.alertmanager_provenance.base_bonus,
+            }
+            if item.alertmanager_provenance.severity_summary:
+                provenance["severitySummary"] = item.alertmanager_provenance.severity_summary
+            if item.alertmanager_provenance.signal_status:
+                provenance["signalStatus"] = item.alertmanager_provenance.signal_status
+
+        entry: NextCheckQueueItemPayload = {
+            "candidateId": item.candidate_id,
+            "candidateIndex": item.candidate_index,
+            "description": item.description,
+            "targetCluster": item.target_cluster,
+            "priorityLabel": item.priority_label,
+            "suggestedCommandFamily": item.suggested_command_family,
+            "safeToAutomate": item.safe_to_automate,
+            "requiresOperatorApproval": item.requires_operator_approval,
+            "approvalState": item.approval_state,
+            "executionState": item.execution_state,
+            "outcomeStatus": item.outcome_status,
+            "latestArtifactPath": item.latest_artifact_path,
+            "sourceReason": item.source_reason,
+            "sourceType": item.source_type,
+            "expectedSignal": item.expected_signal,
             "normalizationReason": item.normalization_reason,
             "safetyReason": item.safety_reason,
             "approvalReason": item.approval_reason,
@@ -1152,8 +1178,9 @@ def _serialize_next_check_queue(
             "queueStatus": item.queue_status,
             "workstream": item.workstream,
         }
-        for item in queue
-    ]
+        if provenance is not None:
+            entry["alertmanagerProvenance"] = provenance
+        entries.append(entry)
     if promotions:
         for entry in promotions:
             if isinstance(entry, Mapping):
@@ -1349,6 +1376,20 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
 
 
 def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCandidatePayload:
+    # Build provenance dict if present
+    provenance: dict[str, object] | None = None
+    if view.alertmanager_provenance is not None:
+        provenance = {
+            "matchedDimensions": list(view.alertmanager_provenance.matched_dimensions),
+            "matchedValues": {k: list(v) for k, v in view.alertmanager_provenance.matched_values.items()},
+            "appliedBonus": view.alertmanager_provenance.applied_bonus,
+            "baseBonus": view.alertmanager_provenance.base_bonus,
+        }
+        if view.alertmanager_provenance.severity_summary:
+            provenance["severitySummary"] = view.alertmanager_provenance.severity_summary
+        if view.alertmanager_provenance.signal_status:
+            provenance["signalStatus"] = view.alertmanager_provenance.signal_status
+
     payload: NextCheckCandidatePayload = {
         "description": view.description,
         "targetCluster": view.target_cluster,
@@ -1384,6 +1425,8 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         payload["priorityRationale"] = view.priority_rationale
     if view.ranking_reason is not None:
         payload["rankingReason"] = view.ranking_reason
+    if provenance is not None:
+        payload["alertmanagerProvenance"] = provenance
     return payload
 
 

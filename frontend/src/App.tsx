@@ -17,6 +17,7 @@ import {
 } from "./api";
 import type {
   AlertmanagerCompact,
+  AlertmanagerProvenance,
   AutoInterpretation,
   ClusterDetailPayload,
   FleetPayload,
@@ -1760,6 +1761,59 @@ const getAlertmanagerPromotionSubtext = (rankingReason: string): string | null =
     return "Ranking influenced by Alertmanager snapshot for selected run";
   }
   return null;
+};
+
+/** Format structured Alertmanager provenance for operator display.
+ * Converts AlertmanagerProvenance into human-friendly text.
+ */
+const formatAlertmanagerProvenance = (provenance: AlertmanagerProvenance): string => {
+  const { matchedDimensions, matchedValues, appliedBonus } = provenance;
+  
+  if (matchedDimensions.length === 0) {
+    return "Promoted by Alertmanager";
+  }
+  
+  // Format matched dimensions and values
+  const parts = matchedDimensions.map((dim) => {
+    const values = matchedValues[dim] ?? [];
+    const valuesStr = values.length > 0 ? `: ${values.join(", ")}` : "";
+    return `${dim}${valuesStr}`;
+  });
+  
+  const bonusStr = appliedBonus > 0 ? ` (+${appliedBonus})` : "";
+  return `Matched ${parts.join(", ")}${bonusStr}`;
+};
+
+/** Get subtext for structured Alertmanager provenance tooltip.
+ * Provides bonus and severity detail when available.
+ */
+const getAlertmanagerProvenanceSubtext = (provenance: AlertmanagerProvenance): string => {
+  const { baseBonus, appliedBonus, severitySummary, signalStatus } = provenance;
+  
+  const parts: string[] = [];
+  
+  if (baseBonus !== appliedBonus) {
+    parts.push(`Base bonus: ${baseBonus}, Applied: ${appliedBonus}`);
+  } else if (appliedBonus > 0) {
+    parts.push(`Bonus: ${appliedBonus}`);
+  }
+  
+  if (Object.keys(severitySummary).length > 0) {
+    const severityParts = Object.entries(severitySummary)
+      .map(([sev, count]) => `${sev}: ${count}`)
+      .join(", ");
+    parts.push(`Severity: ${severityParts}`);
+  }
+  
+  if (signalStatus) {
+    parts.push(`Signal: ${signalStatus}`);
+  }
+  
+  if (parts.length === 0) {
+    return "Ranking influenced by Alertmanager snapshot";
+  }
+  
+  return parts.join(" · ");
 };
 
 const AlertmanagerSnapshotPanel = ({
@@ -5367,7 +5421,11 @@ const App = () => {
                           <div className="queue-item-blocker-note">
                             <span className="queue-item-blocker-icon">⏸</span>
                             <span className="queue-item-blocker-text">{item.priorityRationale}</span>
-                            {item.rankingReason ? (
+                            {item.alertmanagerProvenance ? (
+                              <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title={getAlertmanagerProvenanceSubtext(item.alertmanagerProvenance)}>
+                                🔔 {formatAlertmanagerProvenance(item.alertmanagerProvenance)}
+                              </span>
+                            ) : item.rankingReason ? (
                               item.rankingReason.startsWith("alertmanager-context:") ? (
                                 <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title={getAlertmanagerPromotionSubtext(item.rankingReason) ?? "Ranking influenced by Alertmanager snapshot"}>
                                   🔔 {formatAlertmanagerPromotion(item.rankingReason)}
@@ -6042,7 +6100,11 @@ const App = () => {
                                   <span className="priority-rationale-badge">
                                     {candidate.priorityRationale}
                                   </span>
-                                  {candidate.rankingReason ? (
+                                  {candidate.alertmanagerProvenance ? (
+                                    <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title={getAlertmanagerProvenanceSubtext(candidate.alertmanagerProvenance)}>
+                                      🔔 {formatAlertmanagerProvenance(candidate.alertmanagerProvenance)}
+                                    </span>
+                                  ) : candidate.rankingReason ? (
                                     <span className="ranking-reason-badge">
                                       {candidate.rankingReason}
                                     </span>
