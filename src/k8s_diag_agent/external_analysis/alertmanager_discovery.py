@@ -55,6 +55,22 @@ _ORIGIN_PRIORITY: dict[AlertmanagerSourceOrigin, int] = {
 }
 
 
+def _normalize_endpoint_for_identity(endpoint: str) -> str:
+    '''Strip scheme and trailing slash to get a canonical identity key.
+    
+    e.g., 'http://alertmanager-main.monitoring:9093/' -> 'alertmanager-main.monitoring:9093'
+    This allows deduplication across discovery strategies that generate
+    different source_id prefixes (crd:, prom-crd-config:, service:, pod:).
+    '''
+    normalized = endpoint.rstrip('/')
+    # Strip scheme if present
+    if normalized.startswith('http://'):
+        normalized = normalized[7:]
+    elif normalized.startswith('https://'):
+        normalized = normalized[8:]
+    return normalized
+
+
 class AlertmanagerSourceState(StrEnum):
     """Current state of an Alertmanager source."""
 
@@ -80,49 +96,89 @@ class AlertmanagerSource:
     last_check: datetime | None = None
     last_error: str | None = None
     verified_version: str | None = None  # Alertmanager version from /api/v2/status
-    confidence_hints: tuple[str, ...] = field(default_factory=tuple)  # e.g., "from-crud", "has-service"
+    confidence_hints: tuple[str, ...] = field(default_factory=tuple)  # e.g., (from-crd, has-service)
+    merged_provenances: tuple[AlertmanagerSourceOrigin, ...] = field(default_factory=tuple)  # All contributing origins for UI
 
     def __post_init__(self) -> None:
         # Ensure endpoint has no trailing slash for consistency
-        object.__setattr__(self, "endpoint", self.endpoint.rstrip("/"))
+        object.__setattr__(self, 'endpoint', self.endpoint.rstrip('/'))
+        # Ensure merged_provenances includes current origin if not already present
+        if self.origin not in self.merged_provenances:
+            object.__setattr__(self, 'merged_provenances', self.merged_provenances + (self.origin,))
+
+    @property
+    def canonical_identity(self) -> str:
+        '''Canonical identity for deduplication across strategies.
+        
+        Uses normalized endpoint (without scheme) as the canonical key.
+        This allows sources discovered by different strategies (CRD, Prometheus config,
+        service heuristic) to be recognized as the same Alertmanager instance.
+        '''
+        return _normalize_endpoint_for_identity(self.endpoint)
 
     @property
     def identity_key(self) -> str:
-        """Stable key for deduplication across discovery methods."""
+        '''Legacy identity key - prefer canonical_identity for deduplication.'''
         return self.source_id
+    
+    @property
+    def display_provenance(self) -> str:
+        '''Human-readable provenance showing all merged origins.
+        
+        Always returns human-readable labels, never raw enum values.
+        '''
+        origins = [p.value for p in self.merged_provenances]
+        # Map to human-readable labels
+        labels = {
+            'manual': 'Manual',
+            'alertmanager-crd': 'Alertmanager CRD',
+            'prometheus-crd-config': 'Prometheus Config',
+            'service-heuristic': 'Service Heuristic',
+        }
+        return ', '.join(labels.get(o, o) for o in origins)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "source_id": self.source_id,
-            "endpoint": self.endpoint,
-            "namespace": self.namespace,
-            "name": self.name,
-            "origin": self.origin.value,
-            "state": self.state.value,
-            "discovered_at": self.discovered_at.isoformat(),
-            "verified_at": self.verified_at.isoformat() if self.verified_at else None,
-            "last_check": self.last_check.isoformat() if self.last_check else None,
-            "last_error": self.last_error,
-            "verified_version": self.verified_version,
-            "confidence_hints": list(self.confidence_hints),
+            'source_id': self.source_id,
+            'endpoint': self.endpoint,
+            'namespace': self.namespace,
+            'name': self.name,
+            'origin': self.origin.value,
+            'state': self.state.value,
+            'discovered_at': self.discovered_at.isoformat(),
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'last_check': self.last_check.isoformat() if self.last_check else None,
+            'last_error': self.last_error,
+            'verified_version': self.verified_version,
+            'confidence_hints': list(self.confidence_hints),
+            'merged_provenances': [p.value for p in self.merged_provenances],
+            'display_provenance': self.display_provenance,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertmanagerSource:
-        """Reconstruct source from serialized dict."""
+        '''Reconstruct source from serialized dict.'''
+        merged_raw = data.get('merged_provenances')
+        merged_provenances: tuple[AlertmanagerSourceOrigin, ...] = ()
+        if merged_raw:
+            merged_provenances = tuple(
+                AlertmanagerSourceOrigin(v) if isinstance(v, str) else v
+                for v in merged_raw
+            )
         return cls(
-            source_id=str(data["source_id"]),
-            endpoint=str(data["endpoint"]),
-            namespace=data.get("namespace"),
-            name=data.get("name"),
-            origin=AlertmanagerSourceOrigin(data.get("origin", "service-heuristic")),
-            state=AlertmanagerSourceState(data.get("state", "discovered")),
-            discovered_at=_parse_datetime(data.get("discovered_at")),
-            verified_at=_parse_datetime(data.get("verified_at")),
-            last_check=_parse_datetime(data.get("last_check")),
-            last_error=data.get("last_error"),
-            verified_version=data.get("verified_version"),
-            confidence_hints=tuple(data.get("confidence_hints", [])),
+            source_id=str(data['source_id']),
+            endpoint=str(data['endpoint']),
+            namespace=data.get('namespace'),
+            name=data.get('name'),
+            origin=AlertmanagerSourceOrigin(data.get('origin', 'service-heuristic')),
+            state=AlertmanagerSourceState(data.get('state', 'discovered')),
+            discovered_at=_parse_datetime(data.get('discovered_at')),
+            verified_at=_parse_datetime(data.get('verified_at')),
+            last_check=_parse_datetime(data.get('last_check')),
+            last_error=data.get('last_error'),
+            verified_version=data.get('verified_version'),
+            confidence_hints=tuple(data.get('confidence_hints', [])),
+            merged_provenances=merged_provenances,
         )
 
 
@@ -913,4 +969,114 @@ def build_endpoint_for_manual(
         name=name,
         origin=AlertmanagerSourceOrigin.MANUAL,
         state=AlertmanagerSourceState.MANUAL,
+    )
+
+
+# --- Canonical Deduplication ---
+
+
+def merge_deduplicate_inventory(
+    inventory: AlertmanagerSourceInventory,
+) -> AlertmanagerSourceInventory:
+    """Deduplicate sources based on canonical endpoint identity and merge provenance.
+    
+    Different discovery strategies generate different source_ids for the same
+    Alertmanager instance:
+    - CRD: crd:monitoring/alertmanager-main
+    - Prometheus Config: prom-crd-config:monitoring/alertmanager-main
+    - Service: service:monitoring/alertmanager-main
+    
+    This function merges sources with the same canonical endpoint into a single
+    source with merged provenance tracking all contributing origins.
+    
+    Rules:
+    - Manual sources are authoritative and never deduplicated away
+    - Higher-priority origin wins for display (CRD > Prometheus Config > Service)
+    - All contributing origins are preserved in merged_provenances
+    
+    Args:
+        inventory: Source inventory with potentially duplicate sources
+        
+    Returns:
+        New inventory with deduplicated sources and merged provenance
+    """
+    # Group sources by canonical identity
+    canonical_groups: dict[str, list[AlertmanagerSource]] = {}
+    
+    for source in inventory.sources.values():
+        canon_key = source.canonical_identity
+        if canon_key not in canonical_groups:
+            canonical_groups[canon_key] = []
+        canonical_groups[canon_key].append(source)
+    
+    # Merge each group into a single source
+    merged_sources: dict[str, AlertmanagerSource] = {}
+    
+    for canon_key, group in canonical_groups.items():
+        if len(group) == 1:
+            # No deduplication needed, preserve as-is
+            source = group[0]
+            merged_sources[source.identity_key] = source
+        else:
+            # Merge multiple sources with same canonical identity
+            # Find the authoritative source (manual first, then highest priority)
+            manual_source = None
+            best_source: AlertmanagerSource | None = None
+            best_priority = float('inf')
+            
+            for source in group:
+                priority = _ORIGIN_PRIORITY[source.origin]
+                if source.origin == AlertmanagerSourceOrigin.MANUAL:
+                    manual_source = source
+                if priority < best_priority:
+                    best_priority = priority
+                    best_source = source
+            
+            # Use manual if present, otherwise use best priority source
+            winner = manual_source if manual_source else best_source
+            if winner is None:
+                winner = group[0]  # Fallback to first
+            
+            # Merge all provenances
+            all_provenances: set[AlertmanagerSourceOrigin] = set()
+            for source in group:
+                all_provenances.update(source.merged_provenances)
+            
+            # Preserve ordering by priority
+            sorted_provenances = sorted(
+                all_provenances,
+                key=lambda p: _ORIGIN_PRIORITY[p]
+            )
+            
+            # Create merged source with the winner's data but merged provenance
+            merged_source = AlertmanagerSource(
+                source_id=winner.source_id,
+                endpoint=winner.endpoint,
+                namespace=winner.namespace,
+                name=winner.name,
+                origin=winner.origin,
+                state=winner.state,
+                discovered_at=winner.discovered_at,
+                verified_at=winner.verified_at,
+                last_check=winner.last_check,
+                last_error=winner.last_error,
+                verified_version=winner.verified_version,
+                confidence_hints=winner.confidence_hints,
+                merged_provenances=tuple(sorted_provenances),
+            )
+            
+            merged_sources[winner.identity_key] = merged_source
+            
+            _logger.debug(
+                "Deduplicated %d sources to 1 for canonical identity %s, "
+                "merged provenances: %s",
+                len(group),
+                canon_key,
+                [p.value for p in sorted_provenances],
+            )
+    
+    return AlertmanagerSourceInventory(
+        sources=merged_sources,
+        discovered_at=inventory.discovered_at,
+        cluster_context=inventory.cluster_context,
     )

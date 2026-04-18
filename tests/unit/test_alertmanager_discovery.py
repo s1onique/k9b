@@ -999,3 +999,143 @@ def test_inventory_large_source_count() -> None:
     
     manual_sources = inventory.get_by_origin(AlertmanagerSourceOrigin.MANUAL)
     assert len(manual_sources) == 0
+
+
+def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
+    """Test that merge_deduplicate_inventory merges sources with same endpoint but different origins."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    inventory = AlertmanagerSourceInventory()
+    
+    # Add same endpoint discovered via CRD
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    # Add same endpoint discovered via Prometheus config
+    prom_source = AlertmanagerSource(
+        source_id="prom-crd-config:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
+    )
+    
+    # Add same endpoint discovered via service heuristic
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory.add_source(crd_source)
+    inventory.add_source(prom_source)
+    inventory.add_source(service_source)
+    
+    # Before dedup: 3 sources
+    assert len(inventory.sources) == 3
+    
+    # Dedup
+    result = merge_deduplicate_inventory(inventory)
+    
+    # After dedup: 1 source with merged provenance
+    assert len(result.sources) == 1
+    
+    # Get the merged source
+    merged = next(iter(result.sources.values()))
+    
+    # CRD source should win (highest priority)
+    assert merged.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    
+    # Merged provenances should include all 3 origins
+    assert len(merged.merged_provenances) == 3
+    assert AlertmanagerSourceOrigin.ALERTMANAGER_CRD in merged.merged_provenances
+    assert AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG in merged.merged_provenances
+    assert AlertmanagerSourceOrigin.SERVICE_HEURISTIC in merged.merged_provenances
+    
+    # Display provenance should show all
+    display = merged.display_provenance
+    assert "Alertmanager CRD" in display
+    assert "Prometheus Config" in display
+    assert "Service Heuristic" in display
+
+
+def test_merge_deduplicate_inventory_manual_preserved() -> None:
+    """Test that merge_deduplicate_inventory preserves manual source (same source_id)."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    inventory = AlertmanagerSourceInventory()
+    
+    # Add manual source first (same source_id as would be discovered)
+    manual_source = AlertmanagerSource(
+        source_id="monitoring/alertmanager-main",  # Same ID as discovered
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.MANUAL,
+    )
+    
+    # Add same endpoint discovered via CRD (same source_id)
+    crd_source = AlertmanagerSource(
+        source_id="monitoring/alertmanager-main",  # Same ID
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    inventory.add_source(manual_source)
+    inventory.add_source(crd_source)
+    
+    # Manual should win due to precedence (same source_id, manual takes priority)
+    assert len(inventory.sources) == 1
+    assert inventory.sources[list(inventory.sources.keys())[0]].origin == AlertmanagerSourceOrigin.MANUAL
+    
+    # After dedup: still 1 source with merged provenance
+    result = merge_deduplicate_inventory(inventory)
+    assert len(result.sources) == 1
+    
+    merged = next(iter(result.sources.values()))
+    assert merged.origin == AlertmanagerSourceOrigin.MANUAL
+    # Manual is in merged_provenances (via post_init)
+    assert AlertmanagerSourceOrigin.MANUAL in merged.merged_provenances
+
+
+def test_merge_deduplicate_inventory_different_endpoints_not_merged() -> None:
+    """Test that sources with different endpoints are not merged."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    inventory = AlertmanagerSourceInventory()
+    
+    # Add two different endpoints (both via service heuristic)
+    source1 = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-1",
+        endpoint="http://alertmanager-1.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-1",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    source2 = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-2",
+        endpoint="http://alertmanager-2.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-2",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory.add_source(source1)
+    inventory.add_source(source2)
+    
+    assert len(inventory.sources) == 2
+    
+    result = merge_deduplicate_inventory(inventory)
+    
+    # Still 2 sources (different endpoints)
+    assert len(result.sources) == 2

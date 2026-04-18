@@ -716,6 +716,8 @@ def sample_ui_index() -> dict[str, object]:
                     "last_error": None,
                     "verified_version": "0.27.0",
                     "confidence_hints": ["direct_user_registration"],
+                    "merged_provenances": ["manual"],
+                    "display_provenance": "Manual registration",
                 },
                 {
                     "source_id": "am-src-crd-1",
@@ -730,6 +732,8 @@ def sample_ui_index() -> dict[str, object]:
                     "last_error": "connection timeout",
                     "verified_version": "0.26.0",
                     "confidence_hints": ["crd_discovery", "namespace_match"],
+                    "merged_provenances": ["alertmanager-crd"],
+                    "display_provenance": "Alertmanager CRD",
                 },
                 {
                     "source_id": "am-src-svc-1",
@@ -744,6 +748,8 @@ def sample_ui_index() -> dict[str, object]:
                     "last_error": None,
                     "verified_version": None,
                     "confidence_hints": ["service_discovery"],
+                    "merged_provenances": ["service-heuristic"],
+                    "display_provenance": "Service heuristic",
                 },
             ],
             "total_count": 3,

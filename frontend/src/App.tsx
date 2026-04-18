@@ -2142,7 +2142,22 @@ export const AlertmanagerSourcesPanel = ({
                       {truncateSourceCell(source.display_origin || source.origin)}
                     </td>
                     <td className="alertmanager-source-endpoint">
-                      <code className="alertmanager-source-endpoint-code">
+                      <code 
+                        className="alertmanager-source-endpoint-code clickable"
+                        title={`Copy: ${source.endpoint}`}
+                        onClick={() => {
+                          navigator.clipboard.writeText(source.endpoint).catch(() => {
+                            // Fallback for older browsers
+                            const textArea = document.createElement('textarea');
+                            textArea.value = source.endpoint;
+                            document.body.appendChild(textArea);
+                            textArea.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                          });
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
                         {truncateSourceCell(source.endpoint, 50)}
                       </code>
                     </td>
@@ -2152,9 +2167,9 @@ export const AlertmanagerSourcesPanel = ({
                     <td className="alertmanager-source-version">
                       {source.verified_version || "—"}
                     </td>
-                    <td className="alertmanager-source-provenance">
+                    <td className="alertmanager-source-provenance" title={source.display_provenance || source.provenance_summary}>
                       <span className="muted tiny">
-                        {truncateSourceCell(source.provenance_summary, 60)}
+                        {truncateSourceCell(source.display_provenance || source.provenance_summary, 60)}
                       </span>
                     </td>
                     <td className="alertmanager-source-actions">

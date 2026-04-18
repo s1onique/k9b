@@ -28,6 +28,7 @@ from ..external_analysis.alertmanager_discovery import (
     AlertmanagerSourceOrigin,
     AlertmanagerSourceState,
     discover_alertmanagers,
+    merge_deduplicate_inventory,
 )
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -3205,6 +3206,11 @@ class HealthLoopRunner:
         # Note: verification step is intentionally skipped to keep discovery fast.
         # Call verify_and_update_inventory() if you need to validate source reachability.
         verified_inventory = aggregated_inventory
+        
+        # Deduplicate sources: merge multiple discovery strategies for the same
+        # Alertmanager (e.g., CRD + Prometheus config + service heuristic) into
+        # a single source with merged provenance tracking all contributing origins.
+        verified_inventory = merge_deduplicate_inventory(verified_inventory)
         
         # Log verification result summary
         auto_tracked_count = len(verified_inventory.get_by_state(

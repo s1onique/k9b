@@ -654,6 +654,9 @@ export type AlertmanagerSource = {
   display_origin: string;
   display_state: string;
   provenance_summary: string;
+  // Deduplication support
+  merged_provenances: string[];  // All contributing origins, e.g., ['alertmanager-crd', 'prometheus-crd-config']
+  display_provenance: string;  // Human-readable merged provenance, e.g., 'Alertmanager CRD, Prometheus Config'
 };
 
 export type AlertmanagerSources = {
