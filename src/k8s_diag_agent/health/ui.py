@@ -17,6 +17,10 @@ from ..external_analysis.alertmanager_artifact import (
     read_alertmanager_compact,
     read_alertmanager_sources,
 )
+from ..external_analysis.alertmanager_source_actions import (
+    merge_source_overrides,
+    read_source_overrides,
+)
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -2800,10 +2804,11 @@ def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, 
 def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, object] | None:
     """Read and serialize Alertmanager sources inventory artifact for UI.
     
-    Returns raw source inventory facts only. UI-derived fields (is_manual, 
-    is_tracking, can_disable, can_promote, display_origin, display_state,
-    provenance_summary, and aggregate counts) are computed by 
-    _build_alertmanager_sources_view() in ui/model.py.
+    This function applies operator overrides (promote/disable) to the source
+    inventory before serialization. UI-derived fields (is_manual, is_tracking,
+    can_disable, can_promote, display_origin, display_state, provenance_summary,
+    and aggregate counts) are computed by _build_alertmanager_sources_view()
+    in ui/model.py.
     
     Returns None if the artifact is not available or cannot be read.
     """
@@ -2811,10 +2816,21 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
     if inventory is None:
         return None
     
+    # Load operator overrides and compute effective states
+    overrides_path = output_dir / f"{run_id}-alertmanager-source-overrides.json"
+    overrides = read_source_overrides(overrides_path)
+    effective_states: dict[str, str] = {}
+    if overrides:
+        effective_states = merge_source_overrides(overrides)
+    
     sources = []
     for source in inventory.sources.values():
-        sources.append({
-            "source_id": source.source_id,
+        source_id = source.source_id
+        # Apply override effective state if present
+        effective_state = effective_states.get(source_id)
+        
+        source_data = {
+            "source_id": source_id,
             "endpoint": source.endpoint,
             "namespace": source.namespace,
             "name": source.name,
@@ -2826,11 +2842,18 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             "last_error": source.last_error,
             "verified_version": source.verified_version,
             "confidence_hints": list(source.confidence_hints),
-        })
+        }
+        
+        # Apply effective state override if present (e.g., "disabled" or "manual")
+        if effective_state:
+            source_data["effective_state"] = effective_state
+        
+        sources.append(source_data)
     
     return {
         "sources": sources,
         "total_count": len(sources),
         "discovery_timestamp": inventory.discovered_at.isoformat() if inventory.discovered_at else None,
         "cluster_context": inventory.cluster_context,
+        "_has_overrides": bool(overrides),
     }

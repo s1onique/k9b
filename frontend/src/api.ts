@@ -1,4 +1,6 @@
 import type {
+  AlertmanagerSourceActionRequest,
+  AlertmanagerSourceActionResponse,
   ClusterDetailPayload,
   DeterministicNextCheckPromotionRequest,
   DeterministicNextCheckPromotionResponse,
@@ -209,4 +211,52 @@ export const runBatchExecution = async (
   }
 
   return (await response.json()) as BatchExecutionResponse;
+};
+
+// Alertmanager source action APIs
+export const performAlertmanagerSourceAction = async (
+  request: AlertmanagerSourceActionRequest,
+  runId: string
+): Promise<AlertmanagerSourceActionResponse> => {
+  // Use the run-scoped route: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
+  const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/alertmanager-sources/${encodeURIComponent(request.sourceId)}/action`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: request.action,
+      clusterLabel: request.clusterLabel,
+      reason: request.reason || undefined,
+    }),
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === 'object' && 'error' in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || `Failed to ${request.action} Alertmanager source`);
+  }
+  return (await response.json()) as AlertmanagerSourceActionResponse;
+};
+
+// Convenience wrappers for promote/disable actions
+export const promoteAlertmanagerSource = async (
+  request: AlertmanagerSourceActionRequest,
+  runId: string
+): Promise<AlertmanagerSourceActionResponse> => {
+  return performAlertmanagerSourceAction({ ...request, action: 'promote' }, runId);
+};
+
+export const disableAlertmanagerSource = async (
+  request: AlertmanagerSourceActionRequest,
+  runId: string
+): Promise<AlertmanagerSourceActionResponse> => {
+  return performAlertmanagerSourceAction({ ...request, action: 'disable' }, runId);
 };

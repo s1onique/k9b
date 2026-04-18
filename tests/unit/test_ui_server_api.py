@@ -239,6 +239,95 @@ class RunApiServerTests(unittest.TestCase):
         finally:
             self._shutdown_server(server, thread)
 
+    def test_alertmanager_source_action_endpoint_validates_promote_action(self) -> None:
+        """Test that the endpoint validates the promote action field."""
+        run_id = "am-promote-validate-test"
+        
+        # Create a simple review artifact for the run
+        artifact = self._build_artifact(run_id=run_id, status=ExternalAnalysisStatus.SUCCESS)
+        self._write_index(artifact)
+        
+        server, thread = self._start_server()
+        try:
+            # Test promote action (will fail at source lookup stage, but action validation should pass)
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/src-001/action",
+                data=json.dumps({
+                    "action": "promote",
+                    "clusterLabel": "cluster-a",
+                    "reason": "Permanent monitoring source",
+                }).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(req, timeout=5)
+            
+            # Action validation should pass (400 due to missing sources, not action validation)
+            self.assertEqual(ctx.exception.code, 400)
+            error_body = json.loads(ctx.exception.read().decode("utf-8"))
+            # Should NOT be an action validation error - action is valid
+            self.assertNotIn("action must be 'promote' or 'disable'", error_body.get("error", ""))
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_alertmanager_source_action_endpoint_validates_action(self) -> None:
+        """Test that the endpoint validates the action field."""
+        run_id = "am-validate-test"
+        
+        # Create a simple review artifact for the run
+        artifact = self._build_artifact(run_id=run_id, status=ExternalAnalysisStatus.SUCCESS)
+        self._write_index(artifact)
+        
+        server, thread = self._start_server()
+        try:
+            # Test invalid action
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/src-001/action",
+                data=json.dumps({
+                    "action": "invalid",
+                    "clusterLabel": "cluster-a",
+                }).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(req, timeout=5)
+            
+            self.assertEqual(ctx.exception.code, 400)
+            error_body = json.loads(ctx.exception.read().decode("utf-8"))
+            self.assertIn("action must be 'promote' or 'disable'", error_body.get("error", ""))
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_alertmanager_source_action_endpoint_requires_cluster_label(self) -> None:
+        """Test that the endpoint requires clusterLabel in the body."""
+        run_id = "am-cluster-test"
+        
+        # Create a simple review artifact for the run
+        artifact = self._build_artifact(run_id=run_id, status=ExternalAnalysisStatus.SUCCESS)
+        self._write_index(artifact)
+        
+        server, thread = self._start_server()
+        try:
+            # Test missing clusterLabel
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/src-001/action",
+                data=json.dumps({
+                    "action": "promote",
+                }).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(req, timeout=5)
+            
+            self.assertEqual(ctx.exception.code, 400)
+            error_body = json.loads(ctx.exception.read().decode("utf-8"))
+            self.assertIn("clusterLabel is required", error_body.get("error", ""))
+        finally:
+            self._shutdown_server(server, thread)
+
     def test_next_check_execution_creates_run_scoped_usefulness_review_artifact(self) -> None:
         """Test that execution through UI creates run-scoped usefulness-review artifact.
         

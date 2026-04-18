@@ -1791,7 +1791,12 @@ _STATE_COLOR_HINTS: dict[str, str] = {
 
 
 def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesView | None:
-    """Build AlertmanagerSourcesView from raw JSON data (alertmanager_sources field)."""
+    """Build AlertmanagerSourcesView from raw JSON data (alertmanager_sources field).
+    
+    This function applies effective state overrides from operator actions
+    (promote/disable) when computing UI fields like is_manual, is_tracking,
+    can_disable, can_promote, and display_state.
+    """
     if not isinstance(raw, Mapping):
         return None
     
@@ -1803,9 +1808,20 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
         origin = _coerce_str(src.get("origin", "service-heuristic"))
         state = _coerce_str(src.get("state", "discovered"))
         
-        # Compute UI fields
+        # Apply effective state from operator override (promote/disable)
+        # This overrides the discovery-based state
+        effective_state = _coerce_optional_str(src.get("effective_state"))
+        if effective_state:
+            state = effective_state
+            # Promotion also changes the origin to "manual"
+            if effective_state == "manual":
+                origin = "manual"
+        
+        # Compute UI fields based on (possibly overridden) state and origin
         is_manual = origin == "manual"
         is_tracking = state in ("auto-tracked", "manual")
+        # Sources with effective_state "disabled" cannot be disabled again
+        # Sources that are already manual cannot be promoted
         can_disable = not is_manual and state == "auto-tracked"
         can_promote = not is_manual and state in ("auto-tracked", "discovered")
         display_origin = _ORIGIN_LABELS.get(origin, origin)

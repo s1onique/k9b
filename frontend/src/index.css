@@ -6220,3 +6220,42 @@ body {
 [data-theme="solarized-light"] .alertmanager-source-error-text {
   color: #dc322f;
 }
+
+/* Alertmanager Source Actions */
+.alertmanager-source-actions {
+  min-width: 140px;
+  vertical-align: top;
+}
+
+.alertmanager-source-action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.alertmanager-action-btn {
+  white-space: nowrap;
+}
+
+.alertmanager-source-action-error {
+  font-size: 0.75rem;
+  color: rgba(248, 113, 113, 0.9);
+  margin: 0.25rem 0 0;
+  max-width: 180px;
+}
+
+.alertmanager-source-action-success {
+  font-size: 0.75rem;
+  color: rgba(0, 200, 83, 0.9);
+  margin: 0.25rem 0 0;
+  max-width: 180px;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-action-error {
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .alertmanager-source-action-success {
+  color: #268bd2;
+}

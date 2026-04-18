@@ -705,3 +705,20 @@ export type BatchExecutionResponse = {
   failedCount: number;
   successCount: number;
 };
+
+// Alertmanager source action types
+export type AlertmanagerSourceActionRequest = {
+  sourceId: string;
+  clusterLabel: string;
+  action: "promote" | "disable";
+  reason?: string;
+};
+
+export type AlertmanagerSourceActionResponse = {
+  status: string;
+  summary: string;
+  sourceId: string;
+  action: "promote" | "disable";
+  artifactPath: string;
+  reason?: string | null;
+};

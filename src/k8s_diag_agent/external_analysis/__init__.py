@@ -40,6 +40,15 @@ from .alertmanager_snapshot import (
     normalize_alertmanager_payload,
     snapshot_to_compact,
 )
+from .alertmanager_source_actions import (
+    AlertmanagerSourceOverrides,
+    SourceAction,
+    SourceOverride,
+    merge_source_overrides,
+    read_source_overrides,
+    source_overrides_exist,
+    write_source_overrides,
+)
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus, write_external_analysis_artifact
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisPolicy, ExternalAnalysisSettings, parse_external_analysis_settings
 
@@ -73,4 +82,13 @@ __all__ = [
     "read_alertmanager_snapshot",
     "read_alertmanager_compact",
     "alertmanager_artifacts_exist",
+    # Alertmanager source management
+    "AlertmanagerSourceOverrides",
+    "SourceAction",
+    "SourceOverride",
+    "merge_source_overrides",
+    "read_source_overrides",
+    "source_overrides_exist",
+    "write_source_overrides",
+    "alertmanager_sources_exist",
 ]

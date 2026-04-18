@@ -6,6 +6,7 @@ import functools
 import json
 import logging
 import mimetypes
+import re
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -16,6 +17,11 @@ from threading import Lock
 from typing import Any, cast
 from urllib.parse import parse_qs
 
+from ..external_analysis.alertmanager_source_actions import (
+    AlertmanagerSourceOverrides,
+    SourceAction,
+    SourceOverride,
+)
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisStatus,
@@ -45,6 +51,11 @@ from .api import (
 )
 from .model import UIIndexContext, build_ui_context, load_ui_index
 from .notifications import query_notifications
+
+# Route patterns for path matching
+_RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
+    r"^/api/runs/([^/]+)/alertmanager-sources/([^/]+)/action$"
+)
 
 
 def _build_review_enrichment_status_for_past_run(
@@ -876,6 +887,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 return
             if route == "/api/run-batch-next-check-execution":
                 self._handle_run_batch_next_check_execution()
+                return
+            # Alertmanager source action endpoint: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
+            # Body: { "action": "promote"|"disable", "reason": "..." }
+            runs_am_source_match = _RUN_ALERTMANAGER_SOURCE_ACTION.match(route)
+            if runs_am_source_match:
+                run_id = runs_am_source_match.group(1)
+                source_id = runs_am_source_match.group(2)
+                self._handle_alertmanager_source_action(run_id, source_id)
                 return
             self._status_code = 404
             self._send_text(404, "Not Found")
@@ -2343,6 +2362,199 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
 
         self._send_json(response)
+
+    def _handle_alertmanager_source_action(
+        self, path_run_id: str, path_source_id: str
+    ) -> None:
+        """Handle operator request to promote or disable an Alertmanager source.
+
+        Route: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
+        Body: { "action": "promote"|"disable", "reason": "..." (optional) }
+
+        The run_id in the URL path is authoritative. The cluster_label is still
+        required in the request body for override persistence (since overrides
+        are per-cluster).
+
+        Promotion converts a discovered/auto-tracked source to manual, making it
+        authoritative and preventing it from being silently deleted.
+
+        Disabling removes the source from auto-tracking, preventing it from
+        being re-added on future discovery cycles.
+        """
+        # Load context for the specific run_id from the URL path
+        context = self._load_context(requested_run_id=path_run_id)
+        if context is None:
+            # Fall back to loading from ui-index.json if specific run not found
+            context = self._load_context()
+            if context is None:
+                self._send_json({"error": "Unable to load run context"}, 500)
+                return
+            # If run_id from path doesn't match, log warning but proceed
+            if context.run.run_id != path_run_id:
+                logger.warning(
+                    "Requested run_id not found, using latest",
+                    extra={"requested_run_id": path_run_id, "using_run_id": context.run.run_id},
+                )
+
+        # Parse request body
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+
+        # Validate action field (required in body)
+        action_raw = payload.get("action")
+        if not isinstance(action_raw, str) or not action_raw:
+            self._send_json({"error": "action is required in request body"}, 400)
+            return
+
+        # Parse action enum
+        if action_raw == "promote":
+            action = SourceAction.PROMOTE
+        elif action_raw == "disable":
+            action = SourceAction.DISABLE
+        else:
+            self._send_json({"error": "action must be 'promote' or 'disable'"}, 400)
+            return
+
+        # Optional reason field for audit trail
+        reason = payload.get("reason")
+        if reason is not None and not isinstance(reason, str):
+            self._send_json({"error": "reason must be a string"}, 400)
+            return
+
+        # Cluster label still required in body (for override persistence)
+        cluster_label = payload.get("clusterLabel")
+        if not isinstance(cluster_label, str) or not cluster_label:
+            self._send_json({"error": "clusterLabel is required in request body"}, 400)
+            return
+
+        # Validate source_id from path matches body if provided
+        body_source_id = payload.get("sourceId")
+        if body_source_id is not None and str(body_source_id) != path_source_id:
+            self._send_json(
+                {"error": f"sourceId mismatch: path has '{path_source_id}', body has '{body_source_id}'"}, 400
+            )
+            return
+
+        # Find the source in the alertmanager_sources inventory
+        sources_view = context.alertmanager_sources
+        if sources_view is None:
+            self._send_json({"error": "Alertmanager sources not available"}, 400)
+            return
+
+        source_view = None
+        for s in sources_view.sources:
+            if s.source_id == path_source_id:
+                source_view = s
+                break
+
+        if source_view is None:
+            self._send_json({"error": f"Source not found: {path_source_id}"}, 404)
+            return
+
+        # Validate action is allowed based on source state
+        if action == SourceAction.PROMOTE:
+            if not source_view.can_promote:
+                if source_view.is_manual:
+                    self._send_json({"error": "Source is already manual"}, 400)
+                else:
+                    self._send_json(
+                        {"error": f"Cannot promote source in state: {source_view.state}"}, 400
+                    )
+                return
+        elif action == SourceAction.DISABLE:
+            if not source_view.can_disable:
+                if source_view.is_manual:
+                    self._send_json({"error": "Cannot disable manual source"}, 400)
+                else:
+                    self._send_json(
+                        {"error": f"Cannot disable source in state: {source_view.state}"}, 400
+                    )
+                return
+
+        # Create the source override with reason if provided
+        override = SourceOverride(
+            source_id=path_source_id,
+            action=action,
+            endpoint=source_view.endpoint,
+            namespace=source_view.namespace,
+            name=source_view.name,
+            original_origin=source_view.origin,
+            original_state=source_view.state,
+            reason=reason,
+        )
+
+        # Load existing overrides or create new
+        external_dir = self._health_root / "external-analysis"
+        overrides_path = external_dir / f"{context.run.run_id}-alertmanager-source-overrides.json"
+
+        existing_overrides = AlertmanagerSourceOverrides(cluster_context=cluster_label)
+        if overrides_path.exists():
+            try:
+                raw = json.loads(overrides_path.read_text(encoding="utf-8"))
+                existing_overrides = AlertmanagerSourceOverrides.from_dict(raw)
+            except (json.JSONDecodeError, KeyError, ValueError):
+                pass  # Start fresh if corrupted
+
+        # Add/update the override
+        existing_overrides.add_override(override)
+
+        # Write the overrides artifact
+        try:
+            external_dir.mkdir(parents=True, exist_ok=True)
+            overrides_path.write_text(
+                json.dumps(existing_overrides.to_dict(), indent=2), encoding="utf-8"
+            )
+        except Exception as exc:
+            self._send_json({"error": f"Failed to persist override: {exc}"}, 500)
+            return
+
+        # Invalidate UI caches by touching ui-index.json
+        # This ensures the next /api/run request rebuilds the payload with new source state
+        ui_index_path = self.runs_dir / "health" / "ui-index.json"
+        if ui_index_path.exists():
+            try:
+                ui_index_path.touch()
+            except Exception:
+                pass  # Non-fatal
+
+        # Also clear the in-memory cache for this run
+        with _run_payload_cache_lock:
+            # Remove entries for this run_id (any mtime) to force rebuild
+            keys_to_remove = [k for k in _run_payload_cache if k[0] == context.run.run_id]
+            for key in keys_to_remove:
+                del _run_payload_cache[key]
+
+        action_label = "promoted to manual" if action == SourceAction.PROMOTE else "disabled from auto-tracking"
+        logger.info(
+            f"Alertmanager source {action_label}",
+            extra={
+                "source_id": path_source_id,
+                "endpoint": source_view.endpoint,
+                "namespace": source_view.namespace,
+                "name": source_view.name,
+                "original_origin": source_view.origin,
+                "original_state": source_view.state,
+                "run_id": context.run.run_id,
+                "reason": reason,
+            },
+        )
+
+        self._send_json({
+            "status": "success",
+            "summary": f"Source {path_source_id} {action_label}",
+            "sourceId": path_source_id,
+            "action": action.value,
+            "artifactPath": str(overrides_path.relative_to(self.runs_dir)),
+            "reason": reason,
+        })
 
     def _serve_static(self, route: str) -> None:
         target = route or "/"

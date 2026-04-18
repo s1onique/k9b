@@ -4,6 +4,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import {
   approveNextCheckCandidate,
+  disableAlertmanagerSource,
   executeNextCheckCandidate,
   fetchClusterDetail,
   fetchFleet,
@@ -11,6 +12,7 @@ import {
   fetchProposals,
   fetchRun,
   fetchRunsList,
+  promoteAlertmanagerSource,
   promoteDeterministicNextCheck,
   runBatchExecution,
   submitUsefulnessFeedback,
@@ -1942,8 +1944,10 @@ const AlertmanagerSnapshotPanel = ({
   );
 };
 
-/** AlertmanagerSourcesPanel - Read-only display of tracked alertmanager sources.
+/** AlertmanagerSourcesPanel - Display and manage tracked alertmanager sources.
  * Shows summary counts and a table of sources with visual state indicators.
+ * Supports operator actions: promote (discovered/auto-tracked -> manual) and
+ * disable (auto-tracked only -> remove from auto-tracking).
  * State color mapping:
  * - manual/auto-tracked: green (healthy)
  * - discovered: yellow (caution)
@@ -1952,9 +1956,94 @@ const AlertmanagerSnapshotPanel = ({
  */
 export const AlertmanagerSourcesPanel = ({
   sources,
+  runId,
+  clusterLabel,
+  onRefresh,
 }: {
   sources: AlertmanagerSources;
+  runId?: string;
+  clusterLabel?: string;
+  onRefresh?: () => void;
 }) => {
+  // Track loading state for action buttons
+  const [actionLoading, setActionLoading] = useState<Record<string, "promote" | "disable" | null>>({});
+  const [actionError, setActionError] = useState<Record<string, string | null>>({});
+  const [actionSuccess, setActionSuccess] = useState<Record<string, string | null>>({});
+
+  // Handle promote action
+  const handlePromote = async (sourceId: string) => {
+    if (!clusterLabel) {
+      setActionError((prev) => ({ ...prev, [sourceId]: "No cluster context available" }));
+      return;
+    }
+    if (!runId) {
+      setActionError((prev) => ({ ...prev, [sourceId]: "No run context available" }));
+      return;
+    }
+    setActionLoading((prev) => ({ ...prev, [sourceId]: "promote" }));
+    setActionError((prev) => ({ ...prev, [sourceId]: null }));
+    setActionSuccess((prev) => ({ ...prev, [sourceId]: null }));
+    try {
+      const response = await promoteAlertmanagerSource({ sourceId, clusterLabel }, runId);
+      if (response.status === "success") {
+        setActionSuccess((prev) => ({ ...prev, [sourceId]: response.summary || "Source promoted" }));
+        if (onRefresh) {
+          setTimeout(onRefresh, 500);
+        }
+      } else {
+        setActionError((prev) => ({ ...prev, [sourceId]: response.summary || "Promotion failed" }));
+      }
+    } catch (err) {
+      setActionError((prev) => ({
+        ...prev,
+        [sourceId]: err instanceof Error ? err.message : "Failed to promote source",
+      }));
+    } finally {
+      setActionLoading((prev) => {
+        const next = { ...prev };
+        delete next[sourceId];
+        return next;
+      });
+    }
+  };
+
+  // Handle disable action
+  const handleDisable = async (sourceId: string) => {
+    if (!clusterLabel) {
+      setActionError((prev) => ({ ...prev, [sourceId]: "No cluster context available" }));
+      return;
+    }
+    if (!runId) {
+      setActionError((prev) => ({ ...prev, [sourceId]: "No run context available" }));
+      return;
+    }
+    setActionLoading((prev) => ({ ...prev, [sourceId]: "disable" }));
+    setActionError((prev) => ({ ...prev, [sourceId]: null }));
+    setActionSuccess((prev) => ({ ...prev, [sourceId]: null }));
+    try {
+      const response = await disableAlertmanagerSource({ sourceId, clusterLabel }, runId);
+      if (response.status === "success") {
+        setActionSuccess((prev) => ({ ...prev, [sourceId]: response.summary || "Source disabled" }));
+        if (onRefresh) {
+          setTimeout(onRefresh, 500);
+        }
+      } else {
+        setActionError((prev) => ({ ...prev, [sourceId]: response.summary || "Disable failed" }));
+      }
+    } catch (err) {
+      setActionError((prev) => ({
+        ...prev,
+        [sourceId]: err instanceof Error ? err.message : "Failed to disable source",
+      }));
+    } finally {
+      setActionLoading((prev) => {
+        const next = { ...prev };
+        delete next[sourceId];
+        return next;
+      });
+    }
+  };
+
   // State color class mapping based on display_state
   const getSourceStateClass = (displayState: string): string => {
     const normalized = (displayState || "").toLowerCase();
@@ -1998,7 +2087,7 @@ export const AlertmanagerSourcesPanel = ({
           {sources.cluster_context ? `Context: ${sources.cluster_context}` : ""}
         </span>
       </div>
-      
+
       {/* Summary row with counts */}
       <div className="alertmanager-sources-summary">
         {summaryItems.map((item) => (
@@ -2008,14 +2097,14 @@ export const AlertmanagerSourcesPanel = ({
           </div>
         ))}
       </div>
-      
+
       {/* Discovery timestamp */}
       {sources.discovery_timestamp && (
         <p className="muted tiny alertmanager-sources-timestamp">
           Discovered {formatTimestamp(sources.discovery_timestamp)}
         </p>
       )}
-      
+
       {/* Sources table */}
       {sources.sources.length > 0 ? (
         <div className="alertmanager-sources-table-wrapper">
@@ -2028,6 +2117,7 @@ export const AlertmanagerSourcesPanel = ({
                 <th>Namespace / Name</th>
                 <th>Version</th>
                 <th>Provenance</th>
+                <th>Actions</th>
                 <th>Last Error</th>
               </tr>
             </thead>
@@ -2037,7 +2127,10 @@ export const AlertmanagerSourcesPanel = ({
                 const namespaceName = [source.namespace, source.name]
                   .filter(Boolean)
                   .join(" / ") || "—";
-                
+                const isLoading = actionLoading[source.source_id] != null;
+                const error = actionError[source.source_id];
+                const success = actionSuccess[source.source_id];
+
                 return (
                   <tr key={source.source_id} className={`alertmanager-source-row ${stateClass}`}>
                     <td>
@@ -2063,6 +2156,34 @@ export const AlertmanagerSourcesPanel = ({
                       <span className="muted tiny">
                         {truncateSourceCell(source.provenance_summary, 60)}
                       </span>
+                    </td>
+                    <td className="alertmanager-source-actions">
+                      <div className="alertmanager-source-action-buttons">
+                        <button
+                          type="button"
+                          className="button primary tiny alertmanager-action-btn"
+                          onClick={() => handlePromote(source.source_id)}
+                          disabled={isLoading || !source.can_promote}
+                          title={source.can_promote ? "Promote to manual tracking" : "Cannot promote this source"}
+                        >
+                          {isLoading && actionLoading[source.source_id] === "promote" ? "…" : "Promote"}
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary tiny alertmanager-action-btn"
+                          onClick={() => handleDisable(source.source_id)}
+                          disabled={isLoading || !source.can_disable}
+                          title={source.can_disable ? "Disable auto-tracking for this source" : "Cannot disable this source"}
+                        >
+                          {isLoading && actionLoading[source.source_id] === "disable" ? "…" : "Disable"}
+                        </button>
+                      </div>
+                      {error && (
+                        <p className="alertmanager-source-action-error">{error}</p>
+                      )}
+                      {success && (
+                        <p className="alertmanager-source-action-success">{success}</p>
+                      )}
                     </td>
                     <td className="alertmanager-source-error">
                       {source.last_error ? (
@@ -5064,7 +5185,12 @@ const App = () => {
       <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
       <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} />
       {run.alertmanagerSources && (
-        <AlertmanagerSourcesPanel sources={run.alertmanagerSources} />
+        <AlertmanagerSourcesPanel
+          sources={run.alertmanagerSources}
+          runId={run.runId}
+          clusterLabel={run.alertmanagerSources.cluster_context || undefined}
+          onRefresh={refresh}
+        />
       )}
     <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
       <div className="section-head">
