@@ -106,8 +106,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
         assert hasattr(runner, "_run_alertmanager_discovery")
         assert callable(getattr(runner, "_run_alertmanager_discovery"))
 
-    def test_discovery_invoked_from_execute(self) -> None:
-        """Test that Alertmanager discovery is called during execute()."""
+    def test_discovery_method_called(self) -> None:
+        """Test that Alertmanager discovery method is called with correct parameters."""
         runner = HealthLoopRunner(
             config=self.config,
             available_contexts=["test-context"],
