@@ -22,6 +22,13 @@ from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters
+from ..external_analysis.alertmanager_artifact import write_alertmanager_sources
+from ..external_analysis.alertmanager_discovery import (
+    AlertmanagerSourceInventory,
+    AlertmanagerSourceOrigin,
+    AlertmanagerSourceState,
+    discover_alertmanagers,
+)
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -2051,6 +2058,7 @@ class HealthLoopRunner:
         history = self._load_history(directories["history"])
         previous_history = {key: entry for key, entry in history.items()}
         records = self._collect_snapshots(directories["snapshots"])
+        self._run_alertmanager_discovery(records, directories)
         assessments = self._build_assessments(
             records,
             history,
@@ -3094,6 +3102,164 @@ class HealthLoopRunner:
     def _persist_history(self, history: dict[str, HealthHistoryEntry], history_path: Path) -> None:
         data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
         _write_json(data, history_path)
+
+    def _run_alertmanager_discovery(
+        self,
+        records: list[HealthSnapshotRecord],
+        directories: dict[str, Path],
+    ) -> None:
+        """Run Alertmanager discovery for each cluster target and persist the inventory.
+        
+        Discovers Alertmanager instances in each cluster, verifies them, and writes
+        the aggregated inventory to a run-scoped artifact.
+        
+        This is non-fatal: discovery failures are logged but do not stop the run.
+        """
+        if not records:
+            self._log_event(
+                "alertmanager-discovery",
+                "DEBUG",
+                "Alertmanager discovery skipped: no cluster records",
+                event="alertmanager-discovery-skipped",
+                reason="no_records",
+            )
+            return
+        
+        # Aggregate all discovered sources across all targets
+        aggregated_inventory: AlertmanagerSourceInventory | None = None
+        
+        for record in records:
+            target_context = record.target.context
+            cluster_label = record.target.label
+            
+            # Log discovery start for this target
+            self._log_event(
+                "alertmanager-discovery",
+                "DEBUG",
+                "Starting Alertmanager discovery for cluster target",
+                event="alertmanager-discovery-start",
+                cluster_label=cluster_label,
+                cluster_context=target_context,
+                artifact_directory=str(directories["root"]),
+            )
+            
+            try:
+                # Run discovery for this context
+                discovered_inventory = discover_alertmanagers(context=target_context)
+                
+                # Log discovery result counts by origin
+                crd_count = len(discovered_inventory.get_by_origin(
+                    AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+                ))
+                prom_crd_count = len(discovered_inventory.get_by_origin(
+                    AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG
+                ))
+                service_count = len(discovered_inventory.get_by_origin(
+                    AlertmanagerSourceOrigin.SERVICE_HEURISTIC
+                ))
+                manual_count = len(discovered_inventory.get_by_origin(
+                    AlertmanagerSourceOrigin.MANUAL
+                ))
+                
+                self._log_event(
+                    "alertmanager-discovery",
+                    "DEBUG",
+                    "Alertmanager discovery completed for cluster target",
+                    event="alertmanager-discovery-result",
+                    cluster_label=cluster_label,
+                    cluster_context=target_context,
+                    candidates_found=len(discovered_inventory.sources),
+                    by_origin={
+                        "alertmanager-crd": crd_count,
+                        "prometheus-crd-config": prom_crd_count,
+                        "service-heuristic": service_count,
+                        "manual": manual_count,
+                    },
+                )
+                
+                # Merge into aggregated inventory
+                if aggregated_inventory is None:
+                    aggregated_inventory = discovered_inventory
+                else:
+                    for source in discovered_inventory.sources.values():
+                        aggregated_inventory.add_source(source)
+                        
+            except Exception as exc:
+                self._log_event(
+                    "alertmanager-discovery",
+                    "WARNING",
+                    "Alertmanager discovery failed for cluster target",
+                    event="alertmanager-discovery-failed",
+                    cluster_label=cluster_label,
+                    cluster_context=target_context,
+                    severity_reason=str(exc),
+                    reason="discovery-error",
+                    # Run should continue (non-fatal)
+                )
+                continue
+        
+        # If we have no inventory, create empty one
+        if aggregated_inventory is None:
+            aggregated_inventory = AlertmanagerSourceInventory()
+        
+        # Note: verification step is intentionally skipped to keep discovery fast.
+        # Call verify_and_update_inventory() if you need to validate source reachability.
+        verified_inventory = aggregated_inventory
+        
+        # Log verification result summary
+        auto_tracked_count = len(verified_inventory.get_by_state(
+            AlertmanagerSourceState.AUTO_TRACKED
+        ))
+        manual_count = len(verified_inventory.get_by_state(
+            AlertmanagerSourceState.MANUAL
+        ))
+        degraded_count = len(verified_inventory.get_by_state(
+            AlertmanagerSourceState.DEGRADED
+        ))
+        discovered_count = len(verified_inventory.get_by_state(
+            AlertmanagerSourceState.DISCOVERED
+        ))
+        
+        self._log_event(
+            "alertmanager-discovery",
+            "DEBUG",
+            "Alertmanager verification result",
+            event="alertmanager-verification-result",
+            total_sources=len(verified_inventory.sources),
+            by_state={
+                "auto-tracked": auto_tracked_count,
+                "manual": manual_count,
+                "degraded": degraded_count,
+                "discovered": discovered_count,
+            },
+        )
+        
+        # Write the inventory artifact
+        try:
+            artifact_path = write_alertmanager_sources(
+                directories["root"],
+                verified_inventory,
+                self.run_id,
+            )
+            
+            self._log_event(
+                "alertmanager-discovery",
+                "INFO",
+                "Alertmanager sources inventory written",
+                event="alertmanager-sources-written",
+                source_count=len(verified_inventory.sources),
+                artifact_path=str(artifact_path),
+            )
+        except Exception as exc:
+            self._log_event(
+                "alertmanager-discovery",
+                "ERROR",
+                "Failed to write Alertmanager sources inventory",
+                event="alertmanager-sources-write-failed",
+                severity_reason=str(exc),
+                reason="write-error",
+            )
+            # Continue without failing the run
 
 class BaselineRegistry:
     def __init__(self, policies: Iterable[BaselinePolicy] | None = None) -> None:
