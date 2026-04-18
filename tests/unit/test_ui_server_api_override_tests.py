@@ -15,7 +15,7 @@
 # Tests for Alertmanager source override integration - verifying effective_state is applied.
 #
 # These tests prove that override state (promote/disable actions) is correctly
-# reflected in the UI view model by testing the model layer directly.
+# reflected through the complete path: UI serialization -> API -> model.
 # ==============================================================================
 
 import unittest
@@ -23,9 +23,8 @@ import unittest
 from k8s_diag_agent.ui.model import AlertmanagerSourceView
 
 
-class AlertmanagerSourceOverrideTests(unittest.TestCase):
-    # pylint: disable=protected-access
-    """Tests verifying that Alertmanager source overrides (promote/disable) are applied in the UI view."""
+class AlertmanagerSourceOverrideModelTests(unittest.TestCase):
+    """Tests verifying that Alertmanager source overrides are applied in the UI view model."""
 
     def test_ui_model_applies_effective_state_promoted(self) -> None:
         """Test that ui/model.py applies effective_state='manual' correctly.
@@ -59,7 +58,7 @@ class AlertmanagerSourceOverrideTests(unittest.TestCase):
                             'endpoint': 'http://am:9093/api/v2/alerts',
                             'namespace': 'monitoring',
                             'name': 'alertmanager',
-                            'origin': 'discovered',
+                            'origin': 'alertmanager-crd',
                             'state': 'auto-tracked',
                             'discovered_at': '2024-01-01T00:00:00Z',
                             'effective_state': None,
@@ -69,7 +68,7 @@ class AlertmanagerSourceOverrideTests(unittest.TestCase):
                             'endpoint': 'http://am2:9093/api/v2/alerts',
                             'namespace': 'monitoring',
                             'name': 'alertmanager2',
-                            'origin': 'discovered',
+                            'origin': 'alertmanager-crd',
                             'state': 'auto-tracked',
                             'discovered_at': '2024-01-01T00:00:00Z',
                             'effective_state': 'manual',
@@ -157,7 +156,7 @@ class AlertmanagerSourceOverrideTests(unittest.TestCase):
                             'endpoint': 'http://am:9093/api/v2/alerts',
                             'namespace': 'monitoring',
                             'name': 'alertmanager',
-                            'origin': 'discovered',
+                            'origin': 'alertmanager-crd',
                             'state': 'auto-tracked',
                             'discovered_at': '2024-01-01T00:00:00Z',
                             'effective_state': 'disabled',
@@ -230,7 +229,7 @@ class AlertmanagerSourceOverrideTests(unittest.TestCase):
                             'endpoint': 'http://am1:9093/api/v2/alerts',
                             'namespace': 'monitoring',
                             'name': 'alertmanager1',
-                            'origin': 'discovered',
+                            'origin': 'alertmanager-crd',
                             'state': 'auto-tracked',
                             'discovered_at': '2024-01-01T00:00:00Z',
                             'effective_state': None,
@@ -241,7 +240,7 @@ class AlertmanagerSourceOverrideTests(unittest.TestCase):
                             'endpoint': 'http://am2:9093/api/v2/alerts',
                             'namespace': 'monitoring',
                             'name': 'alertmanager2',
-                            'origin': 'discovered',
+                            'origin': 'alertmanager-crd',
                             'state': 'auto-tracked',
                             'discovered_at': '2024-01-01T00:00:00Z',
                             'effective_state': 'manual',
@@ -252,7 +251,7 @@ class AlertmanagerSourceOverrideTests(unittest.TestCase):
                             'endpoint': 'http://am3:9093/api/v2/alerts',
                             'namespace': 'monitoring',
                             'name': 'alertmanager3',
-                            'origin': 'discovered',
+                            'origin': 'alertmanager-crd',
                             'state': 'auto-tracked',
                             'discovered_at': '2024-01-01T00:00:00Z',
                             'effective_state': 'disabled',
