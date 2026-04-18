@@ -5944,3 +5944,25 @@ body {
 [data-theme="solarized-light"] .advisory-focus-note-row {
   color: #586e75;
 }
+
+/* Runs list detached mode notice */
+.runs-detached-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
+  background: rgba(100, 116, 139, 0.12);
+  border: 1px solid rgba(100, 116, 139, 0.25);
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+}
+
+[data-theme="solarized-light"] .runs-detached-notice {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .runs-detached-notice .muted {
+  color: #586e75;
+}

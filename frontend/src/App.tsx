@@ -3401,6 +3401,30 @@ const App = () => {
   // Pagination state for runs list
   const [runsPageSize, setRunsPageSize] = useState<number>(readStoredRunsPageSize);
   const [runsPage, setRunsPage] = useState(1);
+
+  /**
+   * Follow/detached mode for Recent runs pagination.
+   *
+   * When `isRunsListFollowingSelection === true`:
+   *   - The table auto-navigates to show the selected run after refresh.
+   *   - Selecting a run, clicking ← Latest, or clicking "Show selected run"
+   *     keeps follow mode active.
+   *
+   * When `isRunsListFollowingSelection === false` (detached):
+   *   - Manual page navigation preserves the current browsing position.
+   *   - Refresh does NOT jump to the selected run's page.
+   *   - The operator can browse historical pages while another run is selected.
+   *
+   * Transitions to follow mode:
+   *   - User selects a run from the table
+   *   - User clicks ← Latest
+   *   - User clicks "Show selected run"
+   *
+   * Transitions to detached mode:
+   *   - User manually changes the page
+   *   - User manually changes page size
+   */
+  const [isRunsListFollowingSelection, setIsRunsListFollowingSelection] = useState(true);
   
   // Reset to page 1 when filter changes
   const handleRunsFilterChange = useCallback((filter: RunsReviewFilter) => {
@@ -3409,15 +3433,67 @@ const App = () => {
     persistRunsReviewFilter(filter);
   }, []);
 
-  // Handle page size change
+  // Handle page size change - transitions to detached mode
   const handleRunsPageSizeChange = useCallback((newSize: number) => {
     setRunsPageSize(newSize);
     setRunsPage(1); // Reset to first page when page size changes
+    setIsRunsListFollowingSelection(false); // Detach: manual page size change
     persistRunsPageSize(newSize);
   }, []);
+
+  // Handle manual page change - transitions to detached mode
+  const handleRunsPageChange = useCallback((page: number) => {
+    setRunsPage(page);
+    setIsRunsListFollowingSelection(false); // Detach: manual navigation
+  }, []);
+
+  // Filter runs based on selected filter (defined early so computePageForRunId can use it)
+  const filteredRunsList = useMemo(() => {
+    if (runsFilter === "all") {
+      return runsList;
+    }
+    return runsList.filter((r) => {
+      if (runsFilter === "no-executions") {
+        return r.reviewStatus === "no-executions";
+      }
+      if (runsFilter === "awaiting-review") {
+        return r.reviewStatus === "unreviewed";
+      }
+      if (runsFilter === "partially-reviewed") {
+        return r.reviewStatus === "partially-reviewed";
+      }
+      if (runsFilter === "fully-reviewed") {
+        return r.reviewStatus === "fully-reviewed";
+      }
+      if (runsFilter === "needs-attention") {
+        return r.reviewStatus === "unreviewed" || r.reviewStatus === "partially-reviewed";
+      }
+      return true;
+    });
+  }, [runsList, runsFilter]);
+
+  // Compute the page number for a given runId within the filtered list
+  const computePageForRunId = useCallback((runId: string | null): number => {
+    if (!runId) return 1;
+    const index = filteredRunsList.findIndex((r) => r.runId === runId);
+    if (index === -1) return 1;
+    return Math.floor(index / runsPageSize) + 1;
+  }, [filteredRunsList, runsPageSize]);
+
+  // Navigate to the page containing the given runId
+  const navigateToPageContainingRun = useCallback((runId: string | null) => {
+    const page = computePageForRunId(runId);
+    setRunsPage(page);
+  }, [computePageForRunId]);
   
   // Selected run ID (persisted)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(() => readStoredSelectedRunId());
+
+  // Navigate to the page containing the selected run and switch to follow mode
+  const handleShowSelectedRun = useCallback(() => {
+    setIsRunsListFollowingSelection(true); // Re-engage follow mode
+    navigateToPageContainingRun(selectedRunId);
+  }, [selectedRunId, navigateToPageContainingRun]);
 
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
@@ -3484,47 +3560,9 @@ const App = () => {
   // Compute filter counts
   const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runsList), [runsList]);
 
-  // Filter runs based on selected filter (defined early so computePageForRunId can use it)
-  const filteredRunsList = useMemo(() => {
-    if (runsFilter === "all") {
-      return runsList;
-    }
-    return runsList.filter((r) => {
-      if (runsFilter === "no-executions") {
-        return r.reviewStatus === "no-executions";
-      }
-      if (runsFilter === "awaiting-review") {
-        return r.reviewStatus === "unreviewed";
-      }
-      if (runsFilter === "partially-reviewed") {
-        return r.reviewStatus === "partially-reviewed";
-      }
-      if (runsFilter === "fully-reviewed") {
-        return r.reviewStatus === "fully-reviewed";
-      }
-      if (runsFilter === "needs-attention") {
-        return r.reviewStatus === "unreviewed" || r.reviewStatus === "partially-reviewed";
-      }
-      return true;
-    });
-  }, [runsList, runsFilter]);
-
   // Initialize selectedRunId to latest run on first load when no explicit selection exists
   const latestRunId = runsList.length > 0 ? runsList[0].runId : null;
   const isSelectedRunLatest = selectedRunId === latestRunId;
-  // Compute the page number for a given runId within the filtered list
-  const computePageForRunId = useCallback((runId: string | null): number => {
-    if (!runId) return 1;
-    const index = filteredRunsList.findIndex((r) => r.runId === runId);
-    if (index === -1) return 1;
-    return Math.floor(index / runsPageSize) + 1;
-  }, [filteredRunsList, runsPageSize]);
-
-  // Navigate to the page containing the given runId
-  const navigateToPageContainingRun = useCallback((runId: string | null) => {
-    const page = computePageForRunId(runId);
-    setRunsPage(page);
-  }, [computePageForRunId]);
 
   const handleJumpToLatest = useCallback(() => {
     if (latestRunId) {
@@ -3557,8 +3595,10 @@ const App = () => {
   // Effect: After runs list refresh, navigate to the page containing the selected run.
   // This ensures the selected row remains visible after manual refresh or auto-refresh.
   // If the selected run is filtered out, selection state is preserved but the row won't be visible.
+  // Only auto-navigates when in follow mode (isRunsListFollowingSelection === true).
   useEffect(() => {
     if (!selectedRunId) return;
+    if (!isRunsListFollowingSelection) return;
     // Check if selected run exists in the filtered list
     const runInFilteredList = filteredRunsList.find((r) => r.runId === selectedRunId);
     if (runInFilteredList) {
@@ -3567,8 +3607,7 @@ const App = () => {
     }
     // If not in filtered list, we intentionally do NOT change runsPage here.
     // The selection state remains intact (for the header/detail view).
-    // The UI can show a notice about filtered-out state if needed in the future.
-  }, [selectedRunId, filteredRunsList, navigateToPageContainingRun]);
+  }, [selectedRunId, filteredRunsList, navigateToPageContainingRun, isRunsListFollowingSelection]);
 
   // Computed paginated runs list
   const paginatedRunsList = useMemo(() => {
@@ -3578,6 +3617,13 @@ const App = () => {
   }, [filteredRunsList, runsPage, runsPageSize]);
 
   const totalRunsPages = Math.ceil(filteredRunsList.length / runsPageSize);
+
+  // Derived boolean: true when the selected run is visible on the current page.
+  // Used to suppress the detached notice when the operator can already see the selected run.
+  const isSelectedRunVisibleOnCurrentRunsPage = useMemo(() => {
+    if (!selectedRunId) return false;
+    return paginatedRunsList.some((r) => r.runId === selectedRunId);
+  }, [paginatedRunsList, selectedRunId]);
 
   // Ref to track if a refresh is in progress to prevent duplicate fetches
   const refreshInProgress = useRef(false);
@@ -4669,10 +4715,25 @@ const App = () => {
           totalItems={filteredRunsList.length}
           pageSize={runsPageSize}
           pageSizeOptions={RUNS_PAGE_SIZE_OPTIONS}
-          onPageChange={setRunsPage}
+          onPageChange={handleRunsPageChange}
           onPageSizeChange={handleRunsPageSizeChange}
           label="Runs"
         />
+        {/* Detached mode notice - shown only when operator is detached AND selected run is not visible on current page */}
+        {!isRunsListFollowingSelection && selectedRunId && !isSelectedRunVisibleOnCurrentRunsPage && (
+          <div className="runs-detached-notice">
+            <span className="muted small">
+              Browsing page {runsPage} of {totalRunsPages} · Selected: Run {runsList.find(r => r.runId === selectedRunId)?.runLabel ?? selectedRunId}
+            </span>
+            <button
+              type="button"
+              className="link tiny"
+              onClick={handleShowSelectedRun}
+            >
+              Show selected run
+            </button>
+          </div>
+        )}
       </section>
       <section className="panel run-summary" id="run-detail">
         <div className="run-summary-head">
