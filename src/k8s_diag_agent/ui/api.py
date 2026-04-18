@@ -240,7 +240,6 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     rankingReason: str | None
 
     alertmanagerProvenance: AlertmanagerProvenancePayload | None
-
 class AlertmanagerProvenancePayload(TypedDict, total=False):
     """Payload for alertmanager provenance data on next-check candidates/queue items."""
     matchedDimensions: list[str]
@@ -1185,7 +1184,7 @@ def _serialize_next_check_queue(
     if promotions:
         for promo_entry in promotions:
             if isinstance(entry, Mapping):
-                entries.append(cast(NextCheckQueueItemPayload, dict(entry)))
+                entries.append(cast(NextCheckQueueItemPayload, dict(promo_entry)))
     return entries
 
 
