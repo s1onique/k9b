@@ -2806,6 +2806,40 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Build llm_stats from external-analysis artifacts for this run
         llm_stats = _build_llm_stats_for_run(external_analysis_dir, run_id)
 
+        # Load Alertmanager compact artifact if available
+        alertmanager_compact_entry = None
+        compact_path = external_analysis_dir / f"{run_id}-alertmanager-compact.json"
+        if compact_path.exists():
+            try:
+                import json as _json
+                compact_raw = _json.loads(compact_path.read_text(encoding="utf-8"))
+                alertmanager_compact_entry = {
+                    "status": compact_raw.get("status"),
+                    "alert_count": compact_raw.get("alert_count", 0),
+                    "severity_counts": compact_raw.get("severity_counts", {}),
+                    "state_counts": compact_raw.get("state_counts", {}),
+                    "top_alert_names": compact_raw.get("top_alert_names", []),
+                    "affected_namespaces": compact_raw.get("affected_namespaces", []),
+                    "affected_clusters": compact_raw.get("affected_clusters", []),
+                    "affected_services": compact_raw.get("affected_services", []),
+                    "truncated": compact_raw.get("truncated", False),
+                    "captured_at": compact_raw.get("captured_at"),
+                }
+            except Exception:
+                pass  # Compact not available - non-fatal
+
+        # Load Alertmanager sources inventory if available
+        # Uses _serialize_alertmanager_sources from health/ui.py to apply operator overrides
+        alertmanager_sources_entry = None
+        sources_path = external_analysis_dir / f"{run_id}-alertmanager-sources.json"
+        if sources_path.exists():
+            # Import here to avoid circular import at module level
+            from ..health.ui import _serialize_alertmanager_sources as _serialize_am_sources
+            try:
+                alertmanager_sources_entry = _serialize_am_sources(external_analysis_dir, run_id)
+            except Exception:
+                pass  # Sources not available - non-fatal
+
         # Build run entry with artifact-backed values
         run_entry = {
             "run_id": run_id,
@@ -2832,6 +2866,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "planner_availability": None,
             "diagnostic_pack_review": None,
             "diagnostic_pack": None,
+            "alertmanager_compact": alertmanager_compact_entry,
+            "alertmanager_sources": alertmanager_sources_entry,
         }
 
         # Build proposal status summary
