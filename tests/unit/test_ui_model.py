@@ -1,7 +1,13 @@
 import unittest
 from typing import cast
 
-from k8s_diag_agent.ui.model import AssessmentView, FindingsView, RecommendedActionView, build_ui_context
+from k8s_diag_agent.ui.model import (
+    AlertmanagerSourcesView,
+    AssessmentView,
+    FindingsView,
+    RecommendedActionView,
+    build_ui_context,
+)
 from tests.fixtures.ui_index_sample import sample_ui_index
 
 
@@ -33,6 +39,72 @@ def _sample_deterministic_next_checks() -> dict[str, object]:
                 "drilldownArtifactPath": "drilldowns/cluster-a.json",
             }
         ],
+    }
+
+
+def _alertmanager_sources_raw() -> dict[str, object]:
+    return {
+        "sources": [
+            {
+                "source_id": "am-src-manual-1",
+                "endpoint": "http://alertmanager-main:9093",
+                "namespace": "monitoring",
+                "name": "main-alertmanager",
+                "origin": "manual",
+                "state": "manual",
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": "2026-01-01T00:01:00Z",
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": None,
+                "verified_version": "0.27.0",
+                "confidence_hints": ["direct_user_registration"],
+            },
+            {
+                "source_id": "am-src-crd-1",
+                "endpoint": "http://alertmanager-crd:9093",
+                "namespace": "monitoring",
+                "name": "crd-alertmanager",
+                "origin": "alertmanager-crd",
+                "state": "auto-tracked",
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": "2026-01-01T00:01:30Z",
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": "connection timeout",
+                "verified_version": "0.26.0",
+                "confidence_hints": ["crd_discovery", "namespace_match"],
+            },
+            {
+                "source_id": "am-src-svc-1",
+                "endpoint": "http://am-service.monitoring.svc.cluster.local:9093",
+                "namespace": "monitoring",
+                "name": None,
+                "origin": "service-heuristic",
+                "state": "discovered",
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": None,
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": None,
+                "verified_version": None,
+                "confidence_hints": ["service_discovery"],
+            },
+            {
+                "source_id": "am-src-degraded-1",
+                "endpoint": "http://degraded-alertmanager:9093",
+                "namespace": "monitoring",
+                "name": "degraded-alertmanager",
+                "origin": "alertmanager-crd",
+                "state": "degraded",
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": "2026-01-01T00:01:00Z",
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": "connection refused",
+                "verified_version": "0.25.0",
+                "confidence_hints": ["crd_discovery"],
+            },
+        ],
+        "total_count": 4,
+        "discovery_timestamp": "2026-01-01T00:00:00Z",
+        "cluster_context": "cluster-a",
     }
 
 
@@ -232,3 +304,193 @@ class UIViewModelTests(unittest.TestCase):
         self.assertIsNotNone(dup)
         assert dup is not None
         self.assertEqual(dup.priority_rationale, "Already covered by existing evidence")
+
+
+class AlertmanagerSourcesViewTests(unittest.TestCase):
+    def test_alertmanager_sources_derives_computed_fields(self) -> None:
+        raw_sources = _alertmanager_sources_raw()
+        index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            run_entry["alertmanager_sources"] = raw_sources
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
+        
+        context = build_ui_context(index)
+        sources_view = context.alertmanager_sources
+        
+        self.assertIsNotNone(sources_view)
+        assert isinstance(sources_view, AlertmanagerSourcesView)
+        
+        # Verify we have 4 sources
+        self.assertEqual(len(sources_view.sources), 4)
+        self.assertEqual(sources_view.total_count, 4)
+        
+        # Verify aggregate counts are computed (not from raw data)
+        self.assertEqual(sources_view.manual_count, 1)  # only manual origin
+        self.assertEqual(sources_view.tracked_count, 2)  # manual + auto-tracked
+        self.assertEqual(sources_view.degraded_count, 1)  # only degraded state
+        self.assertEqual(sources_view.missing_count, 0)  # no missing state
+    
+    def test_alertmanager_sources_computed_fields_correct_per_source(self) -> None:
+        raw_sources = _alertmanager_sources_raw()
+        index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            run_entry["alertmanager_sources"] = raw_sources
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
+        
+        context = build_ui_context(index)
+        sources_view = context.alertmanager_sources
+        assert sources_view is not None
+        
+        # Create a map for easier assertions
+        sources_by_id = {s.source_id: s for s in sources_view.sources}
+        
+        # Manual source (is_manual=True, can_disable=False, can_promote=False)
+        manual = sources_by_id.get("am-src-manual-1")
+        self.assertIsNotNone(manual)
+        assert manual is not None
+        self.assertTrue(manual.is_manual)
+        self.assertTrue(manual.is_tracking)  # manual state is tracking
+        self.assertFalse(manual.can_disable)  # can't disable manual
+        self.assertFalse(manual.can_promote)  # already manual
+        self.assertEqual(manual.display_origin, "Manual")
+        self.assertEqual(manual.display_state, "Manual")
+        
+        # Auto-tracked source (is_manual=False, can_disable=True, can_promote=True)
+        auto_tracked = sources_by_id.get("am-src-crd-1")
+        self.assertIsNotNone(auto_tracked)
+        assert auto_tracked is not None
+        self.assertFalse(auto_tracked.is_manual)
+        self.assertTrue(auto_tracked.is_tracking)  # auto-tracked is tracking
+        self.assertTrue(auto_tracked.can_disable)  # can disable auto-tracked
+        self.assertTrue(auto_tracked.can_promote)  # can be promoted from auto-tracked state
+        self.assertEqual(auto_tracked.display_origin, "Alertmanager CRD")
+        self.assertEqual(auto_tracked.display_state, "Auto-tracked")
+        
+        # Discovered source (is_manual=False, can_disable=False, can_promote=True)
+        discovered = sources_by_id.get("am-src-svc-1")
+        self.assertIsNotNone(discovered)
+        assert discovered is not None
+        self.assertFalse(discovered.is_manual)
+        self.assertFalse(discovered.is_tracking)  # discovered is not tracking
+        self.assertFalse(discovered.can_disable)  # not auto-tracked
+        self.assertTrue(discovered.can_promote)  # can promote discovered to manual
+        self.assertEqual(discovered.display_origin, "Service Heuristic")
+        self.assertEqual(discovered.display_state, "Discovered")
+        
+        # Degraded source (is_manual=False, can_disable=False, can_promote=False)
+        degraded = sources_by_id.get("am-src-degraded-1")
+        self.assertIsNotNone(degraded)
+        assert degraded is not None
+        self.assertFalse(degraded.is_manual)
+        self.assertFalse(degraded.is_tracking)  # degraded is not tracking
+        self.assertFalse(degraded.can_disable)
+        self.assertFalse(degraded.can_promote)  # degraded not in promotable states
+        self.assertEqual(degraded.display_origin, "Alertmanager CRD")
+        self.assertEqual(degraded.display_state, "Degraded")
+    
+    def test_alertmanager_sources_provenance_summary(self) -> None:
+        raw_sources = _alertmanager_sources_raw()
+        index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            run_entry["alertmanager_sources"] = raw_sources
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
+        
+        context = build_ui_context(index)
+        sources_view = context.alertmanager_sources
+        assert sources_view is not None
+        
+        sources_by_id = {s.source_id: s for s in sources_view.sources}
+        
+        # Single hint should be joined with semicolon
+        manual = sources_by_id.get("am-src-manual-1")
+        self.assertIsNotNone(manual)
+        assert manual is not None
+        self.assertEqual(manual.provenance_summary, "direct_user_registration")
+        
+        # Multiple hints should be joined with semicolon
+        crd = sources_by_id.get("am-src-crd-1")
+        self.assertIsNotNone(crd)
+        assert crd is not None
+        self.assertEqual(crd.provenance_summary, "crd_discovery; namespace_match")
+        
+        # Single hint returns that hint (not dash)
+        discovered = sources_by_id.get("am-src-svc-1")
+        self.assertIsNotNone(discovered)
+        assert discovered is not None
+        self.assertEqual(discovered.provenance_summary, "service_discovery")
+    
+    def test_raw_ui_index_does_not_contain_computed_fields(self) -> None:
+        # Verify that the raw index data (as written by health/ui.py) does NOT
+        # contain the computed UI fields. These should only be derived by
+        # ui/model.py's _build_alertmanager_sources_view().
+        raw_sources = _alertmanager_sources_raw()
+        
+        # Computed UI fields should NOT be in raw data
+        for source in raw_sources["sources"]:
+            self.assertNotIn("is_manual", source)
+            self.assertNotIn("is_tracking", source)
+            self.assertNotIn("can_disable", source)
+            self.assertNotIn("can_promote", source)
+            self.assertNotIn("display_origin", source)
+            self.assertNotIn("display_state", source)
+            self.assertNotIn("provenance_summary", source)
+        
+        # Aggregate counts should NOT be in raw data
+        self.assertNotIn("tracked_count", raw_sources)
+        self.assertNotIn("manual_count", raw_sources)
+        self.assertNotIn("degraded_count", raw_sources)
+        self.assertNotIn("missing_count", raw_sources)
+    
+    def test_origin_state_label_mapping(self) -> None:
+        """Verify that origin and state values are mapped to human-readable labels."""
+        raw_sources = _alertmanager_sources_raw()
+        index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            run_entry["alertmanager_sources"] = raw_sources
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
+        
+        context = build_ui_context(index)
+        sources_view = context.alertmanager_sources
+        assert sources_view is not None
+        
+        # Test all origin mappings
+        origins_seen = {(s.origin, s.display_origin) for s in sources_view.sources}
+        self.assertIn(("manual", "Manual"), origins_seen)
+        self.assertIn(("alertmanager-crd", "Alertmanager CRD"), origins_seen)
+        self.assertIn(("service-heuristic", "Service Heuristic"), origins_seen)
+        
+        # Test all state mappings
+        states_seen = {(s.state, s.display_state) for s in sources_view.sources}
+        self.assertIn(("manual", "Manual"), states_seen)
+        self.assertIn(("auto-tracked", "Auto-tracked"), states_seen)
+        self.assertIn(("discovered", "Discovered"), states_seen)
+        self.assertIn(("degraded", "Degraded"), states_seen)
+    
+    def test_counts_reflect_computed_is_tracking_and_states(self) -> None:
+        # Verify counts are computed from the derived is_tracking and state fields
+        raw_sources = _alertmanager_sources_raw()
+        index = sample_ui_index()
+        run_entry = index.get("run")
+        if isinstance(run_entry, dict):
+            run_entry["alertmanager_sources"] = raw_sources
+            run_entry["deterministic_next_checks"] = _sample_deterministic_next_checks()
+        
+        context = build_ui_context(index)
+        sources_view = context.alertmanager_sources
+        assert sources_view is not None
+        
+        # tracked_count = is_tracking == True (manual + auto-tracked)
+        self.assertEqual(sources_view.tracked_count, 2)  # manual + auto-tracked
+        
+        # manual_count = is_manual == True
+        self.assertEqual(sources_view.manual_count, 1)  # manual only
+        
+        # degraded_count = state == degraded
+        self.assertEqual(sources_view.degraded_count, 1)
+        
+        # missing_count = state == missing
+        self.assertEqual(sources_view.missing_count, 0)
