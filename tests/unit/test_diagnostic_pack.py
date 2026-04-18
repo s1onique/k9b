@@ -346,12 +346,13 @@ class DiagnosticPackBuilderTests(unittest.TestCase):
                 for call in emit_mock.call_args_list
                 if call.kwargs["event"] == "diagnostic-pack-collection-summary"
             ]
-            self.assertEqual(len(summary_calls), 7)
+            self.assertEqual(len(summary_calls), 8)  # 8 categories: ui_index, review, assessments, drilldowns, triggers, comparisons, external_analysis, alertmanager
             counts = {
                 call.kwargs["metadata"]["artifact_kind"]: call.kwargs["metadata"]["artifact_count"]
                 for call in summary_calls
             }
             self.assertEqual(counts.get("external_analysis"), 2)
+            self.assertEqual(counts.get("alertmanager"), 0)  # No Alertmanager artifacts in this test
             ready_call = emit_mock.call_args_list[-1]
             self.assertEqual(ready_call.kwargs["event"], "diagnostic-pack-ready")
 

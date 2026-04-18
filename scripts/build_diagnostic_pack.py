@@ -20,6 +20,10 @@ if str(SRC_PATH) not in sys.path:
 
 from k8s_diag_agent.structured_logging import emit_structured_log
 from k8s_diag_agent.health.utils import normalize_ref
+from k8s_diag_agent.external_analysis.alertmanager_artifact import (
+    read_alertmanager_snapshot,
+    read_alertmanager_compact,
+)
 
 COMPONENT_NAME = "diagnostic-pack-builder"
 PACK_METADATA_CATEGORY = "pack_metadata"
@@ -185,6 +189,7 @@ def _collect_run_artifacts(run_id: str, run_health_dir: Path) -> dict[str, list[
         "triggers": [],
         "comparisons": [],
         "external_analysis": [],
+        "alertmanager": [],  # Alertmanager snapshot and compact artifacts
     }
     index_path = run_health_dir / "ui-index.json"
     if index_path.exists():
@@ -204,6 +209,14 @@ def _collect_run_artifacts(run_id: str, run_health_dir: Path) -> dict[str, list[
         for artifact in external_dir.glob("*.json"):
             if run_id in artifact.name:
                 result["external_analysis"].append(artifact)
+    # Collect Alertmanager artifacts (snapshot and compact)
+    # Alertmanager artifacts are stored alongside other run artifacts in run_health_dir
+    am_snapshot = run_health_dir / f"{run_id}-alertmanager-snapshot.json"
+    if am_snapshot.exists():
+        result["alertmanager"].append(am_snapshot)
+    am_compact = run_health_dir / f"{run_id}-alertmanager-compact.json"
+    if am_compact.exists():
+        result["alertmanager"].append(am_compact)
     return result
 
 
@@ -242,6 +255,8 @@ def _build_review_bundle(
     run_id_value = str(run_entry.get("run_id") or run_id)
     timestamp = run_entry.get("timestamp")
     review_paths = artifacts.get("review", [])
+    # Build Alertmanager context for prompt-facing provenance
+    alertmanager_context = _build_alertmanager_context(run_health_dir, run_id)
     return {
         "schema_version": REVIEW_BUNDLE_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -262,6 +277,7 @@ def _build_review_bundle(
         "review_enrichment": _extract_mapping(run_entry, "review_enrichment"),
         "provider_execution": _extract_mapping(run_entry, "provider_execution"),
         "diagnostic_pack_review": _extract_mapping(run_entry, "diagnostic_pack_review"),
+        "alertmanager_context": alertmanager_context,
         "artifact_manifest": {
             "summary_path": "summary.md",
             "digest_path": "digest.md",
@@ -269,6 +285,48 @@ def _build_review_bundle(
             "review_bundle_path": "review_bundle.json",
             "included_paths": _normalize_included_paths(included_paths),
         },
+    }
+
+
+def _build_alertmanager_context(run_health_dir: Path, run_id: str) -> dict[str, object]:
+    """Build Alertmanager context for review bundle.
+    
+    Reads snapshot and compact artifacts and builds prompt-facing context.
+    Returns unavailable context if artifacts are missing.
+    No live Alertmanager fetch is performed.
+    """
+    snapshot_path = run_health_dir / f"{run_id}-alertmanager-snapshot.json"
+    compact_path = run_health_dir / f"{run_id}-alertmanager-compact.json"
+    
+    snapshot_exists = snapshot_path.exists()
+    compact_exists = compact_path.exists()
+    
+    if not compact_exists:
+        return {
+            "available": False,
+            "source": "unavailable",
+            "status": None,
+            "compact": None,
+            "snapshot_available": snapshot_exists,
+        }
+    
+    compact = read_alertmanager_compact(compact_path)
+    if compact is None:
+        return {
+            "available": False,
+            "source": "unavailable",
+            "status": None,
+            "compact": None,
+            "snapshot_available": snapshot_exists,
+        }
+    
+    # Build prompt-facing compact context
+    return {
+        "available": True,
+        "source": "run_artifact",
+        "status": compact.status,
+        "compact": compact.to_dict(),
+        "snapshot_available": snapshot_exists,
     }
 
 
@@ -290,6 +348,14 @@ def _build_review_input_14b(
     bundle_manifest = cast(dict[str, object], review_bundle.get("artifact_manifest") or {})
     included_paths = cast(list[str], bundle_manifest.get("included_paths") or [])
     label_map, _ = _build_cluster_label_map(cluster_entries)
+    # Extract Alertmanager context from review bundle for replayability
+    alertmanager_context = cast(dict[str, object], review_bundle.get("alertmanager_context") or {
+        "available": False,
+        "source": "not_present",
+        "status": None,
+        "compact": None,
+        "snapshot_available": False,
+    })
     return {
         "schema_version": REVIEW_INPUT_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -317,6 +383,7 @@ def _build_review_input_14b(
         "proposal_summary": _build_proposal_summary(proposal_entries),
         "review_enrichment": _extract_mapping(review_bundle, "review_enrichment"),
         "provider_execution": _extract_mapping(review_bundle, "provider_execution"),
+        "alertmanager_context": alertmanager_context,
         "artifact_manifest": {
             "review_input_14b_path": "review_input_14b.json",
             "review_bundle_path": "review_bundle.json",
