@@ -118,6 +118,47 @@ body {
    Hero / Cockpit Header
    ========================================================================== */
 
+/* Brand Logo Container - portrait mark (2:3 aspect ratio) */
+.brand-logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Portrait proportions: ~32px width × 48px height for 2:3 asset (1024×1536) */
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  background-color: rgba(56, 189, 248, 0.08);
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.brand-logo-container:hover {
+  background-color: rgba(56, 189, 248, 0.12);
+}
+
+.brand-logo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.brand-logo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Solarized Light theme - brand logo container */
+[data-theme="solarized-light"] .brand-logo-container {
+  background-color: rgba(38, 139, 210, 0.08);
+}
+
+[data-theme="solarized-light"] .brand-logo-container:hover {
+  background-color: rgba(38, 139, 210, 0.12);
+}
+
 .hero {
   display: flex;
   justify-content: space-between;

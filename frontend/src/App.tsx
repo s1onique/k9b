@@ -46,6 +46,7 @@ import type {
 import "./index.css";
 import { ThemeSwitch } from "./ThemeSwitch";
 import Pagination from "./components/Pagination";
+import { HeaderBranding } from "./components/HeaderBranding";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -4418,10 +4419,7 @@ const App = () => {
     <div className="app-shell">
       <header className="panel hero compact">
         <div className="hero-content">
-          <div className="hero-title-block">
-            <p className="eyebrow">Fleet triage</p>
-            <h1>Cockpit</h1>
-          </div>
+          <HeaderBranding />
           <div className="hero-run">
             <div className="hero-run-identity">
               <div className="hero-run-header">
