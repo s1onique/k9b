@@ -4922,7 +4922,7 @@ const App = () => {
                         {runEntry.reviewDownloadPath ? (
                           <a
                             href={artifactUrl(runEntry.reviewDownloadPath)}
-                            className="btn btn-small btn-secondary"
+                            className="row-action row-action--secondary"
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -4949,7 +4949,7 @@ const App = () => {
                         {runEntry.reviewStatus === "no-executions" ? (
                           <button
                             type="button"
-                            className="btn btn-small btn-primary"
+                            className="row-action row-action--primary"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleBatchExecution(runEntry.runId);

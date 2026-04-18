@@ -328,7 +328,7 @@ describe("App", () => {
 
     // Find the download link - it's in the Review column
     // The fixture has run-122 with reviewDownloadPath set
-    const downloadLinks = document.querySelectorAll(".run-row a.btn");
+    const downloadLinks = document.querySelectorAll(".run-row a.row-action");
     expect(downloadLinks.length).toBeGreaterThan(0);
 
     // Check that the href contains /artifact?path= and not /api/artifacts
