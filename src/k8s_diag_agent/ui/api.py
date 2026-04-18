@@ -13,6 +13,8 @@ import ijson
 from ..health.freshness import freshness_status
 from .model import (
     AlertmanagerCompactView,
+    AlertmanagerSourcesView,
+    AlertmanagerSourceView,
     AssessmentHypothesisView,
     AssessmentNextCheckView,
     AssessmentView,
@@ -121,6 +123,7 @@ class RunPayload(TypedDict):
     diagnosticPackReview: DiagnosticPackReviewPayload | None
     diagnosticPack: DiagnosticPackPayload | None
     alertmanagerCompact: AlertmanagerCompactPayload | None
+    alertmanagerSources: AlertmanagerSourcesPayload | None
 
 
 class RunStatsPayload(TypedDict):
@@ -433,6 +436,42 @@ class AlertmanagerCompactPayload(TypedDict, total=False):
     captured_at: str
 
 
+class AlertmanagerSourcePayload(TypedDict, total=False):
+    """Payload for a single Alertmanager source."""
+    source_id: str
+    endpoint: str
+    namespace: str | None
+    name: str | None
+    origin: str
+    state: str
+    discovered_at: str | None
+    verified_at: str | None
+    last_check: str | None
+    last_error: str | None
+    verified_version: str | None
+    confidence_hints: list[str]
+    # Computed UI fields
+    is_manual: bool
+    is_tracking: bool
+    can_disable: bool
+    can_promote: bool
+    display_origin: str
+    display_state: str
+    provenance_summary: str
+
+
+class AlertmanagerSourcesPayload(TypedDict, total=False):
+    """Payload for the full Alertmanager source inventory."""
+    sources: list[AlertmanagerSourcePayload]
+    total_count: int
+    tracked_count: int
+    manual_count: int
+    degraded_count: int
+    missing_count: int
+    discovery_timestamp: str | None
+    cluster_context: str | None
+
+
 class ProviderExecutionBranchPayload(TypedDict, total=False):
     enabled: bool | None
     provider: str | None
@@ -682,6 +721,7 @@ def build_run_payload(
             context.run.next_check_execution_history
         ),
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
+        "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
     }
 
 
@@ -699,6 +739,48 @@ def _serialize_alertmanager_compact(view: AlertmanagerCompactView | None) -> Ale
         "affected_services": list(view.affected_services),
         "truncated": view.truncated,
         "captured_at": view.captured_at,
+    }
+
+
+def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> AlertmanagerSourcePayload:
+    """Serialize a single Alertmanager source to payload dict."""
+    return {
+        "source_id": view.source_id,
+        "endpoint": view.endpoint,
+        "namespace": view.namespace,
+        "name": view.name,
+        "origin": view.origin,
+        "state": view.state,
+        "discovered_at": view.discovered_at,
+        "verified_at": view.verified_at,
+        "last_check": view.last_check,
+        "last_error": view.last_error,
+        "verified_version": view.verified_version,
+        "confidence_hints": list(view.confidence_hints),
+        # Computed UI fields
+        "is_manual": view.is_manual,
+        "is_tracking": view.is_tracking,
+        "can_disable": view.can_disable,
+        "can_promote": view.can_promote,
+        "display_origin": view.display_origin,
+        "display_state": view.display_state,
+        "provenance_summary": view.provenance_summary,
+    }
+
+
+def _serialize_alertmanager_sources(view: AlertmanagerSourcesView | None) -> AlertmanagerSourcesPayload | None:
+    """Serialize the full Alertmanager source inventory to payload."""
+    if not view:
+        return None
+    return {
+        "sources": [_serialize_alertmanager_source(s) for s in view.sources],
+        "total_count": view.total_count,
+        "tracked_count": view.tracked_count,
+        "manual_count": view.manual_count,
+        "degraded_count": view.degraded_count,
+        "missing_count": view.missing_count,
+        "discovery_timestamp": view.discovery_timestamp,
+        "cluster_context": view.cluster_context,
     }
 
 

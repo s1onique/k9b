@@ -13,7 +13,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..external_analysis.alertmanager_artifact import read_alertmanager_compact
+from ..external_analysis.alertmanager_artifact import (
+    read_alertmanager_compact,
+    read_alertmanager_sources,
+)
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -208,6 +211,8 @@ def write_health_ui_index(
     )
     # Read Alertmanager compact artifact if available
     alertmanager_compact_entry = _serialize_alertmanager_compact(output_dir, run_id)
+    # Read Alertmanager sources inventory if available
+    alertmanager_sources_entry = _serialize_alertmanager_sources(output_dir, run_id)
     run_entry = {
         "run_id": run_id,
         "run_label": run_label,
@@ -258,6 +263,7 @@ def write_health_ui_index(
         ),
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
         "alertmanager_compact": alertmanager_compact_entry,
+        "alertmanager_sources": alertmanager_sources_entry,
     }
     index = {
         "run": run_entry,
@@ -2789,3 +2795,91 @@ def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, 
         "truncated": compact.truncated,
         "captured_at": compact.captured_at,
     }
+
+
+def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, object] | None:
+    """Read and serialize Alertmanager sources inventory artifact for UI.
+    
+    Returns None if the artifact is not available or cannot be read.
+    """
+    inventory = read_alertmanager_sources(output_dir / f"{run_id}-alertmanager-sources.json")
+    if inventory is None:
+        return None
+    
+    sources = []
+    for source in inventory.sources.values():
+        # Compute UI fields from source
+        is_manual = source.origin.value == "manual"
+        is_tracking = source.state.value in ("auto-tracked", "manual")
+        can_disable = not is_manual and source.state.value == "auto-tracked"
+        can_promote = not is_manual and source.state.value in ("auto-tracked", "discovered")
+        
+        # Build provenance summary from confidence hints
+        provenance_summary = "; ".join(source.confidence_hints) if source.confidence_hints else "-"
+        
+        sources.append({
+            "source_id": source.source_id,
+            "endpoint": source.endpoint,
+            "namespace": source.namespace,
+            "name": source.name,
+            "origin": source.origin.value,
+            "state": source.state.value,
+            "discovered_at": source.discovered_at.isoformat() if source.discovered_at else None,
+            "verified_at": source.verified_at.isoformat() if source.verified_at else None,
+            "last_check": source.last_check.isoformat() if source.last_check else None,
+            "last_error": source.last_error,
+            "verified_version": source.verified_version,
+            "confidence_hints": list(source.confidence_hints),
+            # Computed UI fields
+            "is_manual": is_manual,
+            "is_tracking": is_tracking,
+            "can_disable": can_disable,
+            "can_promote": can_promote,
+            "display_origin": _map_origin_to_display(source.origin.value),
+            "display_state": _map_state_to_display(source.state.value),
+            "provenance_summary": provenance_summary,
+        })
+    
+    # Count by category
+    manual_count = sum(1 for s in sources if s["is_manual"])
+    tracked_count = sum(1 for s in sources if s["is_tracking"])
+    degraded_count = sum(1 for s in sources if s["state"] == "degraded")
+    missing_count = sum(1 for s in sources if s["state"] == "missing")
+    
+    return {
+        "sources": sources,
+        "total_count": len(sources),
+        "tracked_count": tracked_count,
+        "manual_count": manual_count,
+        "degraded_count": degraded_count,
+        "missing_count": missing_count,
+        "discovery_timestamp": inventory.discovered_at.isoformat() if inventory.discovered_at else None,
+        "cluster_context": inventory.cluster_context,
+    }
+
+
+# Human-readable labels for origin and state values
+_ORIGIN_DISPLAY_LABELS: dict[str, str] = {
+    "manual": "Manual",
+    "alertmanager-crd": "Alertmanager CRD",
+    "prometheus-crd-config": "Prometheus Config",
+    "service-heuristic": "Service Heuristic",
+}
+
+_STATE_DISPLAY_LABELS: dict[str, str] = {
+    "manual": "Manual",
+    "auto-tracked": "Auto-tracked",
+    "discovered": "Discovered",
+    "degraded": "Degraded",
+    "missing": "Missing",
+}
+
+
+def _map_origin_to_display(origin: str) -> str:
+    """Map origin enum value to human-readable display label."""
+    return _ORIGIN_DISPLAY_LABELS.get(origin, origin)
+
+
+def _map_state_to_display(state: str) -> str:
+    """Map state enum value to human-readable display label."""
+    return _STATE_DISPLAY_LABELS.get(state, state)

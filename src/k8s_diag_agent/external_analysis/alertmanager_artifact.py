@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .alertmanager_snapshot import AlertmanagerCompact, AlertmanagerSnapshot
+
+if TYPE_CHECKING:
+    from .alertmanager_discovery import AlertmanagerSourceInventory
 
 
 def write_alertmanager_snapshot(directory: Path, snapshot: AlertmanagerSnapshot, run_id: str) -> Path:
@@ -98,3 +102,35 @@ def alertmanager_artifacts_exist(root: Path, run_id: str) -> tuple[bool, bool]:
     snapshot_path = root / f"{run_id}-alertmanager-snapshot.json"
     compact_path = root / f"{run_id}-alertmanager-compact.json"
     return snapshot_path.exists(), compact_path.exists()
+
+
+def write_alertmanager_sources(directory: Path, inventory: AlertmanagerSourceInventory, run_id: str) -> Path:
+    """Write Alertmanager sources inventory to run artifact directory.
+    
+    Returns the path to the written file.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{run_id}-alertmanager-sources.json"
+    path.write_text(json.dumps(inventory.to_dict(), indent=2), encoding="utf-8")
+    return path
+
+
+def read_alertmanager_sources(path: Path) -> AlertmanagerSourceInventory | None:
+    """Read Alertmanager sources inventory from artifact file.
+    
+    Returns None if file does not exist or cannot be parsed.
+    """
+    from .alertmanager_discovery import AlertmanagerSourceInventory as InventoryClass
+    
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return InventoryClass.from_dict(raw)
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return None
+
+
+def alertmanager_sources_exist(root: Path, run_id: str) -> bool:
+    """Check if Alertmanager sources artifact exists for a run."""
+    return (root / f"{run_id}-alertmanager-sources.json").exists()

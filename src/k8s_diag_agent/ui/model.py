@@ -319,6 +319,44 @@ class AlertmanagerProvenanceView:
 
 
 @dataclass(frozen=True)
+class AlertmanagerSourceView:
+    """View model for a single Alertmanager source in the inventory."""
+    source_id: str
+    endpoint: str
+    namespace: str | None
+    name: str | None
+    origin: str  # origin enum value as string
+    state: str  # state enum value as string
+    discovered_at: str | None
+    verified_at: str | None
+    last_check: str | None
+    last_error: str | None
+    verified_version: str | None
+    confidence_hints: tuple[str, ...]
+    # Computed UI fields
+    is_manual: bool
+    is_tracking: bool  # auto-tracked or manual
+    can_disable: bool  # can be disabled from auto-tracking
+    can_promote: bool  # can be promoted to manual
+    display_origin: str  # human-readable origin
+    display_state: str  # human-readable state with color hint
+    provenance_summary: str  # short provenance string for UI
+
+
+@dataclass(frozen=True)
+class AlertmanagerSourcesView:
+    """View model for the full Alertmanager source inventory."""
+    sources: tuple[AlertmanagerSourceView, ...]
+    total_count: int
+    tracked_count: int  # auto-tracked + manual
+    manual_count: int
+    degraded_count: int
+    missing_count: int
+    discovery_timestamp: str | None
+    cluster_context: str | None
+
+
+@dataclass(frozen=True)
 class NextCheckCandidateView:
     candidate_id: str | None
     priority_label: str | None
@@ -613,6 +651,7 @@ class UIIndexContext:
     diagnostic_pack: DiagnosticPackView | None
     next_check_queue: tuple[NextCheckQueueItemView, ...]
     alertmanager_compact: AlertmanagerCompactView | None
+    alertmanager_sources: AlertmanagerSourcesView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -687,6 +726,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         index.get("auto_drilldown_interpretations")
     )
     alertmanager_compact = _build_alertmanager_compact_view(run_data.get("alertmanager_compact"))
+    alertmanager_sources = _build_alertmanager_sources_view(run_data.get("alertmanager_sources"))
     return UIIndexContext(
         run=run,
         clusters=clusters,
@@ -708,6 +748,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         diagnostic_pack=run.diagnostic_pack,
         next_check_queue=run.next_check_queue,
         alertmanager_compact=alertmanager_compact,
+        alertmanager_sources=alertmanager_sources,
     )
 
 
@@ -1721,4 +1762,94 @@ def _build_alertmanager_compact_view(raw: object | None) -> AlertmanagerCompactV
         affected_services=_coerce_str_tuple(raw.get("affected_services")),
         truncated=bool(raw.get("truncated")),
         captured_at=_coerce_str(raw.get("captured_at")),
+    )
+
+
+# Human-readable labels for origin and state values
+_ORIGIN_LABELS: dict[str, str] = {
+    "manual": "Manual",
+    "alertmanager-crd": "Alertmanager CRD",
+    "prometheus-crd-config": "Prometheus Config",
+    "service-heuristic": "Service Heuristic",
+}
+
+_STATE_LABELS: dict[str, str] = {
+    "manual": "Manual",
+    "auto-tracked": "Auto-tracked",
+    "discovered": "Discovered",
+    "degraded": "Degraded",
+    "missing": "Missing",
+}
+
+_STATE_COLOR_HINTS: dict[str, str] = {
+    "manual": "green",
+    "auto-tracked": "green",
+    "discovered": "yellow",
+    "degraded": "red",
+    "missing": "gray",
+}
+
+
+def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesView | None:
+    """Build AlertmanagerSourcesView from raw JSON data (alertmanager_sources field)."""
+    if not isinstance(raw, Mapping):
+        return None
+    
+    sources_raw = raw.get("sources") or ()
+    sources: list[AlertmanagerSourceView] = []
+    for src in sources_raw:
+        if not isinstance(src, Mapping):
+            continue
+        origin = _coerce_str(src.get("origin", "service-heuristic"))
+        state = _coerce_str(src.get("state", "discovered"))
+        
+        # Compute UI fields
+        is_manual = origin == "manual"
+        is_tracking = state in ("auto-tracked", "manual")
+        can_disable = not is_manual and state == "auto-tracked"
+        can_promote = not is_manual and state in ("auto-tracked", "discovered")
+        display_origin = _ORIGIN_LABELS.get(origin, origin)
+        display_state = _STATE_LABELS.get(state, state)
+        
+        # Build provenance summary from confidence_hints
+        hints = _coerce_str_tuple(src.get("confidence_hints"))
+        provenance_summary = "; ".join(hints) if hints else "-"
+        
+        sources.append(AlertmanagerSourceView(
+            source_id=_coerce_str(src.get("source_id")),
+            endpoint=_coerce_str(src.get("endpoint")),
+            namespace=_coerce_optional_str(src.get("namespace")),
+            name=_coerce_optional_str(src.get("name")),
+            origin=origin,
+            state=state,
+            discovered_at=_coerce_optional_str(src.get("discovered_at")),
+            verified_at=_coerce_optional_str(src.get("verified_at")),
+            last_check=_coerce_optional_str(src.get("last_check")),
+            last_error=_coerce_optional_str(src.get("last_error")),
+            verified_version=_coerce_optional_str(src.get("verified_version")),
+            confidence_hints=hints,
+            is_manual=is_manual,
+            is_tracking=is_tracking,
+            can_disable=can_disable,
+            can_promote=can_promote,
+            display_origin=display_origin,
+            display_state=display_state,
+            provenance_summary=provenance_summary,
+        ))
+    
+    # Count by category
+    manual_count = sum(1 for s in sources if s.is_manual)
+    tracked_count = sum(1 for s in sources if s.is_tracking)
+    degraded_count = sum(1 for s in sources if s.state == "degraded")
+    missing_count = sum(1 for s in sources if s.state == "missing")
+    
+    return AlertmanagerSourcesView(
+        sources=tuple(sources),
+        total_count=len(sources),
+        tracked_count=tracked_count,
+        manual_count=manual_count,
+        degraded_count=degraded_count,
+        missing_count=missing_count,
+        discovery_timestamp=_coerce_optional_str(raw.get("discovery_timestamp")),
+        cluster_context=_coerce_optional_str(raw.get("cluster_context")),
     )
