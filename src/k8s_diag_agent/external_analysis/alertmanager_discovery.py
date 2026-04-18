@@ -1,0 +1,769 @@
+"""Alertmanager auto-discovery for local installations.
+
+This module discovers Alertmanager instances running in the cluster through multiple
+strategies, verifies their health, and manages a source inventory with explicit
+provenance tracking.
+
+Discovery strategies (in priority order):
+1. monitoring.coreos.com/v1 Alertmanager CRDs (high confidence)
+2. Prometheus CRD alertmanagers configuration (medium confidence)
+3. Service/pod heuristics (low confidence, fallback only)
+
+Key invariants:
+- Manual sources are authoritative and never overwritten by discovered sources
+- Candidates must pass /-/healthy and /-/ready verification before auto-tracking
+- All sources track explicit origin and state for UI provenance
+"""
+
+from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
+
+
+class AlertmanagerSourceOrigin(StrEnum):
+    """Origin of an Alertmanager source.
+
+    Priority is explicit via _ORIGIN_PRIORITY map (not string value order).
+    """
+    MANUAL = "manual"
+    ALERTMANAGER_CRD = "alertmanager-crd"
+    # NOTE: prometheus-runtime referred to actual Prometheus /api/v1/alertmanagers
+    # which requires Prometheus server access. Using CRD config inference instead.
+    PROMETHEUS_CRD_CONFIG = "prometheus-crd-config"
+    SERVICE_HEURISTIC = "service-heuristic"
+
+
+# Explicit priority map: lower number = higher priority
+# Used by inventory merge to determine precedence when same source_id exists
+_ORIGIN_PRIORITY: dict[AlertmanagerSourceOrigin, int] = {
+    AlertmanagerSourceOrigin.MANUAL: 0,  # Highest - authoritative, never overwritten
+    AlertmanagerSourceOrigin.ALERTMANAGER_CRD: 10,  # CRD is canonical declaration
+    AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG: 20,  # CRD config inference
+    AlertmanagerSourceOrigin.SERVICE_HEURISTIC: 30,  # Lowest confidence fallback
+}
+
+
+class AlertmanagerSourceState(StrEnum):
+    """Current state of an Alertmanager source."""
+    DISCOVERED = "discovered"  # Found but not yet verified
+    AUTO_TRACKED = "auto-tracked"  # Verified and being tracked
+    DEGRADED = "degraded"  # Verification failed or became unavailable
+    MISSING = "missing"  # Was tracked but no longer available
+    MANUAL = "manual"  # User-configured (authoritative)
+
+
+@dataclass(frozen=True)
+class AlertmanagerSource:
+    """A discovered or configured Alertmanager source with explicit provenance."""
+    source_id: str  # Stable identity (typically namespace/name)
+    endpoint: str  # Full URL to the Alertmanager API
+    namespace: str | None = None  # Kubernetes namespace (if applicable)
+    name: str | None = None  # Kubernetes resource name (if applicable)
+    origin: AlertmanagerSourceOrigin = AlertmanagerSourceOrigin.SERVICE_HEURISTIC
+    state: AlertmanagerSourceState = AlertmanagerSourceState.DISCOVERED
+    discovered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    verified_at: datetime | None = None
+    last_check: datetime | None = None
+    last_error: str | None = None
+    verified_version: str | None = None  # Alertmanager version from /api/v2/status
+    confidence_hints: tuple[str, ...] = field(default_factory=tuple)  # e.g., "from-crud", "has-service"
+    
+    def __post_init__(self) -> None:
+        # Ensure endpoint has no trailing slash for consistency
+        object.__setattr__(self, 'endpoint', self.endpoint.rstrip('/'))
+    
+    @property
+    def identity_key(self) -> str:
+        """Stable key for deduplication across discovery methods."""
+        return self.source_id
+    
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_id": self.source_id,
+            "endpoint": self.endpoint,
+            "namespace": self.namespace,
+            "name": self.name,
+            "origin": self.origin.value,
+            "state": self.state.value,
+            "discovered_at": self.discovered_at.isoformat(),
+            "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+            "last_check": self.last_check.isoformat() if self.last_check else None,
+            "last_error": self.last_error,
+            "verified_version": self.verified_version,
+            "confidence_hints": list(self.confidence_hints),
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AlertmanagerSource:
+        """Reconstruct source from serialized dict."""
+        return cls(
+            source_id=str(data["source_id"]),
+            endpoint=str(data["endpoint"]),
+            namespace=data.get("namespace"),
+            name=data.get("name"),
+            origin=AlertmanagerSourceOrigin(data.get("origin", "service-heuristic")),
+            state=AlertmanagerSourceState(data.get("state", "discovered")),
+            discovered_at=_parse_datetime(data.get("discovered_at")),
+            verified_at=_parse_datetime(data.get("verified_at")),
+            last_check=_parse_datetime(data.get("last_check")),
+            last_error=data.get("last_error"),
+            verified_version=data.get("verified_version"),
+            confidence_hints=tuple(data.get("confidence_hints", [])),
+        )
+
+
+@dataclass
+class AlertmanagerSourceInventory:
+    """Collection of Alertmanager sources with merge semantics.
+    
+    Manual sources take precedence over discovered ones. When the same
+    source_id exists with different origins, manual wins.
+    """
+    sources: dict[str, AlertmanagerSource] = field(default_factory=dict)
+    discovered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    cluster_context: str | None = None  # Kubernetes context used for discovery
+    
+    def add_source(self, source: AlertmanagerSource) -> None:
+        """Add a source, respecting manual precedence.
+        
+        Manual sources are authoritative and cannot be overwritten by
+        discovered sources with the same identity.
+        """
+        existing = self.sources.get(source.identity_key)
+        
+        if existing is None:
+            # No existing source, add it
+            self.sources[source.identity_key] = source
+            return
+        
+        # Apply precedence rules:
+        # 1. Manual always wins
+        # 2. Same origin updates state if more recent
+        # 3. Higher confidence origin wins for non-manual
+        
+        if existing.origin == AlertmanagerSourceOrigin.MANUAL:
+            # Manual is authoritative, don't overwrite
+            return
+        
+        if source.origin == AlertmanagerSourceOrigin.MANUAL:
+            # New source is manual, replace
+            self.sources[source.identity_key] = source
+            return
+        
+        # Both are discovered, prefer higher priority origin (lower number = higher priority)
+        if _ORIGIN_PRIORITY[source.origin] < _ORIGIN_PRIORITY[existing.origin]:
+            self.sources[source.identity_key] = source
+        elif source.origin == existing.origin:
+            # Same origin, prefer more verified state
+            if source.state == AlertmanagerSourceState.AUTO_TRACKED:
+                self.sources[source.identity_key] = source
+    
+    def get_by_origin(self, origin: AlertmanagerSourceOrigin) -> tuple[AlertmanagerSource, ...]:
+        """Get all sources with a specific origin."""
+        return tuple(s for s in self.sources.values() if s.origin == origin)
+    
+    def get_by_state(self, state: AlertmanagerSourceState) -> tuple[AlertmanagerSource, ...]:
+        """Get all sources with a specific state."""
+        return tuple(s for s in self.sources.values() if s.state == state)
+    
+    def get_auto_tracked(self) -> tuple[AlertmanagerSource, ...]:
+        """Get all sources that are being actively tracked."""
+        return tuple(
+            s for s in self.sources.values() 
+            if s.state in (AlertmanagerSourceState.AUTO_TRACKED, AlertmanagerSourceState.MANUAL)
+        )
+    
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sources": [s.to_dict() for s in self.sources.values()],
+            "discovered_at": self.discovered_at.isoformat(),
+            "cluster_context": self.cluster_context,
+            "source_count": len(self.sources),
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AlertmanagerSourceInventory:
+        """Reconstruct inventory from serialized dict."""
+        sources = {
+            s["source_id"]: AlertmanagerSource.from_dict(s) 
+            for s in data.get("sources", [])
+        }
+        return cls(
+            sources=sources,
+            discovered_at=_parse_datetime(data.get("discovered_at")),
+            cluster_context=data.get("cluster_context"),
+        )
+
+
+# --- Discovery Strategy Interfaces ---
+
+@dataclass(frozen=True)
+class DiscoveryResult:
+    """Result from a discovery strategy."""
+    sources: tuple[AlertmanagerSource, ...]
+    strategy: str  # Name of the strategy used
+    errors: tuple[str, ...] = field(default_factory=tuple)
+
+
+class DiscoveryStrategy:
+    """Base class for Alertmanager discovery strategies."""
+    
+    name: str = "base"
+    
+    def discover(self, context: str | None = None) -> DiscoveryResult:
+        """Discover Alertmanager sources.
+        
+        Args:
+            context: Kubernetes context to use for discovery
+            
+        Returns:
+            DiscoveryResult with found sources and any errors
+        """
+        raise NotImplementedError
+
+
+class CRDDiscoveryStrategy(DiscoveryStrategy):
+    """Discover Alertmanagers via monitoring.coreos.com/v1 Alertmanager CRDs.
+    
+    This is the highest-confidence discovery method as it uses the official
+    Kubernetes API for Alertmanager resources.
+    """
+    
+    name = "alertmanager-crd"
+    
+    def discover(self, context: str | None = None) -> DiscoveryResult:
+        """Query Alertmanager CRDs using kubectl.
+        
+        Uses `kubectl get alertmanagers` to find all Alertmanager resources
+        in the cluster, then resolves their service endpoints.
+        """
+        import subprocess
+        
+        sources: list[AlertmanagerSource] = []
+        errors: list[str] = []
+        
+        try:
+            cmd = ["kubectl", "get", "alertmanagers", "-o", "json"]
+            if context:
+                cmd.extend(["--context", context])
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
+            if result.returncode != 0:
+                # CRD may not be installed or kubectl may not be available
+                stderr = result.stderr.lower()
+                if "not found" in stderr or "no resources" in stderr:
+                    # CRD not present, return empty
+                    return DiscoveryResult(sources=(), errors=(), strategy=self.name)
+                errors.append(f"kubectl failed: {result.stderr[:200]}")
+                return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
+            
+            data = json.loads(result.stdout)
+            items = data.get("items", [])
+            
+            for item in items:
+                source = self._parse_crd_item(item, context)
+                if source:
+                    sources.append(source)
+            
+        except subprocess.TimeoutExpired:
+            errors.append("kubectl get alertmanagers timed out")
+        except FileNotFoundError:
+            errors.append("kubectl not found in PATH")
+        except json.JSONDecodeError as exc:
+            errors.append(f"Failed to parse kubectl output: {exc}")
+        
+        return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
+    
+    def _parse_crd_item(self, item: dict[str, Any], context: str | None) -> AlertmanagerSource | None:
+        """Parse an Alertmanager CRD item into a source."""
+        metadata = item.get("metadata", {})
+        name = metadata.get("name")
+        namespace = metadata.get("namespace", "default")
+        
+        if not name:
+            return None
+        
+        # Build the service URL - Alertmanager is typically on port 9093
+        # For in-cluster access, we construct the service DNS name
+        endpoint = f"http://alertmanager-operated.{namespace}:9093"  # conventional for Prometheus Operator
+        
+        source_id = f"crd:{namespace}/{name}"
+        
+        return AlertmanagerSource(
+            source_id=source_id,
+            endpoint=endpoint,
+            namespace=namespace,
+            name=name,
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.DISCOVERED,
+            confidence_hints=("from-crd", f"namespace={namespace}"),
+        )
+
+
+class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
+    """Discover Alertmanagers via Prometheus CRD alertmanagers configuration.
+    
+    This method looks for Prometheus instances that reference Alertmanagers
+    in their alerting.alertmanagers spec. Lower confidence than direct CRD
+    as it relies on Prometheus configuration rather than direct inspection.
+    """
+    
+    name = "prometheus-crd-config"
+    
+    def discover(self, context: str | None = None) -> DiscoveryResult:
+        """Look for Prometheus resources and their Alertmanager configurations."""
+        import subprocess
+        
+        sources: list[AlertmanagerSource] = []
+        errors: list[str] = []
+        
+        try:
+            # Look for Prometheus instances that might discover Alertmanagers
+            cmd = ["kubectl", "get", "prometheuses", "-o", "json"]
+            if context:
+                cmd.extend(["--context", context])
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
+            if result.returncode != 0:
+                # Prometheus CRD may not be installed
+                stderr = result.stderr.lower()
+                if "not found" in stderr or "no resources" in stderr:
+                    return DiscoveryResult(sources=(), errors=(), strategy=self.name)
+                errors.append(f"kubectl prometheuses failed: {result.stderr[:200]}")
+                return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
+            
+            data = json.loads(result.stdout)
+            items = data.get("items", [])
+            
+            for item in items:
+                source = self._parse_prometheus_item(item, context)
+                if source:
+                    sources.append(source)
+            
+        except subprocess.TimeoutExpired:
+            errors.append("kubectl get prometheuses timed out")
+        except FileNotFoundError:
+            errors.append("kubectl not found in PATH")
+        except json.JSONDecodeError as exc:
+            errors.append(f"Failed to parse kubectl output: {exc}")
+        
+        return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
+    
+    def _parse_prometheus_item(self, item: dict[str, Any], context: str | None) -> AlertmanagerSource | None:
+        """Parse a Prometheus CRD item to extract Alertmanager info."""
+        metadata = item.get("metadata", {})
+        name = metadata.get("name")
+        namespace = metadata.get("namespace", "default")
+        
+        spec = item.get("spec", {})
+        
+        # Look for alerting configuration
+        alerting = spec.get("alerting", {})
+        alertmanagers = alerting.get("alertmanagers", [])
+        
+        for am in alertmanagers:
+            # Prometheus Operator alertmanagers typically point to the operated service
+            namespace = am.get("namespace", namespace)
+            name = am.get("name", "alertmanager-main")
+            
+            source_id = f"prom-crd-config:{namespace}/{name}"
+            endpoint = f"http://alertmanager-operated.{namespace}:9093"
+            
+            return AlertmanagerSource(
+                source_id=source_id,
+                endpoint=endpoint,
+                namespace=namespace,
+                name=name,
+                origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
+                state=AlertmanagerSourceState.DISCOVERED,
+                confidence_hints=("from-prometheus-crd-config",),
+            )
+        
+        return None
+
+
+class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
+    """Discover Alertmanagers via service/pod heuristics.
+    
+    Lowest confidence method - looks for conventional service patterns
+    and port configurations. Only used as fallback when CRD and Prometheus
+    discovery methods fail or return empty results.
+    """
+    
+    name = "service-heuristic"
+    
+    def discover(self, context: str | None = None) -> DiscoveryResult:
+        """Search for Alertmanager-like services by name pattern."""
+        import subprocess
+        
+        sources: list[AlertmanagerSource] = []
+        errors: list[str] = []
+        
+        # Search for services with alertmanager-related names
+        
+        try:
+            # First, look for services
+            cmd = ["kubectl", "get", "svc", "-o", "json"]
+            if context:
+                cmd.extend(["--context", context])
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
+            if result.returncode != 0:
+                errors.append(f"kubectl get svc failed: {result.stderr[:200]}")
+                return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
+            
+            data = json.loads(result.stdout)
+            items = data.get("items", [])
+            
+            for item in items:
+                source = self._parse_service_item(item)
+                if source:
+                    sources.append(source)
+            
+            # Also look for pods
+            pod_cmd = ["kubectl", "get", "pods", "-o", "json", "-l", "app=alertmanager"]
+            if context:
+                pod_cmd.extend(["--context", context])
+            
+            pod_result = subprocess.run(
+                pod_cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
+            if pod_result.returncode == 0:
+                pod_data = json.loads(pod_result.stdout)
+                pod_items = pod_data.get("items", [])
+                
+                for pod in pod_items:
+                    source = self._parse_pod_item(pod, context)
+                    if source:
+                        # Avoid duplicates from service discovery
+                        if not any(s.source_id == source.source_id for s in sources):
+                            sources.append(source)
+            
+        except subprocess.TimeoutExpired:
+            errors.append("Service/pod discovery timed out")
+        except FileNotFoundError:
+            errors.append("kubectl not found in PATH")
+        except json.JSONDecodeError as exc:
+            errors.append(f"Failed to parse kubectl output: {exc}")
+        
+        return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
+    
+    def _parse_service_item(self, item: dict[str, Any]) -> AlertmanagerSource | None:
+        """Parse a service to check if it's an Alertmanager service."""
+        metadata = item.get("metadata", {})
+        name = metadata.get("name", "")
+        namespace = metadata.get("namespace", "default")
+        
+        # Check if name matches alertmanager patterns
+        name_lower = name.lower()
+        if "alertmanager" not in name_lower:
+            return None
+        
+        # Check for port 9093 (standard Alertmanager port)
+        ports = item.get("spec", {}).get("ports", [])
+        has_am_port = any(p.get("port") == 9093 for p in ports)
+        
+        if not has_am_port:
+            # Still might be Alertmanager, just different port
+            pass
+        
+        source_id = f"service:{namespace}/{name}"
+        
+        # Construct cluster-internal URL
+        endpoint = f"http://{name}.{namespace}:9093"
+        
+        return AlertmanagerSource(
+            source_id=source_id,
+            endpoint=endpoint,
+            namespace=namespace,
+            name=name,
+            origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+            state=AlertmanagerSourceState.DISCOVERED,
+            confidence_hints=(
+                "from-service",
+                "port=9093" if has_am_port else "port=unknown",
+            ),
+        )
+    
+    def _parse_pod_item(self, item: dict[str, Any], context: str | None) -> AlertmanagerSource | None:
+        """Parse a pod to extract Alertmanager info."""
+        metadata = item.get("metadata", {})
+        name = metadata.get("name", "")
+        namespace = metadata.get("namespace", "default")
+        
+        # Extract pod IP
+        pod_ip = item.get("status", {}).get("podIP")
+        if not pod_ip:
+            return None
+        
+        source_id = f"pod:{namespace}/{name}"
+        
+        return AlertmanagerSource(
+            source_id=source_id,
+            endpoint=f"http://{pod_ip}:9093",
+            namespace=namespace,
+            name=name,
+            origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+            state=AlertmanagerSourceState.DISCOVERED,
+            confidence_hints=("from-pod-label",),
+        )
+
+
+# --- Verification ---
+
+@dataclass(frozen=True)
+class VerificationResult:
+    """Result of Alertmanager endpoint verification."""
+    healthy: bool
+    ready: bool
+    version: str | None = None
+    error: str | None = None
+    checked_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+def verify_alertmanager_endpoint(endpoint: str, timeout_seconds: float = 5.0) -> VerificationResult:
+    """Verify an Alertmanager endpoint by checking /-/healthy and /-/ready.
+    
+    Both endpoints must respond successfully for a candidate to become
+    auto-tracked. This ensures we don't track non-functional Alertmanagers.
+    
+    Args:
+        endpoint: Base URL of the Alertmanager instance
+        timeout_seconds: Timeout for each health check request
+        
+    Returns:
+        VerificationResult with health/ready status and version info
+    """
+    
+    endpoint = endpoint.rstrip('/')
+    
+    # Check /-/healthy endpoint
+    healthy, healthy_error = _check_endpoint(f"{endpoint}/-/healthy", timeout_seconds)
+    
+    if not healthy:
+        return VerificationResult(
+            healthy=False,
+            ready=False,
+            error=healthy_error,
+        )
+    
+    # Check /-/ready endpoint
+    ready, ready_error = _check_endpoint(f"{endpoint}/-/ready", timeout_seconds)
+    
+    if not ready:
+        return VerificationResult(
+            healthy=True,
+            ready=False,
+            error=ready_error,
+        )
+    
+    # Get version info from /api/v2/status (auxiliary, non-blocking)
+    version, _ = _get_version(f"{endpoint}/api/v2/status", timeout_seconds)
+    
+    return VerificationResult(
+        healthy=True,
+        ready=True,
+        version=version,
+    )
+
+
+def _check_endpoint(url: str, timeout: float) -> tuple[bool, str | None]:
+    """Check if an endpoint returns a successful response."""
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if 200 <= response.status < 300:
+                return True, None
+            return False, f"HTTP {response.status}"
+    except urllib.error.HTTPError as exc:
+        return False, f"HTTP {exc.code}: {exc.reason}"
+    except urllib.error.URLError as exc:
+        return False, f"Connection failed: {exc.reason}"
+    except TimeoutError:
+        return False, "Request timed out"
+
+
+def _get_version(url: str, timeout: float) -> tuple[str | None, str | None]:
+    """Get Alertmanager version from status endpoint."""
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            data = json.loads(response.read())
+            version_info = data.get("data", {}).get("versionInfo", {})
+            version = version_info.get("version")
+            return version, None
+    except Exception as exc:
+        return None, str(exc)
+
+
+# --- Orchestrated Discovery ---
+
+def discover_alertmanagers(
+    context: str | None = None,
+    manual_sources: tuple[AlertmanagerSource, ...] = (),
+) -> AlertmanagerSourceInventory:
+    """Orchestrate Alertmanager discovery across all strategies.
+    
+    This is the main entry point for auto-discovery. It runs all strategies
+    in priority order and merges results with proper precedence handling.
+    
+    Args:
+        context: Kubernetes context to use for discovery
+        manual_sources: Pre-existing manual sources (never overwritten)
+        
+    Returns:
+        AlertmanagerSourceInventory with all discovered sources
+    """
+    inventory = AlertmanagerSourceInventory(cluster_context=context)
+    
+    # Add manual sources first (they take precedence)
+    for source in manual_sources:
+        inventory.add_source(source)
+    
+    # Run discovery strategies in priority order
+    strategies: list[DiscoveryStrategy] = [
+        CRDDiscoveryStrategy(),
+        PrometheusCRDConfigDiscoveryStrategy(),
+        ServiceHeuristicDiscoveryStrategy(),
+    ]
+    
+    for strategy in strategies:
+        result = strategy.discover(context)
+        
+        for source in result.sources:
+            inventory.add_source(source)
+    
+    return inventory
+
+
+def verify_and_update_inventory(
+    inventory: AlertmanagerSourceInventory,
+    timeout_seconds: float = 5.0,
+) -> AlertmanagerSourceInventory:
+    """Verify all discovered sources and update their states.
+    
+    Sources that pass verification become auto-tracked.
+    Sources that fail verification become degraded.
+    Manual sources are not verified but maintain their manual state.
+    
+    Args:
+        inventory: The source inventory to verify
+        timeout_seconds: Timeout for verification requests
+        
+    Returns:
+        Updated inventory with verified states
+    """
+    verified_sources: dict[str, AlertmanagerSource] = {}
+    
+    for source in inventory.sources.values():
+        # Manual sources don't need verification
+        if source.origin == AlertmanagerSourceOrigin.MANUAL:
+            verified_sources[source.identity_key] = source
+            continue
+        
+        # Verify non-manual sources
+        result = verify_alertmanager_endpoint(source.endpoint, timeout_seconds)
+        
+        if result.healthy and result.ready:
+            # Source passed verification
+            verified_sources[source.identity_key] = AlertmanagerSource(
+                source_id=source.source_id,
+                endpoint=source.endpoint,
+                namespace=source.namespace,
+                name=source.name,
+                origin=source.origin,
+                state=AlertmanagerSourceState.AUTO_TRACKED,
+                discovered_at=source.discovered_at,
+                verified_at=result.checked_at,
+                last_check=result.checked_at,
+                last_error=None,
+                verified_version=result.version,
+                confidence_hints=source.confidence_hints,
+            )
+        else:
+            # Source failed verification
+            verified_sources[source.identity_key] = AlertmanagerSource(
+                source_id=source.source_id,
+                endpoint=source.endpoint,
+                namespace=source.namespace,
+                name=source.name,
+                origin=source.origin,
+                state=AlertmanagerSourceState.DEGRADED,
+                discovered_at=source.discovered_at,
+                verified_at=None,
+                last_check=result.checked_at,
+                last_error=result.error,
+                verified_version=None,
+                confidence_hints=source.confidence_hints,
+            )
+    
+    return AlertmanagerSourceInventory(
+        sources=verified_sources,
+        discovered_at=inventory.discovered_at,
+        cluster_context=inventory.cluster_context,
+    )
+
+
+# --- Utility Functions ---
+
+def _parse_datetime(value: str | None) -> datetime:
+    """Parse ISO format datetime string."""
+    if not value:
+        return datetime.now(UTC)
+    try:
+        if value.endswith("Z"):
+            value = f"{value[:-1]}+00:00"
+        return datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return datetime.now(UTC)
+
+
+def build_endpoint_for_manual(
+    endpoint: str,
+    namespace: str | None = None,
+    name: str | None = None,
+) -> AlertmanagerSource:
+    """Build a manual Alertmanager source from user-provided endpoint."""
+    if not endpoint.startswith(("http://", "https://")):
+        endpoint = f"http://{endpoint}"
+    
+    source_id = f"manual:{endpoint}"
+    if namespace and name:
+        source_id = f"manual:{namespace}/{name}"
+    
+    return AlertmanagerSource(
+        source_id=source_id,
+        endpoint=endpoint,
+        namespace=namespace,
+        name=name,
+        origin=AlertmanagerSourceOrigin.MANUAL,
+        state=AlertmanagerSourceState.MANUAL,
+    )
