@@ -979,6 +979,80 @@ def build_endpoint_for_manual(
     )
 
 
+# --- Prometheus Operator Alias Resolution ---
+
+def _resolve_prometheus_operator_alias(
+    source: AlertmanagerSource,
+    all_sources: dict[str, AlertmanagerSource],
+) -> AlertmanagerSource:
+    '''Resolve Prometheus Operator alias: alertmanager-operated -> CRD-backed AM.
+    
+    In Prometheus Operator deployments:
+    - CRD is named 'alertmanager-main' (or similar)
+    - The actual service is 'alertmanager-operated' (conventional suffix)
+    
+    When a service heuristic finds 'alertmanager-operated', it should share the
+    same canonical identity as the CRD-backed Alertmanager in the same namespace
+    IF there's an unambiguous mapping (only one CRD Alertmanager in that namespace).
+    
+    This ensures that:
+    - CRD source: monitoring/alertmanager-main (points to alertmanager-operated.monitoring:9093)
+    - Service source: monitoring/alertmanager-operated (same endpoint)
+    
+    Both resolve to canonical identity 'monitoring/alertmanager-main' (the CRD's name).
+    '''
+    # Only apply alias resolution for service heuristic sources
+    if source.origin != AlertmanagerSourceOrigin.SERVICE_HEURISTIC:
+        return source
+    
+    # Check if this is the alertmanager-operated pattern
+    name = source.name or ''
+    if not name.endswith('-operated'):
+        return source
+    
+    # Find CRD sources in the same namespace
+    crd_in_namespace = [
+        s for s in all_sources.values()
+        if s.namespace == source.namespace
+        and s.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    ]
+    
+    # Only apply when there's exactly one CRD Alertmanager in this namespace
+    # (unambiguous mapping)
+    if len(crd_in_namespace) != 1:
+        return source
+    
+    crd_source = crd_in_namespace[0]
+    
+    # Create aliased source with CRD's namespace/name but keep service's endpoint
+    # (since they both point to the same endpoint: alertmanager-operated.svc:9093)
+    aliased_source = AlertmanagerSource(
+        source_id=f'service:{source.namespace}/{crd_source.name}',  # Use CRD name
+        endpoint=source.endpoint,  # Keep the actual endpoint
+        namespace=source.namespace,
+        name=crd_source.name,  # Use CRD name for canonical identity
+        origin=source.origin,
+        state=source.state,
+        discovered_at=source.discovered_at,
+        verified_at=source.verified_at,
+        last_check=source.last_check,
+        last_error=source.last_error,
+        verified_version=source.verified_version,
+        confidence_hints=source.confidence_hints + ('prometheus-operator-alias',),
+    )
+    
+    _logger.debug(
+        'Resolved Prometheus Operator alias: %s/%s -> %s/%s (endpoint %s)',
+        source.namespace,
+        source.name,
+        source.namespace,
+        crd_source.name,
+        source.endpoint,
+    )
+    
+    return aliased_source
+
+
 # --- Canonical Deduplication ---
 
 
@@ -991,10 +1065,12 @@ def merge_deduplicate_inventory(
     Alertmanager instance:
     - CRD: crd:monitoring/alertmanager-main
     - Prometheus Config: prom-crd-config:monitoring/alertmanager-main
-    - Service: service:monitoring/alertmanager-main
+    - Service: service:monitoring/alertmanager-operated (aliased to CRD name)
     
-    This function merges sources with the same canonical endpoint into a single
-    source with merged provenance tracking all contributing origins.
+    This function:
+    1. First resolves Prometheus Operator aliases (alertmanager-operated -> CRD name)
+    2. Then merges sources with the same canonical identity
+    3. Tracks all contributing origins in merged_provenances
     
     Rules:
     - Manual sources are authoritative and never deduplicated away
@@ -1007,14 +1083,34 @@ def merge_deduplicate_inventory(
     Returns:
         New inventory with deduplicated sources and merged provenance
     """
-    # Group sources by canonical identity
-    canonical_groups: dict[str, list[AlertmanagerSource]] = {}
-    
+    # Step 1: Apply Prometheus Operator alias resolution
+    # This transforms service:monitoring/alertmanager-operated -> service:monitoring/alertmanager-main
+    # when there's exactly one CRD Alertmanager in that namespace
+    # Collect ALL sources with their (possibly aliased) canonical identities
+    sources_by_canonical: dict[str, list[AlertmanagerSource]] = {}
     for source in inventory.sources.values():
-        canon_key = source.canonical_identity
+        aliased = _resolve_prometheus_operator_alias(source, inventory.sources)
+        canon_key = aliased.canonical_identity
+        if canon_key not in sources_by_canonical:
+            sources_by_canonical[canon_key] = []
+        sources_by_canonical[canon_key].append(aliased)
+    
+    # Step 2: For each canonical identity, select highest-priority source for the "winner" slot
+    # but keep ALL sources for provenance merging
+    sources_with_aliases: dict[str, AlertmanagerSource] = {}
+    for canon_key, group in sources_by_canonical.items():
+        # Find the highest-priority source to represent this identity
+        priority_winner = min(group, key=lambda s: _ORIGIN_PRIORITY[s.origin])
+        sources_with_aliases[canon_key] = priority_winner
+    
+    # Step 3: Re-group ALL sources (with aliases applied) by canonical identity for merging
+    canonical_groups: dict[str, list[AlertmanagerSource]] = {}
+    for source in inventory.sources.values():
+        aliased = _resolve_prometheus_operator_alias(source, inventory.sources)
+        canon_key = aliased.canonical_identity
         if canon_key not in canonical_groups:
             canonical_groups[canon_key] = []
-        canonical_groups[canon_key].append(source)
+        canonical_groups[canon_key].append(aliased)
     
     # Merge each group into a single source
     # Use canonical_identity as key to ensure duplicates merge properly
@@ -1041,7 +1137,7 @@ def merge_deduplicate_inventory(
                     best_source = source
             
             # Use manual if present, otherwise use best priority source
-            winner = manual_source if manual_source else best_source
+            winner: AlertmanagerSource | None = manual_source if manual_source else best_source
             if winner is None:
                 winner = group[0]  # Fallback to first
             

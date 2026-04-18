@@ -1274,3 +1274,149 @@ def test_display_provenance_merged_origins() -> None:
     assert "Alertmanager CRD" in source.display_provenance
     assert "Prometheus Config" in source.display_provenance
     assert "Service Heuristic" in source.display_provenance
+
+
+def test_prometheus_operator_alias_real_scenario() -> None:
+    """Regression test: Real Prometheus Operator duplicate pattern.
+    
+    This is the exact scenario we observed in the UI:
+    - CRD source: monitoring/kube-prometheus-stack-alertmanager (from kube-prometheus-stack)
+    - Service source: monitoring/alertmanager-operated (Prometheus Operator conventional suffix)
+    
+    Both point to the same endpoint: alertmanager-operated.monitoring:9093
+    Without alias resolution, they'd be 2 separate rows in the UI.
+    With alias resolution, the service should be aliased to CRD name and merged.
+    
+    Expected UI row count: 1 (deduped)
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # CRD source - named after the Helm release (real scenario)
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/kube-prometheus-stack-alertmanager",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="kube-prometheus-stack-alertmanager",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    # Service source - the actual operated service (real scenario)
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-operated",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-operated",  # Note: Different name than CRD
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(crd_source)
+    inventory.add_source(service_source)
+    
+    # Before dedup: 2 sources
+    assert len(inventory.sources) == 2
+    
+    # Dedup with alias resolution
+    result = merge_deduplicate_inventory(inventory)
+    
+    # After dedup: 1 source (service aliased to CRD name)
+    assert len(result.sources) == 1, f"Expected 1 source after dedup, got {len(result.sources)}"
+    
+    # The merged source should use CRD origin (highest priority)
+    merged = next(iter(result.sources.values()))
+    assert merged.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    
+    # The canonical identity should be the CRD name
+    assert merged.canonical_identity == "monitoring/kube-prometheus-stack-alertmanager"
+    
+    # Both provenances should be merged
+    assert AlertmanagerSourceOrigin.ALERTMANAGER_CRD in merged.merged_provenances
+    assert AlertmanagerSourceOrigin.SERVICE_HEURISTIC in merged.merged_provenances
+    
+    # The display should show both origins
+    assert "Alertmanager CRD" in merged.display_provenance
+    assert "Service Heuristic" in merged.display_provenance
+
+
+def test_prometheus_operator_alias_ambiguous_no_alias() -> None:
+    """Test that alias is NOT applied when mapping is ambiguous (multiple CRDs in namespace).
+    
+    If there are 2 CRD Alertmanagers in the same namespace, we cannot determine
+    which one the alertmanager-operated service belongs to, so no alias is applied.
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # Two CRD sources in same namespace
+    crd1 = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    crd2 = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-secondary",
+        endpoint="http://alertmanager-operated-secondary.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-secondary",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    # Service source - ambiguous which CRD it belongs to
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-operated",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-operated",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(crd1)
+    inventory.add_source(crd2)
+    inventory.add_source(service_source)
+    
+    result = merge_deduplicate_inventory(inventory)
+    
+    # Should have 3 sources - service NOT aliased because mapping is ambiguous
+    assert len(result.sources) == 3
+    
+    # The service should still be separate (not aliased)
+    service_key = "monitoring/alertmanager-operated"
+    assert service_key in result.sources
+
+
+def test_prometheus_operator_alias_single_crd_unambiguous() -> None:
+    """Test that alias IS applied when there's exactly one CRD in namespace.
+    
+    This is the unambiguous case - single CRD Alertmanager, alias should apply.
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # Single CRD source
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    # Service source - should be aliased to CRD name
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-operated",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-operated",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(crd_source)
+    inventory.add_source(service_source)
+    
+    result = merge_deduplicate_inventory(inventory)
+    
+    # Should have 1 source - service aliased to CRD
+    assert len(result.sources) == 1
