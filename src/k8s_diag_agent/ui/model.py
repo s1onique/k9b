@@ -333,6 +333,10 @@ class AlertmanagerSourceView:
     last_error: str | None
     verified_version: str | None
     confidence_hints: tuple[str, ...]
+    # Deduplication provenance: all origins that contributed to this source
+    merged_provenances: tuple[str, ...]  # list of origin enum values
+    # Human-readable provenance for UI tooltip
+    display_provenance: str  # e.g., "Alertmanager CRD, Prometheus Config, Service Heuristic"
     # Computed UI fields
     is_manual: bool
     is_tracking: bool  # auto-tracked or manual
@@ -1831,6 +1835,22 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
         hints = _coerce_str_tuple(src.get("confidence_hints"))
         provenance_summary = "; ".join(hints) if hints else "-"
         
+        # Build merged_provenances for deduplication display
+        merged_provenances_raw = src.get("merged_provenances")
+        if isinstance(merged_provenances_raw, Sequence) and not isinstance(merged_provenances_raw, str | bytes):
+            merged_provenances = tuple(str(p) for p in merged_provenances_raw)
+        else:
+            merged_provenances = (origin,)
+        
+        # Build human-readable display_provenance
+        display_provenance_raw = src.get("display_provenance")
+        if display_provenance_raw:
+            display_provenance = _coerce_str(display_provenance_raw)
+        else:
+            # Derive from merged_provenances if not explicitly set
+            labels = [_ORIGIN_LABELS.get(p, p) for p in merged_provenances]
+            display_provenance = ", ".join(labels) if labels else display_origin
+        
         sources.append(AlertmanagerSourceView(
             source_id=_coerce_str(src.get("source_id")),
             endpoint=_coerce_str(src.get("endpoint")),
@@ -1844,6 +1864,8 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
             last_error=_coerce_optional_str(src.get("last_error")),
             verified_version=_coerce_optional_str(src.get("verified_version")),
             confidence_hints=hints,
+            merged_provenances=merged_provenances,
+            display_provenance=display_provenance,
             is_manual=is_manual,
             is_tracking=is_tracking,
             can_disable=can_disable,

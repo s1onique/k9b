@@ -450,6 +450,9 @@ class AlertmanagerSourcePayload(TypedDict, total=False):
     last_error: str | None
     verified_version: str | None
     confidence_hints: list[str]
+    # Deduplication provenance fields
+    merged_provenances: list[str]  # all contributing origins
+    display_provenance: str  # human-readable provenance string
     # Computed UI fields
     is_manual: bool
     is_tracking: bool
@@ -757,6 +760,9 @@ def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> Alertmanager
         "last_error": view.last_error,
         "verified_version": view.verified_version,
         "confidence_hints": list(view.confidence_hints),
+        # Deduplication provenance fields
+        "merged_provenances": list(view.merged_provenances),
+        "display_provenance": view.display_provenance,
         # Computed UI fields
         "is_manual": view.is_manual,
         "is_tracking": view.is_tracking,

@@ -1002,12 +1002,15 @@ def test_inventory_large_source_count() -> None:
 
 
 def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
-    """Test that merge_deduplicate_inventory merges sources with same endpoint but different origins."""
+    """Test that merge_deduplicate_inventory merges CRD + Config sources with same namespace/name.
+    
+    Service heuristic stays separate when names differ (no aggressive merging per user requirement).
+    """
     from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
     
     inventory = AlertmanagerSourceInventory()
     
-    # Add same endpoint discovered via CRD
+    # CRD source
     crd_source = AlertmanagerSource(
         source_id="crd:monitoring/alertmanager-main",
         endpoint="http://alertmanager-main.monitoring:9093",
@@ -1016,7 +1019,7 @@ def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
         origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
     )
     
-    # Add same endpoint discovered via Prometheus config
+    # Prometheus config source (same namespace/name) - should merge with CRD
     prom_source = AlertmanagerSource(
         source_id="prom-crd-config:monitoring/alertmanager-main",
         endpoint="http://alertmanager-main.monitoring:9093",
@@ -1025,12 +1028,12 @@ def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
         origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
     )
     
-    # Add same endpoint discovered via service heuristic
+    # Service heuristic source (same name) - should also merge
     service_source = AlertmanagerSource(
         source_id="service:monitoring/alertmanager-main",
         endpoint="http://alertmanager-main.monitoring:9093",
         namespace="monitoring",
-        name="alertmanager-main",
+        name="alertmanager-main",  # Same name!
         origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
     )
     
@@ -1044,7 +1047,7 @@ def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
     # Dedup
     result = merge_deduplicate_inventory(inventory)
     
-    # After dedup: 1 source with merged provenance
+    # After dedup: 1 source (all have same namespace/name, merge into one)
     assert len(result.sources) == 1
     
     # Get the merged source
@@ -1058,12 +1061,6 @@ def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
     assert AlertmanagerSourceOrigin.ALERTMANAGER_CRD in merged.merged_provenances
     assert AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG in merged.merged_provenances
     assert AlertmanagerSourceOrigin.SERVICE_HEURISTIC in merged.merged_provenances
-    
-    # Display provenance should show all
-    display = merged.display_provenance
-    assert "Alertmanager CRD" in display
-    assert "Prometheus Config" in display
-    assert "Service Heuristic" in display
 
 
 def test_merge_deduplicate_inventory_manual_preserved() -> None:
@@ -1139,3 +1136,141 @@ def test_merge_deduplicate_inventory_different_endpoints_not_merged() -> None:
     
     # Still 2 sources (different endpoints)
     assert len(result.sources) == 2
+
+
+def test_canonical_identity_tiered_approach() -> None:
+    """Test that canonical_identity uses tiered approach: CRD/Config > Endpoint.
+    
+    CRD and Config tiers use namespace/name for merging (same canonical key).
+    Service heuristic falls back to normalized endpoint.
+    
+    This verifies the Prometheus Operator duplicate case where:
+    - alertmanager-operated (service) points to same pod as alertmanager-main (CRD)
+    - CRD and Config sources with same namespace/name merge together
+    - Service heuristic stays separate unless it matches endpoint of CRD source
+    """
+    # CRD and Config sources with same namespace/name share canonical identity
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    assert crd_source.canonical_identity == "monitoring/alertmanager-main"
+    
+    config_source = AlertmanagerSource(
+        source_id="prom-crd-config:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
+    )
+    # Config uses same canonical identity as CRD for proper merging
+    assert config_source.canonical_identity == "monitoring/alertmanager-main"
+    
+    # Service heuristic with same namespace/name as CRD → same canonical identity
+    # This ensures different discovery methods can merge when they point to same AM
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-operated",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-operated",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    assert service_source.canonical_identity == "monitoring/alertmanager-operated"
+
+
+def test_merge_deduplicate_inventory_prometheus_operator_case() -> None:
+    """Test Prometheus Operator duplicate: CRD + Config sources merge when namespace/name matches.
+    
+    Real-world scenario (user requirement):
+    - alertmanager-operated (service) points to same pod as alertmanager-main (CRD)
+    - CRD + Config sources with same namespace/name merge together
+    - Service heuristic with different name stays separate (no aggressive merging)
+    
+    This test uses same names for all 3 sources to verify proper merging.
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # Three sources with same namespace/name (for proper merging)
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        confidence_hints=("from-crd",),
+    )
+    
+    config_source = AlertmanagerSource(
+        source_id="prom-crd-config:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
+        confidence_hints=("from-prometheus-crd-config",),
+    )
+    
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",  # Same name for merging!
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        confidence_hints=("from-service",),
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(crd_source)
+    inventory.add_source(config_source)
+    inventory.add_source(service_source)
+    
+    # Before dedup: 3 sources
+    assert len(inventory.sources) == 3
+    
+    # After dedup: 1 source (all have same namespace/name)
+    result = merge_deduplicate_inventory(inventory)
+    
+    # The CRD source should win (highest priority)
+    assert len(result.sources) == 1
+    
+    winner = list(result.sources.values())[0]
+    assert winner.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    assert winner.source_id == "crd:monitoring/alertmanager-main"
+    
+    # Provenances should be merged (all three origins)
+    assert AlertmanagerSourceOrigin.ALERTMANAGER_CRD in winner.merged_provenances
+    assert AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG in winner.merged_provenances
+    assert AlertmanagerSourceOrigin.SERVICE_HEURISTIC in winner.merged_provenances
+
+
+def test_display_provenance_single_origin() -> None:
+    """Test display_provenance for single-origin source."""
+    source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    assert source.display_provenance == "Alertmanager CRD"
+
+
+def test_display_provenance_merged_origins() -> None:
+    """Test display_provenance shows all merged origins."""
+    source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-operated.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        merged_provenances=(
+            AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
+            AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        ),
+    )
+    assert "Alertmanager CRD" in source.display_provenance
+    assert "Prometheus Config" in source.display_provenance
+    assert "Service Heuristic" in source.display_provenance

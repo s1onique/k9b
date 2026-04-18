@@ -110,10 +110,17 @@ class AlertmanagerSource:
     def canonical_identity(self) -> str:
         '''Canonical identity for deduplication across strategies.
         
-        Uses normalized endpoint (without scheme) as the canonical key.
+        Uses namespace/name as the canonical identity when available (all origins).
+        Falls back to normalized endpoint only when namespace/name is not available.
+        
         This allows sources discovered by different strategies (CRD, Prometheus config,
-        service heuristic) to be recognized as the same Alertmanager instance.
+        service heuristic) to merge when they have matching namespace+name.
         '''
+        # Use namespace/name for canonical identity when available (all origins)
+        if self.namespace and self.name:
+            return f"{self.namespace}/{self.name}"
+        
+        # Fallback to normalized endpoint when namespace/name not available
         return _normalize_endpoint_for_identity(self.endpoint)
 
     @property
@@ -1010,13 +1017,14 @@ def merge_deduplicate_inventory(
         canonical_groups[canon_key].append(source)
     
     # Merge each group into a single source
+    # Use canonical_identity as key to ensure duplicates merge properly
     merged_sources: dict[str, AlertmanagerSource] = {}
     
     for canon_key, group in canonical_groups.items():
         if len(group) == 1:
             # No deduplication needed, preserve as-is
             source = group[0]
-            merged_sources[source.identity_key] = source
+            merged_sources[canon_key] = source
         else:
             # Merge multiple sources with same canonical identity
             # Find the authoritative source (manual first, then highest priority)
@@ -1065,7 +1073,7 @@ def merge_deduplicate_inventory(
                 merged_provenances=tuple(sorted_provenances),
             )
             
-            merged_sources[winner.identity_key] = merged_source
+            merged_sources[canon_key] = merged_source
             
             _logger.debug(
                 "Deduplicated %d sources to 1 for canonical identity %s, "
