@@ -1153,21 +1153,21 @@ body {
 
 /* Secondary row action - Download, lighter/subordinate emphasis */
 .row-action--secondary {
-  background: rgba(71, 85, 105, 0.3);
-  border-color: rgba(100, 116, 139, 0.4);
-  color: rgba(148, 163, 184, 0.9);
-  font-size: 0.7rem;
-  padding: 0.25rem 0.6rem;
+  background: rgba(71, 85, 105, 0.35);
+  border-color: rgba(100, 116, 139, 0.5);
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
 }
 
 .row-action--secondary:hover:not(:disabled) {
-  background: rgba(71, 85, 105, 0.5);
-  border-color: rgba(100, 116, 139, 0.6);
-  color: #e2e8f0;
+  background: rgba(71, 85, 105, 0.55);
+  border-color: rgba(100, 116, 139, 0.7);
+  color: #f1f5f9;
 }
 
 .row-action--secondary:active:not(:disabled) {
-  background: rgba(71, 85, 105, 0.4);
+  background: rgba(71, 85, 105, 0.45);
   transform: translateY(1px);
 }
 
@@ -1290,19 +1290,19 @@ body {
 }
 
 [data-theme="solarized-light"] .row-action--secondary {
-  background: rgba(147, 161, 161, 0.15);
-  border-color: rgba(147, 161, 161, 0.4);
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .row-action--secondary:hover:not(:disabled) {
-  background: rgba(147, 161, 161, 0.25);
+  background: rgba(147, 161, 161, 0.2);
   border-color: rgba(147, 161, 161, 0.5);
   color: #002b36;
 }
 
+[data-theme="solarized-light"] .row-action--secondary:hover:not(:disabled) {
+  background: rgba(147, 161, 161, 0.32);
+  border-color: rgba(147, 161, 161, 0.6);
+  color: #002b36;
+}
+
 [data-theme="solarized-light"] .row-action--secondary:active:not(:disabled) {
-  background: rgba(147, 161, 161, 0.3);
+  background: rgba(147, 161, 161, 0.38);
 }
 
 [data-theme="solarized-light"] .row-action--secondary:focus-visible {
