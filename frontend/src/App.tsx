@@ -1674,12 +1674,13 @@ const RunDiagnosticPackPanel = ({
   );
 };
 
-// Status labels for Alertmanager compact capture status
+// Status labels for Alertmanager compact capture status.
+// These are run-scoped snapshots - wording is chosen to be clear and trustworthy.
 const ALERTMANAGER_STATUS_LABELS: Record<string, string> = {
-  ok: "OK",
-  available: "Available",
-  "no-artifact": "No artifact",
-  empty: "Empty",
+  ok: "Captured",
+  available: "Captured",
+  "no-artifact": "Not captured",
+  empty: "Captured (no alerts)",
   disabled: "Disabled",
   timeout: "Timeout",
   upstream_error: "Upstream error",
@@ -1688,6 +1689,78 @@ const ALERTMANAGER_STATUS_LABELS: Record<string, string> = {
 
 const formatAlertmanagerStatus = (status: string) =>
   ALERTMANAGER_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+
+// Operator-friendly labels for Alertmanager ranking promotion display.
+// Maps internal match dimensions to concise, trustworthy operator-facing text.
+const ALERTMANAGER_PROMOTION_LABELS: Record<string, string> = {
+  namespace: "Matched namespace",
+  namespaces: "Matched namespaces",
+  cluster: "Matched cluster",
+  clusters: "Matched clusters",
+  service: "Matched service",
+  services: "Matched services",
+};
+
+/** Format Alertmanager promotion text for operator display.
+ * Converts internal format like "promoted:matched namespace(s): monitoring"
+ * into human-friendly text like "Promoted: Matched namespace monitoring".
+ */
+const formatAlertmanagerPromotion = (rankingReason: string): string => {
+  // Remove internal prefix
+  const internal = rankingReason.replace(/^alertmanager-context:/, "");
+  
+  // Split into parts: "promoted" + "matched {dimensions}: {values}"
+  const parts = internal.split(":");
+  if (parts.length < 2) {
+    return "Promoted by Alertmanager";
+  }
+  
+  // Parse "promoted" and "matched {dims}: {values}"
+  const action = parts[0]; // "promoted"
+  const rest = parts.slice(1).join(":"); // "matched namespace(s): monitoring"
+  
+  // Extract dimension and values
+  const matchPartMatch = rest.match(/^matched\s+(.+?):\s*(.+)$/);
+  if (!matchPartMatch) {
+    return "Promoted by Alertmanager";
+  }
+  
+  const dimensionRaw = matchPartMatch[1];
+  const values = matchPartMatch[2];
+  
+  // Normalize dimension name (namespace(s) -> namespace/namespaces)
+  let normalizedDim = dimensionRaw;
+  if (dimensionRaw.includes("namespace")) {
+    normalizedDim = dimensionRaw.includes("(") && dimensionRaw.includes(")")
+      ? "namespaces"
+      : "namespace";
+  } else if (dimensionRaw.includes("cluster")) {
+    normalizedDim = dimensionRaw.includes("(") && dimensionRaw.includes(")")
+      ? "clusters"
+      : "cluster";
+  } else if (dimensionRaw.includes("service")) {
+    normalizedDim = dimensionRaw.includes("(") && dimensionRaw.includes(")")
+      ? "services"
+      : "service";
+  }
+  
+  const label = ALERTMANAGER_PROMOTION_LABELS[normalizedDim] || normalizedDim;
+  
+  return `${label}: ${values}`;
+};
+
+/** Get subtext for Alertmanager promotion tooltip.
+ * Provides detail when multiple dimensions are matched.
+ */
+const getAlertmanagerPromotionSubtext = (rankingReason: string): string | null => {
+  // If internal reason has multiple match dimensions, provide subtext
+  const internal = rankingReason.replace(/^alertmanager-context:/, "");
+  const parts = internal.split(":");
+  if (parts.length >= 2) {
+    return "Ranking influenced by Alertmanager snapshot for selected run";
+  }
+  return null;
+};
 
 const AlertmanagerSnapshotPanel = ({
   compact,
@@ -5296,8 +5369,8 @@ const App = () => {
                             <span className="queue-item-blocker-text">{item.priorityRationale}</span>
                             {item.rankingReason ? (
                               item.rankingReason.startsWith("alertmanager-context:") ? (
-                                <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title="Ranking influenced by Alertmanager snapshot">
-                                  🔔 {item.rankingReason.slice("alertmanager-context:".length)}
+                                <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title={getAlertmanagerPromotionSubtext(item.rankingReason) ?? "Ranking influenced by Alertmanager snapshot"}>
+                                  🔔 {formatAlertmanagerPromotion(item.rankingReason)}
                                 </span>
                               ) : (
                                 <span className="ranking-reason-badge">{item.rankingReason}</span>
