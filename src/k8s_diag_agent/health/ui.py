@@ -2860,6 +2860,10 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             # Include canonical_identity for cross-run registry matching
             # This is the stable identity used by the UI server when writing registry entries
             "canonical_identity": source.canonical_identity,
+            # Include cluster_label for per-cluster UI filtering
+            # This is the operator-facing cluster label from the discovery context
+            "cluster_label": source.cluster_label,
+            "cluster_context": source.cluster_context,
         }
         
         # Apply effective state override if present (e.g., "disabled" or "manual")
