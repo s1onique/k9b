@@ -2244,7 +2244,12 @@ export const AlertmanagerSourcesPanel = ({
                     </td>
                     <td className="alertmanager-source-actions">
                       <div className="alertmanager-source-action-buttons">
-                        {source.display_state?.toLowerCase() === "manual" ? (
+                        {/* Determine action label: manual_source_mode-first, then display_state fallback */}
+                        {source.manual_source_mode === "operator-promoted" ? (
+                          <span className="alertmanager-managed-badge">Promoted</span>
+                        ) : source.manual_source_mode === "operator-configured" ? (
+                          <span className="alertmanager-managed-badge">Managed manually</span>
+                        ) : source.display_state?.toLowerCase() === "manual" ? (
                           <span className="alertmanager-managed-badge">Managed manually</span>
                         ) : (
                           <button

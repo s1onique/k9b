@@ -735,8 +735,10 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      // State pill should show "Configured manually"
-      expect(screen.getByText("Configured manually")).toBeInTheDocument();
+      // State pill should show "Configured manually" - use class selector since text appears in multiple places
+      const statePills = document.querySelectorAll(".alertmanager-source-state-pill");
+      expect(statePills).toHaveLength(1);
+      expect(statePills[0]).toHaveTextContent("Configured manually");
       // Should NOT show the raw display_state value
       expect(screen.queryByText("manual")).not.toBeInTheDocument();
     });
@@ -753,8 +755,10 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      // State pill should show "Promoted"
-      expect(screen.getByText("Promoted")).toBeInTheDocument();
+      // State pill should show "Promoted" - use class selector since text appears in multiple places
+      const statePills = document.querySelectorAll(".alertmanager-source-state-pill");
+      expect(statePills).toHaveLength(1);
+      expect(statePills[0]).toHaveTextContent("Promoted");
       // Should NOT show the raw display_state value
       expect(screen.queryByText("manual")).not.toBeInTheDocument();
     });
@@ -763,6 +767,8 @@ describe("AlertmanagerSourcesPanel", () => {
       const source = makeAlertmanagerSource({
         manual_source_mode: null,
         display_state: "manual",
+        can_promote: false,
+        can_disable: true,
       });
       const sources = makeAlertmanagerSources({
         sources: [source],
@@ -771,11 +777,14 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      // Should show the raw display_state value as fallback
-      expect(screen.getByText("manual")).toBeInTheDocument();
-      // Should NOT show distinct labels
-      expect(screen.queryByText("Configured manually")).not.toBeInTheDocument();
-      expect(screen.queryByText("Promoted")).not.toBeInTheDocument();
+      // State pill should show the raw display_state value as fallback
+      const statePills = document.querySelectorAll(".alertmanager-source-state-pill");
+      expect(statePills).toHaveLength(1);
+      expect(statePills[0]).toHaveTextContent("manual");
+      // Actions column should show "Managed manually" badge as fallback
+      const managedBadges = document.querySelectorAll(".alertmanager-managed-badge");
+      expect(managedBadges).toHaveLength(1);
+      expect(managedBadges[0]).toHaveTextContent("Managed manually");
     });
 
     it("renders all three modes correctly in a mixed table", () => {
@@ -806,11 +815,154 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      // Should show distinct labels for operator-configured and operator-promoted
-      expect(screen.getByText("Configured manually")).toBeInTheDocument();
-      expect(screen.getByText("Promoted")).toBeInTheDocument();
-      // Legacy should fall back to display_state
-      expect(screen.getByText("manual")).toBeInTheDocument();
+      // State pills: operator-configured + operator-promoted + legacy fallback
+      const statePills = document.querySelectorAll(".alertmanager-source-state-pill");
+      expect(statePills).toHaveLength(3);
+      const stateTexts = Array.from(statePills).map(pill => pill.textContent);
+      expect(stateTexts).toContain("Configured manually");
+      expect(stateTexts).toContain("Promoted");
+      expect(stateTexts).toContain("manual");
+    });
+  });
+
+  describe("Actions column badge rendering", () => {
+    it("shows 'Promoted' badge in Actions column when manual_source_mode is 'operator-promoted'", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: "operator-promoted",
+        display_state: "manual",
+        display_origin: "Alertmanager CRD",
+        can_promote: false,
+        can_disable: true,
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        manual_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Actions column should show "Promoted" badge with the correct class
+      const promotedBadges = document.querySelectorAll(".alertmanager-managed-badge");
+      expect(promotedBadges).toHaveLength(1);
+      expect(promotedBadges[0]).toHaveTextContent("Promoted");
+      // Should NOT show Promote button (source is already promoted)
+      expect(screen.queryByRole("button", { name: "Promote" })).not.toBeInTheDocument();
+    });
+
+    it("shows 'Managed manually' badge in Actions column when manual_source_mode is 'operator-configured'", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: "operator-configured",
+        display_state: "manual",
+        display_origin: "Manual",
+        can_promote: false,
+        can_disable: true,
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        manual_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Actions column should show "Managed manually" badge with the correct class
+      const managedBadges = document.querySelectorAll(".alertmanager-managed-badge");
+      expect(managedBadges).toHaveLength(1);
+      expect(managedBadges[0]).toHaveTextContent("Managed manually");
+      // Should NOT show Promote button
+      expect(screen.queryByRole("button", { name: "Promote" })).not.toBeInTheDocument();
+    });
+
+    it("falls back to 'Managed manually' for legacy sources with display_state='manual' but no manual_source_mode", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: null,
+        display_state: "manual",
+        display_origin: "Manual",
+        can_promote: false,
+        can_disable: true,
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        manual_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Should show "Managed manually" badge as fallback
+      const managedBadges = document.querySelectorAll(".alertmanager-managed-badge");
+      expect(managedBadges).toHaveLength(1);
+      expect(managedBadges[0]).toHaveTextContent("Managed manually");
+      // Should NOT show Promote button
+      expect(screen.queryByRole("button", { name: "Promote" })).not.toBeInTheDocument();
+    });
+
+    it("shows Promote button for auto-tracked sources (not manual)", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: null,
+        display_state: "tracked",
+        display_origin: "Alertmanager CRD",
+        can_promote: true,
+        can_disable: false,
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        tracked_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Should show Promote button
+      const promoteBtn = screen.getByRole("button", { name: "Promote" });
+      expect(promoteBtn).toBeInTheDocument();
+      // Should NOT show managed badge
+      expect(document.querySelectorAll(".alertmanager-managed-badge")).toHaveLength(0);
+    });
+
+    it("shows all three action badges in a mixed table", () => {
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "src-promoted",
+            manual_source_mode: "operator-promoted",
+            display_state: "manual",
+            display_origin: "Alertmanager CRD",
+            can_promote: false,
+            can_disable: true,
+          }),
+          makeAlertmanagerSource({
+            source_id: "src-configured",
+            manual_source_mode: "operator-configured",
+            display_state: "manual",
+            display_origin: "Manual",
+            can_promote: false,
+            can_disable: true,
+          }),
+          makeAlertmanagerSource({
+            source_id: "src-tracked",
+            manual_source_mode: null,
+            display_state: "tracked",
+            display_origin: "Alertmanager CRD",
+            can_promote: true,
+            can_disable: false,
+          }),
+        ],
+        total_count: 3,
+        tracked_count: 1,
+        manual_count: 2,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Check distinct action badges using class selector
+      const managedBadges = document.querySelectorAll(".alertmanager-managed-badge");
+      expect(managedBadges).toHaveLength(2); // "Promoted" + "Managed manually"
+      
+      // Extract badge texts
+      const badgeTexts = Array.from(managedBadges).map(badge => badge.textContent);
+      expect(badgeTexts).toContain("Promoted");
+      expect(badgeTexts).toContain("Managed manually");
+      
+      // One source should show Promote button
+      expect(screen.getAllByRole("button", { name: "Promote" })).toHaveLength(1);
     });
   });
 });
