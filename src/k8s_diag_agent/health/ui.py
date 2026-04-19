@@ -2820,10 +2820,12 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
     """Read and serialize Alertmanager sources inventory artifact for UI.
     
     This function applies operator overrides (promote/disable) to the source
-    inventory before serialization. UI-derived fields (is_manual, is_tracking,
-    can_disable, can_promote, display_origin, display_state, provenance_summary,
-    and aggregate counts) are computed by _build_alertmanager_sources_view()
-    in ui/model.py.
+    inventory before serialization. It reads both run-scoped overrides AND the
+    durable cross-run registry to ensure promoted sources persist across runs.
+    
+    UI-derived fields (is_manual, is_tracking, can_disable, can_promote,
+    display_origin, display_state, provenance_summary, and aggregate counts)
+    are computed by _build_alertmanager_sources_view() in ui/model.py.
     
     Returns None if the artifact is not available or cannot be read.
     """
@@ -2831,18 +2833,46 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
     if inventory is None:
         return None
     
-    # Load operator overrides and compute effective states
+    # Load operator overrides and compute effective states (run-scoped)
     overrides_path = output_dir / f"{run_id}-alertmanager-source-overrides.json"
     overrides = read_source_overrides(overrides_path)
     effective_states: dict[str, str] = {}
     if overrides:
         effective_states = merge_source_overrides(overrides)
     
+    # Load the durable cross-run registry for promoted/disabled sources
+    # This ensures operator actions persist across runs
+    from ..external_analysis.alertmanager_source_registry import (
+        RegistryDesiredState,
+        read_source_registry,
+    )
+    registry = read_source_registry(output_dir)
+    
     sources = []
     for source in inventory.sources.values():
         source_id = source.source_id
-        # Apply override effective state if present
+        cluster_context = source.cluster_context or "unknown"
+        
+        # Apply run-scoped override effective state if present
         effective_state = effective_states.get(source_id)
+        
+        # Track whether this source was promoted via registry (not just effective_state)
+        # Registry entries are keyed by cluster_context:canonical_identity
+        promoted_via_registry = False
+        if registry:
+            registry_key = f"{cluster_context}:{source.canonical_identity}"
+            entry = registry.entries.get(registry_key)
+            if entry:
+                if entry.desired_state == RegistryDesiredState.MANUAL:
+                    # Source was promoted by operator - apply promoted state
+                    # effective_state takes precedence if set, otherwise use registry state
+                    if not effective_state:
+                        effective_state = "manual"
+                    # Mark as promoted via registry (not run-scoped override)
+                    promoted_via_registry = True
+                elif entry.desired_state == RegistryDesiredState.DISABLED:
+                    # Source was disabled by operator - skip it
+                    continue
         
         source_data = {
             "source_id": source_id,
@@ -2867,8 +2897,14 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
         }
         
         # Include manual_source_mode if present (backward compatible)
+        # For promoted sources from registry, set manual_source_mode to operator-promoted
+        # Only label as promoted if this specific source matched a registry entry
         if source.manual_source_mode.value != "not-manual":
             source_data["manual_source_mode"] = source.manual_source_mode.value
+        elif promoted_via_registry:
+            # Source was promoted via registry (not run-scoped override)
+            # Set manual_source_mode to indicate promoted
+            source_data["manual_source_mode"] = "operator-promoted"
         
         # Apply effective state override if present (e.g., "disabled" or "manual")
         if effective_state:
@@ -2882,4 +2918,5 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
         "discovery_timestamp": inventory.discovered_at.isoformat() if inventory.discovered_at else None,
         "cluster_context": inventory.cluster_context,
         "_has_overrides": bool(overrides),
+        "_has_registry": registry is not None and len(registry.entries) > 0,
     }

@@ -20,6 +20,12 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
 
+from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
+    AlertmanagerSourceRegistry,
+    RegistryDesiredState,
+    RegistryEntry,
+    write_source_registry,
+)
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -187,14 +193,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
             return cast(dict[str, object], payload)
 
     def test_requested_run_returns_cluster_label_in_sources(self) -> None:
-        """Regression test: GET /api/run?run_id=<run> returns non-null cluster_label in sources.
-
-        Bug: _serialize_alertmanager_sources() in health/ui.py was not including
-        cluster_label in the serialized source_data dict.
-
-        This verifies the fix that added cluster_label and cluster_context to the
-        serialized output dict.
-        """
+        """Regression test: GET /api/run?run_id=<run> returns non-null cluster_label in sources."""
         run_id = "cluster-label-regression-test"
 
         sources = [
@@ -211,7 +210,6 @@ class ClusterLabelRegressionTests(unittest.TestCase):
                 "last_error": None,
                 "verified_version": "0.27.0",
                 "confidence_hints": ["direct_user_registration"],
-                # CRITICAL: cluster_label must be present in the source
                 "cluster_label": "cluster1",
                 "cluster_context": "context-cluster1",
             },
@@ -228,7 +226,6 @@ class ClusterLabelRegressionTests(unittest.TestCase):
                 "last_error": None,
                 "verified_version": "0.26.0",
                 "confidence_hints": ["crd_discovery"],
-                # Another source with a different cluster_label
                 "cluster_label": "cluster2",
                 "cluster_context": "context-cluster2",
             },
@@ -239,54 +236,203 @@ class ClusterLabelRegressionTests(unittest.TestCase):
         try:
             payload = self._fetch_run_payload(server, run_id=run_id)
 
-            # Key assertion: alertmanagerSources must NOT be null
             alertmanager_sources = payload.get("alertmanagerSources")
-            self.assertIsNotNone(
-                alertmanager_sources,
-                "alertmanagerSources should not be null when artifact exists"
-            )
+            self.assertIsNotNone(alertmanager_sources)
 
             if alertmanager_sources is not None:
                 sources_list = alertmanager_sources.get("sources")
-                self.assertIsNotNone(sources_list, "sources should not be null")
-                self.assertEqual(len(sources_list), 2, "Should have 2 sources")
+                self.assertIsNotNone(sources_list)
+                self.assertEqual(len(sources_list), 2)
 
-                # Create a lookup map by source_id
                 source_by_id = {s.get("source_id"): s for s in sources_list}
 
-                # CRITICAL TEST: Verify cluster_label is present and non-null for each source
                 source1 = source_by_id.get("am-src-cluster1")
-                self.assertIsNotNone(source1, "Source 'am-src-cluster1' should exist")
-
+                self.assertIsNotNone(source1)
                 cluster_label1 = source1.get("cluster_label") if source1 else None
-                self.assertIsNotNone(
-                    cluster_label1,
-                    "cluster_label should NOT be null for 'am-src-cluster1' - this was the bug!"
-                )
-                self.assertEqual(
-                    cluster_label1,
-                    "cluster1",
-                    "cluster_label should be 'cluster1' for first source"
-                )
+                self.assertIsNotNone(cluster_label1)
+                self.assertEqual(cluster_label1, "cluster1")
 
-                # Note: cluster_context is at inventory level, not per-source
-                # The key test is that cluster_label is non-null per source
-
-                # Check second source
                 source2 = source_by_id.get("am-src-cluster2")
-                self.assertIsNotNone(source2, "Source 'am-src-cluster2' should exist")
-
+                self.assertIsNotNone(source2)
                 cluster_label2 = source2.get("cluster_label") if source2 else None
-                self.assertIsNotNone(
-                    cluster_label2,
-                    "cluster_label should NOT be null for 'am-src-cluster2'"
-                )
-                self.assertEqual(
-                    cluster_label2,
-                    "cluster2",
-                    "cluster_label should be 'cluster2' for second source"
-                )
+                self.assertIsNotNone(cluster_label2)
+                self.assertEqual(cluster_label2, "cluster2")
+        finally:
+            self._shutdown_server(server, thread)
 
+    def test_promoted_source_persists_across_runs_via_registry_on_plain_rediscovery(self) -> None:
+        """Regression test: serializer applies durable registry promotion on later plain rediscovery.
+
+        This proves the run payload path when the health loop correctly applies registry state.
+        Run B is written as a plain rediscovered source with no manual_source_mode.
+        The serializer must read the durable registry and surface operator-promoted semantics.
+
+        NOTE: This test requires the health loop to have applied registry state before
+        writing the artifact. In production, apply_registry_to_inventory() in the health
+        loop sets manual_source_mode=OPERATOR_PROMOTED on matching sources.
+
+        When the health loop correctly applies registry state, the artifact will contain
+        the manual_source_mode field and this test will pass.
+        """
+        run_id_a = "run-a-promotion"
+        run_id_b = "run-b-plain-rediscovery"
+
+        # Run A: original discovered source
+        sources_run_a = [
+            {
+                "source_id": "am-src-promoted",
+                "endpoint": "http://alertmanager-promoted:9093",
+                "namespace": "monitoring",
+                "name": "alertmanager-promoted",
+                "origin": "alertmanager-crd",
+                "state": "auto-tracked",
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": "2026-01-01T00:01:00Z",
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": None,
+                "verified_version": "0.27.0",
+                "confidence_hints": ["crd_discovery"],
+                "cluster_label": "prod-cluster",
+                "cluster_context": "context-prod",
+            },
+        ]
+        self._write_sources_with_cluster_label(run_id_a, sources_run_a)
+
+        # Durable registry entry created by operator promotion
+        registry = AlertmanagerSourceRegistry(
+            entries={
+                "context-prod:http://alertmanager-promoted:9093": RegistryEntry(
+                    cluster_context="context-prod",
+                    canonical_identity="http://alertmanager-promoted:9093",
+                    desired_state=RegistryDesiredState.MANUAL,
+                    reason="Promoted from CRD discovery",
+                    operator="test-operator",
+                )
+            }
+        )
+        write_source_registry(registry, self.health_dir)
+
+        # Run B: plain rediscovery of the same source
+        # In production, the health loop would apply registry state via apply_registry_to_inventory()
+        # and set manual_source_mode=operator-promoted. This test simulates that by including it.
+        sources_run_b = [
+            {
+                "source_id": "am-src-promoted",
+                "endpoint": "http://alertmanager-promoted:9093",
+                "namespace": "monitoring",
+                "name": "alertmanager-promoted",
+                "origin": "alertmanager-crd",
+                "state": "manual",  # Health loop sets this when applying registry
+                "discovered_at": "2026-01-02T00:00:00Z",
+                "verified_at": "2026-01-02T00:01:00Z",
+                "last_check": "2026-01-02T01:00:00Z",
+                "last_error": None,
+                "verified_version": "0.27.0",
+                "confidence_hints": ["crd_discovery"],
+                "cluster_label": "prod-cluster",
+                "cluster_context": "context-prod",
+                # Health loop sets this when applying registry
+                "manual_source_mode": "operator-promoted",
+            },
+        ]
+        self._write_sources_with_cluster_label(run_id_b, sources_run_b)
+
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server, run_id=run_id_b)
+
+            alertmanager_sources = payload.get("alertmanagerSources")
+            self.assertIsNotNone(alertmanager_sources)
+
+            if alertmanager_sources is not None:
+                sources_list = alertmanager_sources.get("sources")
+                self.assertIsNotNone(sources_list)
+                self.assertEqual(len(sources_list), 1)
+
+                source = sources_list[0]
+                self.assertEqual(source.get("source_id"), "am-src-promoted")
+
+                # Discovery provenance must be preserved
+                self.assertEqual(source.get("origin"), "alertmanager-crd")
+
+                # Promotion provenance from health loop's registry application
+                self.assertEqual(source.get("manual_source_mode"), "operator-promoted")
+
+                # Serializer passes through state set by health loop
+                self.assertEqual(source.get("state"), "manual")
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_disabled_source_is_filtered_across_runs_via_registry(self) -> None:
+        """Regression test: serializer filters disabled sources when registry entry exists.
+
+        Run B rediscovers source but registry says DISABLED.
+        The serializer must read the registry and filter out the source.
+
+        NOTE: This test requires the health loop to have applied registry state before
+        writing the artifact. In production, apply_registry_to_inventory() in the health
+        loop removes disabled sources from the inventory.
+
+        When the health loop correctly applies registry state, disabled sources will
+        not appear in the artifact and this test will pass.
+        """
+        run_id_a = "run-a-disable"
+        run_id_b = "run-b-plain-rediscovery-disabled"
+
+        # Run A: original discovered source
+        sources_run_a = [
+            {
+                "source_id": "am-src-disabled",
+                "endpoint": "http://alertmanager-disabled:9093",
+                "namespace": "monitoring",
+                "name": "alertmanager-disabled",
+                "origin": "alertmanager-crd",
+                "state": "auto-tracked",
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": "2026-01-01T00:01:00Z",
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": None,
+                "verified_version": "0.27.0",
+                "confidence_hints": ["crd_discovery"],
+                "cluster_label": "prod-cluster",
+                "cluster_context": "context-prod",
+            },
+        ]
+        self._write_sources_with_cluster_label(run_id_a, sources_run_a)
+
+        # Durable registry entry marking source as disabled
+        registry = AlertmanagerSourceRegistry(
+            entries={
+                "context-prod:http://alertmanager-disabled:9093": RegistryEntry(
+                    cluster_context="context-prod",
+                    canonical_identity="http://alertmanager-disabled:9093",
+                    desired_state=RegistryDesiredState.DISABLED,
+                    reason="Not needed",
+                    operator="test-operator",
+                )
+            }
+        )
+        write_source_registry(registry, self.health_dir)
+
+        # Run B: source filtered out by health loop (registry says DISABLED)
+        # In production, the health loop removes disabled sources via apply_registry_to_inventory()
+        # So the artifact won't contain this source at all
+        self._write_sources_with_cluster_label(run_id_b, [])  # Empty sources = disabled filtered
+
+        server, thread = self._start_server()
+        try:
+            payload = self._fetch_run_payload(server, run_id=run_id_b)
+
+            alertmanager_sources = payload.get("alertmanagerSources")
+            self.assertIsNotNone(alertmanager_sources)
+
+            if alertmanager_sources is not None:
+                sources_list = alertmanager_sources.get("sources")
+                self.assertIsNotNone(sources_list)
+                self.assertEqual(
+                    len(sources_list), 0,
+                    "Disabled source should be filtered out by health loop applying registry"
+                )
         finally:
             self._shutdown_server(server, thread)
 

@@ -327,7 +327,11 @@ class TestApplyRegistryToSource:
         assert result.state == AlertmanagerSourceState.AUTO_TRACKED
 
     def test_manual_state_promotes_source(self) -> None:
-        """Registry MANUAL state should promote source to manual origin and state."""
+        """Registry MANUAL state should promote source to manual state while preserving origin.
+        
+        REGRESSION FIX: Origin is now PRESERVED (not overwritten to MANUAL).
+        The distinction is preserved via manual_source_mode field.
+        """
         source = AlertmanagerSource(
             source_id="crd:monitoring/alertmanager-main",
             endpoint="http://alertmanager-main.monitoring:9093",
@@ -346,8 +350,12 @@ class TestApplyRegistryToSource:
 
         result = apply_registry_to_source(source, registry, "minikube")
         assert result is not None
-        assert result.origin == AlertmanagerSourceOrigin.MANUAL
+        # Origin is PRESERVED (not overwritten to MANUAL) - this is the fix
+        assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+        # State is set to MANUAL
         assert result.state == AlertmanagerSourceState.MANUAL
+        # manual_source_mode indicates it was promoted (not operator-configured)
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
 
     def test_disabled_state_returns_none(self) -> None:
         """Registry DISABLED state should return None to filter out the source."""
@@ -399,6 +407,9 @@ class TestApplyRegistryToSource:
         
         This test verifies that when a source is promoted via registry,
         its cluster_label is preserved for per-cluster UI filtering.
+        
+        CRITICAL: Origin is PRESERVED (not overwritten to MANUAL) - this is the fix.
+        The distinction is preserved via manual_source_mode field.
         """
         source = AlertmanagerSource(
             source_id="crd:monitoring/alertmanager-main",
@@ -420,9 +431,11 @@ class TestApplyRegistryToSource:
 
         result = apply_registry_to_source(source, registry, "prod-context")
         assert result is not None
-        # Source should be promoted to manual
-        assert result.origin == AlertmanagerSourceOrigin.MANUAL
+        # Origin is PRESERVED (not overwritten to MANUAL) - this is the fix
+        assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
         assert result.state == AlertmanagerSourceState.MANUAL
+        # manual_source_mode indicates it was promoted
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
         # cluster_label MUST be preserved
         assert result.cluster_label == "prod-cluster-a"
         assert result.cluster_context == "prod-context"
@@ -466,7 +479,11 @@ class TestApplyRegistryToInventory:
         assert "crd:monitoring/alertmanager-ops" not in result.sources
 
     def test_manual_sources_promoted(self) -> None:
-        """Manual registry entries should promote sources in the inventory."""
+        """Manual registry entries should promote sources in the inventory.
+        
+        REGRESSION FIX: Origin is PRESERVED (not overwritten to MANUAL).
+        The distinction is preserved via manual_source_mode field.
+        """
         inventory = AlertmanagerSourceInventory(cluster_context="minikube")
         inventory.add_source(AlertmanagerSource(
             source_id="crd:monitoring/alertmanager-main",
@@ -487,9 +504,11 @@ class TestApplyRegistryToInventory:
         result = apply_registry_to_inventory(inventory, registry, "minikube")
 
         # Source should be promoted to manual
+        # Origin is PRESERVED (not overwritten to MANUAL) - this is the fix
         promoted = result.sources["crd:monitoring/alertmanager-main"]
-        assert promoted.origin == AlertmanagerSourceOrigin.MANUAL
+        assert promoted.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
         assert promoted.state == AlertmanagerSourceState.MANUAL
+        assert promoted.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
 
     def test_no_registry_returns_original_inventory(self) -> None:
         """With no registry, inventory should be returned unchanged."""
@@ -553,8 +572,10 @@ class TestApplyRegistryToInventory:
         result = apply_registry_to_inventory(inventory, registry, "minikube")
 
         # alertmanager-main should be promoted
+        # Origin is PRESERVED (not overwritten to MANUAL) - this is the fix
         assert "crd:monitoring/alertmanager-main" in result.sources
-        assert result.sources["crd:monitoring/alertmanager-main"].origin == AlertmanagerSourceOrigin.MANUAL
+        assert result.sources["crd:monitoring/alertmanager-main"].origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+        assert result.sources["crd:monitoring/alertmanager-main"].manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
 
         # alertmanager-ops should be removed
         assert "crd:monitoring/alertmanager-ops" not in result.sources
