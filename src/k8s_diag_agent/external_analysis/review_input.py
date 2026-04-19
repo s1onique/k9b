@@ -144,7 +144,11 @@ def _selected_drilldowns(review: Mapping[str, Any]) -> Sequence[Mapping[str, Any
 
 
 def _determine_root_dir(review_path: Path) -> Path:
-    if len(review_path.parents) >= 2:
+    # Use path parts to determine depth (includes the file itself)
+    # For /a/b/c.json -> parts = ['/', 'a', 'b', 'c.json'] (4 parts)
+    # For /a/b.json -> parts = ['/', 'a', 'b.json'] (3 parts)
+    # For /a.json -> parts = ['/', 'a.json'] (2 parts)
+    if len(review_path.parts) >= 3:
         return review_path.parents[1]
     return review_path.parent
 
