@@ -3638,7 +3638,7 @@ class HealthLoopRunner:
                 compact_path=str(compact_path),
                 alert_count=snapshot.alert_count,
                 snapshot_status=snapshot.status.value,
-                cluster_context=selected_source.cluster_context,
+                cluster_context=effective_cluster_context,
             )
             
         except Exception as exc:
