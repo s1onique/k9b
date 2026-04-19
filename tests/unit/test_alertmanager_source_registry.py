@@ -393,6 +393,39 @@ class TestApplyRegistryToSource:
         # Source remains in original state since registry entry is for different context
         assert result.state == AlertmanagerSourceState.AUTO_TRACKED
 
+    def test_manual_state_preserves_cluster_label(self) -> None:
+        """Regression test: Registry MANUAL promotion must preserve cluster_label.
+        
+        This test verifies that when a source is promoted via registry,
+        its cluster_label is preserved for per-cluster UI filtering.
+        """
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-main.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+            cluster_label="prod-cluster-a",
+            cluster_context="prod-context",
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="prod-context",
+            canonical_identity="monitoring/alertmanager-main",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        result = apply_registry_to_source(source, registry, "prod-context")
+        assert result is not None
+        # Source should be promoted to manual
+        assert result.origin == AlertmanagerSourceOrigin.MANUAL
+        assert result.state == AlertmanagerSourceState.MANUAL
+        # cluster_label MUST be preserved
+        assert result.cluster_label == "prod-cluster-a"
+        assert result.cluster_context == "prod-context"
+
 
 class TestApplyRegistryToInventory:
     """Tests for applying registry state to entire source inventory."""

@@ -925,6 +925,9 @@ def verify_and_update_inventory(
                 last_error=None,
                 verified_version=result.version,
                 confidence_hints=source.confidence_hints,
+                merged_provenances=source.merged_provenances,
+                cluster_label=source.cluster_label,
+                cluster_context=source.cluster_context,
             )
         else:
             # Source failed verification
@@ -941,6 +944,9 @@ def verify_and_update_inventory(
                 last_error=result.error,
                 verified_version=None,
                 confidence_hints=source.confidence_hints,
+                merged_provenances=source.merged_provenances,
+                cluster_label=source.cluster_label,
+                cluster_context=source.cluster_context,
             )
 
     return AlertmanagerSourceInventory(
@@ -1048,6 +1054,9 @@ def _resolve_prometheus_operator_alias(
         last_error=source.last_error,
         verified_version=source.verified_version,
         confidence_hints=source.confidence_hints + ('prometheus-operator-alias',),
+        merged_provenances=source.merged_provenances,
+        cluster_label=source.cluster_label,
+        cluster_context=source.cluster_context,
     )
     
     _logger.debug(
@@ -1176,6 +1185,8 @@ def merge_deduplicate_inventory(
                 verified_version=winner.verified_version,
                 confidence_hints=winner.confidence_hints,
                 merged_provenances=tuple(sorted_provenances),
+                cluster_label=winner.cluster_label,
+                cluster_context=winner.cluster_context,
             )
             
             merged_sources[canon_key] = merged_source
