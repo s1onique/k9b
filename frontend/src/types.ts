@@ -621,6 +621,16 @@ export type DiagnosticPack = {
   reviewInput14bPath: string | null;
 };
 
+export type ClusterAlertSummary = {
+  cluster: string;
+  alert_count: number;
+  severity_counts: Record<string, number>;
+  state_counts: Record<string, number>;
+  top_alert_names: string[];
+  affected_namespaces: string[];
+  affected_services: string[];
+};
+
 export type AlertmanagerCompact = {
   status: string;
   alert_count: number;
@@ -632,6 +642,7 @@ export type AlertmanagerCompact = {
   affected_services: string[];
   truncated: boolean;
   captured_at: string;
+  by_cluster?: ClusterAlertSummary[];
 };
 
 export type AlertmanagerSource = {

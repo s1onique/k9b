@@ -68,10 +68,38 @@ def read_alertmanager_compact(path: Path) -> AlertmanagerCompact | None:
     
     Returns None if file does not exist or cannot be parsed.
     """
+    from .alertmanager_snapshot import ClusterAlertSummary
+
     if not path.exists():
         return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+
+        # Deserialize by_cluster summaries if present
+        by_cluster: tuple[ClusterAlertSummary, ...] = ()
+        by_cluster_raw = raw.get("by_cluster")
+        if by_cluster_raw and isinstance(by_cluster_raw, list):
+            summaries: list[ClusterAlertSummary] = []
+            for entry in by_cluster_raw:
+                if not isinstance(entry, dict):
+                    continue
+                summaries.append(ClusterAlertSummary(
+                    cluster=str(entry.get("cluster", "")),
+                    alert_count=int(entry.get("alert_count", 0)),
+                    severity_counts=tuple(
+                        (str(k), int(v))
+                        for k, v in (entry.get("severity_counts", {}).items())
+                    ),
+                    state_counts=tuple(
+                        (str(k), int(v))
+                        for k, v in (entry.get("state_counts", {}).items())
+                    ),
+                    top_alert_names=tuple(str(n) for n in (entry.get("top_alert_names", []))),
+                    affected_namespaces=tuple(str(n) for n in (entry.get("affected_namespaces", []))),
+                    affected_services=tuple(str(n) for n in (entry.get("affected_services", []))),
+                ))
+            by_cluster = tuple(summaries)
+
         return AlertmanagerCompact(
             status=str(raw.get("status", "invalid_response")),
             alert_count=int(raw.get("alert_count", 0)),
@@ -89,6 +117,7 @@ def read_alertmanager_compact(path: Path) -> AlertmanagerCompact | None:
             affected_services=tuple(str(n) for n in (raw.get("affected_services", []))),
             truncated=bool(raw.get("truncated", False)),
             captured_at=str(raw.get("captured_at", "")),
+            by_cluster=by_cluster,
         )
     except (json.JSONDecodeError, KeyError, ValueError):
         return None

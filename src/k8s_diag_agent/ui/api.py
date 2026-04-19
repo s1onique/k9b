@@ -423,6 +423,17 @@ class DiagnosticPackPayload(TypedDict, total=False):
     reviewInput14bPath: str | None
 
 
+class ClusterAlertSummaryPayload(TypedDict, total=False):
+    """Payload for per-cluster alert summary."""
+    cluster: str
+    alert_count: int
+    severity_counts: dict[str, int]
+    state_counts: dict[str, int]
+    top_alert_names: list[str]
+    affected_namespaces: list[str]
+    affected_services: list[str]
+
+
 class AlertmanagerCompactPayload(TypedDict, total=False):
     status: str
     alert_count: int
@@ -434,6 +445,7 @@ class AlertmanagerCompactPayload(TypedDict, total=False):
     affected_services: list[str]
     truncated: bool
     captured_at: str
+    by_cluster: list[ClusterAlertSummaryPayload]
 
 
 class AlertmanagerSourcePayload(TypedDict, total=False):
@@ -731,6 +743,18 @@ def build_run_payload(
 def _serialize_alertmanager_compact(view: AlertmanagerCompactView | None) -> AlertmanagerCompactPayload | None:
     if not view:
         return None
+    # Serialize per-cluster summaries
+    by_cluster_payload: list[ClusterAlertSummaryPayload] = []
+    for summary in view.by_cluster:
+        by_cluster_payload.append({
+            "cluster": summary.cluster,
+            "alert_count": summary.alert_count,
+            "severity_counts": {str(k): v for k, v in summary.severity_counts},
+            "state_counts": {str(k): v for k, v in summary.state_counts},
+            "top_alert_names": list(summary.top_alert_names),
+            "affected_namespaces": list(summary.affected_namespaces),
+            "affected_services": list(summary.affected_services),
+        })
     return {
         "status": view.status,
         "alert_count": view.alert_count,
@@ -742,6 +766,7 @@ def _serialize_alertmanager_compact(view: AlertmanagerCompactView | None) -> Ale
         "affected_services": list(view.affected_services),
         "truncated": view.truncated,
         "captured_at": view.captured_at,
+        "by_cluster": by_cluster_payload,
     }
 
 

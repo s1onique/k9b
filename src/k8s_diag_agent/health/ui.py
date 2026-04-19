@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..external_analysis.alertmanager_artifact import (
     read_alertmanager_compact,
@@ -2787,6 +2787,20 @@ def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, 
     compact = read_alertmanager_compact(output_dir / f"{run_id}-alertmanager-compact.json")
     if compact is None:
         return None
+    
+    # Build by_cluster summaries
+    by_cluster: list[dict[str, Any]] = []
+    for summary in compact.by_cluster:
+        by_cluster.append({
+            "cluster": summary.cluster,
+            "alert_count": summary.alert_count,
+            "severity_counts": {str(k): v for k, v in summary.severity_counts},
+            "state_counts": {str(k): v for k, v in summary.state_counts},
+            "top_alert_names": list(summary.top_alert_names),
+            "affected_namespaces": list(summary.affected_namespaces),
+            "affected_services": list(summary.affected_services),
+        })
+    
     return {
         "status": compact.status,
         "alert_count": compact.alert_count,
@@ -2798,6 +2812,7 @@ def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, 
         "affected_services": list(compact.affected_services),
         "truncated": compact.truncated,
         "captured_at": compact.captured_at,
+        "by_cluster": by_cluster,
     }
 
 

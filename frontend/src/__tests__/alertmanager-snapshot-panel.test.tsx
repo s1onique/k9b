@@ -38,7 +38,8 @@ describe("AlertmanagerSnapshotPanel", () => {
       const compact = makeAlertmanagerCompact({ status: "available" });
       render(<AlertmanagerSnapshotPanel compact={compact} />);
 
-      expect(screen.getByText("Alertmanager context")).toBeInTheDocument();
+      // Eyebrow shows "Alertmanager snapshot · All clusters" in run-global mode
+      expect(screen.getByText("Alertmanager snapshot · All clusters")).toBeInTheDocument();
       expect(screen.getByText("Alertmanager snapshot")).toBeInTheDocument();
     });
 
@@ -641,6 +642,441 @@ describe("AlertmanagerSnapshotPanel", () => {
       expect(screen.getByText("monitoring")).toBeInTheDocument();
       expect(screen.getByText("api-gateway")).toBeInTheDocument();
       expect(screen.getByText("prod-us-east-1")).toBeInTheDocument();
+    });
+  });
+
+  describe("by_cluster data - run-global mode", () => {
+    // Test 1: run-global mode (no clusterLabel) renders run-global data and affected_clusters
+
+    it("renders run-global data when clusterLabel is not provided", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        severity_counts: { critical: 20, warning: 50 },
+        state_counts: { firing: 80, pending: 20 },
+        top_alert_names: ["GlobalAlert1", "GlobalAlert2"],
+        affected_namespaces: ["global-ns-1", "global-ns-2"],
+        affected_clusters: ["cluster-a", "cluster-b", "cluster-c"],
+        affected_services: ["global-service"],
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 30,
+            severity_counts: { critical: 5, warning: 15 },
+            state_counts: { firing: 25, pending: 5 },
+            top_alert_names: ["ClusterAAlert"],
+            affected_namespaces: ["cluster-a-ns"],
+            affected_services: [],
+          },
+          {
+            cluster: "cluster-b",
+            alert_count: 70,
+            severity_counts: { critical: 15, warning: 35 },
+            state_counts: { firing: 55, pending: 15 },
+            top_alert_names: ["ClusterBAlert1", "ClusterBAlert2"],
+            affected_namespaces: ["cluster-b-ns-1", "cluster-b-ns-2"],
+            affected_services: ["cluster-b-service"],
+          },
+        ],
+      });
+      // No clusterLabel prop - run-global mode
+      render(<AlertmanagerSnapshotPanel compact={compact} />);
+
+      // Should show run-global data, NOT cluster-a data
+      expect(screen.getByText("100")).toBeInTheDocument(); // run-global alert_count
+      expect(screen.getByText("critical: 20")).toBeInTheDocument(); // run-global severity
+      expect(screen.getByText("GlobalAlert1")).toBeInTheDocument(); // run-global top alerts
+      expect(screen.getByText("global-ns-1")).toBeInTheDocument(); // run-global namespaces
+
+      // Should NOT show cluster-a specific data
+      expect(screen.queryByText("30")).not.toBeInTheDocument(); // cluster-a's alert_count
+      expect(screen.queryByText("ClusterAAlert")).not.toBeInTheDocument(); // cluster-a's alerts
+    });
+
+    it("shows affected_clusters section in run-global mode", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 50,
+        affected_clusters: ["cluster-x", "cluster-y"],
+        by_cluster: [
+          {
+            cluster: "cluster-x",
+            alert_count: 25,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: [],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} />);
+
+      // affected_clusters should be visible in run-global mode
+      expect(screen.getByText("cluster-x")).toBeInTheDocument();
+      expect(screen.getByText("cluster-y")).toBeInTheDocument();
+      expect(screen.getByText(/Affected clusters \(2\)/)).toBeInTheDocument();
+    });
+
+    it("does NOT show (cluster-filtered) indicator in run-global mode", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 50,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: [],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} />);
+
+      expect(screen.queryByText("(cluster-filtered)")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("by_cluster data - cluster-filtered mode", () => {
+    // Test 2: cluster-filtered mode renders matching by_cluster data and suppresses affected_clusters
+
+    it("renders cluster-specific data when clusterLabel matches by_cluster entry", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        // Run-global data (should NOT be shown)
+        alert_count: 100,
+        severity_counts: { critical: 20, warning: 50 },
+        top_alert_names: ["GlobalAlert"],
+        affected_namespaces: ["global-ns"],
+        affected_clusters: ["cluster-a", "cluster-b"],
+        affected_services: ["global-service"],
+        // Cluster-specific data (should be shown)
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 30,
+            severity_counts: { critical: 5, warning: 15, info: 10 },
+            state_counts: { firing: 25, pending: 5 },
+            top_alert_names: ["ClusterAAlert1", "ClusterAAlert2"],
+            affected_namespaces: ["cluster-a-ns-1", "cluster-a-ns-2"],
+            affected_services: ["cluster-a-service"],
+          },
+          {
+            cluster: "cluster-b",
+            alert_count: 70,
+            severity_counts: { critical: 15, warning: 35 },
+            state_counts: { firing: 60, pending: 10 },
+            top_alert_names: ["ClusterBAlert"],
+            affected_namespaces: ["cluster-b-ns"],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // Should show cluster-a data
+      expect(screen.getByText("30")).toBeInTheDocument(); // cluster-a's alert_count
+      expect(screen.getByText("critical: 5")).toBeInTheDocument(); // cluster-a's severity
+      expect(screen.getByText("ClusterAAlert1")).toBeInTheDocument(); // cluster-a's alerts
+      expect(screen.getByText("cluster-a-ns-1")).toBeInTheDocument(); // cluster-a's namespaces
+
+      // Should NOT show run-global data
+      expect(screen.queryByText("100")).not.toBeInTheDocument(); // run-global alert_count
+      expect(screen.queryByText("GlobalAlert")).not.toBeInTheDocument(); // run-global alerts
+    });
+
+    it("suppresses affected_clusters section in cluster-filtered mode", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 50,
+        affected_clusters: ["cluster-a", "cluster-b", "cluster-c"],
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 30,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: ["a-ns"],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // affected_clusters should NOT be visible in cluster-filtered mode
+      expect(screen.queryByText(/^Affected clusters/)).not.toBeInTheDocument();
+    });
+
+    it("shows (cluster-filtered) indicator in cluster-filtered mode", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 50,
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 25,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: [],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // The (cluster-filtered) indicator appears in the muted tiny timestamp line
+      expect(screen.getByText(/cluster-filtered/)).toBeInTheDocument();
+    });
+
+    it("uses cluster-specific namespaces and services in cluster-filtered mode", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        affected_namespaces: ["global-ns"],
+        affected_services: ["global-svc"],
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 40,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: ["cluster-a-ns-1", "cluster-a-ns-2", "cluster-a-ns-3"],
+            affected_services: ["cluster-a-svc-1", "cluster-a-svc-2"],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // Should show cluster-a's namespaces
+      expect(screen.getByText("cluster-a-ns-1")).toBeInTheDocument();
+      expect(screen.getByText("cluster-a-ns-2")).toBeInTheDocument();
+
+      // Should show cluster-a's services
+      expect(screen.getByText("cluster-a-svc-1")).toBeInTheDocument();
+      expect(screen.getByText("cluster-a-svc-2")).toBeInTheDocument();
+
+      // Should NOT show run-global namespaces/services
+      expect(screen.queryByText("global-ns")).not.toBeInTheDocument();
+      expect(screen.queryByText("global-svc")).not.toBeInTheDocument();
+    });
+
+    it("handles empty cluster data with alert_count: 0", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        affected_namespaces: ["global-ns"],
+        by_cluster: [
+          {
+            cluster: "cluster-a",
+            alert_count: 0,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: [],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // When alert_count is 0, component shows no-data message (not metric with 0)
+      expect(screen.getByText("No active alerts captured.")).toBeInTheDocument();
+      // Should NOT show run-global data
+      expect(screen.queryByText("100")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("by_cluster data - truthful no-data mode", () => {
+    // Test 3: truthful no-data mode when selected cluster has no matching by_cluster entry
+
+    it("shows truthful no-data message when clusterLabel has no matching by_cluster entry", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        // Run-global data (should NOT be shown when clusterLabel is set)
+        alert_count: 100,
+        severity_counts: { critical: 20 },
+        top_alert_names: ["GlobalAlert"],
+        affected_namespaces: ["global-ns"],
+        affected_clusters: ["cluster-b", "cluster-c"],
+        // Only cluster-b and cluster-c have data, cluster-a does not
+        by_cluster: [
+          {
+            cluster: "cluster-b",
+            alert_count: 50,
+            severity_counts: { warning: 30 },
+            state_counts: { firing: 50 },
+            top_alert_names: ["ClusterBAlert"],
+            affected_namespaces: ["cluster-b-ns"],
+            affected_services: [],
+          },
+          {
+            cluster: "cluster-c",
+            alert_count: 50,
+            severity_counts: { critical: 10 },
+            state_counts: { pending: 50 },
+            top_alert_names: ["ClusterCAlert"],
+            affected_namespaces: ["cluster-c-ns"],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // Should show truthful no-data message containing the cluster name
+      const messageElement = document.querySelector(".muted.small");
+      expect(messageElement?.textContent).toContain("cluster-a");
+
+      // Should NOT show run-global data
+      expect(screen.queryByText("100")).not.toBeInTheDocument();
+      expect(screen.queryByText("critical: 20")).not.toBeInTheDocument();
+      expect(screen.queryByText("GlobalAlert")).not.toBeInTheDocument();
+
+      // Should NOT show other cluster's data
+      expect(screen.queryByText("50")).not.toBeInTheDocument();
+      expect(screen.queryByText("ClusterBAlert")).not.toBeInTheDocument();
+    });
+
+    it("does not show affected_clusters in no-data mode", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        affected_clusters: ["cluster-a", "cluster-b"],
+        by_cluster: [
+          {
+            cluster: "cluster-b",
+            alert_count: 50,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: [],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // affected_clusters should NOT be visible in no-data mode
+      expect(screen.queryByText(/^Affected clusters/)).not.toBeInTheDocument();
+    });
+
+    it("shows no-data message even when by_cluster exists but selected cluster not in it", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        by_cluster: [
+          {
+            cluster: "other-cluster",
+            alert_count: 100,
+            severity_counts: {},
+            state_counts: {},
+            top_alert_names: [],
+            affected_namespaces: [],
+            affected_services: [],
+          },
+        ],
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="missing-cluster" />);
+
+      // The no-data message contains the cluster name in curly quotes
+      const messageElement = document.querySelector(".muted.small");
+      expect(messageElement?.textContent).toContain("missing-cluster");
+      expect(screen.queryByText("100")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("by_cluster data - backward compatibility", () => {
+    // Test 4: backward-compat behavior when by_cluster is absent (undefined)
+    // The component is designed to be "truthful" - if by_cluster doesn't exist,
+    // it cannot filter to a cluster, so it shows no-data rather than bleeding run-global data.
+
+    it("shows no-data when by_cluster is undefined and clusterLabel is set (truthful behavior)", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        severity_counts: { critical: 20, warning: 50 },
+        top_alert_names: ["GlobalAlert"],
+        affected_namespaces: ["global-ns"],
+        affected_clusters: ["cluster-a"],
+        // by_cluster is undefined - truthful no-data, NOT backward compat fallback
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // Should show truthful no-data message
+      expect(screen.getByText("No active alerts captured.")).toBeInTheDocument();
+      // Should NOT show run-global data (that would be misleading)
+      expect(screen.queryByText("100")).not.toBeInTheDocument();
+      expect(screen.queryByText("critical: 20")).not.toBeInTheDocument();
+      expect(screen.queryByText("GlobalAlert")).not.toBeInTheDocument();
+    });
+
+    it("suppresses affected_clusters when by_cluster is undefined and clusterLabel is set", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 50,
+        affected_clusters: ["cluster-a", "cluster-b"],
+        // by_cluster is undefined - truthful no-data
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // affected_clusters should NOT be visible (we can't filter, so we show no-data)
+      expect(screen.queryByText(/^Affected clusters/)).not.toBeInTheDocument();
+    });
+
+    it("renders run-global data when by_cluster is undefined and clusterLabel is NOT set", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        severity_counts: { critical: 20, warning: 50 },
+        top_alert_names: ["GlobalAlert"],
+        affected_namespaces: ["global-ns"],
+        affected_clusters: ["cluster-a"],
+        // by_cluster is undefined - in run-global mode, this is fine
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} />); // No clusterLabel
+
+      // Should show run-global data (no cluster filtering requested)
+      expect(screen.getByText("100")).toBeInTheDocument();
+      expect(screen.getByText("critical: 20")).toBeInTheDocument();
+      expect(screen.getByText("GlobalAlert")).toBeInTheDocument();
+      expect(screen.getByText("global-ns")).toBeInTheDocument();
+    });
+
+    it("treats empty by_cluster array as cluster-filtered no-data state", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 100,
+        severity_counts: { critical: 20 },
+        top_alert_names: ["GlobalAlert"],
+        affected_namespaces: ["global-ns"],
+        affected_clusters: ["cluster-a"],
+        by_cluster: [], // empty array - treated as "valid but empty" cluster data
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // Should show no-data message (cluster-filtered mode with empty by_cluster)
+      expect(screen.getByText("No active alerts captured.")).toBeInTheDocument();
+      expect(screen.queryByText("100")).not.toBeInTheDocument();
+      expect(screen.queryByText("critical: 20")).not.toBeInTheDocument();
+      expect(screen.queryByText("GlobalAlert")).not.toBeInTheDocument();
+    });
+
+    it("suppresses affected_clusters when by_cluster is empty and clusterLabel is set", () => {
+      const compact = makeAlertmanagerCompact({
+        status: "available",
+        alert_count: 50,
+        affected_clusters: ["cluster-a"],
+        by_cluster: [], // empty array - treated as cluster-filtered no-data state
+      });
+      render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
+
+      // affected_clusters should NOT be visible in cluster-filtered no-data mode
+      expect(screen.queryByText(/^Affected clusters/)).not.toBeInTheDocument();
     });
   });
 });

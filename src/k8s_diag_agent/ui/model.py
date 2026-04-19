@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import SupportsInt, cast
 
@@ -294,6 +294,18 @@ class DiagnosticPackView:
 
 
 @dataclass(frozen=True)
+class ClusterAlertSummaryView:
+    """Per-cluster alert summary for cluster-scoped UI panels."""
+    cluster: str
+    alert_count: int
+    severity_counts: tuple[tuple[str, int], ...]
+    state_counts: tuple[tuple[str, int], ...]
+    top_alert_names: tuple[str, ...]
+    affected_namespaces: tuple[str, ...]
+    affected_services: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AlertmanagerCompactView:
     """View model for Alertmanager compact context - run-scoped snapshot of alerts."""
     status: str
@@ -306,6 +318,8 @@ class AlertmanagerCompactView:
     affected_services: tuple[str, ...]
     truncated: bool
     captured_at: str
+    # Per-cluster breakdown for cluster-scoped UI panels
+    by_cluster: tuple[ClusterAlertSummaryView, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -1759,6 +1773,34 @@ def _build_alertmanager_compact_view(raw: object | None) -> AlertmanagerCompactV
         state_counts = tuple(
             (str(k), int(v)) for k, v in state_raw.items()
         )
+    
+    # Build per-cluster summaries
+    by_cluster: tuple[ClusterAlertSummaryView, ...] = ()
+    by_cluster_raw = raw.get("by_cluster")
+    if isinstance(by_cluster_raw, Sequence) and not isinstance(by_cluster_raw, str | bytes):
+        cluster_summaries: list[ClusterAlertSummaryView] = []
+        for entry in by_cluster_raw:
+            if not isinstance(entry, Mapping):
+                continue
+            entry_severity_raw = entry.get("severity_counts")
+            entry_severity: tuple[tuple[str, int], ...] = ()
+            if isinstance(entry_severity_raw, Mapping):
+                entry_severity = tuple((str(k), int(v)) for k, v in entry_severity_raw.items())
+            entry_state_raw = entry.get("state_counts")
+            entry_state: tuple[tuple[str, int], ...] = ()
+            if isinstance(entry_state_raw, Mapping):
+                entry_state = tuple((str(k), int(v)) for k, v in entry_state_raw.items())
+            cluster_summaries.append(ClusterAlertSummaryView(
+                cluster=_coerce_str(entry.get("cluster")),
+                alert_count=_coerce_int(entry.get("alert_count")),
+                severity_counts=entry_severity,
+                state_counts=entry_state,
+                top_alert_names=_coerce_str_tuple(entry.get("top_alert_names")),
+                affected_namespaces=_coerce_str_tuple(entry.get("affected_namespaces")),
+                affected_services=_coerce_str_tuple(entry.get("affected_services")),
+            ))
+        by_cluster = tuple(cluster_summaries)
+    
     return AlertmanagerCompactView(
         status=_coerce_str(raw.get("status")),
         alert_count=_coerce_int(raw.get("alert_count")),
@@ -1770,6 +1812,7 @@ def _build_alertmanager_compact_view(raw: object | None) -> AlertmanagerCompactV
         affected_services=_coerce_str_tuple(raw.get("affected_services")),
         truncated=bool(raw.get("truncated")),
         captured_at=_coerce_str(raw.get("captured_at")),
+        by_cluster=by_cluster,
     )
 
 

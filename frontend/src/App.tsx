@@ -1821,19 +1821,46 @@ const getAlertmanagerProvenanceSubtext = (provenance: AlertmanagerProvenance): s
 
 export const AlertmanagerSnapshotPanel = ({
   compact,
+  clusterLabel,
 }: {
   compact: AlertmanagerCompact | undefined | null;
+  clusterLabel?: string | null;
 }) => {
   const statusLabel = compact ? formatAlertmanagerStatus(compact.status) : "No data";
   const isAvailable = compact?.status === "available";
   const isOk = compact?.status === "ok";
   const showAlertDetails = compact && (isAvailable || isOk);
 
+  // Derive cluster-specific snapshot when clusterLabel is provided and by_cluster data exists
+  const clusterData = useMemo(() => {
+    if (!clusterLabel || !compact?.by_cluster) {
+      return null;
+    }
+    return compact.by_cluster.find(c => c.cluster === clusterLabel) ?? null;
+  }, [compact, clusterLabel]);
+
+  // Determine display mode: cluster-filtered, run-global, or no-data
+  const isClusterFilteredMode = Boolean(clusterLabel && clusterData);
+  const isNoClusterDataMode = Boolean(clusterLabel && !clusterData && compact?.by_cluster && compact.by_cluster.length > 0);
+  const isRunGlobalMode = Boolean(!clusterLabel && compact);
+
+  // Use cluster-specific data when available, otherwise fall back to run-global data only in run-global mode
+  const alertCount = clusterData?.alert_count ?? (isRunGlobalMode ? (compact?.alert_count ?? 0) : 0);
+  const severityCounts = clusterData?.severity_counts ?? (isRunGlobalMode ? (compact?.severity_counts ?? {}) : {});
+  const stateCounts = clusterData?.state_counts ?? (isRunGlobalMode ? (compact?.state_counts ?? {}) : {});
+  const topAlertNames = clusterData?.top_alert_names ?? (isRunGlobalMode ? (compact?.top_alert_names ?? []) : []);
+  const affectedNamespaces = clusterData?.affected_namespaces ?? (isRunGlobalMode ? (compact?.affected_namespaces ?? []) : []);
+  const affectedServices = clusterData?.affected_services ?? (isRunGlobalMode ? (compact?.affected_services ?? []) : []);
+  // Only show affected_clusters in run-global mode (it's a run-level field, not cluster-level)
+  const showAffectedClusters = isRunGlobalMode && (compact?.affected_clusters?.length ?? 0) > 0;
+
+  const displayLabel = isClusterFilteredMode ? clusterLabel : (clusterLabel || "All clusters");
+
   return (
     <section className="panel alertmanager-snapshot" id="alertmanager-snapshot">
       <div className="section-head">
         <div>
-          <p className="eyebrow">Alertmanager context</p>
+          <p className="eyebrow">Alertmanager snapshot · {displayLabel}</p>
           <h2>Alertmanager snapshot</h2>
         </div>
         <span className={`status-pill ${statusClass(statusLabel)}`}>
@@ -1848,23 +1875,29 @@ export const AlertmanagerSnapshotPanel = ({
         <p className="muted small">
           Alertmanager snapshot is not available: {statusLabel.toLowerCase()}.
         </p>
+      ) : isNoClusterDataMode ? (
+        // Selected cluster has no alerts - show truthful no-data state
+        <p className="muted small">
+          No alerts captured for cluster &ldquo;{clusterLabel}&rdquo;.
+        </p>
       ) : (
         <>
           <p className="muted tiny">
             Captured {compact.captured_at ? formatTimestamp(compact.captured_at) : "—"}
             {compact.truncated ? " · Truncated" : ""}
+            {isClusterFilteredMode ? " (cluster-filtered)" : ""}
           </p>
-          {compact.alert_count > 0 ? (
+          {alertCount > 0 ? (
             <div className="alertmanager-snapshot-grid">
               <div className="alertmanager-snapshot-metric">
-                <strong className="alertmanager-metric-value">{compact.alert_count}</strong>
+                <strong className="alertmanager-metric-value">{alertCount}</strong>
                 <span className="alertmanager-metric-label">Total alerts</span>
               </div>
-              {Object.keys(compact.severity_counts).length > 0 && (
+              {Object.keys(severityCounts).length > 0 && (
                 <div className="alertmanager-snapshot-section">
                   <p className="alertmanager-section-label">By severity</p>
                   <div className="alertmanager-severity-list">
-                    {Object.entries(compact.severity_counts).map(([severity, count]) => (
+                    {Object.entries(severityCounts).map(([severity, count]) => (
                       <span key={severity} className={`alertmanager-severity-badge alertmanager-severity-badge--${severity.toLowerCase()}`}>
                         {severity}: {count}
                       </span>
@@ -1872,11 +1905,11 @@ export const AlertmanagerSnapshotPanel = ({
                   </div>
                 </div>
               )}
-              {Object.keys(compact.state_counts).length > 0 && (
+              {Object.keys(stateCounts).length > 0 && (
                 <div className="alertmanager-snapshot-section">
                   <p className="alertmanager-section-label">By state</p>
                   <div className="alertmanager-state-list">
-                    {Object.entries(compact.state_counts).map(([state, count]) => (
+                    {Object.entries(stateCounts).map(([state, count]) => (
                       <span key={state} className="alertmanager-state-badge">
                         {state}: {count}
                       </span>
@@ -1884,51 +1917,51 @@ export const AlertmanagerSnapshotPanel = ({
                   </div>
                 </div>
               )}
-              {compact.top_alert_names.length > 0 && (
+              {topAlertNames.length > 0 && (
                 <div className="alertmanager-snapshot-section">
                   <p className="alertmanager-section-label">Top alerts</p>
                   <ul className="alertmanager-top-alerts">
-                    {compact.top_alert_names.slice(0, 5).map((name, idx) => (
+                    {topAlertNames.slice(0, 5).map((name, idx) => (
                       <li key={idx}>{name}</li>
                     ))}
                   </ul>
                 </div>
               )}
-              {compact.affected_namespaces.length > 0 && (
+              {affectedNamespaces.length > 0 && (
                 <div className="alertmanager-snapshot-section">
-                  <p className="alertmanager-section-label">Affected namespaces ({compact.affected_namespaces.length})</p>
+                  <p className="alertmanager-section-label">Affected namespaces ({affectedNamespaces.length})</p>
                   <div className="alertmanager-tag-list">
-                    {compact.affected_namespaces.slice(0, 10).map((ns, idx) => (
+                    {affectedNamespaces.slice(0, 10).map((ns, idx) => (
                       <span key={idx} className="alertmanager-tag">{ns}</span>
                     ))}
-                    {compact.affected_namespaces.length > 10 && (
+                    {affectedNamespaces.length > 10 && (
                       <span className="alertmanager-tag alertmanager-tag--more">
-                        +{compact.affected_namespaces.length - 10} more
+                        +{affectedNamespaces.length - 10} more
                       </span>
                     )}
                   </div>
                 </div>
               )}
-              {compact.affected_clusters.length > 0 && (
+              {showAffectedClusters && (
                 <div className="alertmanager-snapshot-section">
-                  <p className="alertmanager-section-label">Affected clusters ({compact.affected_clusters.length})</p>
+                  <p className="alertmanager-section-label">Affected clusters ({compact.affected_clusters?.length})</p>
                   <div className="alertmanager-tag-list">
-                    {compact.affected_clusters.map((cluster, idx) => (
+                    {compact.affected_clusters?.map((cluster, idx) => (
                       <span key={idx} className="alertmanager-tag">{cluster}</span>
                     ))}
                   </div>
                 </div>
               )}
-              {compact.affected_services.length > 0 && (
+              {affectedServices.length > 0 && (
                 <div className="alertmanager-snapshot-section">
-                  <p className="alertmanager-section-label">Affected services ({compact.affected_services.length})</p>
+                  <p className="alertmanager-section-label">Affected services ({affectedServices.length})</p>
                   <div className="alertmanager-tag-list">
-                    {compact.affected_services.slice(0, 10).map((svc, idx) => (
+                    {affectedServices.slice(0, 10).map((svc, idx) => (
                       <span key={idx} className="alertmanager-tag">{svc}</span>
                     ))}
-                    {compact.affected_services.length > 10 && (
+                    {affectedServices.length > 10 && (
                       <span className="alertmanager-tag alertmanager-tag--more">
-                        +{compact.affected_services.length - 10} more
+                        +{affectedServices.length - 10} more
                       </span>
                     )}
                   </div>
@@ -1967,7 +2000,7 @@ export const AlertmanagerSourcesPanel = ({
 }: {
   sources: AlertmanagerSources;
   runId?: string;
-  clusterLabel?: string;
+  clusterLabel?: string | null;
   onRefresh?: () => void;
 }) => {
   // Track loading state for action buttons
@@ -5207,12 +5240,12 @@ const App = () => {
       <ProviderExecutionPanel execution={run.providerExecution} />
       <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
       <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
-      <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} />
+      <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} clusterLabel={selectedClusterLabel} />
       {run.alertmanagerSources && (
         <AlertmanagerSourcesPanel
           sources={run.alertmanagerSources}
           runId={run.runId}
-          clusterLabel={run.alertmanagerSources.cluster_context || undefined}
+          clusterLabel={selectedClusterLabel}
           onRefresh={refresh}
         />
       )}

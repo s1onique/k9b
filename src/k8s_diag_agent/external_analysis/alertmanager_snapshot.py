@@ -180,6 +180,29 @@ class AlertmanagerSnapshot:
 
 
 @dataclass(frozen=True)
+class ClusterAlertSummary:
+    """Per-cluster alert summary within AlertmanagerCompact.by_cluster."""
+    cluster: str
+    alert_count: int
+    severity_counts: tuple[tuple[str, int], ...]
+    state_counts: tuple[tuple[str, int], ...]
+    top_alert_names: tuple[str, ...]
+    affected_namespaces: tuple[str, ...]
+    affected_services: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cluster": self.cluster,
+            "alert_count": self.alert_count,
+            "severity_counts": {k: v for k, v in self.severity_counts},
+            "state_counts": {k: v for k, v in self.state_counts},
+            "top_alert_names": list(self.top_alert_names),
+            "affected_namespaces": list(self.affected_namespaces),
+            "affected_services": list(self.affected_services),
+        }
+
+
+@dataclass(frozen=True)
 class AlertmanagerCompact:
     """Compact deterministic JSON summarization for LLM prompts."""
     status: str
@@ -192,9 +215,11 @@ class AlertmanagerCompact:
     affected_services: tuple[str, ...]
     truncated: bool
     captured_at: str
+    # Per-cluster breakdown for cluster-scoped UI panels
+    by_cluster: tuple[ClusterAlertSummary, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "status": self.status,
             "alert_count": self.alert_count,
             "severity_counts": {k: v for k, v in self.severity_counts},
@@ -206,6 +231,9 @@ class AlertmanagerCompact:
             "truncated": self.truncated,
             "captured_at": self.captured_at,
         }
+        if self.by_cluster:
+            result["by_cluster"] = [s.to_dict() for s in self.by_cluster]
+        return result
 
     def to_json_bytes(self) -> bytes:
         """Return deterministic JSON bytes for same input."""
@@ -343,6 +371,9 @@ def snapshot_to_compact(
     namespaces: set[str] = set()
     clusters: set[str] = set()
     services: set[str] = set()
+    # Per-cluster aggregation for cluster-scoped UI panels
+    cluster_data: dict[str, dict[str, Any]] = {}
+    
     for alert in snapshot.alerts:
         sev = alert.severity or "unknown"
         severity_counts[sev] = severity_counts.get(sev, 0) + 1
@@ -352,14 +383,52 @@ def snapshot_to_compact(
         alert_names[name] = alert_names.get(name, 0) + 1
         if alert.namespace:
             namespaces.add(alert.namespace)
-        if alert.cluster:
-            clusters.add(alert.cluster)
+        cluster = alert.cluster or "_none_"
+        clusters.add(cluster)
         if alert.service:
             services.add(alert.service)
+        
+        # Per-cluster aggregation
+        if cluster not in cluster_data:
+            cluster_data[cluster] = {
+                "alert_count": 0,
+                "severity_counts": {},
+                "state_counts": {},
+                "alert_names": {},
+                "namespaces": set(),
+                "services": set(),
+            }
+        cd = cluster_data[cluster]
+        cd["alert_count"] += 1
+        cd["severity_counts"][sev] = cd["severity_counts"].get(sev, 0) + 1
+        cd["state_counts"][state] = cd["state_counts"].get(state, 0) + 1
+        cd["alert_names"][name] = cd["alert_names"].get(name, 0) + 1
+        if alert.namespace:
+            cd["namespaces"].add(alert.namespace)
+        if alert.service:
+            cd["services"].add(alert.service)
+    
+    # Build per-cluster summaries
+    by_cluster: list[ClusterAlertSummary] = []
+    for cluster, cd in sorted(cluster_data.items()):
+        if cluster == "_none_":
+            continue  # Skip alerts without cluster label in by_cluster
+        top_cluster_alerts = sorted(cd["alert_names"].items(), key=lambda x: (-x[1], x[0]))[:max_alerts]
+        by_cluster.append(ClusterAlertSummary(
+            cluster=cluster,
+            alert_count=cd["alert_count"],
+            severity_counts=tuple(sorted(cd["severity_counts"].items())),
+            state_counts=tuple(sorted(cd["state_counts"].items())),
+            top_alert_names=tuple(name for name, _ in top_cluster_alerts),
+            affected_namespaces=tuple(sorted(cd["namespaces"]))[:max_alerts],
+            affected_services=tuple(sorted(cd["services"]))[:max_alerts],
+        ))
+    
     top_alerts = sorted(alert_names.items(), key=lambda x: (-x[1], x[0]))[:max_alerts]
     top_alert_names = tuple(name for name, _ in top_alerts)
     affected_namespaces = tuple(sorted(namespaces))[:max_alerts]
-    affected_clusters = tuple(sorted(clusters))[:max_alerts]
+    # Filter out "_none_" placeholder from affected_clusters for backward compatibility
+    affected_clusters = tuple(sorted(c for c in clusters if c != "_none_"))[:max_alerts]
     affected_services = tuple(sorted(services))[:max_alerts]
     return AlertmanagerCompact(
         status=snapshot.status.value,
@@ -372,6 +441,7 @@ def snapshot_to_compact(
         affected_services=affected_services,
         truncated=snapshot.truncated,
         captured_at=snapshot.captured_at,
+        by_cluster=tuple(by_cluster),
     )
 
 
