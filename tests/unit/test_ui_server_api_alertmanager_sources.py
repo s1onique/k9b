@@ -633,8 +633,8 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
                              "Source should be found after URL-decoding")
 
             # Verify the override was written with the correct decoded source_id
-            external_dir = self.health_dir / "external-analysis"
-            overrides_path = external_dir / f"{run_id}-alertmanager-source-overrides.json"
+            # Overrides are stored at health root, not external-analysis/
+            overrides_path = self.health_dir / f"{run_id}-alertmanager-source-overrides.json"
             self.assertTrue(overrides_path.exists(), "Override artifact should be written")
 
             overrides_data = json.loads(overrides_path.read_text(encoding="utf-8"))
@@ -691,8 +691,8 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
                              "Source should be found after URL-decoding")
 
             # Verify the override was written with the correct decoded source_id
-            external_dir = self.health_dir / "external-analysis"
-            overrides_path = external_dir / f"{run_id}-alertmanager-source-overrides.json"
+            # Overrides are stored at health root, not external-analysis/
+            overrides_path = self.health_dir / f"{run_id}-alertmanager-source-overrides.json"
             self.assertTrue(overrides_path.exists(), "Override artifact should be written")
 
             overrides_data = json.loads(overrides_path.read_text(encoding="utf-8"))

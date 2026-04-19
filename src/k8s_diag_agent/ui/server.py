@@ -2501,8 +2501,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         )
 
         # Load existing overrides or create new
-        external_dir = self._health_root / "external-analysis"
-        overrides_path = external_dir / f"{context.run.run_id}-alertmanager-source-overrides.json"
+        # Overrides are stored in health root alongside the sources inventory artifact
+        # (NOT in external-analysis/ which is for next-check planning artifacts)
+        overrides_path = self._health_root / f"{context.run.run_id}-alertmanager-source-overrides.json"
 
         existing_overrides = AlertmanagerSourceOverrides(cluster_context=cluster_label)
         if overrides_path.exists():
@@ -2517,7 +2518,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         # Write the overrides artifact
         try:
-            external_dir.mkdir(parents=True, exist_ok=True)
+            # Ensure health root directory exists
+            self._health_root.mkdir(parents=True, exist_ok=True)
             overrides_path.write_text(
                 json.dumps(existing_overrides.to_dict(), indent=2), encoding="utf-8"
             )
