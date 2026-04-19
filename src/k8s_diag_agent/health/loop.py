@@ -3348,6 +3348,10 @@ class HealthLoopRunner:
         MANUAL > AUTO_TRACKED). Excludes DISCOVERED, DEGRADED, and MISSING sources.
         Skip if no eligible sources exist.
 
+        For cluster-internal endpoints (e.g., alertmanager-operated.monitoring:9093),
+        this method uses kubectl port-forward to reach the service when running
+        outside the cluster network (e.g., from local compose environment).
+
         This is non-fatal: fetch failures are logged but do not stop the run.
         """
         # Log start of snapshot collection
@@ -3416,15 +3420,99 @@ class HealthLoopRunner:
             total_eligible=len(eligible_sources),
         )
         
+        # Determine if we need port-forward for this source
+        port_forward_process: subprocess.Popen[str] | None = None
+        local_port: int | None = None
+        needs_port_forward = False
+        
+        # Check if endpoint looks like a cluster-internal DNS name (contains '.' for FQDN)
+        # Skip localhost and 127.0.0.1 which are directly reachable
+        endpoint = selected_source.endpoint
+        if endpoint and "://" in endpoint:
+            # Extract host from URL
+            from urllib.parse import urlparse
+            parsed = urlparse(endpoint)
+            host = parsed.hostname or ""
+            # If host contains a dot and is not localhost, it's likely a cluster-internal FQDN
+            # that won't resolve from outside the cluster
+            if "." in host and host not in ("localhost", "127.0.0.1", "::1"):
+                needs_port_forward = True
+        
+        # Extract the service name from the endpoint host for port-forward
+        # In real Prometheus Operator deployments, the Alertmanager object name differs
+        # from the service DNS name in the endpoint (e.g., object name is 
+        # "kube-prometheus-stack-alertmanager" but service DNS is "alertmanager-operated")
+        service_name_for_pf: str | None = None
+        if needs_port_forward:
+            # Parse endpoint to get the service name from the host (first part of FQDN)
+            from urllib.parse import urlparse
+            parsed = urlparse(endpoint)
+            host = parsed.hostname or ""
+            # Host format: "service-name.namespace.svc.cluster.local" or just "service-name"
+            # The service name is the first component before any dot
+            if "." in host:
+                service_name_for_pf = host.split(".")[0]
+            elif selected_source.name:
+                # Fallback to name if host has no dots (edge case)
+                service_name_for_pf = selected_source.name
+            
+            if not service_name_for_pf:
+                self._log_event(
+                    "alertmanager-snapshot",
+                    "DEBUG",
+                    "Alertmanager endpoint appears cluster-internal but cannot derive service name",
+                    event="alertmanager-snapshot-source-selected",
+                    run_id=self.run_id,
+                    source_identity=selected_source.source_id,
+                    reason="no_service_name_for_port_forward",
+                )
+                needs_port_forward = False
+        
+        # Attempt to establish port-forward if needed
+        if needs_port_forward:
+            assert selected_source.namespace is not None
+            assert service_name_for_pf is not None
+            try:
+                port_forward_process, local_port = self._start_alertmanager_port_forward(
+                    namespace=selected_source.namespace,
+                    service_name=service_name_for_pf,
+                    context=selected_source.cluster_context,
+                )
+            except RuntimeError as exc:
+                # Port-forward startup failed, but this is non-fatal
+                # Log the error and continue with error snapshot
+                self._log_event(
+                    "alertmanager-snapshot",
+                    "WARNING",
+                    "Alertmanager port-forward startup failed, proceeding with direct fetch",
+                    event="alertmanager-portforward-failed-non-fatal",
+                    run_id=self.run_id,
+                    run_label=self.run_label,
+                    source_identity=selected_source.source_id,
+                    severity_reason=str(exc),
+                    reason="portforward-startup-failed",
+                    cluster_context=selected_source.cluster_context,
+                )
+                # Continue to fetch without port-forward; will likely fail but that's non-fatal
+                needs_port_forward = False
+                port_forward_process = None
+                local_port = None
+        
         # Fetch alerts from the selected source
         snapshot: AlertmanagerSnapshot
+        fetch_url: str
         try:
-            endpoint = selected_source.endpoint
+            if port_forward_process is not None and local_port is not None:
+                # Use the port-forwarded local endpoint
+                fetch_url = f"http://127.0.0.1:{local_port}/api/v2/alerts"
+            else:
+                # Use the direct endpoint
+                fetch_url = f"{endpoint.rstrip('/')}/api/v2/alerts"
+            
             timeout_seconds = 10.0
             headers: dict[str, str] = {"Accept": "application/json"}
-            url = f"{endpoint.rstrip('/')}/api/v2/alerts"
 
-            req = urllib.request.Request(url, headers=headers)
+            req = urllib.request.Request(fetch_url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout_seconds) as response:
                 body = response.read()
                 raw_response = json.loads(body)
@@ -3515,6 +3603,10 @@ class HealthLoopRunner:
             )
             # Non-fatal: continue with error snapshot
         
+        # Always clean up port-forward if it was started
+        if port_forward_process is not None:
+            self._stop_alertmanager_port_forward(port_forward_process, local_port)
+        
         # Create compact summarization
         compact = snapshot_to_compact(snapshot)
         
@@ -3556,6 +3648,241 @@ class HealthLoopRunner:
                 reason="write-error",
             )
             # Continue without failing the run
+
+    def _start_alertmanager_port_forward(
+        self,
+        namespace: str,
+        service_name: str,
+        context: str | None,
+    ) -> tuple[subprocess.Popen[str], int]:
+        """Start kubectl port-forward to an Alertmanager service.
+        
+        Uses port 0 for dynamic port selection to avoid conflicts.
+        
+        Returns:
+            Tuple of (subprocess handle, local port number)
+            
+        Raises:
+            RuntimeError: If port-forward cannot be started
+        """
+        # Build the kubectl command
+        # Use port 0 to let the system choose a free port
+        cmd = [
+            "kubectl", "port-forward",
+            "-n", namespace,
+            f"svc/{service_name}",
+            "0:9093",  # Forward to Alertmanager's default port
+        ]
+        if context:
+            cmd.extend(["--context", context])
+        
+        self._log_event(
+            "alertmanager-snapshot",
+            "INFO",
+            "Starting Alertmanager port-forward",
+            event="alertmanager-portforward-start",
+            run_id=self.run_id,
+            run_label=self.run_label,
+            namespace=namespace,
+            service_name=service_name,
+            cluster_context=context,
+        )
+        
+        try:
+            # Start the port-forward process
+            # redirect stdout/stderr to devnull since we just need the port
+            port_forward_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            
+            # Wait briefly for the forward to become ready
+            # port-forward typically prints binding info to stdout
+            time.sleep(1.5)
+            
+            # Check if process is still running
+            if port_forward_process.poll() is not None:
+                # Process exited unexpectedly
+                stderr = port_forward_process.stderr.read() if port_forward_process.stderr else ""
+                stdout = port_forward_process.stdout.read() if port_forward_process.stdout else ""
+                self._log_event(
+                    "alertmanager-snapshot",
+                    "ERROR",
+                    "Alertmanager port-forward failed to start",
+                    event="alertmanager-portforward-failed",
+                    run_id=self.run_id,
+                    run_label=self.run_label,
+                    namespace=namespace,
+                    service_name=service_name,
+                    exit_code=port_forward_process.returncode,
+                    stderr=stderr[:200] if stderr else None,
+                    stdout=stdout[:200] if stdout else None,
+                    reason="process-exited",
+                )
+                port_forward_process.kill()
+                raise RuntimeError(
+                    f"kubectl port-forward exited unexpectedly with code "
+                    f"{port_forward_process.returncode}: {stderr[:200] if stderr else 'no stderr'}"
+                )
+            
+            # Determine the local port
+            # port-forward outputs binding info to stderr when using port 0
+            # Parse the output to find the assigned port
+            local_port = self._parse_port_forward_output(
+                port_forward_process,
+                namespace,
+                service_name,
+            )
+            
+            self._log_event(
+                "alertmanager-snapshot",
+                "INFO",
+                "Alertmanager port-forward ready",
+                event="alertmanager-portforward-ready",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                namespace=namespace,
+                service_name=service_name,
+                local_port=local_port,
+            )
+            
+            return port_forward_process, local_port
+            
+        except FileNotFoundError:
+            self._log_event(
+                "alertmanager-snapshot",
+                "ERROR",
+                "kubectl not found - cannot establish port-forward",
+                event="alertmanager-portforward-failed",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                namespace=namespace,
+                service_name=service_name,
+                reason="kubectl-not-found",
+            )
+            raise RuntimeError("kubectl not found in PATH - cannot port-forward to Alertmanager")
+        except OSError as exc:
+            self._log_event(
+                "alertmanager-snapshot",
+                "ERROR",
+                "Failed to start port-forward subprocess",
+                event="alertmanager-portforward-failed",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                namespace=namespace,
+                service_name=service_name,
+                severity_reason=str(exc),
+                reason="subprocess-error",
+            )
+            raise RuntimeError(f"Failed to start kubectl port-forward: {exc}")
+
+    def _parse_port_forward_output(
+        self,
+        process: subprocess.Popen[str],
+        namespace: str,
+        service_name: str,
+    ) -> int:
+        """Parse port-forward output to determine the assigned local port.
+        
+        Reads from the process's stderr which contains the forwarding info.
+        
+        Raises:
+            RuntimeError: If the port cannot be determined from the output
+        """
+        import re
+        
+        # Wait briefly for port-forward to initialize
+        time.sleep(0.5)
+        
+        # Try to read stderr for port information
+        # port-forward typically outputs something like:
+        # "Forwarding from 127.0.0.1:PORT -> 9093"
+        # or "Forwarding from [::1]:PORT -> 9093"
+        stderr_output = ""
+        try:
+            if process.stderr:
+                import fcntl
+                import os
+                fd = process.stderr.fileno()
+                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+                
+                try:
+                    stderr_output = process.stderr.read()
+                finally:
+                    fcntl.fcntl(fd, fcntl.F_SETFL, fl)
+                    
+        except Exception:
+            pass
+        
+        # Parse port from stderr output
+        if stderr_output:
+            # Look for port pattern: 127.0.0.1:PORT or ::1:PORT
+            port_pattern = re.compile(r"(?:127\.0\.0\.1|::1|\[::1\]):(\d+)")
+            match = port_pattern.search(stderr_output)
+            if match:
+                port = int(match.group(1))
+                return port
+        
+        # If parsing failed, check if the process is still running
+            if process.poll() is not None:
+                stderr = ""
+                try:
+                    stderr = process.stderr.read() if process.stderr else ""
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"kubectl port-forward for {namespace}/{service_name} exited prematurely. "
+                    f"stderr: {stderr[:200] or 'empty'}"
+                )
+        
+        # Cannot determine port - fail fast rather than scanning arbitrary ports
+        raise RuntimeError(
+            f"Could not determine port-forward local port for "
+            f"{namespace}/{service_name} from stderr output: {stderr_output[:200] or 'empty'}"
+        )
+
+    def _stop_alertmanager_port_forward(
+        self,
+        process: subprocess.Popen[str],
+        local_port: int | None,
+    ) -> None:
+        """Stop the port-forward process and log the event."""
+        try:
+            if process.poll() is None:
+                # Process is still running, terminate it gracefully
+                process.terminate()
+                try:
+                    # Wait briefly for graceful termination
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    # Force kill if it doesn't stop gracefully
+                    process.kill()
+                    process.wait()
+            
+            self._log_event(
+                "alertmanager-snapshot",
+                "INFO",
+                "Alertmanager port-forward stopped",
+                event="alertmanager-portforward-stopped",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                local_port=local_port,
+            )
+        except Exception as exc:
+            self._log_event(
+                "alertmanager-snapshot",
+                "WARNING",
+                "Error during port-forward cleanup",
+                event="alertmanager-portforward-stopped",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                local_port=local_port,
+                severity_reason=str(exc),
+                reason="cleanup-error",
+            )
 
 class BaselineRegistry:
     def __init__(self, policies: Iterable[BaselinePolicy] | None = None) -> None:
