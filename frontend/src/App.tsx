@@ -1819,7 +1819,7 @@ const getAlertmanagerProvenanceSubtext = (provenance: AlertmanagerProvenance): s
   return parts.join(" · ");
 };
 
-const AlertmanagerSnapshotPanel = ({
+export const AlertmanagerSnapshotPanel = ({
   compact,
 }: {
   compact: AlertmanagerCompact | undefined | null;
@@ -1865,7 +1865,7 @@ const AlertmanagerSnapshotPanel = ({
                   <p className="alertmanager-section-label">By severity</p>
                   <div className="alertmanager-severity-list">
                     {Object.entries(compact.severity_counts).map(([severity, count]) => (
-                      <span key={severity} className="alertmanager-severity-badge">
+                      <span key={severity} className={`alertmanager-severity-badge alertmanager-severity-badge--${severity.toLowerCase()}`}>
                         {severity}: {count}
                       </span>
                     ))}
