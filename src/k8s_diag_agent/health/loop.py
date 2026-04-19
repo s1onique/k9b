@@ -30,6 +30,12 @@ from ..external_analysis.alertmanager_discovery import (
     discover_alertmanagers,
     merge_deduplicate_inventory,
 )
+from ..external_analysis.alertmanager_source_registry import (
+    RegistryDesiredState,
+    apply_registry_to_inventory,
+    lookup_registry_state,
+    read_source_registry,
+)
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -3211,6 +3217,49 @@ class HealthLoopRunner:
         # Alertmanager (e.g., CRD + Prometheus config + service heuristic) into
         # a single source with merged provenance tracking all contributing origins.
         verified_inventory = merge_deduplicate_inventory(verified_inventory)
+        
+        # Load durable registry and apply registry state to discovered sources.
+        # This ensures that operator promote/disable actions persist across runs.
+        # Registry entries are keyed by cluster_context + canonical_identity.
+        registry = read_source_registry(directories["root"])
+        
+        if registry is not None:
+            # Use the inventory's cluster_context for registry lookups.
+            # The inventory carries the cluster context from discovery,
+            # ensuring consistent registry key matching across runs.
+            registry_context = verified_inventory.cluster_context
+            
+            # Apply registry state to each source before writing the inventory
+            # This promotes "manual" sources and filters out "disabled" sources
+            registry_disabled_count = 0
+            registry_manual_count = 0
+            for source in verified_inventory.sources.values():
+                desired_state = lookup_registry_state(registry, registry_context, source)
+                if desired_state == RegistryDesiredState.MANUAL:
+                    registry_manual_count += 1
+                elif desired_state == RegistryDesiredState.DISABLED:
+                    registry_disabled_count += 1
+            
+            verified_inventory = apply_registry_to_inventory(
+                verified_inventory, registry, registry_context
+            )
+            
+            self._log_event(
+                "alertmanager-discovery",
+                "DEBUG",
+                "Alertmanager registry state applied",
+                event="alertmanager-registry-applied",
+                registry_entries=len(registry.entries),
+                sources_promoted=registry_manual_count,
+                sources_disabled=registry_disabled_count,
+            )
+        else:
+            self._log_event(
+                "alertmanager-discovery",
+                "DEBUG",
+                "No Alertmanager source registry found",
+                event="alertmanager-registry-absent",
+            )
         
         # Log verification result summary
         auto_tracked_count = len(verified_inventory.get_by_state(

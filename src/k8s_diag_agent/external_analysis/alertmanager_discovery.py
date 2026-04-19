@@ -98,6 +98,7 @@ class AlertmanagerSource:
     verified_version: str | None = None  # Alertmanager version from /api/v2/status
     confidence_hints: tuple[str, ...] = field(default_factory=tuple)  # e.g., (from-crd, has-service)
     merged_provenances: tuple[AlertmanagerSourceOrigin, ...] = field(default_factory=tuple)  # All contributing origins for UI
+    cluster_context: str | None = None  # Kubernetes context used for discovery (required for registry matching)
 
     def __post_init__(self) -> None:
         # Ensure endpoint has no trailing slash for consistency
@@ -160,6 +161,10 @@ class AlertmanagerSource:
             'confidence_hints': list(self.confidence_hints),
             'merged_provenances': [p.value for p in self.merged_provenances],
             'display_provenance': self.display_provenance,
+            'cluster_context': self.cluster_context,
+            # Include canonical_identity for cross-run registry matching
+            # This is the stable identity (namespace/name) used by the health loop registry
+            'canonical_identity': self.canonical_identity,
         }
 
     @classmethod
@@ -186,6 +191,7 @@ class AlertmanagerSource:
             verified_version=data.get('verified_version'),
             confidence_hints=tuple(data.get('confidence_hints', [])),
             merged_provenances=merged_provenances,
+            cluster_context=data.get('cluster_context'),
         )
 
 

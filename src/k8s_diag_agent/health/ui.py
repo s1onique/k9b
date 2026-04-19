@@ -2842,6 +2842,9 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             "last_error": source.last_error,
             "verified_version": source.verified_version,
             "confidence_hints": list(source.confidence_hints),
+            # Include canonical_identity for cross-run registry matching
+            # This is the stable identity used by the UI server when writing registry entries
+            "canonical_identity": source.canonical_identity,
         }
         
         # Apply effective state override if present (e.g., "disabled" or "manual")

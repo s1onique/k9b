@@ -777,5 +777,420 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
             self._shutdown_server(server2, thread2)
 
 
+
+class AlertmanagerSourceRegistryPersistenceTests(unittest.TestCase):
+    """End-to-end tests for cross-run persistence of alertmanager source actions.
+
+    These tests verify the complete flow:
+    1. API promote/disable writes the registry entry
+    2. The registry entry uses canonical_identity for the key (matching health loop lookup)
+    3. The registry entry can be read back with correct key format
+
+    Bug fixed: The action handler was using `matching_key` for both the registry key
+    and the canonical_identity field, while the health loop uses `canonical_identity`
+    for the registry key. This caused a mismatch where operator actions weren't
+    applied in subsequent runs.
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp()).resolve()
+        self.runs_dir = self.tmpdir / "runs"
+        self.health_dir = self.runs_dir / "health"
+        self.static_dir = self.tmpdir / "static"
+        self.static_dir.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write_sources_with_canonical_identity(
+        self,
+        run_id: str,
+        source_id: str,
+        endpoint: str,
+        canonical_identity: str,
+        origin: str = "alertmanager-crd",
+        state: str = "auto-tracked",
+    ) -> None:
+        """Write a run-scoped alertmanager-sources artifact with explicit canonical_identity.
+
+        This simulates what the health loop discovery produces, with explicit
+        canonical_identity for cross-run matching.
+        """
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create all required subdirectories
+        (self.health_dir / "reviews").mkdir(parents=True, exist_ok=True)
+        (self.health_dir / "assessments").mkdir(parents=True, exist_ok=True)
+        (self.health_dir / "drilldowns").mkdir(parents=True, exist_ok=True)
+        (self.health_dir / "proposals").mkdir(parents=True, exist_ok=True)
+        external_dir = self.health_dir / "external-analysis"
+        external_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write a minimal review artifact
+        review_data = {
+            "run_id": run_id,
+            "run_label": run_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "collector_version": "tests",
+            "selected_drilldowns": [],
+            "clusters": [],
+            "assessments": [],
+            "health_rating": "healthy",
+            "warnings": 0,
+            "external_analysis_settings": {
+                "review_enrichment": {"enabled": True, "provider": "reviewer"}
+            },
+        }
+        review_path = self.health_dir / "reviews" / f"{run_id}-review.json"
+        review_path.write_text(json.dumps(review_data, indent=2), encoding="utf-8")
+
+        # Write sources artifact with explicit canonical_identity
+        # This is what the health loop discovery produces
+        cluster_context = "test-cluster"
+        # Parse namespace and name from canonical_identity for proper model behavior
+        if "/" in canonical_identity:
+            name_parts = canonical_identity.rsplit("/", 1)
+            ns = name_parts[0]
+            name = name_parts[1]
+        else:
+            ns = "monitoring"
+            name = endpoint
+        sources = [
+            {
+                "source_id": source_id,
+                "endpoint": endpoint,
+                "namespace": ns,
+                "name": name,
+                "origin": origin,
+                "state": state,
+                # Explicit canonical_identity for cross-run matching
+                # This must match what the health loop uses for registry lookups
+                "canonical_identity": canonical_identity,
+                # matching_key is UI-derived fallback
+                "matching_key": endpoint,  # Also include matching_key for completeness
+                "discovered_at": "2026-01-01T00:00:00Z",
+                "verified_at": "2026-01-01T00:01:00Z",
+                "last_check": "2026-01-01T01:00:00Z",
+                "last_error": None,
+                "verified_version": "0.27.0",
+                "confidence_hints": ["crd_discovery"],
+            },
+        ]
+        sources_artifact = {
+            "sources": sources,
+            "total_count": len(sources),
+            "discovery_timestamp": datetime.now(UTC).isoformat(),
+            "cluster_context": cluster_context,
+        }
+        sources_path = self.health_dir / f"{run_id}-alertmanager-sources.json"
+        sources_path.write_text(json.dumps(sources_artifact, indent=2), encoding="utf-8")
+
+        # Write compact artifact
+        compact_artifact = {
+            "status": "healthy",
+            "alert_count": 5,
+            "severity_counts": {"critical": 1, "warning": 4},
+            "state_counts": {"firing": 3, "pending": 2},
+            "top_alert_names": ["PodNotReady", "HighCPUUsage"],
+            "affected_namespaces": ["monitoring"],
+            "affected_clusters": ["test-cluster"],
+            "affected_services": ["api-service"],
+            "truncated": False,
+            "captured_at": datetime.now(UTC).isoformat(),
+        }
+        compact_path = self.health_dir / f"{run_id}-alertmanager-compact.json"
+        compact_path.write_text(json.dumps(compact_artifact, indent=2), encoding="utf-8")
+
+        # Write ui-index.json with alertmanager data
+        index_data: dict[str, object] = {
+            "run": {
+                "run_id": run_id,
+                "run_label": run_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "collector_version": "tests",
+                "cluster_count": 1,
+                "drilldown_count": 0,
+                "proposal_count": 0,
+                "external_analysis_count": 1,
+                "notification_count": 0,
+                "alertmanager_sources": sources_artifact,
+                "alertmanager_compact": compact_artifact,
+            },
+            "clusters": [],
+            "proposals": [],
+            "latest_assessment": None,
+            "latest_findings": None,
+            "run_stats": {"total_runs": 1},
+            "auto_drilldown_interpretations": {},
+            "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+            "drilldown_availability": {
+                "total_clusters": 0,
+                "available": 0,
+                "missing": 0,
+                "missing_clusters": [],
+                "coverage": [],
+            },
+            "proposal_status_summary": {"status_counts": []},
+            "notification_history": [],
+        }
+        index_path = self.health_dir / "ui-index.json"
+        index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
+
+    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
+        handler = functools.partial(
+            HealthUIRequestHandler,
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
+
+    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    def _post_source_action(
+        self,
+        server: ThreadingHTTPServer,
+        run_id: str,
+        source_id: str,
+        action: str,
+    ) -> dict[str, object]:
+        """POST to the source action endpoint and return parsed JSON response."""
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
+
+        from urllib.parse import quote
+        encoded_source_id = quote(source_id, safe="")
+        url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+
+        payload = json.dumps({
+            "action": action,
+            "clusterLabel": "test-cluster",
+            "reason": "test-cross-run-persistence",
+        }).encode("utf-8")
+
+        request = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return cast(dict[str, object], json.loads(response.read().decode("utf-8")))
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8") if exc.fp else ""
+            raise AssertionError(
+                f"HTTP {exc.code}: {exc.reason}. Error body: {error_body}"
+            ) from exc
+
+    def test_promote_writes_registry_entry_with_canonical_identity(self) -> None:
+        """Test that promote action writes registry entry using canonical_identity.
+
+        The registry key must be: cluster_context:canonical_identity
+        This matches what the health loop uses for lookups in subsequent runs.
+        
+        Note: canonical_identity is computed as namespace/name format by the model,
+        regardless of what's in the source_id field.
+        """
+        run_id = "promote-registry-test"
+        source_id = "crd:monitoring/test-alertmanager"
+        endpoint = "http://alertmanager.monitoring.svc:9093"
+        # canonical_identity is computed as namespace/name by the model
+        canonical_identity = "monitoring/test-alertmanager"
+        cluster_context = "test-cluster"
+
+        self._write_sources_with_canonical_identity(
+            run_id=run_id,
+            source_id=source_id,
+            endpoint=endpoint,
+            canonical_identity=canonical_identity,
+            origin="alertmanager-crd",
+            state="auto-tracked",
+        )
+
+        server, thread = self._start_server()
+        try:
+            response = self._post_source_action(server, run_id, source_id, "promote")
+            self.assertEqual(response.get("status"), "success", f"Promote should succeed: {response}")
+        finally:
+            self._shutdown_server(server, thread)
+
+        # Verify registry entry was written
+        from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
+            RegistryEntry,
+            read_source_registry,
+        )
+        registry = read_source_registry(self.health_dir)
+        assert registry is not None, "Registry should be written"
+        # Type narrowing for mypy
+        registry_entries: dict[str, RegistryEntry] = registry.entries
+        self.assertIsNotNone(registry_entries, "Registry entries should exist")
+
+        # The registry key must use canonical_identity (not matching_key)
+        expected_registry_key = f"{cluster_context}:{canonical_identity}"
+        self.assertIn(
+            expected_registry_key,
+            registry_entries,
+            f"Registry key should be '{expected_registry_key}' using canonical_identity"
+        )
+
+        # Verify the registry entry has correct canonical_identity
+        entry = registry_entries[expected_registry_key]
+        self.assertEqual(
+            entry.canonical_identity,
+            canonical_identity,
+            "Registry entry canonical_identity should match source canonical_identity"
+        )
+        self.assertEqual(
+            entry.desired_state.value,
+            "manual",
+            "Promoted source should have desired_state=manual"
+        )
+        self.assertEqual(
+            entry.cluster_context,
+            cluster_context,
+            "Registry entry cluster_context should match"
+        )
+
+    def test_disable_writes_registry_entry_with_canonical_identity(self) -> None:
+        """Test that disable action writes registry entry using canonical_identity.
+
+        The registry key must be: cluster_context:canonical_identity
+        This matches what the health loop uses for lookups in subsequent runs.
+        
+        Note: canonical_identity is computed as namespace/name format by the model,
+        regardless of what's in the source_id field.
+        """
+        run_id = "disable-registry-test"
+        source_id = "service:monitoring/test-service"
+        endpoint = "http://test-service.monitoring.svc:9093"
+        # canonical_identity is computed as namespace/name by the model
+        canonical_identity = "monitoring/test-service"
+        cluster_context = "test-cluster"
+
+        self._write_sources_with_canonical_identity(
+            run_id=run_id,
+            source_id=source_id,
+            endpoint=endpoint,
+            canonical_identity=canonical_identity,
+            origin="service-heuristic",
+            state="auto-tracked",
+        )
+
+        server, thread = self._start_server()
+        try:
+            response = self._post_source_action(server, run_id, source_id, "disable")
+            self.assertEqual(response.get("status"), "success", f"Disable should succeed: {response}")
+        finally:
+            self._shutdown_server(server, thread)
+
+        # Verify registry entry was written
+        from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
+            RegistryEntry,
+            read_source_registry,
+        )
+        registry = read_source_registry(self.health_dir)
+        assert registry is not None, "Registry should be written"
+        # Type narrowing for mypy
+        registry_entries: dict[str, RegistryEntry] = registry.entries
+
+        # The registry key must use canonical_identity (not matching_key)
+        expected_registry_key = f"{cluster_context}:{canonical_identity}"
+        self.assertIn(
+            expected_registry_key,
+            registry_entries,
+            f"Registry key should be '{expected_registry_key}' using canonical_identity"
+        )
+
+        # Verify the registry entry has correct canonical_identity and state
+        entry = registry_entries[expected_registry_key]
+        self.assertEqual(
+            entry.canonical_identity,
+            canonical_identity,
+            "Registry entry canonical_identity should match source canonical_identity"
+        )
+        self.assertEqual(
+            entry.desired_state.value,
+            "disabled",
+            "Disabled source should have desired_state=disabled"
+        )
+
+    def test_registry_key_matches_health_loop_lookup(self) -> None:
+        """Test that registry key format matches what health loop uses for lookups.
+
+        This verifies end-to-end consistency:
+        - UI server writes: {cluster_context}:{source.canonical_identity}
+        - Health loop looks up: {cluster_context}:{source.canonical_identity}
+
+        Both must use canonical_identity from the discovery layer.
+        """
+        run_id = "registry-key-match-test"
+        source_id = "prometheus-config:default/k8s"
+        endpoint = "http://prometheus.default:9090"
+        # canonical_identity is computed as namespace/name format by the model
+        # For "prometheus-config:default/k8s" with namespace="default" and name="k8s",
+        # the computed canonical_identity would be "default/k8s"
+        canonical_identity = "default/k8s"
+        # Note: The helper uses "test-cluster" as cluster_context
+        cluster_context = "test-cluster"
+
+        self._write_sources_with_canonical_identity(
+            run_id=run_id,
+            source_id=source_id,
+            endpoint=endpoint,
+            canonical_identity=canonical_identity,
+            origin="prometheus-crd-config",
+            state="discovered",
+        )
+
+        server, thread = self._start_server()
+        try:
+            response = self._post_source_action(server, run_id, source_id, "promote")
+            self.assertEqual(response.get("status"), "success")
+        finally:
+            self._shutdown_server(server, thread)
+
+        # Simulate what the health loop does when looking up registry state
+        # It reads from registry and looks up using: cluster_context:canonical_identity
+        from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
+            RegistryEntry,
+            read_source_registry,
+        )
+        registry = read_source_registry(self.health_dir)
+        assert registry is not None, "Registry should be written"
+        # Type narrowing for mypy
+        registry_entries: dict[str, RegistryEntry] = registry.entries
+
+        # This is the exact lookup pattern the health loop uses
+        health_loop_lookup_key = f"{cluster_context}:{canonical_identity}"
+
+        # Verify the lookup key exists (health loop can find it)
+        self.assertIn(
+            health_loop_lookup_key,
+            registry_entries,
+            f"Health loop lookup key '{health_loop_lookup_key}' should exist in registry"
+        )
+
+        # Verify the entry has the correct desired_state
+        entry = registry_entries[health_loop_lookup_key]
+        self.assertEqual(
+            entry.desired_state.value,
+            "manual",
+            "Promoted source should be found by health loop with desired_state=manual"
+        )
+        self.assertEqual(
+            entry.cluster_context,
+            cluster_context,
+            "Cluster context should match for proper lookup"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

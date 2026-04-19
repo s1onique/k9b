@@ -22,6 +22,13 @@ from ..external_analysis.alertmanager_source_actions import (
     SourceAction,
     SourceOverride,
 )
+from ..external_analysis.alertmanager_source_registry import (
+    AlertmanagerSourceRegistry,
+    RegistryDesiredState,
+    RegistryEntry,
+    read_source_registry,
+    write_source_registry,
+)
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisStatus,
@@ -2517,6 +2524,79 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_json({"error": f"Failed to persist override: {exc}"}, 500)
             return
+
+        # Also write to the durable cross-run registry for cross-run persistence
+        # This ensures promote/disable actions survive beyond the current run
+        try:
+            # Use the cluster_context from alertmanager_sources view, which contains
+            # the Kubernetes context used in discovery. This MUST match the context
+            # used in future health loop lookups for the registry to work correctly.
+            cluster_context = sources_view.cluster_context
+            # Fall back to cluster_label only if cluster_context is None
+            if cluster_context is None:
+                cluster_context = cluster_label
+            
+            registry = read_source_registry(self._health_root)
+            if registry is None:
+                registry = AlertmanagerSourceRegistry()
+            
+            # Build registry key from source's matching_key (stable key for cross-run deduplication)
+            # This is derived from canonical_identity during inventory building
+            registry_key = f"{cluster_context}:{source_view.canonical_identity}"
+            existing_entry = registry.entries.get(registry_key)
+            
+            if action == SourceAction.PROMOTE:
+                desired_state = RegistryDesiredState.MANUAL
+            else:
+                desired_state = RegistryDesiredState.DISABLED
+
+            # Create or update registry entry
+            if existing_entry is None:
+                # Create new registry entry for this source
+                new_entry = RegistryEntry(
+                    cluster_context=cluster_context,
+                    canonical_identity=source_view.canonical_identity,
+                    desired_state=desired_state,
+                    reason=reason,
+                    operator=None,  # Could be populated from auth context if available
+                    source_run_id=context.run.run_id,
+                    endpoint=getattr(source_view, "endpoint", None),
+                    namespace=source_view.namespace,
+                    name=source_view.name,
+                    original_origin=getattr(source_view, "origin", None),
+                    original_state=getattr(source_view, "state", None),
+                )
+                registry.add_entry(new_entry)
+            else:
+                # Update existing entry - create a new entry with updated values
+                updated_entry = RegistryEntry(
+                    cluster_context=existing_entry.cluster_context,
+                    canonical_identity=existing_entry.canonical_identity,
+                    desired_state=desired_state,
+                    reason=reason or existing_entry.reason,
+                    operator=existing_entry.operator,
+                    updated_at=datetime.now(UTC),
+                    source_run_id=context.run.run_id,
+                    endpoint=existing_entry.endpoint,
+                    namespace=existing_entry.namespace,
+                    name=existing_entry.name,
+                    original_origin=existing_entry.original_origin,
+                    original_state=existing_entry.original_state,
+                )
+                registry.add_entry(updated_entry)
+
+            write_source_registry(registry, self._health_root)
+        except Exception as exc:
+            # Log warning but don't fail the request - override was written successfully
+            logger.warning(
+                "Failed to persist source to durable registry",
+                extra={
+                    "source_id": path_source_id,
+                    "cluster_label": cluster_label,
+                    "action": action.value,
+                    "error": str(exc),
+                },
+            )
 
         # Invalidate UI caches by touching ui-index.json
         # This ensures the next /api/run request rebuilds the payload with new source state

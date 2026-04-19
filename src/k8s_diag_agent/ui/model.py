@@ -322,6 +322,10 @@ class AlertmanagerProvenanceView:
 class AlertmanagerSourceView:
     """View model for a single Alertmanager source in the inventory."""
     source_id: str
+    matching_key: str  # Stable key for cross-run deduplication (UI-derived fallback)
+    # Canonical identity from discovery layer - the stable identity used for registry matching
+    # This must match the identity used by the health loop for cross-run persistence
+    canonical_identity: str
     endpoint: str
     namespace: str | None
     name: str | None
@@ -1851,8 +1855,26 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
             labels = [_ORIGIN_LABELS.get(p, p) for p in merged_provenances]
             display_provenance = ", ".join(labels) if labels else display_origin
         
+        # Build matching_key for cross-run deduplication
+        # Use explicit matching_key if provided, otherwise derive from endpoint
+        matching_key = _coerce_optional_str(src.get("matching_key"))
+        if not matching_key:
+            # Derive from endpoint as fallback
+            endpoint_val = _coerce_str(src.get("endpoint"))
+            matching_key = endpoint_val
+
+        # Build canonical_identity from discovery layer - the stable identity used for registry matching
+        # This must match the identity used by the health loop for cross-run persistence
+        canonical_identity = _coerce_optional_str(src.get("canonical_identity"))
+        if not canonical_identity:
+            # Fallback to matching_key if canonical_identity not present in artifact
+            # (for backwards compatibility with older artifacts)
+            canonical_identity = matching_key
+
         sources.append(AlertmanagerSourceView(
             source_id=_coerce_str(src.get("source_id")),
+            matching_key=matching_key,
+            canonical_identity=canonical_identity,
             endpoint=_coerce_str(src.get("endpoint")),
             namespace=_coerce_optional_str(src.get("namespace")),
             name=_coerce_optional_str(src.get("name")),
