@@ -3405,6 +3405,10 @@ class HealthLoopRunner:
         # Select the first eligible source (stable, deterministic)
         selected_source = eligible_sources[0]
         
+        # Compute effective cluster context once: prefer per-source value, fall back to inventory
+        # This ensures all snapshot-stage logs have a valid context value for observability
+        effective_cluster_context = selected_source.cluster_context or inventory.cluster_context
+        
         self._log_event(
             "alertmanager-snapshot",
             "DEBUG",
@@ -3416,7 +3420,7 @@ class HealthLoopRunner:
             source_endpoint=selected_source.endpoint,
             source_origin=selected_source.origin.value,
             source_state=selected_source.state.value,
-            cluster_context=selected_source.cluster_context,
+            cluster_context=effective_cluster_context,
             total_eligible=len(eligible_sources),
         )
         
@@ -3493,7 +3497,7 @@ class HealthLoopRunner:
                     source_identity=selected_source.source_id,
                     severity_reason=str(exc),
                     reason="portforward-startup-failed",
-                    cluster_context=selected_source.cluster_context,
+                    cluster_context=effective_cluster_context,
                 )
                 # Continue to fetch without port-forward; will likely fail but that's non-fatal
                 needs_port_forward = False
@@ -3533,7 +3537,7 @@ class HealthLoopRunner:
                 source_endpoint=selected_source.endpoint,
                 alert_count=snapshot.alert_count,
                 snapshot_status=snapshot.status.value,
-                cluster_context=selected_source.cluster_context,
+                cluster_context=effective_cluster_context,
             )
             
         except urllib.error.HTTPError as exc:
@@ -3579,7 +3583,7 @@ class HealthLoopRunner:
                 source_endpoint=selected_source.endpoint,
                 severity_reason=error_msg,
                 reason="connection-error",
-                cluster_context=selected_source.cluster_context,
+                cluster_context=effective_cluster_context,
             )
             # Non-fatal: continue with error snapshot
             
@@ -3601,7 +3605,7 @@ class HealthLoopRunner:
                 source_endpoint=selected_source.endpoint,
                 severity_reason=error_msg,
                 reason="unknown-error",
-                cluster_context=selected_source.cluster_context,
+                cluster_context=effective_cluster_context,
             )
             # Non-fatal: continue with error snapshot
         
