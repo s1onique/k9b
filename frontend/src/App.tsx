@@ -4,7 +4,6 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import {
   approveNextCheckCandidate,
-  disableAlertmanagerSource,
   executeNextCheckCandidate,
   fetchClusterDetail,
   fetchFleet,
@@ -15,6 +14,7 @@ import {
   promoteAlertmanagerSource,
   promoteDeterministicNextCheck,
   runBatchExecution,
+  stopTrackingAlertmanagerSource,
   submitUsefulnessFeedback,
 } from "./api";
 import type {
@@ -1946,8 +1946,13 @@ const AlertmanagerSnapshotPanel = ({
 
 /** AlertmanagerSourcesPanel - Display and manage tracked alertmanager sources.
  * Shows summary counts and a table of sources with visual state indicators.
- * Supports operator actions: promote (discovered/auto-tracked -> manual) and
- * disable (auto-tracked only -> remove from auto-tracking).
+ * 
+ * Action semantics by source state:
+ * - Discovered/Auto-tracked sources: Show Promote + Stop tracking buttons
+ * - Manual sources: Show "Managed manually" badge + Stop tracking button
+ *   (Promote is hidden because source is already manual - action is meaningless)
+ * - Stop tracking is a persistent destructive action that filters source from future runs
+ * 
  * State color mapping:
  * - manual/auto-tracked: green (healthy)
  * - discovered: yellow (caution)
@@ -2007,8 +2012,8 @@ export const AlertmanagerSourcesPanel = ({
     }
   };
 
-  // Handle disable action
-  const handleDisable = async (sourceId: string) => {
+  // Handle stop tracking action
+  const handleStopTracking = async (sourceId: string) => {
     if (!clusterLabel) {
       setActionError((prev) => ({ ...prev, [sourceId]: "No cluster context available" }));
       return;
@@ -2017,23 +2022,23 @@ export const AlertmanagerSourcesPanel = ({
       setActionError((prev) => ({ ...prev, [sourceId]: "No run context available" }));
       return;
     }
-    setActionLoading((prev) => ({ ...prev, [sourceId]: "disable" }));
+    setActionLoading((prev) => ({ ...prev, [sourceId]: "stop_tracking" }));
     setActionError((prev) => ({ ...prev, [sourceId]: null }));
     setActionSuccess((prev) => ({ ...prev, [sourceId]: null }));
     try {
-      const response = await disableAlertmanagerSource({ sourceId, clusterLabel }, runId);
+      const response = await stopTrackingAlertmanagerSource({ sourceId, clusterLabel }, runId);
       if (response.status === "success") {
-        setActionSuccess((prev) => ({ ...prev, [sourceId]: response.summary || "Source disabled" }));
+        setActionSuccess((prev) => ({ ...prev, [sourceId]: response.summary || "Stopped tracking source" }));
         if (onRefresh) {
           setTimeout(onRefresh, 500);
         }
       } else {
-        setActionError((prev) => ({ ...prev, [sourceId]: response.summary || "Disable failed" }));
+        setActionError((prev) => ({ ...prev, [sourceId]: response.summary || "Stop tracking failed" }));
       }
     } catch (err) {
       setActionError((prev) => ({
         ...prev,
-        [sourceId]: err instanceof Error ? err.message : "Failed to disable source",
+        [sourceId]: err instanceof Error ? err.message : "Failed to stop tracking source",
       }));
     } finally {
       setActionLoading((prev) => {
@@ -2174,23 +2179,27 @@ export const AlertmanagerSourcesPanel = ({
                     </td>
                     <td className="alertmanager-source-actions">
                       <div className="alertmanager-source-action-buttons">
-                        <button
-                          type="button"
-                          className="button primary tiny alertmanager-action-btn"
-                          onClick={() => handlePromote(source.source_id)}
-                          disabled={isLoading || !source.can_promote}
-                          title={source.can_promote ? "Promote to manual tracking" : "Cannot promote this source"}
-                        >
-                          {isLoading && actionLoading[source.source_id] === "promote" ? "…" : "Promote"}
-                        </button>
+                        {source.display_state?.toLowerCase() === "manual" ? (
+                          <span className="alertmanager-managed-badge">Managed manually</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button primary tiny alertmanager-action-btn"
+                            onClick={() => handlePromote(source.source_id)}
+                            disabled={isLoading || !source.can_promote}
+                            title={source.can_promote ? "Promote to manual tracking" : "Cannot promote this source"}
+                          >
+                            {isLoading && actionLoading[source.source_id] === "promote" ? "…" : "Promote"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="button secondary tiny alertmanager-action-btn"
-                          onClick={() => handleDisable(source.source_id)}
+                          onClick={() => handleStopTracking(source.source_id)}
                           disabled={isLoading || !source.can_disable}
-                          title={source.can_disable ? "Disable auto-tracking for this source" : "Cannot disable this source"}
+                          title={source.can_disable ? "Stop tracking this source (filters it from future runs)" : "Cannot stop tracking this source"}
                         >
-                          {isLoading && actionLoading[source.source_id] === "disable" ? "…" : "Disable"}
+                          {isLoading && actionLoading[source.source_id] === "stop_tracking" ? "…" : "Stop tracking"}
                         </button>
                       </div>
                       {error && (

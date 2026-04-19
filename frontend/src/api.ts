@@ -254,7 +254,7 @@ export const promoteAlertmanagerSource = async (
   return performAlertmanagerSourceAction({ ...request, action: 'promote' }, runId);
 };
 
-export const disableAlertmanagerSource = async (
+export const stopTrackingAlertmanagerSource = async (
   request: AlertmanagerSourceActionRequest,
   runId: string
 ): Promise<AlertmanagerSourceActionResponse> => {
