@@ -9,6 +9,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -22,13 +24,23 @@ from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters
-from ..external_analysis.alertmanager_artifact import write_alertmanager_sources
+from ..external_analysis.alertmanager_artifact import (
+    write_alertmanager_artifacts,
+    write_alertmanager_sources,
+)
 from ..external_analysis.alertmanager_discovery import (
     AlertmanagerSourceInventory,
     AlertmanagerSourceOrigin,
     AlertmanagerSourceState,
     discover_alertmanagers,
     merge_deduplicate_inventory,
+)
+from ..external_analysis.alertmanager_snapshot import (
+    AlertmanagerSnapshot,
+    AlertmanagerStatus,
+    create_error_snapshot,
+    normalize_alertmanager_payload,
+    snapshot_to_compact,
 )
 from ..external_analysis.alertmanager_source_registry import (
     RegistryDesiredState,
@@ -2031,6 +2043,8 @@ class HealthLoopRunner:
         self._latest_external_artifacts: list[ExternalAnalysisArtifact] = []
         self._notification_records: list[tuple[NotificationArtifact, Path]] = []
         self._expected_scheduler_interval_seconds = expected_scheduler_interval_seconds
+        # Storage for verified Alertmanager inventory (populated by _run_alertmanager_discovery)
+        self._alertmanager_inventory: AlertmanagerSourceInventory | None = None
 
     def _log_event(self, component: str, severity: str, message: str, **metadata: Any) -> None:
         emit_structured_log(
@@ -2066,6 +2080,8 @@ class HealthLoopRunner:
         previous_history = {key: entry for key, entry in history.items()}
         records = self._collect_snapshots(directories["snapshots"])
         self._run_alertmanager_discovery(records, directories)
+        # Collect Alertmanager snapshots from tracked sources
+        self._run_alertmanager_snapshot_collection(directories)
         assessments = self._build_assessments(
             records,
             history,
@@ -3311,6 +3327,231 @@ class HealthLoopRunner:
                 "ERROR",
                 "Failed to write Alertmanager sources inventory",
                 event="alertmanager-sources-write-failed",
+                severity_reason=str(exc),
+                reason="write-error",
+            )
+            # Continue without failing the run
+        
+        # Store the verified inventory for use by snapshot collection
+        self._alertmanager_inventory = verified_inventory
+
+    def _run_alertmanager_snapshot_collection(
+        self,
+        directories: dict[str, Path],
+    ) -> None:
+        """Collect Alertmanager snapshot and compact artifacts for tracked sources.
+
+        This method runs after _run_alertmanager_discovery has populated
+        self._alertmanager_inventory with verified/tracked sources.
+
+        Selection rule: Query the first eligible source (by deterministic order:
+        MANUAL > AUTO_TRACKED). Excludes DISCOVERED, DEGRADED, and MISSING sources.
+        Skip if no eligible sources exist.
+
+        This is non-fatal: fetch failures are logged but do not stop the run.
+        """
+        # Log start of snapshot collection
+        self._log_event(
+            "alertmanager-snapshot",
+            "INFO",
+            "Alertmanager snapshot collection started",
+            event="alertmanager-snapshot-start",
+            run_id=self.run_id,
+            run_label=self.run_label,
+        )
+        
+        # Get inventory from discovery
+        inventory = self._alertmanager_inventory
+        if inventory is None:
+            self._log_event(
+                "alertmanager-snapshot",
+                "WARNING",
+                "Alertmanager inventory not available (discovery may have failed)",
+                event="alertmanager-snapshot-skipped",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                reason="no_inventory",
+            )
+            return
+        
+        # Select eligible sources: MANUAL or AUTO_TRACKED
+        # Exclude DISCOVERED (not verified), DEGRADED (failed verification), MISSING
+        manual_sources = list(inventory.get_by_state(AlertmanagerSourceState.MANUAL))
+        auto_tracked_sources = list(inventory.get_by_state(AlertmanagerSourceState.AUTO_TRACKED))
+        
+        # Deterministic selection: prefer MANUAL, then AUTO_TRACKED
+        eligible_sources = manual_sources + auto_tracked_sources
+        
+        if not eligible_sources:
+            self._log_event(
+                "alertmanager-snapshot",
+                "INFO",
+                "Alertmanager snapshot skipped: no eligible tracked sources",
+                event="alertmanager-snapshot-skipped",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                reason="no_eligible_sources",
+                total_discovered=len(inventory.sources),
+                manual_count=len(manual_sources),
+                auto_tracked_count=len(auto_tracked_sources),
+                cluster_context=inventory.cluster_context,
+            )
+            return
+        
+        # Select the first eligible source (stable, deterministic)
+        selected_source = eligible_sources[0]
+        
+        self._log_event(
+            "alertmanager-snapshot",
+            "DEBUG",
+            "Alertmanager source selected for snapshot",
+            event="alertmanager-snapshot-source-selected",
+            run_id=self.run_id,
+            run_label=self.run_label,
+            source_identity=selected_source.source_id,
+            source_endpoint=selected_source.endpoint,
+            source_origin=selected_source.origin.value,
+            source_state=selected_source.state.value,
+            cluster_context=selected_source.cluster_context,
+            total_eligible=len(eligible_sources),
+        )
+        
+        # Fetch alerts from the selected source
+        snapshot: AlertmanagerSnapshot
+        try:
+            endpoint = selected_source.endpoint
+            timeout_seconds = 10.0
+            headers: dict[str, str] = {"Accept": "application/json"}
+            url = f"{endpoint.rstrip('/')}/api/v2/alerts"
+
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as response:
+                body = response.read()
+                raw_response = json.loads(body)
+            
+            # Normalize the response into a snapshot
+            snapshot = normalize_alertmanager_payload(raw_response)
+            
+            self._log_event(
+                "alertmanager-snapshot",
+                "INFO",
+                "Alertmanager snapshot fetched successfully",
+                event="alertmanager-snapshot-fetched",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                source_identity=selected_source.source_id,
+                source_endpoint=selected_source.endpoint,
+                alert_count=snapshot.alert_count,
+                snapshot_status=snapshot.status.value,
+                cluster_context=selected_source.cluster_context,
+            )
+            
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401 or exc.code == 403:
+                error_msg = f"Alertmanager auth failed: {exc.code}"
+            else:
+                error_msg = f"Alertmanager returned {exc.code}: {exc.reason}"
+            snapshot = create_error_snapshot(
+                AlertmanagerStatus.UPSTREAM_ERROR,
+                error_msg,
+                source=selected_source.endpoint,
+            )
+            self._log_event(
+                "alertmanager-snapshot",
+                "WARNING",
+                "Alertmanager snapshot fetch failed",
+                event="alertmanager-snapshot-failed",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                source_identity=selected_source.source_id,
+                source_endpoint=selected_source.endpoint,
+                severity_reason=error_msg,
+                reason="fetch-error",
+                cluster_context=selected_source.cluster_context,
+            )
+            # Non-fatal: continue with error snapshot
+            
+        except urllib.error.URLError as exc:
+            error_msg = f"Alertmanager unreachable: {exc.reason}"
+            snapshot = create_error_snapshot(
+                AlertmanagerStatus.UPSTREAM_ERROR,
+                error_msg,
+                source=selected_source.endpoint,
+            )
+            self._log_event(
+                "alertmanager-snapshot",
+                "WARNING",
+                "Alertmanager snapshot fetch failed",
+                event="alertmanager-snapshot-failed",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                source_identity=selected_source.source_id,
+                source_endpoint=selected_source.endpoint,
+                severity_reason=error_msg,
+                reason="connection-error",
+                cluster_context=selected_source.cluster_context,
+            )
+            # Non-fatal: continue with error snapshot
+            
+        except Exception as exc:
+            error_msg = str(exc)
+            snapshot = create_error_snapshot(
+                AlertmanagerStatus.INVALID_RESPONSE,
+                error_msg,
+                source=selected_source.endpoint,
+            )
+            self._log_event(
+                "alertmanager-snapshot",
+                "WARNING",
+                "Alertmanager snapshot fetch failed",
+                event="alertmanager-snapshot-failed",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                source_identity=selected_source.source_id,
+                source_endpoint=selected_source.endpoint,
+                severity_reason=error_msg,
+                reason="unknown-error",
+                cluster_context=selected_source.cluster_context,
+            )
+            # Non-fatal: continue with error snapshot
+        
+        # Create compact summarization
+        compact = snapshot_to_compact(snapshot)
+        
+        # Write both artifacts
+        try:
+            snapshot_path, compact_path = write_alertmanager_artifacts(
+                directories["root"],
+                self.run_id,
+                snapshot,
+                compact,
+            )
+            
+            self._log_event(
+                "alertmanager-snapshot",
+                "INFO",
+                "Alertmanager snapshot artifacts written",
+                event="alertmanager-snapshot-written",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                source_identity=selected_source.source_id,
+                source_endpoint=selected_source.endpoint,
+                snapshot_path=str(snapshot_path),
+                compact_path=str(compact_path),
+                alert_count=snapshot.alert_count,
+                snapshot_status=snapshot.status.value,
+                cluster_context=selected_source.cluster_context,
+            )
+            
+        except Exception as exc:
+            self._log_event(
+                "alertmanager-snapshot",
+                "ERROR",
+                "Failed to write Alertmanager snapshot artifacts",
+                event="alertmanager-snapshot-write-failed",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                source_identity=selected_source.source_id,
                 severity_reason=str(exc),
                 reason="write-error",
             )
