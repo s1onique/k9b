@@ -363,6 +363,7 @@ class AlertmanagerSourceView:
     display_origin: str  # human-readable origin
     display_state: str  # human-readable state with color hint
     provenance_summary: str  # short provenance string for UI
+    cluster_label: str | None  # Operator-facing cluster label for per-cluster UI filtering
 
 
 @dataclass(frozen=True)
@@ -1938,6 +1939,7 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
             display_origin=display_origin,
             display_state=display_state,
             provenance_summary=provenance_summary,
+            cluster_label=_coerce_optional_str(src.get("cluster_label")),
         ))
     
     # Count by category

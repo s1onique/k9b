@@ -2003,6 +2003,12 @@ export const AlertmanagerSourcesPanel = ({
   clusterLabel?: string | null;
   onRefresh?: () => void;
 }) => {
+  // Filter sources by cluster when clusterLabel is provided
+  // This prevents cross-cluster bleed-through in the Fleet overview
+  const filteredSources = clusterLabel
+    ? sources.sources.filter((s) => s.cluster_label === clusterLabel)
+    : sources.sources;
+
   // Track loading state for action buttons
   const [actionLoading, setActionLoading] = useState<Record<string, "promote" | "disable" | null>>({});
   const [actionError, setActionError] = useState<Record<string, string | null>>({});
@@ -2106,13 +2112,22 @@ export const AlertmanagerSourcesPanel = ({
     return value.length <= maxLength ? value : `${value.slice(0, maxLength).trim()}…`;
   };
 
-  const summaryItems = [
-    { label: "Total", value: sources.total_count },
-    { label: "Tracked", value: sources.tracked_count },
-    { label: "Manual", value: sources.manual_count },
-    { label: "Degraded", value: sources.degraded_count },
-    { label: "Missing", value: sources.missing_count },
-  ];
+  // Derive summary counts from filtered sources when clusterLabel is provided
+  const summaryItems = clusterLabel
+    ? [
+        { label: "Total", value: filteredSources.length },
+        { label: "Tracked", value: filteredSources.filter((s) => s.display_state?.toLowerCase() === "auto-tracked" || s.display_state?.toLowerCase() === "tracked").length },
+        { label: "Manual", value: filteredSources.filter((s) => s.display_state?.toLowerCase() === "manual").length },
+        { label: "Degraded", value: filteredSources.filter((s) => s.display_state?.toLowerCase() === "degraded").length },
+        { label: "Missing", value: filteredSources.filter((s) => s.display_state?.toLowerCase() === "missing").length },
+      ]
+    : [
+        { label: "Total", value: sources.total_count },
+        { label: "Tracked", value: sources.tracked_count },
+        { label: "Manual", value: sources.manual_count },
+        { label: "Degraded", value: sources.degraded_count },
+        { label: "Missing", value: sources.missing_count },
+      ];
 
   return (
     <section className="panel alertmanager-sources" id="alertmanager-sources">
@@ -2143,8 +2158,8 @@ export const AlertmanagerSourcesPanel = ({
         </p>
       )}
 
-      {/* Sources table */}
-      {sources.sources.length > 0 ? (
+      {/* Sources table - show filtered when clusterLabel is provided, else show all */}
+      {filteredSources.length > 0 ? (
         <div className="alertmanager-sources-table-wrapper">
           <table className="alertmanager-sources-table">
             <thead>
@@ -2155,12 +2170,13 @@ export const AlertmanagerSourcesPanel = ({
                 <th>Namespace / Name</th>
                 <th>Version</th>
                 <th>Provenance</th>
+                <th>Cluster</th>
                 <th>Actions</th>
                 <th>Last Error</th>
               </tr>
             </thead>
             <tbody>
-              {sources.sources.map((source) => {
+              {filteredSources.map((source) => {
                 const stateClass = getSourceStateClass(source.display_state);
                 const namespaceName = [source.namespace, source.name]
                   .filter(Boolean)
@@ -2210,6 +2226,9 @@ export const AlertmanagerSourcesPanel = ({
                         {truncateSourceCell(source.display_provenance || source.provenance_summary, 60)}
                       </span>
                     </td>
+                    <td className="alertmanager-source-cluster">
+                      {source.cluster_label || "—"}
+                    </td>
                     <td className="alertmanager-source-actions">
                       <div className="alertmanager-source-action-buttons">
                         {source.display_state?.toLowerCase() === "manual" ? (
@@ -2258,7 +2277,11 @@ export const AlertmanagerSourcesPanel = ({
           </table>
         </div>
       ) : (
-        <p className="muted small">No alertmanager sources discovered for this run.</p>
+        <p className="muted small">
+          {clusterLabel
+            ? `No alertmanager sources found for cluster "${clusterLabel}".`
+            : "No alertmanager sources discovered for this run."}
+        </p>
       )}
     </section>
   );

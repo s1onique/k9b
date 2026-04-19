@@ -473,6 +473,8 @@ class AlertmanagerSourcePayload(TypedDict, total=False):
     display_origin: str
     display_state: str
     provenance_summary: str
+    # Cluster association for per-cluster UI filtering
+    cluster_label: str | None
 
 
 class AlertmanagerSourcesPayload(TypedDict, total=False):
@@ -796,6 +798,8 @@ def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> Alertmanager
         "display_origin": view.display_origin,
         "display_state": view.display_state,
         "provenance_summary": view.provenance_summary,
+        # Cluster association for per-cluster UI filtering
+        "cluster_label": view.cluster_label,
     }
 
 

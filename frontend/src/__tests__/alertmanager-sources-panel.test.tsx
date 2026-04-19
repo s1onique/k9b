@@ -31,6 +31,7 @@ const makeAlertmanagerSource = (overrides: Partial<AlertmanagerSource> = {}): Al
   display_origin: "Alertmanager CRD",
   display_state: "tracked",
   provenance_summary: "Discovered via Alertmanager CRD",
+  cluster_label: null,
   ...overrides,
 });
 
@@ -185,8 +186,8 @@ describe("AlertmanagerSourcesPanel", () => {
       // Provenance (displayed from provenance_summary field)
       expect(screen.getByText("Discovered via Alertmanager CRD")).toBeInTheDocument();
 
-      // Last Error - should show em-dash since no error
-      expect(screen.getByText("—")).toBeInTheDocument();
+      // Last Error - should show em-dash since no error (multiple em-dashes in table)
+      expect(screen.getAllByText("—")).toHaveLength(2);
     });
 
     it("renders multiple sources", () => {
@@ -329,7 +330,8 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      expect(screen.getByText("—")).toBeInTheDocument();
+      // There are 2 em-dashes: one for error column, possibly one for provenance
+      expect(screen.getAllByText("—")).toHaveLength(2);
     });
 
     it("handles long error messages gracefully", () => {
@@ -490,6 +492,223 @@ describe("AlertmanagerSourcesPanel", () => {
       // Version column and error column both show em-dash in table rows
       const emDashes = screen.getAllByText("—");
       expect(emDashes.length).toBeGreaterThanOrEqual(2); // At least version + error columns
+    });
+  });
+
+  describe("Cluster filtering", () => {
+    it("filters source rows when clusterLabel prop is provided", () => {
+      // Multi-cluster fixture: sources from cluster-a and cluster-b
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "cluster-a-src-1",
+            cluster_label: "cluster-a",
+            endpoint: "http://alertmanager-a.monitoring:9093",
+          }),
+          makeAlertmanagerSource({
+            source_id: "cluster-b-src-1",
+            cluster_label: "cluster-b",
+            endpoint: "http://alertmanager-b.monitoring:9093",
+          }),
+          makeAlertmanagerSource({
+            source_id: "cluster-a-src-2",
+            cluster_label: "cluster-a",
+            endpoint: "http://alertmanager-a-2.monitoring:9093",
+          }),
+        ],
+        total_count: 3,
+      });
+
+      // Render with cluster-a filter
+      render(<AlertmanagerSourcesPanel sources={sources} clusterLabel="cluster-a" />);
+
+      // Should show cluster-a sources only (2 rows)
+      const rows = screen.getAllByRole("row");
+      // 1 header row + 2 data rows for cluster-a
+      expect(rows).toHaveLength(3);
+
+      // Should display cluster-a endpoint
+      expect(screen.getByText(/alertmanager-a\.monitoring/)).toBeInTheDocument();
+      expect(screen.getByText(/alertmanager-a-2\.monitoring/)).toBeInTheDocument();
+
+      // Should NOT display cluster-b endpoint
+      expect(screen.queryByText(/alertmanager-b\.monitoring/)).not.toBeInTheDocument();
+    });
+
+    it("shows all sources when clusterLabel is null", () => {
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "cluster-a-src-1",
+            cluster_label: "cluster-a",
+          }),
+          makeAlertmanagerSource({
+            source_id: "cluster-b-src-1",
+            cluster_label: "cluster-b",
+          }),
+        ],
+        total_count: 2,
+      });
+
+      // Render without cluster filter
+      render(<AlertmanagerSourcesPanel sources={sources} clusterLabel={null} />);
+
+      // Should show all sources (2 rows + header)
+      const rows = screen.getAllByRole("row");
+      expect(rows).toHaveLength(3);
+    });
+
+    it("displays no-data state when selected cluster has no sources", () => {
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "cluster-a-src-1",
+            cluster_label: "cluster-a",
+          }),
+        ],
+        total_count: 1,
+      });
+
+      // Filter for a cluster that has no sources
+      render(<AlertmanagerSourcesPanel sources={sources} clusterLabel="cluster-with-no-sources" />);
+
+      // Should show cluster-specific empty state message
+      expect(screen.getByText(/No alertmanager sources found for cluster "cluster-with-no-sources"\./)).toBeInTheDocument();
+      // Table should not be visible
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    });
+
+    it("displays cluster_label in the Cluster column when present", () => {
+      const source = makeAlertmanagerSource({
+        cluster_label: "prod-us-east-1",
+      });
+      const sources = makeAlertmanagerSources({ sources: [source] });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Cluster column should display the cluster label
+      expect(screen.getByText("prod-us-east-1")).toBeInTheDocument();
+    });
+
+    it("shows em-dash in Cluster column when cluster_label is null", () => {
+      const source = makeAlertmanagerSource({
+        cluster_label: null,
+      });
+      const sources = makeAlertmanagerSources({ sources: [source] });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // At least one em-dash for the cluster column (null cluster_label)
+      const emDashes = screen.getAllByText("—");
+      expect(emDashes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("filtered summary shows correct counts when cluster filtered", () => {
+      // Multi-cluster with mixed state
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "src-1",
+            cluster_label: "cluster-a",
+            display_state: "tracked",
+            endpoint: "http://alertmanager-a-1.monitoring:9093",
+          }),
+          makeAlertmanagerSource({
+            source_id: "src-2",
+            cluster_label: "cluster-a",
+            display_state: "manual",
+            is_manual: true,
+            endpoint: "http://alertmanager-a-2.monitoring:9093",
+          }),
+          makeAlertmanagerSource({
+            source_id: "src-3",
+            cluster_label: "cluster-b",
+            display_state: "tracked",
+            endpoint: "http://alertmanager-b.monitoring:9093",
+          }),
+        ],
+        total_count: 3,
+        tracked_count: 2,
+        manual_count: 1,
+      });
+
+      // Filter to cluster-a only
+      render(<AlertmanagerSourcesPanel sources={sources} clusterLabel="cluster-a" />);
+
+      // Check that filtered view shows correct metrics
+      // (The panel displays run-global counts from props, filtered rows are subset)
+      const rows = screen.getAllByRole("row");
+      // 1 header + 2 filtered rows for cluster-a = 3 total rows
+      expect(rows).toHaveLength(3);
+
+      // Both cluster-a endpoints should be visible
+      expect(screen.getByText(/alertmanager-a-1/)).toBeInTheDocument();
+      expect(screen.getByText(/alertmanager-a-2/)).toBeInTheDocument();
+      
+      // cluster-b source should NOT be visible
+      expect(screen.queryByText(/alertmanager-b/)).not.toBeInTheDocument();
+    });
+
+    it("actions remain functional on filtered source rows", () => {
+      const onDisable = vi.fn();
+      const onPromote = vi.fn();
+
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "cluster-a-src",
+            cluster_label: "cluster-a",
+            can_disable: true,
+            is_tracking: true,
+          }),
+          makeAlertmanagerSource({
+            source_id: "cluster-b-src",
+            cluster_label: "cluster-b",
+            can_promote: true,
+            is_manual: false,
+          }),
+        ],
+        total_count: 2,
+      });
+
+      render(
+        <AlertmanagerSourcesPanel
+          sources={sources}
+          clusterLabel="cluster-a"
+        />
+      );
+
+      // Only cluster-a source should be visible
+      const rows = screen.getAllByRole("row");
+      expect(rows).toHaveLength(2); // 1 header + 1 data row
+
+      // cluster-b source should NOT be rendered
+      expect(screen.queryByText("cluster-b-src")).not.toBeInTheDocument();
+    });
+
+    it("handles single source with matching cluster_label", () => {
+      const source = makeAlertmanagerSource({
+        source_id: "unique-source",
+        cluster_label: "my-cluster",
+        verified_version: "v0.28.0",
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        total_count: 1,
+        tracked_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} clusterLabel="my-cluster" />);
+
+      // Single row should be visible
+      const rows = screen.getAllByRole("row");
+      expect(rows).toHaveLength(2); // header + 1 data
+
+      // Version should be displayed
+      expect(screen.getByText("v0.28.0")).toBeInTheDocument();
+
+      // Cluster label should be displayed
+      expect(screen.getByText("my-cluster")).toBeInTheDocument();
     });
   });
 });

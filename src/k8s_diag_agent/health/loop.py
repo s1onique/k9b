@@ -3200,12 +3200,15 @@ class HealthLoopRunner:
                     },
                 )
                 
-                # Merge into aggregated inventory
-                if aggregated_inventory is None:
-                    aggregated_inventory = discovered_inventory
-                else:
-                    for source in discovered_inventory.sources.values():
-                        aggregated_inventory.add_source(source)
+                # Merge into aggregated inventory, tagging each source with the cluster label
+                # for per-cluster UI filtering.
+                # Tag all discovered sources with cluster_label so UI can filter by cluster.
+                for source in discovered_inventory.sources.values():
+                    source_with_cluster = replace(source, cluster_label=cluster_label)
+                    if aggregated_inventory is None:
+                        # First cluster: start the aggregated inventory with tagged sources
+                        aggregated_inventory = AlertmanagerSourceInventory()
+                    aggregated_inventory.add_source(source_with_cluster)
                         
             except Exception as exc:
                 self._log_event(

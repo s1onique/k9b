@@ -452,6 +452,107 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             assert sources[0].state == AlertmanagerSourceState.DISCOVERED, \
                 "Verification was called (state changed from DISCOVERED)"
 
+    def test_all_clusters_tagged_with_cluster_label_including_first(self) -> None:
+        """Regression: First cluster's sources must also get cluster_label tagged.
+
+        Previously, the code only injected cluster_label in the else branch
+        (when aggregated_inventory was not None). For the first cluster,
+        aggregated_inventory was set directly from discovered_inventory without
+        tagging, so first-cluster sources kept cluster_label=None.
+        
+        This test verifies that ALL clusters (first and subsequent) have
+        cluster_label correctly injected for per-cluster UI filtering.
+        """
+        runner = HealthLoopRunner(
+            config=self.config,
+            available_contexts=["cluster-alpha", "cluster-beta"],
+            quiet=True,
+            run_id=self.run_id,
+        )
+        
+        # Create two mock records for different clusters
+        records = []
+        for ctx, lbl in [("cluster-alpha", "cluster-alpha"), ("cluster-beta", "cluster-beta")]:
+            metadata = ClusterSnapshotMetadata(
+                cluster_id=f"{lbl}-id",
+                captured_at=datetime.now(UTC),
+                control_plane_version="1.28.0",
+                node_count=3,
+                pod_count=10,
+            )
+            
+            mock_snapshot = MagicMock(spec=ClusterSnapshot)
+            mock_snapshot.metadata = metadata
+            
+            target = HealthTarget(
+                context=ctx,
+                label=lbl,
+                monitor_health=True,
+                watched_helm_releases=(),
+                watched_crd_families=(),
+                cluster_class="test-class",
+                cluster_role="test-role",
+                baseline_cohort="test-cohort",
+            )
+            
+            records.append(HealthSnapshotRecord(
+                target=target,
+                snapshot=mock_snapshot,
+                path=self.output_dir / "health" / "snapshots" / f"{lbl}.json",
+                baseline_policy=BaselinePolicy.empty(),
+            ))
+        
+        # Mock discovery to return one source per cluster
+        def mock_discover(context: str) -> AlertmanagerSourceInventory:
+            inventory = AlertmanagerSourceInventory()
+            inventory.add_source(AlertmanagerSource(
+                source_id=f"{context}:am",
+                endpoint=f"http://alertmanager-{context}:9093",
+                origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            ))
+            return inventory
+        
+        captured_inventory: dict[str, AlertmanagerSourceInventory | None] = {"inv": None}
+        
+        def capture_write(*args: Any, **kwargs: Any) -> Path:
+            captured_inventory["inv"] = cast(
+                AlertmanagerSourceInventory | None,
+                args[1] if len(args) > 1 else kwargs.get("inventory")
+            )
+            return self.output_dir / "health" / f"{self.run_id}-alertmanager-sources.json"
+        
+        with patch("k8s_diag_agent.health.loop.discover_alertmanagers", side_effect=mock_discover), \
+             patch("k8s_diag_agent.health.loop.write_alertmanager_sources", side_effect=capture_write):
+            
+            runner._run_alertmanager_discovery(records, {"root": self.output_dir / "health"})
+            
+            # Verify the written inventory has 2 sources
+            assert captured_inventory["inv"] is not None, "Inventory was not captured"
+            sources = list(captured_inventory["inv"].sources.values())
+            assert len(sources) == 2, f"Expected 2 sources, got {len(sources)}"
+            
+            # Critical assertion: ALL sources must have cluster_label set
+            for source in sources:
+                assert source.cluster_label is not None, (
+                    f"Source {source.source_id} has cluster_label=None! "
+                    "First cluster sources must also be tagged."
+                )
+            
+            # Verify both cluster labels are present
+            cluster_labels = {source.cluster_label for source in sources}
+            assert cluster_labels == {"cluster-alpha", "cluster-beta"}, (
+                f"Expected cluster labels {{'cluster-alpha', 'cluster-beta'}}, "
+                f"got {cluster_labels}"
+            )
+            
+            # Verify each source has the correct cluster label matching its source_id
+            for source in sources:
+                expected_cluster = source.source_id.split(":")[0]
+                assert source.cluster_label == expected_cluster, (
+                    f"Source {source.source_id} has cluster_label={source.cluster_label}, "
+                    f"expected {expected_cluster}"
+                )
+
     def test_write_failure_logged_but_non_fatal(self) -> None:
         """Test that write failures are logged but don't stop the run."""
         runner = HealthLoopRunner(
