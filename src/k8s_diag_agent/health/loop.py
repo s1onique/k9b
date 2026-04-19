@@ -3472,11 +3472,13 @@ class HealthLoopRunner:
         if needs_port_forward:
             assert selected_source.namespace is not None
             assert service_name_for_pf is not None
+            # Use source context, fall back to inventory context if not set
+            context = selected_source.cluster_context or inventory.cluster_context
             try:
                 port_forward_process, local_port = self._start_alertmanager_port_forward(
                     namespace=selected_source.namespace,
                     service_name=service_name_for_pf,
-                    context=selected_source.cluster_context,
+                    context=context,
                 )
             except RuntimeError as exc:
                 # Port-forward startup failed, but this is non-fatal
@@ -3649,6 +3651,54 @@ class HealthLoopRunner:
             )
             # Continue without failing the run
 
+    def _choose_free_local_port(self) -> int:
+        """Choose a free local TCP port for port-forward.
+        
+        Returns:
+            A free port number on localhost.
+            
+        Raises:
+            RuntimeError: If no free port can be found.
+        """
+        import socket
+        for attempt in range(10):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.bind(("127.0.0.1", 0))
+                    port: int = sock.getsockname()[1]
+                    return port
+            except OSError:
+                continue
+        raise RuntimeError("Could not find a free local port for port-forward")
+
+    def _wait_for_port_ready(
+        self,
+        host: str,
+        port: int,
+        timeout_seconds: float = 5.0,
+        poll_interval: float = 0.1,
+    ) -> bool:
+        """Wait for a TCP port to become accepting connections.
+        
+        Args:
+            host: The host to check (typically "127.0.0.1").
+            port: The port to check.
+            timeout_seconds: Maximum time to wait.
+            poll_interval: Time between connection attempts.
+            
+        Returns:
+            True if the port became ready within the timeout, False otherwise.
+        """
+        import socket
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection((host, port), timeout=0.5):
+                    return True
+            except OSError:
+                time.sleep(poll_interval)
+        return False
+
     def _start_alertmanager_port_forward(
         self,
         namespace: str,
@@ -3657,21 +3707,24 @@ class HealthLoopRunner:
     ) -> tuple[subprocess.Popen[str], int]:
         """Start kubectl port-forward to an Alertmanager service.
         
-        Uses port 0 for dynamic port selection to avoid conflicts.
+        Chooses a free local port and waits for it to become ready before returning.
         
         Returns:
             Tuple of (subprocess handle, local port number)
             
         Raises:
-            RuntimeError: If port-forward cannot be started
+            RuntimeError: If port-forward cannot be started or the port
+                        does not become ready within the timeout.
         """
-        # Build the kubectl command
-        # Use port 0 to let the system choose a free port
+        # Choose a free local port before starting kubectl
+        local_port = self._choose_free_local_port()
+        
+        # Build the kubectl command with the chosen port
         cmd = [
             "kubectl", "port-forward",
             "-n", namespace,
             f"svc/{service_name}",
-            "0:9093",  # Forward to Alertmanager's default port
+            f"{local_port}:9093",  # Forward to Alertmanager's default port
         ]
         if context:
             cmd.extend(["--context", context])
@@ -3686,27 +3739,42 @@ class HealthLoopRunner:
             namespace=namespace,
             service_name=service_name,
             cluster_context=context,
+            local_port=local_port,
         )
         
         try:
-            # Start the port-forward process
-            # redirect stdout/stderr to devnull since we just need the port
-            port_forward_process = subprocess.Popen(
+            # Start the port-forward process with text mode for type compatibility
+            port_forward_process: subprocess.Popen[str] = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
             )
             
-            # Wait briefly for the forward to become ready
-            # port-forward typically prints binding info to stdout
-            time.sleep(1.5)
+            # Wait for the port to become ready (with retries)
+            if not self._wait_for_port_ready("127.0.0.1", local_port, timeout_seconds=5.0):
+                # Port did not become ready
+                port_forward_process.kill()
+                port_forward_process.wait()
+                self._log_event(
+                    "alertmanager-snapshot",
+                    "ERROR",
+                    "Alertmanager port-forward failed to become ready",
+                    event="alertmanager-portforward-failed",
+                    run_id=self.run_id,
+                    run_label=self.run_label,
+                    namespace=namespace,
+                    service_name=service_name,
+                    local_port=local_port,
+                    reason="port-not-ready",
+                )
+                raise RuntimeError(
+                    f"kubectl port-forward for {namespace}/{service_name} "
+                    f"did not become ready on port {local_port}"
+                )
             
             # Check if process is still running
             if port_forward_process.poll() is not None:
-                # Process exited unexpectedly
-                stderr = port_forward_process.stderr.read() if port_forward_process.stderr else ""
-                stdout = port_forward_process.stdout.read() if port_forward_process.stdout else ""
                 self._log_event(
                     "alertmanager-snapshot",
                     "ERROR",
@@ -3717,24 +3785,12 @@ class HealthLoopRunner:
                     namespace=namespace,
                     service_name=service_name,
                     exit_code=port_forward_process.returncode,
-                    stderr=stderr[:200] if stderr else None,
-                    stdout=stdout[:200] if stdout else None,
                     reason="process-exited",
                 )
-                port_forward_process.kill()
                 raise RuntimeError(
                     f"kubectl port-forward exited unexpectedly with code "
-                    f"{port_forward_process.returncode}: {stderr[:200] if stderr else 'no stderr'}"
+                    f"{port_forward_process.returncode}"
                 )
-            
-            # Determine the local port
-            # port-forward outputs binding info to stderr when using port 0
-            # Parse the output to find the assigned port
-            local_port = self._parse_port_forward_output(
-                port_forward_process,
-                namespace,
-                service_name,
-            )
             
             self._log_event(
                 "alertmanager-snapshot",
@@ -3777,72 +3833,6 @@ class HealthLoopRunner:
                 reason="subprocess-error",
             )
             raise RuntimeError(f"Failed to start kubectl port-forward: {exc}")
-
-    def _parse_port_forward_output(
-        self,
-        process: subprocess.Popen[str],
-        namespace: str,
-        service_name: str,
-    ) -> int:
-        """Parse port-forward output to determine the assigned local port.
-        
-        Reads from the process's stderr which contains the forwarding info.
-        
-        Raises:
-            RuntimeError: If the port cannot be determined from the output
-        """
-        import re
-        
-        # Wait briefly for port-forward to initialize
-        time.sleep(0.5)
-        
-        # Try to read stderr for port information
-        # port-forward typically outputs something like:
-        # "Forwarding from 127.0.0.1:PORT -> 9093"
-        # or "Forwarding from [::1]:PORT -> 9093"
-        stderr_output = ""
-        try:
-            if process.stderr:
-                import fcntl
-                import os
-                fd = process.stderr.fileno()
-                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-                fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-                
-                try:
-                    stderr_output = process.stderr.read()
-                finally:
-                    fcntl.fcntl(fd, fcntl.F_SETFL, fl)
-                    
-        except Exception:
-            pass
-        
-        # Parse port from stderr output
-        if stderr_output:
-            # Look for port pattern: 127.0.0.1:PORT or ::1:PORT
-            port_pattern = re.compile(r"(?:127\.0\.0\.1|::1|\[::1\]):(\d+)")
-            match = port_pattern.search(stderr_output)
-            if match:
-                port = int(match.group(1))
-                return port
-        
-        # If parsing failed, check if the process is still running
-            if process.poll() is not None:
-                stderr = ""
-                try:
-                    stderr = process.stderr.read() if process.stderr else ""
-                except Exception:
-                    pass
-                raise RuntimeError(
-                    f"kubectl port-forward for {namespace}/{service_name} exited prematurely. "
-                    f"stderr: {stderr[:200] or 'empty'}"
-                )
-        
-        # Cannot determine port - fail fast rather than scanning arbitrary ports
-        raise RuntimeError(
-            f"Could not determine port-forward local port for "
-            f"{namespace}/{service_name} from stderr output: {stderr_output[:200] or 'empty'}"
-        )
 
     def _stop_alertmanager_port_forward(
         self,
