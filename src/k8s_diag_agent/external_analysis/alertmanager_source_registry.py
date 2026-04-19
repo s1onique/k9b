@@ -370,6 +370,10 @@ def apply_registry_to_source(
             source.canonical_identity,
             source.origin.value,
         )
+        # Get the registry entry's cluster_context to use for the source
+        # This ensures the serializer can match the source to the registry entry
+        # Use the cluster_context that was used to find this match
+        entry_cluster_context = cluster_context or "unknown"
         return _replace(
             source,
             # Preserve original discovery origin (e.g., alertmanager-crd, service-heuristic)
@@ -377,6 +381,9 @@ def apply_registry_to_source(
             state=AlertmanagerSourceState.MANUAL,
             # Set manual_source_mode to indicate this was promoted from auto-discovery
             manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
+            # Set cluster_context from registry entry so serializer can match it
+            # This is critical for the UI to correctly identify promoted sources
+            cluster_context=entry_cluster_context,
         )
     elif desired_state == RegistryDesiredState.DISABLED:
         # Return None to indicate this source should be filtered from inventory

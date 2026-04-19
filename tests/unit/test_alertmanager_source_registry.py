@@ -438,7 +438,55 @@ class TestApplyRegistryToSource:
         assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
         # cluster_label MUST be preserved
         assert result.cluster_label == "prod-cluster-a"
+        # cluster_context from registry lookup is set on the source
         assert result.cluster_context == "prod-context"
+
+    def test_manual_state_sets_cluster_context_when_source_has_none(self) -> None:
+        """Regression test: Registry promotion must set cluster_context from registry lookup.
+
+        When a discovered source has cluster_context=None (common for CRD discovery),
+        but the registry was written with cluster_context=cluster1, the apply_registry_to_source
+        must set cluster_context=cluster1 on the promoted source so that the serializer
+        can match it back to the registry entry.
+
+        This is the key fix for the UI bug where promoted sources showed "Managed manually"
+        instead of "Promoted" - the serializer couldn't match the source to the registry
+        because cluster_context was null.
+        """
+        # Source has cluster_context=None (common for CRD discovery before apply_registry)
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/kube-prometheus-stack-alertmanager",
+            endpoint="http://alertmanager-operated.monitoring:9093",
+            namespace="monitoring",
+            name="kube-prometheus-stack-alertmanager",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.DISCOVERED,
+            cluster_label="cluster1",
+            cluster_context=None,  # This is the common case for CRD discovery
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        # Registry was written with cluster_context=cluster1 (from the UI server)
+        registry.add_entry(RegistryEntry(
+            cluster_context="cluster1",
+            canonical_identity="monitoring/kube-prometheus-stack-alertmanager",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        # Apply registry with cluster_context=cluster1 (from health loop)
+        result = apply_registry_to_source(source, registry, "cluster1")
+        assert result is not None
+        
+        # Source is promoted
+        assert result.state == AlertmanagerSourceState.MANUAL
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+        
+        # cluster_context is set from the registry lookup, not from the source
+        # This is critical for the serializer to match the source to the registry
+        assert result.cluster_context == "cluster1"
+        
+        # Origin is preserved
+        assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
 
 
 class TestApplyRegistryToInventory:
