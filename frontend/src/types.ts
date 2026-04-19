@@ -668,6 +668,8 @@ export type AlertmanagerSource = {
   // Deduplication support
   merged_provenances: string[];  // All contributing origins, e.g., ['alertmanager-crd', 'prometheus-crd-config']
   display_provenance: string;  // Human-readable merged provenance, e.g., 'Alertmanager CRD, Prometheus Config'
+  // Manual source mode: distinguishes operator-configured vs operator-promoted
+  manual_source_mode: "operator-configured" | "operator-promoted" | null;
   // Cluster association for per-cluster UI filtering
   cluster_label: string | null;
 };

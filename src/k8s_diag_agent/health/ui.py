@@ -2866,6 +2866,10 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             "cluster_context": source.cluster_context,
         }
         
+        # Include manual_source_mode if present (backward compatible)
+        if source.manual_source_mode.value != "not-manual":
+            source_data["manual_source_mode"] = source.manual_source_mode.value
+        
         # Apply effective state override if present (e.g., "disabled" or "manual")
         if effective_state:
             source_data["effective_state"] = effective_state

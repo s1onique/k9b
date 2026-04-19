@@ -2185,11 +2185,24 @@ export const AlertmanagerSourcesPanel = ({
                 const error = actionError[source.source_id];
                 const success = actionSuccess[source.source_id];
 
+                // Derive display label for state pill:
+                // - Use distinct labels when manual_source_mode is present
+                // - Fall back to display_state for legacy artifacts (manual_source_mode is null)
+                const stateLabel = (() => {
+                  if (source.manual_source_mode === "operator-configured") {
+                    return "Configured manually";
+                  }
+                  if (source.manual_source_mode === "operator-promoted") {
+                    return "Promoted";
+                  }
+                  return source.display_state || source.state || "unknown";
+                })();
+
                 return (
                   <tr key={source.source_id} className={`alertmanager-source-row ${stateClass}`}>
                     <td>
                       <span className={`alertmanager-source-state-pill alertmanager-source-state-pill-${stateClass}`}>
-                        {source.display_state || source.state || "unknown"}
+                        {stateLabel}
                       </span>
                     </td>
                     <td className="alertmanager-source-origin">

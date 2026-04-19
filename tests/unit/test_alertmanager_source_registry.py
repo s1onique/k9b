@@ -18,6 +18,7 @@ from pathlib import Path
 from k8s_diag_agent.external_analysis.alertmanager_discovery import (
     AlertmanagerSource,
     AlertmanagerSourceInventory,
+    AlertmanagerSourceMode,
     AlertmanagerSourceOrigin,
     AlertmanagerSourceState,
 )
@@ -653,3 +654,231 @@ class TestLookupRegistryState:
 
         state = lookup_registry_state(registry, None, source)
         assert state == RegistryDesiredState.MANUAL
+
+
+# --- ManualSourceMode Origin Preservation Tests ---
+
+
+class TestManualSourceModeOriginPreservation:
+    """Tests for origin preservation when sources are promoted via registry.
+    
+    This is the critical regression test for the provenance collapse issue:
+    - Operator-promoted sources should PRESERVE their original discovery origin
+    - Only operator-configured sources (typed endpoint) should have origin=MANUAL
+    """
+
+    def test_registry_promotion_preserves_alertmanager_crd_origin(self) -> None:
+        """Registry MANUAL promotion must PRESERVE the original alertmanager-crd origin.
+        
+        This is the core fix for the provenance collapse issue.
+        Before: origin was overwritten to "manual"
+        After: origin stays as "alertmanager-crd", mode indicates it was promoted
+        """
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-main.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="minikube",
+            canonical_identity="monitoring/alertmanager-main",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        result = apply_registry_to_source(source, registry, "minikube")
+        assert result is not None
+        
+        # CRITICAL: Origin should be PRESERVED (not overwritten to MANUAL)
+        assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD, (
+            f"Origin was overwritten! Expected 'alertmanager-crd', got '{result.origin.value}'"
+        )
+        
+        # State should be MANUAL
+        assert result.state == AlertmanagerSourceState.MANUAL
+        
+        # Mode should indicate this was promoted from discovery
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+
+    def test_registry_promotion_preserves_service_heuristic_origin(self) -> None:
+        """Registry MANUAL promotion should preserve service-heuristic origin."""
+        source = AlertmanagerSource(
+            source_id="service:monitoring/alertmanager-operated",
+            endpoint="http://alertmanager-operated.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-operated",
+            origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="minikube",
+            canonical_identity="monitoring/alertmanager-operated",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        result = apply_registry_to_source(source, registry, "minikube")
+        assert result is not None
+        
+        # Origin should be PRESERVED
+        assert result.origin == AlertmanagerSourceOrigin.SERVICE_HEURISTIC, (
+            f"Origin was overwritten! Expected 'service-heuristic', got '{result.origin.value}'"
+        )
+        
+        # Mode should indicate this was promoted
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+
+    def test_registry_promotion_preserves_prometheus_crd_config_origin(self) -> None:
+        """Registry MANUAL promotion should preserve prometheus-crd-config origin."""
+        source = AlertmanagerSource(
+            source_id="prom-crd-config:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-operated.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="minikube",
+            canonical_identity="monitoring/alertmanager-main",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        result = apply_registry_to_source(source, registry, "minikube")
+        assert result is not None
+        
+        # Origin should be PRESERVED
+        assert result.origin == AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG, (
+            f"Origin was overwritten! Expected 'prometheus-crd-config', got '{result.origin.value}'"
+        )
+        
+        # Mode should indicate this was promoted
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+
+    def test_registry_promoted_source_serializes_manual_source_mode(self) -> None:
+        """Promoted source should serialize manual_source_mode for UI consumption."""
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-main.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="minikube",
+            canonical_identity="monitoring/alertmanager-main",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        result = apply_registry_to_source(source, registry, "minikube")
+        assert result is not None
+        
+        # Serialize
+        serialized = result.to_dict()
+        
+        # manual_source_mode should be present
+        assert "manual_source_mode" in serialized
+        assert serialized["manual_source_mode"] == "operator-promoted"
+        
+        # Origin should be preserved in serialization
+        assert serialized["origin"] == "alertmanager-crd"
+
+    def test_disabled_source_returns_none(self) -> None:
+        """Registry DISABLED state should return None regardless of origin."""
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-ops",
+            endpoint="http://alertmanager-ops.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-ops",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+        )
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="minikube",
+            canonical_identity="monitoring/alertmanager-ops",
+            desired_state=RegistryDesiredState.DISABLED,
+        ))
+
+        result = apply_registry_to_source(source, registry, "minikube")
+        assert result is None
+
+    def test_promoted_source_roundtrip_through_inventory(self) -> None:
+        """Promoted source should survive full inventory processing pipeline."""
+        inventory = AlertmanagerSourceInventory(cluster_context="minikube")
+        
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-main.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+        )
+        inventory.add_source(source)
+
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="minikube",
+            canonical_identity="monitoring/alertmanager-main",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        # Apply registry to inventory
+        result = apply_registry_to_inventory(inventory, registry, "minikube")
+        
+        # Verify the promoted source has correct fields
+        promoted = result.sources["crd:monitoring/alertmanager-main"]
+        assert promoted.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+        assert promoted.state == AlertmanagerSourceState.MANUAL
+        assert promoted.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+
+    def test_distinguish_promoted_vs_configured_sources(self) -> None:
+        """Test that promoted and configured sources are distinguishable.
+        
+        This verifies the UI can show different provenance info:
+        - Promoted: "Alertmanager CRD (promoted to manual)"
+        - Configured: "Manual (operator configured)"
+        """
+        # Source 1: Operator-promoted (from CRD)
+        promoted_source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-main.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.MANUAL,
+            manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
+        )
+        
+        # Source 2: Operator-configured (typed endpoint)
+        configured_source = AlertmanagerSource(
+            source_id="manual:alertmanager-external:9093",
+            endpoint="http://alertmanager-external:9093",
+            origin=AlertmanagerSourceOrigin.MANUAL,
+            state=AlertmanagerSourceState.MANUAL,
+            manual_source_mode=AlertmanagerSourceMode.OPERATOR_CONFIGURED,
+        )
+        
+        # They should be distinguishable
+        assert promoted_source.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+        assert configured_source.manual_source_mode == AlertmanagerSourceMode.OPERATOR_CONFIGURED
+        
+        # Origin differs
+        assert promoted_source.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+        assert configured_source.origin == AlertmanagerSourceOrigin.MANUAL
+        
+        # Display provenance differs
+        assert "Alertmanager CRD" in promoted_source.display_provenance
+        assert configured_source.display_provenance == "Manual"

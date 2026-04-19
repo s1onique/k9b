@@ -364,6 +364,9 @@ class AlertmanagerSourceView:
     display_state: str  # human-readable state with color hint
     provenance_summary: str  # short provenance string for UI
     cluster_label: str | None  # Operator-facing cluster label for per-cluster UI filtering
+    # Manual source mode: distinguishes operator-configured vs operator-promoted
+    # Values: "operator-configured", "operator-promoted", or None (not manual or legacy)
+    manual_source_mode: str | None
 
 
 @dataclass(frozen=True)
@@ -1865,12 +1868,14 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
         effective_state = _coerce_optional_str(src.get("effective_state"))
         if effective_state:
             state = effective_state
-            # Promotion also changes the origin to "manual"
-            if effective_state == "manual":
-                origin = "manual"
+            # Note: we no longer overwrite origin here - origin is preserved
+            # The distinction between configured vs promoted is now in manual_source_mode
         
-        # Compute UI fields based on (possibly overridden) state and origin
-        is_manual = origin == "manual"
+        # Compute manual_source_mode - prefer explicit field, then derive from origin
+        manual_source_mode = _coerce_optional_str(src.get("manual_source_mode"))
+        
+        # Compute UI fields based on (possibly overridden) state and manual_source_mode
+        is_manual = state == "manual" or manual_source_mode in ("operator-configured", "operator-promoted")
         is_tracking = state in ("auto-tracked", "manual")
         # Sources with effective_state "disabled" cannot be disabled again
         # Sources that are already manual cannot be promoted
@@ -1940,8 +1945,9 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
             display_state=display_state,
             provenance_summary=provenance_summary,
             cluster_label=_coerce_optional_str(src.get("cluster_label")),
+            manual_source_mode=manual_source_mode,
         ))
-    
+
     # Count by category
     manual_count = sum(1 for s in sources if s.is_manual)
     tracked_count = sum(1 for s in sources if s.is_tracking)

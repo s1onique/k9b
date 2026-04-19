@@ -465,6 +465,8 @@ class AlertmanagerSourcePayload(TypedDict, total=False):
     # Deduplication provenance fields
     merged_provenances: list[str]  # all contributing origins
     display_provenance: str  # human-readable provenance string
+    # Manual provenance: distinguishes operator-configured vs operator-promoted
+    manual_source_mode: str | None  # operator-configured, operator-promoted, or not-present
     # Computed UI fields
     is_manual: bool
     is_tracking: bool
@@ -798,6 +800,8 @@ def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> Alertmanager
         "display_origin": view.display_origin,
         "display_state": view.display_state,
         "provenance_summary": view.provenance_summary,
+        # Manual source mode for distinct status display
+        "manual_source_mode": view.manual_source_mode,
         # Cluster association for per-cluster UI filtering
         "cluster_label": view.cluster_label,
     }

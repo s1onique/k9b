@@ -26,7 +26,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .alertmanager_discovery import AlertmanagerSource
+from .alertmanager_discovery import AlertmanagerSource, AlertmanagerSourceMode
 
 # Module logger
 _logger = logging.getLogger(__name__)
@@ -359,19 +359,24 @@ def apply_registry_to_source(
     if desired_state is None:
         return source
     
-    from .alertmanager_discovery import AlertmanagerSourceOrigin, AlertmanagerSourceState
+    from .alertmanager_discovery import AlertmanagerSourceState
     
     if desired_state == RegistryDesiredState.MANUAL:
-        # Promote to manual - this is authoritative
+        # Promote to manual - preserve the original discovery origin
+        # and set manual_source_mode to indicate this was promoted from discovery
         from dataclasses import replace as _replace
         _logger.debug(
-            "Applying registry state 'manual' to source %s",
+            "Applying registry state 'manual' to source %s (promoted from %s)",
             source.canonical_identity,
+            source.origin.value,
         )
         return _replace(
             source,
-            origin=AlertmanagerSourceOrigin.MANUAL,
+            # Preserve original discovery origin (e.g., alertmanager-crd, service-heuristic)
+            # Do NOT change origin to MANUAL - that is only for operator-configured sources
             state=AlertmanagerSourceState.MANUAL,
+            # Set manual_source_mode to indicate this was promoted from auto-discovery
+            manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
         )
     elif desired_state == RegistryDesiredState.DISABLED:
         # Return None to indicate this source should be filtered from inventory

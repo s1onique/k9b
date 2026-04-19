@@ -122,8 +122,9 @@ class AlertmanagerSourceOverrideModelTests(unittest.TestCase):
         # Display fields updated
         self.assertEqual(src_promoted.display_state, 'Manual',
             'display_state should be "Manual" for promoted sources')
-        self.assertEqual(src_promoted.display_origin, 'Manual',
-            'display_origin should be "Manual" for promoted sources')
+        # Origin is PRESERVED for promoted sources - this is the provenance collapse fix
+        self.assertEqual(src_promoted.display_origin, 'Alertmanager CRD',
+            'display_origin should preserve discovery origin for promoted sources')
 
     def test_ui_model_applies_effective_state_disabled(self) -> None:
         """Test that ui/model.py applies effective_state='disabled' correctly.

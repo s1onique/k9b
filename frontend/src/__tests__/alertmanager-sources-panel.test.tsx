@@ -32,6 +32,11 @@ const makeAlertmanagerSource = (overrides: Partial<AlertmanagerSource> = {}): Al
   display_state: "tracked",
   provenance_summary: "Discovered via Alertmanager CRD",
   cluster_label: null,
+  // Deduplication support
+  merged_provenances: ["alertmanager-crd"],
+  display_provenance: "Alertmanager CRD",
+  // Manual source mode: null by default for legacy fixtures
+  manual_source_mode: null,
   ...overrides,
 });
 
@@ -169,7 +174,10 @@ describe("AlertmanagerSourcesPanel", () => {
       expect(screen.getByText("tracked")).toBeInTheDocument();
 
       // Origin (display_origin is "Alertmanager CRD" for this fixture)
-      expect(screen.getByText("Alertmanager CRD")).toBeInTheDocument();
+      // Check the Origin column specifically (appears in both Origin and Provenance columns)
+      const originCell = document.querySelector(".alertmanager-source-origin");
+      expect(originCell).toBeInTheDocument();
+      expect(originCell?.textContent).toContain("Alertmanager CRD");
 
       // Endpoint should be truncated in a code element
       const endpointCode = document.querySelector(".alertmanager-source-endpoint-code");
@@ -183,8 +191,10 @@ describe("AlertmanagerSourcesPanel", () => {
       // Version
       expect(screen.getByText("v0.27.1")).toBeInTheDocument();
 
-      // Provenance (displayed from provenance_summary field)
-      expect(screen.getByText("Discovered via Alertmanager CRD")).toBeInTheDocument();
+      // Provenance (displayed from display_provenance field when available)
+      const provenanceCell = document.querySelector(".alertmanager-source-provenance");
+      expect(provenanceCell).toBeInTheDocument();
+      expect(provenanceCell?.textContent).toContain("Alertmanager CRD");
 
       // Last Error - should show em-dash since no error (multiple em-dashes in table)
       expect(screen.getAllByText("—")).toHaveLength(2);
@@ -709,6 +719,98 @@ describe("AlertmanagerSourcesPanel", () => {
 
       // Cluster label should be displayed
       expect(screen.getByText("my-cluster")).toBeInTheDocument();
+    });
+  });
+
+  describe("manual_source_mode state labels", () => {
+    it("shows 'Configured manually' when manual_source_mode is 'operator-configured'", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: "operator-configured",
+        display_origin: "Manual",
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        manual_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // State pill should show "Configured manually"
+      expect(screen.getByText("Configured manually")).toBeInTheDocument();
+      // Should NOT show the raw display_state value
+      expect(screen.queryByText("manual")).not.toBeInTheDocument();
+    });
+
+    it("shows 'Promoted' when manual_source_mode is 'operator-promoted'", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: "operator-promoted",
+        display_origin: "Alertmanager CRD",
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        manual_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // State pill should show "Promoted"
+      expect(screen.getByText("Promoted")).toBeInTheDocument();
+      // Should NOT show the raw display_state value
+      expect(screen.queryByText("manual")).not.toBeInTheDocument();
+    });
+
+    it("falls back to display_state when manual_source_mode is null (legacy artifacts)", () => {
+      const source = makeAlertmanagerSource({
+        manual_source_mode: null,
+        display_state: "manual",
+      });
+      const sources = makeAlertmanagerSources({
+        sources: [source],
+        manual_count: 1,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Should show the raw display_state value as fallback
+      expect(screen.getByText("manual")).toBeInTheDocument();
+      // Should NOT show distinct labels
+      expect(screen.queryByText("Configured manually")).not.toBeInTheDocument();
+      expect(screen.queryByText("Promoted")).not.toBeInTheDocument();
+    });
+
+    it("renders all three modes correctly in a mixed table", () => {
+      const sources = makeAlertmanagerSources({
+        sources: [
+          makeAlertmanagerSource({
+            source_id: "src-configured",
+            manual_source_mode: "operator-configured",
+            display_state: "manual",
+            display_origin: "Manual",
+          }),
+          makeAlertmanagerSource({
+            source_id: "src-promoted",
+            manual_source_mode: "operator-promoted",
+            display_state: "manual",
+            display_origin: "Alertmanager CRD",
+          }),
+          makeAlertmanagerSource({
+            source_id: "src-legacy",
+            manual_source_mode: null,
+            display_state: "manual",
+            display_origin: "Manual",
+          }),
+        ],
+        total_count: 3,
+        manual_count: 3,
+      });
+
+      render(<AlertmanagerSourcesPanel sources={sources} />);
+
+      // Should show distinct labels for operator-configured and operator-promoted
+      expect(screen.getByText("Configured manually")).toBeInTheDocument();
+      expect(screen.getByText("Promoted")).toBeInTheDocument();
+      // Legacy should fall back to display_state
+      expect(screen.getByText("manual")).toBeInTheDocument();
     });
   });
 });

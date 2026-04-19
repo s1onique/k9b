@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 from k8s_diag_agent.external_analysis.alertmanager_discovery import (
     AlertmanagerSource,
     AlertmanagerSourceInventory,
+    AlertmanagerSourceMode,
     AlertmanagerSourceOrigin,
     AlertmanagerSourceState,
     CRDDiscoveryStrategy,
@@ -1807,3 +1808,156 @@ def test_multi_cluster_sources_preserve_distinct_labels() -> None:
     # cluster_labels must remain distinct
     assert verified_a.sources["crd:monitoring/alertmanager-main"].cluster_label == "cluster-a"
     assert verified_b.sources["crd:monitoring/alertmanager-main"].cluster_label == "cluster-b"
+
+
+# --- ManualSourceMode Tests ---
+
+
+def test_manual_source_mode_enum_values() -> None:
+    """Verify all expected manual_source_mode values exist."""
+    expected = {"not-manual", "operator-configured", "operator-promoted"}
+    actual = {s.value for s in AlertmanagerSourceMode}
+    assert actual == expected
+
+
+def test_discovered_source_has_not_manual_mode() -> None:
+    """Discovered sources should default to NOT_MANUAL mode."""
+    source = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager:9093",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        state=AlertmanagerSourceState.DISCOVERED,
+    )
+    assert source.manual_source_mode == AlertmanagerSourceMode.NOT_MANUAL
+
+
+def test_operator_configured_source_has_operator_configured_mode() -> None:
+    """Operator-configured sources (typed endpoint) should have OPERATOR_CONFIGURED mode."""
+    source = build_endpoint_for_manual(
+        endpoint="alertmanager.monitoring.svc.cluster.local:9093",
+        namespace="monitoring",
+        name="main",
+    )
+    assert source.manual_source_mode == AlertmanagerSourceMode.OPERATOR_CONFIGURED
+    assert source.origin == AlertmanagerSourceOrigin.MANUAL
+    assert source.state == AlertmanagerSourceState.MANUAL
+
+
+def test_operator_promoted_source_preserves_discovery_origin() -> None:
+    """Operator-promoted sources should preserve their original discovery origin."""
+    source = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager:9093",
+        namespace="monitoring",
+        name="main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        state=AlertmanagerSourceState.AUTO_TRACKED,
+        manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
+    )
+    assert source.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD  # Preserved!
+    assert source.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+
+
+def test_to_dict_includes_manual_source_mode_when_not_not_manual() -> None:
+    """Serialization should include manual_source_mode only when not NOT_MANUAL."""
+    # Operator-configured source - should include manual_source_mode
+    configured = build_endpoint_for_manual(
+        endpoint="alertmanager:9093",
+    )
+    configured_dict = configured.to_dict()
+    assert "manual_source_mode" in configured_dict
+    assert configured_dict["manual_source_mode"] == "operator-configured"
+    
+    # Operator-promoted source - should include manual_source_mode
+    promoted = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager:9093",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        state=AlertmanagerSourceState.MANUAL,
+        manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
+    )
+    promoted_dict = promoted.to_dict()
+    assert "manual_source_mode" in promoted_dict
+    assert promoted_dict["manual_source_mode"] == "operator-promoted"
+    
+    # Discovered source - should NOT include manual_source_mode (backward compat)
+    discovered = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager:9093",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        state=AlertmanagerSourceState.AUTO_TRACKED,
+    )
+    discovered_dict = discovered.to_dict()
+    assert "manual_source_mode" not in discovered_dict
+
+
+def test_from_dict_parses_manual_source_mode() -> None:
+    """Deserialization should correctly parse manual_source_mode."""
+    # With manual_source_mode present
+    data = {
+        "source_id": "test:source",
+        "endpoint": "http://alertmanager:9093",
+        "origin": "manual",
+        "state": "manual",
+        "manual_source_mode": "operator-configured",
+    }
+    source = AlertmanagerSource.from_dict(data)
+    assert source.manual_source_mode == AlertmanagerSourceMode.OPERATOR_CONFIGURED
+    
+    # With operator-promoted mode
+    data_promoted = {
+        "source_id": "test:source",
+        "endpoint": "http://alertmanager:9093",
+        "origin": "alertmanager-crd",  # Preserved origin!
+        "state": "manual",
+        "manual_source_mode": "operator-promoted",
+    }
+    source_promoted = AlertmanagerSource.from_dict(data_promoted)
+    assert source_promoted.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+    assert source_promoted.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    
+    # Without manual_source_mode (backward compat - defaults to NOT_MANUAL)
+    data_legacy = {
+        "source_id": "test:source",
+        "endpoint": "http://alertmanager:9093",
+        "origin": "alertmanager-crd",
+        "state": "auto-tracked",
+    }
+    source_legacy = AlertmanagerSource.from_dict(data_legacy)
+    assert source_legacy.manual_source_mode == AlertmanagerSourceMode.NOT_MANUAL
+
+
+def test_roundtrip_operator_configured_source() -> None:
+    """Operator-configured source should survive serialization roundtrip."""
+    original = build_endpoint_for_manual(
+        endpoint="alertmanager.monitoring:9093",
+        namespace="monitoring",
+        name="main",
+    )
+    
+    serialized = original.to_dict()
+    restored = AlertmanagerSource.from_dict(serialized)
+    
+    assert restored.origin == AlertmanagerSourceOrigin.MANUAL
+    assert restored.state == AlertmanagerSourceState.MANUAL
+    assert restored.manual_source_mode == AlertmanagerSourceMode.OPERATOR_CONFIGURED
+
+
+def test_roundtrip_operator_promoted_source() -> None:
+    """Operator-promoted source should survive serialization roundtrip preserving origin."""
+    original = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager:9093",
+        namespace="monitoring",
+        name="main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,  # Preserved origin!
+        state=AlertmanagerSourceState.MANUAL,
+        manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
+    )
+    
+    serialized = original.to_dict()
+    restored = AlertmanagerSource.from_dict(serialized)
+    
+    assert restored.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD  # Origin preserved!
+    assert restored.state == AlertmanagerSourceState.MANUAL
+    assert restored.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED

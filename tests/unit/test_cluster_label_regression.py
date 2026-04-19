@@ -66,7 +66,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
     def _write_sources_with_cluster_label(
         self,
         run_id: str,
-        sources: list[dict[str, object]],
+        sources: list[dict[str, list[str] | str | None]],
     ) -> None:
         """Write alertmanager sources artifact with cluster_label at health_root level."""
         self.health_dir.mkdir(parents=True, exist_ok=True)

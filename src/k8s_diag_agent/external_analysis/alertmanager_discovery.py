@@ -81,6 +81,21 @@ class AlertmanagerSourceState(StrEnum):
     MANUAL = "manual"  # User-configured (authoritative)
 
 
+class AlertmanagerSourceMode(StrEnum):
+    """How a source entered manual tracking.
+
+    This field preserves the distinction between:
+    - operator-configured: user typed endpoint manually in config
+    - operator-promoted: user promoted a discovered source to manual
+
+    The origin field preserves the discovery mechanism (e.g., alertmanager-crd).
+    """
+
+    NOT_MANUAL = "not-manual"  # Source is auto-discovered, not in manual tracking
+    OPERATOR_CONFIGURED = "operator-configured"  # User typed endpoint manually
+    OPERATOR_PROMOTED = "operator-promoted"  # User promoted from auto-discovery
+
+
 @dataclass(frozen=True)
 class AlertmanagerSource:
     """A discovered or configured Alertmanager source with explicit provenance."""
@@ -100,6 +115,9 @@ class AlertmanagerSource:
     merged_provenances: tuple[AlertmanagerSourceOrigin, ...] = field(default_factory=tuple)  # All contributing origins for UI
     cluster_label: str | None = None  # Operator-facing cluster label for per-cluster UI filtering
     cluster_context: str | None = None  # Kubernetes context used for discovery (required for registry matching)
+    # Manual provenance: distinguishes operator-configured vs operator-promoted sources
+    # Not serialized for discovered sources (defaults to NOT_MANUAL)
+    manual_source_mode: AlertmanagerSourceMode = AlertmanagerSourceMode.NOT_MANUAL
 
     def __post_init__(self) -> None:
         # Ensure endpoint has no trailing slash for consistency
@@ -147,7 +165,7 @@ class AlertmanagerSource:
         return ', '.join(labels.get(o, o) for o in origins)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             'source_id': self.source_id,
             'endpoint': self.endpoint,
             'namespace': self.namespace,
@@ -168,6 +186,10 @@ class AlertmanagerSource:
             # This is the stable identity (namespace/name) used by the health loop registry
             'canonical_identity': self.canonical_identity,
         }
+        # Include manual_source_mode only when not NOT_MANUAL (backward compatibility)
+        if self.manual_source_mode != AlertmanagerSourceMode.NOT_MANUAL:
+            result['manual_source_mode'] = self.manual_source_mode.value
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertmanagerSource:
@@ -179,6 +201,12 @@ class AlertmanagerSource:
                 AlertmanagerSourceOrigin(v) if isinstance(v, str) else v
                 for v in merged_raw
             )
+        # Parse manual_source_mode if present (backward compatibility)
+        manual_source_mode_raw = data.get('manual_source_mode')
+        if manual_source_mode_raw:
+            manual_source_mode = AlertmanagerSourceMode(manual_source_mode_raw)
+        else:
+            manual_source_mode = AlertmanagerSourceMode.NOT_MANUAL
         return cls(
             source_id=str(data['source_id']),
             endpoint=str(data['endpoint']),
@@ -195,6 +223,7 @@ class AlertmanagerSource:
             merged_provenances=merged_provenances,
             cluster_label=data.get('cluster_label'),
             cluster_context=data.get('cluster_context'),
+            manual_source_mode=manual_source_mode,
         )
 
 
@@ -976,7 +1005,11 @@ def build_endpoint_for_manual(
     namespace: str | None = None,
     name: str | None = None,
 ) -> AlertmanagerSource:
-    """Build a manual Alertmanager source from user-provided endpoint."""
+    """Build a manual Alertmanager source from user-provided endpoint.
+    
+    The source is marked as operator-configured to distinguish it from
+    promoted sources (which preserve their discovery origin).
+    """
     if not endpoint.startswith(("http://", "https://")):
         endpoint = f"http://{endpoint}"
 
@@ -991,6 +1024,7 @@ def build_endpoint_for_manual(
         name=name,
         origin=AlertmanagerSourceOrigin.MANUAL,
         state=AlertmanagerSourceState.MANUAL,
+        manual_source_mode=AlertmanagerSourceMode.OPERATOR_CONFIGURED,
     )
 
 
