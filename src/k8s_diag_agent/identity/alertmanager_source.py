@@ -29,7 +29,6 @@ from typing import Any
 
 from .entity import build_deterministic_entity_id, build_deterministic_human_id
 
-
 # Entity type identifier for Alertmanager sources
 _ENTITY_TYPE = "alertmanager-source"
 
@@ -227,9 +226,7 @@ def build_alertmanager_operator_intent_key(
     cluster_context: str | None = None,
     namespace: str | None = None,
     name: str | None = None,
-    origin: str | None = None,
     endpoint: str | None = None,
-    cluster_uid: str | None = None,
 ) -> str:
     """Build operator-intent persistence key for durable actions.
 
@@ -243,6 +240,9 @@ def build_alertmanager_operator_intent_key(
     - For the same source facts, operator_intent_key should remain stable
       across context renames when cluster_label is used
 
+    Note: This is equivalent to build_canonical_registry_key() in the registry module.
+    The identity module version exists for symmetry with other identity helpers.
+
     CRITICAL: This is NOT canonical_entity_id. Do not present this as
     canonical historical identity. Document clearly at call sites.
 
@@ -251,9 +251,7 @@ def build_alertmanager_operator_intent_key(
         cluster_context: Kubernetes context (may change with kubeconfig)
         namespace: Kubernetes namespace for source
         name: Kubernetes resource name
-        origin: Origin family
         endpoint: Service endpoint (fallback)
-        cluster_uid: Cluster UID (available when derived)
 
     Returns:
         Operator-intent key string (format: "cluster_key:source_identity")
