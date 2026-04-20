@@ -9,8 +9,6 @@ import {
   fetchFleet,
   fetchNotifications,
   fetchProposals,
-  fetchRun,
-  fetchRunsList,
   promoteAlertmanagerSource,
   promoteDeterministicNextCheck,
   runBatchExecution,
@@ -3753,6 +3751,7 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Run selection state - extracted to useRunSelection hook
+  // MUST be called BEFORE useRunData because useRunData needs selectedRunId
   const {
     runs: runsList,
     selectedRunId,
@@ -3762,6 +3761,8 @@ const App = () => {
     refreshRuns,
     latestRunId,
     isLatest: isSelectedRunLatest,
+    autoRefreshInterval,
+    handleAutoRefreshChange,
   } = useRunSelection();
 
   // Run data state - extracted to useRunData hook
@@ -3771,8 +3772,6 @@ const App = () => {
     isError: runDataError,
     lastRefresh,
     refresh: refreshRunData,
-    autoRefreshInterval,
-    handleAutoRefreshChange,
   } = useRunData({
     selectedRunId,
   });
@@ -4136,20 +4135,6 @@ const App = () => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    let timerId: ReturnType<typeof setInterval> | null = null;
-    if (autoRefreshInterval) {
-      timerId = setInterval(() => {
-        refresh();
-      }, autoRefreshInterval * 1000);
-    }
-    return () => {
-      if (timerId !== null) {
-        clearInterval(timerId);
-      }
-    };
-  }, [autoRefreshInterval, refresh]);
 
   useEffect(() => {
     const handleVisibility = () => {

@@ -14,12 +14,15 @@
  *   - refreshRuns: () => Promise<void> - manually trigger a refresh
  *   - latestRunId: string | null - the most recent run ID
  *   - isLatest: boolean - whether the selected run is the latest
+ *   - autoRefreshInterval: number | null - the auto-refresh interval used for runs list polling
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchRunsList } from "../api";
 import type { RunsListEntry, RunsListPayload } from "../types";
 
 export const SELECTED_RUN_STORAGE_KEY = "dashboard-selected-run-id";
+export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
+const DEFAULT_AUTOREFRESH_SECONDS = 5;
 
 const readStoredSelectedRunId = (): string | null => {
   if (typeof window === "undefined") {
@@ -43,6 +46,31 @@ const persistSelectedRunId = (runId: string | null) => {
   }
 };
 
+const readStoredAutoRefreshInterval = (): number | null => {
+  if (typeof window === "undefined") {
+    return DEFAULT_AUTOREFRESH_SECONDS;
+  }
+  const stored = window.localStorage.getItem(AUTOREFRESH_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_AUTOREFRESH_SECONDS;
+  }
+  if (stored === "off") {
+    return null;
+  }
+  const parsed = Number(stored);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return DEFAULT_AUTOREFRESH_SECONDS;
+  }
+  return parsed;
+};
+
+const persistAutoRefreshInterval = (value: string) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
+};
+
 export interface UseRunSelectionReturn {
   runs: RunsListEntry[];
   selectedRunId: string | null;
@@ -52,6 +80,9 @@ export interface UseRunSelectionReturn {
   refreshRuns: () => Promise<void>;
   latestRunId: string | null;
   isLatest: boolean;
+  jumpToLatest: () => void;
+  autoRefreshInterval: number | null;
+  handleAutoRefreshChange: (value: string) => void;
 }
 
 export const useRunSelection = (): UseRunSelectionReturn => {
@@ -60,6 +91,19 @@ export const useRunSelection = (): UseRunSelectionReturn => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<number>(0);
+
+  // Auto-refresh interval state for runs list polling
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(readStoredAutoRefreshInterval);
+
+  const handleAutoRefreshChange = useCallback((value: string) => {
+    persistAutoRefreshInterval(value);
+    if (value === "off") {
+      setAutoRefreshInterval(null);
+    } else {
+      const parsed = Number(value);
+      setAutoRefreshInterval(Number.isNaN(parsed) || parsed <= 0 ? null : parsed);
+    }
+  }, []);
 
   // Ref to track if a refresh is in progress to prevent duplicate fetches
   const refreshInProgress = useRef(false);
@@ -120,6 +164,16 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     }
   }, [selectedRunId, latestRunId]);
 
+  // Auto-refresh polling for runs list - polls the runs list endpoint
+  // to surface new runs without requiring a full browser reload.
+  useEffect(() => {
+    if (!autoRefreshInterval) return;
+    const timerId = setInterval(() => {
+      refreshRuns();
+    }, autoRefreshInterval * 1000);
+    return () => clearInterval(timerId);
+  }, [autoRefreshInterval, refreshRuns]);
+
   const selectRun = useCallback(
     (runId: string) => {
       persistSelectedRunId(runId);
@@ -145,5 +199,7 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     latestRunId,
     isLatest,
     jumpToLatest,
+    autoRefreshInterval,
+    handleAutoRefreshChange,
   };
 };
