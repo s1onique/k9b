@@ -63,6 +63,15 @@ import { DiagnosticPackReviewList } from "./components/DiagnosticPackReviewList"
 import { DiagnosticPackReviewPanel } from "./components/DiagnosticPackReviewPanel";
 import { ExecutionLine, ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
+import {
+  artifactUrl,
+  formatTimestamp,
+  formatLatency,
+  normalizeFilterValue,
+  relativeRecency,
+  statusClass,
+  truncateText,
+} from "./utils";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -74,13 +83,6 @@ const confidenceWeight = (value: string) => {
   const order = ["critical", "high", "medium", "low"];
   const idx = order.indexOf(tier);
   return idx === -1 ? order.length : idx;
-};
-
-const truncateText = (value: string, length = 160) => {
-  if (value.length <= length) {
-    return value;
-  }
-  return `${value.slice(0, length).trim()}…`;
 };
 
 type FreshnessLevel = "fresh" | "warning" | "stale";
@@ -115,7 +117,6 @@ const FRESHNESS_LABEL: Record<FreshnessLevel, string> = {
 };
 
 const FRESHNESS_THRESHOLD_MINUTES = 10;
-const relativeRecency = (timestamp: string) => dayjs(timestamp).fromNow();
 const isStaleTimestamp = (timestamp: string) =>
   dayjs().diff(timestamp, "minute") >= FRESHNESS_THRESHOLD_MINUTES;
 
@@ -159,13 +160,6 @@ export const formatAgeDuration = (minutes: number): string => {
   return `${dayStr} ${hourStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
 };
 
-const statusClass = (value: string) => {
-  const normalized = value.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-  return `status-pill status-pill-${normalized}`;
-};
-
-const formatTimestamp = (value: string) => dayjs.utc(value).format("MMM D, YYYY HH:mm [UTC]");
-
 const formatDuration = (value: number | null | undefined) => {
   if (value == null || !Number.isFinite(value)) {
     return "—";
@@ -177,13 +171,6 @@ const formatDuration = (value: number | null | undefined) => {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`;
-};
-
-const formatLatency = (value: number | null | undefined) => {
-  if (value == null || !Number.isFinite(value)) {
-    return "—";
-  }
-  return `${Math.round(value)}ms`;
 };
 
 const DETERMINISTIC_WORKSTREAM_ORDER = ["incident", "evidence", "drift"] as const;
@@ -294,13 +281,6 @@ const persistAutoRefreshInterval = (value: string) => {
     return;
   }
   window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
-};
-
-const artifactUrl = (path: string | null) => {
-  if (!path) {
-    return null;
-  }
-  return `/artifact?path=${encodeURIComponent(path)}`;
 };
 
 const buildExecutionEntryKey = (entry: NextCheckExecutionHistoryEntry) =>

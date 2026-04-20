@@ -5,53 +5,8 @@
  */
 
 import React, { useMemo, useState } from "react";
-import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-import utc from "dayjs/plugin/utc";
+import { artifactUrl, formatTimestamp, formatLatency, normalizeFilterValue, relativeRecency, statusClass, truncateText } from "../utils";
 import type { RunPayload } from "../types";
-
-dayjs.extend(relativeTime);
-dayjs.extend(utc);
-
-// ==========================================================================
-// Helper functions (duplicated from App.tsx for component portability)
-// ==========================================================================
-
-/**
- * Normalize a filter value, returning "unknown" for empty/null values.
- */
-const normalizeFilterValue = (value: string | null | undefined) =>
-  value && value.trim() ? value : "unknown";
-
-const truncateText = (value: string, length = 160) => {
-  if (value.length <= length) {
-    return value;
-  }
-  return `${value.slice(0, length).trim()}…`;
-};
-
-const relativeRecency = (timestamp: string) => dayjs(timestamp).fromNow();
-
-const statusClass = (value: string) => {
-  const normalized = value.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-  return `status-pill status-pill-${normalized}`;
-};
-
-const formatTimestamp = (value: string) => dayjs.utc(value).format("MMM D, YYYY HH:mm [UTC]");
-
-const formatLatency = (value: number | null | undefined) => {
-  if (value == null || !Number.isFinite(value)) {
-    return "—";
-  }
-  return `${Math.round(value)}ms`;
-};
-
-const artifactUrl = (path: string | null) => {
-  if (!path) {
-    return null;
-  }
-  return `/artifact?path=${encodeURIComponent(path)}`;
-};
 
 export interface LLMActivityPanelProps {
   activity: RunPayload["llmActivity"] | undefined;

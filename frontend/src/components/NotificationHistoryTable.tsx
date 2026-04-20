@@ -5,15 +5,10 @@
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-import utc from "dayjs/plugin/utc";
+import { artifactUrl, formatTimestamp, relativeRecency, truncateText } from "../utils";
 import { fetchNotifications } from "../api";
 import type { NotificationEntry } from "../types";
 import Pagination from "./Pagination";
-
-dayjs.extend(relativeTime);
-dayjs.extend(utc);
 
 // Items per page for notification pagination
 const NOTIFICATIONS_PER_PAGE = 50;
@@ -40,41 +35,11 @@ const getNotificationDetailText = (entry: NotificationEntry) => {
 };
 
 /**
- * Builds an artifact URL from a path.
- */
-const artifactUrl = (path: string | null) => {
-  if (!path) {
-    return null;
-  }
-  return `/artifact?path=${encodeURIComponent(path)}`;
-};
-
-/**
- * Format a timestamp for display.
- */
-const formatTimestamp = (value: string) => dayjs.utc(value).format("MMM D, YYYY HH:mm [UTC]");
-
-/**
- * Returns a relative time string (e.g., "2 hours ago") for a timestamp.
- */
-const relativeRecency = (timestamp: string) => dayjs(timestamp).fromNow();
-
-/**
  * Returns a CSS-friendly class name based on notification kind.
  */
 const statusClass = (value: string) => {
   const normalized = value.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
   return `status-${normalized}`;
-};
-
-/**
- * Truncates text to a maximum length, appending an ellipsis if needed.
- */
-const truncateText = (value: string, length = 160) => {
-  if (value.length <= length) {
-    return value;
-  }
-  return `${value.slice(0, length).trim()}…`;
 };
 
 /**

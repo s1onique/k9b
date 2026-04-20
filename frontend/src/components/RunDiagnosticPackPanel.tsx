@@ -5,30 +5,8 @@
  */
 
 import React from "react";
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
+import { artifactUrl, formatTimestamp } from "../utils";
 import type { RunPayload } from "../types";
-
-dayjs.extend(utc);
-
-/**
- * Builds an artifact URL from a path.
- * @param path - The artifact path
- * @returns The artifact URL or null if path is empty
- */
-const artifactUrl = (path: string | null) => {
-  if (!path) {
-    return null;
-  }
-  return `/artifact?path=${encodeURIComponent(path)}`;
-};
-
-/**
- * Format a timestamp for display.
- * @param value - ISO timestamp string
- * @returns Formatted timestamp string
- */
-const formatTimestamp = (value: string) => dayjs.utc(value).format("MMM D, YYYY HH:mm [UTC]");
 
 export interface RunDiagnosticPackPanelProps {
   diagnosticPack: RunPayload["diagnosticPack"] | undefined;
