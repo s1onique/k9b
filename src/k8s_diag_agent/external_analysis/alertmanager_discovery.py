@@ -14,6 +14,12 @@ Key invariants:
 - Candidates must pass /-/healthy and /-/ready verification before auto-tracking
 - All sources track explicit origin and state for UI provenance
 - Discovery queries all namespaces using kubectl -A flag
+
+Identity model:
+- canonical_entity_id: Deterministic hash from normalized defining facts (namespace, name, origin, cluster_uid, etc.)
+- operator_intent_key: For durable operator actions (promote/disable) - prefers cluster_label over cluster_context
+- canonical_identity: namespace/name string for human-readable registry matching (distinct from canonical_entity_id)
+- Display fields: cluster_label, cluster_context, endpoint - never sole identity anchor
 """
 
 from __future__ import annotations
@@ -142,6 +148,32 @@ class AlertmanagerSource:
         
         # Fallback to normalized endpoint when namespace/name not available
         return _normalize_endpoint_for_identity(self.endpoint)
+
+    @property
+    def canonical_entity_id(self) -> str:
+        """Canonical historical identity - deterministic hash from normalized defining facts.
+        
+        This is the canonical_entity_id for historical tracking across runs.
+        Same source facts => same canonical_entity_id.
+        Different source facts => different canonical_entity_id.
+        
+        Uses the identity module helpers to ensure consistent construction.
+        Display-only fields (cluster_label, cluster_context) do NOT affect this ID.
+        
+        Note: This is distinct from operator_intent_key which is used for durable
+        operator actions (promote/disable) and prefers cluster_label for stability.
+        """
+        # Import here to avoid circular import at module level
+        from ..identity.alertmanager_source import build_alertmanager_canonical_entity_id
+        
+        return build_alertmanager_canonical_entity_id(
+            namespace=self.namespace,
+            name=self.name,
+            origin=self.origin.value if self.origin else None,
+            endpoint=self.endpoint,
+            cluster_uid=self.cluster_uid if hasattr(self, 'cluster_uid') else None,
+            object_uid=self.object_uid if hasattr(self, 'object_uid') else None,
+        )
 
     @property
     def identity_key(self) -> str:
