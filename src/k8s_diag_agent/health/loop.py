@@ -3623,10 +3623,12 @@ class HealthLoopRunner:
             self._stop_alertmanager_port_forward(port_forward_process, local_port)
         
         # Create compact summarization
-        # Pass cluster_context for provenance when alerts lack cluster labels
+        # Pass cluster_label for cluster attribution in UI when alerts lack cluster labels
+        # Use selected_source.cluster_label (the Kubernetes context/label) for cluster attribution,
+        # as this is the correct field for per-cluster UI filtering and affected_clusters display
         compact = snapshot_to_compact(
             snapshot,
-            cluster_context=effective_cluster_context,
+            cluster_label=selected_source.cluster_label,
         )
         
         # Write both artifacts

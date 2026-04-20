@@ -370,15 +370,16 @@ def normalize_alertmanager_payload(
 def snapshot_to_compact(
     snapshot: AlertmanagerSnapshot,
     max_alerts: int = 20,
-    cluster_context: str | None = None,
+    cluster_label: str | None = None,
 ) -> AlertmanagerCompact:
     """Convert normalized snapshot to compact LLM-ready JSON.
     
     Args:
         snapshot: The normalized Alertmanager snapshot.
         max_alerts: Maximum number of top alerts to include.
-        cluster_context: Optional cluster context derived from snapshot.source
-                        for provenance when alerts lack cluster labels.
+        cluster_label: Optional cluster label (context/label) from the source
+                       for cluster attribution when alerts lack cluster labels.
+                       This is the cluster_label field used for per-cluster UI filtering.
     """
     severity_counts: dict[str, int] = {}
     state_counts: dict[str, int] = {}
@@ -398,10 +399,10 @@ def snapshot_to_compact(
         alert_names[name] = alert_names.get(name, 0) + 1
         if alert.namespace:
             namespaces.add(alert.namespace)
-        # Use cluster label from alert, fallback to cluster_context for provenance
+        # Use cluster label from alert, fallback to cluster_label for provenance
         # when alerts lack cluster labels (e.g., alerts from a single Alertmanager instance
         # that doesn't emit cluster labels but runs in a known cluster context)
-        cluster = alert.cluster or cluster_context or "_none_"
+        cluster = alert.cluster or cluster_label or "_none_"
         clusters.add(cluster)
         if alert.service:
             services.add(alert.service)
