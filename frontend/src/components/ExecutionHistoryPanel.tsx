@@ -159,7 +159,7 @@ const USEFULNESS_CLASSES = [
 /**
  * Format duration in seconds to human-readable string
  */
-const formatDuration = (value: number | null | undefined) => {
+export const formatDuration = (value: number | null | undefined) => {
   if (value == null || !Number.isFinite(value)) {
     return "—";
   }
@@ -175,7 +175,7 @@ const formatDuration = (value: number | null | undefined) => {
 /**
  * Build a unique key for an execution history entry
  */
-const buildExecutionEntryKey = (entry: NextCheckExecutionHistoryEntry) =>
+export const buildExecutionEntryKey = (entry: NextCheckExecutionHistoryEntry) =>
   `${entry.clusterLabel ?? "global"}::${entry.candidateDescription ?? ""}::${entry.timestamp ?? ""}::${
     entry.artifactPath ?? ""
   }`;

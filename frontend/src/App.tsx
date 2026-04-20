@@ -65,6 +65,8 @@ import { DiagnosticPackReviewPanel } from "./components/DiagnosticPackReviewPane
 import { ExecutionLine, ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
 import {
   ExecutionHistoryPanel,
+  buildExecutionEntryKey,
+  formatDuration,
   persistExecutionHistoryFilter,
   readStoredExecutionHistoryFilter,
 } from "./components/ExecutionHistoryPanel";
@@ -166,18 +168,6 @@ export const formatAgeDuration = (minutes: number): string => {
   return `${dayStr} ${hourStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
 };
 
-const formatDuration = (value: number | null | undefined) => {
-  if (value == null || !Number.isFinite(value)) {
-    return "—";
-  }
-  const seconds = Math.max(0, Math.round(value));
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`;
-};
 
 const DETERMINISTIC_WORKSTREAM_ORDER = ["incident", "evidence", "drift"] as const;
 const DETERMINISTIC_WORKSTREAM_LABELS: Record<string, string> = {
@@ -289,10 +279,6 @@ const persistAutoRefreshInterval = (value: string) => {
   window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
 };
 
-const buildExecutionEntryKey = (entry: NextCheckExecutionHistoryEntry) =>
-  `${entry.clusterLabel ?? "global"}::${entry.candidateDescription ?? ""}::${entry.timestamp ?? ""}::${
-    entry.artifactPath ?? ""
-  }`;
 
 const buildClusterRecommendedArtifacts = (detail?: ClusterDetailPayload) => {
   if (!detail) {
@@ -866,116 +852,13 @@ export const parseNextCheckEntry = (raw: string): ParsedNextCheck => {
 // ==========================================================================
 
 /** Top concerns - compact concern rows with left accent */
-const AdvisoryTopConcernsSection = ({ concerns }: { concerns: string[] }) => {
-  if (!concerns.length) {
-    return null;
-  }
-  return (
-    <div className="advisory-lower-section advisory-concerns-section">
-      <p className="advisory-lower-section-label">Top concerns</p>
-      <ul className="advisory-concerns-list">
-        {concerns.map((concern) => (
-          <li key={concern} className="advisory-concern-row">
-            {concern}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
 
 /** Evidence gaps - uncertainty-oriented rows with gap marker */
-const AdvisoryEvidenceGapsSection = ({ gaps }: { gaps: string[] }) => {
-  if (!gaps.length) {
-    return null;
-  }
-  return (
-    <div className="advisory-lower-section advisory-gaps-section">
-      <p className="advisory-lower-section-label advisory-gaps-label">Evidence gaps</p>
-      <ul className="advisory-gaps-list">
-        {gaps.map((gap) => (
-          <li key={gap} className="advisory-gap-row">
-            <span className="advisory-gap-marker" aria-hidden="true">?</span>
-            <span>{gap}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
 
 /** Next checks - action rows with parsed intent, cluster badge, and command preview */
-const AdvisoryNextChecksSection = ({ checks }: { checks: string[] }) => {
-  if (!checks.length) {
-    return null;
-  }
-  const parsed = checks.map(parseNextCheckEntry);
-  return (
-    <div className="advisory-lower-section advisory-next-checks-section">
-      <p className="advisory-lower-section-label">Next checks</p>
-      <ul className="advisory-checks-list">
-        {parsed.map((check, idx) => (
-          <li key={checks[idx]} className="advisory-check-row">
-            <span className="advisory-check-intent">{check.intent || checks[idx]}</span>
-            {check.targetCluster && (
-              <span className="advisory-check-cluster">{check.targetCluster}</span>
-            )}
-            {check.commandPreview && (
-              <code className="advisory-check-cmd">{check.commandPreview}</code>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
 
 /** Focus notes - demoted secondary guidance hints */
-const AdvisoryFocusNotesSection = ({ notes }: { notes: string[] }) => {
-  if (!notes.length) {
-    return null;
-  }
-  return (
-    <div className="advisory-lower-section advisory-focus-notes-section">
-      <p className="advisory-lower-section-label advisory-focus-notes-label">Focus guidance</p>
-      <ul className="advisory-focus-notes-list">
-        {notes.map((note) => (
-          <li key={note} className="advisory-focus-note-row muted">
-            {note}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
 
-const DiagnosticPackReviewList = ({
-  title,
-  entries,
-}: {
-  title: string;
-  entries: string[];
-}) => {
-  if (!entries.length) {
-    return null;
-  }
-  const previewLimit = 3;
-  const hasMore = entries.length > previewLimit;
-  const visible = entries.slice(0, previewLimit);
-  return (
-    <div className="diagnostic-pack-review-list">
-      <p className="tiny">
-        {title} · {entries.length}
-      </p>
-      <ul>
-        {visible.map((entry) => (
-          <li key={entry}>{entry}</li>
-        ))}
-        {hasMore && <li className="muted">…and {entries.length - previewLimit} more</li>}
-      </ul>
-    </div>
-  );
-};
 
 // Status labels for Alertmanager compact capture status.
 // These are run-scoped snapshots - wording is chosen to be clear and trustworthy.
@@ -1655,62 +1538,6 @@ export const AlertmanagerSourcesPanel = ({
   );
 };
 
-const ExecutionLine = ({
-  title,
-  data,
-}: {
-  title: string;
-  data: ProviderExecutionBranch | undefined | null;
-}) => {
-  if (!data) {
-    return (
-      <div className="provider-execution-line">
-        <strong>{title}</strong>
-        <p className="small muted">Execution data unavailable for this branch.</p>
-      </div>
-    );
-  }
-  const segments = [
-    data.eligible != null && `eligible ${data.eligible}`,
-    `attempted ${data.attempted}`,
-    `ok ${data.succeeded}`,
-    `failed ${data.failed}`,
-    `skipped ${data.skipped}`,
-    data.unattempted != null && `unattempted ${data.unattempted}`,
-    data.budgetLimited != null && data.budgetLimited > 0 && `budget-limited ${data.budgetLimited}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <div className="provider-execution-line">
-      <strong>{title}</strong>
-      <p className="muted tiny provider-execution-summary">{segments || "No counts yet."}</p>
-      {data.notes ? <p className="muted tiny provider-execution-note">{data.notes}</p> : null}
-    </div>
-  );
-};
-
-const ProviderExecutionPanel = ({
-  execution,
-}: {
-  execution: ProviderExecution | undefined | null;
-}) => (
-  <section className="panel provider-execution" id="provider-execution">
-    <div className="section-head">
-      <div>
-        <p className="eyebrow">Provider execution</p>
-        <h2>Provider-assisted branches</h2>
-      </div>
-      <p className="muted small">
-        Counts derived from deterministic artifacts and run-config provenance for each branch.
-      </p>
-    </div>
-    <div className="provider-execution-body">
-      <ExecutionLine title="Auto drilldown" data={execution?.autoDrilldown} />
-      <ExecutionLine title="Review enrichment" data={execution?.reviewEnrichment} />
-    </div>
-  </section>
-);
 
 
 export const ProposalList = ({
