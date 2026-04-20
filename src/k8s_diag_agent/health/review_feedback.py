@@ -10,6 +10,7 @@ from typing import (
     TypeVar,
 )
 
+from ..datetime_utils import ensure_utc
 from ..feedback.models import FailureMode, ProposedImprovement
 from ..models import ConfidenceLevel
 from .drilldown import DrilldownArtifact
@@ -202,7 +203,7 @@ class HealthReviewArtifact:
 
         return cls(
             run_id=str(raw.get("run_id") or ""),
-            timestamp=datetime.fromisoformat(str(raw.get("timestamp") or datetime.now(UTC).isoformat())),
+            timestamp=ensure_utc(datetime.fromisoformat(str(raw.get("timestamp") or datetime.now(UTC).isoformat()))),
             selected_drilldowns=selections,
             quality_summary=metrics,
             failure_modes=failure_modes,

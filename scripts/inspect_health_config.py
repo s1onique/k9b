@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
@@ -34,7 +34,7 @@ def _parse_arguments() -> argparse.Namespace:
 def _dummy_snapshot(target: HealthTarget) -> ClusterSnapshot:
     metadata = {
         "cluster_id": target.context,
-        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "captured_at": datetime.now(UTC).isoformat(),
         "control_plane_version": "unknown",
         "node_count": 0,
         "pod_count": 0,

@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence, cast
-import shlex
+from typing import cast
 
 from k8s_diag_agent.external_analysis.adapter import (
     ExternalAnalysisAdapter,
@@ -68,7 +69,7 @@ def load_ui_index(run_health_dir: Path) -> Mapping[str, object]:
     return cast(Mapping[str, object], json.loads(index_path.read_text(encoding="utf-8")))
 
 
-def build_review_payload(context: "UIIndexContext", summary_text: str | None) -> dict[str, object]:
+def build_review_payload(context: UIIndexContext, summary_text: str | None) -> dict[str, object]:
     review_plan = context.run.next_check_plan
     deterministic = context.run.deterministic_next_checks
     queue_explanation = context.run.next_check_queue_explanation
@@ -152,7 +153,7 @@ def _normalize_adapter_command(command: str | None) -> tuple[str, ...] | None:
     return tuple(shlex.split(command))
 
 
-def _resolve_provider_label(context: "UIIndexContext", explicit: str) -> str:
+def _resolve_provider_label(context: UIIndexContext, explicit: str) -> str:
     review_provider = context.run.review_enrichment.provider if context.run.review_enrichment else None
     return review_provider or explicit
 

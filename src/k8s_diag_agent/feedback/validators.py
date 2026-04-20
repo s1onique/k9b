@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
+from ..datetime_utils import ensure_utc, parse_iso_to_utc
 from ..models import ConfidenceLevel
 from . import models
 
@@ -21,13 +22,14 @@ def _require_keys(data: dict[str, Any], required: Iterable[str]) -> None:
 
 
 def _parse_datetime(value: Any) -> datetime:
+    """Parse timestamp to timezone-aware UTC datetime for validation."""
     if isinstance(value, datetime):
-        return value
+        return ensure_utc(value)
     if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError as exc:
-            raise ArtifactValidationError(f"Invalid timestamp: {exc}") from exc
+        parsed = parse_iso_to_utc(value)
+        if parsed is not None:
+            return parsed
+        raise ArtifactValidationError(f"Invalid timestamp: {value!r}")
     raise ArtifactValidationError("timestamp must be an ISO string or datetime")
 
 

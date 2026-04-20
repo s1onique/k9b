@@ -23,6 +23,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from ..datetime_utils import ensure_utc
+
 
 class SourceAction(StrEnum):
     """Types of operator actions on Alertmanager sources."""
@@ -72,7 +74,7 @@ class SourceOverride:
             if timestamp_str.endswith("Z"):
                 timestamp_str = f"{timestamp_str[:-1]}+00:00"
             try:
-                timestamp = datetime.fromisoformat(timestamp_str)
+                timestamp = ensure_utc(datetime.fromisoformat(timestamp_str))
             except ValueError:
                 timestamp = datetime.now(UTC)
         else:
@@ -157,7 +159,7 @@ class AlertmanagerSourceOverrides:
             if last_updated_str.endswith("Z"):
                 last_updated_str = f"{last_updated_str[:-1]}+00:00"
             try:
-                last_updated = datetime.fromisoformat(last_updated_str)
+                last_updated = ensure_utc(datetime.fromisoformat(last_updated_str))
             except ValueError:
                 last_updated = datetime.now(UTC)
         else:

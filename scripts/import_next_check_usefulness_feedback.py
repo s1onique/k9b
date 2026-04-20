@@ -30,8 +30,8 @@ from k8s_diag_agent.external_analysis.artifact import (  # noqa: E402
     ExternalAnalysisPurpose,
     JudgmentScope,
     ProblemClass,
-    ReviewStage,
     ReviewerConfidence,
+    ReviewStage,
     UsefulnessClass,
     Workstream,
 )
@@ -118,7 +118,7 @@ def _resolve_artifact_path(
 
         if allowed:
             logger.debug(
-                f"Artifact resolution: original=%s resolved=%s mode=absolute exists=%s",
+                "Artifact resolution: original=%s resolved=%s mode=absolute exists=%s",
                 artifact_path,
                 abs_path,
                 abs_path.exists(),
@@ -131,7 +131,7 @@ def _resolve_artifact_path(
         else:
             # Absolute path outside allowed roots - report as unresolved
             logger.debug(
-                f"Artifact resolution: original=%s resolved=%s mode=unresolved exists=False (outside allowed roots)",
+                "Artifact resolution: original=%s resolved=%s mode=unresolved exists=False (outside allowed roots)",
                 artifact_path,
                 abs_path,
             )
@@ -145,7 +145,7 @@ def _resolve_artifact_path(
     modern_path = run_health_dir / artifact_path
     if modern_path.exists():
         logger.debug(
-            f"Artifact resolution: original=%s resolved=%s mode=modern exists=True",
+            "Artifact resolution: original=%s resolved=%s mode=modern exists=True",
             artifact_path,
             modern_path,
         )
@@ -159,7 +159,7 @@ def _resolve_artifact_path(
     legacy_path = runs_dir / artifact_path
     if legacy_path.exists():
         logger.debug(
-            f"Artifact resolution: original=%s resolved=%s mode=legacy exists=True",
+            "Artifact resolution: original=%s resolved=%s mode=legacy exists=True",
             artifact_path,
             legacy_path,
         )
@@ -171,7 +171,7 @@ def _resolve_artifact_path(
 
     # Case 4: Unresolved - report clear error
     logger.debug(
-        f"Artifact resolution: original=%s mode=unresolved exists=False (not found in modern or legacy locations)",
+        "Artifact resolution: original=%s mode=unresolved exists=False (not found in modern or legacy locations)",
         artifact_path,
     )
     return ArtifactResolutionResult(
@@ -755,7 +755,7 @@ def main() -> None:
             dry_run=args.dry_run,
         )
 
-        print(f"Import complete:")
+        print("Import complete:")
         print(f"  - Successfully imported: {result.success_count}")
         print(f"  - Updated (changed): {result.updated_count}")
         print(f"  - Skipped (idempotent): {result.skipped_count}")
@@ -764,12 +764,12 @@ def main() -> None:
         if result.success_count > 0 and not args.dry_run:
             # Show summary statistics
             summary = result.summary
-            print(f"\nUsefulness class distribution:")
+            print("\nUsefulness class distribution:")
             for cls, count in summary.get("usefulness_class_counts", {}).items():
                 print(f"  - {cls}: {count}")
 
             if summary.get("command_family_counts"):
-                print(f"\nCommand family distribution:")
+                print("\nCommand family distribution:")
                 for family, count in summary.get("command_family_counts", {}).items():
                     print(f"  - {family}: {count}")
 
@@ -780,7 +780,7 @@ def main() -> None:
                     print(f"  - {candidate['usefulness_class']} ({candidate['count']}): {candidate['recommendation']}")
 
         if result.errors:
-            print(f"\nErrors encountered:")
+            print("\nErrors encountered:")
             for error in result.errors[:10]:  # Show first 10 errors
                 print(f"  - {error}")
             if len(result.errors) > 10:

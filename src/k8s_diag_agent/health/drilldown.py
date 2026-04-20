@@ -10,6 +10,7 @@ from textwrap import shorten
 from typing import Any, ClassVar
 
 from ..collect.cluster_snapshot import WarningEventSummary
+from ..datetime_utils import parse_iso_to_utc
 from .image_pull_secret import ImagePullSecretInsight
 
 
@@ -557,12 +558,13 @@ class DrilldownArtifact:
             raise ValueError(f"{path} expected a list")
 
         def _parse_datetime(value: Any, path: str) -> datetime:
+            """Parse timestamp with UTC normalization for safe comparisons."""
             if not isinstance(value, str):
                 raise ValueError(f"{path} expected a timestamp string")
-            text = value
-            if text.endswith("Z"):
-                text = f"{text[:-1]}+00:00"
-            return datetime.fromisoformat(text)
+            parsed = parse_iso_to_utc(value)
+            if parsed is None:
+                raise ValueError(f"{path} expected a valid ISO timestamp string")
+            return parsed
 
         warning_raw = raw.get("warning_events", [])
         warnings: list[WarningEventSummary] = []

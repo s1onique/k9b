@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..datetime_utils import ensure_utc, parse_iso_to_utc
 from ..external_analysis.alertmanager_artifact import (
     read_alertmanager_compact,
     read_alertmanager_sources,
@@ -2519,12 +2520,12 @@ def _coerce_sequence(value: object | None) -> tuple[str, ...]:
 
 
 def _parse_timestamp(value: object | None) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
+    """Parse an ISO timestamp string to timezone-aware UTC datetime.
+
+    Uses centralized datetime_utils to ensure all parsed datetimes
+    are timezone-aware UTC for safe comparison operations.
+    """
+    return parse_iso_to_utc(value)
 
 
 def _coerce_optional_str(value: object | None) -> str | None:
@@ -2735,7 +2736,7 @@ def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
         if not isinstance(run_id, str) or not isinstance(timestamp, str):
             continue
         try:
-            finish = datetime.fromisoformat(timestamp)
+            finish = ensure_utc(datetime.fromisoformat(timestamp))
         except ValueError:
             continue
         existing = timestamps.get(run_id)

@@ -26,6 +26,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from ..datetime_utils import ensure_utc
 from .alertmanager_discovery import AlertmanagerSource, AlertmanagerSourceMode
 
 # Module logger
@@ -105,7 +106,7 @@ class RegistryEntry:
             if updated_at_str.endswith("Z"):
                 updated_at_str = f"{updated_at_str[:-1]}+00:00"
             try:
-                updated_at = datetime.fromisoformat(updated_at_str)
+                updated_at = ensure_utc(datetime.fromisoformat(updated_at_str))
             except ValueError:
                 updated_at = datetime.now(UTC)
         else:
@@ -222,7 +223,7 @@ class AlertmanagerSourceRegistry:
             if last_updated_str.endswith("Z"):
                 last_updated_str = f"{last_updated_str[:-1]}+00:00"
             try:
-                last_updated = datetime.fromisoformat(last_updated_str)
+                last_updated = ensure_utc(datetime.fromisoformat(last_updated_str))
             except ValueError:
                 last_updated = datetime.now(UTC)
         else:

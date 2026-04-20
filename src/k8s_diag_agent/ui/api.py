@@ -10,6 +10,7 @@ from typing import NotRequired, TypedDict, cast
 
 import ijson
 
+from ..datetime_utils import parse_iso_to_utc
 from ..health.freshness import freshness_status
 from .model import (
     AlertmanagerCompactView,
@@ -937,9 +938,8 @@ def _build_freshness_payload(
 ) -> FreshnessPayload | None:
     if not timestamp_value:
         return None
-    try:
-        parsed = datetime.fromisoformat(timestamp_value)
-    except ValueError:
+    parsed = parse_iso_to_utc(timestamp_value)
+    if parsed is None:
         return None
     now_value = now or datetime.now(UTC)
     age_seconds = int(max(0, (now_value - parsed).total_seconds()))
@@ -2031,9 +2031,8 @@ def build_runs_list(
                 review_fast_path_failure_missing_field += 1
             continue
 
-        try:
-            parsed_time = datetime.fromisoformat(timestamp)
-        except ValueError:
+        parsed_time = parse_iso_to_utc(timestamp)
+        if parsed_time is None:
             parsed_time = datetime.now(UTC)
 
         run_entries[run_id] = {

@@ -6,24 +6,24 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-import sys
-from typing import Iterable, Mapping, Sequence, cast
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from k8s_diag_agent.structured_logging import emit_structured_log
-from k8s_diag_agent.health.utils import normalize_ref
 from k8s_diag_agent.external_analysis.alertmanager_artifact import (
-    read_alertmanager_snapshot,
     read_alertmanager_compact,
 )
+from k8s_diag_agent.health.utils import normalize_ref
+from k8s_diag_agent.structured_logging import emit_structured_log
 
 COMPONENT_NAME = "diagnostic-pack-builder"
 PACK_METADATA_CATEGORY = "pack_metadata"
@@ -237,7 +237,7 @@ def _build_manifest(run_id: str, run_label: str, files: Iterable[dict[str, str]]
     return {
         "run_id": run_id,
         "run_label": run_label,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "file_count": len(files_list),
         "files": files_list,
     }
@@ -259,7 +259,7 @@ def _build_review_bundle(
     alertmanager_context = _build_alertmanager_context(run_health_dir, run_id)
     return {
         "schema_version": REVIEW_BUNDLE_SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "run": {
             "run_label": str(run_label) if isinstance(run_label, str) else None,
             "run_id": run_id_value,
@@ -358,7 +358,7 @@ def _build_review_input_14b(
     })
     return {
         "schema_version": REVIEW_INPUT_SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "source_run_id": run_id_value,
         "source_review_bundle_path": "review_bundle.json",
         "run": {
@@ -1527,7 +1527,7 @@ def _coerce_int_from_dict(source: dict[str, object], key: str) -> int:
 
 
 def _build_analyst_prompt(run_id: str, run_label: str) -> str:
-    return """# Analyst prompt
+    return f"""# Analyst prompt
 Run: {run_label} ({run_id})
 
 Please review the attached artifacts in the diagnostic pack and respond with concrete findings:
@@ -1538,13 +1538,13 @@ Please review the attached artifacts in the diagnostic pack and respond with con
 4. Highlight duplicates, vague/generic commands, or automated suggestions that lack actionable signal so operators can prioritize accurate checks.
 5. Identify any artifact-to-UI inconsistencies (missing drilldowns, mismatched cluster counts, etc.) that would erode trust in future runs.
 6. Recommend the smallest safe next fixes or operator actions needed to close the remaining gaps.
-""".format(run_id=run_id, run_label=run_label)
+"""
 
 
 def _zip_pack(pack_root: Path, output_dir: Path, run_id: str) -> Path:
     output_dir = output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     pack_name = f"diagnostic-pack-{run_id}-{timestamp}.zip"
     pack_path = output_dir / pack_name
     if pack_path.exists():

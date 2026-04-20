@@ -321,7 +321,7 @@ def load_review_exports(runs_dir: Path) -> list[dict[str, Any]]:
                 data = json.loads(export_file.read_text(encoding="utf-8"))
                 run_data_list.append(data)
                 seen_run_ids.add(run_id)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 continue
 
     # Search pattern 2: diagnostic-packs directory (canonical run-scoped exports)
@@ -340,7 +340,7 @@ def load_review_exports(runs_dir: Path) -> list[dict[str, Any]]:
                 data = json.loads(review_file.read_text(encoding="utf-8"))
                 run_data_list.append(data)
                 seen_run_ids.add(run_id)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 continue
 
     return run_data_list

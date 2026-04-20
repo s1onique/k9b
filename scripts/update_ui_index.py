@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 DIAGNOSTIC_PACK_PATTERN = re.compile(r"diagnostic-pack-[^-]+-(\d{8}T\d{6}Z)\.zip")
 
@@ -17,7 +16,7 @@ def _extract_timestamp(name: str) -> datetime | None:
     if not match:
         return None
     try:
-        return datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        return datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
     except ValueError:
         return None
 
@@ -31,7 +30,7 @@ def _latest_pack(packs_dir: Path, run_id: str) -> Path | None:
         ts = _extract_timestamp(candidate.name)
         if ts is None:
             try:
-                ts = datetime.fromtimestamp(candidate.stat().st_mtime, timezone.utc)
+                ts = datetime.fromtimestamp(candidate.stat().st_mtime, UTC)
             except OSError:
                 ts = None
         if latest is None or (ts is not None and (latest[1] is None or ts > latest[1])):
@@ -50,7 +49,7 @@ def update_index(runs_dir: Path, run_id: str) -> bool:
     timestamp = _extract_timestamp(pack_path.name)
     if timestamp is None:
         try:
-            timestamp = datetime.fromtimestamp(pack_path.stat().st_mtime, timezone.utc)
+            timestamp = datetime.fromtimestamp(pack_path.stat().st_mtime, UTC)
         except OSError:
             timestamp = None
     data = json.loads(ui_index_path.read_text(encoding="utf-8"))

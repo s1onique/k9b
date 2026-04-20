@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..datetime_utils import parse_iso_to_utc
 from ..health.notifications import NotificationArtifact
 from ..structured_logging import emit_structured_log
 
@@ -488,8 +489,14 @@ def _notification_sort_key(record: tuple[NotificationArtifact, Path]) -> datetim
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse an ISO timestamp string to timezone-aware UTC datetime.
+
+    Uses centralized datetime_utils to ensure all parsed datetimes
+    are timezone-aware UTC for safe comparison operations.
+    """
     if not isinstance(value, str):
         return None
+    # Try strptime formats first (these are legacy formats)
     for fmt in (
         "%Y%m%dT%H%M%S",
         "%Y%m%dT%H%M%SZ",
@@ -503,10 +510,8 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=UTC)
         return parsed
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
+    # Use centralized parser for ISO format
+    return parse_iso_to_utc(value)
 
 
 def _build_notification_entry(

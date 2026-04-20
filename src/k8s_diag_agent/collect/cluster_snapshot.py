@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
+
+from ..datetime_utils import now_utc, parse_iso_to_utc
 
 
 @dataclass(frozen=True)
@@ -343,11 +345,14 @@ def _iter_dicts(items: Any) -> Iterable[Mapping[str, Any]]:
 
 
 def _parse_timestamp(value: str | None) -> datetime:
-    if not value:
-        return datetime.now(UTC)
-    if value.endswith("Z"):
-        value = f"{value[:-1]}+00:00"
-    return datetime.fromisoformat(value)
+    """Parse an ISO timestamp string to timezone-aware UTC datetime.
+
+    Uses centralized datetime_utils to ensure all parsed datetimes
+    are timezone-aware UTC for safe comparison operations.
+    Falls back to current UTC time for invalid inputs.
+    """
+    parsed = parse_iso_to_utc(value)
+    return parsed if parsed is not None else now_utc()
 
 
 def _safe_int(value: Any) -> int | None:

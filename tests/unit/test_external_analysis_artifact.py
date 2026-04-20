@@ -605,7 +605,7 @@ class TestExternalAnalysisArtifactEdgeCases(unittest.TestCase):
         self.assertLessEqual(artifact.timestamp, after)
 
     def test_from_dict_with_invalid_timestamp_format_raises_error(self) -> None:
-        """Test that invalid timestamp format raises ValueError."""
+        """Test that invalid timestamp format raises ValueError to fail fast on corrupt artifacts."""
         raw = {
             "tool_name": "test-tool",
             "run_id": "run-invalid-ts",
@@ -613,9 +613,10 @@ class TestExternalAnalysisArtifactEdgeCases(unittest.TestCase):
             "timestamp": "not-a-valid-timestamp",
         }
 
-        # datetime.fromisoformat raises ValueError for invalid formats
-        with self.assertRaises(ValueError):
+        # Invalid timestamp formats should raise ValueError, not silently fall back to now()
+        with self.assertRaises(ValueError) as ctx:
             ExternalAnalysisArtifact.from_dict(raw)
+        self.assertIn("Invalid timestamp format", str(ctx.exception))
 
     def test_from_dict_with_mapping_payload(self) -> None:
         """Test that Mapping payload is converted to dict."""

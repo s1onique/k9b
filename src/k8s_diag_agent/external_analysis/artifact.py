@@ -10,6 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import cast
 
+from ..datetime_utils import now_utc, parse_iso_to_utc
 from ..identity.artifact import new_artifact_id
 
 
@@ -102,6 +103,22 @@ def _parse_optional_enum(
         return enum_type(str(value))
     except ValueError:
         return None
+
+
+def _parse_timestamp_field(value: object | None) -> datetime:
+    """Parse timestamp field from dict.
+
+    - If value is None/missing: use current time (default behavior)
+    - If value is an invalid string: raise ValueError (fail fast on corrupt data)
+    """
+    if value is None:
+        # Missing timestamp: use current time
+        return now_utc()
+    parsed = parse_iso_to_utc(value)
+    if parsed is not None:
+        return parsed
+    # Invalid timestamp format: fail fast
+    raise ValueError(f"Invalid timestamp format: {value!r}")
 
 
 class PackRefreshStatus(StrEnum):
@@ -230,7 +247,7 @@ class ExternalAnalysisArtifact:
             suggested_next_checks=tuple(str(item) for item in raw.get("suggested_next_checks") or []),
             status=status,
             raw_output=str(raw.get("raw_output")) if raw.get("raw_output") else None,
-            timestamp=datetime.fromisoformat(str(raw.get("timestamp"))) if raw.get("timestamp") else datetime.now(UTC),
+            timestamp=_parse_timestamp_field(raw.get("timestamp")),
             artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
             provider=str(raw.get("provider")) if raw.get("provider") else None,
             duration_ms=_coerce_optional_int(raw.get("duration_ms")),

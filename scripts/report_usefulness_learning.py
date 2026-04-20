@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -380,7 +379,7 @@ def format_report(report: ReportData, recommendations: list[Recommendation]) -> 
     lines.append("PLANNER IMPROVEMENT REPORT")
     lines.append("Evidence-backed command family performance analysis")
     lines.append("=" * 80)
-    lines.append(f"")
+    lines.append("")
     lines.append(f"Summaries analyzed: {report.summaries_loaded}")
     lines.append(f"Total runs analyzed: {len(report.runs_analyzed)}")
     lines.append(f"Total entries: {report.total_entries}")

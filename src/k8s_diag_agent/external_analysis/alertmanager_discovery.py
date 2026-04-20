@@ -1112,15 +1112,23 @@ def verify_and_update_inventory(
 
 
 def _parse_datetime(value: str | None) -> datetime:
-    """Parse ISO format datetime string."""
+    """Parse ISO format datetime string to timezone-aware UTC datetime.
+
+    Uses centralized datetime_utils to ensure all parsed datetimes
+    are timezone-aware UTC for safe comparison operations.
+    """
     if not value:
         return datetime.now(UTC)
     try:
         if value.endswith("Z"):
             value = f"{value[:-1]}+00:00"
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except (ValueError, TypeError):
         return datetime.now(UTC)
+    # Ensure the result is timezone-aware UTC
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def build_endpoint_for_manual(

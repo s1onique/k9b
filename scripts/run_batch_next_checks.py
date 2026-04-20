@@ -151,7 +151,7 @@ def _find_latest_run_id(runs_dir: Path) -> str:
     run_entry = cast(dict[str, Any], index_data.get("run") or {})
     run_id = run_entry.get("run_id")
     if not isinstance(run_id, str):
-        raise ValueError(f"Could not find run_id in UI index")
+        raise ValueError("Could not find run_id in UI index")
     return run_id
 
 
@@ -215,7 +215,7 @@ def main() -> None:
             dry_run=args.dry_run,
         )
 
-        print(f"\nBatch Execution Summary:")
+        print("\nBatch Execution Summary:")
         print(f"  Total candidates: {result.total_candidates}")
         print(f"  Eligible candidates: {result.eligible_candidates}")
         print(f"  Executed: {result.executed_count}")

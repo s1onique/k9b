@@ -23,6 +23,7 @@ from uuid import uuid4
 from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
+from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters
 from ..external_analysis.alertmanager_artifact import (
     write_alertmanager_artifacts,
@@ -4873,18 +4874,12 @@ class HealthLoopScheduler:
         return True
 
     def _parse_lock_timestamp(self, value: str | None) -> datetime | None:
-        if not value:
-            return None
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            if value.endswith("Z"):
-                try:
-                    iso_value = f"{value[:-1]}+00:00"
-                    return datetime.fromisoformat(iso_value)
-                except ValueError:
-                    return None
-            return None
+        """Parse lock timestamp to timezone-aware UTC datetime.
+
+        Uses centralized datetime_utils to ensure all parsed datetimes
+        are timezone-aware UTC for safe comparison operations.
+        """
+        return parse_iso_to_utc(value)
 
     def _stale_lock_age_threshold(self) -> float:
         interval = self._interval_seconds or self._LOCK_STALE_MIN_SECONDS

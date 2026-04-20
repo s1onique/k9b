@@ -443,6 +443,32 @@ class UIApiTests(unittest.TestCase):
         assert payload is not None
         self.assertEqual(payload["status"], "stale")
 
+    def test_freshness_helper_accepts_naive_timestamp(self) -> None:
+        """Regression test: naive timestamps should not cause 'can't compare' errors.
+
+        Previously, timestamp strings without timezone info (e.g., "2026-01-01T00:00:00")
+        would be parsed as naive datetimes, and comparing them with the UTC-aware now_value
+        would raise: TypeError: can't compare offset-naive and offset-aware datetimes
+
+        This test verifies that naive timestamps are normalized to UTC-aware before comparison.
+        """
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+        # Naive timestamp string (no timezone) - this used to cause the comparison error
+        naive_timestamp = "2026-01-01T00:00:00"
+        # This should NOT raise TypeError: can't compare offset-naive and offset-aware
+        payload = _build_freshness_payload(naive_timestamp, 300, now=base + timedelta(seconds=200))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["status"], "fresh")
+
+    def test_freshness_helper_accepts_z_suffix_timestamp(self) -> None:
+        """Test that Z-suffix timestamps (ISO 8601 legacy) work correctly."""
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+        payload = _build_freshness_payload("2026-01-01T00:00:00Z", 300, now=base + timedelta(seconds=200))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["status"], "fresh")
+
     def test_fleet_payload_summarizes_clusters(self) -> None:
         payload = build_fleet_payload(self.context)
         self.assertEqual(payload["clusters"][0]["label"], "cluster-a")

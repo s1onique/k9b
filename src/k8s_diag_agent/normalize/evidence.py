@@ -4,17 +4,16 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
+from ..datetime_utils import ensure_utc, now_utc, parse_iso_to_utc
 from ..models import EvidenceRecord, Layer, Signal
 
 
 def _parse_datetime(value: object | None) -> datetime:
+    """Parse timestamp to timezone-aware UTC datetime."""
     if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        if value.endswith("Z"):
-            value = value[:-1] + "+00:00"
-        return datetime.fromisoformat(value)
-    return datetime.now(UTC)
+        return ensure_utc(value)
+    parsed = parse_iso_to_utc(value)
+    return parsed if parsed is not None else now_utc()
 
 
 def normalize_signals(input_data: dict[str, object]) -> tuple[list[EvidenceRecord], list[Signal]]:
