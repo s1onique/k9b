@@ -253,19 +253,26 @@ def normalize_alertmanager_payload(
     raw: Any,
     config_max_alerts: int = 200,
     config_max_string_length: int = 200,
+    source: str | None = None,
 ) -> AlertmanagerSnapshot:
     """Normalize raw Alertmanager API response into snapshot.
     
     Handles two Alertmanager API response formats:
     1. Top-level list: [{"labels": {...}, ...}, ...]  (direct from /api/v2/alerts)
     2. Wrapped format: {"data": {"alerts": [...]}}  (some proxy responses)
+    
+    Args:
+        raw: Raw API response from Alertmanager.
+        config_max_alerts: Maximum number of alerts to include in snapshot.
+        config_max_string_length: Maximum length for string fields.
+        source: Source endpoint URL (optional, for provenance tracking).
     """
     captured_at = datetime.now(UTC).isoformat()
     if raw is None:
         return AlertmanagerSnapshot(
             status=AlertmanagerStatus.INVALID_RESPONSE,
             captured_at=captured_at,
-            source=None,
+            source=source,
             alert_count=0,
             alerts=(),
             errors=("Received null/empty response",),
@@ -277,7 +284,7 @@ def normalize_alertmanager_payload(
             return AlertmanagerSnapshot(
                 status=AlertmanagerStatus.INVALID_RESPONSE,
                 captured_at=captured_at,
-                source=None,
+                source=source,
                 alert_count=0,
                 alerts=(),
                 errors=(f"Failed to parse JSON: {raw[:200]}",),
@@ -299,7 +306,7 @@ def normalize_alertmanager_payload(
         return AlertmanagerSnapshot(
             status=AlertmanagerStatus.INVALID_RESPONSE,
             captured_at=captured_at,
-            source=None,
+            source=source,
             alert_count=0,
             alerts=(),
             errors=(f"Expected list or dict response, got {type(raw).__name__}",),
@@ -309,7 +316,7 @@ def normalize_alertmanager_payload(
         return AlertmanagerSnapshot(
             status=AlertmanagerStatus.INVALID_RESPONSE,
             captured_at=captured_at,
-            source=None,
+            source=source,
             alert_count=0,
             alerts=(),
             errors=("Alerts field is not a list",),
@@ -352,7 +359,7 @@ def normalize_alertmanager_payload(
     return AlertmanagerSnapshot(
         status=status,
         captured_at=captured_at,
-        source=None,
+        source=source,
         alert_count=total_count,
         alerts=tuple(alerts),
         errors=(),
@@ -363,8 +370,16 @@ def normalize_alertmanager_payload(
 def snapshot_to_compact(
     snapshot: AlertmanagerSnapshot,
     max_alerts: int = 20,
+    cluster_context: str | None = None,
 ) -> AlertmanagerCompact:
-    """Convert normalized snapshot to compact LLM-ready JSON."""
+    """Convert normalized snapshot to compact LLM-ready JSON.
+    
+    Args:
+        snapshot: The normalized Alertmanager snapshot.
+        max_alerts: Maximum number of top alerts to include.
+        cluster_context: Optional cluster context derived from snapshot.source
+                        for provenance when alerts lack cluster labels.
+    """
     severity_counts: dict[str, int] = {}
     state_counts: dict[str, int] = {}
     alert_names: dict[str, int] = {}
@@ -383,7 +398,10 @@ def snapshot_to_compact(
         alert_names[name] = alert_names.get(name, 0) + 1
         if alert.namespace:
             namespaces.add(alert.namespace)
-        cluster = alert.cluster or "_none_"
+        # Use cluster label from alert, fallback to cluster_context for provenance
+        # when alerts lack cluster labels (e.g., alerts from a single Alertmanager instance
+        # that doesn't emit cluster labels but runs in a known cluster context)
+        cluster = alert.cluster or cluster_context or "_none_"
         clusters.add(cluster)
         if alert.service:
             services.add(alert.service)

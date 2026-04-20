@@ -3529,7 +3529,11 @@ class HealthLoopRunner:
                 raw_response = json.loads(body)
             
             # Normalize the response into a snapshot
-            snapshot = normalize_alertmanager_payload(raw_response)
+            # Pass the source endpoint for provenance tracking
+            snapshot = normalize_alertmanager_payload(
+                raw_response,
+                source=selected_source.endpoint,
+            )
             
             self._log_event(
                 "alertmanager-snapshot",
@@ -3619,7 +3623,11 @@ class HealthLoopRunner:
             self._stop_alertmanager_port_forward(port_forward_process, local_port)
         
         # Create compact summarization
-        compact = snapshot_to_compact(snapshot)
+        # Pass cluster_context for provenance when alerts lack cluster labels
+        compact = snapshot_to_compact(
+            snapshot,
+            cluster_context=effective_cluster_context,
+        )
         
         # Write both artifacts
         try:
