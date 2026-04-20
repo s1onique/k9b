@@ -17,6 +17,8 @@ import {
   stopTrackingAlertmanagerSource,
   submitUsefulnessFeedback,
 } from "./api";
+import { useRunData } from "./hooks/useRunData";
+import { useRunSelection } from "./hooks/useRunSelection";
 import type {
   AlertmanagerCompact,
   AlertmanagerProvenance,
@@ -3745,25 +3747,46 @@ const NotificationHistoryTable = () => {
 };
 
 const App = () => {
-  const [run, setRun] = useState<RunPayload | null>(null);
   const [fleet, setFleet] = useState<FleetPayload | null>(null);
   const [proposals, setProposals] = useState<ProposalsPayload | null>(null);
-  const [runsList, setRunsList] = useState<RunsListEntry[]>([]);
-  const [runsListLoading, setRunsListLoading] = useState(true);
-  const [runsListError, setRunsListError] = useState<string | null>(null);
   const [clusterDetail, setClusterDetail] = useState<ClusterDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Run selection state - extracted to useRunSelection hook
+  const {
+    runs: runsList,
+    selectedRunId,
+    selectRun: setSelectedRunId,
+    isLoading: runsListLoading,
+    error: runsListError,
+    refreshRuns,
+    latestRunId,
+    isLatest: isSelectedRunLatest,
+  } = useRunSelection();
+
+  // Run data state - extracted to useRunData hook
+  const {
+    run,
+    isLoading: runDataLoading,
+    isError: runDataError,
+    lastRefresh,
+    refresh: refreshRunData,
+    autoRefreshInterval,
+    handleAutoRefreshChange,
+  } = useRunData({
+    selectedRunId,
+  });
+
+  // Derive combined loading and error state
+  const isLoading = runDataLoading || runsListLoading;
+  const isError = runDataError || error;
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("proposalId");
   const [expandedProposals, setExpandedProposals] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"findings" | "hypotheses" | "checks">("findings");
-  const [lastRefresh, setLastRefresh] = useState(() => dayjs());
   const [selectedClusterLabel, setSelectedClusterLabel] = useState<string | null>(null);
   const [clusterDetailExpanded, setClusterDetailExpanded] = useState(false);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(() => {
-    return readStoredAutoRefreshInterval();
-  });
   const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
@@ -3899,9 +3922,6 @@ const App = () => {
     const page = computePageForRunId(runId);
     setRunsPage(page);
   }, [computePageForRunId]);
-  
-  // Selected run ID (persisted)
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(() => readStoredSelectedRunId());
 
   // Navigate to the page containing the selected run and switch to follow mode
   const handleShowSelectedRun = useCallback(() => {
@@ -3913,7 +3933,7 @@ const App = () => {
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
 
-  // Handle batch execution for a run
+  // Handle batch execution for a run - refreshes runs list and selected run via hooks
   const handleBatchExecution = useCallback(async (runId: string) => {
     setExecutingBatchRunId(runId);
     setBatchExecutionError((prev) => {
@@ -3925,13 +3945,11 @@ const App = () => {
       // Explicitly send dryRun: false for actual execution
       // The backend defaults to False, but being explicit improves clarity and debugging
       await runBatchExecution({ runId, dryRun: false });
-      // Refresh runs list after successful execution
-      const payload: RunsListPayload = await fetchRunsList();
-      setRunsList(payload.runs);
-      // If the selected run is the one we just executed, refresh that too
+      // Refresh runs list and run data through hooks after successful execution
+      await refreshRuns();
+      // If the selected run is the one we just executed, refresh its data too
       if (selectedRunId === runId) {
-        const runPayload = await fetchRun(runId);
-        setRun(runPayload);
+        await refreshRunData();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Batch execution failed";
@@ -3942,41 +3960,10 @@ const App = () => {
     } finally {
       setExecutingBatchRunId((current) => (current === runId ? null : current));
     }
-  }, [selectedRunId]);
-
-  // Fetch runs list on mount
-  useEffect(() => {
-    let active = true;
-    const loadRunsList = async () => {
-      setRunsListLoading(true);
-      setRunsListError(null);
-      try {
-        const payload: RunsListPayload = await fetchRunsList();
-        if (active) {
-          setRunsList(payload.runs);
-        }
-      } catch (err) {
-        if (active) {
-          setRunsListError(err instanceof Error ? err.message : "Failed to load runs");
-        }
-      } finally {
-        if (active) {
-          setRunsListLoading(false);
-        }
-      }
-    };
-    loadRunsList();
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [selectedRunId, refreshRuns, refreshRunData]);
 
   // Compute filter counts
   const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runsList), [runsList]);
-
-  // Initialize selectedRunId to latest run on first load when no explicit selection exists
-  const latestRunId = runsList.length > 0 ? runsList[0].runId : null;
-  const isSelectedRunLatest = selectedRunId === latestRunId;
 
   const handleJumpToLatest = useCallback(() => {
     if (latestRunId) {
@@ -3995,16 +3982,6 @@ const App = () => {
     // Navigate to the page containing the selected run
     navigateToPageContainingRun(runId);
   }, [navigateToPageContainingRun]);
-
-  // Effect to initialize selectedRunId from latest run when no stored selection exists
-  useEffect(() => {
-    if (runsList.length > 0 && selectedRunId === null) {
-      const storedSelection = readStoredSelectedRunId();
-      if (!storedSelection && latestRunId) {
-        setSelectedRunId(latestRunId);
-      }
-    }
-  }, [runsList, selectedRunId, latestRunId]);
 
   // Effect: After runs list refresh, navigate to the page containing the selected run.
   // This ensures the selected row remains visible after manual refresh or auto-refresh.
@@ -4052,21 +4029,16 @@ const App = () => {
     let active = true;
     try {
       setError(null);
-      // Fetch runs list AND run data in parallel to update the runs list on refresh.
-      // This ensures new runs surface without requiring a full browser reload.
-      const [runsListPayload, runPayload, fleetPayload, proposalsPayload] = await Promise.all([
-        fetchRunsList(),
-        fetchRun(selectedRunId ?? undefined),
+      // Fetch fleet and proposals in parallel.
+      // Runs list and run data are refreshed through hooks for consistent state management.
+      const [fleetPayload, proposalsPayload] = await Promise.all([
         fetchFleet(),
         fetchProposals(),
       ]);
-      if (active) {
-        // Update runs list first so derived state (latestRunId) is consistent
-        setRunsList(runsListPayload.runs);
-      }
-      if (active) {
-        setRun(runPayload);
-      }
+      // Trigger hook-based refresh for runs list and run data
+      // These update internal hook state; we don't need to await them
+      refreshRuns();
+      refreshRunData();
       if (active) {
         setFleet(fleetPayload);
         if (!selectedClusterLabel) {
@@ -4079,7 +4051,6 @@ const App = () => {
       if (active) {
         setProposals(proposalsPayload);
       }
-      setLastRefresh(dayjs());
       // Clear local execution results after successful refresh reconciliation.
       // This allows the UI to transition from transient local execution state
       // to refreshed artifact-backed payload as the durable source of truth.
@@ -4103,7 +4074,7 @@ const App = () => {
       refreshInProgress.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClusterLabel, selectedRunId]);
+  }, [selectedClusterLabel, selectedRunId, refreshRuns, refreshRunData]);
 
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
     `${clusterLabel}::${description}::${index}`;
@@ -4154,9 +4125,17 @@ const App = () => {
     [refresh]
   );
 
+  // Trigger initial fetch when selected run changes - this is the intended behavior
+  // so users see the new run's data after clicking on a different run
   useEffect(() => {
     refresh();
   }, [refresh, selectedRunId]);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let timerId: ReturnType<typeof setInterval> | null = null;
@@ -4312,19 +4291,6 @@ const App = () => {
       ...current,
       [label]: !current[label],
     }));
-  };
-
-  const handleAutoRefreshChange = (value: string) => {
-    if (value === "off") {
-      persistAutoRefreshInterval("off");
-      setAutoRefreshInterval(null);
-      return;
-    }
-    const parsed = Number(value);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      persistAutoRefreshInterval(value);
-      setAutoRefreshInterval(parsed);
-    }
   };
 
   const buildCandidateKey = (candidate: NextCheckPlanCandidate, index: number) =>
