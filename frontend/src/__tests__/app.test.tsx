@@ -210,8 +210,8 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: /Next check plan/i });
     expect(screen.getByText(/Executed \(success\) · 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Awaiting approval · 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Not used · 1/i)).toBeInTheDocument();
+    expect(screen.getByText(UI_STRINGS.queueStatus.awaitingApprovalWithCount(1), { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(UI_STRINGS.queueStatus.notUsedWithCount(1), { exact: false })).toBeInTheDocument();
   });
 
   test("recent-runs panel displays runs with triage status and allows selection", async () => {
@@ -329,9 +329,9 @@ describe("App", () => {
     const summaryPanel = document.getElementById("run-detail");
     expect(summaryPanel).not.toBeNull();
     const summaryScoped = within(summaryPanel!);
-    expect(summaryScoped.getByText(/Planner candidates/i)).toBeInTheDocument();
-    expect(summaryScoped.getByText(/Safe candidate/i)).toBeInTheDocument();
-    expect(summaryScoped.getByText(/Approval needed/i)).toBeInTheDocument();
+    expect(summaryScoped.getByText(UI_STRINGS.planner.plannerCandidates, { exact: false })).toBeInTheDocument();
+    expect(summaryScoped.getByText(UI_STRINGS.workflowLanes.safeCandidate, { exact: false })).toBeInTheDocument();
+    expect(summaryScoped.getByText(UI_STRINGS.workflowLanes.approvalNeeded, { exact: false })).toBeInTheDocument();
     expect(summaryScoped.getByRole("button", { name: /Review next checks/i })).toBeInTheDocument();
     expect(summaryScoped.getByRole("link", { name: /View planner artifact/i })).toBeInTheDocument();
   });
@@ -703,7 +703,7 @@ describe("App", () => {
     const evidenceLabel = within(panel!).getAllByText(/Evidence gathering/i)[0];
     const evidenceSection = evidenceLabel.closest("section");
     expect(evidenceSection).not.toBeNull();
-    expect(within(evidenceSection!).getByText(/No evidence gathering checks/i)).toBeInTheDocument();
+    expect(within(evidenceSection!).getByText(UI_STRINGS.emptyState.noEvidenceGatheringChecks, { exact: false })).toBeInTheDocument();
   });
 
   test("deterministic panel empty state is obvious when data is absent", async () => {
@@ -752,7 +752,7 @@ describe("App", () => {
       await user.click(showButton);
     });
     expect(queueScoped.getByText(/Source reason:/i)).toBeInTheDocument();
-    expect(queueScoped.getByText(/Command preview/i)).toBeInTheDocument();
+    expect(queueScoped.getByText(UI_STRINGS.commandPreview.commandPreview, { exact: false })).toBeInTheDocument();
     expect(queueScoped.getByText(/Plan artifact/i)).toBeInTheDocument();
     expect(queueScoped.getByText(/kubectl describe diag/i)).toBeInTheDocument();
   });
@@ -801,7 +801,7 @@ describe("App", () => {
     // Verify the blocker note with icon is present (displays priorityRationale with ⏸ icon)
     expect(within(approvalCard!).getByText(/⏸/i)).toBeInTheDocument();
     // Verify the rationale content appears in the blocker note
-    expect(within(approvalCard!).getByText(/Approval required before execution/i)).toBeInTheDocument();
+    expect(within(approvalCard!).getByText(UI_STRINGS.emptyState.approvalRequiredBeforeExecution, { exact: false })).toBeInTheDocument();
   });
 
   test("queue card omits priorityRationale label when field is absent", async () => {
@@ -816,7 +816,7 @@ describe("App", () => {
     const queueScoped = await getQueuePanel();
     // After removing priorityRationale from candidate-vague, the "Approval required before execution"
     // text should NOT appear anywhere in the queue
-    expect(queueScoped.queryByText(/Approval required before execution/i)).toBeNull();
+    expect(queueScoped.queryByText(UI_STRINGS.emptyState.approvalRequiredBeforeExecution, { exact: false })).toBeNull();
   });
 
   test("queue card shows rankingReason badge when present", async () => {
@@ -1256,8 +1256,8 @@ describe("App", () => {
     const planPanel = heading.closest(".next-check-plan");
     expect(planPanel).not.toBeNull();
     const scoped = within(planPanel!);
-    expect(scoped.getByText(/Approval stale/i)).toBeInTheDocument();
-    expect(scoped.getByText(/Orphaned approvals/i)).toBeInTheDocument();
+    expect(scoped.getByText(UI_STRINGS.approvalStates.approvalStale, { exact: false })).toBeInTheDocument();
+    expect(scoped.getByText(UI_STRINGS.approvalStates.orphanedApprovals, { exact: false })).toBeInTheDocument();
   });
 
   test("displays run button only for allowed next-check candidates", async () => {

@@ -1039,7 +1039,15 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
  * These are fragile to copy changes and should be centralized.
  */
 export const UI_STRINGS = {
-  // Queue item status labels
+  // Workflow lane labels (ACT NOW, IMPROVE THE SYSTEM, etc.)
+  workflowLanes: {
+    safeCandidate: "Safe candidate",
+    approvalNeeded: "Approval needed",
+    safeToAutomate: "Safe to automate",
+    whyNotActionable: "Why not actionable now?",
+    why: "Why:",
+  },
+  // Queue item status labels with counts
   queueStatus: {
     approvalNeeded: "Approval needed",
     awaitingApproval: "Awaiting approval",
@@ -1048,6 +1056,11 @@ export const UI_STRINGS = {
     safeCandidate: "Safe candidate",
     awaitingApprovalWithCount: (count: number) => `Awaiting approval · ${count}`,
     notUsedWithCount: (count: number) => `Not used · ${count}`,
+  },
+  // Approval state labels
+  approvalStates: {
+    approvalStale: "Approval stale",
+    orphanedApprovals: "Orphaned approvals",
   },
   // Gating/blocking reasons
   gating: {
@@ -1062,7 +1075,20 @@ export const UI_STRINGS = {
   // Empty states
   emptyState: {
     noEvidenceBasedChecks: "No evidence-based checks are available for this run",
+    noEvidenceBasedChecksAvailable: "No evidence-based checks are available",
     notConfiguredForThisRun: "not configured for this run",
+    noNextChecksGenerated: "No next checks generated for this run",
+    noEvidenceGatheringChecks: "No evidence gathering checks",
+    approvalRequiredBeforeExecution: "Approval required before execution",
+  },
+  // Planner section labels
+  planner: {
+    plannerCandidates: "Planner candidates",
+    reviewNextChecks: "Review next checks",
+  },
+  // Command preview
+  commandPreview: {
+    commandPreview: "Command preview",
   },
 } as const;
 
