@@ -88,25 +88,48 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
     def _write_alertmanager_compact_artifact(
         self,
         run_id: str,
+        compact_artifact: dict[str, object] | None = None,
     ) -> Path:
-        """Write a run-scoped alertmanager-compact artifact."""
-        external_dir = self.health_dir / "external-analysis"
-        external_dir.mkdir(parents=True, exist_ok=True)
+        """Write a run-scoped alertmanager-compact artifact.
 
-        artifact = {
-            "status": "healthy",
-            "alert_count": 5,
-            "severity_counts": {"critical": 1, "warning": 4},
-            "state_counts": {"firing": 3, "pending": 2},
-            "top_alert_names": ["PodNotReady", "HighCPUUsage"],
-            "affected_namespaces": ["monitoring", "default"],
-            "affected_clusters": ["test-cluster"],
-            "affected_services": ["api-service"],
-            "truncated": False,
-            "captured_at": datetime.now(UTC).isoformat(),
-        }
-        path = external_dir / f"{run_id}-alertmanager-compact.json"
-        path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+        Writes to health_root directly (not external-analysis/) to match where
+        the server reads from in _load_context_for_run.
+
+        Args:
+            run_id: The run ID to write the artifact for.
+            compact_artifact: Optional custom compact artifact. If not provided,
+                uses the default test artifact with by_cluster data.
+        """
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+
+        if compact_artifact is None:
+            compact_artifact = {
+                "status": "healthy",
+                "alert_count": 5,
+                "severity_counts": {"critical": 1, "warning": 4},
+                "state_counts": {"firing": 3, "pending": 2},
+                "top_alert_names": ["PodNotReady", "HighCPUUsage"],
+                "affected_namespaces": ["monitoring", "default"],
+                "affected_clusters": ["test-cluster"],
+                "affected_services": ["api-service"],
+                "truncated": False,
+                "captured_at": datetime.now(UTC).isoformat(),
+                # Per-cluster breakdown for cluster-scoped UI panels
+                "by_cluster": [
+                    {
+                        "cluster": "test-cluster",
+                        "alert_count": 5,
+                        "severity_counts": {"critical": 1, "warning": 4},
+                        "state_counts": {"firing": 3, "pending": 2},
+                        "top_alert_names": ["PodNotReady", "HighCPUUsage"],
+                        "affected_namespaces": ["monitoring", "default"],
+                        "affected_services": ["api-service"],
+                        "captured_at": datetime.now(UTC).isoformat(),
+                    }
+                ],
+            }
+        path = self.health_dir / f"{run_id}-alertmanager-compact.json"
+        path.write_text(json.dumps(compact_artifact, indent=2), encoding="utf-8")
         return path
 
     def _write_index(

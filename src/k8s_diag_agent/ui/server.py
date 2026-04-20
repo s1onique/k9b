@@ -2912,6 +2912,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     "affected_services": compact_raw.get("affected_services", []),
                     "truncated": compact_raw.get("truncated", False),
                     "captured_at": compact_raw.get("captured_at"),
+                    # Per-cluster breakdown for cluster-scoped UI panels
+                    "by_cluster": compact_raw.get("by_cluster", []),
                 }
             except Exception:
                 pass  # Compact not available - non-fatal
