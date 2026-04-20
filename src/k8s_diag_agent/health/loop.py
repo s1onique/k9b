@@ -45,6 +45,7 @@ from ..external_analysis.alertmanager_snapshot import (
 from ..external_analysis.alertmanager_source_registry import (
     RegistryDesiredState,
     apply_registry_to_inventory,
+    lookup_registry_state,
     read_source_registry,
 )
 from ..external_analysis.artifact import (
@@ -3242,25 +3243,19 @@ class HealthLoopRunner:
         registry = read_source_registry(directories["root"])
         
         if registry is not None:
-            # Use canonical key lookup for registry matching.
-            # Prefer cluster_label (stable, operator-facing) over cluster_context.
-            # This ensures cross-run persistence even when cluster_context changes.
-            from ..external_analysis.alertmanager_source_registry import build_canonical_registry_key
-            
-            # Apply registry state to each source before writing the inventory
-            # This promotes "manual" sources and filters out "disabled" sources
+            # Use shared lookup helper for registry matching.
+            # This centralizes the label-first key logic and avoids duplicating key construction.
+            # lookup_registry_state() uses source.cluster_label (not inventory-level label)
+            # for cross-run persistence.
             registry_disabled_count = 0
             registry_manual_count = 0
             for source in verified_inventory.sources.values():
-                # Build canonical key preferring cluster_label (stable) over cluster_context
-                canonical_key = build_canonical_registry_key(
-                    cluster_context=verified_inventory.cluster_context,
-                    cluster_label=verified_inventory.cluster_label,
-                    canonical_identity=source.canonical_identity,
+                # Use shared helper - uses source.cluster_label for canonical key
+                desired_state = lookup_registry_state(
+                    registry,
+                    verified_inventory.cluster_context,
+                    source,
                 )
-                # Look up desired state using canonical key
-                entry = registry.get_entry(canonical_key)
-                desired_state = entry.desired_state if entry else None
                 if desired_state == RegistryDesiredState.MANUAL:
                     registry_manual_count += 1
                 elif desired_state == RegistryDesiredState.DISABLED:

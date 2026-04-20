@@ -357,6 +357,10 @@ def lookup_registry_state(
     matches the key used when writing registry entries. This is critical for
     cross-run persistence when cluster_context may differ between runs.
     
+    Backward compatibility: If canonical key is not found, falls back to
+    legacy context-keyed lookup for registry entries written before the
+    label-first change.
+    
     Args:
         registry: The source registry (or None if not loaded)
         cluster_context: Kubernetes context (may be None or change between runs)
@@ -377,7 +381,31 @@ def lookup_registry_state(
     )
     
     entry = registry.get_entry(canonical_key)
-    return entry.desired_state if entry else None
+    if entry:
+        return entry.desired_state
+    
+    # Backward compatibility: try legacy context-keyed lookup
+    # This handles registry entries written before the label-first change
+    # where entries were keyed by cluster_context instead of cluster_label
+    legacy_key = f"{cluster_context or 'unknown'}:{source.canonical_identity}"
+    if legacy_key != canonical_key:
+        _logger.debug(
+            "Canonical key %s not found, trying legacy key %s for source %s",
+            canonical_key,
+            legacy_key,
+            source.canonical_identity,
+        )
+        legacy_entry = registry.get_entry(legacy_key)
+        if legacy_entry:
+            _logger.info(
+                "Found registry entry via legacy key %s (canonical was %s). "
+                "Consider re-promoting the source to migrate to label-first keying.",
+                legacy_key,
+                canonical_key,
+            )
+            return legacy_entry.desired_state
+    
+    return None
 
 
 def apply_registry_to_source(
@@ -419,10 +447,12 @@ def apply_registry_to_source(
             source.canonical_identity,
             source.origin.value,
         )
-        # Get the registry entry's cluster_context to use for the source
-        # This ensures the serializer can match the source to the registry entry
-        # Use the cluster_context that was used to find this match
-        entry_cluster_context = cluster_context or "unknown"
+        # CRITICAL: Do NOT overwrite cluster_context with registry identity!
+        # The source.cluster_context is the REAL kube execution context (e.g., "admin@rees46-k8s")
+        # which is required for kubectl port-forward and snapshot collection.
+        # The registry key identity (cluster_label-based) is only for cross-run persistence,
+        # not for runtime execution. Use build_canonical_registry_key() for registry matching,
+        # but preserve source.cluster_context as-is for execution.
         return _replace(
             source,
             # Preserve original discovery origin (e.g., alertmanager-crd, service-heuristic)
@@ -430,9 +460,8 @@ def apply_registry_to_source(
             state=AlertmanagerSourceState.MANUAL,
             # Set manual_source_mode to indicate this was promoted from auto-discovery
             manual_source_mode=AlertmanagerSourceMode.OPERATOR_PROMOTED,
-            # Set cluster_context from registry entry so serializer can match it
-            # This is critical for the UI to correctly identify promoted sources
-            cluster_context=entry_cluster_context,
+            # Do NOT set cluster_context here - preserve the original discovered context
+            # for runtime execution (kubectl, port-forward, etc.)
         )
     elif desired_state == RegistryDesiredState.DISABLED:
         # Return None to indicate this source should be filtered from inventory

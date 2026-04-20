@@ -566,9 +566,11 @@ class TestApplyRegistryToSource:
         assert result.state == AlertmanagerSourceState.MANUAL
         assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
         
-        # cluster_context is set from the registry lookup, not from the source
-        # This is critical for the serializer to match the source to the registry
-        assert result.cluster_context == "cluster1"
+        # cluster_context is PRESERVED from the source, not set from registry lookup
+        # This is critical for runtime execution (kubectl port-forward, snapshot collection)
+        # The registry uses cluster_label for cross-run matching, but the source's
+        # cluster_context (None in this case) is preserved for execution
+        assert result.cluster_context is None
         
         # Origin is preserved
         assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
