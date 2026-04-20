@@ -35,81 +35,21 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+// Import shared execution history filter types and functions from ExecutionHistoryPanel
+import {
+  ExecutionHistoryFilterState,
+  EXECUTION_HISTORY_FILTER_STORAGE_KEY,
+  readStoredExecutionHistoryFilter,
+  persistExecutionHistoryFilter,
+  ExecutionOutcomeFilter,
+  UsefulnessReviewFilter,
+} from "../components/ExecutionHistoryPanel";
+
 // ============================================================================
-// Types (duplicated from App.tsx to avoid circular dependencies)
+// Types (local re-exports for consumers)
 // ============================================================================
 
 export type SortKey = "proposalId" | "confidence" | "status";
-
-// Filters for execution outcome/status: success, failure, timeout
-export type ExecutionOutcomeFilter = "all" | "success" | "failure" | "timeout";
-
-export type UsefulnessReviewFilter = "all" | "useful" | "partial" | "noisy" | "empty" | "unreviewed";
-
-export const EXECUTION_HISTORY_FILTER_STORAGE_KEY = "dashboard-execution-history-filter";
-
-const EXECUTION_OUTCOME_FILTER_VALUES: ExecutionOutcomeFilter[] = ["all", "success", "failure", "timeout"];
-const USEFULNESS_REVIEW_FILTER_VALUES: UsefulnessReviewFilter[] = ["all", "useful", "partial", "noisy", "empty", "unreviewed"];
-
-const isExecutionOutcomeFilterValue = (value: unknown): value is ExecutionOutcomeFilter =>
-  typeof value === "string" && EXECUTION_OUTCOME_FILTER_VALUES.includes(value as ExecutionOutcomeFilter);
-
-const isUsefulnessReviewFilterValue = (value: unknown): value is UsefulnessReviewFilter =>
-  typeof value === "string" && USEFULNESS_REVIEW_FILTER_VALUES.includes(value as UsefulnessReviewFilter);
-
-const DEFAULT_EXECUTION_HISTORY_FILTER: ExecutionHistoryFilterState = {
-  outcomeFilter: "all",
-  usefulnessFilter: "all",
-  commandFamilyFilter: "all",
-  clusterFilter: "all",
-};
-
-export type ExecutionHistoryFilterState = {
-  outcomeFilter: ExecutionOutcomeFilter;
-  usefulnessFilter: UsefulnessReviewFilter;
-  commandFamilyFilter: string;
-  clusterFilter: string;
-};
-
-const readStoredExecutionHistoryFilter = (): ExecutionHistoryFilterState => {
-  if (typeof window === "undefined") {
-    return DEFAULT_EXECUTION_HISTORY_FILTER;
-  }
-  const stored = window.localStorage.getItem(EXECUTION_HISTORY_FILTER_STORAGE_KEY);
-  if (!stored) {
-    return DEFAULT_EXECUTION_HISTORY_FILTER;
-  }
-  try {
-    const parsed = JSON.parse(stored);
-    if (!parsed || typeof parsed !== "object") {
-      return DEFAULT_EXECUTION_HISTORY_FILTER;
-    }
-    const candidate = parsed as Record<string, unknown>;
-    return {
-      outcomeFilter: isExecutionOutcomeFilterValue(candidate.outcomeFilter)
-        ? candidate.outcomeFilter
-        : DEFAULT_EXECUTION_HISTORY_FILTER.outcomeFilter,
-      usefulnessFilter: isUsefulnessReviewFilterValue(candidate.usefulnessFilter)
-        ? candidate.usefulnessFilter
-        : DEFAULT_EXECUTION_HISTORY_FILTER.usefulnessFilter,
-      commandFamilyFilter: typeof candidate.commandFamilyFilter === "string"
-        ? candidate.commandFamilyFilter
-        : DEFAULT_EXECUTION_HISTORY_FILTER.commandFamilyFilter,
-      clusterFilter: typeof candidate.clusterFilter === "string"
-        ? candidate.clusterFilter
-        : DEFAULT_EXECUTION_HISTORY_FILTER.clusterFilter,
-    };
-  } catch {
-    return DEFAULT_EXECUTION_HISTORY_FILTER;
-  }
-};
-
-const persistExecutionHistoryFilter = (filter: ExecutionHistoryFilterState) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(EXECUTION_HISTORY_FILTER_STORAGE_KEY, JSON.stringify(filter));
-};
 
 // ============================================================================
 // Hook Interface

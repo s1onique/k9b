@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 
-// Import types and helpers from production code
+// Import types and helpers from ExecutionHistoryPanel component
 import {
   filterExecutionHistory,
   extractClustersFromHistory,
@@ -12,7 +12,8 @@ import {
   ExecutionOutcomeFilter,
   UsefulnessReviewFilter,
   ExecutionHistoryFilterState,
-} from "../App";
+  EXECUTION_HISTORY_FILTER_STORAGE_KEY,
+} from "../components/ExecutionHistoryPanel";
 
 import type { NextCheckExecutionHistoryEntry } from "../types";
 
@@ -325,9 +326,7 @@ describe("computeExecutionHistoryFilterCounts", () => {
 // These tests render the actual ExecutionHistoryPanel inside App
 // ============================================================
 
-import App, {
-  EXECUTION_HISTORY_FILTER_STORAGE_KEY,
-} from "../App";
+import App from "../App";
 import {
   createFetchMock,
   createStorageMock,
