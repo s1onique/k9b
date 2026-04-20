@@ -3763,6 +3763,28 @@ const App = () => {
     isLatest: isSelectedRunLatest,
     autoRefreshInterval,
     handleAutoRefreshChange,
+    // Pagination and filter state
+    runsFilter,
+    setRunsFilter,
+    runsPageSize,
+    setRunsPageSize,
+    runsPage,
+    setRunsPage,
+    isRunsListFollowingSelection,
+    setIsRunsListFollowingSelection,
+    filteredRunsList,
+    runsFilterCounts,
+    paginatedRunsList,
+    totalRunsPages,
+    isSelectedRunVisibleOnCurrentRunsPage,
+    handleRunsFilterChange,
+    handleRunsPageSizeChange,
+    handleRunsPageChange,
+    computePageForRunId,
+    navigateToPageContainingRun,
+    handleShowSelectedRun,
+    handleRunSelection,
+    jumpToLatest,
   } = useRunSelection();
 
   // Run data state - extracted to useRunData hook
@@ -3830,103 +3852,6 @@ const App = () => {
   const queueHighlightTimer = useRef<number | null>(null);
   // Track the last executed candidate key so we can highlight it after refresh
   const lastExecutedCandidateKey = useRef<string | null>(null);
-  
-  // Runs list filter state
-  const [runsFilter, setRunsFilter] = useState<RunsReviewFilter>(readStoredRunsReviewFilter);
-  
-  // Pagination state for runs list
-  const [runsPageSize, setRunsPageSize] = useState<number>(readStoredRunsPageSize);
-  const [runsPage, setRunsPage] = useState(1);
-
-  /**
-   * Follow/detached mode for Recent runs pagination.
-   *
-   * When `isRunsListFollowingSelection === true`:
-   *   - The table auto-navigates to show the selected run after refresh.
-   *   - Selecting a run, clicking ← Latest, or clicking "Show selected run"
-   *     keeps follow mode active.
-   *
-   * When `isRunsListFollowingSelection === false` (detached):
-   *   - Manual page navigation preserves the current browsing position.
-   *   - Refresh does NOT jump to the selected run's page.
-   *   - The operator can browse historical pages while another run is selected.
-   *
-   * Transitions to follow mode:
-   *   - User selects a run from the table
-   *   - User clicks ← Latest
-   *   - User clicks "Show selected run"
-   *
-   * Transitions to detached mode:
-   *   - User manually changes the page
-   *   - User manually changes page size
-   */
-  const [isRunsListFollowingSelection, setIsRunsListFollowingSelection] = useState(true);
-  
-  // Reset to page 1 when filter changes
-  const handleRunsFilterChange = useCallback((filter: RunsReviewFilter) => {
-    setRunsFilter(filter);
-    setRunsPage(1);
-    persistRunsReviewFilter(filter);
-  }, []);
-
-  // Handle page size change - transitions to detached mode
-  const handleRunsPageSizeChange = useCallback((newSize: number) => {
-    setRunsPageSize(newSize);
-    setRunsPage(1); // Reset to first page when page size changes
-    setIsRunsListFollowingSelection(false); // Detach: manual page size change
-    persistRunsPageSize(newSize);
-  }, []);
-
-  // Handle manual page change - transitions to detached mode
-  const handleRunsPageChange = useCallback((page: number) => {
-    setRunsPage(page);
-    setIsRunsListFollowingSelection(false); // Detach: manual navigation
-  }, []);
-
-  // Filter runs based on selected filter (defined early so computePageForRunId can use it)
-  const filteredRunsList = useMemo(() => {
-    if (runsFilter === "all") {
-      return runsList;
-    }
-    return runsList.filter((r) => {
-      if (runsFilter === "no-executions") {
-        return r.reviewStatus === "no-executions";
-      }
-      if (runsFilter === "awaiting-review") {
-        return r.reviewStatus === "unreviewed";
-      }
-      if (runsFilter === "partially-reviewed") {
-        return r.reviewStatus === "partially-reviewed";
-      }
-      if (runsFilter === "fully-reviewed") {
-        return r.reviewStatus === "fully-reviewed";
-      }
-      if (runsFilter === "needs-attention") {
-        return r.reviewStatus === "unreviewed" || r.reviewStatus === "partially-reviewed";
-      }
-      return true;
-    });
-  }, [runsList, runsFilter]);
-
-  // Compute the page number for a given runId within the filtered list
-  const computePageForRunId = useCallback((runId: string | null): number => {
-    if (!runId) return 1;
-    const index = filteredRunsList.findIndex((r) => r.runId === runId);
-    if (index === -1) return 1;
-    return Math.floor(index / runsPageSize) + 1;
-  }, [filteredRunsList, runsPageSize]);
-
-  // Navigate to the page containing the given runId
-  const navigateToPageContainingRun = useCallback((runId: string | null) => {
-    const page = computePageForRunId(runId);
-    setRunsPage(page);
-  }, [computePageForRunId]);
-
-  // Navigate to the page containing the selected run and switch to follow mode
-  const handleShowSelectedRun = useCallback(() => {
-    setIsRunsListFollowingSelection(true); // Re-engage follow mode
-    navigateToPageContainingRun(selectedRunId);
-  }, [selectedRunId, navigateToPageContainingRun]);
 
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
@@ -3960,60 +3885,6 @@ const App = () => {
       setExecutingBatchRunId((current) => (current === runId ? null : current));
     }
   }, [selectedRunId, refreshRuns, refreshRunData]);
-
-  // Compute filter counts
-  const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runsList), [runsList]);
-
-  const handleJumpToLatest = useCallback(() => {
-    if (latestRunId) {
-      persistSelectedRunId(latestRunId);
-      setSelectedRunId(latestRunId);
-      // Also navigate to page 1 (where latest run is in default newest-first ordering)
-      setRunsPage(1);
-    }
-  }, [latestRunId]);
-
-  // Navigate to the page containing the selected run when it changes
-  // This ensures the table shows the row for the selected run
-  const handleRunSelection = useCallback((runId: string) => {
-    persistSelectedRunId(runId);
-    setSelectedRunId(runId);
-    // Navigate to the page containing the selected run
-    navigateToPageContainingRun(runId);
-  }, [navigateToPageContainingRun]);
-
-  // Effect: After runs list refresh, navigate to the page containing the selected run.
-  // This ensures the selected row remains visible after manual refresh or auto-refresh.
-  // If the selected run is filtered out, selection state is preserved but the row won't be visible.
-  // Only auto-navigates when in follow mode (isRunsListFollowingSelection === true).
-  useEffect(() => {
-    if (!selectedRunId) return;
-    if (!isRunsListFollowingSelection) return;
-    // Check if selected run exists in the filtered list
-    const runInFilteredList = filteredRunsList.find((r) => r.runId === selectedRunId);
-    if (runInFilteredList) {
-      // Selected run is in filtered dataset - navigate to its page to keep it visible
-      navigateToPageContainingRun(selectedRunId);
-    }
-    // If not in filtered list, we intentionally do NOT change runsPage here.
-    // The selection state remains intact (for the header/detail view).
-  }, [selectedRunId, filteredRunsList, navigateToPageContainingRun, isRunsListFollowingSelection]);
-
-  // Computed paginated runs list
-  const paginatedRunsList = useMemo(() => {
-    const start = (runsPage - 1) * runsPageSize;
-    const end = start + runsPageSize;
-    return filteredRunsList.slice(start, end);
-  }, [filteredRunsList, runsPage, runsPageSize]);
-
-  const totalRunsPages = Math.ceil(filteredRunsList.length / runsPageSize);
-
-  // Derived boolean: true when the selected run is visible on the current page.
-  // Used to suppress the detached notice when the operator can already see the selected run.
-  const isSelectedRunVisibleOnCurrentRunsPage = useMemo(() => {
-    if (!selectedRunId) return false;
-    return paginatedRunsList.some((r) => r.runId === selectedRunId);
-  }, [paginatedRunsList, selectedRunId]);
 
   // Ref to track if a refresh is in progress to prevent duplicate fetches
   const refreshInProgress = useRef(false);
@@ -4872,7 +4743,7 @@ const App = () => {
                 <button
                   type="button"
                   className="link tiny"
-                  onClick={handleJumpToLatest}
+                  onClick={jumpToLatest}
                   title="Jump back to the latest run"
                 >
                   ← Latest
