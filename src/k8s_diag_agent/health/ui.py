@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..datetime_utils import ensure_utc, parse_iso_to_utc
+from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.alertmanager_artifact import (
     read_alertmanager_compact,
     read_alertmanager_sources,
@@ -2424,6 +2424,10 @@ def _build_review_enrichment_execution(
     }
 
 
+# UTC-aware sentinel for sorting (datetime.min is naive, cannot compare with aware datetimes)
+_EPOCH_SENTINEL = datetime.min.replace(tzinfo=UTC)
+
+
 def _serialize_llm_activity(entries: Sequence[Mapping[str, object]], root_dir: Path, limit: int = _LLM_ACTIVITY_LIMIT) -> dict[str, object]:
     normalized: list[tuple[datetime | None, dict[str, object]]] = []
     for entry in entries:
@@ -2455,7 +2459,7 @@ def _serialize_llm_activity(entries: Sequence[Mapping[str, object]], root_dir: P
         normalized.append((timestamp, activity_entry))
     sorted_entries = sorted(
         normalized,
-        key=lambda item: item[0] or datetime.min,
+        key=lambda item: item[0] or _EPOCH_SENTINEL,
         reverse=True,
     )
     trimmed_entries = [payload for _, payload in sorted_entries[:limit]]
@@ -2735,9 +2739,8 @@ def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
         timestamp = raw.get("timestamp")
         if not isinstance(run_id, str) or not isinstance(timestamp, str):
             continue
-        try:
-            finish = ensure_utc(datetime.fromisoformat(timestamp))
-        except ValueError:
+        finish = parse_iso_to_utc(timestamp)
+        if finish is None:
             continue
         existing = timestamps.get(run_id)
         if existing is None or finish > existing:
