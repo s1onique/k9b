@@ -3843,13 +3843,8 @@ const App = () => {
     setExpandedQueueItems,
     toggleQueueDetails,
   } = useUIState();
-  const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
-  const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
-  const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
-  const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
-  const [promotionStatus, setPromotionStatus] = useState<Record<string, PromotionStatus>>({});
-  const [promotingDeterministic, setPromotingDeterministic] = useState<Record<string, boolean>>({});
-  const [promotionMessages, setPromotionMessages] = useState<Record<string, string>>({});
+
+  // Queue state - extracted to useQueueState hook
   const initialQueueViewState = useMemo(() => readStoredQueueViewState(), []);
   const [queueClusterFilter, setQueueClusterFilter] = useState(
     initialQueueViewState.clusterFilter
@@ -3873,6 +3868,13 @@ const App = () => {
   const [queueFocusMode, setQueueFocusMode] = useState<QueueFocusMode>(
     initialQueueViewState.focusMode
   );
+  const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
+  const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
+  const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
+  const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
+  const [promotionStatus, setPromotionStatus] = useState<Record<string, PromotionStatus>>({});
+  const [promotingDeterministic, setPromotingDeterministic] = useState<Record<string, boolean>>({});
+  const [promotionMessages, setPromotionMessages] = useState<Record<string, string>>({});
   const clusterHighlightTimer = useRef<number | null>(null);
   const executionHighlightTimer = useRef<number | null>(null);
   const queueHighlightTimer = useRef<number | null>(null);

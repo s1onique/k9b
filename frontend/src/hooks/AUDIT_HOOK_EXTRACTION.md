@@ -210,17 +210,25 @@ These items are transient, tightly coupled to rendering, or require orchestratin
 | `promotionStatus` / `setPromotionStatus` | Per-promotion transient state |
 | `promotingDeterministic` / `setPromotingDeterministic` | Per-promotion transient state |
 | `promotionMessages` / `setPromotionMessages` | Per-promotion transient state |
+| Queue filter/sort state | Tightly coupled with queue rendering and runtime data (`run?.nextCheckQueue`) |
+| Queue derived values | `queueClusterOptions`, `filteredQueue`, `sortedQueue`, `queueGroups` depend on runtime data |
+| Queue UI helpers | `handleManualExecution`, `handleApproveCandidate`, `handleBackToQueue`, etc. |
+| Queue highlight functions | `highlightQueueCard`, `highlightCluster`, `highlightExecutionEntry` depend on multiple UI states |
 | `executingBatchRunId` / `setExecutingBatchRunId` | Batch execution transient state |
 | `batchExecutionError` / `setBatchExecutionError` | Batch execution error state |
 | `handleBatchExecution` | Orchestrates multiple hooks (refreshRuns, refreshRunData) |
 | `handlePromoteDeterministicCheck` | Uses hook handler from useAppData |
 | `handleUsefulnessFeedback` | Uses hook handler from useAppData |
-| `handleManualExecution` | Inline async handler |
-| `handleApproveCandidate` | Inline async handler |
 | `clusterHighlightTimer` / `executionHighlightTimer` / `queueHighlightTimer` | Timers for highlight animations |
 | `lastExecutedCandidateKey` | Ref for execution tracking |
 | `timer cleanup effect` | Cleans up timers on unmount |
 | `refresh` wrapper | App-level wrapper that calls hook refresh + handles side effects |
+
+**Note on queue state:** Queue state was NOT extracted to a separate hook because:
+1. Queue state depends on derived data from `run?.nextCheckQueue` and other runtime data
+2. Queue state is tightly coupled with the queue UI rendering
+3. Extracting to a hook would require passing too many dependencies
+4. Queue state is already modular within App.tsx (grouped together in the component body)
 
 ---
 
