@@ -3200,14 +3200,22 @@ class HealthLoopRunner:
                     },
                 )
                 
-                # Merge into aggregated inventory, tagging each source with the cluster label
-                # for per-cluster UI filtering.
-                # Tag all discovered sources with cluster_label so UI can filter by cluster.
+                # Merge into aggregated inventory, tagging each source with cluster provenance.
+                # Tag all discovered sources with cluster_label (for UI) and cluster_context (for execution).
                 for source in discovered_inventory.sources.values():
-                    source_with_cluster = replace(source, cluster_label=cluster_label)
+                    # Set both cluster_label and cluster_context for full provenance:
+                    # - cluster_label: operator-facing label for per-cluster UI filtering
+                    # - cluster_context: kube context for execution (kubectl, port-forward, snapshots)
+                    source_with_cluster = replace(
+                        source,
+                        cluster_label=cluster_label,
+                        cluster_context=target_context,
+                    )
                     if aggregated_inventory is None:
                         # First cluster: start the aggregated inventory with tagged sources
-                        aggregated_inventory = AlertmanagerSourceInventory()
+                        aggregated_inventory = AlertmanagerSourceInventory(
+                            cluster_context=target_context,
+                        )
                     aggregated_inventory.add_source(source_with_cluster)
                         
             except Exception as exc:
