@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from ..identity.cluster import derive_cluster_uid
 from .cluster_snapshot import (
     ClusterHealthSignals,
     ClusterSnapshot,
@@ -82,11 +83,16 @@ def _collect_metadata(
         _kubectl(context, "get", "pods", "--all-namespaces", "-o", "json")
     )
     pod_items = _extract_items(pod_payload)
+
+    # Use shared helper for cluster_uid derivation (canonical identity)
+    cluster_uid = derive_cluster_uid(context)
+
     metadata = ClusterSnapshotMetadata(
-        cluster_id=context,
+        cluster_id=context,  # Legacy display field (operator-facing)
         captured_at=datetime.now(UTC),
         control_plane_version=control_plane_version,
         node_count=len(node_items),
+        cluster_uid=cluster_uid,  # Canonical identity (kube-system namespace UID)
         pod_count=len(pod_items),
     )
     return metadata, _summarize_node_conditions(node_items), _summarize_pod_health(pod_items)
@@ -364,3 +370,6 @@ def _parse_server_version(output: str) -> str:
             "kubectl version output is missing `serverVersion.gitVersion`; ensure the control plane is reachable."
         )
     return git_version
+
+
+# Removed: _derive_cluster_uid moved to identity/cluster.py

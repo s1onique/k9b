@@ -10,6 +10,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import cast
 
+from ..identity.artifact import new_artifact_id
+
 
 class ExternalAnalysisStatus(StrEnum):
     PENDING = "pending"
@@ -142,39 +144,41 @@ class ExternalAnalysisArtifact:
     problem_class: ProblemClass | None = None
     judgment_scope: JudgmentScope | None = None
     reviewer_confidence: ReviewerConfidence | None = None
+    # Immutable artifact identity (UUIDv7)
+    artifact_id: str | None = field(default_factory=new_artifact_id)
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
-        "tool_name": self.tool_name,
-        "run_label": self.run_label,
-        "run_id": self.run_id,
-        "cluster_label": self.cluster_label,
-        "source_artifact": self.source_artifact,
-        "summary": self.summary,
-        "findings": list(self.findings),
-        "suggested_next_checks": list(self.suggested_next_checks),
-        "status": self.status.value,
-        "raw_output": self.raw_output,
-        "stdout_truncated": self.stdout_truncated,
-        "stderr_truncated": self.stderr_truncated,
-        "timed_out": self.timed_out,
-        "timestamp": self.timestamp.isoformat(),
-        "artifact_path": self.artifact_path,
-        "provider": self.provider,
-        "duration_ms": self.duration_ms,
-        "purpose": self.purpose.value,
-        "payload": self.payload,
-        "error_summary": self.error_summary,
-        "skip_reason": self.skip_reason,
-        "output_bytes_captured": self.output_bytes_captured,
-        "pack_refresh_status": self.pack_refresh_status.value if self.pack_refresh_status else None,
-        "pack_refresh_warning": self.pack_refresh_warning,
+            "tool_name": self.tool_name,
+            "run_label": self.run_label,
+            "run_id": self.run_id,
+            "cluster_label": self.cluster_label,
+            "source_artifact": self.source_artifact,
+            "summary": self.summary,
+            "findings": list(self.findings),
+            "suggested_next_checks": list(self.suggested_next_checks),
+            "status": self.status.value,
+            "raw_output": self.raw_output,
+            "stdout_truncated": self.stdout_truncated,
+            "stderr_truncated": self.stderr_truncated,
+            "timed_out": self.timed_out,
+            "timestamp": self.timestamp.isoformat(),
+            "artifact_path": self.artifact_path,
+            "provider": self.provider,
+            "duration_ms": self.duration_ms,
+            "purpose": self.purpose.value,
+            "payload": self.payload,
+            "error_summary": self.error_summary,
+            "skip_reason": self.skip_reason,
+            "output_bytes_captured": self.output_bytes_captured,
+            "pack_refresh_status": self.pack_refresh_status.value if self.pack_refresh_status else None,
+            "pack_refresh_warning": self.pack_refresh_warning,
+            "artifact_id": self.artifact_id,
         }
         if self.usefulness_class is not None:
             result["usefulness_class"] = self.usefulness_class.value
         if self.usefulness_summary is not None:
             result["usefulness_summary"] = self.usefulness_summary
-        # Add context fields as nullable when present
         if self.review_stage is not None:
             result["review_stage"] = self.review_stage.value
         if self.workstream is not None:
@@ -195,7 +199,6 @@ class ExternalAnalysisArtifact:
         purpose = ExternalAnalysisPurpose(purpose_raw)
         payload_raw = raw.get("payload")
         payload = dict(payload_raw) if isinstance(payload_raw, Mapping) else None
-        # Parse pack_refresh_status if present
         pack_refresh_status_raw = raw.get("pack_refresh_status")
         pack_refresh_status: PackRefreshStatus | None = None
         if pack_refresh_status_raw:
@@ -203,7 +206,6 @@ class ExternalAnalysisArtifact:
                 pack_refresh_status = PackRefreshStatus(str(pack_refresh_status_raw))
             except ValueError:
                 pass
-        # Parse usefulness_class if present
         usefulness_class_raw = raw.get("usefulness_class")
         usefulness_class: UsefulnessClass | None = None
         if usefulness_class_raw:
@@ -211,15 +213,12 @@ class ExternalAnalysisArtifact:
                 usefulness_class = UsefulnessClass(str(usefulness_class_raw))
             except ValueError:
                 pass
-
-        # Parse context fields for stage-aware usefulness feedback
-        # Use cast() to help mypy understand the specific enum type
         review_stage = cast(ReviewStage | None, _parse_optional_enum(raw.get("review_stage"), ReviewStage))
         workstream = cast(Workstream | None, _parse_optional_enum(raw.get("workstream"), Workstream))
         problem_class = cast(ProblemClass | None, _parse_optional_enum(raw.get("problem_class"), ProblemClass))
         judgment_scope = cast(JudgmentScope | None, _parse_optional_enum(raw.get("judgment_scope"), JudgmentScope))
         reviewer_confidence = cast(ReviewerConfidence | None, _parse_optional_enum(raw.get("reviewer_confidence"), ReviewerConfidence))
-
+        artifact_id = str(raw.get("artifact_id")) if raw.get("artifact_id") else None
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -252,6 +251,7 @@ class ExternalAnalysisArtifact:
             problem_class=problem_class,
             judgment_scope=judgment_scope,
             reviewer_confidence=reviewer_confidence,
+            artifact_id=artifact_id,
         )
 
 

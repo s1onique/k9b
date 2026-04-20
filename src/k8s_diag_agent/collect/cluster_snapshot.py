@@ -9,10 +9,11 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ClusterSnapshotMetadata:
-    cluster_id: str
+    cluster_id: str  # Legacy display field (operator-facing label)
     captured_at: datetime
     control_plane_version: str
     node_count: int
+    cluster_uid: str | None = None  # Canonical identity (kube-system namespace UID)
     pod_count: int | None = None
     region: str | None = None
     labels: dict[str, str] = field(default_factory=dict)
@@ -233,6 +234,7 @@ class ClusterSnapshot:
             captured_at=_parse_timestamp(metadata_source.get("captured_at")),
             control_plane_version=str(metadata_source.get("control_plane_version", "unknown")),
             node_count=int(metadata_source.get("node_count", 0)),
+            cluster_uid=_optional_str(metadata_source.get("cluster_uid")),
             pod_count=_safe_int(metadata_source.get("pod_count")),
             region=_truthy(metadata_source.get("region")),
             labels={
@@ -267,6 +269,7 @@ class ClusterSnapshot:
         return {
             "metadata": {
                 "cluster_id": self.metadata.cluster_id,
+                "cluster_uid": self.metadata.cluster_uid,
                 "captured_at": self.metadata.captured_at.isoformat(),
                 "control_plane_version": self.metadata.control_plane_version,
                 "node_count": self.metadata.node_count,
