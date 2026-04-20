@@ -2857,10 +2857,16 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
         effective_state = effective_states.get(source_id)
         
         # Track whether this source was promoted via registry (not just effective_state)
-        # Registry entries are keyed by cluster_context:canonical_identity
+        # Registry entries are keyed by the canonical key (preferring cluster_label over cluster_context)
+        # See: build_canonical_registry_key() in alertmanager_source_registry.py
         promoted_via_registry = False
         if registry:
-            registry_key = f"{cluster_context}:{source.canonical_identity}"
+            from ..external_analysis.alertmanager_source_registry import build_canonical_registry_key
+            registry_key = build_canonical_registry_key(
+                cluster_context=cluster_context,
+                cluster_label=source.cluster_label,
+                canonical_identity=source.canonical_identity,
+            )
             entry = registry.entries.get(registry_key)
             if entry:
                 if entry.desired_state == RegistryDesiredState.MANUAL:

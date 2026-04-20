@@ -299,11 +299,14 @@ class ClusterLabelRegressionTests(unittest.TestCase):
         self._write_sources_with_cluster_label(run_id_a, sources_run_a)
 
         # Durable registry entry created by operator promotion
+        # NOTE: canonical_identity must match the source's canonical_identity property
+        # (namespace/name format, not endpoint URL)
+        # See: AlertmanagerSource.canonical_identity property in alertmanager_discovery.py
         registry = AlertmanagerSourceRegistry(
             entries={
-                "context-prod:http://alertmanager-promoted:9093": RegistryEntry(
+                "context-prod:monitoring/alertmanager-promoted": RegistryEntry(
                     cluster_context="context-prod",
-                    canonical_identity="http://alertmanager-promoted:9093",
+                    canonical_identity="monitoring/alertmanager-promoted",
                     desired_state=RegistryDesiredState.MANUAL,
                     reason="Promoted from CRD discovery",
                     operator="test-operator",
@@ -401,11 +404,14 @@ class ClusterLabelRegressionTests(unittest.TestCase):
         self._write_sources_with_cluster_label(run_id_a, sources_run_a)
 
         # Durable registry entry marking source as disabled
+        # NOTE: canonical_identity must match the source's canonical_identity property
+        # (namespace/name format, not endpoint URL)
+        # See: AlertmanagerSource.canonical_identity property in alertmanager_discovery.py
         registry = AlertmanagerSourceRegistry(
             entries={
-                "context-prod:http://alertmanager-disabled:9093": RegistryEntry(
+                "context-prod:monitoring/alertmanager-disabled": RegistryEntry(
                     cluster_context="context-prod",
-                    canonical_identity="http://alertmanager-disabled:9093",
+                    canonical_identity="monitoring/alertmanager-disabled",
                     desired_state=RegistryDesiredState.DISABLED,
                     reason="Not needed",
                     operator="test-operator",
