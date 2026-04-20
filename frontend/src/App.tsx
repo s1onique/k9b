@@ -71,6 +71,8 @@ import { NotificationHistoryTable } from "./components/NotificationHistoryTable"
 import { QueuePanel } from "./components/QueuePanel";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
+import { RecentRunsPanel, RunSummaryPanel } from "./components/RunsPanel";
+export type { RecentRunsPanelProps, RunSummaryPanelProps };
 import {
   artifactUrl,
   formatTimestamp,
@@ -2013,335 +2015,53 @@ const App = () => {
         <a className="cockpit-nav__item" href="#llm-activity">LLM activity</a>
       </nav>
       {error && <div className="alert">{error}</div>}
-      {/* Recent runs panel */}
-      <section className="panel recent-runs" id="recent-runs">
-        <div className="section-head">
-          <div>
-            <h2>Recent runs</h2>
-            <p className="muted small">Historical runs with triage status for review tracking.</p>
-          </div>
-        </div>
-        <div className="runs-filter-bar">
-          <div className="runs-filter-options">
-            {RUNS_REVIEW_FILTER_OPTIONS.map((option) => {
-              const count = runsFilterCounts[option.value];
-              const isActive = runsFilter === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`runs-filter-button ${isActive ? "active" : ""}`}
-                  onClick={() => handleRunsFilterChange(option.value)}
-                >
-                  <span className="runs-filter-label">{option.label}</span>
-                  <span className="runs-filter-count">({count})</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {runsFilter !== "all" && filteredRunsList.length > 0 && (
-          <p className="runs-filter-summary small muted">
-            Showing {filteredRunsList.length} of {runsList.length} runs
-          </p>
-        )}
-        {runsListLoading ? (
-          <p className="muted">Loading runs...</p>
-        ) : runsListError ? (
-          <div className="alert alert-inline">{runsListError}</div>
-        ) : filteredRunsList.length === 0 ? (
-          <p className="muted">No runs match the current filter.</p>
-        ) : (
-          <div className="runs-table-wrapper">
-                <table className="runs-table" aria-label="Recent runs">
-              <thead>
-                <tr>
-                  <th>Run</th>
-                  <th>Status</th>
-                  <th>Review</th>
-                  <th>Timestamp</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedRunsList.map((runEntry) => {
-                  const isSelected = selectedRunId === runEntry.runId;
-                  return (
-                    <tr
-                      key={runEntry.runId}
-                      className={`run-row ${isSelected ? "run-row-selected" : ""}`}
-                      data-testid="run-entry"
-                      data-run-id={runEntry.runId}
-                      onClick={() => handleRunSelection(runEntry.runId)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          handleRunSelection(runEntry.runId);
-                        }
-                      }}
-                      tabIndex={0}
-                      role="button"
-                      aria-pressed={isSelected}
-                      aria-label={`Run ${runEntry.label}, ${runEntry.reviewStatus}, selected: ${isSelected}`}
-                    >
-                      <td>
-                        <div className="run-cell-main">
-                          <strong>Run {runEntry.label}</strong>
-                          <span className="muted small">ID {runEntry.runId}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={statusClass(runEntry.reviewStatus)}>
-                          {runEntry.reviewStatus}
-                        </span>
-                      </td>
-                      <td>
-                        {runEntry.reviewDownloadPath ? (
-                          <a
-                            href={artifactUrl(runEntry.reviewDownloadPath)}
-                            className="row-action row-action--secondary"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Download
-                          </a>
-                        ) : (
-                          <span className="run-action-empty" aria-label="No action available">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {runEntry.timestamp ? (
-                          <div className="run-cell-timestamp">
-                            <span className="recency">{relativeRecency(runEntry.timestamp)}</span>
-                            <span className="absolute" title={formatTimestamp(runEntry.timestamp)}>
-                              {formatTimestamp(runEntry.timestamp)}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="muted small">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {runEntry.reviewStatus === "no-executions" ? (
-                          <button
-                            type="button"
-                            className="row-action row-action--primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleBatchExecution(runEntry.runId);
-                            }}
-                            disabled={executingBatchRunId === runEntry.runId}
-                          >
-                            {executingBatchRunId === runEntry.runId ? "Running…" : "Execute"}
-                          </button>
-                        ) : (
-                          <span className="run-action-empty" aria-label="No action available">—</span>
-                        )}
-                        {batchExecutionError[runEntry.runId] && (
-                          <p className="runs-execution-error">
-                            {batchExecutionError[runEntry.runId]}
-                          </p>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <Pagination
-          currentPage={runsPage}
-          totalPages={totalRunsPages}
-          totalItems={filteredRunsList.length}
-          pageSize={runsPageSize}
-          pageSizeOptions={RUNS_PAGE_SIZE_OPTIONS}
-          onPageChange={handleRunsPageChange}
-          onPageSizeChange={handleRunsPageSizeChange}
-          label="Runs"
-        />
-        {/* Detached mode notice - shown only when operator is detached AND selected run is not visible on current page */}
-        {!isRunsListFollowingSelection && selectedRunId && !isSelectedRunVisibleOnCurrentRunsPage && (
-          <div className="runs-detached-notice">
-            <span className="muted small">
-              Browsing page {runsPage} of {totalRunsPages} · Selected: Run {runsList.find(r => r.runId === selectedRunId)?.runLabel ?? selectedRunId}
-            </span>
-            <button
-              type="button"
-              className="link tiny"
-              onClick={handleShowSelectedRun}
-            >
-              Show selected run
-            </button>
-          </div>
-        )}
-      </section>
-      <section className="panel run-summary" id="run-detail">
-        <div className="run-summary-head">
-          <div>
-            <p className="eyebrow">Run summary</p>
-            <h2>{run.label}</h2>
-            <p className="muted tiny run-summary-collector">Collector {run.collectorVersion}</p>
-          </div>
-          <div className="run-summary-freshness">
-            <p className="muted small">{formatTimestamp(run.timestamp)}</p>
-          </div>
-        </div>
-        <div className="run-summary-metrics">
-          <div className="run-summary-stats">
-            {runSummaryStats.map((stat) => (
-              <article
-                className="run-stat-card"
-                key={stat.label}
-                aria-label={`${stat.label}: ${stat.value}`}
-              >
-                <strong>{stat.value}</strong>
-                <span>{stat.label}</span>
-              </article>
-            ))}
-          </div>
-          <p className="run-duration-summary muted small">{runStatsSummary}</p>
-        </div>
-        <div className="run-summary-llm">
-          <div className="run-summary-llm-heading">
-            <p className="eyebrow">LLM telemetry</p>
-            <span className="muted tiny">Provider call metrics from artifacts</span>
-          </div>
-          <div className="llm-current-line">
-            {runLlmStatsLine}
-            {providerBreakdown && (
-              <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
-            )}
-          </div>
-          {historicalLlmStatsLine && (
-            <details className="llm-historical">
-              <summary>Retained history stats</summary>
-              {historicalLlmStatsLine}
-            </details>
-          )}
-        </div>
-        <div className="artifact-strip run-artifacts">
-          {run.artifacts.map((artifact) => {
-            const url = artifactUrl(artifact.path);
-            return (
-              url && (
-                <a
-                  key={artifact.label}
-                  className="artifact-link run-artifact-link"
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {artifact.label}
-                </a>
-              )
-            );
-          })}
-        </div>
-        <div className="run-summary-next-checks">
-          <div className="run-summary-next-checks-head">
-            <div>
-              <p className="eyebrow">Next checks</p>
-              <h3>Planner candidates</h3>
-              {runPlan ? (
-                <>
-                  <p className="muted tiny">{planSummaryText}</p>
-                  {planStatusText ? (
-                    <p className="muted tiny">Planner status: {planStatusText}</p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="muted tiny">{plannerReasonText}</p>
-              )}
-              {plannerNextActionHint ? (
-                <p className="muted tiny">{plannerNextActionHint}</p>
-              ) : null}
-              {plannerArtifactUrl ? (
-                <p className="muted tiny">
-                  <a className="link" href={plannerArtifactUrl} target="_blank" rel="noreferrer">
-                    View planner artifact
-                  </a>
-                </p>
-              ) : null}
-              {runPlan && runPlanCandidates.length ? (
-                <p className="muted tiny">{planCandidateCountLabel}</p>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="run-summary-next-checks-button"
-              onClick={() => focusClusterForNextChecks()}
-              disabled={!runPlan}
-            >
-              Review next checks
-            </button>
-          </div>
-          {!runPlan ? (
-            <>
-              <p className="muted small">No next checks generated for this run.</p>
-              {plannerHint ? (
-                <p className="muted tiny">{plannerHint}</p>
-              ) : null}
-            </>
-          ) : runPlanCandidates.length ? (
-            <>
-              <div className="run-summary-next-checks-stats">
-                {discoveryVariantOrder.map((variant) => {
-                  const count = discoveryVariantCounts[variant];
-                  if (!count) {
-                    return null;
-                  }
-                  return (
-                    <span
-                      key={variant}
-                      className={`next-check-discovery-pill next-check-discovery-pill-${variant}`}
-                    >
-                      <strong>{count}</strong>
-                      <span>{nextCheckStatusLabel(variant)}</span>
-                    </span>
-                  );
-                })}
-              </div>
-              <div className="run-summary-next-checks-clusters">
-                <p className="muted tiny">
-                  Affected cluster{discoveryClusters.length === 1 ? "" : "s"}: {discoveryClusters.length || "None"}
-                </p>
-                <div className="next-check-cluster-tags">
-                  {discoveryClusters.length ? (
-                    discoveryClusters.map((cluster) => (
-                      <button
-                        type="button"
-                        className="next-check-cluster-badge"
-                        key={cluster}
-                        onClick={() => focusClusterForNextChecks(cluster)}
-                      >
-                        {cluster}
-                      </button>
-                    ))
-                  ) : (
-                    <p className="muted small">
-                      Planner candidates do not target a specific cluster.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            <p className="muted small">Planner created no candidates for this run.</p>
-          )}
-        </div>
-        {!isSelectedRunLatest && (
-          <div className="alert alert-inline alert-past-run">
-            This is a past run collected {formatAgeDuration(dayjs().diff(run.timestamp, "minute"))} ago.
-          </div>
-        )}
-        {isSelectedRunLatest && !runFresh && (
-          <div className="alert alert-inline">
-            Latest run is {runAgeMinutes} minute{runAgeMinutes === 1 ? "" : "s"} old; ensure the scheduler is running.
-          </div>
-        )}
-      </section>
+      <RecentRunsPanel
+        runsList={runsList}
+        selectedRunId={selectedRunId}
+        runsFilter={runsFilter}
+        runsFilterCounts={runsFilterCounts}
+        paginatedRunsList={paginatedRunsList}
+        filteredRunsList={filteredRunsList}
+        runsListLoading={runsListLoading}
+        runsListError={runsListError}
+        runsPage={runsPage}
+        totalRunsPages={totalRunsPages}
+        runsPageSize={runsPageSize}
+        isRunsListFollowingSelection={isRunsListFollowingSelection}
+        isSelectedRunVisibleOnCurrentRunsPage={isSelectedRunVisibleOnCurrentRunsPage}
+        executingBatchRunId={executingBatchRunId}
+        batchExecutionError={batchExecutionError}
+        onRunsFilterChange={handleRunsFilterChange}
+        onRunsPageChange={handleRunsPageChange}
+        onRunsPageSizeChange={handleRunsPageSizeChange}
+        onRunSelection={handleRunSelection}
+        onBatchExecution={handleBatchExecution}
+        onShowSelectedRun={handleShowSelectedRun}
+        onFocusClusterForNextChecks={focusClusterForNextChecks}
+      />
+      <RunSummaryPanel
+        run={run}
+        isSelectedRunLatest={isSelectedRunLatest}
+        selectedClusterLabel={selectedClusterLabel}
+        onFocusClusterForNextChecks={focusClusterForNextChecks}
+        runSummaryStats={runSummaryStats}
+        runStatsSummary={runStatsSummary}
+        runLlmStatsLine={runLlmStatsLine}
+        historicalLlmStatsLine={historicalLlmStatsLine}
+        providerBreakdown={providerBreakdown}
+        runPlan={runPlan}
+        runPlanCandidates={runPlanCandidates}
+        planSummaryText={planSummaryText}
+        planStatusText={planStatusText}
+        plannerReasonText={plannerReasonText}
+        plannerHint={plannerHint}
+        plannerNextActionHint={plannerNextActionHint}
+        plannerArtifactUrl={plannerArtifactUrl}
+        planCandidateCountLabel={planCandidateCountLabel}
+        discoveryVariantOrder={discoveryVariantOrder}
+        discoveryVariantCounts={discoveryVariantCounts}
+        discoveryClusters={discoveryClusters}
+      />
       {/* Workflow Lane: Diagnose Now */}
       <div className="workflow-lane-header">
         <div className="workflow-lane-label">
