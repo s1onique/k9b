@@ -355,12 +355,13 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
                 baseline_policy=BaselinePolicy.empty(),
             ))
         
-        def mock_discover(context: str) -> AlertmanagerSourceInventory:
+        def mock_discover(context: str, cluster_uid: str | None = None) -> AlertmanagerSourceInventory:
             inventory = AlertmanagerSourceInventory()
             inventory.add_source(AlertmanagerSource(
                 source_id=f"{context}:am",
                 endpoint=f"http://alertmanager-{context}:9093",
                 origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+                cluster_uid=cluster_uid,
             ))
             return inventory
         
@@ -503,12 +504,14 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             ))
         
         # Mock discovery to return one source per cluster
-        def mock_discover(context: str) -> AlertmanagerSourceInventory:
+        def mock_discover(context: str, cluster_uid: str | None = None) -> AlertmanagerSourceInventory:
             inventory = AlertmanagerSourceInventory()
             inventory.add_source(AlertmanagerSource(
                 source_id=f"{context}:am",
                 endpoint=f"http://alertmanager-{context}:9093",
                 origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+                cluster_label=context,
+                cluster_uid=cluster_uid,
             ))
             return inventory
         

@@ -672,6 +672,11 @@ export type AlertmanagerSource = {
   manual_source_mode: "operator-configured" | "operator-promoted" | null;
   // Cluster association for per-cluster UI filtering
   cluster_label: string | null;
+  // Canonical identity fields for historical/debug tracking
+  // These are exposed in the debug/provenance surface only
+  canonicalEntityId?: string | null;
+  cluster_uid?: string | null;
+  object_uid?: string | null;
 };
 
 export type AlertmanagerSources = {

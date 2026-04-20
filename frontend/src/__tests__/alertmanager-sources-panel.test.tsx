@@ -196,8 +196,9 @@ describe("AlertmanagerSourcesPanel", () => {
       expect(provenanceCell).toBeInTheDocument();
       expect(provenanceCell?.textContent).toContain("Alertmanager CRD");
 
-      // Last Error - should show em-dash since no error (multiple em-dashes in table)
-      expect(screen.getAllByText("—")).toHaveLength(2);
+      // Last Error - should show em-dash since no error
+      // Note: With Identity column added, there are now 3 em-dashes (error, cluster, identity details)
+      expect(screen.getAllByText("—")).toHaveLength(3);
     });
 
     it("renders multiple sources", () => {
@@ -340,8 +341,8 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      // There are 2 em-dashes: one for error column, possibly one for provenance
-      expect(screen.getAllByText("—")).toHaveLength(2);
+      // There are 3 em-dashes: one for error column, one for identity debug, possibly one for provenance
+      expect(screen.getAllByText("—")).toHaveLength(3);
     });
 
     it("handles long error messages gracefully", () => {

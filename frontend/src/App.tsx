@@ -2179,6 +2179,7 @@ export const AlertmanagerSourcesPanel = ({
                 <th>Cluster</th>
                 <th>Actions</th>
                 <th>Last Error</th>
+                <th>Identity</th>
               </tr>
             </thead>
             <tbody>
@@ -2292,6 +2293,50 @@ export const AlertmanagerSourcesPanel = ({
                         </span>
                       ) : (
                         <span className="muted">—</span>
+                      )}
+                    </td>
+                    {/* Debug/Provenance column - Canonical Identity details */}
+                    <td className="alertmanager-source-identity">
+                      {(source.canonicalEntityId || source.cluster_uid || source.object_uid) ? (
+                        <details className="alertmanager-source-identity-details">
+                          <summary className="alertmanager-source-identity-toggle" title="View debug identity">
+                            <span className="alertmanager-source-identity-icon">⧉</span>
+                          </summary>
+                          <div className="alertmanager-source-identity-content">
+                            <p className="alertmanager-source-identity-explanation muted tiny">
+                              Deterministic identity for historical/debug tracking
+                            </p>
+                            {source.canonicalEntityId && (
+                              <div className="alertmanager-source-identity-field">
+                                <span className="alertmanager-source-identity-label">Canonical ID:</span>
+                                <code className="alertmanager-source-identity-value" title={source.canonicalEntityId}>
+                                  {truncateSourceCell(source.canonicalEntityId, 32)}
+                                </code>
+                              </div>
+                            )}
+                            {source.cluster_uid && (
+                              <div className="alertmanager-source-identity-field">
+                                <span className="alertmanager-source-identity-label">Cluster UID:</span>
+                                <code className="alertmanager-source-identity-value" title={source.cluster_uid}>
+                                  {truncateSourceCell(source.cluster_uid, 32)}
+                                </code>
+                              </div>
+                            )}
+                            {source.object_uid && (
+                              <div className="alertmanager-source-identity-field">
+                                <span className="alertmanager-source-identity-label">Object UID:</span>
+                                <code className="alertmanager-source-identity-value" title={source.object_uid}>
+                                  {truncateSourceCell(source.object_uid, 32)}
+                                </code>
+                              </div>
+                            )}
+                            <p className="alertmanager-source-identity-note tiny muted">
+                              IDs may differ across runs when anchor capture differs
+                            </p>
+                          </div>
+                        </details>
+                      ) : (
+                        <span className="muted tiny">—</span>
                       )}
                     </td>
                   </tr>

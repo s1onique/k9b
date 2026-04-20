@@ -477,6 +477,10 @@ class AlertmanagerSourcePayload(TypedDict, total=False):
     provenance_summary: str
     # Cluster association for per-cluster UI filtering
     cluster_label: str | None
+    # Deterministic identity fields for historical/debug tracking
+    canonicalEntityId: str | None
+    cluster_uid: str | None
+    object_uid: str | None
 
 
 class AlertmanagerSourcesPayload(TypedDict, total=False):
