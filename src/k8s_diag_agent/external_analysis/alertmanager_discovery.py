@@ -121,6 +121,12 @@ class AlertmanagerSource:
     merged_provenances: tuple[AlertmanagerSourceOrigin, ...] = field(default_factory=tuple)  # All contributing origins for UI
     cluster_label: str | None = None  # Operator-facing cluster label for per-cluster UI filtering
     cluster_context: str | None = None  # Kubernetes context used for discovery (required for registry matching)
+    # Identity anchors for canonical entity ID (cross-cluster disambiguation)
+    # cluster_uid: Cluster UID from kube-system namespace (optional but preferred when available)
+    # object_uid: Native Kubernetes object UID (optional, highest confidence anchor)
+    # These are included in canonical_entity_id when available, excluded when not
+    cluster_uid: str | None = None
+    object_uid: str | None = None
     # Manual provenance: distinguishes operator-configured vs operator-promoted sources
     # Not serialized for discovered sources (defaults to NOT_MANUAL)
     manual_source_mode: AlertmanagerSourceMode = AlertmanagerSourceMode.NOT_MANUAL
@@ -160,6 +166,14 @@ class AlertmanagerSource:
         Uses the identity module helpers to ensure consistent construction.
         Display-only fields (cluster_label, cluster_context) do NOT affect this ID.
         
+        Mixed-discovery policy:
+        - cluster_uid and object_uid are OPTIONAL identity anchors
+        - When available, they are INCLUDED in the hash (changes the ID)
+        - When not available, they are EXCLUDED (based on namespace/name/origin/endpoint only)
+        - IMPORTANT: The same Alertmanager may have DIFFERENT canonical_entity_id
+          depending on whether cluster_uid/object_uid were captured in that run
+        - For rediscovery continuity, prefer sources that have consistent anchor capture
+        
         Note: This is distinct from operator_intent_key which is used for durable
         operator actions (promote/disable) and prefers cluster_label for stability.
         """
@@ -171,8 +185,34 @@ class AlertmanagerSource:
             name=self.name,
             origin=self.origin.value if self.origin else None,
             endpoint=self.endpoint,
-            cluster_uid=self.cluster_uid if hasattr(self, 'cluster_uid') else None,
-            object_uid=self.object_uid if hasattr(self, 'object_uid') else None,
+            cluster_uid=self.cluster_uid,  # None if not set - optional anchor
+            object_uid=self.object_uid,  # None if not set - optional anchor
+        )
+    
+    @property
+    def operator_intent_key(self) -> str:
+        """Operator-intent persistence key for durable actions.
+        
+        This key is used ONLY for durable operator actions (promote/disable)
+        and override persistence. It is NOT the canonical historical identity.
+        
+        Design rationale:
+        - cluster_label is preferred over cluster_context because it is
+          operator-controlled and stable across kubeconfig edits/renames
+        - cluster_context can change with kubeconfig edits, aliases, or renames
+        
+        Returns:
+            Operator-intent key string (format: "cluster_key:source_identity")
+        """
+        # Import here to avoid circular import at module level
+        from ..identity.alertmanager_source import build_alertmanager_operator_intent_key
+        
+        return build_alertmanager_operator_intent_key(
+            cluster_label=self.cluster_label,
+            cluster_context=self.cluster_context,
+            namespace=self.namespace,
+            name=self.name,
+            endpoint=self.endpoint,
         )
 
     @property
@@ -217,7 +257,15 @@ class AlertmanagerSource:
             # Include canonical_identity for cross-run registry matching
             # This is the stable identity (namespace/name) used by the health loop registry
             'canonical_identity': self.canonical_identity,
+            # Include canonicalEntityId for historical tracking across runs
+            # This is the deterministic hash from normalized defining facts
+            'canonicalEntityId': self.canonical_entity_id,
         }
+        # Include cluster_uid and object_uid when available (optional anchors)
+        if self.cluster_uid is not None:
+            result['cluster_uid'] = self.cluster_uid
+        if self.object_uid is not None:
+            result['object_uid'] = self.object_uid
         # Include manual_source_mode only when not NOT_MANUAL (backward compatibility)
         if self.manual_source_mode != AlertmanagerSourceMode.NOT_MANUAL:
             result['manual_source_mode'] = self.manual_source_mode.value
@@ -255,6 +303,9 @@ class AlertmanagerSource:
             merged_provenances=merged_provenances,
             cluster_label=data.get('cluster_label'),
             cluster_context=data.get('cluster_context'),
+            # Parse optional identity anchors (may not be present in older artifacts)
+            cluster_uid=data.get('cluster_uid'),
+            object_uid=data.get('object_uid'),
             manual_source_mode=manual_source_mode,
         )
 
@@ -354,11 +405,12 @@ class DiscoveryStrategy:
 
     name: str = "base"
 
-    def discover(self, context: str | None = None) -> DiscoveryResult:
+    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
         """Discover Alertmanager sources.
 
         Args:
             context: Kubernetes context to use for discovery
+            cluster_uid: Canonical cluster identity for cross-cluster disambiguation
 
         Returns:
             DiscoveryResult with found sources and any errors
@@ -375,7 +427,7 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
 
     name = "alertmanager-crd"
 
-    def discover(self, context: str | None = None) -> DiscoveryResult:
+    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
         """Query Alertmanager CRDs using kubectl.
 
         Uses `kubectl get alertmanagers -A` to find all Alertmanager resources
@@ -432,7 +484,7 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
             )
 
             for item in items:
-                source = self._parse_crd_item(item, context)
+                source = self._parse_crd_item(item, context, cluster_uid)
                 if source:
                     sources.append(source)
                     _logger.debug(
@@ -453,7 +505,12 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 
-    def _parse_crd_item(self, item: dict[str, Any], context: str | None) -> AlertmanagerSource | None:
+    def _parse_crd_item(
+        self,
+        item: dict[str, Any],
+        context: str | None,
+        cluster_uid: str | None,
+    ) -> AlertmanagerSource | None:
         """Parse an Alertmanager CRD item into a source."""
         metadata = item.get("metadata", {})
         name = metadata.get("name")
@@ -461,6 +518,9 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
 
         if not name:
             return None
+
+        # Capture native Kubernetes object UID (highest confidence identity anchor)
+        object_uid: str | None = metadata.get("uid")
 
         # Build the service URL - Alertmanager is typically on port 9093
         # For in-cluster access, we construct the service DNS name
@@ -476,6 +536,8 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
             origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
             state=AlertmanagerSourceState.DISCOVERED,
             confidence_hints=("from-crd", f"namespace={namespace}"),
+            cluster_uid=cluster_uid,
+            object_uid=object_uid,
         )
 
 
@@ -490,7 +552,7 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
 
     name = "prometheus-crd-config"
 
-    def discover(self, context: str | None = None) -> DiscoveryResult:
+    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
         """Look for Prometheus resources and their Alertmanager configurations.
 
         Uses `kubectl get prometheuses -A` to search all namespaces.
@@ -542,7 +604,7 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
             )
 
             for item in items:
-                source = self._parse_prometheus_item(item, context)
+                source = self._parse_prometheus_item(item, context, cluster_uid)
                 if source:
                     sources.append(source)
                     _logger.debug(
@@ -563,7 +625,12 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 
-    def _parse_prometheus_item(self, item: dict[str, Any], context: str | None) -> AlertmanagerSource | None:
+    def _parse_prometheus_item(
+        self,
+        item: dict[str, Any],
+        context: str | None,
+        cluster_uid: str | None,
+    ) -> AlertmanagerSource | None:
         """Parse a Prometheus CRD item to extract Alertmanager info."""
         metadata = item.get("metadata", {})
         name = metadata.get("name")
@@ -591,6 +658,7 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
                 origin=AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG,
                 state=AlertmanagerSourceState.DISCOVERED,
                 confidence_hints=("from-prometheus-crd-config",),
+                cluster_uid=cluster_uid,
             )
 
         return None
@@ -606,7 +674,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
 
     name = "service-heuristic"
 
-    def discover(self, context: str | None = None) -> DiscoveryResult:
+    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
         """Search for Alertmanager-like services by name pattern.
 
         Uses `kubectl get svc -A` and `kubectl get pods -A -l app=alertmanager`
@@ -656,7 +724,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
             )
 
             for item in items:
-                source = self._parse_service_item(item)
+                source = self._parse_service_item(item, cluster_uid)
                 if source:
                     sources.append(source)
                     _logger.debug(
@@ -692,7 +760,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
                 )
 
                 for pod in pod_items:
-                    source = self._parse_pod_item(pod, context)
+                    source = self._parse_pod_item(pod, context, cluster_uid)
                     if source:
                         # Avoid duplicates from service discovery
                         if not any(s.source_id == source.source_id for s in sources):
@@ -710,12 +778,16 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
             errors.append("kubectl not found in PATH")
             _logger.warning("kubectl not found in PATH for service heuristic discovery")
         except json.JSONDecodeError as exc:
-            errors.append(f"Failed to parse kubectl output: {exc}")
+            errors.append(f"Failed to parse service heuristic output: {exc}")
             _logger.warning("Failed to parse service heuristic discovery output: %s", exc)
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 
-    def _parse_service_item(self, item: dict[str, Any]) -> AlertmanagerSource | None:
+    def _parse_service_item(
+        self,
+        item: dict[str, Any],
+        cluster_uid: str | None,
+    ) -> AlertmanagerSource | None:
         """Parse a service to check if it's an Alertmanager service."""
         metadata = item.get("metadata", {})
         name = metadata.get("name", "")
@@ -750,9 +822,15 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
                 "from-service",
                 "port=9093" if has_am_port else "port=unknown",
             ),
+            cluster_uid=cluster_uid,
         )
 
-    def _parse_pod_item(self, item: dict[str, Any], context: str | None) -> AlertmanagerSource | None:
+    def _parse_pod_item(
+        self,
+        item: dict[str, Any],
+        context: str | None,
+        cluster_uid: str | None,
+    ) -> AlertmanagerSource | None:
         """Parse a pod to extract Alertmanager info."""
         metadata = item.get("metadata", {})
         name = metadata.get("name", "")
@@ -762,6 +840,9 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
         pod_ip = item.get("status", {}).get("podIP")
         if not pod_ip:
             return None
+
+        # Capture native Kubernetes object UID (optional identity anchor)
+        object_uid: str | None = metadata.get("uid")
 
         source_id = f"pod:{namespace}/{name}"
 
@@ -773,6 +854,8 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
             origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
             state=AlertmanagerSourceState.DISCOVERED,
             confidence_hints=("from-pod-label",),
+            cluster_uid=cluster_uid,
+            object_uid=object_uid,
         )
 
 
@@ -871,6 +954,7 @@ def _get_version(url: str, timeout: float) -> tuple[str | None, str | None]:
 def discover_alertmanagers(
     context: str | None = None,
     manual_sources: tuple[AlertmanagerSource, ...] = (),
+    cluster_uid: str | None = None,
 ) -> AlertmanagerSourceInventory:
     """Orchestrate Alertmanager discovery across all strategies.
 
@@ -884,14 +968,17 @@ def discover_alertmanagers(
     Args:
         context: Kubernetes context to use for discovery
         manual_sources: Pre-existing manual sources (never overwritten)
+        cluster_uid: Canonical cluster identity (kube-system namespace UID) for
+            cross-cluster disambiguation. Included in canonical_entity_id when available.
 
     Returns:
         AlertmanagerSourceInventory with all discovered sources
     """
     _logger.debug(
-        "Starting Alertmanager discovery for context=%s, manual_sources=%d",
+        "Starting Alertmanager discovery for context=%s, manual_sources=%d, cluster_uid=%s",
         context,
         len(manual_sources),
+        cluster_uid,
     )
 
     inventory = AlertmanagerSourceInventory(cluster_context=context)
@@ -917,7 +1004,7 @@ def discover_alertmanagers(
             "Alertmanager discovery: running strategy %s",
             strategy.name,
         )
-        result = strategy.discover(context)
+        result = strategy.discover(context, cluster_uid=cluster_uid)
 
         for source in result.sources:
             inventory.add_source(source)
@@ -989,6 +1076,8 @@ def verify_and_update_inventory(
                 merged_provenances=source.merged_provenances,
                 cluster_label=source.cluster_label,
                 cluster_context=source.cluster_context,
+                cluster_uid=source.cluster_uid,
+                object_uid=source.object_uid,
             )
         else:
             # Source failed verification
@@ -1008,6 +1097,8 @@ def verify_and_update_inventory(
                 merged_provenances=source.merged_provenances,
                 cluster_label=source.cluster_label,
                 cluster_context=source.cluster_context,
+                cluster_uid=source.cluster_uid,
+                object_uid=source.object_uid,
             )
 
     return AlertmanagerSourceInventory(
@@ -1107,6 +1198,7 @@ def _resolve_prometheus_operator_alias(
     
     # Create aliased source with CRD's namespace/name but keep service's endpoint
     # (since they both point to the same endpoint: alertmanager-operated.svc:9093)
+    # Preserve identity anchors from the source (cluster_uid/object_uid)
     aliased_source = AlertmanagerSource(
         source_id=f'service:{source.namespace}/{crd_source.name}',  # Use CRD name
         endpoint=source.endpoint,  # Keep the actual endpoint
@@ -1123,6 +1215,8 @@ def _resolve_prometheus_operator_alias(
         merged_provenances=source.merged_provenances,
         cluster_label=source.cluster_label,
         cluster_context=source.cluster_context,
+        cluster_uid=source.cluster_uid,
+        object_uid=source.object_uid,
     )
     
     _logger.debug(
@@ -1237,6 +1331,7 @@ def merge_deduplicate_inventory(
             )
             
             # Create merged source with the winner's data but merged provenance
+            # Preserve identity anchors from the winner (cluster_uid/object_uid)
             merged_source = AlertmanagerSource(
                 source_id=winner.source_id,
                 endpoint=winner.endpoint,
@@ -1253,6 +1348,8 @@ def merge_deduplicate_inventory(
                 merged_provenances=tuple(sorted_provenances),
                 cluster_label=winner.cluster_label,
                 cluster_context=winner.cluster_context,
+                cluster_uid=winner.cluster_uid,
+                object_uid=winner.object_uid,
             )
             
             merged_sources[canon_key] = merged_source

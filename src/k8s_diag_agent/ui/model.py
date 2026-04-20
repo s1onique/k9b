@@ -367,6 +367,15 @@ class AlertmanagerSourceView:
     # Manual source mode: distinguishes operator-configured vs operator-promoted
     # Values: "operator-configured", "operator-promoted", or None (not manual or legacy)
     manual_source_mode: str | None
+    # Canonical entity ID: deterministic hash from normalized defining facts for historical tracking
+    # Same source facts => same canonicalEntityId (for cross-run historical continuity)
+    # Different source facts => different canonicalEntityId
+    canonical_entity_id: str | None
+    # Identity anchors for cross-cluster disambiguation
+    # cluster_uid: Cluster UID from kube-system namespace (optional)
+    # object_uid: Native Kubernetes object UID (optional, highest confidence anchor)
+    cluster_uid: str | None
+    object_uid: str | None
 
 
 @dataclass(frozen=True)
@@ -1946,6 +1955,10 @@ def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesV
             provenance_summary=provenance_summary,
             cluster_label=_coerce_optional_str(src.get("cluster_label")),
             manual_source_mode=manual_source_mode,
+            # Identity fields for cross-run historical tracking
+            canonical_entity_id=_coerce_optional_str(src.get("canonicalEntityId")),
+            cluster_uid=_coerce_optional_str(src.get("cluster_uid")),
+            object_uid=_coerce_optional_str(src.get("object_uid")),
         ))
 
     # Count by category

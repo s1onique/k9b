@@ -804,6 +804,12 @@ def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> Alertmanager
         "manual_source_mode": view.manual_source_mode,
         # Cluster association for per-cluster UI filtering
         "cluster_label": view.cluster_label,
+        # Identity fields for cross-run historical tracking
+        # canonical_entity_id: deterministic hash from normalized defining facts
+        "canonicalEntityId": view.canonical_entity_id,
+        # Identity anchors for cross-cluster disambiguation
+        "cluster_uid": view.cluster_uid,
+        "object_uid": view.object_uid,
     }
 
 

@@ -296,13 +296,30 @@ def build_registry_key(cluster_context: str | None, source: AlertmanagerSource) 
     This uses the source's canonical_identity (namespace/name) rather than
     the raw source_id to ensure stable matching across discovery strategies.
     
+    Keying priority:
+    1. source.cluster_label (most stable - operator-controlled)
+    2. cluster_context parameter (if source has no cluster_label)
+    3. "unknown" (fallback when neither is available)
+    
+    NOTE: For new code, prefer using source.operator_intent_key directly,
+    which uses cluster_label for stability. This function is kept for backward
+    compatibility with code that explicitly passes cluster_context.
+    
     Args:
-        cluster_context: Kubernetes context (uses "unknown" if None)
+        cluster_context: Kubernetes context (may be used if source has no cluster_label)
         source: The Alertmanager source
         
     Returns:
         Registry key string
     """
+    # Prefer operator_intent_key (uses cluster_label when available)
+    # Falls back to cluster_context when cluster_label is not set
+    # Falls back to "unknown" when neither is available
+    if source.cluster_label:
+        return source.operator_intent_key
+    
+    # Source has no cluster_label, use the passed cluster_context
+    # This maintains backward compatibility for callers that pass cluster_context
     context = cluster_context or "unknown"
     return f"{context}:{source.canonical_identity}"
 

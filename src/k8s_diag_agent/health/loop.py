@@ -3167,8 +3167,16 @@ class HealthLoopRunner:
             )
             
             try:
-                # Run discovery for this context
-                discovered_inventory = discover_alertmanagers(context=target_context)
+                # Derive cluster_uid for this context (canonical identity anchor)
+                # This is used for cross-cluster disambiguation in canonical_entity_id
+                from ..identity.cluster import derive_cluster_uid
+                cluster_uid = derive_cluster_uid(kube_context=target_context)
+                
+                # Run discovery for this context with cluster_uid for identity threading
+                discovered_inventory = discover_alertmanagers(
+                    context=target_context,
+                    cluster_uid=cluster_uid,
+                )
                 
                 # Log discovery result counts by origin
                 crd_count = len(discovered_inventory.get_by_origin(
