@@ -1841,7 +1841,7 @@ export const AlertmanagerSnapshotPanel = ({
 
   // Determine display mode: cluster-filtered, run-global, or no-data
   const isClusterFilteredMode = Boolean(clusterLabel && clusterData);
-  const isNoClusterDataMode = Boolean(clusterLabel && !clusterData && compact?.by_cluster && compact.by_cluster.length > 0);
+  const isNoClusterDataMode = Boolean(clusterLabel && !clusterData && compact?.by_cluster);
   const isRunGlobalMode = Boolean(!clusterLabel && compact);
 
   // Use cluster-specific data when available, otherwise fall back to run-global data only in run-global mode
@@ -1853,6 +1853,11 @@ export const AlertmanagerSnapshotPanel = ({
   const affectedServices = clusterData?.affected_services ?? (isRunGlobalMode ? (compact?.affected_services ?? []) : []);
   // Only show affected_clusters in run-global mode (it's a run-level field, not cluster-level)
   const showAffectedClusters = isRunGlobalMode && (compact?.affected_clusters?.length ?? 0) > 0;
+
+  // Use alert_count as the primary indicator for whether to show alert data.
+  // state_counts.firing is available for additional context but alert_count is authoritative.
+  // Note: Alertmanager uses "firing" and "pending" states, but alert_count is the reliable count.
+  const hasActiveAlerts = alertCount > 0;
 
   const displayLabel = isClusterFilteredMode ? clusterLabel : (clusterLabel || "All clusters");
 
@@ -1887,7 +1892,7 @@ export const AlertmanagerSnapshotPanel = ({
             {compact.truncated ? " · Truncated" : ""}
             {isClusterFilteredMode ? " (cluster-filtered)" : ""}
           </p>
-          {alertCount > 0 ? (
+          {hasActiveAlerts ? (
             <div className="alertmanager-snapshot-grid">
               <div className="alertmanager-snapshot-metric">
                 <strong className="alertmanager-metric-value">{alertCount}</strong>

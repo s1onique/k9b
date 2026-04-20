@@ -1059,8 +1059,9 @@ describe("AlertmanagerSnapshotPanel", () => {
       });
       render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
 
-      // Should show no-data message (cluster-filtered mode with empty by_cluster)
-      expect(screen.getByText("No active alerts captured.")).toBeInTheDocument();
+      // Should show cluster-specific no-data message (cluster-filtered mode with empty by_cluster)
+      expect(screen.getByText(/No alerts captured for cluster .cluster-a.\./)).toBeInTheDocument();
+      // Should NOT show run-global data (that would be misleading)
       expect(screen.queryByText("100")).not.toBeInTheDocument();
       expect(screen.queryByText("critical: 20")).not.toBeInTheDocument();
       expect(screen.queryByText("GlobalAlert")).not.toBeInTheDocument();
