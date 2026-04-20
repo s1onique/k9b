@@ -71,23 +71,6 @@ const buildNotificationEntry = (
 const buildNotificationList = (count: number) =>
   Array.from({ length: count }, (_, index) => buildNotificationEntry(index));
 
-// Local fetch mock for tests that need custom payloads
-const createFetchMock = (payloads: Record<string, unknown>) =>
-  vi.fn((input: RequestInfo) => {
-    const url = typeof input === "string" ? input : input.url;
-    const base = url.split("?")[0];
-    const payload = payloads[url] ?? payloads[base];
-    if (!payload) {
-      return Promise.reject(new Error(`Unexpected fetch ${url}`));
-    }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
-  });
-
 const renderAppWithRunOverride = async (overrides: Partial<RunPayload>) => {
   const payloads = {
     ...defaultPayloads,

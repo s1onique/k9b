@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import dayjs from "dayjs";
 import { within } from "@testing-library/react";
 import type {
@@ -1018,8 +1019,7 @@ export const createStorageMock = () => {
  * @param payloads - Record of URL patterns to return values
  */
 export const createFetchMock = (payloads: Record<string, unknown>) =>
-  // Note: vi.fn is from vitest and must be provided by the test file
-  ((input: RequestInfo) => {
+  vi.fn((input: RequestInfo) => {
     const url = typeof input === "string" ? input : input.url;
     const base = url.split("?")[0];
     const payload = payloads[url] ?? payloads[base];
@@ -1032,7 +1032,7 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
       statusText: "OK",
       json: () => Promise.resolve(payload),
     });
-  }) as unknown as (input: RequestInfo) => Promise<unknown>;
+  });
 
 /**
  * Centralized workflow-critical text strings used in UI assertions.
