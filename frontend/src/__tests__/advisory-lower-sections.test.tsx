@@ -17,7 +17,9 @@ import {
   createStorageMock,
   sampleFleet,
   sampleProposals,
+  sampleRunsList,
   sampleRun,
+  sampleNotifications,
 } from "./fixtures";
 
 // ---------------------------------------------------------------------------
@@ -116,11 +118,12 @@ const setupRender = (enrichmentOverrides = {}) => {
   };
   const payloads = {
     "/api/run": runPayload,
-    "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
     "/api/fleet": sampleFleet,
     "/api/proposals": sampleProposals,
+    "/api/notifications": sampleNotifications,
   };
-  globalThis.fetch = createFetchMock(payloads);
+  vi.stubGlobal("fetch", createFetchMock(payloads));
   render(<App />);
 };
 

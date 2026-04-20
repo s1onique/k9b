@@ -5,18 +5,16 @@ import utc from "dayjs/plugin/utc";
 import {
   approveNextCheckCandidate,
   executeNextCheckCandidate,
-  fetchClusterDetail,
-  fetchFleet,
   fetchNotifications,
-  fetchProposals,
   promoteAlertmanagerSource,
-  promoteDeterministicNextCheck,
   runBatchExecution,
   stopTrackingAlertmanagerSource,
   submitUsefulnessFeedback,
 } from "./api";
+import { useAppData } from "./hooks/useAppData";
 import { useRunData } from "./hooks/useRunData";
 import { useRunSelection } from "./hooks/useRunSelection";
+import { useUIState } from "./hooks/useUIState";
 import type {
   AlertmanagerCompact,
   AlertmanagerProvenance,
@@ -3745,11 +3743,6 @@ const NotificationHistoryTable = () => {
 };
 
 const App = () => {
-  const [fleet, setFleet] = useState<FleetPayload | null>(null);
-  const [proposals, setProposals] = useState<ProposalsPayload | null>(null);
-  const [clusterDetail, setClusterDetail] = useState<ClusterDetailPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   // Run selection state - extracted to useRunSelection hook
   // MUST be called BEFORE useRunData because useRunData needs selectedRunId
   const {
@@ -3798,16 +3791,58 @@ const App = () => {
     selectedRunId,
   });
 
+  // App data state - extracted to useAppData hook
+  const {
+    fleet,
+    proposals,
+    expandedProposals,
+    handleToggleProposal,
+    statusOptions,
+    clusterDetail,
+    selectedClusterLabel: hookSelectedClusterLabel,
+    handleClusterSelection: hookHandleClusterSelection,
+    promotionStatus: hookPromotionStatus,
+    refreshAppData,
+    handlePromoteDeterministicCheck,
+    handleUsefulnessFeedback,
+    error,
+  } = useAppData({
+    selectedRunId,
+    lastRefresh,
+    refreshRuns,
+    refreshRunData,
+  });
+
   // Derive combined loading and error state
   const isLoading = runDataLoading || runsListLoading;
   const isError = runDataError || error;
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchText, setSearchText] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("proposalId");
-  const [expandedProposals, setExpandedProposals] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<"findings" | "hypotheses" | "checks">("findings");
-  const [selectedClusterLabel, setSelectedClusterLabel] = useState<string | null>(null);
-  const [clusterDetailExpanded, setClusterDetailExpanded] = useState(false);
+
+  // UI state - extracted to useUIState hook
+  const {
+    statusFilter,
+    setStatusFilter,
+    searchText,
+    setSearchText,
+    sortKey,
+    setSortKey,
+    activeTab,
+    setActiveTab,
+    clusterDetailExpanded,
+    setClusterDetailExpanded,
+    highlightedClusterLabel,
+    setHighlightedClusterLabel,
+    incidentExpandedClusters,
+    setIncidentExpandedClusters,
+    executionHistoryHighlightKey,
+    setExecutionHistoryHighlightKey,
+    queueHighlightKey,
+    setQueueHighlightKey,
+    executionHistoryFilter,
+    setExecutionHistoryFilter,
+    expandedQueueItems,
+    setExpandedQueueItems,
+    toggleQueueDetails,
+  } = useUIState();
   const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
@@ -3838,16 +3873,7 @@ const App = () => {
   const [queueFocusMode, setQueueFocusMode] = useState<QueueFocusMode>(
     initialQueueViewState.focusMode
   );
-  const [highlightedClusterLabel, setHighlightedClusterLabel] = useState<string | null>(null);
-  const [incidentExpandedClusters, setIncidentExpandedClusters] = useState<Record<string, boolean>>({});
-  const [executionHistoryHighlightKey, setExecutionHistoryHighlightKey] = useState<string | null>(null);
-  const [queueHighlightKey, setQueueHighlightKey] = useState<string | null>(null);
   const clusterHighlightTimer = useRef<number | null>(null);
-  
-  // Execution history filter state
-  const [executionHistoryFilter, setExecutionHistoryFilter] = useState<ExecutionHistoryFilterState>(
-    readStoredExecutionHistoryFilter
-  );
   const executionHighlightTimer = useRef<number | null>(null);
   const queueHighlightTimer = useRef<number | null>(null);
   // Track the last executed candidate key so we can highlight it after refresh
@@ -3856,6 +3882,8 @@ const App = () => {
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
+
+  // Promotion status is now managed by the useAppData hook via hookPromotionStatus
 
   // Handle batch execution for a run - refreshes runs list and selected run via hooks
   const handleBatchExecution = useCallback(async (runId: string) => {
@@ -3886,204 +3914,40 @@ const App = () => {
     }
   }, [selectedRunId, refreshRuns, refreshRunData]);
 
-  // Ref to track if a refresh is in progress to prevent duplicate fetches
-  const refreshInProgress = useRef(false);
+  // Derive selectedClusterLabel from hook (with local clusterDetailExpanded handling)
+  const selectedClusterLabel = hookSelectedClusterLabel;
 
+  // Handle cluster selection - combines hook logic with local clusterDetailExpanded state
+  const handleClusterSelection = (label: string, options?: { expand?: boolean }) => {
+    hookHandleClusterSelection(label, options);
+    if (options?.expand) {
+      setClusterDetailExpanded(true);
+    }
+  };
+
+  // App-level refresh wrapper - calls hook refresh and handles App-specific side effects
   const refresh = useCallback(async () => {
-    // Prevent overlapping refresh requests - this is critical for reducing
-    // server load when auto-refresh is enabled or visibility changes rapidly
-    if (refreshInProgress.current) {
-      return;
+    await refreshAppData();
+    // Clear local execution results after successful refresh reconciliation.
+    // This allows the UI to transition from transient local execution state
+    // to refreshed artifact-backed payload as the durable source of truth.
+    setExecutionResults({});
+    // After successful refresh reconciliation, highlight the last executed candidate
+    // if we have a tracked key from a recent manual execution.
+    if (lastExecutedCandidateKey.current) {
+      const keyToHighlight = lastExecutedCandidateKey.current;
+      // Clear the ref so we don't keep highlighting on subsequent auto-refreshes
+      lastExecutedCandidateKey.current = null;
+      // Trigger the highlight after state updates have settled
+      requestAnimationFrame(() => {
+        highlightQueueCard(keyToHighlight);
+      });
     }
-    refreshInProgress.current = true;
-    let active = true;
-    try {
-      setError(null);
-      // Fetch fleet and proposals in parallel.
-      // Runs list and run data are refreshed through hooks for consistent state management.
-      const [fleetPayload, proposalsPayload] = await Promise.all([
-        fetchFleet(),
-        fetchProposals(),
-      ]);
-      // Trigger hook-based refresh for runs list and run data
-      // These update internal hook state; we don't need to await them
-      refreshRuns();
-      refreshRunData();
-      if (active) {
-        setFleet(fleetPayload);
-        if (!selectedClusterLabel) {
-          const fallbackLabel = fleetPayload.clusters[0]?.label ?? null;
-          if (fallbackLabel) {
-            setSelectedClusterLabel(fallbackLabel);
-          }
-        }
-      }
-      if (active) {
-        setProposals(proposalsPayload);
-      }
-      // Clear local execution results after successful refresh reconciliation.
-      // This allows the UI to transition from transient local execution state
-      // to refreshed artifact-backed payload as the durable source of truth.
-      setExecutionResults({});
-      // After successful refresh reconciliation, highlight the last executed candidate
-      // if we have a tracked key from a recent manual execution.
-      if (lastExecutedCandidateKey.current) {
-        const keyToHighlight = lastExecutedCandidateKey.current;
-        // Clear the ref so we don't keep highlighting on subsequent auto-refreshes
-        lastExecutedCandidateKey.current = null;
-        // Trigger the highlight after state updates have settled
-        requestAnimationFrame(() => {
-          highlightQueueCard(keyToHighlight);
-        });
-      }
-    } catch (err) {
-      if (active) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      refreshInProgress.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClusterLabel, selectedRunId, refreshRuns, refreshRunData]);
+  }, [refreshAppData]);
 
+  // Build promotion key helper
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
     `${clusterLabel}::${description}::${index}`;
-
-  const handlePromoteDeterministicCheck = useCallback(
-    async (
-      clusterLabel: string,
-      clusterContext: string | null,
-      topProblem: string | null,
-      check: DeterministicNextCheckSummary,
-      index: number
-    ) => {
-      const key = buildPromotionKey(clusterLabel, check.description, index);
-      setPromotionStatus((current) => ({
-        ...current,
-        [key]: { status: "pending", message: null },
-      }));
-      const request: DeterministicNextCheckPromotionRequest = {
-        clusterLabel,
-        context: clusterContext,
-        description: check.description,
-        method: check.method || null,
-        evidenceNeeded: check.evidenceNeeded,
-        workstream: check.workstream,
-        urgency: check.urgency,
-        whyNow: check.whyNow,
-        topProblem,
-        priorityScore: check.priorityScore ?? null,
-      };
-      try {
-        const response = await promoteDeterministicNextCheck(request);
-        setPromotionStatus((current) => ({
-          ...current,
-          [key]: {
-            status: "success",
-            message: response.summary ?? "Promoted to queue",
-          },
-        }));
-        await refresh();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Promotion failed";
-        setPromotionStatus((current) => ({
-          ...current,
-          [key]: { status: "error", message },
-        }));
-      }
-    },
-    [refresh]
-  );
-
-  // Trigger initial fetch when selected run changes - this is the intended behavior
-  // so users see the new run's data after clicking on a different run
-  useEffect(() => {
-    refresh();
-  }, [refresh, selectedRunId]);
-
-  // Initial fetch on mount
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        refresh();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    return () => {
-      if (clusterHighlightTimer.current) {
-        window.clearTimeout(clusterHighlightTimer.current);
-      }
-      if (executionHighlightTimer.current) {
-        window.clearTimeout(executionHighlightTimer.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedClusterLabel) {
-      setClusterDetail(null);
-      return;
-    }
-    let active = true;
-    const loadDetail = async () => {
-      try {
-        const detailPayload = await fetchClusterDetail(selectedClusterLabel);
-        if (active) {
-          setClusterDetail(detailPayload);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      }
-    };
-    loadDetail();
-    return () => {
-      active = false;
-    };
-  }, [selectedClusterLabel, lastRefresh]);
-
-  const statusOptions = useMemo(() => {
-    const entries = proposals?.statusSummary.map((entry) => entry.status) ?? [];
-    return ["all", ...Array.from(new Set(entries))];
-  }, [proposals]);
-
-  const handleToggleProposal = (id: string) => {
-    setExpandedProposals((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const handleClusterSelection = (label: string, options?: { expand?: boolean }) => {
-    if (!label) {
-      return;
-    }
-    if (label === selectedClusterLabel) {
-      if (options?.expand) {
-        setClusterDetailExpanded(true);
-      }
-      return;
-    }
-    setSelectedClusterLabel(label);
-    setClusterDetailExpanded(Boolean(options?.expand));
-  };
 
   const scrollToSection = (id: string) => {
     if (typeof document === "undefined") {
@@ -4361,14 +4225,6 @@ const App = () => {
     persistExecutionHistoryFilter(executionHistoryFilter);
   }, [executionHistoryFilter]);
 
-  const [expandedQueueItems, setExpandedQueueItems] = useState<Record<string, boolean>>({});
-  const toggleQueueDetails = useCallback((key: string) => {
-    setExpandedQueueItems((current) => ({
-      ...current,
-      [key]: !current[key],
-    }));
-  }, []);
-
   const isManualExecutionAllowed = (candidate: NextCheckPlanCandidate) => {
     const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
     if (!hasCandidateIdentifier) {
@@ -4533,23 +4389,6 @@ const App = () => {
       setApprovingCandidate((current) => (current === candidateKey ? null : current));
     }
   };
-
-  const handleUsefulnessFeedback = useCallback(
-    async (
-      artifactPath: string,
-      usefulnessClass: string,
-      summary: string | undefined
-    ) => {
-      await submitUsefulnessFeedback({
-        artifactPath,
-        usefulnessClass: usefulnessClass as "useful" | "partial" | "noisy" | "empty",
-        usefulnessSummary: summary,
-      });
-      // Refresh to get updated data
-      await refresh();
-    },
-    [refresh]
-  );
 
   if (!run || !fleet || !proposals) {
     return (
@@ -5194,7 +5033,7 @@ const App = () => {
               index: number
             ) => {
               const promotionKey = buildPromotionKey(cluster.label, check.description, index);
-              const promotionEntry = promotionStatus[promotionKey];
+              const promotionEntry = hookPromotionStatus[promotionKey];
               const isPromoting = promotionEntry?.status === "pending";
               const isPromoted = promotionEntry?.status === "success";
               return (

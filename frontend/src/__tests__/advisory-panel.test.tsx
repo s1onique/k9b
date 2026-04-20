@@ -15,7 +15,9 @@ import {
   createStorageMock,
   sampleFleet,
   sampleProposals,
+  sampleRunsList,
   sampleRun,
+  sampleNotifications,
 } from "./fixtures";
 
 // Test data fixtures
@@ -73,11 +75,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       // Wait for the component to render
@@ -114,11 +117,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -143,11 +147,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -201,11 +206,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -231,11 +237,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -256,11 +263,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -285,11 +293,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -321,11 +330,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -354,11 +364,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -387,11 +398,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -414,11 +426,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -464,11 +477,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -491,11 +505,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
@@ -515,11 +530,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       // Wait a tick for any conditional rendering
@@ -543,11 +559,12 @@ describe("Advisory Panel Components", () => {
 
       const payloads = {
         "/api/run": runPayload,
-        "/api/runs": { runs: [], totalCount: 0 },
+        "/api/runs": sampleRunsList,
         "/api/fleet": sampleFleet,
         "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
       };
-      globalThis.fetch = createFetchMock(payloads);
+      vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
       await waitFor(() => {
