@@ -2530,21 +2530,21 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Also write to the durable cross-run registry for cross-run persistence
         # This ensures promote/disable actions survive beyond the current run
         try:
-            # Use the cluster_context from alertmanager_sources view, which contains
-            # the Kubernetes context used in discovery. This MUST match the context
-            # used in future health loop lookups for the registry to work correctly.
-            cluster_context = sources_view.cluster_context
-            # Fall back to cluster_label only if cluster_context is None
-            if cluster_context is None:
-                cluster_context = cluster_label
+            # Use canonical key helper for consistent registry key matching.
+            # Prefer cluster_label (stable, operator-facing) over cluster_context.
+            # This ensures cross-run persistence even when cluster_context changes.
+            from ..external_analysis.alertmanager_source_registry import build_canonical_registry_key
             
             registry = read_source_registry(self._health_root)
             if registry is None:
                 registry = AlertmanagerSourceRegistry()
             
-            # Build registry key from source's matching_key (stable key for cross-run deduplication)
-            # This is derived from canonical_identity during inventory building
-            registry_key = f"{cluster_context}:{source_view.canonical_identity}"
+            # Build canonical registry key preferring cluster_label (stable) over cluster_context
+            registry_key = build_canonical_registry_key(
+                cluster_context=sources_view.cluster_context,
+                cluster_label=cluster_label,
+                canonical_identity=source_view.canonical_identity,
+            )
             existing_entry = registry.entries.get(registry_key)
             
             if action == SourceAction.PROMOTE:
@@ -2555,8 +2555,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             # Create or update registry entry
             if existing_entry is None:
                 # Create new registry entry for this source
+                # Use cluster_label (stable, operator-facing) as primary identifier
+                # because cluster_context can change with kubeconfig edits/renames
+                entry_cluster_context = cluster_label or sources_view.cluster_context
                 new_entry = RegistryEntry(
-                    cluster_context=cluster_context,
+                    cluster_context=entry_cluster_context,
                     canonical_identity=source_view.canonical_identity,
                     desired_state=desired_state,
                     reason=reason,

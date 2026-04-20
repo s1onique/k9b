@@ -402,6 +402,87 @@ class TestApplyRegistryToSource:
         # Source remains in original state since registry entry is for different context
         assert result.state == AlertmanagerSourceState.AUTO_TRACKED
 
+    def test_label_first_promotes_source_when_context_differs(self) -> None:
+        """End-to-end regression: Registry promotes source when cluster_label matches but cluster_context differs.
+        
+        This is the critical test that proves the actual apply path works:
+        - Source has cluster_label="cluster1" (stable)
+        - Source has cluster_context="admin@k8s" (changes between runs)
+        - Registry entry keyed by cluster_label="cluster1"
+        - apply_registry_to_source must promote the source (not just count it)
+        
+        This prevents the split-brain bug where:
+        - counting/logging shows correct registry matches
+        - but actual inventory mutation fails
+        """
+        # Source discovered with DIFFERENT cluster_context than registry entry
+        # (This is the common failure case in production)
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-main",
+            endpoint="http://alertmanager-main.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-main",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+            cluster_label="cluster1",        # Stable - same as registry
+            cluster_context="admin@k8s",       # Changes between runs!
+        )
+
+        # Registry entry written when cluster_context was different (or None)
+        # Keyed by cluster_label for stability
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="cluster1",  # Keyed by cluster_label (stable)
+            canonical_identity="monitoring/alertmanager-main",
+            desired_state=RegistryDesiredState.MANUAL,
+        ))
+
+        # Apply registry with the NEW cluster_context (different from when registry was written)
+        # The apply path MUST use canonical key (preferring cluster_label) to find the match
+        result = apply_registry_to_source(source, registry, "admin@k8s")
+        
+        # CRITICAL: Source MUST be promoted, not just counted
+        assert result is not None, "Source should be promoted, not filtered out"
+        assert result.state == AlertmanagerSourceState.MANUAL, (
+            f"Source should be promoted to MANUAL. "
+            f"Got state={result.state}, which means the apply path did NOT use canonical key."
+        )
+        assert result.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+        assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD  # Origin preserved
+
+    def test_label_first_disables_source_when_context_differs(self) -> None:
+        """End-to-end regression: Registry disables source when cluster_label matches but cluster_context differs.
+        
+        Same as above but for DISABLE action - ensures the apply path works for both actions.
+        """
+        source = AlertmanagerSource(
+            source_id="crd:monitoring/alertmanager-ops",
+            endpoint="http://alertmanager-ops.monitoring:9093",
+            namespace="monitoring",
+            name="alertmanager-ops",
+            origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+            state=AlertmanagerSourceState.AUTO_TRACKED,
+            cluster_label="cluster1",        # Stable - same as registry
+            cluster_context="admin@k8s",       # Changes between runs!
+        )
+
+        # Registry entry keyed by cluster_label
+        registry = AlertmanagerSourceRegistry()
+        registry.add_entry(RegistryEntry(
+            cluster_context="cluster1",  # Keyed by cluster_label (stable)
+            canonical_identity="monitoring/alertmanager-ops",
+            desired_state=RegistryDesiredState.DISABLED,
+        ))
+
+        # Apply registry with different cluster_context
+        result = apply_registry_to_source(source, registry, "admin@k8s")
+        
+        # CRITICAL: Source MUST be disabled (None), not just counted
+        assert result is None, (
+            "Source should be disabled (filtered out). "
+            "If this assertion fails, the apply path did NOT use canonical key."
+        )
+
     def test_manual_state_preserves_cluster_label(self) -> None:
         """Regression test: Registry MANUAL promotion must preserve cluster_label.
         
@@ -410,6 +491,9 @@ class TestApplyRegistryToSource:
         
         CRITICAL: Origin is PRESERVED (not overwritten to MANUAL) - this is the fix.
         The distinction is preserved via manual_source_mode field.
+        
+        NOTE: Registry entries are keyed by cluster_label (preferred) for stability.
+        The cluster_context can change between runs but cluster_label is stable.
         """
         source = AlertmanagerSource(
             source_id="crd:monitoring/alertmanager-main",
@@ -418,13 +502,14 @@ class TestApplyRegistryToSource:
             name="alertmanager-main",
             origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
             state=AlertmanagerSourceState.AUTO_TRACKED,
-            cluster_label="prod-cluster-a",
-            cluster_context="prod-context",
+            cluster_label="prod-cluster-a",  # This is the stable identifier
+            cluster_context="prod-context",   # May change between runs
         )
 
         registry = AlertmanagerSourceRegistry()
+        # Registry entry uses cluster_label as the key (preferred for stability)
         registry.add_entry(RegistryEntry(
-            cluster_context="prod-context",
+            cluster_context="prod-cluster-a",  # cluster_label is used as key
             canonical_identity="monitoring/alertmanager-main",
             desired_state=RegistryDesiredState.MANUAL,
         ))

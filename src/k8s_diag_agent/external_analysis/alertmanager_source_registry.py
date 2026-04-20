@@ -307,6 +307,45 @@ def build_registry_key(cluster_context: str | None, source: AlertmanagerSource) 
     return f"{context}:{source.canonical_identity}"
 
 
+def build_canonical_registry_key(
+    cluster_context: str | None,
+    cluster_label: str | None,
+    canonical_identity: str,
+) -> str:
+    """Build a canonical registry key for cross-run persistence.
+    
+    Uses the most STABLE available cluster identifier (prefer operator-facing label):
+    1. cluster_label if available (operator-facing, stable across runs)
+    2. cluster_context if available (Kubernetes context, may change with kubeconfig)
+    3. "unknown" as last resort
+    
+    This ensures registry entries persist across runs even when
+    cluster_context differs, is None, or changes between runs.
+    
+    CRITICAL: For durable operator persistence, cluster_label is preferred because
+    it is operator-controlled and stable, while cluster_context can change with
+    kubeconfig edits, aliases, or context renames.
+    
+    Args:
+        cluster_context: Kubernetes context (may be None or change between runs)
+        cluster_label: Operator-facing cluster label (stable, preferred)
+        canonical_identity: Source canonical identity (namespace/name)
+        
+    Returns:
+        Canonical registry key string
+    """
+    # Prefer cluster_label (stable, operator-facing) over cluster_context
+    # because cluster_context can change with kubeconfig edits/renames
+    if cluster_label:
+        cluster_key = cluster_label
+    elif cluster_context:
+        cluster_key = cluster_context
+    else:
+        cluster_key = "unknown"
+    
+    return f"{cluster_key}:{canonical_identity}"
+
+
 def lookup_registry_state(
     registry: AlertmanagerSourceRegistry | None,
     cluster_context: str | None,
@@ -314,10 +353,14 @@ def lookup_registry_state(
 ) -> RegistryDesiredState | None:
     """Look up the desired state for a source in the registry.
     
+    Uses the canonical key (preferring cluster_label) to ensure the lookup
+    matches the key used when writing registry entries. This is critical for
+    cross-run persistence when cluster_context may differ between runs.
+    
     Args:
         registry: The source registry (or None if not loaded)
-        cluster_context: Kubernetes context
-        source: The Alertmanager source to look up
+        cluster_context: Kubernetes context (may be None or change between runs)
+        source: The Alertmanager source to look up (provides cluster_label for canonical key)
         
     Returns:
         Desired state if found in registry, None otherwise
@@ -325,10 +368,16 @@ def lookup_registry_state(
     if registry is None:
         return None
     
-    return registry.get_desired_state(
-        cluster_context=cluster_context or "unknown",
+    # Use canonical key (preferring cluster_label) to match the write path
+    # This ensures cross-run persistence even when cluster_context changes
+    canonical_key = build_canonical_registry_key(
+        cluster_context=cluster_context,
+        cluster_label=source.cluster_label,
         canonical_identity=source.canonical_identity,
     )
+    
+    entry = registry.get_entry(canonical_key)
+    return entry.desired_state if entry else None
 
 
 def apply_registry_to_source(
