@@ -47,6 +47,19 @@ import "./index.css";
 import { ThemeSwitch } from "./ThemeSwitch";
 import Pagination from "./components/Pagination";
 import { HeaderBranding } from "./components/HeaderBranding";
+import { InterpretationBlock } from "./components/InterpretationBlock";
+import { FailureFollowUpBlock } from "./components/FailureFollowUpBlock";
+import { ResultInterpretationBlock } from "./components/ResultInterpretationBlock";
+import { EvidenceDetails } from "./components/EvidenceDetails";
+import {
+  AdvisoryTopConcernsSection,
+  AdvisoryEvidenceGapsSection,
+  AdvisoryNextChecksSection,
+  AdvisoryFocusNotesSection,
+} from "./components/AdvisorySections";
+import { DiagnosticPackReviewList } from "./components/DiagnosticPackReviewList";
+import { DiagnosticPackReviewPanel } from "./components/DiagnosticPackReviewPanel";
+import { ExecutionLine, ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -199,95 +212,6 @@ const WORKFLOW_LANES = {
 };
 const INCIDENT_PREVIEW_LIMIT = 3;
 
-const FAILURE_FOLLOW_UP_LABELS: Record<string, string> = {
-  "timed-out": "Timed out",
-  "command-unavailable": "Command unavailable",
-  "context-unavailable": "Context unavailable",
-  "command-failed": "Command failed",
-  "blocked-by-gating": "Blocked",
-  "approval-missing-or-stale": "Approval needed",
-  "unknown-failure": "Action needed",
-};
-
-const RESULT_FOLLOW_UP_LABELS: Record<string, string> = {
-  "useful-signal": "Useful signal",
-  "empty-result": "Empty result",
-  "noisy-result": "Noisy result",
-  "inconclusive": "Inconclusive",
-  "partial-result": "Partial output",
-};
-
-type FailureFollowUpProps = {
-  failureClass?: string | null;
-  failureSummary?: string | null;
-  suggestedNextOperatorMove?: string | null;
-};
-
-type InterpretationBlockProps = {
-  badgeLabel: string;
-  badgeClass?: string;
-  summary?: string | null;
-  suggestedNextOperatorMove?: string | null;
-};
-
-const InterpretationBlock = ({
-  badgeLabel,
-  badgeClass,
-  summary,
-  suggestedNextOperatorMove,
-}: InterpretationBlockProps) => (
-  <div className="follow-up-block">
-    <span className={`follow-up-badge ${badgeClass ?? ""}`.trim()}>{badgeLabel}</span>
-    {summary ? <p className="follow-up-summary">{summary}</p> : null}
-    {suggestedNextOperatorMove ? (
-      <p className="follow-up-action">
-        <strong>Next step:</strong> {suggestedNextOperatorMove}
-      </p>
-    ) : null}
-  </div>
-);
-
-const FailureFollowUpBlock = ({
-  failureClass,
-  failureSummary,
-  suggestedNextOperatorMove,
-}: FailureFollowUpProps) => {
-  if (!failureClass) {
-    return null;
-  }
-  const badgeLabel = FAILURE_FOLLOW_UP_LABELS[failureClass] ?? failureClass;
-  return (
-    <InterpretationBlock
-      badgeLabel={badgeLabel}
-      badgeClass={`follow-up-badge-${failureClass}`}
-      summary={failureSummary}
-      suggestedNextOperatorMove={suggestedNextOperatorMove}
-    />
-  );
-};
-
-const ResultInterpretationBlock = ({
-  resultClass,
-  resultSummary,
-  suggestedNextOperatorMove,
-}: {
-  resultClass?: string | null;
-  resultSummary?: string | null;
-  suggestedNextOperatorMove?: string | null;
-}) => {
-  if (!resultClass) {
-    return null;
-  }
-  const badgeLabel = RESULT_FOLLOW_UP_LABELS[resultClass] ?? resultClass;
-  return (
-    <InterpretationBlock
-      badgeLabel={badgeLabel}
-      badgeClass={`follow-up-badge-${resultClass}`}
-      summary={resultSummary}
-      suggestedNextOperatorMove={suggestedNextOperatorMove}
-    />
-  );
-};
 
 const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
 
@@ -836,32 +760,6 @@ const outcomeStatusDisplay = (status?: string | null) =>
 
 const outcomeStatusClass = (status?: string | null) =>
   `outcome-pill outcome-pill-${((status ?? "unknown").replace(/[^a-z0-9]+/gi, "-").toLowerCase())}`;
-
-const EvidenceDetails = ({
-  title,
-  entries,
-}: {
-  title: string;
-  entries: NotificationDetail[];
-}) => {
-  if (!entries.length) {
-    return null;
-  }
-  return (
-    <details className="evidence-details">
-      <summary>
-        {title} · {entries.length} evidence point{entries.length === 1 ? "" : "s"}
-      </summary>
-      <ul>
-        {entries.map((entry) => (
-          <li key={`${entry.label}-${entry.value}`}>
-            <strong>{entry.label}:</strong> {entry.value}
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-};
 
 const normalizeFilterValue = (value: string | null | undefined) =>
   value && value.trim() ? value : "unknown";
@@ -2350,71 +2248,6 @@ export const AlertmanagerSourcesPanel = ({
             : "No alertmanager sources discovered for this run."}
         </p>
       )}
-    </section>
-  );
-};
-
-const DiagnosticPackReviewPanel = ({
-  review,
-}: {
-  review: RunPayload["diagnosticPackReview"] | undefined;
-}) => {
-  if (!review) {
-    return null;
-  }
-  const artifactLink = review.artifactPath ? artifactUrl(review.artifactPath) : null;
-  const providerStatus = review.providerStatus || "Status unavailable";
-  const hasProviderDetails = review.providerSummary || review.providerErrorSummary || review.providerSkipReason;
-  return (
-    <section className="panel diagnostic-pack-review" id="diagnostic-pack-review">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Diagnostic pack review</p>
-          <h2>Automated review insights</h2>
-        </div>
-        <span className={`status-pill ${statusClass(providerStatus)}`}>
-          {providerStatus}
-        </span>
-      </div>
-      <p className="muted tiny">
-        {review.timestamp ? formatTimestamp(review.timestamp) : "Timestamp unavailable"}
-      </p>
-      {review.summary ? <p className="diagnostic-pack-summary">{review.summary}</p> : null}
-      {review.confidence ? (
-        <p className="muted tiny">Confidence: {review.confidence}</p>
-      ) : null}
-      {hasProviderDetails ? (
-        <div className="diagnostic-pack-provider">
-          {review.providerSummary ? (
-            <p className="muted small">{review.providerSummary}</p>
-          ) : null}
-          {review.providerErrorSummary ? (
-            <p className="muted small">Error: {review.providerErrorSummary}</p>
-          ) : null}
-          {review.providerSkipReason ? (
-            <p className="muted small">Skipped because {review.providerSkipReason}</p>
-          ) : null}
-        </div>
-      ) : null}
-      {review.driftMisprioritized ? (
-        <p className="muted tiny">
-          Provider flagged suspected drift misprioritization. Review the assigned check order.
-        </p>
-      ) : null}
-      <div className="diagnostic-pack-review-grid">
-        <DiagnosticPackReviewList title="Major disagreements" entries={review.majorDisagreements} />
-        <DiagnosticPackReviewList title="Missing checks" entries={review.missingChecks} />
-        <DiagnosticPackReviewList title="Ranking issues" entries={review.rankingIssues} />
-        <DiagnosticPackReviewList
-          title="Recommended next actions"
-          entries={review.recommendedNextActions}
-        />
-      </div>
-      {artifactLink ? (
-        <a className="link" href={artifactLink} target="_blank" rel="noreferrer">
-          View diagnostic pack review artifact
-        </a>
-      ) : null}
     </section>
   );
 };
