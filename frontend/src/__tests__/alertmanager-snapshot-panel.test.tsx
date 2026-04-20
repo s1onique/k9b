@@ -992,10 +992,11 @@ describe("AlertmanagerSnapshotPanel", () => {
 
   describe("by_cluster data - backward compatibility", () => {
     // Test 4: backward-compat behavior when by_cluster is absent (undefined)
-    // The component is designed to be "truthful" - if by_cluster doesn't exist,
-    // it cannot filter to a cluster, so it shows no-data rather than bleeding run-global data.
+    // When by_cluster is undefined, the panel correctly falls back to run-global alert_count
+    // for the alert count display. Other cluster-specific fields (severity, services) remain
+    // suppressed since they can't be filtered without by_cluster data.
 
-    it("shows no-data when by_cluster is undefined and clusterLabel is set (truthful behavior)", () => {
+    it("falls back to run-global alert_count when by_cluster is undefined", () => {
       const compact = makeAlertmanagerCompact({
         status: "available",
         alert_count: 100,
@@ -1003,16 +1004,17 @@ describe("AlertmanagerSnapshotPanel", () => {
         top_alert_names: ["GlobalAlert"],
         affected_namespaces: ["global-ns"],
         affected_clusters: ["cluster-a"],
-        // by_cluster is undefined - truthful no-data, NOT backward compat fallback
+        // by_cluster is undefined - should fall back to compact.alert_count
       });
       render(<AlertmanagerSnapshotPanel compact={compact} clusterLabel="cluster-a" />);
 
-      // Should show truthful no-data message
-      expect(screen.getByText("No active alerts captured.")).toBeInTheDocument();
-      // Should NOT show run-global data (that would be misleading)
-      expect(screen.queryByText("100")).not.toBeInTheDocument();
+      // Should show run-global alert count since that's the authoritative data
+      expect(screen.getByText("100")).toBeInTheDocument();
+      expect(screen.getByText("Total alerts")).toBeInTheDocument();
+      // Should NOT show cluster-specific fields since by_cluster is undefined
       expect(screen.queryByText("critical: 20")).not.toBeInTheDocument();
       expect(screen.queryByText("GlobalAlert")).not.toBeInTheDocument();
+      expect(screen.queryByText("global-ns")).not.toBeInTheDocument();
     });
 
     it("suppresses affected_clusters when by_cluster is undefined and clusterLabel is set", () => {

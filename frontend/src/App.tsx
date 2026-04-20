@@ -1844,8 +1844,9 @@ export const AlertmanagerSnapshotPanel = ({
   const isNoClusterDataMode = Boolean(clusterLabel && !clusterData && compact?.by_cluster);
   const isRunGlobalMode = Boolean(!clusterLabel && compact);
 
-  // Use cluster-specific data when available, otherwise fall back to run-global data only in run-global mode
-  const alertCount = clusterData?.alert_count ?? (isRunGlobalMode ? (compact?.alert_count ?? 0) : 0);
+  // Use cluster-specific data when available. When cluster data is missing but clusterLabel is set,
+  // fall back to run-global alert_count (but not other fields like severity/service which are cluster-specific).
+  const alertCount = clusterData?.alert_count ?? compact?.alert_count ?? 0;
   const severityCounts = clusterData?.severity_counts ?? (isRunGlobalMode ? (compact?.severity_counts ?? {}) : {});
   const stateCounts = clusterData?.state_counts ?? (isRunGlobalMode ? (compact?.state_counts ?? {}) : {});
   const topAlertNames = clusterData?.top_alert_names ?? (isRunGlobalMode ? (compact?.top_alert_names ?? []) : []);
