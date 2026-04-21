@@ -177,6 +177,110 @@ def test_review_enrichment_payload_invalid_entry() -> None:
         failed = True
     assert failed
 
+
+def test_review_enrichment_payload_with_alertmanager_evidence_references() -> None:
+    """Test that alertmanagerEvidenceReferences are parsed correctly."""
+    payload = {
+        "summary": "Alert context matters",
+        "triageOrder": ["cluster-prod"],
+        "topConcerns": ["High memory alert"],
+        "evidenceGaps": [],
+        "nextChecks": ["kubectl describe pod -n default high-mem-pod --context cluster-prod"],
+        "focusNotes": [],
+        "alertmanagerEvidenceReferences": [
+            {
+                "cluster": "cluster-prod",
+                "matchedDimensions": ["alert_name", "severity"],
+                "reason": "High memory alert indicates pod resource pressure",
+                "usedFor": "top_concern",
+            },
+            {
+                "cluster": "cluster-prod",
+                "matchedDimensions": ["namespace", "alert_name"],
+                "reason": "default namespace has multiple pod issues",
+                "usedFor": "next_check",
+            },
+        ],
+    }
+    parsed = ReviewEnrichmentPayload.from_dict(payload)
+    assert parsed.summary == "Alert context matters"
+    assert len(parsed.alertmanager_evidence_references) == 2
+    
+    ref1 = parsed.alertmanager_evidence_references[0]
+    assert ref1.cluster == "cluster-prod"
+    assert ref1.matched_dimensions == ("alert_name", "severity")
+    assert ref1.reason == "High memory alert indicates pod resource pressure"
+    assert ref1.used_for == "top_concern"
+    
+    ref2 = parsed.alertmanager_evidence_references[1]
+    assert ref2.cluster == "cluster-prod"
+    assert ref2.matched_dimensions == ("namespace", "alert_name")
+    assert ref2.used_for == "next_check"
+
+
+def test_review_enrichment_payload_alertmanager_references_snake_case() -> None:
+    """Test that snake_case alertmanager_evidence_references are also accepted."""
+    payload = {
+        "summary": "Test",
+        "alertmanager_evidence_references": [
+            {
+                "cluster": "cluster-dev",
+                "matched_dimensions": ["severity"],
+                "reason": "Critical severity",
+                "used_for": "summary",
+            },
+        ],
+    }
+    parsed = ReviewEnrichmentPayload.from_dict(payload)
+    assert len(parsed.alertmanager_evidence_references) == 1
+    assert parsed.alertmanager_evidence_references[0].cluster == "cluster-dev"
+    assert parsed.alertmanager_evidence_references[0].used_for == "summary"
+
+
+def test_review_enrichment_payload_invalid_used_for() -> None:
+    """Test that invalid used_for values are rejected."""
+    payload = {
+        "summary": "Test",
+        "alertmanagerEvidenceReferences": [
+            {
+                "cluster": "cluster-x",
+                "matchedDimensions": ["alert_name"],
+                "reason": "Test reason",
+                "usedFor": "invalid_value",  # Invalid - must be one of the allowed values
+            },
+        ],
+    }
+    failed = False
+    try:
+        ReviewEnrichmentPayload.from_dict(payload)
+    except ReviewEnrichmentPayloadError:
+        failed = True
+    assert failed
+
+
+def test_review_enrichment_payload_to_dict_with_references() -> None:
+    """Test that to_dict serializes alertmanagerEvidenceReferences correctly."""
+    payload = {
+        "summary": "Test",
+        "alertmanagerEvidenceReferences": [
+            {
+                "cluster": "cluster-y",
+                "matchedDimensions": ["severity", "namespace"],
+                "reason": "Test",
+                "usedFor": "focus_note",
+            },
+        ],
+    }
+    parsed = ReviewEnrichmentPayload.from_dict(payload)
+    serialized = parsed.to_dict()
+    
+    assert "alertmanagerEvidenceReferences" in serialized
+    refs = serialized["alertmanagerEvidenceReferences"]
+    assert len(refs) == 1
+    assert refs[0]["cluster"] == "cluster-y"
+    assert refs[0]["matchedDimensions"] == ["severity", "namespace"]
+    assert refs[0]["usedFor"] == "focus_note"
+
 def _configure_http_env(monkeypatch: Any) -> None:
     monkeypatch.setenv("LLAMA_CPP_BASE_URL", "http://example")
     monkeypatch.setenv("LLAMA_CPP_MODEL", "test-model")

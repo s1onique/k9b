@@ -176,6 +176,8 @@ class ExternalAnalysisArtifact:
     alertmanager_relevance_summary: str | None = None
     # Alertmanager provenance snapshot - preserved when execution is triggered by Alertmanager-ranked queue item
     alertmanager_provenance: dict[str, object] | None = None
+    # Provider-assisted interpretation payload (e.g., alertmanagerEvidenceReferences from review enrichment)
+    interpretation: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -225,6 +227,8 @@ class ExternalAnalysisArtifact:
             result["alertmanager_relevance_summary"] = self.alertmanager_relevance_summary
         if self.alertmanager_provenance is not None:
             result["alertmanager_provenance"] = self.alertmanager_provenance
+        if self.interpretation is not None:
+            result["interpretation"] = self.interpretation
         return result
 
     @classmethod
@@ -261,6 +265,8 @@ class ExternalAnalysisArtifact:
             alertmanager_provenance: dict[str, object] | None = dict(raw_provenance)
         else:
             alertmanager_provenance = None
+        raw_interpretation = raw.get("interpretation")
+        interpretation: dict[str, object] | None = dict(raw_interpretation) if isinstance(raw_interpretation, dict) else None
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -297,6 +303,7 @@ class ExternalAnalysisArtifact:
             alertmanager_relevance=alertmanager_relevance,
             alertmanager_relevance_summary=str(raw.get("alertmanager_relevance_summary")) if raw.get("alertmanager_relevance_summary") else None,
             alertmanager_provenance=alertmanager_provenance,
+            interpretation=interpretation,
         )
 
 

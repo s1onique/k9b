@@ -250,6 +250,15 @@ class ReviewEnrichmentStatusView:
 
 
 @dataclass(frozen=True)
+class AlertmanagerEvidenceReferenceView:
+    """View model for an Alertmanager evidence reference in review enrichment."""
+    cluster: str
+    matched_dimensions: tuple[str, ...]
+    reason: str
+    used_for: str
+
+
+@dataclass(frozen=True)
 class ReviewEnrichmentView:
     status: str
     provider: str | None
@@ -260,6 +269,7 @@ class ReviewEnrichmentView:
     evidence_gaps: tuple[str, ...]
     next_checks: tuple[str, ...]
     focus_notes: tuple[str, ...]
+    alertmanager_evidence_references: tuple[AlertmanagerEvidenceReferenceView, ...]
     artifact_path: str | None
     error_summary: str | None
     skip_reason: str | None
@@ -1253,6 +1263,16 @@ def _build_auto_drilldown_interpretations(
     return interpretations
 
 
+def _build_alertmanager_evidence_reference_view(raw: Mapping[str, object]) -> AlertmanagerEvidenceReferenceView:
+    """Build AlertmanagerEvidenceReferenceView from raw JSON data."""
+    return AlertmanagerEvidenceReferenceView(
+        cluster=_coerce_str(raw.get("cluster")),
+        matched_dimensions=_coerce_str_tuple(raw.get("matchedDimensions") or raw.get("matched_dimensions")),
+        reason=_coerce_str(raw.get("reason")),
+        used_for=_coerce_str(raw.get("usedFor") or raw.get("used_for")),
+    )
+
+
 def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | None:
     if not isinstance(raw, Mapping):
         return None
@@ -1261,6 +1281,17 @@ def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | 
     gaps = raw.get("evidenceGaps") or raw.get("evidence_gaps")
     checks = raw.get("nextChecks") or raw.get("next_checks")
     focus = raw.get("focusNotes") or raw.get("focus_notes")
+    
+    # Extract alertmanager evidence references
+    am_refs_raw = raw.get("alertmanagerEvidenceReferences") or raw.get("alertmanager_evidence_references")
+    am_refs: tuple[AlertmanagerEvidenceReferenceView, ...] = ()
+    if isinstance(am_refs_raw, Sequence) and not isinstance(am_refs_raw, str | bytes):
+        am_refs = tuple(
+            _build_alertmanager_evidence_reference_view(entry)
+            for entry in am_refs_raw
+            if isinstance(entry, Mapping)
+        )
+    
     return ReviewEnrichmentView(
         status=_coerce_str(raw.get("status")),
         provider=_coerce_optional_str(raw.get("provider")),
@@ -1271,6 +1302,7 @@ def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | 
         evidence_gaps=_coerce_sequence(gaps),
         next_checks=_coerce_sequence(checks),
         focus_notes=_coerce_sequence(focus),
+        alertmanager_evidence_references=am_refs,
         artifact_path=_coerce_optional_str(raw.get("artifactPath")),
         error_summary=_coerce_optional_str(raw.get("errorSummary")),
         skip_reason=_coerce_optional_str(raw.get("skipReason")),

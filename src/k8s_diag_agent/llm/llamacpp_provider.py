@@ -31,9 +31,13 @@ _SYSTEM_INSTRUCTIONS = (
 _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
     "You are a Kubernetes diagnostics review advisor."
     " Provide a concise JSON advisory payload that includes summary, triageOrder, topConcerns,"
-    " evidenceGaps, nextChecks, and focusNotes."  # noqa: E501
+    " evidenceGaps, nextChecks, focusNotes, and optionally alertmanagerEvidenceReferences."  # noqa: E501
     " Use arrays of non-empty strings for list entries and highlight missing data explicitly."  # noqa: E501
     " Do not include markdown, XML, or explanatory text outside the JSON payload."  # noqa: E501
+    " When Alertmanager data is available in the input, you may optionally reference it in alertmanagerEvidenceReferences."
+    " Each reference MUST cite evidence that was present in the provided Alertmanager compact artifact."
+    " You MUST NOT cite alert names, severities, namespaces, or clusters that do NOT appear in the supplied artifacts."
+    " alertmanagerEvidenceReferences format: [{\"cluster\": \"<string>\", \"matchedDimensions\": [\"<dim>\",...], \"reason\": \"<string>\", \"usedFor\": \"<top_concern|next_check|summary|triage_order|focus_note>\"}]"  # noqa: E501
     " CRITICAL for nextChecks: each entry MUST be an explicit kubectl command in one of these formats:"  # noqa: E501
     " - 'kubectl describe <resource> -n <namespace>'"
     " - 'kubectl logs <pod> -n <namespace>'"

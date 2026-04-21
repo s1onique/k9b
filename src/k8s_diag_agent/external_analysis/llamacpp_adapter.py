@@ -378,6 +378,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             provider=self.name,
             duration_ms=duration_ms,
             payload=payload,
+            interpretation=payload if parsed.alertmanager_evidence_references else None,
         )
 
     def _build_failure_artifact(

@@ -497,7 +497,13 @@ def _serialize_review_enrichment(
     if not artifact:
         return None
     payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
-    payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+
+    # Merge interpretation field (which carries alertmanagerEvidenceReferences) into payload
+    # This ensures the bounded evidence references are threaded through to the UI
+    if artifact.interpretation and isinstance(artifact.interpretation, Mapping):
+        for key, value in artifact.interpretation.items():
+            if key not in payload:
+                payload[key] = value
 
     def _list_from(*keys: str) -> list[str]:
         for key in keys:
@@ -508,7 +514,10 @@ def _serialize_review_enrichment(
                 return [str(value)]
         return []
 
-    return {
+    # Extract alertmanager evidence references from merged payload
+    alertmanager_refs = payload.get("alertmanagerEvidenceReferences") or payload.get("alertmanager_evidence_references")
+
+    result: dict[str, object] = {
         "status": artifact.status.value,
         "provider": artifact.provider,
         "timestamp": artifact.timestamp.isoformat(),
@@ -522,6 +531,9 @@ def _serialize_review_enrichment(
         "errorSummary": artifact.error_summary,
         "skipReason": artifact.skip_reason,
     }
+    if alertmanager_refs is not None:
+        result["alertmanagerEvidenceReferences"] = alertmanager_refs
+    return result
 
 
 def _find_review_enrichment_artifact(

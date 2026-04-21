@@ -197,6 +197,14 @@ class LLMActivityPayload(TypedDict):
     summary: LLMActivitySummaryPayload
 
 
+class AlertmanagerEvidenceReferencePayload(TypedDict, total=False):
+    """Payload for an Alertmanager evidence reference in review enrichment."""
+    cluster: str
+    matchedDimensions: list[str]
+    reason: str
+    usedFor: str
+
+
 class ReviewEnrichmentPayload(TypedDict, total=False):
     status: str
     provider: str | None
@@ -207,6 +215,7 @@ class ReviewEnrichmentPayload(TypedDict, total=False):
     evidenceGaps: list[str]
     nextChecks: list[str]
     focusNotes: list[str]
+    alertmanagerEvidenceReferences: list[AlertmanagerEvidenceReferencePayload] | None
     artifactPath: str | None
     errorSummary: str | None
     skipReason: str | None
@@ -1224,6 +1233,18 @@ def _serialize_auto_interpretation(
 def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnrichmentPayload | None:
     if not view:
         return None
+    # Serialize alertmanager evidence references if present
+    alertmanager_refs: list[AlertmanagerEvidenceReferencePayload] | None = None
+    if view.alertmanager_evidence_references:
+        alertmanager_refs = [
+            {
+                "cluster": ref.cluster,
+                "matchedDimensions": list(ref.matched_dimensions),
+                "reason": ref.reason,
+                "usedFor": ref.used_for,
+            }
+            for ref in view.alertmanager_evidence_references
+        ]
     return {
         "status": view.status,
         "provider": view.provider,
@@ -1234,6 +1255,7 @@ def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnr
         "evidenceGaps": list(view.evidence_gaps),
         "nextChecks": list(view.next_checks),
         "focusNotes": list(view.focus_notes),
+        "alertmanagerEvidenceReferences": alertmanager_refs,
         "artifactPath": view.artifact_path,
         "errorSummary": view.error_summary,
         "skipReason": view.skip_reason,

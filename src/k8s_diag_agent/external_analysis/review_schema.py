@@ -3,13 +3,43 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
 
 class ReviewEnrichmentPayloadError(ValueError):
     """Raised when review-enrichment payload validation fails."""
+
+
+# Valid values for the used_for field in alert evidence references
+_ALERT_EVIDENCE_USED_FOR_VALUES = frozenset({
+    "top_concern",
+    "next_check",
+    "summary",
+    "triage_order",
+    "focus_note",
+})
+
+
+@dataclass(frozen=True)
+class AlertmanagerEvidenceReference:
+    """A bounded, inspectable reference to Alertmanager evidence used by the provider.
+
+    This distinguishes provider-assisted interpretation from raw alert evidence.
+    Each reference cites specific evidence that was present in the run artifacts.
+    """
+    cluster: str
+    matched_dimensions: tuple[str, ...]
+    reason: str
+    used_for: str
+
+    def __post_init__(self) -> None:
+        if self.used_for not in _ALERT_EVIDENCE_USED_FOR_VALUES:
+            raise ReviewEnrichmentPayloadError(
+                f"AlertmanagerEvidenceReference.used_for must be one of {sorted(_ALERT_EVIDENCE_USED_FOR_VALUES)}, "
+                f"got {self.used_for!r}"
+            )
 
 
 class ReviewEnrichmentShapeClassification(StrEnum):
@@ -68,6 +98,62 @@ def _extract_list(raw: Mapping[str, Any], *keys: str) -> tuple[str, ...]:
     return ()
 
 
+def _normalize_alertmanager_references(
+    value: Any, path: str
+) -> tuple[AlertmanagerEvidenceReference, ...]:
+    """Parse alertmanagerEvidenceReferences array from raw payload."""
+    if value is None:
+        return ()
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ReviewEnrichmentPayloadError(
+            f"{path} expected a list but got {_type_name(value)}"
+        )
+    refs: list[AlertmanagerEvidenceReference] = []
+    for index, entry in enumerate(value):
+        if not isinstance(entry, Mapping):
+            raise ReviewEnrichmentPayloadError(
+                f"{path}[{index}] expected an object but got {_type_name(entry)}"
+            )
+        cluster = _normalize_optional_string(entry.get("cluster"), f"{path}[{index}].cluster")
+        if not cluster:
+            raise ReviewEnrichmentPayloadError(
+                f"{path}[{index}].cluster must be a non-empty string"
+            )
+        dimensions_raw = entry.get("matchedDimensions") or entry.get("matched_dimensions")
+        dimensions = _normalize_string_sequence(
+            dimensions_raw, f"{path}[{index}].matchedDimensions"
+        )
+        if not dimensions:
+            raise ReviewEnrichmentPayloadError(
+                f"{path}[{index}].matchedDimensions must contain at least one entry"
+            )
+        reason = _normalize_optional_string(entry.get("reason"), f"{path}[{index}].reason")
+        if not reason:
+            raise ReviewEnrichmentPayloadError(
+                f"{path}[{index}].reason must be a non-empty string"
+            )
+        used_for = _normalize_optional_string(entry.get("usedFor") or entry.get("used_for"), f"{path}[{index}].usedFor")
+        if not used_for:
+            raise ReviewEnrichmentPayloadError(
+                f"{path}[{index}].usedFor must be a non-empty string"
+            )
+        refs.append(AlertmanagerEvidenceReference(
+            cluster=cluster,
+            matched_dimensions=dimensions,
+            reason=reason,
+            used_for=used_for,
+        ))
+    return tuple(refs)
+
+
+def _extract_alertmanager_references(raw: Mapping[str, Any]) -> tuple[AlertmanagerEvidenceReference, ...]:
+    """Extract alertmanagerEvidenceReferences from raw mapping."""
+    return _normalize_alertmanager_references(
+        raw.get("alertmanagerEvidenceReferences") or raw.get("alertmanager_evidence_references"),
+        "alertmanagerEvidenceReferences"
+    )
+
+
 @dataclass(frozen=True)
 class ReviewEnrichmentPayload:
     summary: str | None
@@ -76,6 +162,9 @@ class ReviewEnrichmentPayload:
     evidence_gaps: tuple[str, ...]
     next_checks: tuple[str, ...]
     focus_notes: tuple[str, ...]
+    alertmanager_evidence_references: tuple[AlertmanagerEvidenceReference, ...] = field(
+        default_factory=tuple
+    )
 
     @classmethod
     def from_dict(cls, raw: Any) -> ReviewEnrichmentPayload:
@@ -89,6 +178,7 @@ class ReviewEnrichmentPayload:
         gaps = _extract_list(raw, "evidenceGaps", "evidence_gaps")
         checks = _extract_list(raw, "nextChecks", "next_checks")
         focus = _extract_list(raw, "focusNotes", "focus_notes")
+        am_refs = _extract_alertmanager_references(raw)
         return cls(
             summary=summary,
             triage_order=triage,
@@ -96,7 +186,35 @@ class ReviewEnrichmentPayload:
             evidence_gaps=gaps,
             next_checks=checks,
             focus_notes=focus,
+            alertmanager_evidence_references=am_refs,
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict for JSON storage."""
+        result: dict[str, Any] = {}
+        if self.summary is not None:
+            result["summary"] = self.summary
+        if self.triage_order:
+            result["triageOrder"] = list(self.triage_order)
+        if self.top_concerns:
+            result["topConcerns"] = list(self.top_concerns)
+        if self.evidence_gaps:
+            result["evidenceGaps"] = list(self.evidence_gaps)
+        if self.next_checks:
+            result["nextChecks"] = list(self.next_checks)
+        if self.focus_notes:
+            result["focusNotes"] = list(self.focus_notes)
+        if self.alertmanager_evidence_references:
+            result["alertmanagerEvidenceReferences"] = [
+                {
+                    "cluster": ref.cluster,
+                    "matchedDimensions": list(ref.matched_dimensions),
+                    "reason": ref.reason,
+                    "usedFor": ref.used_for,
+                }
+                for ref in self.alertmanager_evidence_references
+            ]
+        return result
 
 
 # Fields that define the bounded review-enrichment shape
