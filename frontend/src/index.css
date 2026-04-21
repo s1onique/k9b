@@ -1995,30 +1995,19 @@
 
 /* .run-cell-id - MOVED to styles/components/runs-table.css */
 
-/* Freshness indicators - Solarized colors */
-[data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--fresh {
-  color: #859900;
-}
-
-[data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--warning {
-  color: #b58900;
-}
-
-[data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--stale {
-  color: #dc322f;
-}
-
-[data-theme="solarized-light"] .freshness-indicator.fresh .label {
-  color: #859900;
-}
-
-[data-theme="solarized-light"] .freshness-indicator.warning .label {
-  color: #b58900;
-}
-
-[data-theme="solarized-light"] .freshness-indicator.stale .label {
-  color: #dc322f;
-}
+/* ==========================================================================
+   EXTRACTED to styles/layout/freshness.css
+   ========================================================================== */
+/*
+   Page freshness indicator + freshness indicator label Solarized Light overrides
+   MOVED TO styles/layout/freshness.css
+   
+   Extracted selectors:
+   - [data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--*
+   - [data-theme="solarized-light"] .freshness-indicator.* .label
+   
+   See: styles/layout/freshness.css
+*/
 
 /* Triage pills */
 [data-theme="solarized-light"] .triage-pill.triaged {
@@ -2774,24 +2763,18 @@
   border-color: rgba(147, 161, 161, 0.35);
 }
 
-/* Freshness pills */
-[data-theme="solarized-light"] .freshness-pill {
-  background: rgba(38, 139, 210, 0.08);
-  border-color: rgba(38, 139, 210, 0.2);
-  color: #268bd2;
-}
+/* ==========================================================================
+   EXTRACTED to styles/layout/freshness.css
+   ========================================================================== */
+/* Freshness pill Solarized Light overrides - MOVED TO styles/layout/freshness.css
 
-[data-theme="solarized-light"] .freshness-pill.stale {
-  background: rgba(220, 50, 47, 0.1);
-  border-color: rgba(220, 50, 47, 0.25);
-  color: #dc322f;
-}
+   Extracted selectors:
+   - [data-theme="solarized-light"] .freshness-pill
+   - [data-theme="solarized-light"] .freshness-pill.stale
+   - [data-theme="solarized-light"] .freshness-pill.fresh
 
-[data-theme="solarized-light"] .freshness-pill.fresh {
-  background: rgba(133, 153, 0, 0.1);
-  border-color: rgba(133, 153, 0, 0.25);
-  color: #859900;
-}
+   See: styles/layout/freshness.css
+*/
 
 /* Lifecycle chip */
 [data-theme="solarized-light"] .lifecycle-chip {
