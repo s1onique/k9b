@@ -33,9 +33,10 @@
  * ✓ Phase 9A: styles/layout/navigation.css (cockpit-nav/floating-nav extracted)
  * ✓ Phase 9A: styles/layout/freshness.css (freshness indicators extracted)
  * ✓ Phase 9B: styles/layout/workflow-lanes.css (workflow lane headers extracted)
- * → Phase 10: panel component extraction (future)
- * → Phase 11: theme override extraction (future)
- * → Phase 12: remaining component groups (future)
+ * ✓ Phase 10: styles/components/alertmanager-sources.css (alertmanager sources extracted)
+ * → Phase 11: panel component extraction (future)
+ * → Phase 12: theme override extraction (future)
+ * → Phase 13: remaining component groups (future)
  */
 
 /* 1. Base tokens must load first */
@@ -57,6 +58,7 @@
 @import url('./components/action-status.css');
 @import url('./components/row-actions.css');
 @import url('./components/notification-table.css');
+@import url('./components/alertmanager-sources.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');

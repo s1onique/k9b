@@ -1,0 +1,466 @@
+/**
+ * Alertmanager Sources Component Styles
+ * 
+ * Extracted from: frontend/src/index.css (lines 5259-5632)
+ * 
+ * Family inventory:
+ * - Base selectors: 45 rules (alertmanager-sources-*, alertmanager-source-*)
+ * - Solarized Light overrides: 20 rules (tightly local to the family)
+ * 
+ * Dependencies:
+ * - Inherits from tokens.css for CSS custom properties (with inline fallbacks)
+ * - Uses .panel via inheritance (commented note only, no styles extracted)
+ * - .alertmanager-action-btn may be shared (pending audit)
+ * 
+ * Ownership model for theme rules:
+ * - All [data-theme="solarized-light"] selectors target family members only
+ * - Identity debug column uses --color-surface/--color-border with inline fallbacks
+ * 
+ * Cascade contract:
+ * - Panel wrapper styles inherited from .panel (NOT extracted per constraints)
+ * - Component wrapper scoped via .alertmanager-sources
+ * - Table styles scoped via .alertmanager-sources-table
+ * - Identity debug column uses CSS custom properties with inline fallbacks
+ * - Theme overrides via [data-theme="solarized-light"] container selector
+ */
+
+/* ==========================================================================
+   Base styles - default (dark) theme
+   ========================================================================== */
+
+/* Panel wrapper - inherits from .panel (not extracted) */
+.alertmanager-sources {
+  /* panel styles inherited from .panel */
+}
+
+.alertmanager-sources .section-head {
+  margin-bottom: 0.75rem;
+}
+
+/* Summary row with counts */
+.alertmanager-sources-summary {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+/* Summary item container */
+.alertmanager-sources-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 50px;
+}
+
+/* Metric value - large prominent number */
+.alertmanager-sources-metric-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.95);
+  line-height: 1;
+}
+
+/* Metric label - small uppercase text */
+.alertmanager-sources-metric-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Timestamp - muted timestamp display */
+.alertmanager-sources-timestamp {
+  margin-bottom: 0.75rem;
+}
+
+/* Table wrapper - horizontal scroll container */
+.alertmanager-sources-table-wrapper {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+/* Main table - collapse model, responsive */
+.alertmanager-sources-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+/* Table header cells */
+.alertmanager-sources-table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  color: rgba(148, 163, 184, 0.7);
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+/* Table data cells */
+.alertmanager-sources-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 0.85rem;
+}
+
+/* Last row - no bottom border */
+.alertmanager-sources-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Table row - hover transition */
+.alertmanager-source-row {
+  transition: background 0.15s ease;
+}
+
+.alertmanager-source-row:hover {
+  background: rgba(71, 85, 105, 0.35);
+}
+
+/* State pill base - inline badge styling */
+.alertmanager-source-state-pill {
+  display: inline-block;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* State variants - healthy (green) */
+.alertmanager-source-healthy,
+.alertmanager-source-state-pill-healthy {
+  background: rgba(0, 200, 83, 0.2);
+  color: #00c853;
+}
+
+/* State variants - caution (amber) */
+.alertmanager-source-caution,
+.alertmanager-source-state-pill-caution {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+/* State variants - warning (orange) */
+.alertmanager-source-warning,
+.alertmanager-source-state-pill-warning {
+  background: rgba(255, 87, 34, 0.2);
+  color: #ff5722;
+}
+
+/* State variants - muted (gray) */
+.alertmanager-source-muted,
+.alertmanager-source-state-pill-muted {
+  background: rgba(158, 158, 158, 0.2);
+  color: #9e9e9e;
+}
+
+/* State variants - default (blue) */
+.alertmanager-source-default,
+.alertmanager-source-state-pill-default {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+/* Origin column - truncated text */
+.alertmanager-source-origin {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Endpoint column - monospace font */
+.alertmanager-source-endpoint {
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+/* Endpoint code badge - inline code block */
+.alertmanager-source-endpoint-code {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Namespace column - truncated */
+.alertmanager-source-namespace {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Version column - muted text */
+.alertmanager-source-version {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Provenance column - truncated */
+.alertmanager-source-provenance {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Error column - truncated */
+.alertmanager-source-error {
+  max-width: 150px;
+}
+
+/* Identity debug column - narrow centered */
+.alertmanager-source-identity {
+  max-width: 60px;
+  text-align: center;
+}
+
+/* Identity debug details - relative for positioned children */
+.alertmanager-source-identity-details {
+  position: relative;
+}
+
+/* Identity toggle - clickable icon button */
+.alertmanager-source-identity-toggle {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.alertmanager-source-identity-toggle:hover {
+  background-color: var(--color-surface-hover, #f0f0f0);
+}
+
+/* Identity icon - small icon display */
+.alertmanager-source-identity-icon {
+  font-size: 14px;
+  color: var(--color-text-muted, #888);
+}
+
+/* Identity content - positioned dropdown */
+.alertmanager-source-identity-content {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 100;
+  min-width: 280px;
+  max-width: 400px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  text-align: left;
+}
+
+/* Identity explanation - intro text */
+.alertmanager-source-identity-explanation {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+/* Identity field - label + value row */
+.alertmanager-source-identity-field {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+/* Identity label - small muted label */
+.alertmanager-source-identity-label {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--color-text-muted, #888);
+  white-space: nowrap;
+}
+
+/* Identity value - small code value */
+.alertmanager-source-identity-value {
+  font-size: 11px;
+  background: var(--color-surface-hover, #f5f5f5);
+  padding: 2px 5px;
+  border-radius: 3px;
+  word-break: break-all;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Identity note - footer note */
+.alertmanager-source-identity-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border, #ddd);
+}
+
+/* Error text - red error display */
+.alertmanager-source-error-text {
+  color: rgba(248, 113, 113, 0.9);
+  display: block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Solarized Light theme overrides
+   Tightly local - all selectors target alertmanager-sources family members
+   ========================================================================== */
+
+/* Summary row - warm paper background */
+[data-theme="solarized-light"] .alertmanager-sources-summary {
+  background: rgba(238, 232, 213, 0.5);
+}
+
+/* Metric value - dark text */
+[data-theme="solarized-light"] .alertmanager-sources-metric-value {
+  color: #002b36;
+}
+
+/* Metric label - muted text */
+[data-theme="solarized-light"] .alertmanager-sources-metric-label {
+  color: #586e75;
+}
+
+/* Table - warm paper background */
+[data-theme="solarized-light"] .alertmanager-sources-table {
+  background: rgba(238, 232, 213, 0.85);
+}
+
+/* Table header - muted, subtle border */
+[data-theme="solarized-light"] .alertmanager-sources-table th {
+  background: rgba(238, 232, 213, 0.9);
+  color: #586e75;
+  border-bottom-color: rgba(147, 161, 161, 0.35);
+}
+
+/* Table cells - dark text */
+[data-theme="solarized-light"] .alertmanager-sources-table td {
+  color: #002b36;
+  border-bottom-color: rgba(147, 161, 161, 0.25);
+}
+
+/* Table row hover - subtle highlight */
+[data-theme="solarized-light"] .alertmanager-sources-table tbody tr:hover {
+  background: rgba(147, 161, 161, 0.18);
+}
+
+/* State - healthy (teal/green) */
+[data-theme="solarized-light"] .alertmanager-source-healthy,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-healthy {
+  background: rgba(0, 100, 0, 0.15);
+  color: #2aa198;
+}
+
+/* State - caution (amber) */
+[data-theme="solarized-light"] .alertmanager-source-caution,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-caution {
+  background: rgba(180, 120, 0, 0.15);
+  color: #b08800;
+}
+
+/* State - warning (red) */
+[data-theme="solarized-light"] .alertmanager-source-warning,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-warning {
+  background: rgba(180, 60, 0, 0.15);
+  color: #dc322f;
+}
+
+/* State - muted (gray) */
+[data-theme="solarized-light"] .alertmanager-source-muted,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-muted {
+  background: rgba(88, 110, 117, 0.15);
+  color: #586e75;
+}
+
+/* State - default (blue) */
+[data-theme="solarized-light"] .alertmanager-source-default,
+[data-theme="solarized-light"] .alertmanager-source-state-pill-default {
+  background: rgba(38, 139, 210, 0.15);
+  color: #268bd2;
+}
+
+/* Endpoint code badge - warm paper */
+[data-theme="solarized-light"] .alertmanager-source-endpoint-code {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #073642;
+}
+
+/* Error text - red */
+[data-theme="solarized-light"] .alertmanager-source-error-text {
+  color: #dc322f;
+}
+
+/* ==========================================================================
+   Action buttons (within table cells)
+   ========================================================================== */
+
+/* Actions cell - vertical alignment */
+.alertmanager-source-actions {
+  min-width: 140px;
+  vertical-align: top;
+}
+
+/* Action buttons container */
+.alertmanager-source-action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Action button - no wrap */
+.alertmanager-action-btn {
+  white-space: nowrap;
+}
+
+/* Action error - small red text */
+.alertmanager-source-action-error {
+  font-size: 0.75rem;
+  color: rgba(248, 113, 113, 0.9);
+  margin: 0.25rem 0 0;
+  max-width: 180px;
+}
+
+/* Action success - small green text */
+.alertmanager-source-action-success {
+  font-size: 0.75rem;
+  color: rgba(0, 200, 83, 0.9);
+  margin: 0.25rem 0 0;
+  max-width: 180px;
+}
+
+/* Action error - Solarized red */
+[data-theme="solarized-light"] .alertmanager-source-action-error {
+  color: #dc322f;
+}
+
+/* Action success - Solarized blue */
+[data-theme="solarized-light"] .alertmanager-source-action-success {
+  color: #268bd2;
+}
