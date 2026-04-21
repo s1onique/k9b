@@ -39,7 +39,7 @@ from tests.fixtures.ui_index_sample import sample_ui_index
 # Sample alertmanager evidence reference data for testing
 # NOTE: usedFor values must be valid per the bounded schema:
 # top_concern, next_check, summary, triage_order, focus_note
-_SAMPLE_AM_REFS: list[dict[str, object]] = [
+_SAMPLE_AM_REFS: list[AlertmanagerEvidenceReferencePayload] = [
     {
         "cluster": "cluster-alpha",
         "matchedDimensions": ["alertname", "severity"],
@@ -56,7 +56,7 @@ _SAMPLE_AM_REFS: list[dict[str, object]] = [
 
 
 def _sample_review_enrichment_artifact(
-    alertmanager_refs: list[dict[str, object]] | None = None,
+    alertmanager_refs: list[AlertmanagerEvidenceReferencePayload] | None = None,
 ) -> ExternalAnalysisArtifact:
     """Create a sample review enrichment artifact with optional alertmanager refs."""
     interpretation: dict[str, object] = {}

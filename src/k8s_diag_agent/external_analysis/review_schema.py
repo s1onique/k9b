@@ -21,6 +21,29 @@ _ALERT_EVIDENCE_USED_FOR_VALUES = frozenset({
     "focus_note",
 })
 
+# Safe alias normalization: maps common invalid variants to canonical values.
+# This prevents review-enrichment failures from pluralized or field-derived values
+# emitted by providers (e.g., "top_concerns" -> "top_concern").
+_ALERT_EVIDENCE_USED_FOR_ALIASES: dict[str, str] = {
+    "top_concerns": "top_concern",
+    "next_checks": "next_check",
+    "focus_notes": "focus_note",
+}
+
+
+def _normalize_used_for(value: str) -> str:
+    """Normalize used_for value, applying safe alias mapping if needed.
+
+    Only applies to clearly safe, deterministic aliases that are obvious
+    pluralization variants of canonical values. Unknown invalid values
+    are returned unchanged for downstream validation to reject.
+    """
+    # Fast path: if already canonical, return as-is
+    if value in _ALERT_EVIDENCE_USED_FOR_VALUES:
+        return value
+    # Apply alias normalization for known pluralized variants
+    return _ALERT_EVIDENCE_USED_FOR_ALIASES.get(value, value)
+
 
 @dataclass(frozen=True)
 class AlertmanagerEvidenceReference:
@@ -35,7 +58,11 @@ class AlertmanagerEvidenceReference:
     used_for: str
 
     def __post_init__(self) -> None:
-        if self.used_for not in _ALERT_EVIDENCE_USED_FOR_VALUES:
+        # Normalize alias before validation (e.g., "top_concerns" -> "top_concern")
+        normalized_used_for = _normalize_used_for(self.used_for)
+        # Validate against canonical values (object.__setattr__ bypasses frozen)
+        object.__setattr__(self, "used_for", normalized_used_for)
+        if normalized_used_for not in _ALERT_EVIDENCE_USED_FOR_VALUES:
             raise ReviewEnrichmentPayloadError(
                 f"AlertmanagerEvidenceReference.used_for must be one of {sorted(_ALERT_EVIDENCE_USED_FOR_VALUES)}, "
                 f"got {self.used_for!r}"
@@ -132,11 +159,13 @@ def _normalize_alertmanager_references(
             raise ReviewEnrichmentPayloadError(
                 f"{path}[{index}].reason must be a non-empty string"
             )
-        used_for = _normalize_optional_string(entry.get("usedFor") or entry.get("used_for"), f"{path}[{index}].usedFor")
-        if not used_for:
+        raw_used_for = _normalize_optional_string(entry.get("usedFor") or entry.get("used_for"), f"{path}[{index}].usedFor")
+        if not raw_used_for:
             raise ReviewEnrichmentPayloadError(
                 f"{path}[{index}].usedFor must be a non-empty string"
             )
+        # Normalize alias before validation (e.g., "top_concerns" -> "top_concern")
+        used_for = _normalize_used_for(raw_used_for)
         refs.append(AlertmanagerEvidenceReference(
             cluster=cluster,
             matched_dimensions=dimensions,

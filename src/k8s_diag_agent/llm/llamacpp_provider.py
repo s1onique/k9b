@@ -38,6 +38,9 @@ _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
     " Each reference MUST cite evidence that was present in the provided Alertmanager compact artifact."
     " You MUST NOT cite alert names, severities, namespaces, or clusters that do NOT appear in the supplied artifacts."
     " alertmanagerEvidenceReferences format: [{\"cluster\": \"<string>\", \"matchedDimensions\": [\"<dim>\",...], \"reason\": \"<string>\", \"usedFor\": \"<top_concern|next_check|summary|triage_order|focus_note>\"}]"  # noqa: E501
+    " CRITICAL - usedFor values: Use EXACTLY one of these literals: top_concern, next_check, summary, triage_order, focus_note."
+    " Do NOT use plural forms like 'top_concerns', 'next_checks', or 'focus_notes'."
+    " Do NOT derive usedFor from field names like topConcerns, nextChecks, or focusNotes."
     " CRITICAL for nextChecks: each entry MUST be an explicit kubectl command in one of these formats:"  # noqa: E501
     " - 'kubectl describe <resource> -n <namespace>'"
     " - 'kubectl logs <pod> -n <namespace>'"
