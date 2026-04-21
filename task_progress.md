@@ -50,3 +50,60 @@ Use normalized endpoint as canonical identity (not source_id which is strategy-s
 
 ### Documentation
 - [ ] 20. Update memory bank with deduplication behavior
+
+---
+
+# Task Progress: CSS Monolith Phase 9B Extraction ✓ COMPLETE
+
+## Overview
+Phase 9B of CSS monolith extraction: structural family audit for workflow lanes, panel shells, and related structural wrappers.
+
+## Completed Work
+
+### Workflow Lane Headers Extraction ✓
+- **File Created**: `frontend/src/styles/layout/workflow-lanes.css`
+- **Selectors Extracted**: 6 (.workflow-lane-header, + sibling, .workflow-lane-label, .workflow-lane-icon, .workflow-lane-title, .workflow-lane-description)
+- **Model**: A (pure structural, CSS custom properties only)
+- **Boundary**: Clean - isolated to workflow lane header regions
+- **Verification**: Frontend build SUCCESS (66 modules, 468ms)
+
+### Deferred Candidates (Per Task Constraints)
+
+#### `.panel` Family - DEFERRED
+**Reason**: Semantic ambiguity - unclear if panel is structural shell or semantic component
+- Contains theme override coupling (var(--color-panel-*))
+- Per task constraint: "No panel-heavy extraction"
+- **Recommendation**: Defer until semantic boundary is clarified; may warrant component Model B extraction
+
+#### `.recent-runs` / `.runs-table-*` Family - DEFERRED  
+**Reason**: Per task explicit directive
+- Task stated: "do not force `runs-table` extraction"
+- High coupling to table structure, filtering state, and action handlers
+- Adjacent selector coupling (.recent-runs-list, .recent-runs-item, .recent-runs-label, .recent-runs-time)
+- **Recommendation**: Retain in monolith until table structure is componentized
+
+#### `.runs-table-wrapper` - DEFERRED
+**Reason**: Table infrastructure, not standalone structural family
+- Couples to table semantics and scroll behavior
+- **Recommendation**: Keep in monolith; extract when table component is isolated
+
+## Extraction Audit Summary
+
+| Family | Status | Reason |
+|--------|--------|--------|
+| `.workflow-lane-*` | ✅ Extracted | Clean boundary, pure structural, all CSS tokens |
+| `.panel` | ❌ Deferred | Semantic ambiguity + theme override coupling |
+| `.recent-runs-*` | ❌ Deferred | Per task directive |
+| `.runs-table-*` | ❌ Deferred | Per task directive |
+
+## Cascade Preservation
+All extracted styles use CSS custom properties only - no hardcoded values, ensuring theme overrides propagate correctly.
+
+## Files Modified
+- `frontend/src/styles/layout/workflow-lanes.css` (created)
+- `frontend/src/styles/index.css` (import added)
+- `frontend/src/index.css` (extraction comment added)
+
+## Verification
+- Frontend build: ✅ SUCCESS
+- Backend tests: ⚠️ 1333 tests, 1 pre-existing failure, 12 pre-existing errors (OSError: directory cleanup) - unrelated to CSS changes

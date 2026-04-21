@@ -1,0 +1,212 @@
+/**
+ * Notification Table Component Styles
+ * 
+ * Extracted from: frontend/src/index.css (lines 3455-3556, 4541-4561, 5002-5012, 5157-5162, 5185-5197, 5249-5258)
+ * 
+ * Family inventory:
+ * - Base selectors: 15 rules (.notification-table-*, .notification-summary, .notification-detail, .notification-run-cluster)
+ * - Solarized Light overrides: 12 rules (tightly local to the family)
+ * 
+ * Dependencies:
+ * - Inherits from tokens.css for CSS custom properties
+ * - Uses .status-pill (badges-pills.css) - no duplication, scoped via .notification-table .status-pill
+ * 
+ * Cascade contract:
+ * - Component wrapper styles apply globally
+ * - Table cell styles scoped via .notification-table
+ * - Controls styles scoped via .notification-table-controls
+ * - Theme overrides via [data-theme="solarized-light"] container selector
+ */
+
+/* ==========================================================================
+   Base styles - default (dark) theme
+   ========================================================================== */
+
+/* Wrapper - outer shell with scroll container */
+.notification-table-wrapper {
+  margin-top: 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(2, 6, 23, 0.85);
+  box-shadow: 0 30px 60px rgba(2, 6, 23, 0.35);
+  padding: 0.75rem 1rem 0.35rem;
+}
+
+/* Scroll container - horizontal overflow handling */
+.notification-table-scroll {
+  overflow-x: auto;
+}
+
+/* Main table - collapse model, responsive width */
+.notification-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+/* Table cells - shared padding and alignment */
+.notification-table th,
+.notification-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  text-align: left;
+  font-size: 0.8rem;
+  vertical-align: middle;
+  line-height: 1.3;
+}
+
+/* Header cells - uppercase, letterspaced */
+.notification-table th {
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.7);
+}
+
+/* Last row - no bottom border */
+.notification-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Cell paragraphs - tight spacing */
+.notification-table td p {
+  margin: 0;
+}
+
+/* Text cells - truncated summary/detail */
+.notification-summary,
+.notification-detail {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Detail cell - slightly muted text */
+.notification-detail {
+  color: rgba(248, 250, 252, 0.75);
+  font-size: 0.8rem;
+}
+
+/* Artifact links in cells - prominent styling */
+.notification-table td a.artifact-link {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Controls bar - filter/search inputs */
+.notification-table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* Control labels - uppercase, letterspaced */
+.notification-table-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Control inputs - dark theme styling */
+.notification-table-controls select,
+.notification-table-controls input {
+  border-radius: 0.55rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.8);
+  color: #f8fafc;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  min-width: 160px;
+}
+
+/* Status pills within table - no wrap */
+.notification-table .status-pill {
+  white-space: nowrap;
+}
+
+/* Run/cluster meta - muted secondary text */
+.notification-run-cluster {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.8);
+}
+
+/* ==========================================================================
+   Solarized Light theme overrides
+   Tightly local - all selectors target notification-table family members
+   ========================================================================== */
+
+/* Notification table - warm paper background */
+[data-theme="solarized-light"] .notification-table-wrapper {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.4);
+}
+
+[data-theme="solarized-light"] .notification-table th {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .notification-table td {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .notification-detail {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .notification-run-cluster {
+  color: #657b83;
+}
+
+/* Notification controls - muted text */
+[data-theme="solarized-light"] .notification-table-controls {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .notification-table-controls select,
+[data-theme="solarized-light"] .notification-table-controls input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.45);
+  color: #002b36;
+}
+
+/* Notification table filter selects - warm paper, softer opacity */
+[data-theme="solarized-light"] .notification-table-controls select {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #002b36;
+}
+
+/* Notification table artifact links - softer treatment */
+[data-theme="solarized-light"] .notification-table td a.artifact-link {
+  background: rgba(38, 139, 210, 0.06);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+[data-theme="solarized-light"] .notification-table td a.artifact-link:hover {
+  background: rgba(38, 139, 210, 0.12);
+  color: #1a5f8a;
+}
+
+/* Notification table search input - warm paper, softer */
+[data-theme="solarized-light"] .notification-table-controls input {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .notification-table-controls input::placeholder {
+  color: #93a1a1;
+}
