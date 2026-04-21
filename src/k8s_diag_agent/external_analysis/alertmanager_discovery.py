@@ -33,6 +33,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from ..identity.artifact import new_artifact_id
+
 # Module logger for debug output
 _logger = logging.getLogger(__name__)
 
@@ -321,13 +323,16 @@ class AlertmanagerSourceInventory:
     sources: dict[str, AlertmanagerSource] = field(default_factory=dict)
     discovered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cluster_context: str | None = None  # Kubernetes context used for discovery
+    # Immutable artifact instance identity (UUIDv7)
+    # Optional for backward compatibility - None for legacy artifacts, generated for new
+    artifact_id: str | None = field(default_factory=new_artifact_id)
 
     def add_source(self, source: AlertmanagerSource) -> None:
-        """Add a source, respecting manual precedence.
+        '''Add a source, respecting manual precedence.
 
         Manual sources are authoritative and cannot be overwritten by
         discovered sources with the same identity.
-        """
+        '''
         existing = self.sources.get(source.identity_key)
 
         if existing is None:
@@ -358,15 +363,15 @@ class AlertmanagerSourceInventory:
                 self.sources[source.identity_key] = source
 
     def get_by_origin(self, origin: AlertmanagerSourceOrigin) -> tuple[AlertmanagerSource, ...]:
-        """Get all sources with a specific origin."""
+        '''Get all sources with a specific origin.'''
         return tuple(s for s in self.sources.values() if s.origin == origin)
 
     def get_by_state(self, state: AlertmanagerSourceState) -> tuple[AlertmanagerSource, ...]:
-        """Get all sources with a specific state."""
+        '''Get all sources with a specific state.'''
         return tuple(s for s in self.sources.values() if s.state == state)
 
     def get_auto_tracked(self) -> tuple[AlertmanagerSource, ...]:
-        """Get all sources that are being actively tracked."""
+        '''Get all sources that are being actively tracked.'''
         return tuple(s for s in self.sources.values() if s.state in (AlertmanagerSourceState.AUTO_TRACKED, AlertmanagerSourceState.MANUAL))
 
     def to_dict(self) -> dict[str, Any]:
@@ -375,16 +380,23 @@ class AlertmanagerSourceInventory:
             "discovered_at": self.discovered_at.isoformat(),
             "cluster_context": self.cluster_context,
             "source_count": len(self.sources),
+            "artifact_id": self.artifact_id,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertmanagerSourceInventory:
-        """Reconstruct inventory from serialized dict."""
+        '''Reconstruct inventory from serialized dict.'''
         sources = {s["source_id"]: AlertmanagerSource.from_dict(s) for s in data.get("sources", [])}
+        # artifact_id is optional for backward compatibility
+        # Legacy artifacts without artifact_id will have None
+        artifact_id: str | None = None
+        if data.get("artifact_id"):
+            artifact_id = str(data["artifact_id"])
         return cls(
             sources=sources,
             discovered_at=_parse_datetime(data.get("discovered_at")),
             cluster_context=data.get("cluster_context"),
+            artifact_id=artifact_id,
         )
 
 

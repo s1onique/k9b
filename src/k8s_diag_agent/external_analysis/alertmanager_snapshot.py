@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from ..identity.artifact import new_artifact_id
+
 
 def _compute_deterministic_fingerprint(labels_sorted: tuple[tuple[str, str], ...]) -> str:
     """Compute deterministic fingerprint from sorted labels tuple using MD5.
@@ -116,6 +118,9 @@ class AlertmanagerSnapshot:
     alerts: tuple[NormalizedAlert, ...]
     errors: tuple[str, ...] = field(default_factory=tuple)
     truncated: bool = False
+    # Immutable artifact instance identity (UUIDv7)
+    # Optional for backward compatibility - None for legacy artifacts, generated for new
+    artifact_id: str | None = field(default_factory=new_artifact_id)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -126,6 +131,7 @@ class AlertmanagerSnapshot:
             "alerts": [alert.to_dict() for alert in self.alerts],
             "errors": list(self.errors),
             "truncated": self.truncated,
+            "artifact_id": self.artifact_id,
         }
 
     @classmethod
@@ -168,6 +174,11 @@ class AlertmanagerSnapshot:
         errors: list[str] = []
         if isinstance(errors_raw, list):
             errors = [str(e) for e in errors_raw]
+        # artifact_id is optional for backward compatibility
+        # Legacy artifacts without artifact_id will have None
+        artifact_id: str | None = None
+        if raw.get("artifact_id"):
+            artifact_id = str(raw["artifact_id"])
         return cls(
             status=status,
             captured_at=captured_at,
@@ -176,6 +187,7 @@ class AlertmanagerSnapshot:
             alerts=tuple(alerts),
             errors=tuple(errors),
             truncated=bool(raw.get("truncated")),
+            artifact_id=artifact_id,
         )
 
 
@@ -217,6 +229,8 @@ class AlertmanagerCompact:
     captured_at: str
     # Per-cluster breakdown for cluster-scoped UI panels
     by_cluster: tuple[ClusterAlertSummary, ...] = field(default_factory=tuple)
+    # Immutable artifact instance identity (UUIDv7); separate from source snapshot identity
+    artifact_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -233,6 +247,9 @@ class AlertmanagerCompact:
         }
         if self.by_cluster:
             result["by_cluster"] = [s.to_dict() for s in self.by_cluster]
+        # Include artifact_id if present (for new artifacts)
+        if self.artifact_id is not None:
+            result["artifact_id"] = self.artifact_id
         return result
 
     def to_json_bytes(self) -> bytes:
@@ -461,6 +478,8 @@ def snapshot_to_compact(
         truncated=snapshot.truncated,
         captured_at=snapshot.captured_at,
         by_cluster=tuple(by_cluster),
+        # Compact gets its own artifact_id - it is a separate artifact instance
+        artifact_id=new_artifact_id(),
     )
 
 
