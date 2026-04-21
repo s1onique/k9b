@@ -17,6 +17,15 @@
  * - .runs-table-* (runs-table family)
  * - .action-state-* (action-status.css)
  * - .queue-status-pill-* (action-status.css)
+ * 
+ * Queue Group/Item ownership note:
+ * - .next-check-queue-group, .next-check-queue-group-head, .next-check-queue-items
+ *   BASE rules: index.css (still present, not fully extracted)
+ *   Theme overrides: next-check-queue.css
+ * - .next-check-queue-item, .next-check-queue-item-meta, .next-check-queue-item-status,
+ *   .next-check-queue-item-flags, .next-check-queue-item-actions
+ *   BASE rules: index.css (still present, not fully extracted)
+ *   Theme overrides: next-check-queue.css
  */
 
 /* ==========================================================================

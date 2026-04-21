@@ -792,121 +792,43 @@
 }
 
 /* ==========================================================================
-   Queue Item New Structure - Header, Title, Context, Actions
+   EXTRACTED to styles/components/next-check-queue.css
    ========================================================================== */
+/*
+   Queue Item Structure family - MOVED TO styles/components/next-check-queue.css
 
-/* Header block with title and status badges */
-.next-check-queue-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
+   Base selectors extracted:
+   - .next-check-queue-item-header, .queue-item-title-block, .queue-item-title
+   - .queue-item-status-badges, .next-check-queue-item-context
+   - .queue-item-rationale-line, .queue-item-rationale-label
+   - .queue-item-meta-row, .queue-item-meta-tag
+   - .queue-item-blocker-note, .queue-item-blocker-icon, .queue-item-blocker-text
+   - .queue-item-secondary-actions, .queue-item-primary-action
+   - .next-check-queue-item-details, .next-check-queue-item-metadata
+   - .next-check-queue-item-metadata span strong
+   - .next-check-queue-item-rationale, .priority-rationale-label, .priority-rationale-badge
 
-/* Title block containing the h4 title and source pill */
-.queue-item-title-block {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 200px;
-}
+   Theme overrides extracted:
+   - All [data-theme="solarized-light"] .queue-item-* selectors
+   - All [data-theme="solarized-light"] .next-check-queue-item-* selectors
+   - All [data-theme="solarized-light"] .priority-rationale-* selectors
 
-/* Prominent title (h4) */
-.queue-item-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #f1f5f9;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-}
+   NOT extracted (separate families):
+   - .next-check-queue-controls, .next-check-filter-row, .next-check-control-row (queue controls)
+   - .queue-search, .focus-presets, .focus-preset-button (queue controls)
+   - .queue-empty-state, .queue-empty-explanation, .queue-empty-recovery-actions (queue empty)
+   - .queue-explanation-block, .queue-explanation-header, .queue-explanation-* (queue explanation)
+   - .next-check-queue-group, .next-check-queue-group-head, .next-check-queue-items (queue group)
+   - .next-check-queue-item (card base, owned by next-check-plan.css)
+   - .next-check-queue-item-meta, .next-check-queue-item-status, .next-check-queue-item-flags (queue item)
+   - .next-check-queue-item-actions, .next-check-queue-item-flags strong (queue item)
+   - .queue-card-* (deterministic card family)
+   - .primary-reason (triage/reason family)
+   - .toggle-details-button (shared UI)
+   - .queue-search input (queue controls)
 
-/* Status badges container */
-.queue-item-status-badges {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-/* Context block: rationale and meta row */
-.next-check-queue-item-context {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-/* Rationale line: "Why: <reason>" */
-.queue-item-rationale-line {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #cbd5e1;
-  line-height: 1.4;
-}
-
-/* "Why:" label */
-.queue-item-rationale-label {
-  color: #94a3b8;
-  font-weight: 500;
-}
-
-/* Horizontal meta tags row */
-.queue-item-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-/* Individual meta tag pills */
-.queue-item-meta-tag {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-  background: rgba(71, 85, 105, 0.3);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.25);
-}
-
-/* Blocker/priority rationale note */
-.queue-item-blocker-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  padding: 0.4rem 0.6rem;
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.2);
-  border-radius: 6px;
-  font-size: 0.8rem;
-  color: #fde047;
-}
-
-.queue-item-blocker-icon {
-  flex-shrink: 0;
-  opacity: 0.9;
-}
-
-.queue-item-blocker-text {
-  line-height: 1.4;
-}
-
-/* Secondary actions group */
-.queue-item-secondary-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* Primary action button styling */
-.queue-item-primary-action {
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
-}
+   See: styles/components/next-check-queue.css
+*/
 
 /* ==========================================================================
    EXTRACTED to styles/components/action-status.css
@@ -914,6 +836,7 @@
 /* .action-state-badge, .action-state-*, .queue-status-pill, .queue-status-pill-*
     moved to styles/components/action-status.css */
 
+/* Shared UI */
 .toggle-details-button {
   background: none;
   border: none;
@@ -923,123 +846,9 @@
   font-size: 0.85rem;
 }
 
-/* Queue item result strip - shows last execution outcome */
-.queue-item-result-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
-  align-items: baseline;
-  padding: 0.5rem 0.65rem;
-  border-radius: 0.4rem;
-  font-size: 0.8rem;
-  margin: 0.25rem 0;
-}
-
-.queue-item-result-strip.success {
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-}
-
-.queue-item-result-strip.error {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-}
-
-.queue-item-result-strip.timeout {
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-}
-
-.queue-item-result-label {
-  font-weight: 600;
-  color: rgba(148, 163, 184, 0.9);
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.queue-item-result-summary {
-  flex: 1;
-  min-width: 120px;
-}
-
-.queue-item-result-link {
-  font-size: 0.75rem;
-  color: var(--blue, #0f62fe);
-  text-decoration: none;
-}
-
-.queue-item-result-link:hover {
-  text-decoration: underline;
-}
-
-/* Compact Next: hint on queue cards */
-.queue-item-result-next {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.15);
-  font-size: 0.75rem;
-  color: rgba(251, 191, 36, 0.9);
-  font-weight: 500;
-}
-
-.queue-item-result-next::before {
-  content: "Next: ";
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.65rem;
-  opacity: 0.8;
-}
-
-.next-check-queue-item-details {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  border: 1px solid #d8d8d8;
-  border-radius: 0.5rem;
-  background: #fbfbfb;
-}
-
-.next-check-queue-item-metadata {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1rem;
-  margin-bottom: 0.75rem;
-  font-size: 0.85rem;
-}
-
-.next-check-queue-item-metadata span strong {
-  margin-right: 0.25rem;
-}
-
-/* Priority rationale label and badge */
-.next-check-queue-item-rationale {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.priority-rationale-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: rgba(148, 163, 184, 0.9);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.priority-rationale-badge {
-  display: inline-block;
-  font-size: 0.8rem;
-  color: #fde68a;
-  background: rgba(251, 191, 36, 0.15);
-  padding: 0.2rem 0.5rem;
-  border-radius: 0.3rem;
-  font-style: italic;
-}
+/* Queue item result strip - MOVED to styles/components/next-check-queue.css */
+/* Queue item details, metadata, rationale - MOVED to styles/components/next-check-queue.css */
+/* Priority rationale - MOVED to styles/components/next-check-queue.css */
 
 .next-check-command-preview {
   font-family: var(--font-mono, 'JetBrains Mono', 'SFMono-Regular', monospace);
@@ -2080,102 +1889,7 @@
   color: #002b36;
 }
 
-/* Queue item cards - harmonized backgrounds */
-[data-theme="solarized-light"] .next-check-queue-item {
-  background: rgba(253, 246, 227, 0.92);
-  border-color: rgba(147, 161, 161, 0.3);
-}
-
-[data-theme="solarized-light"] .next-check-queue-group {
-  background: rgba(238, 232, 213, 0.85);
-  border-color: rgba(147, 161, 161, 0.35);
-}
-
-[data-theme="solarized-light"] .queue-item-title {
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .queue-item-rationale-line {
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .queue-item-rationale-label {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .queue-item-meta-tag {
-  background: rgba(147, 161, 161, 0.15);
-  color: #586e75;
-  border-color: rgba(147, 161, 161, 0.3);
-}
-
-/* Queue item blocker note */
-[data-theme="solarized-light"] .queue-item-blocker-note {
-  background: rgba(181, 137, 0, 0.1);
-  border-color: rgba(181, 137, 0, 0.25);
-  color: #b58900;
-}
-
-/* Queue item result strip */
-[data-theme="solarized-light"] .queue-item-result-strip {
-  background: rgba(238, 232, 213, 0.85);
-  border-color: rgba(147, 161, 161, 0.25);
-}
-
-[data-theme="solarized-light"] .queue-item-result-strip.success {
-  background: rgba(133, 153, 0, 0.12);
-  border-color: rgba(133, 153, 0, 0.3);
-}
-
-[data-theme="solarized-light"] .queue-item-result-strip.error {
-  background: rgba(220, 50, 47, 0.1);
-  border-color: rgba(220, 50, 47, 0.25);
-}
-
-[data-theme="solarized-light"] .queue-item-result-strip.timeout {
-  background: rgba(181, 137, 0, 0.1);
-  border-color: rgba(181, 137, 0, 0.25);
-}
-
-[data-theme="solarized-light"] .queue-item-result-label {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .queue-item-result-summary {
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .queue-item-result-next {
-  color: #b58900;
-  border-top-color: rgba(147, 161, 161, 0.2);
-}
-
-/* Queue item details */
-[data-theme="solarized-light"] .next-check-queue-item-details {
-  background: rgba(238, 232, 213, 0.9);
-  border-color: rgba(147, 161, 161, 0.3);
-  color: #002b36;
-}
-
-/* Queue item metadata */
-[data-theme="solarized-light"] .next-check-queue-item-metadata {
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .next-check-queue-item-metadata strong {
-  color: #002b36;
-}
-
-/* Priority rationale */
-[data-theme="solarized-light"] .priority-rationale-label {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .priority-rationale-badge {
-  background: rgba(181, 137, 0, 0.12);
-  color: #b58900;
-}
-
+/* Queue item cards + group - MOVED to styles/components/next-check-queue.css */
 /* Queue explanation block */
 [data-theme="solarized-light"] .queue-explanation-block {
   background: rgba(238, 232, 213, 0.88);
@@ -2940,10 +2654,7 @@
   color: #dc322f;
 }
 
-/* Primary action button */
-[data-theme="solarized-light"] .queue-item-primary-action {
-  box-shadow: 0 2px 8px rgba(133, 153, 0, 0.15);
-}
+/* Primary action button - MOVED to styles/components/next-check-queue.css */
 
 /* Diagnostic pack review */
 [data-theme="solarized-light"] .diagnostic-pack-review-summary {

@@ -92,6 +92,7 @@
 @import url('./components/tabs.css');
 @import url('./components/shared-ui.css');
 @import url('./components/runs-table.css');
+@import url('./components/next-check-queue.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');
