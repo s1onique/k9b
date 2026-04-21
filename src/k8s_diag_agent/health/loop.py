@@ -58,6 +58,7 @@ from ..external_analysis.artifact import (
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..external_analysis.next_check_planner import plan_next_checks
 from ..external_analysis.review_schema import classify_review_enrichment_shape
+from ..identity.artifact import new_artifact_id
 from ..models import (
     Assessment,
     ConfidenceLevel,
@@ -522,9 +523,10 @@ class ComparisonTriggerArtifact:
     ignored_drift_categories: tuple[str, ...]
     peer_notes: str | None = None
     notes: str | None = None
+    artifact_id: str | None = None  # None for legacy artifacts, auto-generated for new artifacts
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "run_label": self.run_label,
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
@@ -542,6 +544,79 @@ class ComparisonTriggerArtifact:
             "peer_notes": self.peer_notes,
             "notes": self.notes,
         }
+        # Include artifact_id when present (backward compat: legacy artifacts without it)
+        if self.artifact_id is not None:
+            data["artifact_id"] = self.artifact_id
+        return data
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> ComparisonTriggerArtifact:
+        """Parse a trigger artifact from a dict, with backward compatibility for legacy artifacts."""
+        # Parse artifact_id for backward compatibility (legacy artifacts without it)
+        artifact_id_value = raw.get("artifact_id")
+        parsed_artifact_id: str | None = None
+        if artifact_id_value is not None and isinstance(artifact_id_value, str) and artifact_id_value:
+            parsed_artifact_id = artifact_id_value
+
+        # Parse timestamp
+        timestamp_value = raw.get("timestamp")
+        parsed_timestamp: datetime
+        if isinstance(timestamp_value, str):
+            parsed_timestamp = parse_iso_to_utc(timestamp_value) or datetime.now(UTC)
+        else:
+            parsed_timestamp = datetime.now(UTC)
+
+        # Parse trigger details
+        trigger_details_raw = raw.get("trigger_details") or []
+        parsed_trigger_details: list[TriggerDetail] = []
+        if isinstance(trigger_details_raw, list):
+            for detail_raw in trigger_details_raw:
+                if isinstance(detail_raw, Mapping):
+                    parsed_trigger_details.append(TriggerDetail(
+                        type=str(detail_raw.get("type", "")),
+                        reason=str(detail_raw.get("reason", "")),
+                        baseline_expectation=str(detail_raw.get("baseline_expectation")) if detail_raw.get("baseline_expectation") else None,
+                        actual_value=str(detail_raw.get("actual_value", "")),
+                        previous_run_value=str(detail_raw.get("previous_run_value")) if detail_raw.get("previous_run_value") else None,
+                        why=str(detail_raw.get("why", "")),
+                        next_check=str(detail_raw.get("next_check")) if detail_raw.get("next_check") else None,
+                        peer_roles=str(detail_raw.get("peer_roles")) if detail_raw.get("peer_roles") else None,
+                        classification=str(detail_raw.get("classification")) if detail_raw.get("classification") else None,
+                    ))
+
+        # Parse trigger_reasons
+        trigger_reasons_raw = raw.get("trigger_reasons") or []
+        parsed_trigger_reasons: tuple[str, ...]
+        if isinstance(trigger_reasons_raw, list):
+            parsed_trigger_reasons = tuple(str(item) for item in trigger_reasons_raw)
+        else:
+            parsed_trigger_reasons = ()
+
+        # Parse categories
+        def _parse_tuple(value: Any) -> tuple[str, ...]:
+            if isinstance(value, list):
+                return tuple(str(item) for item in value)
+            return ()
+
+        return cls(
+            run_label=str(raw.get("run_label", "")),
+            run_id=str(raw.get("run_id", "")),
+            timestamp=parsed_timestamp,
+            primary=str(raw.get("primary", "")),
+            secondary=str(raw.get("secondary", "")),
+            primary_label=str(raw.get("primary_label", "")),
+            secondary_label=str(raw.get("secondary_label", "")),
+            trigger_reasons=parsed_trigger_reasons,
+            comparison_summary=dict(raw.get("comparison_summary") or {}),
+            differences=dict(raw.get("differences") or {}),
+            trigger_details=tuple(parsed_trigger_details),
+            comparison_intent=str(raw.get("comparison_intent", "")),
+            expected_drift_categories=_parse_tuple(raw.get("expected_drift_categories")),
+            ignored_drift_categories=_parse_tuple(raw.get("ignored_drift_categories")),
+            peer_notes=str(raw.get("peer_notes")) if raw.get("peer_notes") else None,
+            notes=str(raw.get("notes")) if raw.get("notes") else None,
+            artifact_id=parsed_artifact_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -3090,6 +3165,7 @@ class HealthLoopRunner:
                 ignored_drift_categories=ignored_categories,
                 peer_notes=peer_notes,
                 notes="; ".join(detail.reason for detail in trigger_details),
+                artifact_id=new_artifact_id(),
             )
             triggers.append(artifact)
             trigger_path = directories["triggers"] / f"{self.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-trigger.json"

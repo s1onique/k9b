@@ -272,7 +272,7 @@ def generate_proposals_from_review(
     review_path: Path,
     run_id: str,
     warning_threshold: int,
-    baseline_policy: BaselinePolicy,
+    baseline_policy: BaselinePolicy | None,
     trigger_details: Sequence[Mapping[str, Any]] | None = None,
 ) -> tuple[HealthProposal, ...]:
     selection = review.selected_drilldowns[0] if review.selected_drilldowns else None
@@ -380,7 +380,7 @@ def _baseline_release_proposals(
     run_id: str,
     review_path: str,
     source_run_id: str,
-    baseline_policy: BaselinePolicy,
+    baseline_policy: BaselinePolicy | None,
     details: Sequence[Mapping[str, Any]],
 ) -> list[HealthProposal]:
     proposals: list[HealthProposal] = []
@@ -395,7 +395,7 @@ def _baseline_release_proposals(
         seen.add(release_key)
         actual_value = str(detail.get("actual_value") or "")
         versions = _split_pair(actual_value)
-        policy = baseline_policy.release_policy(release_key)
+        policy = baseline_policy.release_policy(release_key) if baseline_policy else None
         if policy:
             normalized_allowed = {_normalize_version(item) for item in policy.allowed_versions}
             missing = [version for version in versions if _normalize_version(version) not in normalized_allowed]
@@ -434,7 +434,7 @@ def _baseline_crd_proposals(
     run_id: str,
     review_path: str,
     source_run_id: str,
-    baseline_policy: BaselinePolicy,
+    baseline_policy: BaselinePolicy | None,
     details: Sequence[Mapping[str, Any]],
 ) -> list[HealthProposal]:
     proposals: list[HealthProposal] = []
@@ -445,7 +445,7 @@ def _baseline_crd_proposals(
         if not family or family in seen:
             continue
         seen.add(family)
-        policy = baseline_policy.crd_policy(family)
+        policy = baseline_policy.crd_policy(family) if baseline_policy else None
         if policy:
             change = f"Refresh CRD family {family} expectations; drift reported as '{reason}'."
         else:
