@@ -1,0 +1,101 @@
+/* ==========================================================================
+   Freshness Indicator Layout
+   ==========================================================================
+
+   Structural layout family for data freshness indicators.
+   
+   Scope:
+   - Freshness indicator base styles
+   - Freshness emoji and label elements
+   - Freshness state variants (fresh, stale, warning)
+   - Page freshness indicator (emoji-only variant)
+
+   Theme ownership: Model B
+   - Solarized Light overrides are tightly local to this family
+
+   Extraction rationale:
+   - Coherent semantic boundary (data freshness display)
+   - Self-contained with no cross-family structural dependencies
+   - Small theme override block suitable for Model B
+   ========================================================================== */
+
+/* Freshness emoji indicator */
+.freshness-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.freshness-indicator .emoji {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.freshness-indicator .label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.freshness-indicator.fresh .label {
+  color: rgba(34, 197, 94, 0.9);
+}
+
+.freshness-indicator.stale .label {
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.freshness-indicator.warning .label {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+/* Solarized Light - freshness indicator labels */
+[data-theme="solarized-light"] .freshness-indicator.fresh .label {
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .freshness-indicator.warning .label {
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .freshness-indicator.stale .label {
+  color: #dc322f;
+}
+
+/* ==========================================================================
+   Page Freshness Indicator (Emoji-only variant)
+   ========================================================================== */
+
+/* Page freshness indicator - emoji-only, glanceable, near refresh controls */
+.page-freshness-indicator {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: default;
+}
+
+.page-freshness-indicator.page-freshness-indicator--fresh {
+  color: rgba(34, 197, 94, 0.9);
+}
+
+.page-freshness-indicator.page-freshness-indicator--warning {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.page-freshness-indicator.page-freshness-indicator--stale {
+  color: rgba(248, 113, 113, 0.9);
+}
+
+/* Solarized Light - page freshness indicator */
+[data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--fresh {
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--warning {
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--stale {
+  color: #dc322f;
+}

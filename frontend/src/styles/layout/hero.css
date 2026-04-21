@@ -1,0 +1,340 @@
+/* ==========================================================================
+   Hero / Cockpit Header Layout
+   ==========================================================================
+
+   Structural layout family for the main header region.
+   
+   Scope:
+   - Brand logo container and mark
+   - Hero base layout and variants
+   - Hero content, title block, run info
+   - Run badges (Latest/Past)
+   - Hero actions and refresh controls
+   - Autorefresh control
+
+   Theme ownership: Model B
+   - Solarized Light overrides are tightly local to this family
+
+   Extraction rationale:
+   - Coherent structural boundary (main page header)
+   - Self-contained layout that doesn't cascade into panels
+   - Small theme override block suitable for Model B
+   ========================================================================== */
+
+/* Brand Logo Container - portrait mark (2:3 aspect ratio) */
+.brand-logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Portrait proportions: 44px width × 66px height for 2:3 asset (1024×1536) */
+  width: 44px;
+  height: 66px;
+  border-radius: 4px;
+  background-color: rgba(56, 189, 248, 0.08);
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.brand-logo-container:hover {
+  background-color: rgba(56, 189, 248, 0.12);
+}
+
+.brand-logo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.brand-logo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Solarized Light theme - brand logo container */
+[data-theme="solarized-light"] .brand-logo-container {
+  background-color: rgba(38, 139, 210, 0.08);
+}
+
+[data-theme="solarized-light"] .brand-logo-container:hover {
+  background-color: rgba(38, 139, 210, 0.12);
+}
+
+/* ==========================================================================
+   Hero Base Layout
+   ========================================================================== */
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+}
+
+.hero.compact {
+  align-items: center;
+}
+
+.hero-content {
+  flex: 1 1 280px;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* Title block - first anchor: "Fleet triage" + "Cockpit" */
+.hero-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 90px;
+}
+
+.hero-title-block .eyebrow {
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.hero-title-block h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+/* Solarized Light - hero title */
+[data-theme="solarized-light"] .hero-title-block h1 {
+  color: #002b36;
+}
+
+/* ==========================================================================
+   Hero Run Info Block
+   ========================================================================== */
+
+/* Run block - second anchor: selected run info */
+.hero-run {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding-left: 0.75rem;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.hero-run-identity {
+  flex: 0 1 auto;
+}
+
+.hero-run-label {
+  font-size: 0.68rem;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.hero-run-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  line-height: 1.2;
+}
+
+.hero-run-title strong {
+  font-size: 1rem;
+  display: block;
+  color: #f1f5f9;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.hero-run-id {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.65);
+  line-height: 1.2;
+}
+
+/* Solarized Light - hero run info */
+[data-theme="solarized-light"] .hero-run-title strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .hero-run-id {
+  color: #657b83;
+}
+
+/* Freshness block - integrated with run info */
+.hero-run-freshness {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Hero run header - contains label and badge */
+.hero-run-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Run badge - Latest / Past run indicator */
+.run-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  line-height: 1;
+}
+
+.run-badge--latest {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: rgba(34, 197, 94, 0.9);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.run-badge--past {
+  background-color: rgba(251, 191, 36, 0.15);
+  color: rgba(251, 191, 36, 0.9);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.hero-run-captured {
+  margin: 0.15rem 0 0;
+  font-size: 0.7rem;
+  color: rgba(148, 163, 184, 0.6);
+  line-height: 1.2;
+}
+
+.hero-run-latest-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.65rem;
+  color: rgba(148, 163, 184, 0.5);
+  font-style: italic;
+  line-height: 1.2;
+}
+
+.hero-run-recency {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(148, 163, 184, 0.6);
+  line-height: 1.2;
+}
+
+/* Solarized Light - hero run text */
+[data-theme="solarized-light"] .hero-run-recency,
+[data-theme="solarized-light"] .hero-run-label {
+  color: #839496;
+}
+
+/* Hero run block border - subtle separator */
+[data-theme="solarized-light"] .hero-run {
+  border-left-color: rgba(147, 161, 161, 0.35);
+}
+
+/* ==========================================================================
+   Hero Actions and Controls
+   ========================================================================== */
+
+.hero-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.hero-actions .refresh-controls {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.autorefresh-control {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.autorefresh-control label {
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.6);
+  white-space: nowrap;
+}
+
+.autorefresh-control select {
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-radius: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+  font-size: 0.8rem;
+}
+
+.autorefresh-status {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: rgba(148, 163, 184, 0.6);
+  white-space: nowrap;
+}
+
+/* Solarized Light - autorefresh controls */
+[data-theme="solarized-light"] .autorefresh-control select {
+  border-color: rgba(147, 161, 161, 0.4);
+  background: rgba(238, 232, 213, 0.92);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .autorefresh-control label,
+[data-theme="solarized-light"] .autorefresh-status {
+  color: #657b83;
+}
+
+/* Hero buttons */
+.hero button {
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  background: rgba(56, 189, 248, 0.1);
+  color: #bae6fd;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.hero button:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Solarized Light - hero buttons */
+[data-theme="solarized-light"] .hero button {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.4);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .hero button:hover {
+  background: rgba(38, 139, 210, 0.22);
+  border-color: rgba(38, 139, 210, 0.5);
+}

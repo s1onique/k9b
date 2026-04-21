@@ -1,0 +1,179 @@
+/* ==========================================================================
+   Navigation and Section Header Layout
+   ==========================================================================
+
+   Structural layout family for navigation and section headings.
+   
+   Scope:
+   - Cockpit navigation chip bar
+   - Navigation items, icons, labels
+   - Legacy floating nav (deprecated)
+   - Section headers and section head elements
+   - Utility text classes (eyebrow, muted)
+
+   Theme ownership: Model B
+   - Solarized Light overrides are tightly local to this family
+
+   Extraction rationale:
+   - Coherent structural boundary (navigation strip)
+   - Clear isolation from panel/component styles
+   - Minimal cross-coupling with other families
+   ========================================================================== */
+
+/* ==========================================================================
+   Cockpit Navigation Strip - Compressed chip bar
+   ========================================================================== */
+
+/* Primary navigation container - wraps as chip bar */
+.cockpit-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(71, 85, 105, 0.35);
+  margin: 0.15rem 0;
+}
+
+/* Navigation chip - individual link styling - compressed */
+.cockpit-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.3rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* Hover state */
+.cockpit-nav__item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #bae6fd;
+}
+
+/* Focus state for accessibility */
+.cockpit-nav__item:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* Active/current section state */
+.cockpit-nav__item--active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+/* Icon support within nav chips */
+.cockpit-nav__icon {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* Section label for grouping hint - visually quieter */
+.cockpit-nav__label {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.5);
+  padding: 0.15rem 0.35rem;
+  align-self: center;
+}
+
+/* Solarized Light - navigation bar */
+[data-theme="solarized-light"] .cockpit-nav {
+  background: rgba(238, 232, 213, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .cockpit-nav__item {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .cockpit-nav__item:hover {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .cockpit-nav__item--active {
+  background: rgba(38, 139, 210, 0.18);
+  border-color: rgba(38, 139, 210, 0.4);
+  color: #1a5f8a;
+}
+
+[data-theme="solarized-light"] .cockpit-nav__label {
+  color: #839496;
+}
+
+/* ==========================================================================
+   Legacy Floating Navigation (Deprecated)
+   ========================================================================== */
+
+/* Legacy class for backward compatibility */
+.floating-nav {
+  /* Deprecated: use .cockpit-nav instead */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.85) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  box-shadow: 0 4px 20px rgba(2, 6, 23, 0.3), inset 0 1px 0 rgba(148, 163, 184, 0.1);
+  margin: 0.25rem 0;
+}
+
+.floating-nav a {
+  color: #93c5fd;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+}
+
+/* ==========================================================================
+   Section Headers
+   ========================================================================== */
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+/* Utility text classes used in section heads */
+.muted {
+  color: rgba(248, 250, 252, 0.65);
+  margin: 0.15rem 0;
+}
+
+.eyebrow {
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
