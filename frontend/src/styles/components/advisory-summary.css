@@ -1,0 +1,291 @@
+/* ==========================================================================
+   Advisory Summary + Cluster Cards
+   Advisory panel top: summary strip, cluster overview, collapsible summary.
+   ========================================================================== */
+
+/* Executive summary strip - compact scan-friendly overview */
+.advisory-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  align-items: center;
+}
+
+.advisory-summary-metrics {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.advisory-summary-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 50px;
+}
+
+.advisory-summary-metric--warning {
+  background: rgba(251, 191, 36, 0.08);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.advisory-metric-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.95);
+  line-height: 1;
+}
+
+.advisory-summary-metric--warning .advisory-metric-value {
+  color: #fbbf24;
+}
+
+.advisory-metric-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.advisory-summary-tags {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.advisory-tag {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: #93c5fd;
+}
+
+.advisory-summary-provider {
+  margin-left: auto;
+}
+
+.advisory-provider-label {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.6);
+  padding: 0.25rem 0.5rem;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.advisory-summary-hint {
+  display: flex;
+  align-items: center;
+}
+
+.advisory-hint-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 999px;
+  font-size: 0.65rem;
+  color: #d8b4fe;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Collapsible provider summary */
+.advisory-summary-collapsible {
+  margin: 0.75rem 0;
+}
+
+.advisory-summary-collapsible summary {
+  cursor: pointer;
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 0.75rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.advisory-summary-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.advisory-summary-collapsible summary::before {
+  content: "▶";
+  font-size: 0.6rem;
+  transition: transform 0.15s ease;
+}
+
+.advisory-summary-collapsible[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.advisory-summary-collapsible .review-enrichment-summary {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  color: rgba(248, 250, 252, 0.7);
+  line-height: 1.5;
+}
+
+/* Cluster overview cards grid */
+.advisory-cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.advisory-cluster-card {
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.advisory-cluster-card:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.advisory-cluster-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.advisory-cluster-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #93c5fd;
+  flex-shrink: 0;
+}
+
+.advisory-cluster-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.9);
+}
+
+.advisory-cluster-concern {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.7);
+  line-height: 1.3;
+}
+
+.advisory-cluster-focus {
+  margin: 0;
+  font-size: 0.7rem;
+  color: rgba(148, 163, 184, 0.6);
+  line-height: 1.3;
+  font-style: italic;
+}
+
+.advisory-focus-hint {
+  color: #d8b4fe;
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT THEME OVERRIDES
+   Advisory summary + cluster cards
+   ========================================================================== */
+
+[data-theme="solarized-light"] .advisory-panel-header {
+  border-bottom-color: rgba(7, 54, 66, 0.15);
+}
+
+[data-theme="solarized-light"] .advisory-summary-strip {
+  background: rgba(238, 232, 213, 0.6);
+  border-color: rgba(7, 54, 66, 0.15);
+}
+
+[data-theme="solarized-light"] .advisory-summary-metric--warning {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.25);
+}
+
+[data-theme="solarized-light"] .advisory-metric-value {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .advisory-summary-metric--warning .advisory-metric-value {
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .advisory-metric-label {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .advisory-cluster-card {
+  background: rgba(238, 232, 213, 0.7);
+  border-color: rgba(7, 54, 66, 0.2);
+}
+
+[data-theme="solarized-light"] .advisory-cluster-card:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(88, 110, 117, 0.4);
+}
+
+[data-theme="solarized-light"] .advisory-cluster-rank {
+  background: rgba(88, 110, 117, 0.15);
+  border-color: rgba(88, 110, 117, 0.3);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .advisory-cluster-name {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .advisory-cluster-concern {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .advisory-tag {
+  background: rgba(38, 139, 195, 0.1);
+  border-color: rgba(38, 139, 195, 0.3);
+  color: #0060a8;
+}
+
+[data-theme="solarized-light"] .advisory-hint-badge {
+  background: rgba(108, 113, 196, 0.1);
+  border-color: rgba(108, 113, 196, 0.3);
+  color: #5b5b8a;
+}
+
+/* Collapsible summary in light theme */
+[data-theme="solarized-light"] .advisory-summary-collapsible summary {
+  color: rgba(7, 54, 66, 0.7);
+}
+
+[data-theme="solarized-light"] .advisory-summary-collapsible .review-enrichment-summary {
+  background: rgba(238, 232, 213, 0.4);
+  color: #073642;
+}
