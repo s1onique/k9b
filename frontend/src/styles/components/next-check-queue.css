@@ -44,7 +44,13 @@
  * - .next-check-queue-item-meta (item meta: index.css; theme overrides: this file)
  * - .next-check-queue-item-status, .next-check-queue-item-flags, .next-check-queue-item-actions (item status: index.css)
  * - .next-check-queue-item-flags strong (owned by index.css)
- * - .queue-card-* (deterministic card family)
+ * - .deterministic-cluster-card, .deterministic-cluster-head, .deterministic-cluster-summary,
+ *   .deterministic-group, .deterministic-group-title, .deterministic-group-meta,
+ *   .deterministic-check-list, .deterministic-check-row, .deterministic-check-main,
+ *   .deterministic-check-command, .deterministic-check-meta, .deterministic-empty-state,
+ *   .deterministic-empty-bucket, .deterministic-primary-pill, .deterministic-workstream-pill*,
+ *   .deterministic-urgency-pill* (deterministic card family - OWNED by next-check-plan.css)
+ *   Solarized Light overrides for deterministic family - OWNED by next-check-plan.css
  * - .primary-reason (triage/reason family)
  * - .toggle-details-button (shared UI)
  * - .next-check-queue-controls, .next-check-filter-row select, .next-check-control-row select (queue controls)

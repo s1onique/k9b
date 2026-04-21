@@ -1267,6 +1267,7 @@
 
 [data-theme="solarized-light"] .deterministic-urgency-pill {
   border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
 }
 
 [data-theme="solarized-light"] .deterministic-urgency-pill-high {
