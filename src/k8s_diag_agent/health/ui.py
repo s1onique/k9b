@@ -2656,18 +2656,20 @@ def _serialize_notification_history(
             {"label": str(key), "value": _stringify_notification_value(value)}
             for key, value in sorted(artifact.details.items())
         ]
-        entries.append(
-            {
-                "kind": artifact.kind,
-                "summary": artifact.summary,
-                "timestamp": artifact.timestamp,
-                "run_id": artifact.run_id,
-                "cluster_label": artifact.cluster_label,
-                "context": artifact.context,
-                "details": detail_entries,
-                "artifact_path": _relative_path(root_dir, path),
-            }
-        )
+        entry: dict[str, object] = {
+            "kind": artifact.kind,
+            "summary": artifact.summary,
+            "timestamp": artifact.timestamp,
+            "run_id": artifact.run_id,
+            "cluster_label": artifact.cluster_label,
+            "context": artifact.context,
+            "details": detail_entries,
+            "artifact_path": _relative_path(root_dir, path),
+        }
+        # Thread artifact_id for provenance/debugging surfaces (optional)
+        if artifact.artifact_id:
+            entry["artifact_id"] = artifact.artifact_id
+        entries.append(entry)
     return entries
 
 
