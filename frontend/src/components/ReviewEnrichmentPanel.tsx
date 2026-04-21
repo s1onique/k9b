@@ -24,6 +24,7 @@ import {
   AdvisoryEvidenceGapsSection,
   AdvisoryNextChecksSection,
   AdvisoryFocusNotesSection,
+  AdvisoryAlertEvidenceSection,
 } from "./AdvisorySections";
 
 // ============================================================================
@@ -321,6 +322,11 @@ const ReviewEnrichmentPanel = ({
             </div>
             <AdvisoryNextChecksSection checks={reviewEnrichment.nextChecks} />
             <AdvisoryFocusNotesSection notes={reviewEnrichment.focusNotes} />
+            {reviewEnrichment.alertmanagerEvidenceReferences?.length ? (
+              <AdvisoryAlertEvidenceSection
+                references={reviewEnrichment.alertmanagerEvidenceReferences}
+              />
+            ) : null}
           </div>
 
           {reviewEnrichment.errorSummary ? (

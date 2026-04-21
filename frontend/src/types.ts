@@ -604,6 +604,22 @@ export type AutoInterpretation = {
   skipReason: string | null;
 };
 
+/**
+ * Provider-assisted reference to Alertmanager evidence.
+ * These are bounded, inspectable references that distinguish
+ * provider-assisted interpretation from raw alert evidence.
+ */
+export type AlertmanagerEvidenceReference = {
+  /** Cluster from which the alert evidence was sourced */
+  cluster: string;
+  /** Dimensions that matched for this reference (e.g., "namespace", "cluster", "service") */
+  matchedDimensions: string[];
+  /** Human-readable reason why this evidence was selected */
+  reason: string;
+  /** How this reference was used in the advisory (e.g., "top_concern", "next_check") */
+  usedFor: string;
+};
+
 export type ReviewEnrichment = {
   status: string;
   provider: string | null;
@@ -614,6 +630,7 @@ export type ReviewEnrichment = {
   evidenceGaps: string[];
   nextChecks: string[];
   focusNotes: string[];
+  alertmanagerEvidenceReferences?: AlertmanagerEvidenceReference[] | null;
   artifactPath: string | null;
   errorSummary: string | null;
   skipReason: string | null;

@@ -5,6 +5,7 @@
 // - Evidence gaps (AdvisoryEvidenceGapsSection)
 // - Next checks (AdvisoryNextChecksSection + parseNextCheckEntry)
 // - Focus notes (AdvisoryFocusNotesSection)
+// - Alert evidence references (AdvisoryAlertEvidenceSection)
 // - Section coexistence under the provider summary
 // - Empty state handling
 
@@ -358,11 +359,195 @@ describe("Advisory Lower Sections", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Alert Evidence References
+  // -------------------------------------------------------------------------
+  describe("Alert evidence section", () => {
+    it("renders alert evidence rows for each reference", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: ["namespace", "service"],
+            reason: "High error rate detected in production namespace",
+            usedFor: "top_concern",
+          },
+          {
+            cluster: "cluster-b",
+            matchedDimensions: ["severity"],
+            reason: "Critical alerts pending resolution",
+            usedFor: "next_check",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const rows = document.querySelectorAll(".advisory-alert-evidence-row");
+        expect(rows.length).toBeGreaterThanOrEqual(2);
+      });
+
+      const rowTexts = Array.from(
+        document.querySelectorAll(".advisory-alert-evidence-row")
+      ).map((el) => el.textContent || "");
+      expect(rowTexts.some((t) => t.includes("cluster-a"))).toBe(true);
+      expect(rowTexts.some((t) => t.includes("cluster-b"))).toBe(true);
+    });
+
+    it("renders section with correct label", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: ["namespace"],
+            reason: "Test reason",
+            usedFor: "summary",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const section = document.querySelector(".advisory-alert-evidence-section");
+        expect(section).toBeTruthy();
+        expect(section?.textContent).toContain("Alert evidence used in this review");
+      });
+    });
+
+    it("renders cluster name for each reference", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "prod-cluster-1",
+            matchedDimensions: [],
+            reason: "Test reason",
+            usedFor: "top_concern",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const clusters = document.querySelectorAll(".advisory-alert-evidence-cluster");
+        expect(clusters.length).toBeGreaterThanOrEqual(1);
+        expect(clusters[0].textContent).toContain("prod-cluster-1");
+      });
+    });
+
+    it("renders used_for badge with human-readable label", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: [],
+            reason: "Test reason",
+            usedFor: "top_concern",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const badges = document.querySelectorAll(".advisory-alert-evidence-used-for");
+        expect(badges.length).toBeGreaterThanOrEqual(1);
+        expect(badges[0].textContent).toContain("Top concern");
+      });
+    });
+
+    it("renders matched dimensions as dimension pills", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: ["namespace", "severity", "cluster"],
+            reason: "Test reason",
+            usedFor: "next_check",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const dimensions = document.querySelectorAll(".advisory-alert-evidence-dimension");
+        expect(dimensions.length).toBeGreaterThanOrEqual(3);
+        const dimTexts = Array.from(dimensions).map((el) => el.textContent || "");
+        expect(dimTexts).toContain("namespace");
+        expect(dimTexts).toContain("severity");
+        expect(dimTexts).toContain("cluster");
+      });
+    });
+
+    it("renders reason text for each reference", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: [],
+            reason: "High CPU usage on worker nodes",
+            usedFor: "focus_note",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const reasons = document.querySelectorAll(".advisory-alert-evidence-reason");
+        expect(reasons.length).toBeGreaterThanOrEqual(1);
+        expect(reasons[0].textContent).toContain("High CPU usage on worker nodes");
+      });
+    });
+
+    it("does not render section when alertmanagerEvidenceReferences is empty", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [],
+        triageOrder: [],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      const section = document.querySelector(".advisory-alert-evidence-section");
+      expect(section).toBeNull();
+    });
+
+    it("does not render section when alertmanagerEvidenceReferences is undefined", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: undefined,
+        triageOrder: [],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      const section = document.querySelector(".advisory-alert-evidence-section");
+      expect(section).toBeNull();
+    });
+
+    it("handles unknown used_for values gracefully", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: [],
+            reason: "Test reason",
+            usedFor: "custom_category",
+          },
+        ],
+      });
+
+      await waitFor(() => {
+        const badges = document.querySelectorAll(".advisory-alert-evidence-used-for");
+        expect(badges.length).toBeGreaterThanOrEqual(1);
+        // Unknown values should be converted to human-readable format (underscores replaced with spaces)
+        expect(badges[0].textContent).toContain("custom category");
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Section Coexistence
   // -------------------------------------------------------------------------
   describe("Lower sections coexistence", () => {
-    it("renders all four lower sections together correctly", async () => {
-      setupRender();
+    it("renders all five lower sections together correctly", async () => {
+      setupRender({
+        alertmanagerEvidenceReferences: [
+          {
+            cluster: "cluster-a",
+            matchedDimensions: ["namespace"],
+            reason: "Test evidence",
+            usedFor: "top_concern",
+          },
+        ],
+      });
 
       await waitFor(() => {
         expect(document.querySelector(".advisory-lower-sections")).toBeTruthy();
@@ -370,6 +555,7 @@ describe("Advisory Lower Sections", () => {
         expect(document.querySelector(".advisory-gaps-section")).toBeTruthy();
         expect(document.querySelector(".advisory-next-checks-section")).toBeTruthy();
         expect(document.querySelector(".advisory-focus-notes-section")).toBeTruthy();
+        expect(document.querySelector(".advisory-alert-evidence-section")).toBeTruthy();
       });
     });
 

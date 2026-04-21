@@ -7,6 +7,25 @@
 
 import React from "react";
 import { parseNextCheckEntry } from "../App";
+import type { AlertmanagerEvidenceReference } from "../types";
+
+/**
+ * Maps used_for values to human-readable labels.
+ */
+const USED_FOR_LABELS: Record<string, string> = {
+  top_concern: "Top concern",
+  next_check: "Next check",
+  summary: "Summary",
+  triage_order: "Triage order",
+  focus_note: "Focus note",
+};
+
+/**
+ * Gets a display label for the used_for field.
+ */
+const getUsedForLabel = (usedFor: string): string => {
+  return USED_FOR_LABELS[usedFor] ?? usedFor.replace(/_/g, " ");
+};
 
 /** Top concerns - compact concern rows with left accent */
 export const AdvisoryTopConcernsSection: React.FC<{ concerns: string[] }> = ({ concerns }) => {
@@ -92,9 +111,57 @@ export const AdvisoryFocusNotesSection: React.FC<{ notes: string[] }> = ({ notes
   );
 };
 
+/**
+ * Alert evidence references - provider-assisted references to Alertmanager evidence.
+ * Renders bounded, inspectable references that distinguish provider-assisted
+ * interpretation from raw alert evidence.
+ */
+export const AdvisoryAlertEvidenceSection: React.FC<{
+  references: AlertmanagerEvidenceReference[];
+}> = ({ references }) => {
+  if (!references.length) {
+    return null;
+  }
+
+  return (
+    <div className="advisory-lower-section advisory-alert-evidence-section">
+      <p className="advisory-lower-section-label advisory-alert-evidence-label">
+        Alert evidence used in this review
+      </p>
+      <p className="advisory-alert-evidence-disclaimer muted tiny">
+        Provider-assisted references to Alertmanager evidence
+      </p>
+      <ul className="advisory-alert-evidence-list">
+        {references.map((ref, idx) => {
+          const usedForLabel = getUsedForLabel(ref.usedFor);
+          return (
+            <li key={idx} className="advisory-alert-evidence-row">
+              <div className="advisory-alert-evidence-header">
+                <span className="advisory-alert-evidence-cluster">{ref.cluster}</span>
+                <span className="advisory-alert-evidence-used-for">
+                  Used for: {usedForLabel}
+                </span>
+              </div>
+              <div className="advisory-alert-evidence-dimensions">
+                {ref.matchedDimensions.map((dim) => (
+                  <span key={dim} className="advisory-alert-evidence-dimension">
+                    {dim}
+                  </span>
+                ))}
+              </div>
+              <p className="advisory-alert-evidence-reason muted tiny">{ref.reason}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
 export default {
   AdvisoryTopConcernsSection,
   AdvisoryEvidenceGapsSection,
   AdvisoryNextChecksSection,
   AdvisoryFocusNotesSection,
+  AdvisoryAlertEvidenceSection,
 };
