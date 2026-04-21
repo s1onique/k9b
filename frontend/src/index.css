@@ -2336,9 +2336,11 @@
 /* ==========================================================================
    EXTRACTED to styles/layout/panel.css
    ========================================================================== */
-/* Provider-assisted advisory block
-   [data-theme="solarized-light"] .provider-assisted-block moved to styles/layout/panel.css
-   [data-theme="solarized-light"] .provider-assisted-block .panel moved to styles/layout/panel.css
+/* Provider-assisted advisory block - Solarized Light override
+   [data-theme="solarized-light"] .provider-assisted-block .panel
+   moved to styles/layout/panel.css (tightly local child variant)
+   
+   NOTE: Base .provider-assisted-block remains in index.css (owned by this file)
 */
 
 /* Provider execution cards - harmonized with light shell */
