@@ -73,7 +73,7 @@ import { QueuePanel } from "./components/QueuePanel";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
 import { RecentRunsPanel, RunSummaryPanel } from "./components/RunsPanel";
-export type { RecentRunsPanelProps, RunSummaryPanelProps };
+export type { RecentRunsPanelProps, RunSummaryPanelProps } from "./components/RunsPanel";
 import {
   artifactUrl,
   formatTimestamp,
