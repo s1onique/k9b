@@ -12,6 +12,7 @@ from typing import (
 
 from ..datetime_utils import ensure_utc
 from ..feedback.models import FailureMode, ProposedImprovement
+from ..identity.artifact import new_artifact_id
 from ..models import ConfidenceLevel
 from .drilldown import DrilldownArtifact
 from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON
@@ -132,9 +133,12 @@ class HealthReviewArtifact:
     failure_modes: tuple[str, ...]
     proposed_improvements: tuple[ProposedImprovement, ...]
     review_version: str = "health-review:v1"
+    # Immutable artifact identity (UUIDv7)
+    # None for legacy artifacts, auto-generated for new artifacts via build_health_review()
+    artifact_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "run_id": self.run_id,
             "timestamp": self.timestamp.isoformat(),
             "review_version": self.review_version,
@@ -154,6 +158,10 @@ class HealthReviewArtifact:
                 for improvement in self.proposed_improvements
             ],
         }
+        # Include artifact_id when present (backward compat: legacy artifacts without it)
+        if self.artifact_id is not None:
+            data["artifact_id"] = self.artifact_id
+        return data
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> HealthReviewArtifact:
@@ -201,6 +209,12 @@ class HealthReviewArtifact:
 
         failure_modes = tuple(str(item) for item in (raw.get("failure_modes") or []))
 
+        # Parse artifact_id for backward compatibility (legacy artifacts without it)
+        artifact_id_value = raw.get("artifact_id")
+        parsed_artifact_id: str | None = None
+        if artifact_id_value is not None and isinstance(artifact_id_value, str) and artifact_id_value:
+            parsed_artifact_id = artifact_id_value
+
         return cls(
             run_id=str(raw.get("run_id") or ""),
             timestamp=ensure_utc(datetime.fromisoformat(str(raw.get("timestamp") or datetime.now(UTC).isoformat()))),
@@ -209,6 +223,7 @@ class HealthReviewArtifact:
             failure_modes=failure_modes,
             proposed_improvements=tuple(improvements),
             review_version=str(raw.get("review_version") or "health-review:v1"),
+            artifact_id=parsed_artifact_id,
         )
 
 
@@ -559,4 +574,5 @@ def build_health_review(
         quality_summary=metrics,
         failure_modes=tuple(mode.value for mode in failure_modes),
         proposed_improvements=improvements,
+        artifact_id=new_artifact_id(),
     )
