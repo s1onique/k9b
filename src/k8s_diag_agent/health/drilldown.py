@@ -519,6 +519,7 @@ class DrilldownArtifact:
     image_pull_secret_insight: ImagePullSecretInsight | None = None
     pattern_details: dict[str, str] = field(default_factory=dict)
     artifact_path: str | None = None
+    artifact_id: str | None = None  # Immutable artifact instance identity (UUIDv7); None for legacy artifacts
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -546,6 +547,9 @@ class DrilldownArtifact:
         }
         if self.artifact_path:
             data["artifact_path"] = self.artifact_path
+        # Include artifact_id when present (backward compat: legacy artifacts without it)
+        if self.artifact_id is not None:
+            data["artifact_id"] = self.artifact_id
         return data
 
     @classmethod
@@ -618,5 +622,6 @@ class DrilldownArtifact:
             },
             pattern_details=pattern_details,
             image_pull_secret_insight=insight_value,
+            artifact_id=str(raw.get("artifact_id")) if raw.get("artifact_id") else None,
             artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
         )

@@ -2517,6 +2517,7 @@ class HealthLoopRunner:
                 collection_timestamps=evidence.collection_timestamps,
                 pattern_details=evidence.pattern_details,
                 artifact_path=str(path),
+                artifact_id=new_artifact_id(),
             )
             DrilldownArtifactValidator.validate(artifact.to_dict())
             _write_json(artifact.to_dict(), path)
