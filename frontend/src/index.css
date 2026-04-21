@@ -1843,81 +1843,28 @@
   color: #fff;
 }
 
-.cluster-detail-panel {
-  margin-top: 1rem;
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-radius: 1rem;
-  background: rgba(2, 6, 23, 0.9);
-  padding: 0.75rem 1rem;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/cluster-detail.css
+   ========================================================================== */
+/*
+   Cluster Detail Panel family - MOVED TO styles/components/cluster-detail.css
 
-.cluster-detail-panel summary {
-  cursor: pointer;
-  list-style: none;
-}
+   Base selectors extracted:
+   - .cluster-detail-panel, .cluster-detail-panel summary,
+     .cluster-detail-panel summary::-webkit-details-marker,
+     .cluster-detail-panel summary::marker
+   - .cluster-detail-summary, .cluster-detail-summary-grid
+   - .cluster-summary-card, .cluster-summary-card strong
+   - .cluster-detail-summary-artifacts, .cluster-summary-artifact-link
+   - .cluster-detail-summary-meta, .cluster-detail-body
 
-.cluster-detail-panel summary::-webkit-details-marker,
-.cluster-detail-panel summary::marker {
-  display: none;
-}
+   Theme overrides extracted:
+   - All [data-theme="solarized-light"] .cluster-detail-panel
+   - All [data-theme="solarized-light"] .cluster-summary-card
+   - All [data-theme="solarized-light"] .cluster-detail-body
 
-.cluster-detail-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.cluster-detail-summary-grid {
-  margin-top: 0.9rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-}
-
-.cluster-summary-card {
-  border-radius: 0.85rem;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  background: rgba(15, 23, 42, 0.75);
-  padding: 0.8rem;
-  min-height: 120px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.cluster-summary-card strong {
-  font-size: 1rem;
-}
-
-.cluster-detail-summary-artifacts {
-  margin-top: 0.8rem;
-  border-top: 1px dashed rgba(148, 163, 184, 0.3);
-  padding-top: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.cluster-summary-artifact-link {
-  border-color: rgba(251, 191, 36, 0.5);
-  background: rgba(251, 191, 36, 0.1);
-  color: #fef3c7;
-}
-
-.cluster-detail-summary-meta {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.cluster-detail-body {
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+   See: styles/components/cluster-detail.css
+*/
 
 .proposal-controls select,
 .proposal-controls input {

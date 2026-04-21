@@ -218,10 +218,6 @@
    Advisory summary + cluster cards
    ========================================================================== */
 
-[data-theme="solarized-light"] .advisory-panel-header {
-  border-bottom-color: rgba(7, 54, 66, 0.15);
-}
-
 [data-theme="solarized-light"] .advisory-summary-strip {
   background: rgba(238, 232, 213, 0.6);
   border-color: rgba(7, 54, 66, 0.15);

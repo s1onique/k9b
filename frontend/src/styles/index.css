@@ -68,6 +68,7 @@
 @import url('./components/next-check-plan.css');
 @import url('./components/fleet-summary.css');
 @import url('./components/advisory-summary.css');
+@import url('./components/cluster-detail.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');
