@@ -1157,6 +1157,7 @@ const App = () => {
     refreshAppData,
     handlePromoteDeterministicCheck,
     handleUsefulnessFeedback,
+    handleAlertmanagerRelevanceFeedback,
     error,
   } = useAppData({
     selectedRunId,
@@ -2103,6 +2104,7 @@ const App = () => {
       queueCandidateCount={runQueue.length}
       highlightedKey={executionHistoryHighlightKey}
       onSubmitFeedback={handleUsefulnessFeedback}
+      onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
       filter={executionHistoryFilter}
       onFilterChange={setExecutionHistoryFilter}
       runQueue={runQueue}

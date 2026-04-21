@@ -585,6 +585,141 @@ const ExecutionHistorySummaryStrip = ({
 };
 
 // ============================================================================
+// AlertmanagerRelevanceFeedbackControl Component
+// ============================================================================
+
+/**
+ * Constants for Alertmanager relevance judgment options.
+ * Values match AlertmanagerRelevanceClass from the backend.
+ */
+const ALERTMANAGER_RELEVANCE_OPTIONS = [
+  { value: "relevant", label: "Relevant" },
+  { value: "not_relevant", label: "Not relevant" },
+  { value: "noisy", label: "Noisy" },
+  { value: "unsure", label: "Unsure" },
+] as const;
+
+type AlertmanagerRelevanceFeedbackHandler = {
+  onSubmitAlertmanagerRelevance: (
+    artifactPath: string,
+    relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
+    summary: string | undefined
+  ) => Promise<void>;
+};
+
+const AlertmanagerRelevanceFeedbackControl = ({
+  entry,
+  onSubmit,
+}: {
+  entry: NextCheckExecutionHistoryEntry;
+  onSubmit: (
+    artifactPath: string,
+    relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
+    summary: string | undefined
+  ) => Promise<void>;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedRelevance, setSelectedRelevance] = useState<"relevant" | "not_relevant" | "noisy" | "unsure" | null>(null);
+  const [summary, setSummary] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  // If relevance is already recorded, show it in read-only mode
+  if (entry.alertmanagerRelevance) {
+    return null;
+  }
+
+  // Only show feedback control if there's an artifact path and Alertmanager provenance
+  if (!entry.artifactPath) {
+    return null;
+  }
+
+  const handleSubmit = async () => {
+    if (!selectedRelevance || !entry.artifactPath) {
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(entry.artifactPath, selectedRelevance, summary.trim() || undefined);
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit feedback");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="alertmanager-relevance-feedback-success">
+        <span className="muted small">✓ Alertmanager relevance recorded</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="alertmanager-relevance-feedback-control">
+      {!isExpanded ? (
+        <button
+          type="button"
+          className="link tiny"
+          onClick={() => setIsExpanded(true)}
+        >
+          Rate Alertmanager relevance
+        </button>
+      ) : (
+        <div className="alertmanager-relevance-feedback-form">
+          <p className="tiny muted">Was Alertmanager influence relevant for this check?</p>
+          <div className="alertmanager-relevance-feedback-options">
+            {ALERTMANAGER_RELEVANCE_OPTIONS.map((option) => (
+              <label key={option.value} className="alertmanager-relevance-feedback-option">
+                <input
+                  type="radio"
+                  name={`alertmanager-relevance-${entry.artifactPath}`}
+                  value={option.value}
+                  checked={selectedRelevance === option.value}
+                  onChange={() => setSelectedRelevance(option.value)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Optional note"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className="alertmanager-relevance-feedback-summary"
+            maxLength={200}
+          />
+          <div className="alertmanager-relevance-feedback-actions">
+            <button
+              type="button"
+              className="button primary tiny"
+              onClick={handleSubmit}
+              disabled={!selectedRelevance || isSubmitting}
+            >
+              {isSubmitting ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              className="button secondary tiny"
+              onClick={() => setIsExpanded(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && <p className="alertmanager-relevance-feedback-error">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
 // UsefulnessFeedbackControl Component
 // ============================================================================
 
@@ -711,6 +846,11 @@ export interface ExecutionHistoryPanelProps {
   queueCandidateCount: number;
   highlightedKey: string | null;
   onSubmitFeedback?: (artifactPath: string, usefulnessClass: string, summary: string | undefined) => Promise<void>;
+  onSubmitAlertmanagerRelevanceFeedback?: (
+    artifactPath: string,
+    relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
+    summary: string | undefined
+  ) => Promise<void>;
   filter: ExecutionHistoryFilterState;
   onFilterChange: (filter: ExecutionHistoryFilterState) => void;
   runQueue?: NextCheckQueueItem[];
@@ -724,6 +864,7 @@ export const ExecutionHistoryPanel = ({
   queueCandidateCount,
   highlightedKey,
   onSubmitFeedback,
+  onSubmitAlertmanagerRelevanceFeedback,
   filter,
   onFilterChange,
   runQueue,
@@ -974,6 +1115,40 @@ export const ExecutionHistoryPanel = ({
                   <UsefulnessFeedbackControl
                     entry={entry}
                     onSubmit={onSubmitFeedback}
+                  />
+                )}
+                {/* Alertmanager provenance and relevance feedback section */}
+                {entry.alertmanagerProvenance && (
+                  <div className="alertmanager-provenance-block">
+                    <span className="alertmanager-provenance-label">Alertmanager provenance</span>
+                    <span className="alertmanager-provenance-meta">
+                      Matched: {entry.alertmanagerProvenance.matchedDimensions?.join(", ") || "none"}
+                      {entry.alertmanagerProvenance.appliedBonus != null && (
+                        <> · bonus +{entry.alertmanagerProvenance.appliedBonus}</>
+                      )}
+                      {entry.alertmanagerProvenance.severitySummary && Object.keys(entry.alertmanagerProvenance.severitySummary).length > 0 && (
+                        <> · {Object.entries(entry.alertmanagerProvenance.severitySummary).map(([sev, count]) => `${count} ${sev}`).join(", ")}</>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {entry.alertmanagerRelevance ? (
+                  <div className="alertmanager-relevance-indicator">
+                    <span className={`alertmanager-relevance-badge alertmanager-relevance-badge-${entry.alertmanagerRelevance}`}>
+                      {entry.alertmanagerRelevance}
+                    </span>
+                    {entry.alertmanagerRelevanceSummary && (
+                      <span className="muted small"> — {truncateText(entry.alertmanagerRelevanceSummary, 80)}</span>
+                    )}
+                    {entry.alertmanagerReviewedAt && (
+                      <span className="muted small"> · {relativeRecency(entry.alertmanagerReviewedAt)}</span>
+                    )}
+                  </div>
+                ) : null}
+                {onSubmitAlertmanagerRelevanceFeedback && entry.artifactPath && entry.alertmanagerProvenance && !entry.alertmanagerRelevance && (
+                  <AlertmanagerRelevanceFeedbackControl
+                    entry={entry}
+                    onSubmit={onSubmitAlertmanagerRelevanceFeedback}
                   />
                 )}
               </article>

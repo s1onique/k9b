@@ -272,3 +272,33 @@ export const stopTrackingAlertmanagerSource = async (
 ): Promise<AlertmanagerSourceActionResponse> => {
   return performAlertmanagerSourceAction({ ...request, action: 'disable' }, runId);
 };
+
+// Alertmanager relevance feedback API
+export type AlertmanagerRelevanceFeedbackRequest = import("./types").AlertmanagerRelevanceFeedbackRequest;
+export type AlertmanagerRelevanceFeedbackResponse = import("./types").AlertmanagerRelevanceFeedbackResponse;
+
+export const submitAlertmanagerRelevanceFeedback = async (
+  request: AlertmanagerRelevanceFeedbackRequest
+): Promise<AlertmanagerRelevanceFeedbackResponse> => {
+  const response = await fetch("/api/alertmanager-relevance-feedback", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to submit Alertmanager relevance feedback");
+  }
+  return (await response.json()) as AlertmanagerRelevanceFeedbackResponse;
+};

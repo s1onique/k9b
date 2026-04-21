@@ -50,6 +50,14 @@ export type NextCheckExecutionHistoryEntry = {
   // Provenance fields for traceability
   candidateId?: string | null;
   candidateIndex?: number | null;
+  // Alertmanager provenance - preserved from execution artifact when Alertmanager influenced ranking
+  alertmanagerProvenance?: AlertmanagerProvenance | null;
+  // Alertmanager relevance judgment from operator feedback
+  alertmanagerRelevance?: AlertmanagerRelevance | null;
+  alertmanagerRelevanceSummary?: string | null;
+  // Review artifact metadata for persisted feedback
+  alertmanagerReviewArtifactPath?: string | null;
+  alertmanagerReviewedAt?: string | null;
 };
 
 export type StatusCount = {
@@ -515,6 +523,23 @@ export type UsefulnessFeedbackResponse = {
   summary: string;
   usefulnessClass: string;
   usefulnessSummary: string | null;
+};
+
+// Alertmanager relevance judgment types
+export type AlertmanagerRelevance = "relevant" | "not_relevant" | "noisy" | "unsure";
+
+export type AlertmanagerRelevanceFeedbackRequest = {
+  artifactPath: string;
+  alertmanagerRelevance: AlertmanagerRelevance;
+  alertmanagerRelevanceSummary?: string;
+};
+
+export type AlertmanagerRelevanceFeedbackResponse = {
+  status: string;
+  summary: string;
+  alertmanagerRelevance: AlertmanagerRelevance;
+  alertmanagerRelevanceSummary: string | null;
+  reviewArtifactPath: string | null;
 };
 
 export type RecommendedAction = {

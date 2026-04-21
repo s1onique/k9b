@@ -44,6 +44,7 @@ import {
   fetchNotifications,
   fetchProposals,
   promoteDeterministicNextCheck,
+  submitAlertmanagerRelevanceFeedback,
   submitUsefulnessFeedback,
 } from "../api";
 
@@ -92,6 +93,11 @@ export interface UseAppDataReturn {
   handleUsefulnessFeedback: (
     artifactPath: string,
     usefulnessClass: string,
+    summary: string | undefined
+  ) => Promise<void>;
+  handleAlertmanagerRelevanceFeedback: (
+    artifactPath: string,
+    relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
     summary: string | undefined
   ) => Promise<void>;
 }
@@ -239,6 +245,24 @@ export const useAppData = ({
     [refreshAppData]
   );
 
+  // Handle Alertmanager relevance feedback
+  const handleAlertmanagerRelevanceFeedback = useCallback(
+    async (
+      artifactPath: string,
+      relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
+      summary: string | undefined
+    ) => {
+      await submitAlertmanagerRelevanceFeedback({
+        artifactPath,
+        alertmanagerRelevance: relevance,
+        alertmanagerRelevanceSummary: summary,
+      });
+      // Refresh to get updated data
+      await refreshAppData();
+    },
+    [refreshAppData]
+  );
+
   // Handle toggle proposal expansion
   const handleToggleProposal = (id: string) => {
     setExpandedProposals((current) => {
@@ -353,5 +377,6 @@ export const useAppData = ({
     // callbacks
     handlePromoteDeterministicCheck,
     handleUsefulnessFeedback,
+    handleAlertmanagerRelevanceFeedback,
   };
 };
