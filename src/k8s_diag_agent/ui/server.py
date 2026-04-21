@@ -32,6 +32,7 @@ from ..external_analysis.alertmanager_source_registry import (
 from ..external_analysis.artifact import (
     AlertmanagerRelevanceClass,
     ExternalAnalysisArtifact,
+    ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
     PackRefreshStatus,
     UsefulnessClass,
@@ -2380,7 +2381,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         review_path = external_analysis_dir / review_filename
 
         review_artifact = {
-            "purpose": "next-check-execution-alertmanager-review",
+            "purpose": ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW.value,
             "tool_name": tool_name,
             "run_id": run_id,
             "run_label": execution_artifact.get("run_label", ""),
@@ -3821,7 +3822,9 @@ def _load_alertmanager_review_artifacts(
                 continue
 
             purpose = review_data.get("purpose")
-            if purpose != "next-check-execution-alertmanager-review":
+            # Accept both the formal purpose constant and the legacy literal for backward compatibility
+            formal_purpose = ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW.value
+            if purpose != formal_purpose and purpose != "next-check-execution-alertmanager-review":
                 continue
 
             # Get source artifact path (the execution artifact this review is for)
