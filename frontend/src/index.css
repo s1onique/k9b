@@ -556,55 +556,11 @@
   color: #93c5fd;
 }
 
-.status-badges {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.freshness-pill {
-  padding: 0.15rem 0.5rem;
-  border-radius: 0.3rem;
-  font-size: 0.6rem;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  background: rgba(56, 189, 248, 0.08);
-  color: rgba(148, 163, 184, 0.8);
-  border: 1px solid rgba(56, 189, 248, 0.15);
-}
-
-.freshness-pill.stale {
-  background: rgba(248, 113, 113, 0.12);
-  color: rgba(248, 113, 113, 0.9);
-  border-color: rgba(248, 113, 113, 0.25);
-}
-
-.freshness-pill.fresh {
-  background: rgba(34, 197, 94, 0.08);
-  color: rgba(34, 197, 94, 0.85);
-  border-color: rgba(34, 197, 94, 0.15);
-}
-
-/* Triage state pills */
-.triage-pill {
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.triage-pill.triaged {
-  background: rgba(34, 197, 94, 0.15);
-  color: #86efac;
-}
-
-.triage-pill.not-triaged {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fde047;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/badges-pills.css
+   ========================================================================== */
+/* Status badges, freshness pills, triage pills
+   moved to styles/components/badges-pills.css */
 
 /* Recent runs panel */
 .recent-runs {
@@ -1029,62 +985,10 @@
 }
 
 /* ==========================================================================
-   Legacy Runs Pagination (backward compatibility wrapper)
-   Maps old class names to new canonical pagination styles
+   EXTRACTED to styles/components/badges-pills.css
    ========================================================================== */
-.status-pill {
-  padding: 0.25rem 0.8rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  text-transform: capitalize;
-  background: rgba(248, 250, 252, 0.1);
-}
-
-.status-pill-degraded,
-.status-pill-healthy,
-.status-pill-pending {
-  font-weight: 600;
-}
-
-.status-pill-degraded {
-  background: rgba(248, 113, 113, 0.2);
-  color: #fecaca;
-}
-
-.status-pill-healthy {
-  background: rgba(34, 197, 94, 0.2);
-  color: #86efac;
-}
-
-.status-pill-pending {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fde68a;
-}
-
-/* Recent runs review status badges */
-.status-pill-fully-reviewed {
-  background: rgba(34, 197, 94, 0.2);
-  color: #86efac;
-  font-weight: 600;
-}
-
-.status-pill-unreviewed {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fde68a;
-  font-weight: 600;
-}
-
-.status-pill-partially-reviewed {
-  background: rgba(148, 163, 184, 0.15);
-  color: #cbd5e1;
-  font-weight: 600;
-}
-
-.status-pill-no-executions {
-  background: rgba(59, 130, 246, 0.15);
-  color: #bfdbfe;
-  font-weight: 600;
-}
+/* Status pills, triage pills, freshness pills, recency pill, badges
+   moved to styles/components/badges-pills.css */
 
 /* ==========================================================================
    Row Action Pattern - Shared styling for dense table row actions
