@@ -30,7 +30,34 @@
    - All [data-theme="solarized-light"] .focus-preset-* selectors
    
    See: styles/components/next-check-plan.css
-*/
+ */
+
+/* ==========================================================================
+   EXTRACTED to styles/components/next-check-queue.css
+   ========================================================================== */
+/* 
+   Queue Controls / Search / Focus Presets family - MOVED TO next-check-queue.css
+   
+   Base selectors extracted:
+   - .next-check-queue-controls
+   - .next-check-filter-row, .next-check-control-row
+   - .next-check-filter-row label, .next-check-control-row label
+   - .next-check-filter-row select, .next-check-control-row select
+   - .queue-search input (base only; hover/focus in next-check-queue.css)
+   - .focus-presets, .focus-preset-button
+   - .focus-preset-button.active, .focus-preset-button:focus-visible
+   
+   Theme overrides extracted:
+   - All [data-theme="solarized-light"] .focus-preset-button* selectors
+   - All [data-theme="solarized-light"] .next-check-filter-row select
+   - All [data-theme="solarized-light"] .next-check-control-row select
+   - All [data-theme="solarized-light"] .queue-search input*
+   
+   NOT extracted (separate families):
+   - .queue-empty-state, .queue-empty-explanation, .queue-empty-recovery-actions (this file)
+   
+   See: styles/components/next-check-queue.css
+ */
 
 /* ==========================================================================
    EXTracted to styles/reset.css

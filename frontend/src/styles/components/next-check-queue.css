@@ -53,7 +53,6 @@
  *   Solarized Light overrides for deterministic family - OWNED by next-check-plan.css
  * - .primary-reason (triage/reason family)
  * - .toggle-details-button (shared UI)
- * - .next-check-queue-controls, .next-check-filter-row select, .next-check-control-row select (queue controls)
  */
 
 /* ==========================================================================
@@ -394,4 +393,131 @@
 /* Primary action button */
 [data-theme="solarized-light"] .queue-item-primary-action {
   box-shadow: 0 2px 8px rgba(133, 153, 0, 0.15);
+}
+
+/* ==========================================================================
+   Queue Controls / Search / Focus Presets
+   ========================================================================== */
+
+/* Queue controls wrapper */
+.next-check-queue-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+/* Filter and control rows - shared flex layout */
+.next-check-filter-row,
+.next-check-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* Filter and control row labels */
+.next-check-filter-row label,
+.next-check-control-row label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+}
+
+/* Shared input/select base styling */
+.next-check-filter-row select,
+.next-check-control-row select,
+.queue-search input {
+  margin-top: 0.25rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  padding: 0.35rem 0.65rem;
+  background: rgba(2, 6, 23, 0.85);
+  color: #f8fafc;
+}
+
+/* Queue search input specific */
+.queue-search input {
+  min-width: 220px;
+}
+
+/* Focus presets container */
+.focus-presets {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Focus preset button base */
+.focus-preset-button {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Focus preset button active/focus states */
+.focus-preset-button.active,
+.focus-preset-button:focus-visible {
+  border-color: #38bdf8;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT THEME OVERRIDES - Queue Controls / Search / Focus Presets
+   ========================================================================== */
+
+/* Focus preset button - Solarized */
+[data-theme="solarized-light"] .focus-preset-button {
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .focus-preset-button.active,
+[data-theme="solarized-light"] .focus-preset-button:focus-visible {
+  border-color: #268bd2;
+  background: rgba(38, 139, 210, 0.12);
+}
+
+/* Focus preset button active/focus - Solarized override (wins over above) */
+[data-theme="solarized-light"] .focus-preset-button.active,
+[data-theme="solarized-light"] .focus-preset-button:focus-visible {
+  border-color: rgba(38, 139, 210, 0.6);
+  background: rgba(38, 139, 210, 0.1);
+  color: #268bd2;
+}
+
+/* Queue filter/control selects - Solarized */
+[data-theme="solarized-light"] .next-check-filter-row select,
+[data-theme="solarized-light"] .next-check-control-row select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-filter-row select:hover,
+[data-theme="solarized-light"] .next-check-control-row select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
+
+/* Queue search input - Solarized */
+[data-theme="solarized-light"] .queue-search input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-search input::placeholder {
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .queue-search input:focus {
+  border-color: rgba(38, 139, 210, 0.6);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.1);
 }
