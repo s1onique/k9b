@@ -33,10 +33,11 @@
  * ✓ Phase 4: styles/components/pagination.css (pagination extracted)
  * ✓ Phase 5: styles/components/badges-pills.css (badges/pills extracted)
  * ✓ Phase 6: styles/components/filters.css (runs-filter family extracted)
- * → Phase 7: layout extraction (future)
- * → Phase 8: panel component extraction (future)
- * → Phase 9: theme override extraction (future)
- * → Phase 10: remaining component groups (future)
+ * ✓ Phase 7: styles/components/action-status.css (action-state/queue-status extracted)
+ * → Phase 8: layout extraction (future)
+ * → Phase 9: panel component extraction (future)
+ * → Phase 10: theme override extraction (future)
+ * → Phase 11: remaining component groups (future)
  */
 
 /* 1. Base tokens must load first */
@@ -49,6 +50,7 @@
 @import "./components/pagination.css";
 @import "./components/badges-pills.css";
 @import "./components/filters.css";
+@import "./components/action-status.css";
 
 /* 4. Legacy component styles (remaining monolith) */
 @import "../index.css";

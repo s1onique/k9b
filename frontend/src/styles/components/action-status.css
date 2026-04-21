@@ -1,0 +1,160 @@
+/* ==========================================================================
+   Action State Badges & Queue Status Pills
+   Compact state indicator patterns used in queue and execution views.
+   
+   Family: action-state-*, queue-status-pill-*
+   Used in: QueuePanel.tsx
+   Theme: supports [data-theme="solarized-light"]
+   ========================================================================== */
+
+/* ==========================================================================
+   Action State Badges
+   Compact pill badges showing approval/execution state.
+   ========================================================================== */
+
+.action-state-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.action-state-ready {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.action-state-approval {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde047;
+}
+
+.action-state-inactive {
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+.action-state-unknown {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   Queue Status Pills
+   Status indicators for queue group headers.
+   ========================================================================== */
+
+.queue-status-pill {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(248, 250, 252, 0.1);
+}
+
+.queue-status-pill-approved-ready {
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  color: #bae6fd;
+}
+
+.queue-status-pill-safe-ready {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #a7f3d0;
+}
+
+.queue-status-pill-approval-needed {
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde047;
+}
+
+.queue-status-pill-failed {
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
+.queue-status-pill-completed {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.queue-status-pill-duplicate-or-stale {
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #cbd5f5;
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+[data-theme="solarized-light"] .action-state-badge {
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .action-state-ready {
+  background: rgba(133, 153, 0, 0.15);
+  border-color: rgba(133, 153, 0, 0.45);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .action-state-approval {
+  background: rgba(181, 137, 0, 0.15);
+  border-color: rgba(181, 137, 0, 0.45);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .action-state-inactive {
+  background: rgba(147, 161, 161, 0.12);
+  border-color: rgba(147, 161, 161, 0.35);
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .action-state-unknown {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-approved-ready {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.45);
+  color: #0060a8;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-safe-ready {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.45);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-approval-needed {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.45);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-failed {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.45);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-completed {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.45);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-duplicate-or-stale {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.45);
+  color: #93a1a1;
+}

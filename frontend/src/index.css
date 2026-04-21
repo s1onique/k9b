@@ -2011,79 +2011,11 @@
   box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
 }
 
-.action-state-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.65rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.action-state-ready {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.45);
-  color: #86efac;
-}
-
-.action-state-approval {
-  background: rgba(251, 191, 36, 0.15);
-  border: 1px solid rgba(251, 191, 36, 0.45);
-  color: #fde047;
-}
-
-.action-state-inactive {
-  background: rgba(148, 163, 184, 0.15);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  color: #cbd5e1;
-}
-
-.action-state-unknown {
-  background: rgba(148, 163, 184, 0.1);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  color: #94a3b8;
-}
-
-.queue-status-pill {
-  padding: 0.25rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  background: rgba(248, 250, 252, 0.1);
-}
-
-.queue-status-pill-approved-ready {
-  border: 1px solid rgba(14, 165, 233, 0.45);
-  color: #bae6fd;
-}
-
-.queue-status-pill-safe-ready {
-  border: 1px solid rgba(34, 197, 94, 0.45);
-  color: #a7f3d0;
-}
-
-.queue-status-pill-approval-needed {
-  border: 1px solid rgba(251, 191, 36, 0.45);
-  color: #fde047;
-}
-
-.queue-status-pill-failed {
-  border: 1px solid rgba(239, 68, 68, 0.45);
-  color: #fecaca;
-}
-
-.queue-status-pill-completed {
-  border: 1px solid rgba(34, 197, 94, 0.45);
-  color: #86efac;
-}
-
-.queue-status-pill-duplicate-or-stale {
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  color: #cbd5f5;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/action-status.css
+   ========================================================================== */
+/* .action-state-badge, .action-state-*, .queue-status-pill, .queue-status-pill-*
+    moved to styles/components/action-status.css */
 
 .toggle-details-button {
   background: none;
