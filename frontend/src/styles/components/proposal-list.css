@@ -1,0 +1,375 @@
+/**
+ * Proposal List / Findings Display Family
+ * 
+ * Styles for the proposal display panel and findings card family.
+ * Includes both base selectors and tightly local Solarized Light theme overrides.
+ * 
+ * Architecture:
+ * - Base styles: core layout and visual design for proposal/finding components
+ * - Theme overrides: [data-theme="solarized-light"] modifications
+ * 
+ * Phase: 19 (proposal-list extraction)
+ * 
+ * Base selectors extracted:
+ * - .proposal-controls, .proposal-controls label/select/input
+ * - .proposal-table, .proposal-row, .proposal-row-*
+ * - .lifecycle-row, .lifecycle-chip
+ * - .confidence-badge, .confidence-badge.level-*
+ * - .finding-list, .finding-card, .finding-card *
+ * - .evidence-details, .evidence-details *
+ * - .detail-grid, .artifact-chip
+ * 
+ * Theme overrides extracted:
+ * - All [data-theme="solarized-light"] .proposal-* selectors
+ * - All [data-theme="solarized-light"] .confidence-badge.* selectors
+ * - All [data-theme="solarized-light"] .finding-* selectors
+ * - All [data-theme="solarized-light"] .evidence-details selectors
+ * - All [data-theme="solarized-light"] .lifecycle-chip selector
+ * - All [data-theme="solarized-light"] .artifact-chip selectors
+ * 
+ * Dependencies:
+ * - Deferred: .panel (semantic ambiguity)
+ * - Not included: .cluster-controls, .tab* (separate families)
+ */
+
+/* ==========================================================================
+   PROPOSAL CONTROLS
+   Filter and control bar for proposal display
+   ========================================================================== */
+
+.section-head .proposal-controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.proposal-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: rgba(248, 250, 252, 0.75);
+}
+
+.proposal-controls select,
+.proposal-controls input {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.6rem;
+  background: rgba(15, 23, 42, 0.8);
+  color: #fff;
+}
+
+/* ==========================================================================
+   PROPOSAL TABLE & ROWS
+   Proposal display panel - list of diagnostic proposals with expandable details
+   ========================================================================== */
+
+.proposal-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.proposal-row {
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.proposal-row-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.proposal-status-line {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.proposal-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.proposal-row-details {
+  display: none;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.proposal-row-details.is-visible {
+  display: flex;
+}
+
+.proposal-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.proposal-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.proposal-rationale {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   LIFECYCLE & CONFIDENCE INDICATORS
+   Status indicators for proposals and findings
+   ========================================================================== */
+
+.lifecycle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lifecycle-chip {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.2);
+  font-size: 0.8rem;
+}
+
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.confidence-badge.level-critical {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+}
+
+.confidence-badge.level-high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+.confidence-badge.level-medium {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+}
+
+.confidence-badge.level-low {
+  background: rgba(34, 197, 94, 0.2);
+  color: #bbf7d0;
+}
+
+.confidence-badge.level-default {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+}
+
+/* ==========================================================================
+   FINDING LIST & CARDS
+   Grid-based findings display for diagnostic results
+   ========================================================================== */
+
+.finding-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.finding-card {
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.finding-card.compact {
+  padding: 0.9rem;
+}
+
+.finding-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.finding-card strong {
+  font-size: 1rem;
+}
+
+/* ==========================================================================
+   EVIDENCE DETAILS
+   Expandable evidence sections within findings
+   ========================================================================== */
+
+.evidence-details {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.evidence-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.evidence-details ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+}
+
+/* ==========================================================================
+   DETAIL GRID & ARTIFACT CHIPS
+   Supporting styles for proposal and finding details
+   ========================================================================== */
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.35rem;
+}
+
+.artifact-chip {
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(94, 234, 212, 0.4);
+  background: rgba(14, 165, 233, 0.08);
+  text-decoration: none;
+  color: #5eead4;
+  font-size: 0.8rem;
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT THEME OVERRIDES
+   Warm paper palette adjustments for dense operational use
+   ========================================================================== */
+
+/* Finding cards - warm paper background */
+[data-theme="solarized-light"] .finding-card {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .evidence-details {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .evidence-details summary {
+  color: #657b83;
+}
+
+/* Proposal rows - warm paper background */
+[data-theme="solarized-light"] .proposal-row {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .proposal-rationale {
+  color: #002b36;
+}
+
+/* Proposal controls - warm paper form elements */
+[data-theme="solarized-light"] .proposal-controls label {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .proposal-controls select,
+[data-theme="solarized-light"] .proposal-controls input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.45);
+  color: #002b36;
+}
+
+/* Proposal controls selects - warm paper background */
+[data-theme="solarized-light"] .proposal-controls select {
+  background: rgba(253, 246, 227, 0.95);
+}
+
+/* Proposal controls inputs - warm paper */
+[data-theme="solarized-light"] .proposal-controls input {
+  background: rgba(253, 246, 227, 0.95);
+}
+
+/* Proposal row actions - softer secondary actions */
+[data-theme="solarized-light"] .proposal-row-actions {
+  color: #586e75;
+}
+
+/* Artifact chips - Solarized palette */
+[data-theme="solarized-light"] .artifact-chip {
+  background: rgba(38, 139, 210, 0.06);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .artifact-chip:hover {
+  background: rgba(38, 139, 210, 0.12);
+  color: #1a5f8a;
+}
+
+/* Confidence badges - Solarized palette */
+[data-theme="solarized-light"] .confidence-badge {
+  background: rgba(38, 139, 210, 0.12);
+  border: 1px solid rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-critical,
+[data-theme="solarized-light"] .confidence-badge.level-high {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-medium {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-low {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-default {
+  background: rgba(147, 161, 161, 0.12);
+  border-color: rgba(147, 161, 161, 0.3);
+  color: #657b83;
+}
+
+/* Lifecycle chip - Solarized palette */
+[data-theme="solarized-light"] .lifecycle-chip {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.25);
+  color: #268bd2;
+}

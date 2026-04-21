@@ -1807,199 +1807,35 @@
   color: #5eead4;
 }
 
-.section-head .proposal-controls {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.proposal-controls label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: rgba(248, 250, 252, 0.75);
-}
-
-.cluster-controls {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.cluster-controls label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: rgba(248, 250, 252, 0.8);
-}
-
-.cluster-controls select {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 0.6rem;
-  padding: 0.35rem 0.6rem;
-  background: rgba(15, 23, 42, 0.8);
-  color: #fff;
-}
-
 /* ==========================================================================
-   EXTRACTED to styles/components/cluster-detail.css
+   EXTRACTED to styles/components/proposal-list.css
    ========================================================================== */
 /*
-   Cluster Detail Panel family - MOVED TO styles/components/cluster-detail.css
+   Proposal List / Findings Display family - MOVED TO styles/components/proposal-list.css
 
    Base selectors extracted:
-   - .cluster-detail-panel, .cluster-detail-panel summary,
-     .cluster-detail-panel summary::-webkit-details-marker,
-     .cluster-detail-panel summary::marker
-   - .cluster-detail-summary, .cluster-detail-summary-grid
-   - .cluster-summary-card, .cluster-summary-card strong
-   - .cluster-detail-summary-artifacts, .cluster-summary-artifact-link
-   - .cluster-detail-summary-meta, .cluster-detail-body
+   - .proposal-controls, .proposal-controls label/select/input
+   - .proposal-table, .proposal-row, .proposal-row-*
+   - .lifecycle-row, .lifecycle-chip
+   - .confidence-badge, .confidence-badge.level-*
+   - .finding-list, .finding-card, .finding-card *
+   - .evidence-details, .evidence-details *
+   - .detail-grid, .artifact-chip
 
    Theme overrides extracted:
-   - All [data-theme="solarized-light"] .cluster-detail-panel
-   - All [data-theme="solarized-light"] .cluster-summary-card
-   - All [data-theme="solarized-light"] .cluster-detail-body
+   - All [data-theme="solarized-light"] .proposal-* selectors
+   - All [data-theme="solarized-light"] .confidence-badge.* selectors
+   - All [data-theme="solarized-light"] .finding-* selectors
+   - All [data-theme="solarized-light"] .evidence-details selectors
+   - All [data-theme="solarized-light"] .lifecycle-chip selector
+   - All [data-theme="solarized-light"] .artifact-chip selectors
 
-   See: styles/components/cluster-detail.css
+   NOT extracted (separate families):
+   - .cluster-controls (cluster-detail.css handles related, but controls are shared UI)
+   - .tab*, .link, .text-button (shared UI components)
+
+   See: styles/components/proposal-list.css
 */
-
-.proposal-controls select,
-.proposal-controls input {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 0.6rem;
-  padding: 0.35rem 0.6rem;
-  background: rgba(15, 23, 42, 0.8);
-  color: #fff;
-}
-
-.proposal-table {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  margin-top: 1rem;
-}
-
-.proposal-row {
-  background: rgba(2, 6, 23, 0.9);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  border-radius: 0.9rem;
-  padding: 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.proposal-row-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.proposal-status-line {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-}
-
-.proposal-row-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.2rem;
-}
-
-.proposal-row-details {
-  display: none;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.proposal-row-details.is-visible {
-  display: flex;
-}
-
-.proposal-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.75rem;
-}
-
-.proposal-artifacts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.artifact-chip {
-  padding: 0.35rem 0.75rem;
-  border-radius: 0.6rem;
-  border: 1px solid rgba(94, 234, 212, 0.4);
-  background: rgba(14, 165, 233, 0.08);
-  text-decoration: none;
-  color: #5eead4;
-  font-size: 0.8rem;
-}
-
-.proposal-rationale {
-  margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.4;
-}
-
-.lifecycle-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.lifecycle-chip {
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.2);
-  font-size: 0.8rem;
-}
-
-.confidence-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.25rem 0.8rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  background: rgba(59, 130, 246, 0.2);
-  color: #bfdbfe;
-}
-
-.confidence-badge.level-critical {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fecaca;
-}
-
-.confidence-badge.level-high {
-  background: rgba(248, 113, 113, 0.2);
-  color: #fecaca;
-}
-
-.confidence-badge.level-medium {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fde68a;
-}
-
-.confidence-badge.level-low {
-  background: rgba(34, 197, 94, 0.2);
-  color: #bbf7d0;
-}
-
-.confidence-badge.level-default {
-  background: rgba(148, 163, 184, 0.2);
-  color: #e2e8f0;
-}
 
 .link {
   color: #93c5fd;
@@ -2039,61 +1875,6 @@
   padding: 0;
   display: grid;
   gap: 0.75rem;
-}
-
-.finding-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.finding-card {
-  border-radius: 0.9rem;
-  padding: 1rem;
-  background: rgba(2, 6, 23, 0.9);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.finding-card.compact {
-  padding: 0.9rem;
-}
-
-.finding-card header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-}
-
-.finding-card strong {
-  font-size: 1rem;
-}
-
-.evidence-details {
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  background: rgba(15, 23, 42, 0.85);
-}
-
-.evidence-details summary {
-  cursor: pointer;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.evidence-details ul {
-  margin: 0.35rem 0 0;
-  padding-left: 1rem;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.35rem;
 }
 
 .cluster-lists {
@@ -3540,31 +3321,6 @@
 /* LLM activity, LLM policy Solarized Light overrides
     moved to styles/components/llm-activity.css */
 
-/* Finding cards */
-[data-theme="solarized-light"] .finding-card {
-  background: rgba(253, 246, 227, 0.92);
-  border-color: rgba(147, 161, 161, 0.35);
-}
-
-[data-theme="solarized-light"] .evidence-details {
-  background: rgba(238, 232, 213, 0.88);
-  border-color: rgba(147, 161, 161, 0.3);
-}
-
-[data-theme="solarized-light"] .evidence-details summary {
-  color: #657b83;
-}
-
-/* Proposal rows */
-[data-theme="solarized-light"] .proposal-row {
-  background: rgba(253, 246, 227, 0.92);
-  border-color: rgba(147, 161, 161, 0.35);
-}
-
-[data-theme="solarized-light"] .proposal-rationale {
-  color: #002b36;
-}
-
 /* Cluster assessment */
 [data-theme="solarized-light"] .cluster-assessment {
   background: rgba(253, 246, 227, 0.92);
@@ -4025,14 +3781,7 @@
   border-color: rgba(147, 161, 161, 0.7);
 }
 
-/* Proposal controls selects - warm paper background */
-[data-theme="solarized-light"] .proposal-controls select {
-  background: rgba(253, 246, 227, 0.95);
-  border-color: rgba(147, 161, 161, 0.5);
-  color: #002b36;
-}
-
-/* Cluster controls selects - warm paper background (already has partial override) */
+/* Cluster controls selects - warm paper background (kept for backward compat) */
 [data-theme="solarized-light"] .cluster-controls select {
   background: rgba(253, 246, 227, 0.95);
   border-color: rgba(147, 161, 161, 0.5);
