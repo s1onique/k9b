@@ -4,25 +4,20 @@
    ========================================================================== */
 
 /* ==========================================================================
-   REVIEW ENRICHMENT FAMILY - BASE STYLES
-   Extracted from frontend/src/index.css
+   REVIEW ENRICHMENT FAMILY - CONTEXTUAL OVERRIDE
+   Base family owned by monolith (frontend/src/index.css).
    
-   Moved here to resolve split ownership with compound selectors in this file.
-   The base .review-enrichment-summary rule (font-size only) is duplicated here.
-   The compound selector .advisory-summary-collapsible .review-enrichment-summary
-   provides the full styling when inside the collapsible context.
+   This file owns only the compound contextual selector for when
+   .review-enrichment-summary appears inside .advisory-summary-collapsible.
    
-   Base selectors:
-   - .review-enrichment-summary (font-size base)
+   Monolith owns:
+   - .review-enrichment-summary (base font-size)
+   - [data-theme="solarized-light"] .review-enrichment-summary
    
-   Compound override (stays here):
+   This file owns:
    - .advisory-summary-collapsible .review-enrichment-summary
+   - [data-theme="solarized-light"] .advisory-summary-collapsible .review-enrichment-summary
    ========================================================================== */
-
-/* Base style - overridden by compound selector in collapsible context */
-.review-enrichment-summary {
-  font-size: 0.95rem;
-}
 
 /* Executive summary strip - compact scan-friendly overview */
 .advisory-summary-strip {
