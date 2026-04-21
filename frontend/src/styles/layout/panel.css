@@ -1,0 +1,70 @@
+/**
+ * Panel Shell - Shared Wrapper Semantics
+ * 
+ * Canonical shared panel wrapper used as the common shell across
+ * many already-extracted component families.
+ * 
+ * Architecture:
+ * - Shared shell: .panel base styles
+ * - Theme overrides: Solarized Light .panel variants
+ * - Tightly local overrides: Solarized Light .provider-assisted-block .panel
+ * 
+ * This file does NOT include:
+ * - .cluster-detail-panel (owned by cluster-detail.css)
+ * - Component-specific modifier classes (per audit, they are inseparable)
+ * 
+ * Dependencies:
+ * - tokens.css: custom properties (--color-panel-bg, --color-panel-border)
+ * 
+ * Component dependencies on .panel:
+ * - All extracted components use .panel via normal cascade (inheritance only)
+ * - No hidden child combinators found in any extracted component file
+ * 
+ * Phase tracking:
+ * - Phase 22: styles/layout/panel.css (panel shell extracted)
+ */
+
+/* ==========================================================================
+   Panel Shell - Base
+   ========================================================================== */
+
+/**
+ * Panel - Shared wrapper semantics
+ * 
+ * Used as the common shell for many component families.
+ * Provides consistent card-like container styling.
+ */
+.panel {
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 25px 60px rgba(2, 6, 23, 0.35);
+}
+
+/* ==========================================================================
+   Panel Shell - Solarized Light Theme Overrides
+   ========================================================================== */
+
+/**
+ * Panel styling - subtle shadow for depth
+ * 
+ * Lightens box-shadow to match Solarized Light warm paper aesthetic.
+ */
+[data-theme="solarized-light"] .panel {
+  box-shadow: 0 2px 8px rgba(0, 43, 54, 0.08);
+}
+
+/* ==========================================================================
+   Panel Shell - Provider-Assisted Block Variants
+   ========================================================================== */
+
+/**
+ * Provider-assisted advisory block - Solarized Light override
+ * 
+ * Harmonizes panel background within provider-assisted contexts.
+ */
+[data-theme="solarized-light"] .provider-assisted-block .panel {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.4);
+}

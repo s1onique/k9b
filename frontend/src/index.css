@@ -44,14 +44,12 @@
    .workflow-lane-title, .workflow-lane-description
    moved to styles/layout/workflow-lanes.css */
 
-/* Panel shell - intentionally deferred due to semantic ambiguity */
-.panel {
-  background: var(--color-panel-bg);
-  border: 1px solid var(--color-panel-border);
-  border-radius: 1rem;
-  padding: 1.25rem;
-  box-shadow: 0 25px 60px rgba(2, 6, 23, 0.35);
-}
+/* ==========================================================================
+   EXTRACTED to styles/layout/panel.css
+   ========================================================================== */
+/* Panel shell - shared wrapper semantics
+   Base .panel moved to styles/layout/panel.css
+*/
 
 /* ==========================================================================
    EXTRACTED to styles/layout/hero.css
@@ -2323,26 +2321,25 @@
   color: #002b36;
 }
 
-/* Panel styling - subtle shadow for depth */
-[data-theme="solarized-light"] .panel {
-  box-shadow: 0 2px 8px rgba(0, 43, 54, 0.08);
-}
+/* ==========================================================================
+   EXTRACTED to styles/layout/panel.css
+   ========================================================================== */
+/* Panel styling - subtle shadow for depth
+   [data-theme="solarized-light"] .panel moved to styles/layout/panel.css
+*/
 
 /* ==========================================================================
    SOLARIZED LIGHT - INSET SURFACES & CARDS POLISH
    Harmonize dark inset cards with light theme shell
    ========================================================================== */
 
-/* Provider-assisted advisory block */
-[data-theme="solarized-light"] .provider-assisted-block {
-  background: rgba(238, 232, 213, 0.5);
-  border-color: rgba(147, 161, 161, 0.3);
-}
-
-[data-theme="solarized-light"] .provider-assisted-block .panel {
-  background: rgba(253, 246, 227, 0.95);
-  border-color: rgba(147, 161, 161, 0.4);
-}
+/* ==========================================================================
+   EXTRACTED to styles/layout/panel.css
+   ========================================================================== */
+/* Provider-assisted advisory block
+   [data-theme="solarized-light"] .provider-assisted-block moved to styles/layout/panel.css
+   [data-theme="solarized-light"] .provider-assisted-block .panel moved to styles/layout/panel.css
+*/
 
 /* Provider execution cards - harmonized with light shell */
 [data-theme="solarized-light"] .provider-execution {

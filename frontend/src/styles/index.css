@@ -43,6 +43,7 @@
  * ✓ Phase 18: styles/components/advisory-lower-sections.css (advisory lower/detail sections extracted)
  * ✓ Phase 19: styles/components/proposal-list.css (proposal list + findings display extracted)
  * ✓ Phase 21: styles/components/alerts.css (alert/notice family extracted)
+ * ✓ Phase 22: styles/layout/panel.css (panel shell extracted)
  * → Phase 13: theme override extraction (future)
  * → Phase 20: remaining component groups (future)
  */
@@ -56,11 +57,12 @@
 /* 2b. Shared helpers (theme switch, accessibility - no dependencies beyond tokens) */
 @import url('./shared/theme-helpers.css');
 
-/* 3. Layout structural styles (page header, navigation, freshness, workflow lanes) */
+/* 3. Layout structural styles (page header, navigation, freshness, workflow lanes, panel shell) */
 @import url('./layout/hero.css');
 @import url('./layout/navigation.css');
 @import url('./layout/freshness.css');
 @import url('./layout/workflow-lanes.css');
+@import url('./layout/panel.css');
 
 /* 4. Extracted component styles (load before legacy monolith) */
 @import url('./components/pagination.css');
