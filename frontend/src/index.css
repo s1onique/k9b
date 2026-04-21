@@ -1,153 +1,3 @@
-/* ==========================================================================
-   EXTRACTED to styles/tokens.css
-   ========================================================================== */
-/* Tokens (:root, [data-theme] base declarations) moved to styles/tokens.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/components/next-check-plan.css
-   ========================================================================== */
-/* 
-   Next Check Plan / Approval / Queue family - MOVED TO next-check-plan.css
-   
-   Base selectors extracted:
-   - .next-check-manual-actions, .not-runnable-explanation
-   - .next-check-execution, .next-check-execution-*
-   - .next-check-discovery-pill, .next-check-discovery-pill-*
-   - .next-check-cluster-tags, .next-check-cluster-badge
-   - .next-check-queue-panel, .deterministic-next-checks-panel
-   - .deterministic-*, .next-check-queue-*
-   - .next-check-plan, .next-check-plan-*, .outcome-pill-*
-   - .next-check-approval-*, .next-check-orphaned
-   - .queue-*, .focus-preset-*, .priority-*
-   
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .next-check-* selectors
-   - All [data-theme="solarized-light"] .deterministic-* selectors
-   - All [data-theme="solarized-light"] .queue-* selectors
-   - All [data-theme="solarized-light"] .outcome-pill-* selectors
-   - All [data-theme="solarized-light"] .plan-* selectors
-   - All [data-theme="solarized-light"] .priority-* selectors
-   - All [data-theme="solarized-light"] .focus-preset-* selectors
-   
-   See: styles/components/next-check-plan.css
- */
-
-/* ==========================================================================
-   EXTRACTED to styles/components/next-check-queue.css
-   ========================================================================== */
-/*
-   Queue Controls / Search / Focus Presets family - MOVED TO next-check-queue.css
-   Queue Group & Items family - MOVED TO next-check-queue.css
-
-   Base selectors extracted (now owned by next-check-queue.css):
-   - .next-check-queue-controls, .next-check-filter-row, .next-check-control-row
-   - .next-check-filter-row label, .next-check-control-row label
-   - .next-check-filter-row select, .next-check-control-row select
-   - .queue-search input, .focus-presets, .focus-preset-button
-   - .focus-preset-button.active, .focus-preset-button:focus-visible
-   - .next-check-queue-group, .next-check-queue-group-head, .next-check-queue-items
-   - .next-check-queue-item, .next-check-queue-item-meta
-   - .queue-card-title, .queue-card-reason, .queue-card-reason-label, .queue-card-signal
-   - .primary-reason
-   - .next-check-queue-item-status, .next-check-queue-item-flags, .next-check-queue-item-actions
-   - .next-check-queue-item-flags strong
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .focus-preset-button* selectors
-   - All [data-theme="solarized-light"] .next-check-filter-row select
-   - All [data-theme="solarized-light"] .next-check-control-row select
-   - All [data-theme="solarized-light"] .queue-search input*
-   - All [data-theme="solarized-light"] .next-check-queue-item* selectors
-   - All [data-theme="solarized-light"] .next-check-queue-group selectors
-
-   Intentional monolith remainder:
-   - .queue-empty-state, .queue-empty-explanation, .queue-empty-recovery-actions
-   - .queue-explanation-block, .queue-explanation-header, .queue-explanation-*
-   - .next-check-command-preview (command preview in cards)
-   - .toggle-details-button (shared UI)
-
-   See: styles/components/next-check-queue.css
-*/
-
-/* ==========================================================================
-   EXTRACTED to styles/reset.css
-   ========================================================================== */
-/* Reset (*, body, .app-shell) moved to styles/reset.css */
-
-/* ==========================================================================
-    EXTRACTED to styles/layout/workflow-lanes.css
-    ========================================================================== */
-/* .workflow-lane-header, .workflow-lane-label, .workflow-lane-icon,
-   .workflow-lane-title, .workflow-lane-description
-   moved to styles/layout/workflow-lanes.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/panel.css
-   ========================================================================== */
-/* Panel shell - shared wrapper semantics
-   Base .panel moved to styles/layout/panel.css
-*/
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/hero.css
-   ========================================================================== */
-/* Brand logo, hero structure, run info, badges, actions, autorefresh
-    moved to styles/layout/hero.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/freshness.css
-   ========================================================================== */
-/* Freshness indicators, page freshness indicator
-    moved to styles/layout/freshness.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/navigation.css
-   ========================================================================== */
-/* Cockpit navigation, floating nav, section head, utility text classes
-    moved to styles/layout/navigation.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/components/badges-pills.css
-   ========================================================================== */
-/* Status badges, freshness pills, triage pills
-   moved to styles/components/badges-pills.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/components/runs-table.css
-   ========================================================================== */
-/*
-   Runs Table & Recent Runs family - MOVED TO runs-table.css
-
-   Base selectors extracted:
-   - .recent-runs, .recent-runs-list, .recent-runs-item
-   - .recent-runs-item:hover, .recent-runs-item.selected
-   - .recent-runs-label, .recent-runs-time
-   - .runs-table-wrapper, .runs-table, .runs-table th/td
-   - .runs-table td strong, .runs-table tbody tr (hover, selected, last-child)
-   - .run-cell-main, .run-cell-main strong, .run-cell-id
-   - .run-cell-timestamp, .run-cell-timestamp .recency / .absolute
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .runs-table th/td/strong/hover
-   - All [data-theme="solarized-light"] .run-cell-timestamp .recency / .absolute
-   - All [data-theme="solarized-light"] .run-cell-id
-   - All [data-theme="solarized-light"] .recent-runs-* (list, item, label, time)
-   - All [data-theme="solarized-light"] .run-action-cell .btn-primary / .btn-secondary
-
-   NOT extracted (separate families):
-   - .runs-filter-* (filters.css)
-   - .row-action-* (row-actions.css)
-   - pagination selectors (pagination.css)
-   - .panel (semantic shell, remains in monolith)
-
-   Legacy action-cell duplication decision:
-   - Base .run-action-cell and legacy btn classes: retained in row-actions.css
-   - Solarized Light overrides for legacy btn classes: MOVED to runs-table.css
-     (they are tightly local overrides, not the generic row-action pattern)
-
-   See: styles/components/runs-table.css
-*/
-
 /* Action cell - deliberate placement (base retained here, Solarized overrides in runs-table.css) */
 /* NOTE: .run-action-cell base styles now live exclusively in styles/components/row-actions.css */
 /* Legacy compat shims removed - zero active TSX usage */
@@ -322,34 +172,9 @@
 }
 
 /* ==========================================================================
-   EXTRACTED to styles/components/badges-pills.css
+   Fleet / Run Summary Components
    ========================================================================== */
-/* Status pills, triage pills, freshness pills, recency pill, badges
-   moved to styles/components/badges-pills.css */
 
-/* ==========================================================================
-   EXTRACTED to styles/components/row-actions.css
-   ========================================================================== */
-/* .row-action, .row-action--primary, .row-action--secondary,
-   .row-action--disabled, .row-action-empty, .run-action-cell,
-   .run-action-empty, .run-cell-review, .run-row-actions
-   moved to styles/components/row-actions.css
-   
-   DUPLICATE REMOVED: Legacy .run-action-cell and compat shims were
-   also present here but are now exclusively in row-actions.css.
-   TSX audit confirmed zero active usage of .btn-primary, .btn-secondary,
-   or .run-action-cell in current codebase.
-   
-   Remaining in index.css: Solarized Light overrides for legacy btn
-   classes within .run-action-cell scope (runs-table.css handles base
-   legacy cell, solarized overrides stay contextual to table context).
-   
-   See: styles/components/row-actions.css
-*/
-
-/* ==========================================================================
-    EXTRACTED to styles/components/fleet-summary.css
-    ========================================================================== */
 .diagnostic-pack-review-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -375,61 +200,6 @@
   flex-direction: column;
   gap: 0.2rem;
 }
-
-/*
-   Fleet / Run Summary family - MOVED TO styles/components/fleet-summary.css
-
-   Base selectors extracted:
-   - .fleet-metrics, .fleet-metrics article
-   - .fleet-table table, .fleet-table th/td, .fleet-table tr, .fleet-table tr.row-selected
-   - .recency-pill, .recency-pill.stale
-   - .run-summary-head, .run-summary-freshness, .run-summary-collector
-   - .run-summary-metrics, .run-summary-stats, .run-stat-card, .run-stat-card strong/span
-   - .run-duration-summary
-   - .run-summary-llm, .run-summary-llm-heading, .run-summary-llm-heading span
-   - .llm-current-line, .llm-historical, .llm-historical summary
-   - .run-summary-next-checks, .run-summary-next-checks-head/stats/clusters/button
-   - .highlighted-row, @keyframes row-highlight-pulse
-   - @media (max-width: 768px) fleet-table responsive block
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .fleet-table th/td
-   - All [data-theme="solarized-light"] .run-stat-card variants
-   - All [data-theme="solarized-light"] .run-summary-collector, .run-stat-label
-   - All [data-theme="solarized-light"] .recency-pill variants
-   - All [data-theme="solarized-light"] .fleet-metrics article
-   - All [data-theme="solarized-light"] .llm-historical variants
-
-   Shared with next-check-plan.css (not duplicated):
-   - .next-check-queue-panel, .deterministic-next-checks-panel
-   - .next-check-discovery-pill-*, .next-check-cluster-badge
-
-   See: styles/components/fleet-summary.css
-*/
-
-/* ==========================================================================
-   EXTRACTED to styles/components/next-check-plan.css
-   ========================================================================== */
-/*
-   Deterministic Card Family - MOVED TO next-check-plan.css
-
-   Base selectors extracted:
-   - .deterministic-cluster-card, .deterministic-cluster-head, .deterministic-cluster-stats
-   - .deterministic-cluster-attachments, .deterministic-cluster-summary
-   - .deterministic-group-list, .deterministic-group, .deterministic-group-head
-   - .deterministic-group--drift, .deterministic-group-title, .deterministic-group-meta
-   - .deterministic-check-list, .deterministic-check-list li
-   - .deterministic-check-head, .deterministic-check-main, .deterministic-check-command
-   - .deterministic-check-badges, .deterministic-check-meta
-   - .deterministic-workstream-pill, .deterministic-workstream-pill-*
-   - .deterministic-urgency-pill, .deterministic-urgency-pill-*
-   - .deterministic-primary-pill, .deterministic-empty-state, .deterministic-empty-bucket
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .deterministic-* selectors
-
-   See: styles/components/next-check-plan.css
-*/
 
 /* ==========================================================================
    INTENTIONAL MONOLITH REMAINDER
@@ -577,84 +347,8 @@
 }
 
 /* ==========================================================================
-   EXTRACTED to styles/components/next-check-queue.css
+   Review Enrichment & Provider Execution
    ========================================================================== */
-/*
-   Queue Item Structure family - MOVED TO styles/components/next-check-queue.css
-
-   Base selectors extracted:
-   - .next-check-queue-item-header, .queue-item-title-block, .queue-item-title
-   - .queue-item-status-badges, .next-check-queue-item-context
-   - .queue-item-rationale-line, .queue-item-rationale-label
-   - .queue-item-meta-row, .queue-item-meta-tag
-   - .queue-item-blocker-note, .queue-item-blocker-icon, .queue-item-blocker-text
-   - .queue-item-secondary-actions, .queue-item-primary-action
-   - .next-check-queue-item-details, .next-check-queue-item-metadata
-   - .next-check-queue-item-metadata span strong
-   - .next-check-queue-item-rationale, .priority-rationale-label, .priority-rationale-badge
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .queue-item-* selectors
-   - All [data-theme="solarized-light"] .next-check-queue-item-* selectors
-   - All [data-theme="solarized-light"] .priority-rationale-* selectors
-
-   NOT extracted (separate families):
-   - .next-check-queue-controls, .next-check-filter-row, .next-check-control-row (queue controls)
-   - .queue-search, .focus-presets, .focus-preset-button (queue controls)
-   - .queue-empty-state, .queue-empty-explanation, .queue-empty-recovery-actions (queue empty)
-   - .queue-explanation-block, .queue-explanation-header, .queue-explanation-* (queue explanation)
-   - .next-check-queue-group, .next-check-queue-group-head, .next-check-queue-items (queue group)
-   - .next-check-queue-item (card base, owned by next-check-plan.css)
-   - .next-check-queue-item-meta, .next-check-queue-item-status, .next-check-queue-item-flags (queue item)
-   - .next-check-queue-item-actions, .next-check-queue-item-flags strong (queue item)
-   - .queue-card-* (deterministic card family)
-   - .primary-reason (triage/reason family)
-   - .toggle-details-button (shared UI)
-   - .queue-search input (queue controls)
-
-   See: styles/components/next-check-queue.css
-*/
-
-/* ==========================================================================
-   EXTRACTED to styles/components/action-status.css
-   ========================================================================== */
-/* .action-state-badge, .action-state-*, .queue-status-pill, .queue-status-pill-*
-    moved to styles/components/action-status.css */
-
-/* Shared UI */
-.toggle-details-button {
-  background: none;
-  border: none;
-  color: var(--blue, #0f62fe);
-  text-decoration: underline;
-  padding: 0;
-  font-size: 0.85rem;
-}
-
-/* Queue item result strip - MOVED to styles/components/next-check-queue.css */
-/* Queue item details, metadata, rationale - MOVED to styles/components/next-check-queue.css */
-/* Priority rationale - MOVED to styles/components/next-check-queue.css */
-
-.next-check-command-preview {
-  font-family: var(--font-mono, 'JetBrains Mono', 'SFMono-Regular', monospace);
-}
-
-.next-check-command-preview pre {
-  margin: 0;
-  padding: 0.5rem;
-  background: #f3f3f3;
-  border-radius: 0.375rem;
-  border: 1px solid #e1e1e1;
-  overflow-x: auto;
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-/* ==========================================================================
-   EXTRACTED to styles/components/fleet-summary.css
-   ========================================================================== */
-/* .run-summary-llm-heading, .llm-current-line, .llm-historical
-    MOVED TO styles/components/fleet-summary.css */
 
 .review-enrichment {
   background: rgba(15, 23, 42, 0.9);
@@ -702,15 +396,11 @@
   font-size: 0.7rem;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/execution-history.css
-   ========================================================================== */
-/* .execution-history-panel, .execution-history-filters, .filter-group,
-   .filter-label, .filter-select, .filter-count, .execution-history-grid,
-   .execution-history-card, .execution-history-meta, .execution-history-badges,
-   .execution-history-badge, .execution-history-pack-refresh,
-   .execution-history-summary, .exec-summary-*, .usefulness-indicator,
-   .usefulness-badge* moved to styles/components/execution-history.css */
+.review-enrichment-summary {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: rgba(248, 250, 252, 0.8);
+}
 
 .follow-up-block {
   border-radius: 0.65rem;
@@ -749,85 +439,6 @@
   margin-right: 0.25rem;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/advisory-summary.css
-   ========================================================================== */
-/*
-   Review Enrichment family - BASE STYLES MOVED TO advisory-summary.css
-   
-   .review-enrichment-summary base rule moved (font-size only).
-   The compound selector .advisory-summary-collapsible .review-enrichment-summary
-   provides full styling in collapsible context.
-   
-   See: styles/components/advisory-summary.css
-   ========================================================================== */
-
-/* Base rule duplicated in extracted file - overridden by compound selector */
-.review-enrichment-summary {
-  font-size: 0.95rem;
-  line-height: 1.4;
-  color: rgba(248, 250, 252, 0.8);
-}
-
-/* ==========================================================================
-   EXTRACTED to styles/components/advisory-summary.css
-   ========================================================================== */
-/*
-   Advisory Summary + Cluster Cards family - MOVED TO advisory-summary.css
-
-   Base selectors extracted:
-   - .advisory-summary-strip, .advisory-summary-metrics, .advisory-summary-metric,
-     .advisory-summary-metric--warning, .advisory-metric-value, .advisory-metric-label
-   - .advisory-summary-tags, .advisory-tag, .advisory-summary-provider, .advisory-provider-label
-   - .advisory-summary-hint, .advisory-hint-badge
-   - .advisory-summary-collapsible (and all sub-rules)
-   - .advisory-cluster-grid, .advisory-cluster-card (and all sub-rules)
-   - .advisory-focus-hint
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .advisory-summary-* selectors
-   - All [data-theme="solarized-light"] .advisory-cluster-* selectors
-   - All [data-theme="solarized-light"] .advisory-tag, .advisory-hint-badge
-
-   See: styles/components/advisory-summary.css
-*/
-
-/* ==========================================================================
-    EXTRACTED to styles/components/advisory-lower-sections.css
-    ========================================================================== */
-/*
-   Advisory Lower Sections family - MOVED TO styles/components/advisory-lower-sections.css
-
-   Base selectors extracted:
-   - .advisory-lower-sections, .advisory-lower-row, .advisory-lower-row--top
-   - .advisory-lower-section, .advisory-lower-section-label
-   - .advisory-concerns-section, .advisory-concerns-list, .advisory-concern-row
-   - .advisory-gaps-section, .advisory-gaps-label, .advisory-gaps-list
-   - .advisory-gap-row, .advisory-gap-marker
-   - .advisory-next-checks-section, .advisory-checks-list, .advisory-check-row
-   - .advisory-check-intent, .advisory-check-cluster, .advisory-check-cmd
-   - .advisory-focus-notes-section, .advisory-focus-notes-label, .advisory-focus-notes-list
-   - .advisory-focus-note-row
-   - .advisory-alert-evidence-section, .advisory-alert-evidence-label
-   - .advisory-alert-evidence-disclaimer, .advisory-alert-evidence-list
-   - .advisory-alert-evidence-row, .advisory-alert-evidence-header
-   - .advisory-alert-evidence-cluster, .advisory-alert-evidence-used-for
-   - .advisory-alert-evidence-dimensions, .advisory-alert-evidence-dimension
-   - .advisory-alert-evidence-reason
-   - @media (max-width: 640px) .advisory-lower-row--top
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .advisory-lower-* selectors
-   - All [data-theme="solarized-light"] .advisory-concerns-* selectors
-   - All [data-theme="solarized-light"] .advisory-gaps-* selectors
-   - All [data-theme="solarized-light"] .advisory-next-checks-* selectors
-   - All [data-theme="solarized-light"] .advisory-check-* selectors
-   - All [data-theme="solarized-light"] .advisory-focus-notes-* selectors
-   - All [data-theme="solarized-light"] .advisory-alert-evidence-* selectors
-
-   See: styles/components/advisory-lower-sections.css
-*/
-
 /* Keep old grid class for any lingering CSS references */
 .review-enrichment-grid {
   display: grid;
@@ -865,13 +476,6 @@
   border-color: rgba(94, 234, 212, 0.6);
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/llm-activity.css
-   ========================================================================== */
-/* .llm-activity-panel .section-head, .llm-activity-filters, .llm-policy-panel,
-    .llm-policy-grid, .llm-activity-table-wrapper, .llm-activity-table
-    moved to styles/components/llm-activity.css */
-
 .artifact-link {
   padding: 0.4rem 0.9rem;
   border-radius: 0.6rem;
@@ -882,59 +486,8 @@
 }
 
 /* ==========================================================================
-   EXTRACTED to styles/components/proposal-list.css
+   Cluster Assessment & Related Components
    ========================================================================== */
-/*
-   Proposal List / Findings Display family - MOVED TO styles/components/proposal-list.css
-
-   Base selectors extracted:
-   - .proposal-controls, .proposal-controls label/select/input
-   - .proposal-table, .proposal-row, .proposal-row-*
-   - .lifecycle-row, .lifecycle-chip
-   - .confidence-badge, .confidence-badge.level-*
-   - .finding-list, .finding-card, .finding-card *
-   - .evidence-details, .evidence-details *
-   - .detail-grid, .artifact-chip
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .proposal-* selectors
-   - All [data-theme="solarized-light"] .confidence-badge.* selectors
-   - All [data-theme="solarized-light"] .finding-* selectors
-   - All [data-theme="solarized-light"] .evidence-details selectors
-   - All [data-theme="solarized-light"] .lifecycle-chip selector
-   - All [data-theme="solarized-light"] .artifact-chip selectors
-
-   NOT extracted (separate families):
-   - .cluster-controls (cluster-detail.css handles related, but controls are shared UI)
-   - .tab*, .link, .text-button (shared UI components)
-
-   See: styles/components/proposal-list.css
- */
-
-/* ==========================================================================
-     EXTRACTED to styles/components/shared-ui.css
-     ========================================================================== */
-/* .link, .text-button base selectors
-    moved to styles/components/shared-ui.css */
-
-/* ==========================================================================
-    EXTRACTED to styles/components/tabs.css
-    ========================================================================== */
-/*
-   Tabs / Navigation Family - MOVED TO styles/components/tabs.css
-
-   Base selectors extracted:
-   - .tab-list
-   - .tab
-   - .tab.active
-   - .tab-panel ul
-
-   Theme overrides extracted:
-   - [data-theme="solarized-light"] .tab
-   - [data-theme="solarized-light"] .tab.active (2 variants - last wins)
-
-   See: styles/components/tabs.css
-*/
 
 .cluster-lists {
   display: grid;
@@ -1305,53 +858,8 @@
 }
 
 /* ==========================================================================
-    EXTRACTED to styles/components/notification-table.css
-    ========================================================================== */
-/* .notification-table-wrapper, .notification-table-scroll, .notification-table,
-   .notification-table th/td, .notification-summary, .notification-detail,
-   .notification-table-controls, .notification-table-controls label/select/input,
-   .notification-table .status-pill, .notification-run-cluster
-   moved to styles/components/notification-table.css */
-
-/* ==========================================================================
-    EXTRACTED to styles/components/alerts.css
-    ========================================================================== */
-/*
-   Alert / Notice family - MOVED TO styles/components/alerts.css
-
-   Base selectors extracted:
-   - .alert (base alert block - red/danger)
-   - .alert-inline (inline alert modifier)
-   - .alert-past-run (past-run notice - amber/yellow)
-   - .alert-past-run.alert-inline (combined modifier)
-
-   Theme overrides extracted:
-   - [data-theme="solarized-light"] .alert (uses --color-alert-text token)
-
-   Not extracted (separate families):
-   - .alertmanager-* (alertmanager-snapshot.css, alertmanager-sources.css)
-
-   See: styles/components/alerts.css
- */
-
-/* ==========================================================================
-    EXTRACTED to styles/components/loading.css
-    ========================================================================== */
-/*
-   Loading state family - MOVED TO loading.css
-   
-   Base selectors extracted:
-   - .loading
-   
-   Theme overrides:
-   - None (self-contained)
-   
-   See: styles/components/loading.css
- */
-
-/* ==========================================================================
-    Media queries (fleet-table responsive)
-    ========================================================================== */
+   Media queries (fleet-table responsive)
+   ========================================================================== */
 @media (max-width: 768px) {
   .fleet-table table,
   .fleet-table thead,
@@ -1468,12 +976,6 @@
 }
 
 /* ==========================================================================
-   EXTRACTED to styles/shared/theme-helpers.css
-   ========================================================================== */
-/* Theme switch and accessibility helpers (.theme-switch, .theme-switch-label,
-   .theme-switch-select, .visually-hidden) moved to styles/shared/theme-helpers.css */
-
-/* ==========================================================================
    SOLARIZED LIGHT THEME OVERRIDES
    Enhanced contrast for dense operational use
    ========================================================================== */
@@ -1531,26 +1033,6 @@
   color: #657b83;
 }
 
-/* Status pill Solarized Light overrides - MOVED to styles/components/badges-pills.css */
-
-/* Runs filter button Solarized Light overrides - MOVED to styles/components/filters.css */
-
-/* .muted, .eyebrow, .tiny - MOVED to styles/layout/navigation.css */
-
-/* Hero Solarized Light overrides - MOVED to styles/layout/hero.css */
-/* - [data-theme="solarized-light"] .hero-title-block h1 */
-/* - [data-theme="solarized-light"] .hero-run-title strong */
-/* - [data-theme="solarized-light"] .hero-run-id */
-/* - [data-theme="solarized-light"] .hero-run-recency, .hero-run-label */
-/* - [data-theme="solarized-light"] .hero button, .hero button:hover */
-/* - [data-theme="solarized-light"] .hero-run (border-left-color) */
-
-/* Cockpit nav Solarized Light overrides - MOVED to styles/layout/navigation.css */
-/* - [data-theme="solarized-light"] .cockpit-nav */
-/* - [data-theme="solarized-light"] .cockpit-nav__item, .cockpit-nav__item:hover */
-/* - [data-theme="solarized-light"] .cockpit-nav__item--active */
-/* - [data-theme="solarized-light"] .cockpit-nav__label */
-
 /* Input/select in light theme - stronger contrast */
 [data-theme="solarized-light"] .autorefresh-control select,
 [data-theme="solarized-light"] .runs-filter-select {
@@ -1587,22 +1069,6 @@
   color: #002b36;
 }
 
-/* .run-cell-id - MOVED to styles/components/runs-table.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/freshness.css
-   ========================================================================== */
-/*
-   Page freshness indicator + freshness indicator label Solarized Light overrides
-   MOVED TO styles/layout/freshness.css
-   
-   Extracted selectors:
-   - [data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--*
-   - [data-theme="solarized-light"] .freshness-indicator.* .label
-   
-   See: styles/layout/freshness.css
-*/
-
 /* Triage pills */
 [data-theme="solarized-light"] .triage-pill.triaged {
   background: rgba(133, 153, 0, 0.18);
@@ -1613,37 +1079,6 @@
   background: rgba(181, 137, 0, 0.18);
   color: #b58900;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/fleet-summary.css
-   ========================================================================== */
-/* .fleet-table Solarized Light overrides - MOVED
-   [data-theme="solarized-light"] .fleet-table th (color: #657b83)
-   [data-theme="solarized-light"] .fleet-table td (color: #002b36)
-   moved to styles/components/fleet-summary.css (lines ~330-339)
-*/
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/panel.css
-   ========================================================================== */
-/* Panel styling - subtle shadow for depth
-   [data-theme="solarized-light"] .panel moved to styles/layout/panel.css
-*/
-
-/* ==========================================================================
-   SOLARIZED LIGHT - INSET SURFACES & CARDS POLISH
-   Harmonize dark inset cards with light theme shell
-   ========================================================================== */
-
-/* ==========================================================================
-   EXTRACTED to styles/layout/panel.css
-   ========================================================================== */
-/* Provider-assisted advisory block - Solarized Light override
-   [data-theme="solarized-light"] .provider-assisted-block .panel
-   moved to styles/layout/panel.css (tightly local child variant)
-   
-   NOTE: Base .provider-assisted-block remains in index.css (owned by this file)
-*/
 
 /* Provider execution cards - harmonized with light shell */
 [data-theme="solarized-light"] .provider-execution {
@@ -1674,7 +1109,6 @@
   color: #002b36;
 }
 
-/* Queue item cards + group - MOVED to styles/components/next-check-queue.css */
 /* Queue explanation block */
 [data-theme="solarized-light"] .queue-explanation-block {
   background: rgba(238, 232, 213, 0.88);
@@ -1684,25 +1118,6 @@
 [data-theme="solarized-light"] .queue-explanation-actions__label {
   color: #657b83;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/next-check-plan.css
-   ========================================================================== */
-/* Deterministic Card Family Solarized Light overrides - MOVED TO next-check-plan.css
-
-   Extracted selectors:
-   - [data-theme="solarized-light"] .deterministic-cluster-card
-   - [data-theme="solarized-light"] .deterministic-group
-   - [data-theme="solarized-light"] .deterministic-empty-state
-   - [data-theme="solarized-light"] .deterministic-empty-bucket
-   - [data-theme="solarized-light"] .deterministic-workstream-pill
-   - [data-theme="solarized-light"] .deterministic-workstream-pill-*
-   - [data-theme="solarized-light"] .deterministic-urgency-pill
-   - [data-theme="solarized-light"] .deterministic-urgency-pill-*
-   - [data-theme="solarized-light"] .deterministic-primary-pill
-
-   See: styles/components/next-check-plan.css
-*/
 
 /* Action state badges */
 [data-theme="solarized-light"] .action-state-badge {
@@ -1932,12 +1347,6 @@
   color: #839496;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/shared-ui.css
-   ========================================================================== */
-/* [data-theme="solarized-light"] .link, .link:hover, .link:visited
-    moved to styles/components/shared-ui.css */
-
 /* Artifact links - Solarized palette */
 [data-theme="solarized-light"] .artifact-link {
   background: rgba(38, 139, 210, 0.08);
@@ -1967,14 +1376,6 @@
   color: #8a6800;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/notification-table.css
-   ========================================================================== */
-/* Notification table Solarized Light overrides
-   moved to styles/components/notification-table.css */
-
-/* Execution history - MOVED to styles/components/execution-history.css */
-
 [data-theme="solarized-light"] .exec-summary-item:hover {
   background: rgba(38, 139, 210, 0.08);
   border-color: rgba(38, 139, 210, 0.35);
@@ -2000,14 +1401,6 @@
   background: rgba(181, 137, 0, 0.15);
   color: #b58900;
 }
-
-/* Usefulness badges - MOVED to styles/components/execution-history.css */
-
-/* ==========================================================================
-   EXTRACTED to styles/components/llm-activity.css
-   ========================================================================== */
-/* LLM activity, LLM policy Solarized Light overrides
-    moved to styles/components/llm-activity.css */
 
 /* Cluster assessment */
 [data-theme="solarized-light"] .cluster-assessment {
@@ -2080,15 +1473,6 @@
   color: #002b36;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/fleet-summary.css
-   ========================================================================== */
-/* Run summary cards Solarized Light overrides - MOVED
-   [data-theme="solarized-light"] .run-stat-card, .run-stat-card strong/span
-   [data-theme="solarized-light"] .run-duration-summary, .run-summary-collector
-   moved to styles/components/fleet-summary.css (lines ~341-361)
-*/
-
 /* LLM stats */
 [data-theme="solarized-light"] .run-stat-label {
   color: #657b83;
@@ -2125,17 +1509,6 @@
 [data-theme="solarized-light"] .plan-blocking-reason {
   color: #dc322f;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/fleet-summary.css
-   ========================================================================== */
-/* Run orphaned pill (recency-pill) Solarized Light overrides - MOVED
-   [data-theme="solarized-light"] .recency-pill, .recency-pill.stale
-   moved to styles/components/fleet-summary.css (lines ~363-373)
-*/
-
-/* Execution history badge - MOVED to styles/components/execution-history.css */
-/* Execution pack refresh - MOVED to styles/components/execution-history.css */
 
 /* Queue empty state */
 [data-theme="solarized-light"] .queue-empty-state .link {
@@ -2209,19 +1582,6 @@
   border-color: rgba(147, 161, 161, 0.35);
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/layout/freshness.css
-   ========================================================================== */
-/* Freshness pill Solarized Light overrides - MOVED TO styles/layout/freshness.css
-
-   Extracted selectors:
-   - [data-theme="solarized-light"] .freshness-pill
-   - [data-theme="solarized-light"] .freshness-pill.stale
-   - [data-theme="solarized-light"] .freshness-pill.fresh
-
-   See: styles/layout/freshness.css
-*/
-
 /* Lifecycle chip */
 [data-theme="solarized-light"] .lifecycle-chip {
   background: rgba(38, 139, 210, 0.1);
@@ -2291,15 +1651,6 @@
   color: #b58900;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/notification-table.css
-   ========================================================================== */
-/* Notification controls Solarized Light overrides - MOVED
-   [data-theme=\"solarized-light\"] .notification-table-controls (color)
-   [data-theme=\"solarized-light\"] .notification-table-controls select/input (bg, border, color)
-   moved to styles/components/notification-table.css
-*/
-
 /* Cluster controls */
 [data-theme="solarized-light"] .cluster-controls label,
 [data-theme="solarized-light"] .cluster-controls select {
@@ -2323,22 +1674,6 @@
   border-color: rgba(147, 161, 161, 0.45);
   color: #002b36;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/tabs.css
-   ========================================================================== */
-/*
-   Tab / Navigation family - MOVED TO styles/components/tabs.css
-
-   Base selectors extracted:
-   - .tab, .tab.active, .tab-list, .tab-panel ul
-
-   Theme overrides extracted:
-   - [data-theme="solarized-light"] .tab (background, color)
-   - [data-theme="solarized-light"] .tab.active (background, color, border-color)
-
-   See: styles/components/tabs.css
-*/
 
 /* Queue card title */
 [data-theme="solarized-light"] .queue-card-title {
@@ -2385,8 +1720,6 @@
 [data-theme="solarized-light"] .runs-execution-error {
   color: #dc322f;
 }
-
-/* Primary action button - MOVED to styles/components/next-check-queue.css */
 
 /* Diagnostic pack review */
 [data-theme="solarized-light"] .diagnostic-pack-review-summary {
@@ -2438,19 +1771,11 @@
   color: #002b36;
 }
 
-/* ==========================================================================
-   EXTRACTED to styles/components/notification-table.css
-   ========================================================================== */
-/* .notification-table-controls selectSolarized Light override
-   moved to styles/components/notification-table.css */
-
 /* Blue accent softening - reduce opacity slightly for better integration */
 [data-theme="solarized-light"] .eyebrow {
   color: #268bd2;
   opacity: 0.9;
 }
-
-/* Tab active state - EXTRACTED to styles/components/tabs.css */
 
 /* Focus preset button active - softer blue */
 [data-theme="solarized-light"] .focus-preset-button.active,
@@ -2459,12 +1784,6 @@
   background: rgba(38, 139, 210, 0.1);
   color: #268bd2;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/notification-table.css
-   ========================================================================== */
-/* .notification-table td a.artifact-linkSolarized Light overrides
-   moved to styles/components/notification-table.css */
 
 /* Action links - softer blue for Download, View artifact, Show details, Back to queue */
 [data-theme="solarized-light"] .toggle-details-button {
@@ -2475,12 +1794,6 @@
 [data-theme="solarized-light"] .toggle-details-button:hover {
   opacity: 1;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/shared-ui.css
-   ========================================================================== */
-/* [data-theme="solarized-light"] .text-button, .text-button:hover
-    moved to styles/components/shared-ui.css */
 
 /* Queue search input - warm paper background */
 [data-theme="solarized-light"] .queue-search input {
@@ -2510,12 +1823,6 @@
   border-color: rgba(147, 161, 161, 0.5);
   color: #002b36;
 }
-
-/* ==========================================================================
-   EXTRACTED to styles/components/notification-table.css
-   ========================================================================== */
-/* .notification-table-controls inputSolarized Light override
-   moved to styles/components/notification-table.css */
 
 /* Cluster detail body - harmonized with light shell */
 [data-theme="solarized-light"] .cluster-detail-body {
@@ -2639,44 +1946,3 @@
 [data-theme="solarized-light"] .runs-detached-notice .muted {
   color: #586e75;
 }
-
-/* ============================================================
-   Alertmanager Sources Panel
-   [EXTRACTED → styles/components/alertmanager-sources.css]
-   ============================================================ */
-
-/* ============================================================
-   Alertmanager Source Actions
-   [EXTRACTED → styles/components/alertmanager-sources.css]
-   ============================================================ */
-
-/* ==========================================================================
-   EXTRACTED to styles/components/alertmanager-snapshot.css
-   ========================================================================== */
-/*
-   Alertmanager Snapshot family - MOVED TO styles/components/alertmanager-snapshot.css
-
-   Base selectors extracted:
-   - .alertmanager-snapshot, .alertmanager-snapshot .section-head
-   - .alertmanager-snapshot-grid
-   - .alertmanager-snapshot-metric, .alertmanager-metric-value, .alertmanager-metric-label
-   - .alertmanager-snapshot-section, .alertmanager-section-label
-   - .alertmanager-severity-list, .alertmanager-severity-badge, .alertmanager-severity-badge--*
-   - .alertmanager-state-list, .alertmanager-state-badge
-   - .alertmanager-top-alerts, .alertmanager-top-alerts li
-   - .alertmanager-tag-list, .alertmanager-tag, .alertmanager-tag--more
-
-   Theme overrides extracted:
-   - All [data-theme="solarized-light"] .alertmanager-* selectors
-
-   Dependencies (inherited via cascade):
-   - .panel: inherited via cascade (NOT extracted per constraints)
-   - .section-head: shared utility, locally scoped with .alertmanager-snapshot
-
-   Not extracted (separate families):
-   - .alertmanager-sources-* (alertmanager-sources.css)
-   - .alertmanager-provenance-* (execution-history.css)
-   - .alertmanager-relevance-* (execution-history.css)
-
-   See: styles/components/alertmanager-snapshot.css
-*/
