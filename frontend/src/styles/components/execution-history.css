@@ -1,0 +1,477 @@
+/* ==========================================================================
+   Execution History + Usefulness Component
+   Extracted from frontend/src/index.css
+   
+   Contains:
+   - Execution History panel, grid, cards, meta, badges, pack-refresh
+   - Execution History summary strips (useful/noisy/repeated)
+   - Usefulness indicator and badges (useful/partial/noisy/empty)
+   - Filter controls (filter-group, filter-label, filter-select, filter-count)
+   
+   NOT extracted (deferred to other panels):
+   - .panel (semantic ambiguity)
+   - .recent-runs, .recent-runs-list (runs-table panel)
+   - .runs-filter-* family (filters.css)
+   - .next-check-filter-row (queue panel)
+   
+   Related but not extracted:
+   - .filter-label, .filter-select, .filter-count are tightly coupled to
+     execution-history-filters context, making extraction premature
+   ========================================================================== */
+
+/* ==========================================================================
+   Execution History Panel
+   ========================================================================== */
+
+.execution-history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ==========================================================================
+   Execution History Filters
+   ========================================================================== */
+
+/* Main filter bar */
+.execution-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  align-items: center;
+}
+
+/* Filter group wrapper */
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Filter label text */
+.filter-label {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* Filter select dropdown */
+.filter-select {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  color: #f8fafc;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.filter-select:hover {
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Filter result count */
+.filter-count {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-left: auto;
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Execution History Grid
+   ========================================================================== */
+
+.execution-history-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .execution-history-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+/* ==========================================================================
+   Execution History Card
+   ========================================================================== */
+
+.execution-history-card {
+  padding: 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.execution-history-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.execution-history-card header strong {
+  display: block;
+}
+
+/* Meta information row */
+.execution-history-meta {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+
+/* Badges container */
+.execution-history-badges {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* Execution history badge */
+.execution-history-badge {
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+}
+
+/* Pack refresh status */
+.execution-history-pack-refresh {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.execution-history-pack-refresh .text-success {
+  color: #4ade80;
+}
+
+.execution-history-pack-refresh .text-warning {
+  color: #fbbf24;
+}
+
+/* ==========================================================================
+   Execution History Summary Strips
+   ========================================================================== */
+
+.execution-history-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+/* Summary strip container */
+.exec-summary-strip {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+}
+
+/* Summary strip variants */
+.exec-summary-strip--useful {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.exec-summary-strip--noisy {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.exec-summary-strip--repeated {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+/* Summary strip header */
+.exec-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.exec-summary-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.8);
+}
+
+.exec-summary-strip--useful .exec-summary-label {
+  color: #86efac;
+}
+
+.exec-summary-strip--noisy .exec-summary-label {
+  color: #fecaca;
+}
+
+.exec-summary-strip--repeated .exec-summary-label {
+  color: #fde047;
+}
+
+/* Summary count badge */
+.exec-summary-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  color: rgba(248, 250, 252, 0.9);
+}
+
+/* Summary items container */
+.exec-summary-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* Summary item pill */
+.exec-summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.35rem;
+  font-size: 0.7rem;
+  color: rgba(248, 250, 252, 0.8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  max-width: 100%;
+}
+
+.exec-summary-item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+}
+
+/* Summary item text (truncatable) */
+.exec-summary-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Summary item metadata */
+.exec-summary-item-meta {
+  font-size: 0.65rem;
+  color: rgba(148, 163, 184, 0.7);
+  flex-shrink: 0;
+}
+
+/* Summary item badge */
+.exec-summary-item-badge {
+  flex-shrink: 0;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.exec-summary-item-badge--repeated {
+  background: rgba(251, 191, 36, 0.25);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+/* "Show more" button */
+.exec-summary-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.65rem;
+  color: rgba(148, 163, 184, 0.7);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.exec-summary-more:hover {
+  color: rgba(148, 163, 184, 0.9);
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Usefulness Indicator
+   Shows usefulness review status on execution history cards
+   ========================================================================== */
+
+.usefulness-indicator {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.2);
+}
+
+.usefulness-indicator.unreviewed {
+  border-top-style: dashed;
+}
+
+/* Usefulness badge base */
+.usefulness-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Usefulness badge variants */
+.usefulness-badge-useful {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.usefulness-badge-partial {
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde047;
+}
+
+.usefulness-badge-noisy {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
+.usefulness-badge-empty {
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+/* Execution history card */
+[data-theme="solarized-light"] .execution-history-card {
+  background: rgba(253, 246, 227, 0.92);
+}
+
+/* Execution history summary */
+[data-theme="solarized-light"] .execution-history-summary {
+  background: rgba(238, 232, 213, 0.88);
+}
+
+/* Summary strips */
+[data-theme="solarized-light"] .exec-summary-strip {
+  background: rgba(253, 246, 227, 0.9);
+}
+
+/* Summary items */
+[data-theme="solarized-light"] .exec-summary-item {
+  background: rgba(253, 246, 227, 0.9);
+}
+
+[data-theme="solarized-light"] .exec-summary-item:hover {
+  background: rgba(38, 139, 210, 0.08);
+}
+
+/* Usefulness badges */
+[data-theme="solarized-light"] .usefulness-badge-useful {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .usefulness-badge-partial {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .usefulness-badge-noisy {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+}
+
+[data-theme="solarized-light"] .usefulness-badge-empty {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+/* Execution history badge */
+[data-theme="solarized-light"] .execution-history-badge {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.25);
+  color: #0060a8;
+}
+
+/* Execution pack refresh */
+[data-theme="solarized-light"] .execution-history-pack-refresh .text-success {
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .execution-history-pack-refresh .text-warning {
+  color: #b58900;
+}
+
+/* Execution history filters */
+[data-theme="solarized-light"] .execution-history-filters {
+  background: rgba(238, 232, 213, 0.85);
+  border-color: rgba(7, 54, 66, 0.2);
+}
+
+/* Filter controls */
+[data-theme="solarized-light"] .filter-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .filter-select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(88, 110, 117, 0.4);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .filter-select:hover {
+  border-color: rgba(88, 110, 117, 0.6);
+}
+
+[data-theme="solarized-light"] .filter-select:focus {
+  border-color: #268bd2;
+  box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.15);
+}
+
+/* Filter count - softer muted for light theme */
+[data-theme="solarized-light"] .filter-count {
+  color: #839496;
+}
