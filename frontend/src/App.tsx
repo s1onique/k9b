@@ -172,18 +172,6 @@ export const formatAgeDuration = (minutes: number): string => {
 };
 
 
-const DETERMINISTIC_WORKSTREAM_ORDER = ["incident", "evidence", "drift"] as const;
-const DETERMINISTIC_WORKSTREAM_LABELS: Record<string, string> = {
-  incident: "Firefight now",
-  evidence: "Evidence gathering",
-  drift: "Drift / toil follow-up",
-};
-const DETERMINISTIC_WORKSTREAM_DESCRIPTIONS: Record<string, string> = {
-  incident: "Focus on the current degraded symptom",
-  evidence: "Collect supporting telemetry and context",
-  drift: "Log drift, parity, and toil follow-up",
-};
-
 // Workflow lanes for operator guidance
 const WORKFLOW_LANES = {
   diagnose: {
@@ -199,7 +187,6 @@ const WORKFLOW_LANES = {
     description: "Review durable policy and config changes suggested by what we learned",
   },
 };
-const INCIDENT_PREVIEW_LIMIT = 3;
 
 
 const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
