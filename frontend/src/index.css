@@ -1992,37 +1992,34 @@
 }
 
 /* ==========================================================================
-   EXTRACTED to styles/components/notification-table.css
-   ========================================================================== */
+    EXTRACTED to styles/components/notification-table.css
+    ========================================================================== */
 /* .notification-table-wrapper, .notification-table-scroll, .notification-table,
    .notification-table th/td, .notification-summary, .notification-detail,
    .notification-table-controls, .notification-table-controls label/select/input,
    .notification-table .status-pill, .notification-run-cluster
    moved to styles/components/notification-table.css */
 
-.alert {
-  padding: 0.75rem 1rem;
-  background: rgba(248, 113, 113, 0.2);
-  border-radius: 0.75rem;
-  border: 1px solid rgba(248, 113, 113, 0.5);
-}
+/* ==========================================================================
+    EXTRACTED to styles/components/alerts.css
+    ========================================================================== */
+/*
+   Alert / Notice family - MOVED TO styles/components/alerts.css
 
-.alert-inline {
-  margin-top: 0.4rem;
-}
+   Base selectors extracted:
+   - .alert (base alert block - red/danger)
+   - .alert-inline (inline alert modifier)
+   - .alert-past-run (past-run notice - amber/yellow)
+   - .alert-past-run.alert-inline (combined modifier)
 
-/* Past-run notice - amber/yellow informational styling for historical runs */
-.alert-past-run {
-  padding: 0.75rem 1rem;
-  background: rgba(251, 191, 36, 0.15);
-  border-radius: 0.75rem;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  color: rgba(251, 191, 36, 0.95);
-}
+   Theme overrides extracted:
+   - [data-theme="solarized-light"] .alert (uses --color-alert-text token)
 
-.alert-past-run.alert-inline {
-  margin-top: 0.4rem;
-}
+   Not extracted (separate families):
+   - .alertmanager-* (alertmanager-snapshot.css, alertmanager-sources.css)
+
+   See: styles/components/alerts.css
+*/
 
 .loading {
   min-height: 200px;

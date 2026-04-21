@@ -1,0 +1,64 @@
+/**
+ * Alert / Notice Family
+ * 
+ * Shared alert and notice patterns used across multiple surfaces.
+ * Self-contained family with no external component dependencies.
+ * 
+ * Base selectors:
+ * - .alert                    → Base alert block (red/danger)
+ * - .alert-inline            → Inline alert modifier (compact vertical spacing)
+ * - .alert-past-run          → Past-run notice (amber/yellow informational)
+ * - .alert-past-run.alert-inline → Combined modifier for inline past-run notices
+ * 
+ * Theme notes:
+ * - Dark theme values are hardcoded (rgba) directly in this file
+ * - Solarized Light theme uses tokens.css variables:
+ *   --color-alert-bg, --color-alert-border, --color-alert-text
+ *   These tokens are defined in themes.css and resolved via cascade
+ * 
+ * Not extracted (separate families):
+ * - .alertmanager-* (alertmanager-snapshot.css, alertmanager-sources.css)
+ * 
+ * Phase tracking:
+ * - Phase 21: styles/components/alerts.css (alert/notice family extracted)
+ */
+
+/* ==========================================================================
+   Alert / Notice Family
+   ========================================================================== */
+
+/* Base alert block - red/danger informational styling */
+.alert {
+  padding: 0.75rem 1rem;
+  background: rgba(248, 113, 113, 0.2);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+}
+
+/* Inline alert modifier - compact vertical spacing */
+.alert-inline {
+  margin-top: 0.4rem;
+}
+
+/* Past-run notice - amber/yellow informational styling for historical runs */
+.alert-past-run {
+  padding: 0.75rem 1rem;
+  background: rgba(251, 191, 36, 0.15);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: rgba(251, 191, 36, 0.95);
+}
+
+/* Inline modifier for past-run notices */
+.alert-past-run.alert-inline {
+  margin-top: 0.4rem;
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+/* Alert text color for Solarized Light theme */
+[data-theme="solarized-light"] .alert {
+  color: var(--color-alert-text, #dc322f);
+}
