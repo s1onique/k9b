@@ -1912,47 +1912,6 @@
   --status-pill-border-style: solid;
 }
 
-[data-theme="solarized-light"] .hero-title-block h1 {
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .hero-run-title strong {
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .hero-run-id {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .hero-run-recency,
-[data-theme="solarized-light"] .hero-run-label {
-  color: #839496;
-}
-
-/* Navigation bar - integrated with warm shell */
-[data-theme="solarized-light"] .cockpit-nav {
-  background: rgba(238, 232, 213, 0.92);
-  border-color: rgba(147, 161, 161, 0.4);
-}
-
-[data-theme="solarized-light"] .cockpit-nav__item {
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .cockpit-nav__item:hover {
-  background: rgba(38, 139, 210, 0.12);
-  color: #268bd2;
-}
-
-[data-theme="solarized-light"] .cockpit-nav__item--active {
-  background: rgba(38, 139, 210, 0.18);
-  color: #268bd2;
-}
-
-[data-theme="solarized-light"] .cockpit-nav__label {
-  color: #839496;
-}
-
 /* Table improvements */
 [data-theme="solarized-light"] .runs-table th {
   background: rgba(238, 232, 213, 0.9);
@@ -1984,22 +1943,19 @@
 
 /* .muted, .eyebrow, .tiny - MOVED to styles/layout/navigation.css */
 
-/* Hero buttons - themed */
-[data-theme="solarized-light"] .hero button {
-  background: rgba(38, 139, 210, 0.12);
-  border-color: rgba(38, 139, 210, 0.45);
-  color: #268bd2;
-}
+/* Hero Solarized Light overrides - MOVED to styles/layout/hero.css */
+/* - [data-theme="solarized-light"] .hero-title-block h1 */
+/* - [data-theme="solarized-light"] .hero-run-title strong */
+/* - [data-theme="solarized-light"] .hero-run-id */
+/* - [data-theme="solarized-light"] .hero-run-recency, .hero-run-label */
+/* - [data-theme="solarized-light"] .hero button, .hero button:hover */
+/* - [data-theme="solarized-light"] .hero-run (border-left-color) */
 
-[data-theme="solarized-light"] .hero button:hover {
-  background: rgba(38, 139, 210, 0.22);
-  border-color: rgba(38, 139, 210, 0.6);
-}
-
-/* Hero run block border - subtle separator */
-[data-theme="solarized-light"] .hero-run {
-  border-left-color: rgba(147, 161, 161, 0.35);
-}
+/* Cockpit nav Solarized Light overrides - MOVED to styles/layout/navigation.css */
+/* - [data-theme="solarized-light"] .cockpit-nav */
+/* - [data-theme="solarized-light"] .cockpit-nav__item, .cockpit-nav__item:hover */
+/* - [data-theme="solarized-light"] .cockpit-nav__item--active */
+/* - [data-theme="solarized-light"] .cockpit-nav__label */
 
 /* Input/select in light theme - stronger contrast */
 [data-theme="solarized-light"] .autorefresh-control select,
