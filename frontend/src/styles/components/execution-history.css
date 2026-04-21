@@ -429,7 +429,7 @@
   border-color: rgba(147, 161, 161, 0.25);
 }
 
-/* Execution history badge */
+/* Execution history badge - Solarized Light */
 [data-theme="solarized-light"] .execution-history-badge {
   background: rgba(38, 139, 210, 0.12);
   border-color: rgba(38, 139, 210, 0.25);

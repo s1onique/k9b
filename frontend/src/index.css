@@ -2749,26 +2749,7 @@
 /* Notification table Solarized Light overrides
    moved to styles/components/notification-table.css */
 
-/* Execution history */
-[data-theme="solarized-light"] .execution-history-card {
-  background: rgba(253, 246, 227, 0.92);
-  border-color: rgba(147, 161, 161, 0.35);
-}
-
-[data-theme="solarized-light"] .execution-history-summary {
-  background: rgba(238, 232, 213, 0.88);
-  border-color: rgba(147, 161, 161, 0.3);
-}
-
-[data-theme="solarized-light"] .exec-summary-strip {
-  background: rgba(253, 246, 227, 0.9);
-}
-
-[data-theme="solarized-light"] .exec-summary-item {
-  background: rgba(253, 246, 227, 0.9);
-  border-color: rgba(147, 161, 161, 0.25);
-  color: #002b36;
-}
+/* Execution history - MOVED to styles/components/execution-history.css */
 
 [data-theme="solarized-light"] .exec-summary-item:hover {
   background: rgba(38, 139, 210, 0.08);
@@ -2948,15 +2929,7 @@
 }
 
 /* Execution history badge - MOVED to styles/components/execution-history.css */
-
-/* Execution pack refresh */
-[data-theme="solarized-light"] .execution-history-pack-refresh .text-success {
-  color: #859900;
-}
-
-[data-theme="solarized-light"] .execution-history-pack-refresh .text-warning {
-  color: #b58900;
-}
+/* Execution pack refresh - MOVED to styles/components/execution-history.css */
 
 /* Queue empty state */
 [data-theme="solarized-light"] .queue-empty-state .link {
