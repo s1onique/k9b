@@ -23,6 +23,7 @@ from k8s_diag_agent.external_analysis.alertmanager_artifact import (
     read_alertmanager_compact,
 )
 from k8s_diag_agent.health.utils import normalize_ref
+from k8s_diag_agent.identity.artifact import new_artifact_id
 from k8s_diag_agent.structured_logging import emit_structured_log
 
 COMPONENT_NAME = "diagnostic-pack-builder"
@@ -238,6 +239,8 @@ def _build_manifest(run_id: str, run_label: str, files: Iterable[dict[str, str]]
         "run_id": run_id,
         "run_label": run_label,
         "generated_at": datetime.now(UTC).isoformat(),
+        # Immutable artifact instance identity (UUIDv7) for provenance and debugging
+        "artifact_id": new_artifact_id(),
         "file_count": len(files_list),
         "files": files_list,
     }
@@ -260,6 +263,8 @@ def _build_review_bundle(
     return {
         "schema_version": REVIEW_BUNDLE_SCHEMA,
         "generated_at": datetime.now(UTC).isoformat(),
+        # Immutable artifact instance identity (UUIDv7) for provenance and debugging
+        "artifact_id": new_artifact_id(),
         "run": {
             "run_label": str(run_label) if isinstance(run_label, str) else None,
             "run_id": run_id_value,
@@ -359,6 +364,8 @@ def _build_review_input_14b(
     return {
         "schema_version": REVIEW_INPUT_SCHEMA,
         "generated_at": datetime.now(UTC).isoformat(),
+        # Immutable artifact instance identity (UUIDv7) for provenance and debugging
+        "artifact_id": new_artifact_id(),
         "source_run_id": run_id_value,
         "source_review_bundle_path": "review_bundle.json",
         "run": {
