@@ -154,3 +154,55 @@
   margin: 0;
   font-size: 0.75rem;
 }
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+/* Status pills - stronger definition */
+[data-theme="solarized-light"] .status-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .status-pill-degraded {
+  background: rgba(220, 50, 47, 0.18);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.35);
+}
+
+[data-theme="solarized-light"] .status-pill-healthy {
+  background: rgba(133, 153, 0, 0.2);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.4);
+}
+
+[data-theme="solarized-light"] .status-pill-pending {
+  background: rgba(181, 137, 0, 0.2);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.4);
+}
+
+/* Review badges - stronger */
+[data-theme="solarized-light"] .status-pill-fully-reviewed {
+  background: rgba(133, 153, 0, 0.2);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.4);
+}
+
+[data-theme="solarized-light"] .status-pill-unreviewed {
+  background: rgba(181, 137, 0, 0.2);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.4);
+}
+
+[data-theme="solarized-light"] .status-pill-partially-reviewed {
+  background: rgba(147, 161, 161, 0.15);
+  color: #657b83;
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .status-pill-no-executions {
+  background: rgba(38, 139, 210, 0.15);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.35);
+}
