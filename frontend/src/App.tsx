@@ -188,10 +188,7 @@ const WORKFLOW_LANES = {
   },
 };
 
-
 const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
-
-const NOTIFICATIONS_PER_PAGE = 50;
 
 const getLlmScopeLabel = (scope?: string | null) =>
   scope === "retained_history" ? "Historical LLM" : "Run LLM";
