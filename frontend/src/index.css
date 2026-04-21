@@ -3252,16 +3252,21 @@
   color: #002b36;
 }
 
-/* Tab styling */
-[data-theme="solarized-light"] .tab {
-  background: rgba(147, 161, 161, 0.1);
-  color: #586e75;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/tabs.css
+   ========================================================================== */
+/*
+   Tab / Navigation family - MOVED TO styles/components/tabs.css
 
-[data-theme="solarized-light"] .tab.active {
-  background: rgba(38, 139, 210, 0.15);
-  color: #268bd2;
-}
+   Base selectors extracted:
+   - .tab, .tab.active, .tab-list, .tab-panel ul
+
+   Theme overrides extracted:
+   - [data-theme="solarized-light"] .tab (background, color)
+   - [data-theme="solarized-light"] .tab.active (background, color, border-color)
+
+   See: styles/components/tabs.css
+*/
 
 /* Queue card title */
 [data-theme="solarized-light"] .queue-card-title {
@@ -3376,12 +3381,7 @@
   opacity: 0.9;
 }
 
-/* Tab active state - softer blue accent */
-[data-theme="solarized-light"] .tab.active {
-  background: rgba(38, 139, 210, 0.12);
-  color: #268bd2;
-  border-color: rgba(38, 139, 210, 0.3);
-}
+/* Tab active state - EXTRACTED to styles/components/tabs.css */
 
 /* Focus preset button active - softer blue */
 [data-theme="solarized-light"] .focus-preset-button.active,

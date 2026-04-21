@@ -58,14 +58,12 @@
 /* Tab in light theme - subtle warm background */
 [data-theme="solarized-light"] .tab {
   background: rgba(147, 161, 161, 0.1);
+  color: #586e75;
 }
 
-/* Active tab in light theme - Solarized blue accent */
-[data-theme="solarized-light"] .tab.active {
-  background: rgba(38, 139, 210, 0.15);
-}
-
-/* Tab active state - softer blue accent (override) */
+/* Active tab in light theme - Solarized blue accent (final winning value) */
 [data-theme="solarized-light"] .tab.active {
   background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
 }
