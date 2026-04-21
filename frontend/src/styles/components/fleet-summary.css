@@ -325,9 +325,20 @@
   }
 }
 
+/****** SECONDARY EXTRACTION: Residue from index.css lines ~2079-2084, ~2693-2712, ~2752-2761 ******/
+/* 
+   Previously extracted (phase 15, lines 328-379):
+   - .fleet-table th/td, .run-stat-card variants, .recency-pill variants, .fleet-metrics article
+   
+   Now fully consolidated:
+   - [data-theme="solarized-light"] .fleet-table th/td (lines ~2079-2084)
+   - [data-theme="solarized-light"] .run-stat-card, .run-stat-card strong/span, .run-duration-summary, .run-summary-collector (lines ~2693-2712)
+   - [data-theme="solarized-light"] .recency-pill, .recency-pill.stale (lines ~2752-2762)
+*/
+
 /* ==========================================================================
-   Solarized Light Theme Overrides
-   ========================================================================== */
+    Solarized Light Theme Overrides
+    ========================================================================== */
 
 /* Fleet table in light theme */
 [data-theme="solarized-light"] .fleet-table th {

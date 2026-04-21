@@ -167,16 +167,13 @@
   color: #657b83;
 }
 
-/* Notification controls - muted text */
+/* ==========================================================================
+   Solarized Light theme overrides - controls
+   ========================================================================== */
+
+/* Notification controls - text color (scoped to controls wrapper) */
 [data-theme="solarized-light"] .notification-table-controls {
   color: #586e75;
-}
-
-[data-theme="solarized-light"] .notification-table-controls select,
-[data-theme="solarized-light"] .notification-table-controls input {
-  background: rgba(253, 246, 227, 0.95);
-  border-color: rgba(147, 161, 161, 0.45);
-  color: #002b36;
 }
 
 /* Notification table filter selects - warm paper, softer opacity */
@@ -210,3 +207,4 @@
 [data-theme="solarized-light"] .notification-table-controls input::placeholder {
   color: #93a1a1;
 }
+

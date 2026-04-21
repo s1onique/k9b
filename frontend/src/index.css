@@ -2075,14 +2075,14 @@
   color: #b58900;
 }
 
-/* Fleet table */
-[data-theme="solarized-light"] .fleet-table th {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .fleet-table td {
-  color: #002b36;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/fleet-summary.css
+   ========================================================================== */
+/* .fleet-table Solarized Light overrides - MOVED
+   [data-theme="solarized-light"] .fleet-table th (color: #657b83)
+   [data-theme="solarized-light"] .fleet-table td (color: #002b36)
+   moved to styles/components/fleet-summary.css (lines ~330-339)
+*/
 
 /* ==========================================================================
    EXTRACTED to styles/layout/panel.css
@@ -2689,27 +2689,14 @@
   color: #002b36;
 }
 
-/* Run summary cards */
-[data-theme="solarized-light"] .run-stat-card {
-  background: rgba(238, 232, 213, 0.88);
-  border-color: rgba(147, 161, 161, 0.35);
-}
-
-[data-theme="solarized-light"] .run-stat-card strong {
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .run-stat-card span {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .run-duration-summary {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .run-summary-collector {
-  color: #657b83;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/fleet-summary.css
+   ========================================================================== */
+/* Run summary cards Solarized Light overrides - MOVED
+   [data-theme="solarized-light"] .run-stat-card, .run-stat-card strong/span
+   [data-theme="solarized-light"] .run-duration-summary, .run-summary-collector
+   moved to styles/components/fleet-summary.css (lines ~341-361)
+*/
 
 /* LLM stats */
 [data-theme="solarized-light"] .run-stat-label {
@@ -2748,18 +2735,13 @@
   color: #dc322f;
 }
 
-/* Run orphaned pill in light mode */
-[data-theme="solarized-light"] .recency-pill {
-  background: rgba(38, 139, 210, 0.12);
-  border-color: rgba(38, 139, 210, 0.3);
-  color: #268bd2;
-}
-
-[data-theme="solarized-light"] .recency-pill.stale {
-  background: rgba(220, 50, 47, 0.12);
-  border-color: rgba(220, 50, 47, 0.3);
-  color: #dc322f;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/fleet-summary.css
+   ========================================================================== */
+/* Run orphaned pill (recency-pill) Solarized Light overrides - MOVED
+   [data-theme="solarized-light"] .recency-pill, .recency-pill.stale
+   moved to styles/components/fleet-summary.css (lines ~363-373)
+*/
 
 /* Execution history badge - MOVED to styles/components/execution-history.css */
 /* Execution pack refresh - MOVED to styles/components/execution-history.css */
@@ -2924,17 +2906,14 @@
   color: #b58900;
 }
 
-/* Notification controls */
-[data-theme="solarized-light"] .notification-table-controls {
-  color: #586e75;
-}
-
-[data-theme="solarized-light"] .notification-table-controls select,
-[data-theme="solarized-light"] .notification-table-controls input {
-  background: rgba(253, 246, 227, 0.95);
-  border-color: rgba(147, 161, 161, 0.45);
-  color: #002b36;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/notification-table.css
+   ========================================================================== */
+/* Notification controls Solarized Light overrides - MOVED
+   [data-theme=\"solarized-light\"] .notification-table-controls (color)
+   [data-theme=\"solarized-light\"] .notification-table-controls select/input (bg, border, color)
+   moved to styles/components/notification-table.css
+*/
 
 /* Cluster controls */
 [data-theme="solarized-light"] .cluster-controls label,
