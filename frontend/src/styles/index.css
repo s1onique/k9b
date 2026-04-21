@@ -52,6 +52,9 @@
 /* 2. Reset and base styles (universal, no component dependencies) */
 @import url('./reset.css');
 
+/* 2b. Shared helpers (theme switch, accessibility - no dependencies beyond tokens) */
+@import url('./shared/theme-helpers.css');
+
 /* 3. Layout structural styles (page header, navigation, freshness, workflow lanes) */
 @import url('./layout/hero.css');
 @import url('./layout/navigation.css');
