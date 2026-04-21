@@ -39,6 +39,7 @@
  * ✓ Phase 14: styles/components/next-check-plan.css (next check plan / approval / queue extracted)
  * ✓ Phase 16: styles/components/fleet-summary.css (fleet table / run summary extracted)
  * ✓ Phase 17: styles/components/advisory-summary.css (advisory summary + cluster cards extracted)
+ * ✓ Phase 18: styles/components/advisory-lower-sections.css (advisory lower/detail sections extracted)
  * ✓ Phase 19: styles/components/proposal-list.css (proposal list + findings display extracted)
  * → Phase 13: theme override extraction (future)
  * → Phase 20: remaining component groups (future)
@@ -69,6 +70,7 @@
 @import url('./components/next-check-plan.css');
 @import url('./components/fleet-summary.css');
 @import url('./components/advisory-summary.css');
+@import url('./components/advisory-lower-sections.css');
 @import url('./components/cluster-detail.css');
 @import url('./components/proposal-list.css');
 
