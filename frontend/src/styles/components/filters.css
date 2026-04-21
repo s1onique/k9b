@@ -1,0 +1,157 @@
+/* ==========================================================================
+   Filters Component - Chip-based filter controls
+   Extracted from frontend/src/index.css
+   
+   Contains: runs-filter family (runs selection and filtering UI)
+   Related but NOT extracted: recent-runs-list, execution-history-filters, 
+   next-check-filter-row (too coupled to their respective panels)
+   ========================================================================== */
+
+/* ==========================================================================
+   Runs Filter Bar - Chip-based filtering UI
+   ========================================================================== */
+
+/* Main filter bar container */
+.runs-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Filter options wrapper - wraps filter chips */
+.runs-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* Filter button - interactive chip styling */
+.runs-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  background: rgba(30, 41, 59, 0.6);
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* Filter button hover state */
+.runs-filter-button:hover {
+  background: rgba(71, 85, 105, 0.4);
+  border-color: rgba(100, 116, 139, 0.6);
+  color: #e2e8f0;
+}
+
+/* Filter button focus state for accessibility */
+.runs-filter-button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* Filter button active/selected state */
+.runs-filter-button.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #bae6fd;
+  font-weight: 600;
+}
+
+/* Filter label text */
+.runs-filter-label {
+  white-space: nowrap;
+}
+
+/* Filter count indicator */
+.runs-filter-count {
+  color: rgba(148, 163, 184, 0.6);
+  font-size: 0.7rem;
+}
+
+/* Active filter chip count - enhanced contrast */
+.runs-filter-button.active .runs-filter-count {
+  color: rgba(186, 230, 253, 0.7);
+}
+
+/* Filter summary text */
+.runs-filter-summary {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.7);
+  padding-left: 0.15rem;
+}
+
+/* ==========================================================================
+   Runs Filter Select - Dropdown styling
+   ========================================================================== */
+
+/* Filter select dropdown */
+.runs-filter-select {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* Filter select hover state */
+.runs-filter-select:hover {
+  border-color: rgba(100, 116, 139, 0.8);
+}
+
+/* ==========================================================================
+   Deprecated: Recent Runs Filter Row
+   Retained for backward compatibility, not recommended for new use
+   ========================================================================== */
+
+/* Recent runs filter row - deprecated */
+.recent-runs-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.recent-runs-filter-row .eyebrow {
+  margin-bottom: 0;
+}
+
+/* ==========================================================================
+   Theme Overrides - Solarized Light
+   Retained here as selector-based overrides must live in monolith during transition
+   ========================================================================== */
+
+/* Solarized Light theme - filter button styling */
+[data-theme="solarized-light"] .runs-filter-button {
+  background: rgba(147, 161, 161, 0.15);
+}
+
+[data-theme="solarized-light"] .runs-filter-button:hover {
+  background: rgba(147, 161, 161, 0.22);
+}
+
+[data-theme="solarized-light"] .runs-filter-button.active {
+  background: rgba(38, 139, 210, 0.18);
+}
+
+[data-theme="solarized-light"] .runs-filter-count {
+  color: #657b83;
+}
+
+/* Active filter chip count - stronger contrast for legibility on warm paper */
+[data-theme="solarized-light"] .runs-filter-button.active .runs-filter-count {
+  color: #268bd2;
+}
+
+/* Solarized Light theme - filter select */
+[data-theme="solarized-light"] .runs-filter-select {
+  background: rgba(253, 246, 227, 0.95);
+}

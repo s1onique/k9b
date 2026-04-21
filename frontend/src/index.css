@@ -569,98 +569,13 @@
   gap: 0.75rem;
 }
 
-/* Runs filter bar - cleaner chip-based design */
-.runs-filter-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.runs-filter-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.runs-filter-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.65rem;
-  border-radius: 0.35rem;
-  border: 1px solid rgba(71, 85, 105, 0.4);
-  background: rgba(30, 41, 59, 0.6);
-  color: rgba(148, 163, 184, 0.85);
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.runs-filter-button:hover {
-  background: rgba(71, 85, 105, 0.4);
-  border-color: rgba(100, 116, 139, 0.6);
-  color: #e2e8f0;
-}
-
-.runs-filter-button:focus-visible {
-  outline: 2px solid #38bdf8;
-  outline-offset: 2px;
-}
-
-.runs-filter-button.active {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #bae6fd;
-  font-weight: 600;
-}
-
-.runs-filter-label {
-  white-space: nowrap;
-}
-
-.runs-filter-count {
-  color: rgba(148, 163, 184, 0.6);
-  font-size: 0.7rem;
-}
-
-.runs-filter-button.active .runs-filter-count {
-  color: rgba(186, 230, 253, 0.7);
-}
-
-.runs-filter-summary {
-  font-size: 0.75rem;
-  color: rgba(148, 163, 184, 0.7);
-  padding-left: 0.15rem;
-}
-
-/* Recent runs filter row - deprecated, using runs-filter-bar instead */
-.recent-runs-filter-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.recent-runs-filter-row .eyebrow {
-  margin-bottom: 0;
-}
-
-.runs-filter-select {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(71, 85, 105, 0.5);
-  color: #e2e8f0;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.runs-filter-select:hover {
-  border-color: rgba(100, 116, 139, 0.8);
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/filters.css
+   ========================================================================== */
+/* .runs-filter-bar, .runs-filter-options, .runs-filter-button, .runs-filter-label,
+   .runs-filter-count, .runs-filter-summary, .runs-filter-select,
+   .recent-runs-filter-row, .recent-runs-filter-row .eyebrow
+   moved to styles/components/filters.css */
 
 /* Recent runs list */
 .recent-runs-list {
