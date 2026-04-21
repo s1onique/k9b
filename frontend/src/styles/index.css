@@ -1,0 +1,46 @@
+/**
+ * Styles Entry Point
+ * 
+ * Canonical entrypoint for all application styles.
+ * Imports in correct cascade order: tokens first, then component styles.
+ * 
+ * Architecture:
+ * - styles/index.css    → Main entrypoint (this file)
+ * - styles/tokens.css   → Base tokens (:root, [data-theme]) - LOW RISK extraction
+ * - ../index.css        → All component, layout, and theme override styles
+ * - ../themes.css       → Token values (color definitions) - loaded via main.tsx
+ * 
+ * Import order rationale:
+ * 1. tokens.css must load first so :root custom properties are declared
+ * 2. index.css contains all component styles that reference those tokens
+ * 3. themes.css is loaded separately in main.tsx BEFORE this import
+ *    to ensure token VALUES exist before tokens.css references them
+ * 
+ * Phase tracking:
+ * ✓ Phase 1: styles/index.css entrypoint (scaffolding)
+ * ✓ Phase 2: styles/tokens.css (base tokens extracted)
+ * → Phase 3: layout extraction (future)
+ * → Phase 4: panel component extraction (future)
+ * → Phase 5: theme override extraction (future)
+ * → Phase 6: remaining component groups (future)
+ */
+
+/**
+ * Phase tracking:
+ * ✓ Phase 1: styles/index.css entrypoint (scaffolding)
+ * ✓ Phase 2: styles/tokens.css (base tokens extracted)
+ * ✓ Phase 3: styles/reset.css (reset + base extracted)
+ * → Phase 4: layout extraction (future)
+ * → Phase 5: panel component extraction (future)
+ * → Phase 6: theme override extraction (future)
+ * → Phase 7: remaining component groups (future)
+ */
+
+/* 1. Base tokens must load first */
+@import "./tokens.css";
+
+/* 2. Reset and base styles (universal, no component dependencies) */
+@import "./reset.css";
+
+/* 3. Component styles that reference those tokens */
+@import "../index.css";

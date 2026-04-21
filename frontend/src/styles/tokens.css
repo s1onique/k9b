@@ -1,0 +1,35 @@
+/**
+ * Token Declarations
+ * 
+ * Global CSS custom properties and base token declarations.
+ * These establish the design token foundation for the application.
+ * 
+ * Token sources:
+ * - Design tokens (colors, spacing, etc.) → defined in ../themes.css
+ * - Global font and base styling → declared here
+ * 
+ * Import order: This file should be imported BEFORE component styles
+ * to ensure tokens are available when selectors reference them.
+ */
+
+/* ==========================================================================
+   Global Base Tokens
+   ========================================================================== */
+
+/**
+ * Root element font and base color declarations.
+ * Uses CSS custom properties defined in themes.css for color values.
+ */
+:root {
+  font-family: "Space Grotesk", "Relief Sans", "Inter", system-ui, sans-serif;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-page);
+}
+
+/**
+ * Theme-aware page background.
+ * Applies gradient defined in themes.css to all themed elements.
+ */
+[data-theme] {
+  background: var(--color-bg-page-gradient);
+}

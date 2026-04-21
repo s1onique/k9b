@@ -1,12 +1,8 @@
-:root {
-  font-family: "Space Grotesk", "Relief Sans", "Inter", system-ui, sans-serif;
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-page);
-}
-
-[data-theme] {
-  background: var(--color-bg-page-gradient);
-}
+/* ==========================================================================
+   EXTracted to styles/tokens.css
+   ========================================================================== */
+/* Tokens (:root, [data-theme] base declarations) moved to styles/tokens.css */
+/* ========================================================================== */
 
 .next-check-manual-actions {
   margin-top: 0.5rem;
@@ -45,24 +41,10 @@
   padding: 0.25rem 0;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--color-bg-page-gradient);
-  min-height: 100vh;
-}
-
-.app-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+/* ==========================================================================
+   EXTracted to styles/reset.css
+   ========================================================================== */
+/* Reset (*, body, .app-shell) moved to styles/reset.css */
 
 /* ==========================================================================
    Workflow Lane Headers
