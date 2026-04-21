@@ -1,58 +1,81 @@
 /**
- * Next Check Queue Item Structure
+ * Next Check Queue - Canonical Owner
  * 
- * Self-contained queue card/item structure and its tightly local Solarized Light overrides.
+ * Extracted from: frontend/src/index.css, styles/components/next-check-plan.css
+ * Phase: 31 (initial), consolidation pass (final)
  * 
- * Phase: 31
+ * ============================================================================
+ * CANONICAL OWNERSHIP (this file owns all base rules)
+ * ============================================================================
  * 
- * Base selectors:
- * - .next-check-queue-item-header
- * - .queue-item-title-block
- * - .queue-item-title
+ * Queue Controls (moved from index.css + next-check-plan.css):
+ * - .next-check-queue-controls
+ * - .next-check-filter-row, .next-check-control-row
+ * - .next-check-filter-row label, .next-check-control-row label
+ * - .next-check-filter-row select, .next-check-control-row select
+ * - .queue-search input
+ * - .focus-presets, .focus-preset-button
+ * - .focus-preset-button.active, .focus-preset-button:focus-visible
+ * 
+ * Queue Group & Items (moved from index.css + next-check-plan.css):
+ * - .next-check-queue-group, .next-check-queue-group-head, .next-check-queue-items
+ * - .next-check-queue-item
+ * - .next-check-queue-item-meta
+ * - .queue-card-title, .queue-card-reason, .queue-card-reason-label, .queue-card-signal
+ * - .primary-reason
+ * - .next-check-queue-item-status, .next-check-queue-item-flags, .next-check-queue-item-actions
+ * - .next-check-queue-item-flags strong
+ * 
+ * Queue Item Structure (moved from next-check-plan.css):
+ * - .next-check-queue-item-header, .queue-item-title-block, .queue-item-title
  * - .queue-item-status-badges
  * - .next-check-queue-item-context
- * - .queue-item-rationale-line
- * - .queue-item-rationale-label
- * - .queue-item-meta-row
- * - .queue-item-meta-tag
+ * - .queue-item-rationale-line, .queue-item-rationale-label
+ * - .queue-item-meta-row, .queue-item-meta-tag
  * - .queue-item-blocker-note, .queue-item-blocker-icon, .queue-item-blocker-text
- * - .queue-item-secondary-actions
- * - .queue-item-primary-action
+ * - .queue-item-secondary-actions, .queue-item-primary-action
  * - .queue-item-result-strip, .queue-item-result-strip.success/error/timeout
  * - .queue-item-result-label, .queue-item-result-summary
  * - .queue-item-result-link, .queue-item-result-link:hover
  * - .queue-item-result-next
  * - .next-check-queue-item-details
- * - .next-check-queue-item-metadata
- * - .next-check-queue-item-metadata span strong
+ * - .next-check-queue-item-metadata, .next-check-queue-item-metadata span strong
  * - .next-check-queue-item-rationale
  * - .priority-rationale-label, .priority-rationale-badge
  * 
- * Theme overrides:
- * - All [data-theme="solarized-light"] .queue-item-* selectors
- * - All [data-theme="solarized-light"] .next-check-queue-item-* selectors
- * - All [data-theme="solarized-light"] .priority-rationale-* selectors
+ * Theme overrides (all Solarized Light):
+ * - [data-theme="solarized-light"] .next-check-queue-item
+ * - [data-theme="solarized-light"] .next-check-queue-group
+ * - [data-theme="solarized-light"] .queue-item-*
+ * - [data-theme="solarized-light"] .priority-rationale-*
+ * - [data-theme="solarized-light"] .focus-preset-button*
+ * - [data-theme="solarized-light"] .next-check-filter-row select
+ * - [data-theme="solarized-light"] .next-check-control-row select
+ * - [data-theme="solarized-light"] .queue-search input
  * 
- * NOT extracted (separate families, owned elsewhere):
- * - .next-check-queue-controls, .next-check-filter-row, .next-check-control-row
- * - .queue-search, .focus-presets, .focus-preset-button (queue controls)
- * - .queue-empty-state, .queue-empty-explanation, .queue-empty-recovery-actions (queue empty)
+ * ============================================================================
+ * SPLIT OWNERSHIP (other files still own these)
+ * ============================================================================
+ * 
+ * next-check-plan.css owns:
+ * - .next-check-queue-panel, .deterministic-next-checks-panel
+ * - Deterministic card family (.deterministic-*)
+ * - Next check plan family (.next-check-plan-*)
+ * - Approval actions family (.next-check-approval-*)
+ * - Discovery pills (.next-check-discovery-pill-*)
+ * - Cluster badges (.next-check-cluster-badge)
+ * - Outcome pills (.outcome-pill-*)
+ * - Solarized Light overrides for above families
+ * 
+ * Intentional remaining in index.css (monolith remainder):
+ * - .queue-empty-state, .queue-empty-explanation, .queue-empty-recovery-actions
  * - .queue-explanation-block, .queue-explanation-header, .queue-explanation-*
- * - .next-check-queue-group, .next-check-queue-group-head, .next-check-queue-items
- *   NOTE: Base rules in index.css; this file owns the Solarized Light theme overrides
- * - .next-check-queue-item (card base: index.css; theme overrides: this file)
- * - .next-check-queue-item-meta (item meta: index.css; theme overrides: this file)
- * - .next-check-queue-item-status, .next-check-queue-item-flags, .next-check-queue-item-actions (item status: index.css)
- * - .next-check-queue-item-flags strong (owned by index.css)
- * - .deterministic-cluster-card, .deterministic-cluster-head, .deterministic-cluster-summary,
- *   .deterministic-group, .deterministic-group-title, .deterministic-group-meta,
- *   .deterministic-check-list, .deterministic-check-row, .deterministic-check-main,
- *   .deterministic-check-command, .deterministic-check-meta, .deterministic-empty-state,
- *   .deterministic-empty-bucket, .deterministic-primary-pill, .deterministic-workstream-pill*,
- *   .deterministic-urgency-pill* (deterministic card family - OWNED by next-check-plan.css)
- *   Solarized Light overrides for deterministic family - OWNED by next-check-plan.css
- * - .primary-reason (triage/reason family)
+   * - .next-check-command-preview (command preview in cards)
  * - .toggle-details-button (shared UI)
+ * 
+ * NOT IN SCOPE (separate component files):
+ * - .action-state-* (action-status.css)
+ * - .queue-status-pill-* (action-status.css)
  */
 
 /* ==========================================================================
@@ -520,4 +543,127 @@
   border-color: rgba(38, 139, 210, 0.6);
   outline: none;
   box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.1);
+}
+
+/* ==========================================================================
+   Queue Group & Items - Base Rules (moved from index.css + next-check-plan.css)
+   ========================================================================== */
+
+/* Queue group container */
+.next-check-queue-group {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* Queue group header */
+.next-check-queue-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Queue items grid */
+.next-check-queue-items {
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* Queue item card base */
+.next-check-queue-item {
+  padding: 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Queue item meta row */
+.next-check-queue-item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Queue card title */
+.queue-card-title {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+/* Queue card reason */
+.queue-card-reason {
+  margin: 0.25rem 0;
+}
+
+.queue-card-reason-label {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.queue-card-signal {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+/* Primary reason badge */
+.primary-reason {
+  color: var(--color-text-accent, #b45309);
+  font-weight: 600;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: rgba(180, 83, 9, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+}
+
+.primary-reason::before {
+  content: "Why";
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+/* Queue item status column */
+.next-check-queue-item-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+
+/* Queue item flags row */
+.next-check-queue-item-flags {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.next-check-queue-item-flags strong {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Queue item actions row */
+.next-check-queue-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
