@@ -278,3 +278,12 @@
   background: rgba(147, 161, 161, 0.25);
   color: #002b36;
 }
+
+/* ==========================================================================
+   Execution error display (runs table context)
+   ========================================================================== */
+.runs-execution-error {
+  margin: 0;
+  font-size: 0.65rem;
+  color: #fca5a5;
+}

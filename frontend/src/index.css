@@ -112,18 +112,8 @@
 */
 
 /* Action cell - deliberate placement (base retained here, Solarized overrides in runs-table.css) */
-.run-action-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  align-items: flex-start;
-}
-
-.runs-execution-error {
-  margin: 0;
-  font-size: 0.65rem;
-  color: #fca5a5;
-}
+/* NOTE: .run-action-cell base styles now live exclusively in styles/components/row-actions.css */
+/* Legacy compat shims removed - zero active TSX usage */
 
 /* ==========================================================================
    Canonical Pagination Controls
@@ -306,176 +296,19 @@
 /* .row-action, .row-action--primary, .row-action--secondary,
    .row-action--disabled, .row-action-empty, .run-action-cell,
    .run-action-empty, .run-cell-review, .run-row-actions
-   moved to styles/components/row-actions.css */
-
-/* Backward compatibility: map old btn classes to row-action pattern */
-.run-action-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  align-items: flex-start;
-}
-
-/* Legacy primary button - now uses row-action pattern */
-.run-action-cell .btn-primary,
-.run-action-cell button[class*='primary'] {
-  background: rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.5);
-  color: #7dd3fc;
-  font-weight: 600;
-  padding: 0.35rem 0.75rem;
-  border-radius: 0.35rem;
-  font-size: 0.75rem;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.run-action-cell .btn-primary:hover,
-.run-action-cell button[class*='primary']:hover {
-  background: rgba(56, 189, 248, 0.25);
-  border-color: rgba(56, 189, 248, 0.7);
-}
-
-.run-action-cell .btn-primary:focus-visible,
-.run-action-cell button[class*='primary']:focus-visible {
-  outline: 2px solid #38bdf8;
-  outline-offset: 2px;
-}
-
-/* Legacy secondary button - now uses row-action pattern */
-.run-action-cell .btn-secondary,
-.run-action-cell a.btn,
-.run-action-cell a[class*='btn'] {
-  background: rgba(71, 85, 105, 0.3);
-  border: 1px solid rgba(100, 116, 139, 0.4);
-  color: rgba(148, 163, 184, 0.9);
-  padding: 0.25rem 0.6rem;
-  border-radius: 0.3rem;
-  font-size: 0.7rem;
-  transition: all 0.15s ease;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.run-action-cell .btn-secondary:hover,
-.run-action-cell a.btn:hover,
-.run-action-cell a[class*='btn']:hover {
-  background: rgba(71, 85, 105, 0.5);
-  border-color: rgba(100, 116, 139, 0.6);
-  color: #e2e8f0;
-}
-
-.run-action-cell .btn-secondary:focus-visible,
-.run-action-cell a.btn:focus-visible,
-.run-action-cell a[class*='btn']:focus-visible {
-  outline: 2px solid #38bdf8;
-  outline-offset: 2px;
-}
-
-/* Solarized Light overrides for row-action pattern */
-[data-theme="solarized-light"] .row-action--primary {
-  background: rgba(38, 139, 210, 0.15);
-  border-color: rgba(38, 139, 210, 0.5);
-  color: #268bd2;
-}
-
-[data-theme="solarized-light"] .row-action--primary:hover:not(:disabled) {
-  background: rgba(38, 139, 210, 0.25);
-  border-color: rgba(38, 139, 210, 0.7);
-  color: #1a5f8a;
-}
-
-[data-theme="solarized-light"] .row-action--primary:active:not(:disabled) {
-  background: rgba(38, 139, 210, 0.3);
-}
-
-[data-theme="solarized-light"] .row-action--primary:focus-visible {
-  outline-color: #268bd2;
-}
-
-[data-theme="solarized-light"] .row-action--secondary {
-  background: rgba(147, 161, 161, 0.2);
-  border-color: rgba(147, 161, 161, 0.5);
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .row-action--secondary:hover:not(:disabled) {
-  background: rgba(147, 161, 161, 0.32);
-  border-color: rgba(147, 161, 161, 0.6);
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .row-action--secondary:active:not(:disabled) {
-  background: rgba(147, 161, 161, 0.38);
-}
-
-[data-theme="solarized-light"] .row-action--secondary:focus-visible {
-  outline-color: #268bd2;
-}
-
-[data-theme="solarized-light"] .row-action--disabled,
-[data-theme="solarized-light"] .row-action:disabled {
-  background: rgba(147, 161, 161, 0.1);
-  border-color: rgba(147, 161, 161, 0.2);
-  color: #93a1a1;
-}
-
-[data-theme="solarized-light"] .row-action-empty {
-  color: #93a1a1;
-}
-
-/* Backward compat: map old empty class */
-.run-action-empty {
-  color: rgba(100, 116, 139, 0.5);
-  font-size: 0.7rem;
-  font-style: italic;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-/* Run cell review column - semantic grouping */
-.run-cell-review {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  align-items: flex-start;
-}
-
-.run-cell-review .review-action-hint {
-  font-size: 0.6rem;
-  color: rgba(100, 116, 139, 0.6);
-  margin-top: 0.1rem;
-}
-
-/* Action column - primary vs secondary visual hierarchy */
-.run-row-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  align-items: flex-start;
-}
-
-.run-row-actions .action-primary {
-  font-weight: 600;
-  font-size: 0.75rem;
-}
-
-.run-row-actions .action-secondary {
-  font-size: 0.7rem;
-  opacity: 0.85;
-}
-
-.run-row-actions .action-tertiary {
-  font-size: 0.65rem;
-  opacity: 0.7;
-}
+   moved to styles/components/row-actions.css
+   
+   DUPLICATE REMOVED: Legacy .run-action-cell and compat shims were
+   also present here but are now exclusively in row-actions.css.
+   TSX audit confirmed zero active usage of .btn-primary, .btn-secondary,
+   or .run-action-cell in current codebase.
+   
+   Remaining in index.css: Solarized Light overrides for legacy btn
+   classes within .run-action-cell scope (runs-table.css handles base
+   legacy cell, solarized overrides stay contextual to table context).
+   
+   See: styles/components/row-actions.css
+*/
 
 /* ==========================================================================
     EXTRACTED to styles/components/fleet-summary.css
