@@ -1322,6 +1322,20 @@
   margin-right: 0.25rem;
 }
 
+/* ==========================================================================
+   EXTRACTED to styles/components/advisory-summary.css
+   ========================================================================== */
+/*
+   Review Enrichment family - BASE STYLES MOVED TO advisory-summary.css
+   
+   .review-enrichment-summary base rule moved (font-size only).
+   The compound selector .advisory-summary-collapsible .review-enrichment-summary
+   provides full styling in collapsible context.
+   
+   See: styles/components/advisory-summary.css
+   ========================================================================== */
+
+/* Base rule duplicated in extracted file - overridden by compound selector */
 .review-enrichment-summary {
   font-size: 0.95rem;
   line-height: 1.4;

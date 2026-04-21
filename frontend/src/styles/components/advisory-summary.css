@@ -3,6 +3,27 @@
    Advisory panel top: summary strip, cluster overview, collapsible summary.
    ========================================================================== */
 
+/* ==========================================================================
+   REVIEW ENRICHMENT FAMILY - BASE STYLES
+   Extracted from frontend/src/index.css
+   
+   Moved here to resolve split ownership with compound selectors in this file.
+   The base .review-enrichment-summary rule (font-size only) is duplicated here.
+   The compound selector .advisory-summary-collapsible .review-enrichment-summary
+   provides the full styling when inside the collapsible context.
+   
+   Base selectors:
+   - .review-enrichment-summary (font-size base)
+   
+   Compound override (stays here):
+   - .advisory-summary-collapsible .review-enrichment-summary
+   ========================================================================== */
+
+/* Base style - overridden by compound selector in collapsible context */
+.review-enrichment-summary {
+  font-size: 0.95rem;
+}
+
 /* Executive summary strip - compact scan-friendly overview */
 .advisory-summary-strip {
   display: flex;
@@ -131,6 +152,7 @@
   transform: rotate(90deg);
 }
 
+/* Compound selector - provides full styling in collapsible context */
 .advisory-summary-collapsible .review-enrichment-summary {
   margin: 0.5rem 0 0;
   padding: 0.75rem;
