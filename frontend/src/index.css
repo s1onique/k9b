@@ -2019,16 +2019,26 @@
    - .alertmanager-* (alertmanager-snapshot.css, alertmanager-sources.css)
 
    See: styles/components/alerts.css
-*/
+ */
 
-.loading {
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-}
+/* ==========================================================================
+    EXTRACTED to styles/components/loading.css
+    ========================================================================== */
+/*
+   Loading state family - MOVED TO loading.css
+   
+   Base selectors extracted:
+   - .loading
+   
+   Theme overrides:
+   - None (self-contained)
+   
+   See: styles/components/loading.css
+ */
 
+/* ==========================================================================
+    Media queries (fleet-table responsive)
+    ========================================================================== */
 @media (max-width: 768px) {
   .fleet-table table,
   .fleet-table thead,

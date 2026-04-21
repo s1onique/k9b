@@ -80,6 +80,7 @@
 @import url('./components/cluster-detail.css');
 @import url('./components/proposal-list.css');
 @import url('./components/alerts.css');
+@import url('./components/loading.css');
 @import url('./components/shared-ui.css');
 
 /* 5. Legacy component styles (remaining monolith) */

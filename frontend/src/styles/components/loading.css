@@ -1,0 +1,25 @@
+/**
+ * Loading State Family
+ * 
+ * Shared loading state pattern for async content areas.
+ * Provides centered flex layout with minimum height for loading placeholders.
+ * 
+ * Base selectors:
+ * - .loading
+ * 
+ * Theme overrides:
+ * - None (self-contained, no theme-specific variants)
+ * 
+ * Dependencies:
+ * - None (uses only flexbox, no token dependencies)
+ * 
+ * Phase: 22
+ */
+
+.loading {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
