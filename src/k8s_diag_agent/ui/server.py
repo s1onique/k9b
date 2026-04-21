@@ -30,6 +30,7 @@ from ..external_analysis.alertmanager_source_registry import (
     write_source_registry,
 )
 from ..external_analysis.artifact import (
+    AlertmanagerRelevanceClass,
     ExternalAnalysisArtifact,
     ExternalAnalysisStatus,
     PackRefreshStatus,
@@ -891,6 +892,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 return
             if route == "/api/next-check-execution-usefulness":
                 self._handle_usefulness_feedback()
+                return
+            if route == "/api/alertmanager-relevance-feedback":
+                self._handle_alertmanager_relevance_feedback()
                 return
             if route == "/api/run-batch-next-check-execution":
                 self._handle_run_batch_next_check_execution()
@@ -2280,6 +2284,154 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "usefulnessSummary": usefulness_summary,
         })
 
+    def _handle_alertmanager_relevance_feedback(self) -> None:
+        """Handle operator feedback on next-check execution Alertmanager relevance.
+
+        Accepts artifactPath, alertmanagerRelevance (relevant|not_relevant|noisy|unsure),
+        and optional alertmanagerRelevanceSummary, then creates a separate review artifact
+        to preserve the immutable execution artifact.
+
+        Note: provenance is read from the execution artifact itself, not accepted from
+        the client, to preserve provenance integrity.
+        """
+        content_length = int(self.headers.get("Content-Length") or 0)
+        if content_length <= 0:
+            self._send_json({"error": "Request body required"}, 400)
+            return
+        try:
+            raw_payload = self.rfile.read(content_length).decode("utf-8")
+            payload = json.loads(raw_payload)
+        except Exception:
+            self._send_json({"error": "Invalid JSON payload"}, 400)
+            return
+
+        # Validate required fields
+        artifact_path_rel = payload.get("artifactPath")
+        if not isinstance(artifact_path_rel, str) or not artifact_path_rel:
+            self._send_json({"error": "artifactPath is required"}, 400)
+            return
+
+        relevance_raw = payload.get("alertmanagerRelevance")
+        if not isinstance(relevance_raw, str) or not relevance_raw:
+            self._send_json({"error": "alertmanagerRelevance is required"}, 400)
+            return
+
+        # Validate relevance class - only allow the 4 contract values
+        try:
+            relevance = AlertmanagerRelevanceClass(relevance_raw)
+        except ValueError:
+            self._send_json(
+                {
+                    "error": "Invalid alertmanagerRelevance. Must be one of: relevant, not_relevant, noisy, unsure"
+                },
+                400,
+            )
+            return
+
+        # Optional summary
+        relevance_summary = payload.get("alertmanagerRelevanceSummary")
+        if relevance_summary is not None and not isinstance(relevance_summary, str):
+            self._send_json({"error": "alertmanagerRelevanceSummary must be a string"}, 400)
+            return
+
+        # Resolve artifact path securely
+        try:
+            artifact_path = (self.runs_dir / artifact_path_rel).resolve()
+        except Exception:
+            self._send_json({"error": "Invalid artifact path"}, 400)
+            return
+
+        # Verify path is within runs_dir
+        if not str(artifact_path).startswith(str(self.runs_dir.resolve())):
+            self._send_json({"error": "Artifact path must be within runs directory"}, 400)
+            return
+
+        if not artifact_path.exists():
+            self._send_json({"error": "Execution artifact not found"}, 404)
+            return
+
+        # Read the execution artifact to extract provenance and metadata
+        try:
+            execution_artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            self._send_json({"error": f"Unable to read execution artifact: {exc}"}, 500)
+            return
+
+        # Extract provenance from execution artifact (server-owned, not client-supplied)
+        # This preserves provenance integrity - operator cannot alter evidence
+        provenance = execution_artifact.get("alertmanager_provenance")
+
+        # Extract execution metadata for the review artifact
+        run_id = execution_artifact.get("run_id", "")
+        cluster_label = execution_artifact.get("cluster_label", "")
+        tool_name = execution_artifact.get("tool_name", "")
+        status = execution_artifact.get("status", "")
+        timestamp = execution_artifact.get("timestamp", datetime.now(UTC).isoformat())
+
+        # Generate unique review artifact filename
+        # Pattern: {run_id}-next-check-execution-alertmanager-review-{uuid}.json
+        import uuid
+        review_uuid = str(uuid.uuid4())[:8]
+        review_filename = f"{run_id}-next-check-execution-alertmanager-review-{review_uuid}.json"
+
+        # Write review artifact to external-analysis directory
+        external_analysis_dir = self._health_root / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        review_path = external_analysis_dir / review_filename
+
+        review_artifact = {
+            "purpose": "next-check-execution-alertmanager-review",
+            "tool_name": tool_name,
+            "run_id": run_id,
+            "run_label": execution_artifact.get("run_label", ""),
+            "cluster_label": cluster_label,
+            "status": status,
+            "timestamp": timestamp,
+            "reviewed_at": datetime.now(UTC).isoformat(),
+            # Link back to original execution artifact
+            "source_artifact": str(artifact_path.relative_to(self._health_root)),
+            # Alertmanager relevance judgment
+            "alertmanager_relevance": relevance.value,
+            "alertmanager_relevance_summary": relevance_summary,
+            # Preserve provenance from execution artifact (server-owned)
+            "alertmanager_provenance": provenance,
+            # Include execution summary for context
+            "summary": execution_artifact.get("summary"),
+            "duration_ms": execution_artifact.get("duration_ms"),
+        }
+
+        try:
+            review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
+        except Exception as exc:
+            self._send_json({"error": f"Unable to persist review artifact: {exc}"}, 500)
+            return
+
+        logger.info(
+            "Operator recorded Alertmanager relevance feedback",
+            extra={
+                "review_artifact": str(review_path),
+                "source_artifact": str(artifact_path),
+                "alertmanager_relevance": relevance.value,
+                "alertmanager_relevance_summary": relevance_summary,
+            },
+        )
+
+        # Invalidate UI caches so the new review shows up immediately
+        ui_index_path = self.runs_dir / "health" / "ui-index.json"
+        if ui_index_path.exists():
+            try:
+                ui_index_path.touch()
+            except Exception:
+                pass  # Non-fatal
+
+        self._send_json({
+            "status": "success",
+            "summary": "Alertmanager relevance feedback recorded",
+            "alertmanagerRelevance": relevance.value,
+            "alertmanagerRelevanceSummary": relevance_summary,
+            "reviewArtifactPath": str(review_path.relative_to(self._health_root)),
+        })
+
     def _handle_run_batch_next_check_execution(self) -> None:
         """Handle batch execution of next-check candidates for a specific run.
 
@@ -3632,6 +3784,114 @@ def _get_field_with_default(data: dict[str, object], default: object, *keys: str
     return default
 
 
+def _load_alertmanager_review_artifacts(
+    external_analysis_dir: Path, run_id: str
+) -> dict[str, dict[str, object]]:
+    """Discover Alertmanager review artifacts and return latest per source execution artifact.
+
+    Scans external-analysis/ for review artifacts matching:
+    {run_id}-next-check-execution-alertmanager-review-*.json
+
+    Returns a dict mapping source_artifact path -> latest review artifact data.
+    If multiple reviews exist for the same source, returns the most recent one.
+
+    Each review artifact is enriched with the review file's relative path as
+    `artifact_path` so that callers can include the review artifact path in
+    merged entries (not just the source artifact path).
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory
+        run_id: The run ID to filter by
+
+    Returns:
+        Dict mapping source artifact relative path -> latest review artifact data,
+        with each review also containing `artifact_path` = relative path of the review file
+    """
+    reviews_by_source: dict[str, dict[str, object]] = {}
+
+    if not external_analysis_dir.exists():
+        return reviews_by_source
+
+    # Find all Alertmanager review artifacts for this run
+    review_pattern = f"{run_id}-next-check-execution-alertmanager-review-*.json"
+    for review_file in external_analysis_dir.glob(review_pattern):
+        try:
+            review_data = json.loads(review_file.read_text(encoding="utf-8"))
+            if not isinstance(review_data, dict):
+                continue
+
+            purpose = review_data.get("purpose")
+            if purpose != "next-check-execution-alertmanager-review":
+                continue
+
+            # Get source artifact path (the execution artifact this review is for)
+            source_artifact = review_data.get("source_artifact")
+            if not isinstance(source_artifact, str):
+                continue
+
+            # Inject the review file's relative path as artifact_path
+            # This allows callers to include the review artifact path, not just the source
+            review_data["artifact_path"] = str(review_file.relative_to(external_analysis_dir.parent))
+
+            # Get review timestamp for determining "latest"
+            reviewed_at = review_data.get("reviewed_at", "")
+            existing = reviews_by_source.get(source_artifact)
+            if existing is None or reviewed_at > existing.get("reviewed_at", ""):
+                reviews_by_source[source_artifact] = review_data
+
+        except Exception:
+            continue
+
+    return reviews_by_source
+
+
+def _merge_alertmanager_review_into_history_entry(
+    entry: dict[str, object], review: dict[str, object] | None
+) -> dict[str, object]:
+    """Merge Alertmanager review data into an execution history entry.
+
+    If a review exists for this entry's source artifact, merge the relevance
+    judgment and provenance into the entry for API serialization.
+
+    Args:
+        entry: The execution history entry dict
+        review: The latest Alertmanager review artifact data, or None if no review
+
+    Returns:
+        Entry dict with alertmanager review fields merged in
+    """
+    if review is None:
+        return entry
+
+    # Create merged entry
+    merged = dict(entry)
+
+    # Add Alertmanager relevance judgment from review
+    relevance = review.get("alertmanager_relevance")
+    if isinstance(relevance, str):
+        merged["alertmanagerRelevance"] = relevance
+
+    summary = review.get("alertmanager_relevance_summary")
+    if isinstance(summary, str):
+        merged["alertmanagerRelevanceSummary"] = summary
+
+    # Add provenance preserved from execution artifact
+    provenance = review.get("alertmanager_provenance")
+    if provenance is not None:
+        merged["alertmanagerProvenance"] = provenance
+
+    # Add review metadata
+    reviewed_at = review.get("reviewed_at")
+    if isinstance(reviewed_at, str):
+        merged["alertmanagerReviewedAt"] = reviewed_at
+
+    review_artifact = review.get("artifact_path") or review.get("source_artifact")
+    if isinstance(review_artifact, str):
+        merged["alertmanagerReviewArtifactPath"] = review_artifact
+
+    return merged
+
+
 def _build_execution_history(
     external_analysis_dir: Path, run_id: str
 ) -> list[dict[str, object]]:
@@ -3640,11 +3900,17 @@ def _build_execution_history(
     Uses prefix-based matching to handle any artifact naming pattern,
     matching any file starting with run_id and ending with '-next-check-execution'.
     This mirrors the approach used in build_runs_list() for consistency.
+
+    After building execution entries, merges in Alertmanager review artifacts
+    so the UI can display relevance judgments.
     """
     history: list[dict[str, object]] = []
 
     if not external_analysis_dir.exists():
         return history
+
+    # Pre-load Alertmanager review artifacts for merging into entries
+    reviews_by_source = _load_alertmanager_review_artifacts(external_analysis_dir, run_id)
 
     # Pre-sort files by length (longest first) to handle prefixed run_ids correctly
     # e.g., "run-2024-01-15" should match before "run-2024"
@@ -3686,7 +3952,7 @@ def _build_execution_history(
                 except (ValueError, TypeError):
                     candidate_index = None
 
-            history.append({
+            entry: dict[str, object] = {
                 "timestamp": artifact_data.get("timestamp"),
                 "clusterLabel": _get_field_with_fallback(payload, "clusterLabel", "cluster_label"),
                 "candidateDescription": _get_field_with_fallback(payload, "candidateDescription", "candidate_description"),
@@ -3700,7 +3966,15 @@ def _build_execution_history(
                 "outputBytesCaptured": _get_field_with_default(artifact_data, 0, "output_bytes_captured", "outputBytesCaptured"),
                 "candidateId": candidate_id,
                 "candidateIndex": candidate_index,
-            })
+            }
+
+            # Merge Alertmanager review if exists for this source artifact
+            source_artifact = str(artifact_file.relative_to(external_analysis_dir.parent))
+            review = reviews_by_source.get(source_artifact)
+            if review is not None:
+                entry = _merge_alertmanager_review_into_history_entry(entry, review)
+
+            history.append(entry)
         except Exception:
             continue
 

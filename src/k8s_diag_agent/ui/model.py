@@ -484,6 +484,11 @@ class NextCheckExecutionHistoryEntryView:
     # Provenance fields for traceability
     candidate_id: str | None = None
     candidate_index: int | None = None
+    # Alertmanager provenance snapshot (preserved from ranked queue item)
+    alertmanager_provenance: AlertmanagerProvenanceView | None = None
+    # Alertmanager relevance judgment from operator feedback
+    alertmanager_relevance: str | None = None
+    alertmanager_relevance_summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1363,6 +1368,8 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
     for entry in raw:
         if not isinstance(entry, Mapping):
             continue
+        provenance_raw = entry.get("alertmanagerProvenance") or entry.get("alertmanager_provenance")
+        provenance = _build_alertmanager_provenance_view(provenance_raw)
         entries.append(
             NextCheckExecutionHistoryEntryView(
                 timestamp=_coerce_str(entry.get("timestamp")),
@@ -1388,6 +1395,11 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 # Provenance fields for traceability
                 candidate_id=_coerce_optional_str(entry.get("candidateId")),
                 candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
+                # Alertmanager provenance snapshot (preserved from ranked queue item)
+                alertmanager_provenance=provenance,
+                # Alertmanager relevance judgment from operator feedback
+                alertmanager_relevance=_coerce_optional_str(entry.get("alertmanagerRelevance")),
+                alertmanager_relevance_summary=_coerce_optional_str(entry.get("alertmanagerRelevanceSummary")),
             )
         )
     return tuple(entries)
@@ -1403,22 +1415,22 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
         provenance_raw = entry.get("alertmanagerProvenance") or entry.get("alertmanager_provenance")
         provenance = _build_alertmanager_provenance_view(provenance_raw)
         entries.append(
-                NextCheckQueueItemView(
-                    candidate_id=_coerce_optional_str(entry.get("candidateId")),
-                    candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
-                    description=_coerce_str(entry.get("description")),
-                    target_cluster=_coerce_optional_str(entry.get("targetCluster")),
-                    priority_label=_coerce_optional_str(entry.get("priorityLabel")),
-                    suggested_command_family=_coerce_optional_str(entry.get("suggestedCommandFamily")),
-                    safe_to_automate=bool(entry.get("safeToAutomate")),
-                    requires_operator_approval=bool(entry.get("requiresOperatorApproval")),
-                    approval_state=_coerce_optional_str(entry.get("approvalState")),
-                    execution_state=_coerce_optional_str(entry.get("executionState")),
-                    outcome_status=_coerce_optional_str(entry.get("outcomeStatus")),
-                    latest_artifact_path=_coerce_optional_str(entry.get("latestArtifactPath")),
-                    source_reason=_coerce_optional_str(entry.get("sourceReason")),
-                    source_type=_coerce_optional_str(entry.get("sourceType")),
-                    expected_signal=_coerce_optional_str(entry.get("expectedSignal")),
+            NextCheckQueueItemView(
+                candidate_id=_coerce_optional_str(entry.get("candidateId")),
+                candidate_index=_coerce_optional_int(entry.get("candidateIndex")),
+                description=_coerce_str(entry.get("description")),
+                target_cluster=_coerce_optional_str(entry.get("targetCluster")),
+                priority_label=_coerce_optional_str(entry.get("priorityLabel")),
+                suggested_command_family=_coerce_optional_str(entry.get("suggestedCommandFamily")),
+                safe_to_automate=bool(entry.get("safeToAutomate")),
+                requires_operator_approval=bool(entry.get("requiresOperatorApproval")),
+                approval_state=_coerce_optional_str(entry.get("approvalState")),
+                execution_state=_coerce_optional_str(entry.get("executionState")),
+                outcome_status=_coerce_optional_str(entry.get("outcomeStatus")),
+                latest_artifact_path=_coerce_optional_str(entry.get("latestArtifactPath")),
+                source_reason=_coerce_optional_str(entry.get("sourceReason")),
+                source_type=_coerce_optional_str(entry.get("sourceType")),
+                expected_signal=_coerce_optional_str(entry.get("expectedSignal")),
                 normalization_reason=_coerce_optional_str(entry.get("normalizationReason")),
                 safety_reason=_coerce_optional_str(entry.get("safetyReason")),
                 approval_reason=_coerce_optional_str(entry.get("approvalReason")),

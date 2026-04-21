@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from k8s_diag_agent.external_analysis.artifact import (
+    AlertmanagerRelevanceClass,
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
     ExternalAnalysisStatus,
@@ -1034,6 +1035,195 @@ class TestAllEnumValues(unittest.TestCase):
                 reviewer_confidence=confidence,
             )
             self.assertEqual(artifact.reviewer_confidence, confidence)
+
+
+class TestAlertmanagerRelevanceFields(unittest.TestCase):
+    """Tests for AlertmanagerRelevanceClass and alertmanager provenance fields."""
+
+    def test_alertmanager_relevance_class_enum_values(self) -> None:
+        """Test all AlertmanagerRelevanceClass enum values."""
+        values = [
+            AlertmanagerRelevanceClass.RELEVANT,
+            AlertmanagerRelevanceClass.NOT_RELEVANT,
+            AlertmanagerRelevanceClass.NOISY,
+            AlertmanagerRelevanceClass.UNSURE,
+        ]
+        for val in values:
+            artifact = ExternalAnalysisArtifact(
+                tool_name="test",
+                run_id="run-relevance",
+                cluster_label="cluster",
+                purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+                alertmanager_relevance=val,
+            )
+            self.assertEqual(artifact.alertmanager_relevance, val)
+            # mypy needs help here - we know it's not None after the above assertion
+            assert artifact.alertmanager_relevance is not None
+            self.assertEqual(artifact.alertmanager_relevance.value, val.value)
+
+    def test_to_dict_includes_alertmanager_relevance(self) -> None:
+        """Test that to_dict includes alertmanager_relevance when set."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test",
+            run_id="run-to-dict",
+            cluster_label="cluster",
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            alertmanager_relevance=AlertmanagerRelevanceClass.RELEVANT,
+            alertmanager_relevance_summary="This check is relevant to the incident",
+        )
+
+        result = artifact.to_dict()
+
+        self.assertEqual(result["alertmanager_relevance"], "relevant")
+        self.assertEqual(result["alertmanager_relevance_summary"], "This check is relevant to the incident")
+
+    def test_to_dict_excludes_alertmanager_fields_when_none(self) -> None:
+        """Test that to_dict excludes alertmanager fields when None."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test",
+            run_id="run-minimal",
+            cluster_label="cluster",
+        )
+
+        result = artifact.to_dict()
+
+        self.assertNotIn("alertmanager_relevance", result)
+        self.assertNotIn("alertmanager_relevance_summary", result)
+        self.assertNotIn("alertmanager_provenance", result)
+
+    def test_to_dict_includes_alertmanager_provenance(self) -> None:
+        """Test that to_dict includes alertmanager_provenance when set."""
+        provenance = {
+            "matchedDimensions": ["alertname", "severity"],
+            "matchedValues": {"alertname": ["PodCrash"]},
+            "appliedBonus": 15,
+            "baseBonus": 10,
+            "severitySummary": {"critical": 2, "warning": 3},
+            "signalStatus": "firing",
+        }
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test",
+            run_id="run-provenance",
+            cluster_label="cluster",
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            alertmanager_provenance=provenance,
+        )
+
+        result = artifact.to_dict()
+
+        self.assertIn("alertmanager_provenance", result)
+        prov = result["alertmanager_provenance"]
+        assert isinstance(prov, dict)
+        self.assertEqual(prov["matchedDimensions"], ["alertname", "severity"])
+        self.assertEqual(prov["appliedBonus"], 15)
+
+    def test_from_dict_with_alertmanager_relevance(self) -> None:
+        """Test parsing alertmanager_relevance from dict."""
+        raw = {
+            "tool_name": "test",
+            "run_id": "run-from-dict",
+            "cluster_label": "cluster",
+            "purpose": "next-check-execution",
+            "alertmanager_relevance": "not_relevant",
+            "alertmanager_relevance_summary": "Not related to the current incident",
+        }
+
+        artifact = ExternalAnalysisArtifact.from_dict(raw)
+
+        self.assertEqual(artifact.alertmanager_relevance, AlertmanagerRelevanceClass.NOT_RELEVANT)
+        self.assertEqual(artifact.alertmanager_relevance_summary, "Not related to the current incident")
+
+    def test_from_dict_with_alertmanager_provenance(self) -> None:
+        """Test parsing alertmanager_provenance from dict."""
+        provenance = {
+            "matchedDimensions": ["namespace"],
+            "matchedValues": {"namespace": ["production"]},
+            "appliedBonus": 5,
+            "baseBonus": 0,
+        }
+        raw = {
+            "tool_name": "test",
+            "run_id": "run-from-dict-provenance",
+            "cluster_label": "cluster",
+            "purpose": "next-check-execution",
+            "alertmanager_provenance": provenance,
+        }
+
+        artifact = ExternalAnalysisArtifact.from_dict(raw)
+
+        self.assertEqual(artifact.alertmanager_provenance, provenance)
+        assert artifact.alertmanager_provenance is not None
+        self.assertEqual(artifact.alertmanager_provenance["appliedBonus"], 5)
+
+    def test_from_dict_with_all_alertmanager_fields(self) -> None:
+        """Test parsing artifact with all alertmanager fields."""
+        provenance = {
+            "matchedDimensions": ["alertname", "severity", "namespace"],
+            "matchedValues": {"alertname": ["PodOOMKilled"], "severity": ["critical"]},
+            "appliedBonus": 20,
+            "baseBonus": 10,
+            "severitySummary": {"critical": 5},
+            "signalStatus": "resolved",
+        }
+        raw = {
+            "tool_name": "test",
+            "run_id": "run-full-alertmanager",
+            "cluster_label": "cluster",
+            "purpose": "next-check-execution",
+            "status": "success",
+            "alertmanager_relevance": "relevant",
+            "alertmanager_relevance_summary": "Highly relevant to the OOM issue",
+            "alertmanager_provenance": provenance,
+        }
+
+        artifact = ExternalAnalysisArtifact.from_dict(raw)
+
+        self.assertEqual(artifact.alertmanager_relevance, AlertmanagerRelevanceClass.RELEVANT)
+        self.assertEqual(artifact.alertmanager_relevance_summary, "Highly relevant to the OOM issue")
+        assert artifact.alertmanager_provenance is not None
+        self.assertEqual(artifact.alertmanager_provenance["appliedBonus"], 20)
+        self.assertEqual(artifact.alertmanager_provenance["signalStatus"], "resolved")
+
+    def test_roundtrip_with_alertmanager_fields(self) -> None:
+        """Test that artifact survives roundtrip with alertmanager fields."""
+        provenance = {
+            "matchedDimensions": ["alertname"],
+            "matchedValues": {"alertname": ["TestAlert"]},
+            "appliedBonus": 10,
+            "baseBonus": 5,
+        }
+        original = ExternalAnalysisArtifact(
+            tool_name="test",
+            run_id="run-roundtrip",
+            cluster_label="cluster",
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            status=ExternalAnalysisStatus.SUCCESS,
+            alertmanager_relevance=AlertmanagerRelevanceClass.NOISY,
+            alertmanager_relevance_summary="Too noisy to be useful",
+            alertmanager_provenance=provenance,
+        )
+
+        serialized = original.to_dict()
+        restored = ExternalAnalysisArtifact.from_dict(serialized)
+
+        self.assertEqual(restored.alertmanager_relevance, AlertmanagerRelevanceClass.NOISY)
+        self.assertEqual(restored.alertmanager_relevance_summary, "Too noisy to be useful")
+        self.assertEqual(restored.alertmanager_provenance, provenance)
+        assert restored.alertmanager_provenance is not None
+        self.assertEqual(restored.alertmanager_provenance["appliedBonus"], 10)
+
+    def test_from_dict_with_invalid_alertmanager_relevance(self) -> None:
+        """Test that invalid alertmanager_relevance values result in None."""
+        raw = {
+            "tool_name": "test",
+            "run_id": "run-invalid",
+            "cluster_label": "cluster",
+            "alertmanager_relevance": "invalid_value",
+        }
+
+        artifact = ExternalAnalysisArtifact.from_dict(raw)
+
+        self.assertIsNone(artifact.alertmanager_relevance)
 
 
 if __name__ == "__main__":

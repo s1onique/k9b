@@ -87,6 +87,10 @@ class NextCheckExecutionHistoryEntry(TypedDict, total=False):
     # Provenance fields for traceability
     candidateId: str | None
     candidateIndex: int | None
+    # Alertmanager provenance and relevance judgment
+    alertmanagerProvenance: dict[str, object] | None
+    alertmanagerRelevance: str | None
+    alertmanagerRelevanceSummary: str | None
 
 
 class FreshnessPayload(TypedDict, total=False):
@@ -1476,8 +1480,9 @@ def _serialize_orphaned_approval(view: NextCheckOrphanedApprovalView) -> NextChe
 
 
 def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryView, ...]) -> list[NextCheckExecutionHistoryEntry]:
-    return [
-        {
+    result: list[NextCheckExecutionHistoryEntry] = []
+    for entry in entries:
+        serialized: dict[str, object] = {
             "timestamp": entry.timestamp,
             "clusterLabel": entry.cluster_label,
             "candidateDescription": entry.candidate_description,
@@ -1502,8 +1507,16 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
             "candidateId": entry.candidate_id,
             "candidateIndex": entry.candidate_index,
         }
-        for entry in entries
-    ]
+        # Include Alertmanager provenance if present
+        if entry.alertmanager_provenance is not None:
+            serialized["alertmanagerProvenance"] = entry.alertmanager_provenance
+        # Include Alertmanager relevance judgment if present
+        if entry.alertmanager_relevance is not None:
+            serialized["alertmanagerRelevance"] = entry.alertmanager_relevance
+        if entry.alertmanager_relevance_summary is not None:
+            serialized["alertmanagerRelevanceSummary"] = entry.alertmanager_relevance_summary
+        result.append(cast(NextCheckExecutionHistoryEntry, serialized))
+    return result
 
 
 def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCandidatePayload:

@@ -39,6 +39,14 @@ class UsefulnessClass(StrEnum):
     EMPTY = "empty"
 
 
+class AlertmanagerRelevanceClass(StrEnum):
+    """Operator judgment on whether Alertmanager influence was relevant for the executed check."""
+    RELEVANT = "relevant"
+    NOT_RELEVANT = "not_relevant"
+    NOISY = "noisy"
+    UNSURE = "unsure"
+
+
 class ReviewStage(StrEnum):
     INITIAL_TRIAGE = "initial_triage"
     FOCUSED_INVESTIGATION = "focused_investigation"
@@ -163,6 +171,11 @@ class ExternalAnalysisArtifact:
     reviewer_confidence: ReviewerConfidence | None = None
     # Immutable artifact identity (UUIDv7)
     artifact_id: str | None = field(default_factory=new_artifact_id)
+    # Alertmanager relevance judgment from operator feedback
+    alertmanager_relevance: AlertmanagerRelevanceClass | None = None
+    alertmanager_relevance_summary: str | None = None
+    # Alertmanager provenance snapshot - preserved when execution is triggered by Alertmanager-ranked queue item
+    alertmanager_provenance: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -206,6 +219,12 @@ class ExternalAnalysisArtifact:
             result["judgment_scope"] = self.judgment_scope.value
         if self.reviewer_confidence is not None:
             result["reviewer_confidence"] = self.reviewer_confidence.value
+        if self.alertmanager_relevance is not None:
+            result["alertmanager_relevance"] = self.alertmanager_relevance.value
+        if self.alertmanager_relevance_summary is not None:
+            result["alertmanager_relevance_summary"] = self.alertmanager_relevance_summary
+        if self.alertmanager_provenance is not None:
+            result["alertmanager_provenance"] = self.alertmanager_provenance
         return result
 
     @classmethod
@@ -235,7 +254,13 @@ class ExternalAnalysisArtifact:
         problem_class = cast(ProblemClass | None, _parse_optional_enum(raw.get("problem_class"), ProblemClass))
         judgment_scope = cast(JudgmentScope | None, _parse_optional_enum(raw.get("judgment_scope"), JudgmentScope))
         reviewer_confidence = cast(ReviewerConfidence | None, _parse_optional_enum(raw.get("reviewer_confidence"), ReviewerConfidence))
+        alertmanager_relevance = cast(AlertmanagerRelevanceClass | None, _parse_optional_enum(raw.get("alertmanager_relevance"), AlertmanagerRelevanceClass))
         artifact_id = str(raw.get("artifact_id")) if raw.get("artifact_id") else None
+        raw_provenance = raw.get("alertmanager_provenance")
+        if isinstance(raw_provenance, dict):
+            alertmanager_provenance: dict[str, object] | None = dict(raw_provenance)
+        else:
+            alertmanager_provenance = None
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -269,6 +294,9 @@ class ExternalAnalysisArtifact:
             judgment_scope=judgment_scope,
             reviewer_confidence=reviewer_confidence,
             artifact_id=artifact_id,
+            alertmanager_relevance=alertmanager_relevance,
+            alertmanager_relevance_summary=str(raw.get("alertmanager_relevance_summary")) if raw.get("alertmanager_relevance_summary") else None,
+            alertmanager_provenance=alertmanager_provenance,
         )
 
 

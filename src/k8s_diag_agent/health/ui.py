@@ -1427,6 +1427,14 @@ def _build_next_check_execution_history(
             entry["usefulnessClass"] = artifact.usefulness_class.value
             if artifact.usefulness_summary:
                 entry["usefulnessSummary"] = artifact.usefulness_summary
+        # Include Alertmanager relevance judgment if available
+        if artifact.alertmanager_relevance is not None:
+            entry["alertmanagerRelevance"] = artifact.alertmanager_relevance.value
+            if artifact.alertmanager_relevance_summary:
+                entry["alertmanagerRelevanceSummary"] = artifact.alertmanager_relevance_summary
+        # Thread Alertmanager provenance from execution artifact
+        if artifact.alertmanager_provenance is not None:
+            entry["alertmanagerProvenance"] = artifact.alertmanager_provenance
         if follow_up and follow_up.failure_class:
             entry["failureClass"] = follow_up.failure_class
             entry["failureSummary"] = follow_up.failure_summary
