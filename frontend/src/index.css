@@ -1588,20 +1588,13 @@
    - .tab*, .link, .text-button (shared UI components)
 
    See: styles/components/proposal-list.css
-*/
+ */
 
-.link {
-  color: #93c5fd;
-  text-decoration: none;
-}
-
-.text-button {
-  background: none;
-  border: none;
-  color: #3b82f6;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
+/* ==========================================================================
+    EXTRACTED to styles/components/shared-ui.css
+    ========================================================================== */
+/* .link, .text-button base selectors
+    moved to styles/components/shared-ui.css */
 
 .tab-list {
   display: flex;
@@ -2905,18 +2898,11 @@
   color: #839496;
 }
 
-/* Links - Solarized styled, not generic default blue */
-[data-theme="solarized-light"] .link {
-  color: #268bd2;
-}
-
-[data-theme="solarized-light"] .link:hover {
-  color: #1a5f8a;
-}
-
-[data-theme="solarized-light"] .link:visited {
-  color: #2aa198;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/shared-ui.css
+   ========================================================================== */
+/* [data-theme="solarized-light"] .link, .link:hover, .link:visited
+    moved to styles/components/shared-ui.css */
 
 /* Artifact links - Solarized palette */
 [data-theme="solarized-light"] .artifact-link {
@@ -3541,16 +3527,11 @@
   opacity: 1;
 }
 
-/* Text button - softer accent */
-[data-theme="solarized-light"] .text-button {
-  color: #268bd2;
-  opacity: 0.85;
-}
-
-[data-theme="solarized-light"] .text-button:hover {
-  color: #1a5f8a;
-  opacity: 1;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/shared-ui.css
+   ========================================================================== */
+/* [data-theme="solarized-light"] .text-button, .text-button:hover
+    moved to styles/components/shared-ui.css */
 
 /* Queue search input - warm paper background */
 [data-theme="solarized-light"] .queue-search input {

@@ -78,6 +78,7 @@
 @import url('./components/advisory-lower-sections.css');
 @import url('./components/cluster-detail.css');
 @import url('./components/proposal-list.css');
+@import url('./components/shared-ui.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');

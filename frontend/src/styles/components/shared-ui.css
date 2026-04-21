@@ -1,0 +1,65 @@
+/**
+ * Shared UI Primitives
+ * 
+ * Generic interactive text/button primitives used across multiple components.
+ * These are base styles that cascade into more specific contexts.
+ * 
+ * Selector family:
+ * - .link              → Base link styling
+ * - .text-button       → Base text button styling
+ * 
+ * Theme overrides (solarized-light):
+ * - [data-theme="solarized-light"] .link, .link:hover, .link:visited
+ * - [data-theme="solarized-light"] .text-button, .text-button:hover
+ * 
+ * Phase 21 in monolith retirement sequence.
+ */
+
+/* ==========================================================================
+   Link - Generic text link
+   ========================================================================== */
+
+.link {
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+/* ==========================================================================
+   Text Button - Button-like text element
+   ========================================================================== */
+
+.text-button {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+/* ==========================================================================
+   Solarized Light overrides
+   ========================================================================== */
+
+/* Links - Solarized styled, not generic default blue */
+[data-theme="solarized-light"] .link {
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .link:hover {
+  color: #1a5f8a;
+}
+
+[data-theme="solarized-light"] .link:visited {
+  color: #2aa198;
+}
+
+/* Text button - softer accent */
+[data-theme="solarized-light"] .text-button {
+  color: #268bd2;
+  opacity: 0.85;
+}
+
+[data-theme="solarized-light"] .text-button:hover {
+  color: #1a5f8a;
+  opacity: 1;
+}
