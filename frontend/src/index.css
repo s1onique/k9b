@@ -77,161 +77,43 @@
 /* Status badges, freshness pills, triage pills
    moved to styles/components/badges-pills.css */
 
-/* Recent runs panel */
-.recent-runs {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
 /* ==========================================================================
-   EXTRACTED to styles/components/filters.css
+   EXTRACTED to styles/components/runs-table.css
    ========================================================================== */
-/* .runs-filter-bar, .runs-filter-options, .runs-filter-button, .runs-filter-label,
-   .runs-filter-count, .runs-filter-summary, .runs-filter-select,
-   .recent-runs-filter-row, .recent-runs-filter-row .eyebrow
-   moved to styles/components/filters.css */
+/*
+   Runs Table & Recent Runs family - MOVED TO runs-table.css
 
-/* Recent runs list */
-.recent-runs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding: 0.5rem;
-  background: rgba(30, 41, 59, 0.5);
-  border-radius: 6px;
-  max-height: 200px;
-  overflow-y: auto;
-}
+   Base selectors extracted:
+   - .recent-runs, .recent-runs-list, .recent-runs-item
+   - .recent-runs-item:hover, .recent-runs-item.selected
+   - .recent-runs-label, .recent-runs-time
+   - .runs-table-wrapper, .runs-table, .runs-table th/td
+   - .runs-table td strong, .runs-table tbody tr (hover, selected, last-child)
+   - .run-cell-main, .run-cell-main strong, .run-cell-id
+   - .run-cell-timestamp, .run-cell-timestamp .recency / .absolute
 
-.recent-runs-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
+   Theme overrides extracted:
+   - All [data-theme="solarized-light"] .runs-table th/td/strong/hover
+   - All [data-theme="solarized-light"] .run-cell-timestamp .recency / .absolute
+   - All [data-theme="solarized-light"] .run-cell-id
+   - All [data-theme="solarized-light"] .recent-runs-* (list, item, label, time)
+   - All [data-theme="solarized-light"] .run-action-cell .btn-primary / .btn-secondary
 
-.recent-runs-item:hover {
-  background: rgba(71, 85, 105, 0.4);
-}
+   NOT extracted (separate families):
+   - .runs-filter-* (filters.css)
+   - .row-action-* (row-actions.css)
+   - pagination selectors (pagination.css)
+   - .panel (semantic shell, remains in monolith)
 
-.recent-runs-item.selected {
-  background: rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-}
+   Legacy action-cell duplication decision:
+   - Base .run-action-cell and legacy btn classes: retained in row-actions.css
+   - Solarized Light overrides for legacy btn classes: MOVED to runs-table.css
+     (they are tightly local overrides, not the generic row-action pattern)
 
-.recent-runs-label {
-  font-weight: 500;
-  font-size: 0.85rem;
-}
+   See: styles/components/runs-table.css
+*/
 
-.recent-runs-time {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-left: auto;
-}
-
-/* Runs table and pagination - improved scannability */
-.runs-table-wrapper {
-  overflow-x: auto;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(148, 163, 184, 0.15);
-}
-
-.runs-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 500px;
-}
-
-.runs-table th {
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-  vertical-align: middle;
-  text-transform: uppercase;
-  font-size: 0.62rem;
-  letter-spacing: 0.15em;
-  color: rgba(148, 163, 184, 0.7);
-  font-weight: 600;
-  background: rgba(15, 23, 42, 0.6);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-}
-
-.runs-table td {
-  padding: 0.6rem 0.75rem;
-  text-align: left;
-  vertical-align: middle;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.runs-table tbody tr {
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.runs-table tbody tr:hover {
-  background: rgba(71, 85, 105, 0.35);
-}
-
-.runs-table tbody tr.run-row-selected {
-  background: rgba(56, 189, 248, 0.12);
-}
-
-.runs-table tbody tr.run-row-selected td:first-child {
-  border-left: 3px solid rgba(56, 189, 248, 0.6);
-}
-
-.runs-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.runs-table td strong {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #f1f5f9;
-}
-
-/* Run identity cell - clean block layout */
-.run-cell-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.run-cell-main strong {
-  font-size: 0.85rem;
-}
-
-.run-cell-id {
-  font-size: 0.65rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.6);
-}
-
-/* Timestamp cell - aligned for scanning */
-.run-cell-timestamp {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.run-cell-timestamp .recency {
-  font-size: 0.75rem;
-  color: rgba(148, 163, 184, 0.75);
-}
-
-.run-cell-timestamp .absolute {
-  font-size: 0.65rem;
-  color: rgba(148, 163, 184, 0.5);
-}
-
-/* Action cell - deliberate placement */
+/* Action cell - deliberate placement (base retained here, Solarized overrides in runs-table.css) */
 .run-action-cell {
   display: flex;
   flex-direction: column;

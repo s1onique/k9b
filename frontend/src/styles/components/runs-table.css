@@ -1,0 +1,280 @@
+/**
+ * Runs Table & Recent Runs Family
+ * 
+ * Selection and listing UI for runs - sidebar list and table view.
+ * Tightly coupled Solarized Light overrides co-located with base selectors.
+ * 
+ * Phase tracking:
+ * → Phase 22: styles/components/runs-table.css (runs table / recent runs family extracted)
+ * 
+ * Selector scope:
+ * - .recent-runs (sidebar container)
+ * - .recent-runs-list (sidebar scrollable list)
+ * - .recent-runs-item (list item states)
+ * - .recent-runs-label / .recent-runs-time (label and timestamp in sidebar)
+ * - .runs-table-wrapper (table scroll container)
+ * - .runs-table (table structure)
+ * - .run-cell-main / .run-cell-id (run identity cell)
+ * - .run-cell-timestamp (timestamp cell with .recency / .absolute subelements)
+ * 
+ * NOT extracted (separate families):
+ * - .runs-filter-* (filters.css)
+ * - .row-action-* (row-actions.css)
+ * - pagination selectors (pagination.css)
+ * - .panel (semantic shell, remains in monolith)
+ * 
+ * Legacy action-cell handling:
+ * - Base .run-action-cell and legacy btn classes retained in row-actions.css
+ * - Monolith Solarized Light overrides for .run-action-cell stay in THIS file
+ *   (they are tightly local overrides, not generic row-action pattern)
+ */
+
+/* ==========================================================================
+   Recent runs sidebar
+   ========================================================================== */
+
+/* Recent runs panel */
+.recent-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Recent runs list */
+.recent-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.recent-runs-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.recent-runs-item:hover {
+  background: rgba(71, 85, 105, 0.4);
+}
+
+.recent-runs-item.selected {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.recent-runs-label {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.recent-runs-time {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+/* ==========================================================================
+   Runs table
+   ========================================================================== */
+
+/* Runs table and pagination - improved scannability */
+.runs-table-wrapper {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 500px;
+}
+
+.runs-table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  color: rgba(148, 163, 184, 0.7);
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.runs-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.runs-table td strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.runs-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.runs-table tbody tr:hover {
+  background: rgba(71, 85, 105, 0.35);
+}
+
+.runs-table tbody tr.run-row-selected {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.runs-table tbody tr.run-row-selected td:first-child {
+  border-left: 3px solid rgba(56, 189, 248, 0.6);
+}
+
+.runs-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ==========================================================================
+   Run cell subcomponents
+   ========================================================================== */
+
+/* Run identity cell - clean block layout */
+.run-cell-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.run-cell-main strong {
+  font-size: 0.85rem;
+}
+
+.run-cell-id {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.6);
+}
+
+/* Timestamp cell - aligned for scanning */
+.run-cell-timestamp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.run-cell-timestamp .recency {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.run-cell-timestamp .absolute {
+  font-size: 0.65rem;
+  color: rgba(148, 163, 184, 0.5);
+}
+
+/* ==========================================================================
+   Theme overrides - Solarized Light
+   Model B: Local theme overrides co-located with base selectors
+   ========================================================================== */
+
+/* Table improvements */
+[data-theme="solarized-light"] .runs-table th {
+  background: rgba(238, 232, 213, 0.9);
+  color: #586e75;
+  border-bottom-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .runs-table td {
+  color: #002b36;
+  border-bottom-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .runs-table td strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .runs-table tbody tr:hover {
+  background: rgba(147, 161, 161, 0.18);
+}
+
+/* Timestamp cell in table */
+[data-theme="solarized-light"] .runs-table .run-cell-timestamp .recency,
+[data-theme="solarized-light"] .runs-table .run-cell-timestamp .absolute {
+  color: #657b83;
+}
+
+/* Run IDs */
+[data-theme="solarized-light"] .run-cell-id {
+  color: #839496;
+}
+
+/* Recent runs sidebar */
+[data-theme="solarized-light"] .recent-runs-list {
+  background: rgba(238, 232, 213, 0.85);
+}
+
+[data-theme="solarized-light"] .recent-runs-item {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .recent-runs-item:hover {
+  background: rgba(147, 161, 161, 0.15);
+}
+
+[data-theme="solarized-light"] .recent-runs-item.selected {
+  background: rgba(38, 139, 210, 0.1);
+}
+
+[data-theme="solarized-light"] .recent-runs-label {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .recent-runs-time {
+  color: #657b83;
+}
+
+/* ==========================================================================
+   Legacy action-cell Solarized Light overrides
+   These stay here (not in row-actions.css) because they are tightly local
+   overrides for legacy btn classes, not the generic row-action pattern.
+   Base .run-action-cell and legacy btn classes live in row-actions.css.
+   ========================================================================== */
+
+/* Legacy primary button in Solarized Light */
+[data-theme="solarized-light"] .run-action-cell .btn-primary,
+[data-theme="solarized-light"] .run-action-cell button[class*='primary'] {
+  background: rgba(38, 139, 210, 0.15);
+  border-color: rgba(38, 139, 210, 0.5);
+  color: #268bd2;
+}
+
+/* Legacy secondary button in Solarized Light */
+[data-theme="solarized-light"] .run-action-cell .btn-secondary,
+[data-theme="solarized-light"] .run-action-cell a.btn,
+[data-theme="solarized-light"] .run-action-cell a[class*='btn'] {
+  background: rgba(147, 161, 161, 0.15);
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .run-action-cell .btn-secondary:hover,
+[data-theme="solarized-light"] .run-action-cell a.btn:hover,
+[data-theme="solarized-light"] .run-action-cell a[class*='btn']:hover {
+  background: rgba(147, 161, 161, 0.25);
+  color: #002b36;
+}
