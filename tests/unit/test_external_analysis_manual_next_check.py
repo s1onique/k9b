@@ -26,6 +26,7 @@ from k8s_diag_agent.external_analysis.manual_next_check import (
     _build_payload,
     _candidate_blocking_reason,
     _capture_output,
+    _extract_alertmanager_provenance,
     _strip_context_arguments,
     _validate_command_tokens,
     execute_manual_next_check,
@@ -824,6 +825,159 @@ class TestArtifactWriting(unittest.TestCase):
         ]
         for field in expected_fields:
             self.assertIn(field, payload, f"Missing field: {field}")
+
+
+class TestExtractAlertmanagerProvenance(unittest.TestCase):
+    """Tests for _extract_alertmanager_provenance function."""
+
+    def test_extract_returns_none_for_missing_provenance(self) -> None:
+        """Test that missing provenance returns None."""
+        candidate: dict[str, object] = {}
+        result = _extract_alertmanager_provenance(candidate)
+        self.assertIsNone(result)
+
+    def test_extract_returns_none_for_non_dict_provenance(self) -> None:
+        """Test that non-dict provenance (string, list, etc.) returns None."""
+        for invalid_value in ["string", ["list"], 123, None]:
+            candidate = {"alertmanagerProvenance": invalid_value}
+            result = _extract_alertmanager_provenance(candidate)
+            self.assertIsNone(result)
+
+    def test_extract_returns_dict_copy_for_valid_provenance(self) -> None:
+        """Test that valid provenance dict is copied."""
+        provenance = {
+            "matchedDimensions": ["namespace", "cluster"],
+            "matchedValues": {"namespace": ["monitoring"]},
+            "baseBonus": 140,
+            "appliedBonus": 175,
+            "severitySummary": {"critical": 2},
+            "signalStatus": "active",
+        }
+        candidate = {"alertmanagerProvenance": provenance}
+        result = _extract_alertmanager_provenance(candidate)
+        self.assertIsNotNone(result)
+        assert isinstance(result, dict)  # help mypy narrow the type
+        self.assertEqual(result, provenance)
+        # Verify it's a copy, not the original
+        result["appliedBonus"] = 999
+        self.assertEqual(candidate["alertmanagerProvenance"]["appliedBonus"], 175)
+
+
+class TestAlertmanagerProvenanceInExecutionArtifact(unittest.TestCase):
+    """Tests for Alertmanager provenance copy path in execution artifacts."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.health_root = self.tmpdir
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _base_candidate(self) -> dict[str, object]:
+        return {
+            "description": "kubectl get pods -n default",
+            "targetCluster": "cluster-a",
+            "suggestedCommandFamily": "kubectl-get",
+            "safeToAutomate": True,
+            "requiresOperatorApproval": False,
+            "duplicateOfExistingEvidence": False,
+            "gatingReason": None,
+            "candidateId": "candidate-am-test",
+        }
+
+    def _runner(self, returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(["kubectl"], returncode, stdout=stdout, stderr=stderr)
+
+    def test_provenance_copied_to_artifact_on_success(self) -> None:
+        """Test that Alertmanager provenance is copied to execution artifact on success."""
+        provenance = {
+            "matchedDimensions": ["namespace", "cluster"],
+            "matchedValues": {"namespace": ["monitoring"]},
+            "baseBonus": 140,
+            "appliedBonus": 175,
+            "severitySummary": {"critical": 2},
+            "signalStatus": "active",
+        }
+        candidate = self._base_candidate()
+        candidate["alertmanagerProvenance"] = provenance
+
+        artifact = execute_manual_next_check(
+            health_root=self.health_root,
+            run_id="run-am-success",
+            run_label="run-am-success",
+            plan_artifact_path=Path("plan.json"),
+            candidate_index=0,
+            candidate=candidate,
+            target_context="prod",
+            target_cluster="cluster-a",
+            command_runner=lambda cmd: self._runner(0, stdout="ok"),
+        )
+
+        # Verify provenance is in artifact
+        self.assertIsNotNone(artifact.alertmanager_provenance)
+        self.assertEqual(artifact.alertmanager_provenance, provenance)
+
+        # Verify it's also in the persisted JSON
+        artifact_path = self.health_root / "external-analysis" / "run-am-success-next-check-execution-0.json"
+        data = json.loads(artifact_path.read_text(encoding="utf-8"))
+        self.assertIn("alertmanager_provenance", data)
+        self.assertEqual(data["alertmanager_provenance"], provenance)
+
+    def test_provenance_copied_to_artifact_on_failure(self) -> None:
+        """Test that Alertmanager provenance is copied to execution artifact on command failure."""
+        provenance = {
+            "matchedDimensions": ["namespace"],
+            "matchedValues": {"namespace": ["monitoring"]},
+            "baseBonus": 80,
+            "appliedBonus": 80,
+            "severitySummary": {"warning": 1},
+            "signalStatus": "active",
+        }
+        candidate = self._base_candidate()
+        candidate["alertmanagerProvenance"] = provenance
+
+        # Simulate a failed command (returncode != 0)
+        artifact = execute_manual_next_check(
+            health_root=self.health_root,
+            run_id="run-am-failure",
+            run_label="run-am-failure",
+            plan_artifact_path=Path("plan.json"),
+            candidate_index=0,
+            candidate=candidate,
+            target_context="prod",
+            target_cluster="cluster-a",
+            command_runner=lambda cmd: self._runner(1, stdout="", stderr="error"),
+        )
+
+        # Verify provenance is in artifact even on failure
+        self.assertIsNotNone(artifact.alertmanager_provenance)
+        self.assertEqual(artifact.alertmanager_provenance, provenance)
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
+
+    def test_no_provenance_when_none_on_candidate(self) -> None:
+        """Test that artifact has no provenance when candidate has none."""
+        candidate = self._base_candidate()
+        # No alertmanagerProvenance key
+
+        artifact = execute_manual_next_check(
+            health_root=self.health_root,
+            run_id="run-no-am",
+            run_label="run-no-am",
+            plan_artifact_path=Path("plan.json"),
+            candidate_index=0,
+            candidate=candidate,
+            target_context="prod",
+            target_cluster="cluster-a",
+            command_runner=lambda cmd: self._runner(0, stdout="ok"),
+        )
+
+        # Verify provenance is None in artifact
+        self.assertIsNone(artifact.alertmanager_provenance)
+
+        # Verify it's not in the persisted JSON
+        artifact_path = self.health_root / "external-analysis" / "run-no-am-next-check-execution-0.json"
+        data = json.loads(artifact_path.read_text(encoding="utf-8"))
+        self.assertNotIn("alertmanager_provenance", data)
 
 
 if __name__ == "__main__":

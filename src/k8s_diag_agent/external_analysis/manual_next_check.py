@@ -132,6 +132,25 @@ def _build_command(description: str, target_context: str, family: CommandFamily)
     return ["kubectl", *remainder, "--context", target_context]
 
 
+def _extract_alertmanager_provenance(
+    candidate: Mapping[str, object],
+) -> dict[str, object] | None:
+    """Extract Alertmanager provenance from candidate if present.
+    
+    The provenance snapshot is preserved when execution is triggered by 
+    an Alertmanager-ranked queue item. This preserves the ranking influence
+    for observability and operator feedback.
+    
+    Returns:
+        The provenance dict if present, None otherwise.
+        No provenance is invented - we only copy what exists.
+    """
+    raw_provenance = candidate.get("alertmanagerProvenance")
+    if isinstance(raw_provenance, dict):
+        return dict(raw_provenance)
+    return None
+
+
 def _build_payload(
     candidate: Mapping[str, object],
     candidate_index: int,
@@ -501,6 +520,7 @@ def execute_manual_next_check(
             output_bytes,
         ) = _summarize_outputs(exc.stdout, exc.stderr)
         artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
+        alertmanager_provenance = _extract_alertmanager_provenance(candidate)
         artifact = ExternalAnalysisArtifact(
             tool_name="next-check-runner",
             run_id=run_id,
@@ -532,6 +552,7 @@ def execute_manual_next_check(
             stderr_truncated=stderr_truncated,
             timed_out=True,
             output_bytes_captured=output_bytes,
+            alertmanager_provenance=alertmanager_provenance,
         )
         _log_artifact_write(
             run_id=run_id,
@@ -566,6 +587,7 @@ def execute_manual_next_check(
     except FileNotFoundError as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
         artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
+        alertmanager_provenance = _extract_alertmanager_provenance(candidate)
         artifact = ExternalAnalysisArtifact(
             tool_name="next-check-runner",
             run_id=run_id,
@@ -593,6 +615,7 @@ def execute_manual_next_check(
             ),
             raw_output=None,
             error_summary=f"{exc}",
+            alertmanager_provenance=alertmanager_provenance,
         )
         _log_artifact_write(
             run_id=run_id,
@@ -639,6 +662,7 @@ def execute_manual_next_check(
     if status == ExternalAnalysisStatus.FAILED:
         error_summary = stderr_text or "Command returned non-zero status."
     artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
+    alertmanager_provenance = _extract_alertmanager_provenance(candidate)
     artifact = ExternalAnalysisArtifact(
         tool_name="next-check-runner",
         run_id=run_id,
@@ -670,6 +694,7 @@ def execute_manual_next_check(
         stderr_truncated=stderr_truncated,
         timed_out=False,
         output_bytes_captured=output_bytes,
+        alertmanager_provenance=alertmanager_provenance,
     )
     _log_artifact_write(
         run_id=run_id,
