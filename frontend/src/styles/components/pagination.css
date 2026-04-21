@@ -1,0 +1,168 @@
+/* ==========================================================================
+   Canonical Pagination Controls
+   Unified pagination component with clear grouping, balanced spacing,
+   and consistent button sizes. Works with all supported themes.
+   ========================================================================== */
+
+.pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+}
+
+/* Page navigation controls - centered, with clear visual hierarchy */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Pagination buttons - consistent sizing, clear states */
+.pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--color-border-default, rgba(148, 163, 184, 0.5));
+  border-radius: 0.5rem;
+  background: var(--color-btn-secondary-bg, rgba(30, 41, 59, 0.8));
+  color: var(--color-text-secondary, #e2e8f0);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+/* Button icons (chevrons) */
+.pagination-btn-icon {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Hover state - elevated, more prominent */
+.pagination-btn:hover:not(:disabled) {
+  background: var(--color-interactive-hover, rgba(71, 85, 105, 0.6));
+  border-color: var(--color-border-emphasis, rgba(100, 116, 139, 0.8));
+  color: var(--color-text-primary, #f8fafc);
+}
+
+/* Focus state - visible keyboard focus ring */
+.pagination-btn:focus-visible {
+  outline: 2px solid var(--color-interactive-focus, #38bdf8);
+  outline-offset: 2px;
+}
+
+/* Disabled state - clearly disabled but still readable */
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  color: var(--color-text-muted, rgba(248, 250, 252, 0.5));
+}
+
+/* Page indicator - clear hierarchy, secondary emphasis */
+.pagination-page-indicator {
+  min-width: 120px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, rgba(248, 250, 252, 0.8));
+  padding: 0 0.5rem;
+}
+
+/* Page size selector - grouped, aligned with nav controls */
+.pagination-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.2));
+  border-radius: 0.4rem;
+}
+
+.pagination-size-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  white-space: nowrap;
+}
+
+.pagination-size-select {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-border-default, rgba(148, 163, 184, 0.4));
+  border-radius: 0.3rem;
+  background: var(--color-input-bg, rgba(15, 23, 42, 0.85));
+  color: var(--color-input-text, #f8fafc);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.pagination-size-select:hover {
+  border-color: var(--color-border-emphasis, rgba(100, 116, 139, 0.6));
+}
+
+.pagination-size-select:focus-visible {
+  outline: 2px solid var(--color-interactive-focus, #38bdf8);
+  outline-offset: 2px;
+}
+
+/* Range summary - tertiary emphasis, informative */
+.pagination-summary {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.7));
+  margin: 0;
+  text-align: center;
+}
+
+.pagination-summary strong {
+  color: var(--color-text-secondary, rgba(248, 250, 252, 0.85));
+  font-weight: 600;
+}
+
+/* Responsive pagination: stack controls on narrow widths */
+@media (max-width: 600px) {
+  .pagination {
+    gap: 0.6rem;
+    padding-top: 0.75rem;
+  }
+
+  .pagination-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .pagination-page-indicator {
+    order: -1;
+    width: 100%;
+    text-align: center;
+    padding: 0.25rem 0;
+    min-width: unset;
+    border-bottom: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+    margin-bottom: 0.25rem;
+  }
+
+  .pagination-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .pagination-size-selector {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pagination-summary {
+    font-size: 0.72rem;
+  }
+}
