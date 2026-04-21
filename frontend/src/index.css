@@ -2649,89 +2649,12 @@
   border-color: rgba(94, 234, 212, 0.6);
 }
 
-.llm-activity-panel .section-head {
-  margin-bottom: 0.6rem;
-}
-
-.llm-activity-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.8rem;
-  margin-bottom: 1rem;
-}
-
-.llm-policy-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
-
-.llm-policy-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.75rem;
-}
-
-.llm-policy-grid div {
-  padding: 0.75rem;
-  border-radius: 0.75rem;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-}
-
-.llm-policy-grid strong {
-  font-size: 0.95rem;
-  display: block;
-}
-
-.llm-activity-filters label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
-}
-
-.llm-activity-filters select {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 0.6rem;
-  padding: 0.35rem 0.6rem;
-  background: rgba(15, 23, 42, 0.8);
-  color: #fff;
-}
-
-.llm-activity-table-wrapper {
-  overflow-x: auto;
-}
-
-.llm-activity-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 700px;
-}
-
-.llm-activity-table th,
-.llm-activity-table td {
-  padding: 0.65rem 0.5rem;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-}
-
-.llm-activity-table th {
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  color: rgba(148, 163, 184, 0.8);
-}
-
-.llm-activity-table td strong {
-  display: block;
-}
-
-.llm-activity-table td p {
-  margin: 0.2rem 0 0;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/llm-activity.css
+   ========================================================================== */
+/* .llm-activity-panel .section-head, .llm-activity-filters, .llm-policy-panel,
+    .llm-policy-grid, .llm-activity-table-wrapper, .llm-activity-table
+    moved to styles/components/llm-activity.css */
 
 .artifact-link {
   padding: 0.4rem 0.9rem;
@@ -4522,28 +4445,11 @@
   color: #657b83;
 }
 
-/* LLM activity */
-[data-theme="solarized-light"] .llm-activity-table th {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .llm-activity-table td {
-  color: #002b36;
-}
-
-[data-theme="solarized-light"] .llm-activity-table td strong {
-  color: #002b36;
-}
-
-/* LLM policy */
-[data-theme="solarized-light"] .llm-policy-grid div {
-  background: rgba(253, 246, 227, 0.92);
-  border-color: rgba(147, 161, 161, 0.35);
-}
-
-[data-theme="solarized-light"] .llm-policy-grid strong {
-  color: #002b36;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/llm-activity.css
+   ========================================================================== */
+/* LLM activity, LLM policy Solarized Light overrides
+    moved to styles/components/llm-activity.css */
 
 /* Finding cards */
 [data-theme="solarized-light"] .finding-card {

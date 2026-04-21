@@ -34,7 +34,8 @@
  * ✓ Phase 9A: styles/layout/freshness.css (freshness indicators extracted)
  * ✓ Phase 9B: styles/layout/workflow-lanes.css (workflow lane headers extracted)
  * ✓ Phase 10: styles/components/alertmanager-sources.css (alertmanager sources extracted)
- * → Phase 11: panel component extraction (future)
+ * ✓ Phase 11: styles/components/llm-activity.css (LLM activity/policy extracted)
+ * → Phase 12: panel component extraction (future)
  * → Phase 12: theme override extraction (future)
  * → Phase 13: remaining component groups (future)
  */
@@ -59,6 +60,7 @@
 @import url('./components/row-actions.css');
 @import url('./components/notification-table.css');
 @import url('./components/alertmanager-sources.css');
+@import url('./components/llm-activity.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');

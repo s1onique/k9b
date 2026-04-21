@@ -1,0 +1,248 @@
+/**
+ * LLM Activity and Policy Panel Styles
+ * 
+ * Extracted from: frontend/src/index.css (lines 2652-2734, 1600-1633, 4525-4536, 4538-4546, 4671-4683, 5022-5031)
+ * 
+ * Family inventory:
+ * - Base selectors: 22 rules covering LLM activity table, filters, policy grid, historical stats
+ * - Solarized Light overrides: 10 rules (tightly local to this family)
+ * - Related stats selectors: 5 rules (llm-provider-breakdown, run-stat-label, llm-historical)
+ * 
+ * Usage:
+ * - .llm-activity-panel: LLMActivityPanel.tsx
+ * - .llm-policy-panel: App.tsx (llm-policy section)
+ * - .llm-historical: RunsPanel.tsx (retained history stats)
+ * - .run-summary-llm: RunsPanel.tsx (LLM telemetry section)
+ * - .llm-provider-breakdown: RunsPanel.tsx
+ * - .run-stat-label: App.tsx
+ * 
+ * Dependencies:
+ * - Inherits from tokens.css for CSS custom properties
+ * - Uses .section-head (navigation.css) - already extracted
+ * - Uses .eyebrow (navigation.css) - already extracted
+ * - Uses .muted (navigation.css) - already extracted
+ * - Uses .tiny (navigation.css) - already extracted
+ * - No duplication of shared utility classes
+ * 
+ * Cascade contract:
+ * - Panel wrapper styles apply at component level
+ * - Table styles scoped via .llm-activity-table
+ * - Filter controls scoped via .llm-activity-filters
+ * - Policy grid styles scoped via .llm-policy-grid
+ * - Theme overrides via [data-theme="solarized-light"] container selector
+ */
+
+/* ==========================================================================
+   LLM Activity Panel - Activity Table and Filters
+   ========================================================================== */
+
+/* Section head within activity panel */
+.llm-activity-panel .section-head {
+  margin-bottom: 0.6rem;
+}
+
+/* Activity filters container */
+.llm-activity-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+/* Filter label styling */
+.llm-activity-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+}
+
+/* Filter select inputs */
+.llm-activity-filters select {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.6rem;
+  background: rgba(15, 23, 42, 0.8);
+  color: #fff;
+}
+
+/* Activity table wrapper - horizontal scroll */
+.llm-activity-table-wrapper {
+  overflow-x: auto;
+}
+
+/* Activity table - full width with collapse model */
+.llm-activity-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+/* Table header and data cells */
+.llm-activity-table th,
+.llm-activity-table td {
+  padding: 0.65rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+/* Table header - uppercase labels */
+.llm-activity-table th {
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Strong text in data cells */
+.llm-activity-table td strong {
+  display: block;
+}
+
+/* Paragraph in data cells */
+.llm-activity-table td p {
+  margin: 0.2rem 0 0;
+}
+
+/* ==========================================================================
+   LLM Policy Panel
+   ========================================================================== */
+
+/* Policy panel container */
+.llm-policy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* Policy grid - responsive card layout */
+.llm-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+/* Individual policy cards */
+.llm-policy-grid div {
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+/* Policy label text */
+.llm-policy-grid strong {
+  font-size: 0.95rem;
+  display: block;
+}
+
+/* ==========================================================================
+   LLM Run Summary Stats (RunsPanel.tsx)
+   ========================================================================== */
+
+/* LLM telemetry section */
+.run-summary-llm {
+  margin-top: 1.15rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* LLM summary header */
+.run-summary-llm-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.run-summary-llm-heading span {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: rgba(248, 250, 252, 0.55);
+}
+
+/* Current LLM stats line */
+.llm-current-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Historical stats collapsible */
+.llm-historical {
+  margin-top: 0.65rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 0.6rem 0.9rem;
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.llm-historical summary {
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+/* LLM activity table in light theme */
+[data-theme="solarized-light"] .llm-activity-table th {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .llm-activity-table td {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .llm-activity-table td strong {
+  color: #002b36;
+}
+
+/* LLM policy grid in light theme */
+[data-theme="solarized-light"] .llm-policy-grid div {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .llm-policy-grid strong {
+  color: #002b36;
+}
+
+/* LLM stats in light theme */
+[data-theme="solarized-light"] .run-stat-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .llm-provider-breakdown {
+  color: #657b83;
+}
+
+/* LLM historical in light theme */
+[data-theme="solarized-light"] .llm-historical {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .llm-historical summary {
+  color: #657b83;
+}
+
+/* LLM activity filter selects - harmonize with warm shell */
+[data-theme="solarized-light"] .llm-activity-filters select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .llm-activity-filters select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
