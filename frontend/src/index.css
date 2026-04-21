@@ -597,13 +597,9 @@
   opacity: 0.7;
 }
 
-.fleet-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.75rem;
-  margin: 1rem 0;
-}
-
+/* ==========================================================================
+    EXTRACTED to styles/components/fleet-summary.css
+    ========================================================================== */
 .diagnostic-pack-review-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -630,277 +626,36 @@
   gap: 0.2rem;
 }
 
-.fleet-metrics article {
-  background: rgba(15, 23, 42, 0.75);
-  border-radius: 0.65rem;
-  padding: 0.8rem;
-  border: 1px solid rgba(59, 130, 246, 0.4);
-}
+/*
+   Fleet / Run Summary family - MOVED TO styles/components/fleet-summary.css
 
-.fleet-table table {
-  width: 100%;
-  border-collapse: collapse;
-}
+   Base selectors extracted:
+   - .fleet-metrics, .fleet-metrics article
+   - .fleet-table table, .fleet-table th/td, .fleet-table tr, .fleet-table tr.row-selected
+   - .recency-pill, .recency-pill.stale
+   - .run-summary-head, .run-summary-freshness, .run-summary-collector
+   - .run-summary-metrics, .run-summary-stats, .run-stat-card, .run-stat-card strong/span
+   - .run-duration-summary
+   - .run-summary-llm, .run-summary-llm-heading, .run-summary-llm-heading span
+   - .llm-current-line, .llm-historical, .llm-historical summary
+   - .run-summary-next-checks, .run-summary-next-checks-head/stats/clusters/button
+   - .highlighted-row, @keyframes row-highlight-pulse
+   - @media (max-width: 768px) fleet-table responsive block
 
-.fleet-table th,
-.fleet-table td {
-  padding: 0.65rem 0.8rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  text-align: left;
-  vertical-align: top;
-}
+   Theme overrides extracted:
+   - All [data-theme="solarized-light"] .fleet-table th/td
+   - All [data-theme="solarized-light"] .run-stat-card variants
+   - All [data-theme="solarized-light"] .run-summary-collector, .run-stat-label
+   - All [data-theme="solarized-light"] .recency-pill variants
+   - All [data-theme="solarized-light"] .fleet-metrics article
+   - All [data-theme="solarized-light"] .llm-historical variants
 
-.fleet-table th {
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.2em;
-  color: rgba(148, 163, 184, 0.8);
-}
+   Shared with next-check-plan.css (not duplicated):
+   - .next-check-queue-panel, .deterministic-next-checks-panel
+   - .next-check-discovery-pill-*, .next-check-cluster-badge
 
-.recency-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.1rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  background: rgba(37, 99, 235, 0.2);
-  color: #bfdbfe;
-}
-
-.recency-pill.stale {
-  background: rgba(248, 113, 113, 0.2);
-  color: #fecaca;
-}
-
-.tiny {
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
-}
-
-.compact {
-  margin: 0;
-  font-size: 0.75rem;
-}
-
-.fleet-table tr {
-  transition: background 0.2s ease;
-  cursor: pointer;
-}
-
-.fleet-table tr.row-selected {
-  background: rgba(59, 130, 246, 0.12);
-}
-
-.run-summary-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.run-summary-freshness {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.2rem;
-}
-
-.run-summary-collector {
-  margin: 0.25rem 0 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: rgba(248, 250, 252, 0.6);
-}
-
-.run-summary-metrics {
-  margin-top: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.run-summary-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.75rem;
-}
-
-.run-stat-card {
-  padding: 0.75rem 1rem;
-  border-radius: 0.85rem;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  background: rgba(15, 23, 42, 0.65);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.run-stat-card strong {
-  font-size: 1.4rem;
-  line-height: 1;
-}
-
-.run-stat-card span {
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: rgba(248, 250, 252, 0.65);
-}
-
-.run-duration-summary {
-  margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  color: rgba(248, 250, 252, 0.7);
-}
-
-.run-summary-llm {
-  margin-top: 1.15rem;
-  padding-top: 0.8rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.3);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.run-summary-next-checks {
-  margin-top: 1rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.3);
-  padding-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.run-summary-next-checks-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.run-summary-next-checks-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  align-items: center;
-}
-
-.next-check-discovery-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.4rem 0.85rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: rgba(15, 23, 42, 0.75);
-  font-size: 0.75rem;
-  color: #e0e7ff;
-}
-
-.next-check-discovery-pill span {
-  text-transform: none;
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
-}
-
-.next-check-discovery-pill-safe {
-  border-color: rgba(34, 197, 94, 0.35);
-  color: #a7f3d0;
-}
-
-.next-check-discovery-pill-approval {
-  border-color: rgba(251, 191, 36, 0.35);
-  color: #fde047;
-}
-
-.next-check-discovery-pill-approved {
-  border-color: rgba(14, 165, 233, 0.35);
-  color: #bae6fd;
-}
-
-.next-check-discovery-pill-duplicate {
-  border-color: rgba(148, 163, 184, 0.35);
-  color: #cbd5f5;
-}
-
-.next-check-discovery-pill-stale {
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #fecaca;
-}
-
-.run-summary-next-checks-clusters {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.next-check-cluster-tags {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.next-check-cluster-badge {
-  border: 1px solid rgba(59, 130, 246, 0.45);
-  border-radius: 999px;
-  padding: 0.35rem 0.8rem;
-  background: rgba(59, 130, 246, 0.15);
-  color: #bfdbfe;
-  font-size: 0.75rem;
-  cursor: pointer;
-  text-transform: none;
-}
-
-.next-check-cluster-badge:hover {
-  background: rgba(59, 130, 246, 0.3);
-}
-
-.run-summary-next-checks-button {
-  border-radius: 999px;
-  border: none;
-  padding: 0.45rem 1.2rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 600;
-  background: linear-gradient(135deg, #0284c7, #0ea5e9);
-  color: #fff;
-  cursor: pointer;
-}
-
-.run-summary-next-checks-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  background: rgba(15, 23, 42, 0.6);
-}
-
-.next-check-queue-panel {
-  border-top: 1px solid rgba(148, 163, 184, 0.3);
-  padding-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.deterministic-next-checks-panel {
-  border-top: 1px solid rgba(148, 163, 184, 0.3);
-  padding-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.deterministic-cluster-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 0.75rem;
-}
+   See: styles/components/fleet-summary.css
+*/
 
 .deterministic-cluster-card {
   border: 1px solid rgba(148, 163, 184, 0.3);
@@ -1588,40 +1343,11 @@
   line-height: 1.4;
 }
 
-.run-summary-llm-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.run-summary-llm-heading span {
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  color: rgba(248, 250, 252, 0.55);
-}
-
-.llm-current-line {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.llm-historical {
-  margin-top: 0.65rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  padding: 0.6rem 0.9rem;
-  background: rgba(15, 23, 42, 0.8);
-}
-
-.llm-historical summary {
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/fleet-summary.css
+   ========================================================================== */
+/* .run-summary-llm-heading, .llm-current-line, .llm-historical
+    MOVED TO styles/components/fleet-summary.css */
 
 .review-enrichment {
   background: rgba(15, 23, 42, 0.9);

@@ -1,0 +1,379 @@
+/**
+ * Fleet / Run Summary Styles
+ * 
+ * Extracted from: frontend/src/index.css
+ * Phase: 15 (Fleet / Run Summary extraction)
+ * 
+ * Family inventory:
+ * 
+ * FLEET TABLE (lines ~600-700, ~3100-3155):
+ * - .fleet-metrics, .fleet-metrics article
+ * - .fleet-table table, .fleet-table thead/tbody, .fleet-table th/td
+ * - .fleet-table tr, .fleet-table tr.row-selected
+ * - .highlighted-row + @keyframes row-highlight-pulse
+ * - .recency-pill, .recency-pill.stale
+ * - @media (max-width: 768px) responsive block for .fleet-table
+ * 
+ * RUN SUMMARY (lines ~696-900):
+ * - .run-summary-head, .run-summary-freshness
+ * - .run-summary-collector, .run-summary-metrics
+ * - .run-summary-stats, .run-stat-card, .run-stat-card strong/span
+ * - .run-duration-summary
+ * - .run-summary-next-checks, .run-summary-next-checks-head/stats/clusters
+ * - .run-summary-next-checks-button, .run-summary-next-checks-button:disabled
+ * 
+ * SOLARIZED LIGHT THEME OVERRIDES (lines ~3547-3553, ~4234-4263, ~4293-4303, ~4388-4392):
+ * - [data-theme="solarized-light"] .fleet-table th/td
+ * - [data-theme="solarized-light"] .run-stat-card, .run-stat-card strong/span
+ * - [data-theme="solarized-light"] .run-summary-collector
+ * - [data-theme="solarized-light"] .recency-pill, .recency-pill.stale
+ * - [data-theme="solarized-light"] .fleet-metrics article
+ * 
+ * NOT included (already extracted to other files):
+ * - .next-check-discovery-pill-* (next-check-plan.css)
+ * - .next-check-cluster-badge (next-check-plan.css)
+ * - .next-check-queue-panel (next-check-plan.css)
+ * - .deterministic-next-checks-panel (next-check-plan.css)
+ * - .run-summary-llm, .run-summary-llm-heading (llm-activity.css)
+ * - .llm-current-line, .llm-historical (llm-activity.css)
+ * 
+ * NOT included (deferred selectors):
+ * - .panel shell (semantic ambiguity)
+ * - .runs-table-* (runs-table family - not yet extracted)
+ * 
+ * Dependencies:
+ * - Inherits from tokens.css for CSS custom properties
+ * - Uses .section-head (navigation.css) - already extracted
+ * - Uses .eyebrow (navigation.css) - already extracted
+ * 
+ * Cascade contract:
+ * - Fleet table styles scoped via .fleet-table
+ * - Run summary styles scoped via .run-summary-*
+ * - Theme overrides via [data-theme="solarized-light"] container selector
+ */
+
+/* ==========================================================================
+   Fleet Metrics Cards
+   ========================================================================== */
+
+.fleet-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.fleet-metrics article {
+  background: rgba(15, 23, 42, 0.75);
+  border-radius: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+/* ==========================================================================
+   Fleet Table
+   ========================================================================== */
+
+.fleet-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fleet-table th,
+.fleet-table td {
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.fleet-table th {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.fleet-table tr {
+  transition: background 0.2s ease;
+  cursor: pointer;
+}
+
+.fleet-table tr.row-selected {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* ==========================================================================
+   Recency Pills
+   ========================================================================== */
+
+.recency-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: rgba(37, 99, 235, 0.2);
+  color: #bfdbfe;
+}
+
+.recency-pill.stale {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+/* ==========================================================================
+   Run Summary Header
+   ========================================================================== */
+
+.run-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.run-summary-freshness {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.run-summary-collector {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.6);
+}
+
+/* ==========================================================================
+   Run Summary Metrics and Stats
+   ========================================================================== */
+
+.run-summary-metrics {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.run-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.run-stat-card {
+  padding: 0.75rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(15, 23, 42, 0.65);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.run-stat-card strong {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.run-stat-card span {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.65);
+}
+
+.run-duration-summary {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: rgba(248, 250, 252, 0.7);
+}
+/* ==========================================================================
+   Run Summary Next Checks
+   ========================================================================== */
+
+.run-summary-next-checks {
+  margin-top: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.run-summary-next-checks-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.run-summary-next-checks-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.run-summary-next-checks-clusters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.run-summary-next-checks-button {
+  border-radius: 999px;
+  border: none;
+  padding: 0.45rem 1.2rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  background: linear-gradient(135deg, #0284c7, #0ea5e9);
+  color: #fff;
+  cursor: pointer;
+}
+
+.run-summary-next-checks-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+/* ==========================================================================
+   Fleet Table Responsive (768px breakpoint)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .fleet-table table,
+  .fleet-table thead,
+  .fleet-table tbody,
+  .fleet-table th,
+  .fleet-table td,
+  .fleet-table tr {
+    display: block;
+  }
+
+  .fleet-table tr {
+    margin-bottom: 1rem;
+  }
+
+  .fleet-table th {
+    display: none;
+  }
+
+  .fleet-table td {
+    padding-left: 50%;
+    position: relative;
+  }
+
+  .fleet-table td::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 45%;
+    padding-left: 0.5rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  .fleet-table td:nth-of-type(1)::before {
+    content: "Cluster";
+  }
+  .fleet-table td:nth-of-type(2)::before {
+    content: "Rating";
+  }
+  .fleet-table td:nth-of-type(3)::before {
+    content: "Latest run";
+  }
+  .fleet-table td:nth-of-type(4)::before {
+    content: "Trigger";
+  }
+  .fleet-table td:nth-of-type(5)::before {
+    content: "Drilldown";
+  }
+}
+
+/* ==========================================================================
+   Highlighted Row Animation
+   ========================================================================== */
+
+/* Highlighted row in fleet table */
+.highlighted-row {
+  animation: row-highlight-pulse 2.2s ease-out;
+}
+
+@keyframes row-highlight-pulse {
+  0% {
+    background-color: rgba(34, 197, 94, 0.3);
+  }
+  20% {
+    background-color: rgba(34, 197, 94, 0.15);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+/* Fleet table in light theme */
+[data-theme="solarized-light"] .fleet-table th {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .fleet-table td {
+  color: #002b36;
+}
+
+/* Run summary cards in light theme */
+[data-theme="solarized-light"] .run-stat-card {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .run-stat-card strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .run-stat-card span {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .run-duration-summary {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .run-summary-collector {
+  color: #657b83;
+}
+/* Run orphaned pill in light mode */
+[data-theme="solarized-light"] .recency-pill {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .recency-pill.stale {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+/* Fleet metrics in light theme */
+[data-theme="solarized-light"] .fleet-metrics article {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
