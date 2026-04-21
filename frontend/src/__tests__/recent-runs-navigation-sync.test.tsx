@@ -152,7 +152,7 @@ describe("Recent Runs Navigation Synchronization", () => {
       });
 
       // Wait for run-95 to be visible on page 2
-      const historicalRow = document.querySelector('.run-row[data-run-id="run-95"]');
+      const historicalRow = await waitFor(() => document.querySelector('.run-row[data-run-id="run-95"]'), { timeout: 2000 });
       expect(historicalRow).toBeInTheDocument();
 
       // Update mock for historical run fetch
