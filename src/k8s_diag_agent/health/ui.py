@@ -115,7 +115,7 @@ def _serialize_drilldown(artifact: DrilldownArtifact, root_dir: Path) -> dict[st
 
 def _serialize_proposal(proposal: HealthProposal, root_dir: Path) -> dict[str, object]:
     latest_status = proposal.lifecycle_history[-1]
-    return {
+    data: dict[str, object] = {
         "proposal_id": proposal.proposal_id,
         "target": proposal.target,
         "confidence": proposal.confidence.value,
@@ -127,6 +127,10 @@ def _serialize_proposal(proposal: HealthProposal, root_dir: Path) -> dict[str, o
         "artifact_path": _relative_path(root_dir, proposal.artifact_path),
         "review_artifact": _relative_path(root_dir, proposal.source_artifact_path),
     }
+    # Thread artifact_id for provenance/debugging surfaces (optional)
+    if proposal.artifact_id:
+        data["artifact_id"] = proposal.artifact_id
+    return data
 
 
 def _serialize_review_enrichment_policy(policy: ReviewEnrichmentPolicy) -> dict[str, object]:

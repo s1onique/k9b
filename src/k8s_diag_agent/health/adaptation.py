@@ -13,6 +13,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from ..identity.artifact import new_artifact_id
 from ..models import ConfidenceLevel
 from .baseline import (
     DEFAULT_CRD_NEXT_CHECK,
@@ -86,6 +87,7 @@ class HealthProposal:
     lifecycle_history: tuple[ProposalLifecycleEntry, ...] = field(default_factory=_default_lifecycle_history)
     promotion_evaluation: ProposalEvaluation | None = None
     artifact_path: str | None = None
+    artifact_id: str | None = None  # None for legacy, auto-generated for new proposals via factory functions
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "promotion_payload", _freeze_payload(self.promotion_payload))
@@ -95,7 +97,7 @@ class HealthProposal:
         object.__setattr__(self, "lifecycle_history", history)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "proposal_id": self.proposal_id,
             "source_run_id": self.source_run_id,
             "source_artifact_path": self.source_artifact_path,
@@ -110,6 +112,10 @@ class HealthProposal:
             "promotion_evaluation": self.promotion_evaluation.to_dict() if self.promotion_evaluation else None,
             "artifact_path": self.artifact_path,
         }
+        # Include artifact_id when present (backward compat: legacy artifacts without it)
+        if self.artifact_id is not None:
+            data["artifact_id"] = self.artifact_id
+        return data
 
     def __hash__(self) -> int:
         return hash((self.proposal_id, self.source_run_id, self.target, self.proposed_change))
@@ -152,6 +158,11 @@ class HealthProposal:
                 evaluation = ProposalEvaluation.from_dict(evaluation_raw)
             except ValueError:
                 evaluation = None
+        # Parse artifact_id for backward compatibility (legacy artifacts without it)
+        artifact_id_value = raw.get("artifact_id")
+        parsed_artifact_id: str | None = None
+        if artifact_id_value is not None and isinstance(artifact_id_value, str) and artifact_id_value:
+            parsed_artifact_id = artifact_id_value
         return cls(
             proposal_id=str(raw.get("proposal_id") or ""),
             source_run_id=str(raw.get("source_run_id") or ""),
@@ -166,6 +177,7 @@ class HealthProposal:
             lifecycle_history=history,
             promotion_evaluation=evaluation,
             artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
+            artifact_id=parsed_artifact_id,
         )
 
 
@@ -289,6 +301,10 @@ def generate_proposals_from_review(
     ranking_proposal = _drilldown_ranking_proposal(run_id, base_path, review.run_id, ranking_metric)
     if ranking_proposal:
         proposals.append(ranking_proposal)
+    # Ensure all proposals have artifact_id for immutable instance identity
+    for i, proposal in enumerate(proposals):
+        if proposal.artifact_id is None:
+            proposals[i] = replace(proposal, artifact_id=new_artifact_id())
     return tuple(dict.fromkeys(proposals))
 
 
