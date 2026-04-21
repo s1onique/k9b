@@ -1,0 +1,1547 @@
+/**
+ * Next Check Plan / Approval / Queue Styles
+ * 
+ * Extracted from: frontend/src/index.css
+ * Phase: 14 (Next Check Plan / Approval / Queue extraction)
+ * 
+ * Scope: Complete Next Check Plan / Approval family including:
+ * - Queue panel (next-check-queue-*)
+ * - Deterministic next checks (deterministic-*)
+ * - Next check plan cards (next-check-plan-*)
+ * - Approval actions (next-check-approval-*)
+ * - Discovery pills (next-check-discovery-pill-*)
+ * - Solarized Light theme overrides for all above
+ * 
+ * NOT included (deferred selectors):
+ * - .panel shell (semantic ambiguity)
+ * - .runs-table-* (runs-table family)
+ * - .action-state-* (action-status.css)
+ * - .queue-status-pill-* (action-status.css)
+ */
+
+/* ==========================================================================
+   Next Check Execution States
+   ========================================================================== */
+
+.next-check-manual-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.not-runnable-explanation {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  background: rgba(51, 65, 85, 0.4);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-style: italic;
+}
+
+.next-check-execution {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.next-check-execution-success {
+  color: var(--color-success, #0b6623);
+}
+
+.next-check-execution-error {
+  color: var(--color-error, #b30000);
+}
+
+.next-check-execution-warning {
+  color: var(--color-warning, #8a6d3b);
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+/* ==========================================================================
+   Next Check Discovery Pills
+   ========================================================================== */
+
+.next-check-discovery-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(15, 23, 42, 0.75);
+  font-size: 0.75rem;
+  color: #e0e7ff;
+}
+
+.next-check-discovery-pill span {
+  text-transform: none;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+}
+
+.next-check-discovery-pill-safe {
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #a7f3d0;
+}
+
+.next-check-discovery-pill-approval {
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+}
+
+.next-check-discovery-pill-approved {
+  border-color: rgba(14, 165, 233, 0.35);
+  color: #bae6fd;
+}
+
+.next-check-discovery-pill-duplicate {
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #cbd5f5;
+}
+
+.next-check-discovery-pill-stale {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+}
+
+/* ==========================================================================
+   Cluster Tags and Badges
+   ========================================================================== */
+
+.next-check-cluster-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.next-check-cluster-badge {
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  background: rgba(59, 130, 246, 0.15);
+  color: #bfdbfe;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-transform: none;
+}
+
+.next-check-cluster-badge:hover {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+/* ==========================================================================
+   Next Check Queue Panel
+   ========================================================================== */
+
+.next-check-queue-panel {
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ==========================================================================
+   Deterministic Next Checks Panel
+   ========================================================================== */
+
+.deterministic-next-checks-panel {
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deterministic-cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.deterministic-cluster-card {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deterministic-cluster-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.deterministic-cluster-stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.deterministic-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deterministic-check-list li {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 0.75rem;
+}
+
+.deterministic-check-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+}
+
+.deterministic-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deterministic-group {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.deterministic-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.deterministic-check-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.deterministic-check-badges {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.deterministic-workstream-pill,
+.deterministic-urgency-pill,
+.deterministic-primary-pill {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.deterministic-workstream-pill {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+}
+
+.deterministic-workstream-pill-incident {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+.deterministic-workstream-pill-evidence {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.deterministic-workstream-pill-drift {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+}
+
+.deterministic-urgency-pill {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+}
+
+.deterministic-urgency-pill-high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+.deterministic-urgency-pill-medium {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.deterministic-urgency-pill-low {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+}
+
+.deterministic-primary-pill {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.deterministic-group--drift summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.deterministic-group--drift summary::-webkit-details-marker {
+  display: none;
+}
+
+.deterministic-group--drift summary::marker {
+  display: none;
+}
+
+.deterministic-cluster-attachments {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.deterministic-empty-state {
+  border-radius: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.deterministic-empty-bucket {
+  padding: 0.5rem 0;
+  color: rgba(148, 163, 184, 0.7);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Queue Controls and Filters
+   ========================================================================== */
+
+.next-check-queue-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.next-check-filter-row,
+.next-check-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.next-check-filter-row label,
+.next-check-control-row label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+}
+
+.next-check-filter-row select,
+.next-check-control-row select,
+.queue-search input {
+  margin-top: 0.25rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  padding: 0.35rem 0.65rem;
+  background: rgba(2, 6, 23, 0.85);
+  color: #f8fafc;
+}
+
+.queue-search input {
+  min-width: 220px;
+}
+
+.focus-presets {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.focus-preset-button {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.focus-preset-button.active,
+.focus-preset-button:focus-visible {
+  border-color: #38bdf8;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.queue-empty-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.queue-empty-state .link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #38bdf8;
+  cursor: pointer;
+}
+
+.queue-empty-explanation {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.queue-empty-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.queue-empty-recovery-actions .link::before {
+  content: "";
+}
+
+.queue-explanation-block {
+  width: 100%;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.queue-explanation-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.queue-explanation-stats,
+.queue-explanation-accounting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.queue-explanation-accounting span {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.75rem;
+  padding: 0.2rem 0.75rem;
+}
+
+.queue-explanation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.queue-explanation-actions__label {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.65);
+}
+
+.queue-explanation-actions ul {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.queue-explanation-actions li {
+  font-size: 0.85rem;
+}
+
+/* ==========================================================================
+   Queue Group and Items
+   ========================================================================== */
+
+.next-check-queue-group {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.next-check-queue-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.next-check-queue-items {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.next-check-queue-item {
+  padding: 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.next-check-queue-item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.queue-card-title {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.queue-card-reason {
+  margin: 0.25rem 0;
+}
+
+.queue-card-reason-label {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.queue-card-signal {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.primary-reason {
+  color: var(--color-text-accent, #b45309);
+  font-weight: 600;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: rgba(180, 83, 9, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+}
+
+.primary-reason::before {
+  content: "Why";
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.next-check-queue-item-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+
+.next-check-queue-item-flags {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.next-check-queue-item-flags strong {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.next-check-queue-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Queue Item New Structure - Header, Title, Context, Actions */
+
+.next-check-queue-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.queue-item-title-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 200px;
+}
+
+.queue-item-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.queue-item-status-badges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.next-check-queue-item-context {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.queue-item-rationale-line {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.queue-item-rationale-label {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.queue-item-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.queue-item-meta-tag {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(71, 85, 105, 0.3);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+.queue-item-blocker-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #fde047;
+}
+
+.queue-item-blocker-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.queue-item-blocker-text {
+  line-height: 1.4;
+}
+
+.queue-item-secondary-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.queue-item-primary-action {
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
+}
+
+/* Queue item result strip */
+
+.queue-item-result-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+  margin: 0.25rem 0;
+}
+
+.queue-item-result-strip.success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.queue-item-result-strip.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.queue-item-result-strip.timeout {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+.queue-item-result-label {
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.queue-item-result-summary {
+  flex: 1;
+  min-width: 120px;
+}
+
+.queue-item-result-link {
+  font-size: 0.75rem;
+  color: var(--blue, #0f62fe);
+  text-decoration: none;
+}
+
+.queue-item-result-link:hover {
+  text-decoration: underline;
+}
+
+.queue-item-result-next {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  font-size: 0.75rem;
+  color: rgba(251, 191, 36, 0.9);
+  font-weight: 500;
+}
+
+.queue-item-result-next::before {
+  content: "Next: ";
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+
+.next-check-queue-item-details {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #d8d8d8;
+  border-radius: 0.5rem;
+  background: #fbfbfb;
+}
+
+.next-check-queue-item-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.next-check-queue-item-metadata span strong {
+  margin-right: 0.25rem;
+}
+
+.next-check-queue-item-rationale {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.priority-rationale-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.9);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.priority-rationale-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-style: italic;
+}
+
+.next-check-command-preview {
+  font-family: var(--font-mono, 'JetBrains Mono', 'SFMono-Regular', monospace);
+}
+
+.next-check-command-preview pre {
+  margin: 0;
+  padding: 0.5rem;
+  background: #f3f3f3;
+  border-radius: 0.375rem;
+  border: 1px solid #e1e1e1;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   Next Check Plan
+   ========================================================================== */
+
+.next-check-plan {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.next-check-outcome-summary {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.outcome-pill {
+  padding: 0.15rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+}
+
+.outcome-pill-executed-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.outcome-pill-executed-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.outcome-pill-timed-out {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.outcome-pill-approval-required {
+  background: rgba(59, 130, 246, 0.15);
+  color: #bfdbfe;
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.outcome-pill-approved {
+  background: rgba(14, 165, 233, 0.15);
+  color: #7dd3fc;
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+.outcome-pill-approval-stale {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.outcome-pill-approval-orphaned {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.outcome-pill-not-used {
+  background: rgba(148, 163, 184, 0.08);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.outcome-pill-unknown {
+  background: rgba(148, 163, 184, 0.08);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.next-check-outcome-meta {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: rgba(248, 250, 252, 0.78);
+}
+
+.next-check-outcome-meta a.link {
+  font-size: 0.8rem;
+}
+
+.next-check-plan-head {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.next-check-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.next-check-plan-card {
+  border-radius: 0.9rem;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: rgba(2, 6, 23, 0.8);
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.next-check-plan-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.next-check-plan-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.45rem;
+}
+
+.next-check-plan-meta strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.next-check-plan-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.8);
+}
+
+.plan-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.plan-status-pill-safe {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.plan-status-pill-approval {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fcd34d;
+}
+
+.plan-status-pill-duplicate {
+  background: rgba(148, 163, 184, 0.25);
+  color: #cbd5f5;
+}
+
+.plan-status-pill-approved {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+}
+
+.plan-status-pill-stale {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fb7185;
+}
+
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.priority-pill-primary {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.priority-pill-secondary {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+}
+
+.priority-pill-fallback {
+  background: rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+}
+
+.plan-gating {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.75);
+  font-style: italic;
+}
+
+.plan-normalization {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.85);
+  font-style: italic;
+}
+
+.plan-stale-note {
+  margin: 0.4rem 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.65);
+  font-style: italic;
+}
+
+.next-check-orphaned {
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.next-check-orphaned ul {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.next-check-orphaned li {
+  font-size: 0.85rem;
+}
+
+/* ==========================================================================
+   Approval Actions
+   ========================================================================== */
+
+.next-check-approval-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.next-check-approval-status {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.next-check-approval-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(248, 250, 252, 0.8);
+}
+
+.next-check-approval-note-success {
+  color: #4ade80;
+}
+
+.next-check-approval-note-error {
+  color: #f87171;
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT THEME OVERRIDES
+   ========================================================================== */
+
+/* Queue item cards - harmonized backgrounds */
+[data-theme="solarized-light"] .next-check-queue-item {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .next-check-queue-group {
+  background: rgba(238, 232, 213, 0.85);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .queue-item-title {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-item-rationale-line {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .queue-item-rationale-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .queue-item-meta-tag {
+  background: rgba(147, 161, 161, 0.15);
+  color: #586e75;
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .queue-item-blocker-note {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.25);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .queue-item-result-strip {
+  background: rgba(238, 232, 213, 0.85);
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .queue-item-result-strip.success {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .queue-item-result-strip.error {
+  background: rgba(220, 50, 47, 0.1);
+  border-color: rgba(220, 50, 47, 0.25);
+}
+
+[data-theme="solarized-light"] .queue-item-result-strip.timeout {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.25);
+}
+
+[data-theme="solarized-light"] .queue-item-result-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .queue-item-result-summary {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-item-result-next {
+  color: #b58900;
+  border-top-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .next-check-queue-item-details {
+  background: rgba(238, 232, 213, 0.9);
+  border-color: rgba(147, 161, 161, 0.3);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-queue-item-metadata {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-queue-item-metadata strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .priority-rationale-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .priority-rationale-badge {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .queue-explanation-block {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .queue-explanation-actions__label {
+  color: #657b83;
+}
+
+/* Deterministic cluster cards */
+[data-theme="solarized-light"] .deterministic-cluster-card {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .deterministic-group {
+  background: rgba(238, 232, 213, 0.9);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .deterministic-empty-state {
+  background: rgba(253, 246, 227, 0.9);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .deterministic-empty-bucket {
+  color: #657b83;
+}
+
+/* Workstream/urgency pills */
+[data-theme="solarized-light"] .deterministic-workstream-pill {
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .deterministic-workstream-pill-incident {
+  background: rgba(220, 50, 47, 0.12);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.3);
+}
+
+[data-theme="solarized-light"] .deterministic-workstream-pill-evidence {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .deterministic-workstream-pill-drift {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .deterministic-urgency-pill {
+  border-color: rgba(147, 161, 161, 0.4);
+}
+
+[data-theme="solarized-light"] .deterministic-urgency-pill-high {
+  background: rgba(220, 50, 47, 0.12);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.3);
+}
+
+[data-theme="solarized-light"] .deterministic-urgency-pill-medium {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .deterministic-urgency-pill-low {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .deterministic-primary-pill {
+  background: rgba(133, 153, 0, 0.12);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.3);
+}
+
+/* 
+   NOTE: .action-state-* and .queue-status-pill-* Solarized Light overrides
+   are owned by styles/components/action-status.css
+*/
+
+/* Plan status pills */
+[data-theme="solarized-light"] .plan-status-pill-safe {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-approval {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-duplicate {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #839496;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-approved {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-stale {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+/* Next check plan cards */
+[data-theme="solarized-light"] .next-check-plan-card {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .next-check-plan-meta strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-plan-flags {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .plan-gating {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .plan-normalization {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .plan-stale-note {
+  color: #657b83;
+}
+
+/* Approval note colors */
+[data-theme="solarized-light"] .next-check-approval-note {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-approval-note-success {
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .next-check-approval-note-error {
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .plan-blocking-reason {
+  color: #dc322f;
+}
+
+/* Next check discovery pills */
+[data-theme="solarized-light"] .next-check-discovery-pill {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-safe {
+  background: rgba(133, 153, 0, 0.1);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-approval {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-approved {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-duplicate {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.3);
+  color: #839496;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-stale {
+  background: rgba(220, 50, 47, 0.1);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+/* Cluster badge */
+[data-theme="solarized-light"] .next-check-cluster-badge {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .next-check-cluster-badge:hover {
+  background: rgba(38, 139, 210, 0.18);
+}
+
+/* Focus preset button */
+[data-theme="solarized-light"] .focus-preset-button {
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .focus-preset-button.active,
+[data-theme="solarized-light"] .focus-preset-button:focus-visible {
+  border-color: #268bd2;
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+}
+
+/* Next check execution */
+[data-theme="solarized-light"] .next-check-execution {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-execution-warning {
+  color: #b58900;
+}
+
+/* Queue filter selects - soften to match warm paper shell */
+[data-theme="solarized-light"] .next-check-filter-row select,
+[data-theme="solarized-light"] .next-check-control-row select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-filter-row select:hover,
+[data-theme="solarized-light"] .next-check-control-row select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
+
+/* Orphaned checks */
+[data-theme="solarized-light"] .next-check-orphaned {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .next-check-orphaned li {
+  color: #002b36;
+}
+
+/* Queue card title */
+[data-theme="solarized-light"] .queue-card-title {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-card-reason-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .queue-card-signal {
+  color: #839496;
+}
+
+/* Not runnable explanation */
+[data-theme="solarized-light"] .not-runnable-explanation {
+  background: rgba(147, 161, 161, 0.1);
+  color: #657b83;
+}
+
+/* Primary action button */
+[data-theme="solarized-light"] .queue-item-primary-action {
+  box-shadow: 0 2px 8px rgba(133, 153, 0, 0.15);
+}
+
+/* Queue search input - warm paper background */
+[data-theme="solarized-light"] .queue-search input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-search input::placeholder {
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .queue-search input:focus {
+  border-color: rgba(38, 139, 210, 0.6);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.1);
+}
+
+/* Primary reason */
+[data-theme="solarized-light"] .primary-reason {
+  background-color: rgba(181, 137, 0, 0.08);
+  color: #b58900;
+}
+
+/* Outcome pills */
+[data-theme="solarized-light"] .outcome-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .outcome-pill-executed-success {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .outcome-pill-executed-failed {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .outcome-pill-timed-out {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .outcome-pill-approval-required {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .outcome-pill-approval-stale,
+[data-theme="solarized-light"] .outcome-pill-approval-orphaned,
+[data-theme="solarized-light"] .outcome-pill-not-used,
+[data-theme="solarized-light"] .outcome-pill-unknown {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #839496;
+}
+
+/* Queue empty state */
+[data-theme="solarized-light"] .queue-empty-state .link {
+  color: #268bd2;
+}

@@ -36,8 +36,9 @@
  * ✓ Phase 10: styles/components/alertmanager-sources.css (alertmanager sources extracted)
  * ✓ Phase 11: styles/components/llm-activity.css (LLM activity/policy extracted)
  * ✓ Phase 12: styles/components/execution-history.css (execution history / usefulness extracted)
+ * ✓ Phase 14: styles/components/next-check-plan.css (next check plan / approval / queue extracted)
  * → Phase 13: theme override extraction (future)
- * → Phase 14: remaining component groups (future)
+ * → Phase 15: remaining component groups (future)
  */
 
 /* 1. Base tokens must load first */
@@ -62,6 +63,7 @@
 @import url('./components/alertmanager-sources.css');
 @import url('./components/llm-activity.css');
 @import url('./components/execution-history.css');
+@import url('./components/next-check-plan.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');

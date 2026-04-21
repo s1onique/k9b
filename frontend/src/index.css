@@ -1,45 +1,36 @@
 /* ==========================================================================
-   EXTracted to styles/tokens.css
+   EXTRACTED to styles/tokens.css
    ========================================================================== */
 /* Tokens (:root, [data-theme] base declarations) moved to styles/tokens.css */
-/* ========================================================================== */
 
-.next-check-manual-actions {
-  margin-top: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.not-runnable-explanation {
-  display: inline-block;
-  font-size: 0.8rem;
-  color: #94a3b8;
-  background: rgba(51, 65, 85, 0.4);
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-style: italic;
-}
-
-.next-check-execution {
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-.next-check-execution-success {
-  color: var(--color-success, #0b6623);
-}
-
-.next-check-execution-error {
-  color: var(--color-error, #b30000);
-}
-
-.next-check-execution-warning {
-  color: var(--color-warning, #8a6d3b);
-  font-size: 0.85rem;
-  margin: 0;
-  padding: 0.25rem 0;
-}
+/* ==========================================================================
+   EXTRACTED to styles/components/next-check-plan.css
+   ========================================================================== */
+/* 
+   Next Check Plan / Approval / Queue family - MOVED TO next-check-plan.css
+   
+   Base selectors extracted:
+   - .next-check-manual-actions, .not-runnable-explanation
+   - .next-check-execution, .next-check-execution-*
+   - .next-check-discovery-pill, .next-check-discovery-pill-*
+   - .next-check-cluster-tags, .next-check-cluster-badge
+   - .next-check-queue-panel, .deterministic-next-checks-panel
+   - .deterministic-*, .next-check-queue-*
+   - .next-check-plan, .next-check-plan-*, .outcome-pill-*
+   - .next-check-approval-*, .next-check-orphaned
+   - .queue-*, .focus-preset-*, .priority-*
+   
+   Theme overrides extracted:
+   - All [data-theme="solarized-light"] .next-check-* selectors
+   - All [data-theme="solarized-light"] .deterministic-* selectors
+   - All [data-theme="solarized-light"] .queue-* selectors
+   - All [data-theme="solarized-light"] .outcome-pill-* selectors
+   - All [data-theme="solarized-light"] .plan-* selectors
+   - All [data-theme="solarized-light"] .priority-* selectors
+   - All [data-theme="solarized-light"] .focus-preset-* selectors
+   
+   See: styles/components/next-check-plan.css
+*/
 
 /* ==========================================================================
    EXTracted to styles/reset.css
