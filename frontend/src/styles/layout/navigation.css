@@ -177,3 +177,25 @@
   text-transform: uppercase;
   color: #93c5fd;
 }
+
+/* Legacy orphaned pill */
+.tiny {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+[data-theme="solarized-light"] .muted {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .eyebrow {
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .tiny {
+  color: #657b83;
+}

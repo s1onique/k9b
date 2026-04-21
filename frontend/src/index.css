@@ -2219,18 +2219,7 @@
 [data-theme="solarized-light"] .runs-filter-button.active .runs-filter-count {
   color: #268bd2;
 }
-/* Muted text - improved readability */
-[data-theme="solarized-light"] .muted {
-  color: #657b83;
-}
-
-[data-theme="solarized-light"] .eyebrow {
-  color: #268bd2;
-}
-
-[data-theme="solarized-light"] .tiny {
-  color: #657b83;
-}
+/* .muted, .eyebrow, .tiny - MOVED to styles/layout/navigation.css */
 
 /* Hero buttons - themed */
 [data-theme="solarized-light"] .hero button {
@@ -2285,10 +2274,7 @@
   color: #002b36;
 }
 
-/* Run IDs and timestamps in table */
-[data-theme="solarized-light"] .run-cell-id {
-  color: #839496;
-}
+/* .run-cell-id - MOVED to styles/components/runs-table.css */
 
 /* Freshness indicators - Solarized colors */
 [data-theme="solarized-light"] .page-freshness-indicator.page-freshness-indicator--fresh {
@@ -2880,30 +2866,7 @@
   color: #b58900;
 }
 
-/* Usefulness badges */
-[data-theme="solarized-light"] .usefulness-badge-useful {
-  background: rgba(133, 153, 0, 0.12);
-  border-color: rgba(133, 153, 0, 0.3);
-  color: #859900;
-}
-
-[data-theme="solarized-light"] .usefulness-badge-partial {
-  background: rgba(181, 137, 0, 0.12);
-  border-color: rgba(181, 137, 0, 0.3);
-  color: #b58900;
-}
-
-[data-theme="solarized-light"] .usefulness-badge-noisy {
-  background: rgba(220, 50, 47, 0.12);
-  border-color: rgba(220, 50, 47, 0.3);
-  color: #dc322f;
-}
-
-[data-theme="solarized-light"] .usefulness-badge-empty {
-  background: rgba(147, 161, 161, 0.1);
-  border-color: rgba(147, 161, 161, 0.25);
-  color: #657b83;
-}
+/* Usefulness badges - MOVED to styles/components/execution-history.css */
 
 /* ==========================================================================
    EXTRACTED to styles/components/llm-activity.css
