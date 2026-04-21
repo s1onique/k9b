@@ -430,26 +430,28 @@ def _serialize_external_analysis(
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         status = artifact.status.value
         counts[status] = counts.get(status, 0) + 1
-        entries.append(
-            {
-                "tool_name": artifact.tool_name,
-                "cluster_label": artifact.cluster_label,
-                "run_id": artifact.run_id,
-                "run_label": artifact.run_label,
-                "status": status,
-                "summary": artifact.summary,
-                "findings": list(artifact.findings),
-                "suggested_next_checks": list(artifact.suggested_next_checks),
-                "timestamp": artifact.timestamp.isoformat(),
-                "artifact_path": _relative_path(root_dir, artifact.artifact_path),
-                "duration_ms": artifact.duration_ms,
-                "provider": artifact.provider,
-                "purpose": artifact.purpose.value,
-                "payload": artifact.payload,
-                "error_summary": artifact.error_summary,
-                "skip_reason": artifact.skip_reason,
-            }
-        )
+        entry: dict[str, object] = {
+            "tool_name": artifact.tool_name,
+            "cluster_label": artifact.cluster_label,
+            "run_id": artifact.run_id,
+            "run_label": artifact.run_label,
+            "status": status,
+            "summary": artifact.summary,
+            "findings": list(artifact.findings),
+            "suggested_next_checks": list(artifact.suggested_next_checks),
+            "timestamp": artifact.timestamp.isoformat(),
+            "artifact_path": _relative_path(root_dir, artifact.artifact_path),
+            "duration_ms": artifact.duration_ms,
+            "provider": artifact.provider,
+            "purpose": artifact.purpose.value,
+            "payload": artifact.payload,
+            "error_summary": artifact.error_summary,
+            "skip_reason": artifact.skip_reason,
+        }
+        # Immutable artifact instance identity for provenance/debugging
+        if artifact.artifact_id:
+            entry["artifact_id"] = artifact.artifact_id
+        entries.append(entry)
     status_counts: list[dict[str, object]] = []
     seen: set[str] = set()
     for status in _ANALYSIS_STATUS_ORDER:

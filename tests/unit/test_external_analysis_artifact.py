@@ -755,6 +755,122 @@ class TestWriteExternalAnalysisArtifact(unittest.TestCase):
         self.assertEqual(restored.reviewer_confidence, original.reviewer_confidence)
 
 
+class TestArtifactIdField(unittest.TestCase):
+    """Tests for artifact_id field in ExternalAnalysisArtifact."""
+
+    def test_new_artifact_includes_artifact_id(self) -> None:
+        """New artifacts should have artifact_id auto-generated."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test-tool",
+            run_id="run-123",
+            cluster_label="cluster-a",
+        )
+        self.assertIsNotNone(artifact.artifact_id)
+        self.assertIsInstance(artifact.artifact_id, str)
+        assert artifact.artifact_id is not None
+        self.assertTrue(len(artifact.artifact_id) > 0)
+
+    def test_artifact_id_is_unique(self) -> None:
+        """Each artifact should get a unique artifact_id."""
+        ids = set()
+        for _ in range(100):
+            artifact = ExternalAnalysisArtifact(
+                tool_name="test-tool",
+                run_id="run-123",
+                cluster_label="cluster-a",
+            )
+            ids.add(artifact.artifact_id)
+        self.assertEqual(len(ids), 100)
+
+    def test_artifact_id_format_is_uuid_like(self) -> None:
+        """artifact_id should be UUID-like format."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test-tool",
+            run_id="run-123",
+            cluster_label="cluster-a",
+        )
+        aid = artifact.artifact_id
+        assert aid is not None
+        # UUID format: 8-4-4-4-12 hex chars
+        parts = aid.split("-")
+        self.assertEqual(len(parts), 5)
+        self.assertEqual(len(parts[0]), 8)
+        self.assertEqual(len(parts[1]), 4)
+        self.assertEqual(len(parts[2]), 4)
+        self.assertEqual(len(parts[3]), 4)
+        self.assertEqual(len(parts[4]), 12)
+
+    def test_to_dict_includes_artifact_id(self) -> None:
+        """to_dict should serialize artifact_id when present."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test-tool",
+            run_id="run-123",
+            cluster_label="cluster-a",
+        )
+        result = artifact.to_dict()
+        self.assertIn("artifact_id", result)
+        self.assertEqual(result["artifact_id"], artifact.artifact_id)
+
+    def test_from_dict_preserves_artifact_id(self) -> None:
+        """from_dict should parse and preserve artifact_id."""
+        original = ExternalAnalysisArtifact(
+            tool_name="test-tool",
+            run_id="run-123",
+            cluster_label="cluster-a",
+        )
+        raw = original.to_dict()
+        restored = ExternalAnalysisArtifact.from_dict(raw)
+        self.assertEqual(restored.artifact_id, original.artifact_id)
+
+    def test_from_dict_missing_artifact_id_returns_none(self) -> None:
+        """Legacy artifacts without artifact_id should deserialize with None."""
+        raw = {
+            "tool_name": "test-tool",
+            "run_id": "run-legacy",
+            "cluster_label": "cluster-legacy",
+            # No artifact_id field
+        }
+        artifact = ExternalAnalysisArtifact.from_dict(raw)
+        self.assertIsNone(artifact.artifact_id)
+
+    def test_artifact_id_distinct_from_run_id(self) -> None:
+        """artifact_id must remain distinct from run_id."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="test-tool",
+            run_id="run-123",
+            cluster_label="cluster-a",
+        )
+        self.assertNotEqual(artifact.artifact_id, artifact.run_id)
+
+    def test_roundtrip_preserves_artifact_id(self) -> None:
+        """Roundtrip serialization should preserve artifact_id."""
+        original = ExternalAnalysisArtifact(
+            tool_name="roundtrip-tool",
+            run_id="run-rt",
+            cluster_label="cluster-rt",
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+        )
+        serialized = original.to_dict()
+        restored = ExternalAnalysisArtifact.from_dict(serialized)
+        self.assertEqual(restored.artifact_id, original.artifact_id)
+
+    def test_write_and_read_preserves_artifact_id(self) -> None:
+        """Writing and reading from disk should preserve artifact_id."""
+        original = ExternalAnalysisArtifact(
+            tool_name="write-tool",
+            run_id="run-write",
+            cluster_label="cluster-write",
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_APPROVAL,
+        )
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "artifact.json"
+            write_external_analysis_artifact(path, original)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            restored = ExternalAnalysisArtifact.from_dict(data)
+            self.assertEqual(restored.artifact_id, original.artifact_id)
+
+
 class TestAllEnumValues(unittest.TestCase):
     """Tests verifying all enum values can be used."""
 

@@ -2289,6 +2289,139 @@ class HealthUITests(unittest.TestCase):
         result = _derive_ranking_reason(entry)
         self.assertEqual(result, "duplicate")
 
+
+# Tests for artifact_id threading in UI serialization
+class TestArtifactIdUiSerialization(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_external_analysis_serialization_includes_artifact_id(self) -> None:
+        """New external artifacts include artifact_id in UI serialization."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="test-run",
+            cluster_label="cluster-a",
+            summary="Test analysis",
+            status=ExternalAnalysisStatus.SUCCESS,
+            artifact_path="external-analysis/test.json",
+            provider="k8sgpt",
+            duration_ms=100,
+        )
+        output_dir = self.tmpdir / "runs" / "health"
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="test-run",
+            run_label="test-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[artifact],
+            notifications=[],
+            external_analysis_settings=ExternalAnalysisSettings(),
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        ea_data = cast(dict[str, object], data["external_analysis"])
+        artifacts = cast(list[dict[str, object]], ea_data["artifacts"])
+        self.assertEqual(len(artifacts), 1)
+        entry = artifacts[0]
+        self.assertIn("artifact_id", entry)
+        self.assertIsNotNone(entry["artifact_id"])
+        # Verify it matches UUID format
+        artifact_id = str(entry["artifact_id"])
+        self.assertEqual(len(artifact_id), 36)
+        self.assertEqual(artifact_id[8], "-")
+        self.assertEqual(artifact_id[13], "-")
+
+    def test_external_analysis_serialization_handles_legacy_without_artifact_id(self) -> None:
+        """Legacy artifacts without artifact_id deserialize gracefully."""
+        # Simulate a legacy artifact dict without artifact_id field
+        legacy_dict = {
+            "tool_name": "k8sgpt",
+            "run_id": "legacy-run",
+            "run_label": "legacy-run",
+            "cluster_label": "cluster-legacy",
+            "status": "success",
+            "summary": "Legacy analysis",
+            "findings": [],
+            "suggested_next_checks": [],
+            "timestamp": "2026-01-01T00:00:00Z",
+            "artifact_path": "external-analysis/legacy.json",
+            "duration_ms": 50,
+            "provider": "k8sgpt",
+            "purpose": "manual",
+            "payload": {},
+            "error_summary": None,
+            "skip_reason": None,
+        }
+        legacy_artifact = ExternalAnalysisArtifact.from_dict(legacy_dict)
+        self.assertIsNone(legacy_artifact.artifact_id)
+
+        output_dir = self.tmpdir / "runs" / "health"
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="legacy-run",
+            run_label="legacy-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=[legacy_artifact],
+            notifications=[],
+            external_analysis_settings=ExternalAnalysisSettings(),
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        ea_data = cast(dict[str, object], data["external_analysis"])
+        artifacts = cast(list[dict[str, object]], ea_data["artifacts"])
+        self.assertEqual(len(artifacts), 1)
+        entry = artifacts[0]
+        # Legacy artifact should not have artifact_id in serialized output
+        self.assertNotIn("artifact_id", entry)
+
+    def test_multiple_external_analysis_artifacts_have_unique_artifact_ids(self) -> None:
+        """Multiple artifacts get unique artifact_ids in UI serialization."""
+        artifacts = [
+            ExternalAnalysisArtifact(
+                tool_name="k8sgpt",
+                run_id="test-run",
+                cluster_label="cluster-a",
+                summary=f"Analysis {i}",
+                status=ExternalAnalysisStatus.SUCCESS,
+                artifact_path=f"external-analysis/test-{i}.json",
+                provider="k8sgpt",
+                duration_ms=100,
+            )
+            for i in range(3)
+        ]
+        output_dir = self.tmpdir / "runs" / "health"
+        index_path = write_health_ui_index(
+            output_dir,
+            run_id="test-run",
+            run_label="test-run",
+            collector_version="1.0",
+            records=[],
+            assessments=[],
+            drilldowns=[],
+            proposals=[],
+            external_analysis=artifacts,
+            notifications=[],
+            external_analysis_settings=ExternalAnalysisSettings(),
+        )
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        ea_data = cast(dict[str, object], data["external_analysis"])
+        serialized_artifacts = cast(list[dict[str, object]], ea_data["artifacts"])
+        artifact_ids = [entry.get("artifact_id") for entry in serialized_artifacts]
+        # All artifact_ids should be unique and present
+        self.assertEqual(len(artifact_ids), 3)
+        self.assertEqual(len(set(artifact_ids)), 3)
+        for aid in artifact_ids:
+            self.assertIsNotNone(aid)
+
     def test_build_next_check_queue_populates_structured_ranking_reason(self) -> None:
         plan_entry: dict[str, object] = {
             "candidates": [
