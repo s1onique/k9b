@@ -37,6 +37,7 @@
  * ✓ Phase 11: styles/components/llm-activity.css (LLM activity/policy extracted)
  * ✓ Phase 12: styles/components/execution-history.css (execution history / usefulness extracted)
  * ✓ Phase 14: styles/components/next-check-plan.css (next check plan / approval / queue extracted)
+ * ✓ Phase 15: styles/components/alertmanager-snapshot.css (alertmanager snapshot extracted)
  * ✓ Phase 16: styles/components/fleet-summary.css (fleet table / run summary extracted)
  * ✓ Phase 17: styles/components/advisory-summary.css (advisory summary + cluster cards extracted)
  * ✓ Phase 18: styles/components/advisory-lower-sections.css (advisory lower/detail sections extracted)
@@ -65,6 +66,7 @@
 @import url('./components/row-actions.css');
 @import url('./components/notification-table.css');
 @import url('./components/alertmanager-sources.css');
+@import url('./components/alertmanager-snapshot.css');
 @import url('./components/llm-activity.css');
 @import url('./components/execution-history.css');
 @import url('./components/next-check-plan.css');

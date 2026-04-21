@@ -1,0 +1,268 @@
+/**
+ * Alertmanager Snapshot Panel
+ * 
+ * Component family for displaying the alertmanager compact snapshot
+ * (alert counts, severity/state breakdowns, affected namespaces/services/clusters)
+ * 
+ * Phase: 15 (Alertmanager Snapshot extraction)
+ * 
+ * Base selectors:
+ * - .alertmanager-snapshot, .alertmanager-snapshot .section-head
+ * - .alertmanager-snapshot-grid
+ * - .alertmanager-snapshot-metric, .alertmanager-metric-value, .alertmanager-metric-label
+ * - .alertmanager-snapshot-section, .alertmanager-section-label
+ * - .alertmanager-severity-list, .alertmanager-severity-badge, .alertmanager-severity-badge--*
+ * - .alertmanager-state-list, .alertmanager-state-badge
+ * - .alertmanager-top-alerts, .alertmanager-top-alerts li
+ * - .alertmanager-tag-list, .alertmanager-tag, .alertmanager-tag--more
+ * 
+ * Theme overrides:
+ * - All [data-theme="solarized-light"] .alertmanager-* selectors
+ * 
+ * Ownership model for theme rules:
+ * - Theme overrides live in the same stylesheet as base rules
+ * - [data-theme="solarized-light"] specificity used for theme overrides
+ * - Custom properties from tokens.css used for theming
+ * 
+ * Dependencies:
+ * - .panel: inherited via cascade (NOT extracted per constraints)
+ * - .section-head: shared utility, locally scoped with .alertmanager-snapshot
+ * - CSS custom properties: defined in tokens.css
+ * 
+ * Not extracted (separate families):
+ * - .alertmanager-sources-* (alertmanager-sources.css)
+ * - .alertmanager-provenance-* (shared with execution-history.css)
+ * - .alertmanager-relevance-* (shared with execution-history.css)
+ */
+
+/* ============================================================
+   Alertmanager Snapshot Panel
+   ============================================================ */
+
+.alertmanager-snapshot {
+  /* Panel styles inherited from .panel */
+}
+
+.alertmanager-snapshot .section-head {
+  margin-bottom: 0.75rem;
+}
+
+/* Snapshot grid - organized metrics layout */
+.alertmanager-snapshot-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Primary metric block - total alert count */
+.alertmanager-snapshot-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.5rem;
+  border-left: 4px solid var(--color-state-danger-border);
+}
+
+.alertmanager-metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.alertmanager-metric-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+/* Section blocks - severity, state, top alerts, etc. */
+.alertmanager-snapshot-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.alertmanager-section-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Severity badges */
+.alertmanager-severity-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.alertmanager-severity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  color: var(--color-text-secondary);
+}
+
+/* Severity color variants */
+.alertmanager-severity-badge--critical {
+  background: var(--color-state-danger-bg);
+  border-color: var(--color-state-danger-border);
+  color: var(--color-state-danger-text);
+}
+
+.alertmanager-severity-badge--warning,
+.alertmanager-severity-badge--warn,
+.alertmanager-severity-badge--high {
+  background: var(--color-state-warning-bg);
+  border-color: var(--color-state-warning-border);
+  color: var(--color-state-warning-text);
+}
+
+.alertmanager-severity-badge--info,
+.alertmanager-severity-badge--medium {
+  background: var(--color-state-info-bg);
+  border-color: var(--color-state-info-border);
+  color: var(--color-state-info-text);
+}
+
+.alertmanager-severity-badge--debug,
+.alertmanager-severity-badge--low {
+  background: var(--color-state-neutral-bg);
+  border-color: var(--color-state-neutral-border);
+  color: var(--color-state-neutral-text);
+}
+
+/* State badges */
+.alertmanager-state-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.alertmanager-state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  color: var(--color-text-secondary);
+}
+
+/* Top alerts list */
+.alertmanager-top-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alertmanager-top-alerts li {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.alertmanager-top-alerts li:last-child {
+  border-bottom: none;
+}
+
+/* Tag/chip list for namespaces, clusters, services */
+.alertmanager-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.alertmanager-tag {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: var(--color-accent-primary);
+  border: 1px solid var(--color-accent-primary-border);
+  color: var(--color-accent-primary-text);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertmanager-tag--more {
+  background: var(--color-state-neutral-bg);
+  border-color: var(--color-state-neutral-border);
+  color: var(--color-state-neutral-text);
+  font-style: italic;
+}
+
+/* Solarized Light theme for Alertmanager Snapshot */
+[data-theme="solarized-light"] .alertmanager-snapshot-metric {
+  border-left-color: var(--color-state-danger-border);
+}
+
+[data-theme="solarized-light"] .alertmanager-metric-value {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .alertmanager-severity-badge--critical {
+  background: rgba(220, 50, 47, 0.15);
+  border-color: rgba(220, 50, 47, 0.4);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .alertmanager-severity-badge--warning,
+[data-theme="solarized-light"] .alertmanager-severity-badge--warn,
+[data-theme="solarized-light"] .alertmanager-severity-badge--high {
+  background: rgba(181, 137, 0, 0.18);
+  border-color: rgba(181, 137, 0, 0.45);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .alertmanager-severity-badge--info,
+[data-theme="solarized-light"] .alertmanager-severity-badge--medium {
+  background: rgba(38, 139, 210, 0.15);
+  border-color: rgba(38, 139, 210, 0.4);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .alertmanager-severity-badge--debug,
+[data-theme="solarized-light"] .alertmanager-severity-badge--low {
+  background: rgba(147, 161, 161, 0.15);
+  border-color: rgba(147, 161, 161, 0.35);
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .alertmanager-tag {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .alertmanager-tag--more {
+  background: rgba(147, 161, 161, 0.15);
+  border-color: rgba(147, 161, 161, 0.35);
+  color: #93a1a1;
+}
