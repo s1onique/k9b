@@ -1,0 +1,71 @@
+/**
+ * Tabs / Navigation Family
+ * 
+ * Shared tab navigation pattern for switching between content panels.
+ * Provides horizontal tab list, individual tab buttons, and associated panel styling.
+ * 
+ * Base selectors:
+ * - .tab-list - horizontal flex container for tabs
+ * - .tab - individual tab button
+ * - .tab.active - currently selected tab
+ * - .tab-panel ul - content panel list layout
+ * 
+ * Theme overrides:
+ * - [data-theme="solarized-light"] .tab
+ * - [data-theme="solarized-light"] .tab.active
+ * 
+ * Dependencies:
+ * - None (uses only rgba colors and border-radius, no token dependencies)
+ * 
+ * Phase: 22 (continuation after loading.css)
+ */
+
+/* Tab list container - horizontal flex layout */
+.tab-list {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Individual tab button - pill-style with dark background */
+.tab {
+  border: none;
+  background: rgba(15, 23, 42, 0.7);
+  color: rgba(248, 250, 252, 0.8);
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* Active tab - highlighted state */
+.tab.active {
+  background: rgba(14, 165, 233, 0.2);
+  color: #fff;
+}
+
+/* Tab panel content - grid list layout */
+.tab-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT THEME OVERRIDES
+   ========================================================================== */
+
+/* Tab in light theme - subtle warm background */
+[data-theme="solarized-light"] .tab {
+  background: rgba(147, 161, 161, 0.1);
+}
+
+/* Active tab in light theme - Solarized blue accent */
+[data-theme="solarized-light"] .tab.active {
+  background: rgba(38, 139, 210, 0.15);
+}
+
+/* Tab active state - softer blue accent (override) */
+[data-theme="solarized-light"] .tab.active {
+  background: rgba(38, 139, 210, 0.12);
+}
