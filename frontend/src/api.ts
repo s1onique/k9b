@@ -1,3 +1,15 @@
+/**
+ * api.ts — Backend API client for the K9b diagnostics frontend.
+ *
+ * Exports: fetchRun, fetchFleet, fetchProposals, fetchNotifications,
+ *         fetchClusterDetail, fetchRunsList, executeNextCheckCandidate,
+ *         approveNextCheckCandidate, promoteDeterministicNextCheck,
+ *         submitUsefulnessFeedback, runBatchExecution,
+ *         performAlertmanagerSourceAction, promoteAlertmanagerSource,
+ *         stopTrackingAlertmanagerSource.
+ * Used by: All frontend components that load or mutate backend state.
+ */
+
 import type {
   AlertmanagerSourceActionRequest,
   AlertmanagerSourceActionResponse,

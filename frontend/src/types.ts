@@ -1,3 +1,13 @@
+/**
+ * types.ts — TypeScript type definitions for the full application.
+ *
+ * Covers: RunPayload, FleetPayload, ProposalsPayload, NotificationsPayload,
+ *         LLMActivity, ClusterDetailPayload, NextCheckPlanCandidate, and
+ *         supporting types for execution history, findings, hypotheses, and
+ *         Alertmanager provenance.
+ * Consumers: All frontend components, hooks, and API layer.
+ */
+
 export type ArtifactLink = {
   label: string;
   path: string;
