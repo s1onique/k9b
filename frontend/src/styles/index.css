@@ -1,9 +1,9 @@
 /**
  * Styles Entry Point
- * 
+ *
  * Canonical entrypoint for all application styles.
  * Imports in correct cascade order: tokens first, then layout, then component styles.
- * 
+ *
  * Architecture:
  * - styles/index.css    → Main entrypoint (this file)
  * - styles/tokens.css   → Base tokens (:root, [data-theme]) - LOW RISK extraction
@@ -11,7 +11,7 @@
  * - styles/components/* → Component styles
  * - ../index.css        → All remaining component and theme override styles
  * - ../themes.css       → Token values (color definitions) - loaded via main.tsx
- * 
+ *
  * Import order rationale:
  * 1. tokens.css must load first so :root custom properties are declared
  * 2. layout styles follow (structural page regions)
@@ -19,33 +19,39 @@
  * 4. monolith index.css loads last for remaining unorganized styles
  * 5. themes.css is loaded separately in main.tsx BEFORE this import
  *    to ensure token VALUES exist before tokens.css references them
- * 
- * Phase tracking:
- * ✓ Phase 1: styles/index.css entrypoint (scaffolding)
- * ✓ Phase 2: styles/tokens.css (base tokens extracted)
- * ✓ Phase 3: styles/reset.css (reset + base extracted)
- * ✓ Phase 4: styles/components/pagination.css (pagination extracted)
- * ✓ Phase 5: styles/components/badges-pills.css (badges/pills extracted)
- * ✓ Phase 6: styles/components/filters.css (runs-filter family extracted)
- * ✓ Phase 7: styles/components/action-status.css (action-state/queue-status extracted)
- * ✓ Phase 8: styles/components/row-actions.css (row action family extracted)
- * ✓ Phase 9A: styles/layout/hero.css (hero structure extracted)
- * ✓ Phase 9A: styles/layout/navigation.css (cockpit-nav/floating-nav extracted)
- * ✓ Phase 9A: styles/layout/freshness.css (freshness indicators extracted)
- * ✓ Phase 9B: styles/layout/workflow-lanes.css (workflow lane headers extracted)
- * ✓ Phase 10: styles/components/alertmanager-sources.css (alertmanager sources extracted)
- * ✓ Phase 11: styles/components/llm-activity.css (LLM activity/policy extracted)
- * ✓ Phase 12: styles/components/execution-history.css (execution history / usefulness extracted)
- * ✓ Phase 14: styles/components/next-check-plan.css (next check plan / approval / queue extracted)
- * ✓ Phase 15: styles/components/alertmanager-snapshot.css (alertmanager snapshot extracted)
- * ✓ Phase 16: styles/components/fleet-summary.css (fleet table / run summary extracted)
- * ✓ Phase 17: styles/components/advisory-summary.css (advisory summary + cluster cards extracted)
- * ✓ Phase 18: styles/components/advisory-lower-sections.css (advisory lower/detail sections extracted)
- * ✓ Phase 19: styles/components/proposal-list.css (proposal list + findings display extracted)
- * ✓ Phase 21: styles/components/alerts.css (alert/notice family extracted)
- * ✓ Phase 22: styles/layout/panel.css (panel shell extracted)
- * → Phase 13: theme override extraction (future)
- * → Phase 20: remaining component groups (future)
+ *
+ * Phase tracking (extraction sequence, sequential numbering):
+ * ✓ Phase  1: styles/index.css entrypoint (scaffolding)
+ * ✓ Phase  2: styles/tokens.css (base tokens extracted)
+ * ✓ Phase  3: styles/reset.css (reset + base extracted)
+ * ✓ Phase  4: styles/components/pagination.css (pagination extracted)
+ * ✓ Phase  5: styles/components/badges-pills.css (badges/pills extracted)
+ * ✓ Phase  6: styles/components/filters.css (runs-filter family extracted)
+ * ✓ Phase  7: styles/components/action-status.css (action-state/queue-status extracted)
+ * ✓ Phase  8: styles/components/row-actions.css (row action family extracted)
+ * ✓ Phase  9: styles/layout/hero.css (hero structure extracted)
+ * ✓ Phase 10: styles/layout/navigation.css (cockpit-nav/floating-nav extracted)
+ * ✓ Phase 11: styles/layout/freshness.css (freshness indicators extracted)
+ * ✓ Phase 12: styles/layout/workflow-lanes.css (workflow lane headers extracted)
+ * ✓ Phase 13: styles/components/alertmanager-sources.css (alertmanager sources extracted)
+ * ✓ Phase 14: styles/components/llm-activity.css (LLM activity/policy extracted)
+ * ✓ Phase 15: styles/components/execution-history.css (execution history / usefulness extracted)
+ * ✓ Phase 16: styles/components/next-check-plan.css (next check plan / approval / queue extracted)
+ * ✓ Phase 17: styles/components/alertmanager-snapshot.css (alertmanager snapshot extracted)
+ * ✓ Phase 18: styles/components/fleet-summary.css (fleet table / run summary extracted)
+ * ✓ Phase 19: styles/components/advisory-summary.css (advisory summary + cluster cards extracted)
+ * ✓ Phase 20: styles/components/advisory-lower-sections.css (advisory lower/detail sections extracted)
+ * ✓ Phase 21: styles/components/proposal-list.css (proposal list + findings display extracted)
+ * ✓ Phase 22: styles/components/alerts.css (alert/notice family extracted)
+ * ✓ Phase 23: styles/layout/panel.css (panel shell extracted)
+ * ✓ Phase 24: styles/shared/theme-helpers.css (theme switch / accessibility helpers)
+ * ✓ Phase 25: styles/components/notification-table.css (notification table extracted)
+ * ✓ Phase 26: styles/components/loading.css (loading states extracted)
+ * ✓ Phase 27: styles/components/tabs.css (tab component extracted)
+ * ✓ Phase 28: styles/components/shared-ui.css (shared UI primitives extracted)
+ * ✓ Phase 29: styles/components/runs-table.css (runs table extracted)
+ * ✓ Phase 30: styles/components/cluster-detail.css (cluster detail extracted)
+ * → Phase 31: remaining monolith styles (future)
  */
 
 /* 1. Base tokens must load first */
