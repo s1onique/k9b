@@ -142,6 +142,10 @@ step_run() {
         echo "[$step_id] $message" | tee "$log_file"
         "$@" 2>&1 | tee -a "$log_file"
         exit_code=${PIPESTATUS[0]}
+    elif [[ -n "${STEP_JSON_MODE:-}" ]]; then
+        # JSON mode: capture to log only, no console output
+        "$@" >> "$log_file" 2>&1
+        exit_code=$?
     else
         # Compact: capture to log only, emit single result line
         "$@" >> "$log_file" 2>&1
@@ -153,14 +157,19 @@ step_run() {
     local duration_fmt=$(_step_format_duration "$duration_ms")
 
     if (( exit_code == 0 )); then
-        # Compact: single line with id, status, duration, and message
-        echo "[$step_id] PASS (${duration_fmt}) - $message"
         _STEP_RESULTS["$step_id"]="PASS|$duration_ms|$exit_code"
+        # Only emit to console if not in JSON mode
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] PASS (${duration_fmt}) - $message"
+        fi
     else
-        echo "[$step_id] FAIL (${duration_fmt}) - $message" >&2
         _STEP_RESULTS["$step_id"]="FAIL|$duration_ms|$exit_code"
         _STEP_FAILED=true
-        _step_print_failure_info "$step_id" "$exit_code" "$log_file" "$duration_fmt"
+        # Only emit to console if not in JSON mode
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] FAIL (${duration_fmt}) - $message" >&2
+            _step_print_failure_info "$step_id" "$exit_code" "$log_file" "$duration_fmt"
+        fi
         exit "$exit_code"
     fi
 }
@@ -189,6 +198,10 @@ step_run_continue() {
         echo "[$step_id] $message" | tee "$log_file"
         "$@" 2>&1 | tee -a "$log_file"
         exit_code=${PIPESTATUS[0]}
+    elif [[ -n "${STEP_JSON_MODE:-}" ]]; then
+        # JSON mode: capture to log only, no console output
+        "$@" >> "$log_file" 2>&1
+        exit_code=$?
     else
         # Compact: capture to log only, emit single result line
         "$@" >> "$log_file" 2>&1
@@ -200,14 +213,19 @@ step_run_continue() {
     local duration_fmt=$(_step_format_duration "$duration_ms")
 
     if (( exit_code == 0 )); then
-        # Compact: single line with id, status, duration, and message
-        echo "[$step_id] PASS (${duration_fmt}) - $message"
         _STEP_RESULTS["$step_id"]="PASS|$duration_ms|$exit_code"
+        # Only emit to console if not in JSON mode
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] PASS (${duration_fmt}) - $message"
+        fi
     else
-        echo "[$step_id] FAIL (${duration_fmt}) - $message" >&2
         _STEP_RESULTS["$step_id"]="FAIL|$duration_ms|$exit_code"
         _STEP_FAILED=true
-        _step_print_failure_info "$step_id" "$exit_code" "$log_file" "$duration_fmt"
+        # Only emit to console if not in JSON mode
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] FAIL (${duration_fmt}) - $message" >&2
+            _step_print_failure_info "$step_id" "$exit_code" "$log_file" "$duration_fmt"
+        fi
     fi
 }
 
@@ -276,7 +294,10 @@ step_emit_summary() {
             echo "${step_id}|${result}"
         done
     } > "$summary_file"
-    echo "Summary: $summary_file"
+    # Only emit to console if not in JSON mode
+    if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+        echo "Summary: $summary_file"
+    fi
     
     # Write JSON summary
     {
@@ -308,7 +329,10 @@ step_emit_summary() {
         echo "  ]"
         echo "}"
     } > "$json_file"
-    echo "JSON Summary: $json_file"
+    # Only emit to console if not in JSON mode
+    if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+        echo "JSON Summary: $json_file"
+    fi
 }
 
 _step_failed_count() {
@@ -324,16 +348,27 @@ _step_failed_count() {
 
 # step_finalize <exit_code>
 # Called at end of verification to emit final status
+# In STEP_JSON_MODE, emits only the JSON summary to stdout
 step_finalize() {
     local exit_code="$1"
 
-    if (( exit_code == 0 )); then
-        echo "VERIFICATION GATE: PASSED"
-    else
-        echo "VERIFICATION GATE: FAILED" >&2
-    fi
-
+    # Emit summary to files
     step_emit_summary
+
+    if [[ -n "${STEP_JSON_MODE:-}" ]]; then
+        # JSON mode: output only the JSON summary to stdout
+        local json_file="${STEP_DATA_DIR}/${_RUN_TIMESTAMP}-summary.json"
+        if [[ -f "$json_file" ]]; then
+            cat "$json_file"
+        fi
+    else
+        # Normal mode: human-readable status
+        if (( exit_code == 0 )); then
+            echo "VERIFICATION GATE: PASSED"
+        else
+            echo "VERIFICATION GATE: FAILED" >&2
+        fi
+    fi
 
     return "$exit_code"
 }

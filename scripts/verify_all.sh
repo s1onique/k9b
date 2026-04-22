@@ -9,16 +9,43 @@
 #
 # Usage:
 #   scripts/verify_all.sh          # compact output (default)
+#   scripts/verify_all.sh --json   # JSON output to stdout only
 #   STEP_VERBOSE=1 scripts/verify_all.sh  # verbose output
 #
 # Output contract:
 #   - Compact mode: one line per step (PASS/FAIL with duration)
 #   - Success: VERIFICATION GATE: PASSED
 #   - Failure: step name, exit code, log excerpt, log path
+#   - JSON mode: pure JSON summary on stdout (no progress output)
 #
 # Logs are stored in runs/verification/ with timestamped per-step files.
 
 set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+
+STEP_JSON_MODE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --json)
+            STEP_JSON_MODE=1
+            export STEP_JSON_MODE
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--json]"
+            echo "  --json   Emit only JSON summary to stdout"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Usage: $0 [--json]" >&2
+            exit 1
+            ;;
+    esac
+done
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PYTHON="$REPO_ROOT/.venv/bin/python"

@@ -443,6 +443,113 @@ class TestVerifyAllIntegration(unittest.TestCase):
             )
 
 
+class TestStepRunnerJsonMode(unittest.TestCase):
+    """Test JSON output mode via STEP_JSON_MODE environment variable."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    STEP_RUNNER = REPO_ROOT / "scripts" / "step_runner.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.STEP_RUNNER.exists():
+            self.skipTest("step_runner.sh not found")
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_json_mode_")
+        self._log_dir = os.path.join(self._tmp_dir, "logs")
+        self._data_dir = os.path.join(self._tmp_dir, "data")
+        os.makedirs(self._log_dir, exist_ok=True)
+        os.makedirs(self._data_dir, exist_ok=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+    def test_json_mode_emits_valid_json_on_stdout(self) -> None:
+        """JSON mode should emit valid JSON only on stdout."""
+        import json
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-json-stdout"
+        env["STEP_JSON_MODE"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", f'source "{self.STEP_RUNNER}"; step_run "pass-step" "Pass step" echo "ok"; step_finalize 0'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        # stdout should be pure JSON
+        stdout = result.stdout.strip()
+        # Should not contain progress messages
+        self.assertNotIn("[pass-step]", stdout)
+        self.assertNotIn("VERIFICATION GATE", stdout)
+        # Should be valid JSON
+        data = json.loads(stdout)
+        self.assertIn("run_id", data)
+        self.assertEqual(data["status"], "passed")
+
+    def test_json_mode_success_includes_expected_keys(self) -> None:
+        """JSON mode success should include all required top-level keys."""
+        import json
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-json-keys"
+        env["STEP_JSON_MODE"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", f'source "{self.STEP_RUNNER}"; step_run "step-a" "Step A" echo "ok"; step_run "step-b" "Step B" echo "ok"; step_finalize 0'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        data = json.loads(result.stdout.strip())
+        # Check all required top-level keys
+        self.assertIn("run_id", data)
+        self.assertIn("started", data)
+        self.assertIn("status", data)
+        self.assertIn("failed_count", data)
+        self.assertIn("failed_steps", data)
+        self.assertIn("steps", data)
+        # Check values
+        self.assertEqual(data["status"], "passed")
+        self.assertEqual(data["failed_count"], 0)
+        self.assertEqual(data["failed_steps"], [])
+        self.assertEqual(len(data["steps"]), 2)
+        # Check step structure
+        for step in data["steps"]:
+            self.assertIn("id", step)
+            self.assertIn("status", step)
+            self.assertIn("duration_ms", step)
+            self.assertIn("exit_code", step)
+            self.assertIn("log_file", step)
+
+    def test_json_mode_failure_keeps_nonzero_exit_code(self) -> None:
+        """JSON mode failure should return non-zero exit code."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-json-fail-exit"
+        env["STEP_JSON_MODE"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", f'source "{self.STEP_RUNNER}"; step_run_continue "fail-step" "Fail step" bash -c "echo error; false"; step_finalize 1'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        import json
+        data = json.loads(result.stdout.strip())
+        self.assertEqual(data["status"], "failed")
+        self.assertGreater(data["failed_count"], 0)
+
+
 class TestStepRunnerOutputContracts(unittest.TestCase):
     """Test output format contracts for LLM usability."""
 
@@ -504,6 +611,72 @@ class TestStepRunnerOutputContracts(unittest.TestCase):
         self.assertIn("Failure excerpt", stderr)
         self.assertIn("LOG FILE:", stderr)
         self.assertIn("EXIT CODE:", stderr)
+
+
+class TestVerifyAllJsonMode(unittest.TestCase):
+    """Test verify_all.sh --json flag behavior."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    VERIFY_ALL = REPO_ROOT / "scripts" / "verify_all.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.VERIFY_ALL.exists():
+            self.skipTest("verify_all.sh not found")
+        os.chmod(self.VERIFY_ALL, 0o755)
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_verify_json_")
+        os.makedirs(self._tmp_dir, exist_ok=True)
+        # Clean up any existing lock
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        if lock_dir.exists():
+            import shutil
+            shutil.rmtree(lock_dir, ignore_errors=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory and lock."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        if lock_dir.exists():
+            shutil.rmtree(lock_dir, ignore_errors=True)
+
+    def test_verify_all_json_flag_accepted(self) -> None:
+        """verify_all.sh --json should be accepted without error."""
+        # Test with help flag first to verify argument parsing works
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=self.REPO_ROOT,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("--json", result.stdout)
+
+    def test_verify_all_default_mode_unchanged(self) -> None:
+        """Default mode (no --json) should still show human-readable output.
+        
+        This test runs the full verify_all.sh gated behind RUN_FULL_VERIFY_TEST.
+        """
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
+        result = subprocess.run(
+            [str(self.VERIFY_ALL)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+
+        output = result.stdout + result.stderr
+        # Should contain VERIFICATION GATE marker
+        self.assertIn("VERIFICATION GATE: PASSED", output)
+        # Should NOT be valid JSON
+        import json
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(output.strip())
 
 
 class TestVerifyAllRecursionAndLock(unittest.TestCase):
