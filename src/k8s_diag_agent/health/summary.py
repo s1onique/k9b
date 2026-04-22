@@ -11,10 +11,12 @@ from typing import Any
 
 from ..security import sanitize_payload
 from .adaptation import HealthProposal, ProposalLifecycleStatus
+from .proposal_lifecycle_events import derive_current_proposal_status
 from .utils import normalize_ref
 
 _ASSESSMENT_PATTERN = re.compile(r"(?P<run_id>.+-\d{8}T\d{6}Z)-(?P<label>.+)-assessment\.json$")
 _TIMESTAMP_LENGTH = 16  # YYYYMMDDTHHMMSSZ
+_TRANSITIONS_SUBDIR = "transitions"
 
 
 @dataclass(frozen=True)
@@ -128,9 +130,10 @@ def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> Healt
     history = _load_history(history_path)
     cluster_summaries = _build_cluster_summaries(assessments_dir, run_id, history)
     all_proposals = _load_all_proposals(proposals_dir)
-    proposal_list = _collect_proposals_for_run(all_proposals, run_id)
+    transitions_dir = proposals_dir / _TRANSITIONS_SUBDIR
+    proposal_list = _collect_proposals_for_run(all_proposals, transitions_dir, run_id)
     trigger_artifacts = _collect_triggers(triggers_dir, run_id)
-    promoted = _collect_promoted_reports(all_proposals, reviews_dir, run_id)
+    promoted = _collect_promoted_reports(all_proposals, transitions_dir, reviews_dir, run_id)
     comparison_summaries = _collect_comparison_summaries(runs_dir, run_id)
 
     return HealthSummary(
@@ -456,12 +459,16 @@ def _load_all_proposals(proposals_dir: Path) -> list[HealthProposal]:
     return proposals
 
 
-def _collect_proposals_for_run(proposals: Iterable[HealthProposal], run_id: str) -> list[ProposalSummary]:
+def _collect_proposals_for_run(
+    proposals: Iterable[HealthProposal], transitions_dir: Path | None, run_id: str
+) -> list[ProposalSummary]:
     summaries: list[ProposalSummary] = []
     for proposal in proposals:
         if proposal.source_run_id != run_id:
             continue
-        lifecycle_status = proposal.lifecycle_history[-1].status.value
+        # Use event-aware derivation for current status
+        current_status = derive_current_proposal_status(proposal.to_dict(), transitions_dir)
+        lifecycle_status = current_status.value
         summaries.append(
             ProposalSummary(
                 proposal_id=proposal.proposal_id,
@@ -546,11 +553,17 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> list[ComparisonSum
 
 
 def _collect_promoted_reports(
-    proposals: Iterable[HealthProposal], reviews_dir: Path, after_run_id: str
+    proposals: Iterable[HealthProposal], transitions_dir: Path | None, reviews_dir: Path, after_run_id: str
 ) -> list[PromotedComparison]:
     promoted: list[PromotedComparison] = []
     for proposal in proposals:
-        if not _has_promoted_status(proposal):
+        # Use event-aware derivation for promoted/accepted state
+        current_status = derive_current_proposal_status(proposal.to_dict(), transitions_dir)
+        if current_status not in {
+            ProposalLifecycleStatus.ACCEPTED,
+            ProposalLifecycleStatus.PROMOTED,
+            ProposalLifecycleStatus.APPLIED,
+        }:
             continue
         before_review = _load_review(proposal.source_run_id, reviews_dir)
         after_review = _load_review(after_run_id, reviews_dir)
@@ -625,14 +638,3 @@ def _signal_note(before: int, after: int) -> str:
     if after > before:
         return f"signals preserved or stronger (non-running pods {before} -> {after})"
     return f"signal presence unchanged (non-running pods {before})"
-
-
-def _has_promoted_status(proposal: HealthProposal) -> bool:
-    return any(
-        entry.status in {
-            ProposalLifecycleStatus.ACCEPTED,
-            ProposalLifecycleStatus.PROMOTED,
-            ProposalLifecycleStatus.APPLIED,
-        }
-        for entry in proposal.lifecycle_history
-    )
