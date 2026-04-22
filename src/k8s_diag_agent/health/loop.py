@@ -32,10 +32,11 @@ from .adaptation import HealthProposal
 from .baseline import BaselineDriftCategory, BaselinePolicy, resolve_baseline_policy_path
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .drilldown_assessor import assess_drilldown_artifact
-from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON, ImagePullSecretInsight, ImagePullSecretInspector
+from .image_pull_secret import ImagePullSecretInsight, ImagePullSecretInspector
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
+from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_history import (
     HealthHistoryEntry,
     HealthRating,
@@ -2880,40 +2881,16 @@ class HealthLoopRunner:
         record: HealthSnapshotRecord,
         previous_history: dict[str, HealthHistoryEntry],
     ) -> tuple[str, ...]:
-        if not record.assessment:
-            return ()
-        reasons: list[str] = []
-        normalized_context = normalize_ref(record.target.context)
-        if normalized_context in self._manual_drilldown_contexts:
-            reasons.append("manual_request")
-        prev_entry = previous_history.get(record.snapshot.metadata.cluster_id)
-        if (
-            prev_entry
-            and prev_entry.health_rating == HealthRating.HEALTHY
-            and record.assessment.rating == HealthRating.DEGRADED
-        ):
-            reasons.append("health_regression")
-        pod_counts = record.snapshot.health_signals.pod_counts
-        if pod_counts.crash_loop_backoff > 0:
-            reasons.append("CrashLoopBackOff")
-        if pod_counts.image_pull_backoff > 0:
-            reasons.append("ImagePullBackOff")
-        warning_threshold = self.config.trigger_policy.warning_event_threshold
-        warning_events = record.snapshot.health_signals.warning_events
-        threshold_met = (
-            len(warning_events) > 0
-            if warning_threshold <= 0
-            else len(warning_events) >= warning_threshold
+        """Determine drilldown reasons for a cluster record.
+
+        Delegates to the extracted drilldown helpers module for the core logic.
+        """
+        return _determine_drilldown_reasons_impl(
+            record=record,
+            previous_history=previous_history,
+            manual_drilldown_contexts=self._manual_drilldown_contexts,
+            warning_event_threshold=self.config.trigger_policy.warning_event_threshold,
         )
-        if threshold_met:
-            reasons.append("warning_event_threshold")
-        if record.snapshot.health_signals.job_failures > 0:
-            reasons.append("job_failures")
-        if record.image_pull_secret_insight:
-            reasons.append(BROKEN_IMAGE_PULL_SECRET_REASON)
-        reasons.extend(record.pattern_reasons)
-        unique_reasons = tuple(dict.fromkeys(reasons))
-        return unique_reasons
 
     def _evaluate_triggers(
         self,
