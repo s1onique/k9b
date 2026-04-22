@@ -42,7 +42,6 @@ from .ui_next_check_execution import (
     _classify_blocked_candidate,  # noqa: F401  # re-exported for tests
     _classify_execution_failure,  # noqa: F401  # re-exported for tests
     _classify_execution_success,  # noqa: F401  # re-exported for tests
-    _derive_outcome_status,  # noqa: F401  # re-exported for ui/server.py
 )
 from .ui_planner_queue import (
     _PLANNER_NEXT_ACTION_HINTS,  # noqa: F401  # re-exported for tests
@@ -56,7 +55,6 @@ from .ui_planner_queue import (
     _build_next_check_queue,
     _build_next_check_queue_explanation,
     _derive_priority_rationale,  # noqa: F401  # re-exported for tests
-    _derive_ranking_reason,  # noqa: F401  # re-exported for tests
     _serialize_next_check_plan,
 )
 from .ui_serialization import (

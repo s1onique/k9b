@@ -102,7 +102,7 @@ class CRDWorkstreamRoutingTests(unittest.TestCase):
                 },
             ],
         }
-        from k8s_diag_agent.health.ui import _build_next_check_queue
+        from k8s_diag_agent.health.ui_planner_queue import _build_next_check_queue
         queue = _build_next_check_queue(plan_entry, {})
         
         # Find the CRD demoted entry
@@ -134,7 +134,7 @@ class CRDWorkstreamRoutingTests(unittest.TestCase):
                 },
             ],
         }
-        from k8s_diag_agent.health.ui import _build_next_check_queue
+        from k8s_diag_agent.health.ui_planner_queue import _build_next_check_queue
         queue = _build_next_check_queue(plan_entry, {})
         
         crd_entry = queue[0]

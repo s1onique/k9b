@@ -50,7 +50,7 @@ from ..external_analysis.next_check_approval import (
     log_next_check_approval_event,
     record_next_check_approval,
 )
-from ..health.ui import _derive_outcome_status
+from ..health.ui_next_check_execution import _derive_outcome_status
 from ..structured_logging import emit_structured_log
 from .api import (
     build_cluster_detail_payload,

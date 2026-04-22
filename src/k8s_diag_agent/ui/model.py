@@ -1631,7 +1631,7 @@ def _build_outcome_count_view(raw: Mapping[str, object]) -> NextCheckOutcomeCoun
 
 def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
     # Import here to avoid circular dependency at module level
-    from ..health.ui import _derive_priority_rationale, _derive_ranking_reason
+    from ..health.ui_planner_queue import _derive_priority_rationale, _derive_ranking_reason
 
     provenance_raw = raw.get("alertmanagerProvenance") or raw.get("alertmanager_provenance")
     provenance = _build_alertmanager_provenance_view(provenance_raw)

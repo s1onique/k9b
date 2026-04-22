@@ -51,10 +51,10 @@ from k8s_diag_agent.health.ui import (
     _classify_execution_failure,
     _classify_execution_success,
     _derive_priority_rationale,
-    _derive_ranking_reason,
     _serialize_review_enrichment,
     write_health_ui_index,
 )
+from k8s_diag_agent.health.ui_planner_queue import _derive_ranking_reason
 from k8s_diag_agent.models import ConfidenceLevel
 
 
