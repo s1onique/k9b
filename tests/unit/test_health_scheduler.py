@@ -554,17 +554,54 @@ class SchedulerImportSmokeTests(unittest.TestCase):
 
     def test_schedule_health_loop_function_imports_cleanly(self) -> None:
         """Verify schedule_health_loop can be imported without errors."""
-        # This exercises the function-level imports inside schedule_health_loop
-        from k8s_diag_agent.health.loop_scheduler import schedule_health_loop  # noqa: F401
+        # This exercises the module-level imports in loop_scheduler
+        from k8s_diag_agent.health import loop_scheduler  # noqa: F401
+
+    def test_schedule_health_loop_executes_local_imports_without_importerror(self) -> None:
+        """Regression test: calling schedule_health_loop should not fail on local imports.
+
+        This specifically guards the historical bug where HealthRunConfig was imported
+        from loop_history.py instead of loop.py inside schedule_health_loop().
+        Importing the function does NOT execute function-local imports - we must CALL it.
+        """
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+
+        from k8s_diag_agent.health.loop_scheduler import schedule_health_loop
+
+        with TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            config_path = tmp_path / "health-config.local.json"
+            config_path.write_text(
+                """{"run_label": "health-run", "targets": []}""",
+                encoding="utf-8",
+            )
+
+            # Patch immediately downstream of the local imports so the test stays cheap
+            # while still proving the function body was entered successfully.
+            # Both emit_structured_log and run_health_loop are local imports inside the function,
+            # so we patch them where they are defined.
+            with patch(
+                "k8s_diag_agent.structured_logging.emit_structured_log"
+            ), patch(
+                "k8s_diag_agent.health.loop.run_health_loop",
+                side_effect=SystemExit(0),
+            ):
+                try:
+                    schedule_health_loop(
+                        config_path=config_path,
+                        interval_seconds=300,
+                    )
+                except SystemExit as exc:
+                    self.assertEqual(exc.code, 0)
 
     def test_health_run_config_imported_from_canonical_owner(self) -> None:
-        """Verify HealthRunConfig is imported from loop.py, not loop_history.py."""
-        # HealthRunConfig lives in loop.py - importing from loop_scheduler
-        # should resolve correctly (via loop.py, not loop_history.py)
-        from dataclasses import fields
-
+        """Verify HealthRunConfig lives in loop.py, not loop_history.py."""
         from k8s_diag_agent.health.loop import HealthRunConfig
-        # Sanity check: the class has the expected interface (dataclass with load method)
-        self.assertTrue(hasattr(HealthRunConfig, 'load'))
-        field_names = {f.name for f in fields(HealthRunConfig)}
-        self.assertIn('run_label', field_names)
+
+        # Direct module ownership check
+        self.assertEqual(
+            HealthRunConfig.__module__,
+            "k8s_diag_agent.health.loop",
+        )

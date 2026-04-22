@@ -982,9 +982,9 @@ def schedule_health_loop(
     This function loads the configuration and creates a scheduler that manages
     lock-based execution of health loops.
     """
+    from ..structured_logging import emit_structured_log
     from .loop import HealthRunConfig, run_health_loop
     from .loop_history import _safe_label
-    from .structured_logging import emit_structured_log
 
     # Compute scripts_dir relative to project root
     project_root = Path(__file__).resolve().parents[3]
