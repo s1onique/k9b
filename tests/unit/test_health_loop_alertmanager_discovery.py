@@ -151,8 +151,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
         )
         
         # Track whether discovery was called
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers") as discover_mock, \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources") as write_mock:
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers") as discover_mock, \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources") as write_mock:
             
             inventory = AlertmanagerSourceInventory()
             inventory.add_source(AlertmanagerSource(
@@ -207,8 +207,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             baseline_policy=BaselinePolicy.empty(),
         )
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers") as discover_mock, \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources") as write_mock:
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers") as discover_mock, \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources") as write_mock:
             
             inventory = AlertmanagerSourceInventory()
             inventory.add_source(AlertmanagerSource(
@@ -272,8 +272,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             baseline_policy=BaselinePolicy.empty(),
         )
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers", return_value=AlertmanagerSourceInventory()), \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources") as write_mock:
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers", return_value=AlertmanagerSourceInventory()), \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources") as write_mock:
             
             expected_path = self.output_dir / "health" / f"{self.run_id}-alertmanager-sources.json"
             write_mock.return_value = expected_path
@@ -296,8 +296,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             run_id=self.run_id,
         )
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers") as discover_mock, \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources") as write_mock, \
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers") as discover_mock, \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources") as write_mock, \
              patch.object(runner, "_log_event") as log_mock:
             
             runner._run_alertmanager_discovery([], {"root": self.output_dir / "health"})
@@ -365,8 +365,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             ))
             return inventory
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers", side_effect=mock_discover) as discover_mock, \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources") as write_mock:
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers", side_effect=mock_discover) as discover_mock, \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources") as write_mock:
             
             runner._run_alertmanager_discovery(records, {"root": self.output_dir / "health"})
             
@@ -430,8 +430,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             captured_inventory["inv"] = cast(AlertmanagerSourceInventory | None, args[1] if len(args) > 1 else kwargs.get("inventory"))
             return self.output_dir / "health" / f"{self.run_id}-alertmanager-sources.json"
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers") as discover_mock, \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources", side_effect=capture_write):
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers") as discover_mock, \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources", side_effect=capture_write):
             
             # Mock discovery to return an inventory in DISCOVERED state
             inventory = AlertmanagerSourceInventory()
@@ -524,8 +524,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             )
             return self.output_dir / "health" / f"{self.run_id}-alertmanager-sources.json"
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers", side_effect=mock_discover), \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources", side_effect=capture_write):
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers", side_effect=mock_discover), \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources", side_effect=capture_write):
             
             runner._run_alertmanager_discovery(records, {"root": self.output_dir / "health"})
             
@@ -594,8 +594,8 @@ class TestHealthLoopAlertmanagerDiscovery(unittest.TestCase):
             baseline_policy=BaselinePolicy.empty(),
         )
         
-        with patch("k8s_diag_agent.health.loop.discover_alertmanagers") as discover_mock, \
-             patch("k8s_diag_agent.health.loop.write_alertmanager_sources", side_effect=RuntimeError("Write failed")), \
+        with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers") as discover_mock, \
+             patch("k8s_diag_agent.health.loop_alertmanager_discovery.write_alertmanager_sources", side_effect=RuntimeError("Write failed")), \
              patch.object(runner, "_log_event") as log_mock:
             
             inventory = AlertmanagerSourceInventory()
@@ -782,7 +782,7 @@ class TestHealthLoopRegistryCountingWithoutContainerLevelClusterLabel:
             # This call should NOT raise AttributeError about inventory.cluster_label
             # Before the fix, this would crash with:
             #   AttributeError: 'AlertmanagerSourceInventory' object has no attribute 'cluster_label'
-            with patch("k8s_diag_agent.health.loop.discover_alertmanagers", return_value=inventory), \
+            with patch("k8s_diag_agent.health.loop_alertmanager_discovery.discover_alertmanagers", return_value=inventory), \
                  patch.object(runner, "_log_event") as log_mock:
                 
                 runner._run_alertmanager_discovery([mock_record], {"root": health_root})
