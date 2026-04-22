@@ -57,6 +57,7 @@ from .loop_history import (
 )
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
+from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
 from .loop_scheduler import (  # noqa: F401
     _HEALTH_ONLY_MESSAGE,
     HealthLoopScheduler,  # noqa: F401 - re-exported for backward compatibility
@@ -546,8 +547,8 @@ class HealthRunConfig:
         else:
             label_source = path.stem
         run_label = _safe_label(label_source)
-        output_dir = Path(str(raw.get("output_dir") or "runs"))
-        collector_version = str(raw.get("collector_version") or "dev")
+        output_dir = _resolve_output_dir(raw.get("output_dir"))
+        collector_version = _resolve_collector_version(raw.get("collector_version"))
 
         base_dir = path.parent
         policy_cache: dict[Path, BaselinePolicy] = {}
