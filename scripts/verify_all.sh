@@ -107,35 +107,60 @@ fi
 export VERIFY_ALL_ACTIVE=1
 
 # ---------------------------------------------------------------------------
-# Single-instance lock
+# Single-instance lock (atomic mkdir-based)
+# ---------------------------------------------------------------------------
+# Uses mkdir for atomic lock acquisition on POSIX systems.
+# The lock directory (.lock) is atomically created - if it already exists,
+# mkdir fails with EEXIST, preventing race conditions in check-then-write.
+#
+# Lock structure:
+#   .verify_lock/      - lock root directory
+#   .verify_lock/.lock - atomic lock indicator (created by winner)
+#   .verify_lock/pid    - metadata: PID of lock holder (for stale lock detection)
 # ---------------------------------------------------------------------------
 
 _LOCK_DIR="$REPO_ROOT/.verify_lock"
-_LOCK_FILE="$_LOCK_DIR/pid"
+_LOCK_MARKER="$_LOCK_DIR/.lock"
+_LOCK_PID_FILE="$_LOCK_DIR/pid"
 
 _acquire_lock() {
+    # Ensure lock root exists
     mkdir -p "$_LOCK_DIR" 2>/dev/null || {
         echo "ERROR: Cannot create lock directory '$_LOCK_DIR'." >&2
         exit 3
     }
     
-    if [[ -f "$_LOCK_FILE" ]]; then
-        local pid
-        pid=$(cat "$_LOCK_FILE" 2>/dev/null)
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            echo "ERROR: Another verification run is active (PID: $pid)." >&2
+    # Try atomic lock acquisition using mkdir
+    # This succeeds ONLY if .lock doesn't already exist (atomic on POSIX)
+    if ! mkdir "$_LOCK_MARKER" 2>/dev/null; then
+        # Lock exists - check if it's stale (PID not running)
+        local stale_pid
+        stale_pid=$(cat "$_LOCK_PID_FILE" 2>/dev/null)
+        if [[ -n "$stale_pid" ]] && kill -0 "$stale_pid" 2>/dev/null; then
+            echo "ERROR: Another verification run is active (PID: $stale_pid)." >&2
             echo "Wait for it to complete or kill it before running again." >&2
             exit 4
         fi
-        # Stale lock - remove it
-        rm -f "$_LOCK_FILE"
+        # Stale lock detected - remove and retry
+        rm -rf "$_LOCK_MARKER" 2>/dev/null
+        if ! mkdir "$_LOCK_MARKER" 2>/dev/null; then
+            # Lost the race to another process - report active lock
+            echo "ERROR: Another verification run is active." >&2
+            exit 4
+        fi
     fi
     
-    echo $$ > "$_LOCK_FILE"
+    # Write PID metadata for stale lock detection by future runs
+    echo $$ > "$_LOCK_PID_FILE"
 }
 
 _release_lock() {
-    rm -f "$_LOCK_FILE"
+    # Only remove if we own the lock (PID matches)
+    local lock_pid
+    lock_pid=$(cat "$_LOCK_PID_FILE" 2>/dev/null)
+    if [[ "$lock_pid" == "$$" ]]; then
+        rm -rf "$_LOCK_DIR" 2>/dev/null
+    fi
 }
 
 _acquire_lock

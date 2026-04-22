@@ -927,13 +927,14 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
 
     def test_verify_all_concurrent_launch_rejected(self) -> None:
         """Second concurrent verify_all.sh run should be rejected by lock."""
-        # Create a fake lock with an active-looking PID to simulate concurrent run
         lock_dir = self.REPO_ROOT / ".verify_lock"
+        lock_marker = lock_dir / ".lock"
         lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / "pid"
-        # Write the current shell's PID - it's definitely running
-        fake_pid = str(os.getpid())
-        lock_file.write_text(fake_pid + "\n")
+        # Create the atomic lock marker (not just pid file)
+        lock_marker.touch()
+        # Write PID for stale lock detection
+        pid_file = lock_dir / "pid"
+        pid_file.write_text(str(os.getpid()) + "\n")
         
         try:
             # Clear VERIFY_ALL_ACTIVE from env to avoid triggering recursion check first
@@ -954,8 +955,10 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
             self.assertIn("Another verification run is active", output)
         finally:
             # Clean up our fake lock
-            if lock_file.exists():
-                lock_file.unlink()
+            if lock_marker.exists():
+                lock_marker.unlink()
+            if pid_file.exists():
+                pid_file.unlink()
 
     def test_verify_all_stale_lock_cleared(self) -> None:
         """verify_all.sh should clear stale locks and proceed."""
@@ -963,12 +966,14 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
         
-        # Create a stale lock (PID that doesn't exist)
+        # Create a stale lock: .lock exists with a stale PID
         lock_dir = self.REPO_ROOT / ".verify_lock"
         lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / "pid"
+        lock_marker = lock_dir / ".lock"
+        lock_marker.touch()  # Simulate existing lock
+        pid_file = lock_dir / "pid"
         stale_pid = "999998"
-        lock_file.write_text(stale_pid + "\n")
+        pid_file.write_text(stale_pid + "\n")
         
         try:
             # Run with isolated env to avoid other checks failing
@@ -989,8 +994,10 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
                     "Stale lock should be cleared, not cause rejection")
         finally:
             # Clean up stale lock
-            if lock_file.exists():
-                lock_file.unlink()
+            if lock_marker.exists():
+                lock_marker.unlink()
+            if pid_file.exists():
+                pid_file.unlink()
 
 
 class TestStepRunnerLongRunningHints(unittest.TestCase):
@@ -1644,12 +1651,13 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_verify_all_lock_protection_preserved(self) -> None:
         """verify_all.sh should still reject concurrent runs under parallel mode."""
-        # Create a fake lock with an active-looking PID
+        # Create a fake lock with the atomic .lock marker and PID file
         lock_dir = self.REPO_ROOT / ".verify_lock"
         lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / "pid"
-        fake_pid = str(os.getpid())
-        lock_file.write_text(fake_pid + "\n")
+        lock_marker = lock_dir / ".lock"
+        lock_marker.touch()  # Atomic lock indicator
+        pid_file = lock_dir / "pid"
+        pid_file.write_text(str(os.getpid()) + "\n")
         
         try:
             env = os.environ.copy()
@@ -1669,8 +1677,10 @@ class TestParallelLanes(unittest.TestCase):
                 "Concurrent run should be rejected")
             self.assertIn("Another verification run is active", output)
         finally:
-            if lock_file.exists():
-                lock_file.unlink()
+            if lock_marker.exists():
+                lock_marker.unlink()
+            if pid_file.exists():
+                pid_file.unlink()
 
     def test_lane_state_file_contains_both_lanes(self) -> None:
         """verify_all.sh should create lane state file with both Python and Frontend results.
@@ -1930,12 +1940,13 @@ class TestScopedVerificationModes(unittest.TestCase):
 
     def test_lock_protection_preserved_in_scoped_modes(self) -> None:
         """Scoped modes should still reject concurrent runs."""
-        # Create a fake lock with an active-looking PID
+        # Create a fake lock with the atomic .lock marker and PID file
         lock_dir = self.REPO_ROOT / ".verify_lock"
         lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / "pid"
-        fake_pid = str(os.getpid())
-        lock_file.write_text(fake_pid + "\n")
+        lock_marker = lock_dir / ".lock"
+        lock_marker.touch()  # Atomic lock indicator
+        pid_file = lock_dir / "pid"
+        pid_file.write_text(str(os.getpid()) + "\n")
 
         try:
             env = os.environ.copy()
@@ -1954,8 +1965,10 @@ class TestScopedVerificationModes(unittest.TestCase):
                 "Concurrent run should be rejected even in scoped mode")
             self.assertIn("Another verification run is active", result.stderr)
         finally:
-            if lock_file.exists():
-                lock_file.unlink()
+            if lock_marker.exists():
+                lock_marker.unlink()
+            if pid_file.exists():
+                pid_file.unlink()
 
 
 if __name__ == "__main__":
