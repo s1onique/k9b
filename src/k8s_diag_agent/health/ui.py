@@ -1397,6 +1397,47 @@ def _serialize_next_check_plan(
     }
 
 
+def _load_usefulness_review_artifacts(
+    artifacts: Sequence[ExternalAnalysisArtifact],
+) -> dict[str, dict[str, object]]:
+    """Discover usefulness review artifacts and return latest per source execution artifact.
+
+    Scans artifacts for review artifacts matching:
+    - purpose = NEXT_CHECK_EXECUTION_USEFULNESS_REVIEW
+
+    Returns a dict mapping source_artifact path -> latest review artifact data.
+    If multiple reviews exist for the same source, returns the most recent one.
+
+    Args:
+        artifacts: Sequence of ExternalAnalysisArtifact to scan
+
+    Returns:
+        Dict mapping source artifact relative path -> latest review artifact data
+    """
+    reviews_by_source: dict[str, dict[str, object]] = {}
+
+    for artifact in artifacts:
+        if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_USEFULNESS_REVIEW:
+            continue
+
+        source_artifact = artifact.source_artifact
+        if not source_artifact:
+            continue
+
+        # Get reviewed_at timestamp for determining "latest"
+        # Use the persisted reviewed_at field from the review artifact payload,
+        # not artifact.timestamp (which is the execution artifact's timestamp)
+        review_dict = artifact.to_dict()
+        reviewed_at = str(review_dict.get("reviewed_at") or artifact.timestamp.isoformat())
+        existing = reviews_by_source.get(source_artifact)
+        existing_reviewed_at: str = str(existing.get("reviewed_at", "")) if existing else ""
+        if existing is None or reviewed_at > existing_reviewed_at:
+            review_dict["reviewed_at"] = reviewed_at
+            reviews_by_source[source_artifact] = review_dict
+
+    return reviews_by_source
+
+
 def _build_next_check_execution_history(
     artifacts: Sequence[ExternalAnalysisArtifact],
     root_dir: Path,
@@ -1404,6 +1445,10 @@ def _build_next_check_execution_history(
     limit: int = _NEXT_CHECK_EXECUTION_HISTORY_LIMIT,
 ) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
+
+    # Pre-load usefulness review artifacts for merging into entries
+    usefulness_reviews_by_source = _load_usefulness_review_artifacts(artifacts)
+
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         if (
             artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION
@@ -1416,6 +1461,7 @@ def _build_next_check_execution_history(
         pack_refresh_status: str | None = None
         if artifact.pack_refresh_status:
             pack_refresh_status = artifact.pack_refresh_status.value
+        artifact_path_str = _relative_path(root_dir, artifact.artifact_path)
         entry: dict[str, object] = {
             "timestamp": artifact.timestamp.isoformat(),
             "clusterLabel": artifact.cluster_label,
@@ -1423,7 +1469,7 @@ def _build_next_check_execution_history(
             "commandFamily": payload.get("commandFamily"),
             "status": artifact.status.value,
             "durationMs": artifact.duration_ms,
-            "artifactPath": _relative_path(root_dir, artifact.artifact_path),
+            "artifactPath": artifact_path_str,
             "timedOut": artifact.timed_out,
             "stdoutTruncated": artifact.stdout_truncated,
             "stderrTruncated": artifact.stderr_truncated,
@@ -1434,11 +1480,41 @@ def _build_next_check_execution_history(
             "candidateId": payload.get("candidateId"),
             "candidateIndex": payload.get("candidateIndex"),
         }
-        # Include persisted usefulness if available
-        if artifact.usefulness_class is not None:
+
+        # Get the execution artifact path for review lookup
+        # Normalize to relative path for consistent lookup with review artifacts
+        # Review artifacts store source_artifact as relative to root_dir
+        raw_artifact_path = artifact.artifact_path
+        if raw_artifact_path:
+            try:
+                execution_artifact_path = str(Path(raw_artifact_path).relative_to(root_dir))
+            except ValueError:
+                # Already relative or cannot normalize - use as-is
+                execution_artifact_path = str(raw_artifact_path)
+        else:
+            execution_artifact_path = ""
+
+        # Check for usefulness review artifact first (new immutability pattern)
+        usefulness_review = usefulness_reviews_by_source.get(execution_artifact_path)
+        if usefulness_review is not None:
+            # Use usefulness from review artifact
+            usefulness_class = usefulness_review.get("usefulness_class")
+            if isinstance(usefulness_class, str):
+                try:
+                    usefulness_enum = UsefulnessClass(usefulness_class)
+                    entry["usefulnessClass"] = usefulness_enum.value
+                    usefulness_summary = usefulness_review.get("usefulness_summary")
+                    if usefulness_summary:
+                        entry["usefulnessSummary"] = usefulness_summary
+                except ValueError:
+                    pass  # Invalid usefulness class, fall through
+
+        # Fall back to legacy embedded usefulness fields on execution artifact
+        elif artifact.usefulness_class is not None:
             entry["usefulnessClass"] = artifact.usefulness_class.value
             if artifact.usefulness_summary:
                 entry["usefulnessSummary"] = artifact.usefulness_summary
+
         # Include Alertmanager relevance judgment if available
         if artifact.alertmanager_relevance is not None:
             entry["alertmanagerRelevance"] = artifact.alertmanager_relevance.value
@@ -1453,7 +1529,7 @@ def _build_next_check_execution_history(
             entry["suggestedNextOperatorMove"] = follow_up.suggested_next_operator_move
         else:
             # Use persisted usefulness or compute from output
-            if artifact.usefulness_class is None:
+            if artifact.usefulness_class is None and usefulness_review is None:
                 success_interpretation = _classify_execution_success(artifact)
                 if success_interpretation:
                     entry["resultClass"] = success_interpretation.result_class
@@ -1462,9 +1538,15 @@ def _build_next_check_execution_history(
                         success_interpretation.suggested_next_operator_move
                     )
             else:
-                # Persisted usefulness exists - use it as the result interpretation
-                entry["resultClass"] = _map_usefulness_to_result_class(artifact.usefulness_class)
-                entry["resultSummary"] = artifact.usefulness_summary
+                # Persisted usefulness exists (from review or legacy) - use it as the result interpretation
+                usefulness_class_for_result = entry.get("usefulnessClass")
+                if isinstance(usefulness_class_for_result, str):
+                    try:
+                        usefulness_enum = UsefulnessClass(usefulness_class_for_result)
+                        entry["resultClass"] = _map_usefulness_to_result_class(usefulness_enum)
+                    except ValueError:
+                        entry["resultClass"] = _RESULT_CLASS_INCONCLUSIVE
+                entry["resultSummary"] = entry.get("usefulnessSummary")
         entries.append(entry)
         if len(entries) >= limit:
             break

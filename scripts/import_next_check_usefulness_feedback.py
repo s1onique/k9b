@@ -534,6 +534,9 @@ def _process_entry(
 ) -> ProcessResult:
     """Process a single feedback entry.
 
+    Creates a separate review artifact (immutability pattern) instead of
+    mutating the original execution artifact.
+
     Args:
         entry: The feedback entry from the input file
         runs_dir: Path to runs directory
@@ -543,6 +546,9 @@ def _process_entry(
     Returns:
         ProcessResult with updated and skipped flags
     """
+    import uuid
+    from datetime import UTC, datetime
+
     # Validate required fields
     artifact_path_raw = entry.get("artifact_path")
     if not artifact_path_raw or not isinstance(artifact_path_raw, str):
@@ -576,53 +582,83 @@ def _process_entry(
 
     full_artifact_path = resolution_result.resolved_path
 
-    # Load the artifact
+    # Load the execution artifact to extract metadata
     try:
-        artifact_data = json.loads(full_artifact_path.read_text(encoding="utf-8"))
+        execution_artifact = json.loads(full_artifact_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in artifact: {artifact_path}") from e
 
     # Validate purpose is next-check-execution
-    purpose = artifact_data.get("purpose")
+    purpose = execution_artifact.get("purpose")
     if purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value:
         raise ValueError(
             f"Artifact purpose is {purpose!r}, not {ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value}: {artifact_path}"
         )
 
-    # Idempotency check: if usefulness_class is already set to the same value, skip
-    existing_class = artifact_data.get("usefulness_class")
+    # Extract metadata from execution artifact for the review artifact
+    run_id = execution_artifact.get("run_id", "")
+    cluster_label = execution_artifact.get("cluster_label", "")
+    tool_name = execution_artifact.get("tool_name", "")
+    status = execution_artifact.get("status", "")
+    timestamp = execution_artifact.get("timestamp", datetime.now(UTC).isoformat())
     usefulness_summary = entry.get("usefulness_summary")
-    existing_summary = artifact_data.get("usefulness_summary")
 
-    if existing_class == usefulness_class:
-        # Check if summary also matches (complete idempotency)
-        if existing_summary == usefulness_summary:
-            return ProcessResult(updated=False, skipped=True)  # no changes needed
-        # Summary differs but class matches - this is an update
-        needs_update = True
-    else:
-        needs_update = True
+    # Idempotency check: look for existing review artifact with same usefulness_class
+    # This is a simplified check - in production, you might want more sophisticated dedupe
+    external_analysis_dir = run_health_dir / "external-analysis"
+    if external_analysis_dir.exists():
+        review_pattern = f"{run_id}-next-check-execution-usefulness-review-*.json"
+        for existing_review in external_analysis_dir.glob(review_pattern):
+            try:
+                review_data = json.loads(existing_review.read_text(encoding="utf-8"))
+                # Check if this review is for the same execution artifact
+                if review_data.get("source_artifact") == str(artifact_path):
+                    # Check if class matches
+                    if review_data.get("usefulness_class") == usefulness_class:
+                        # Check if summary also matches (complete idempotency)
+                        if review_data.get("usefulness_summary") == usefulness_summary:
+                            return ProcessResult(updated=False, skipped=True)
+            except Exception:
+                continue
 
-    # Update usefulness fields and context fields
-    if not dry_run and needs_update:
-        artifact_data["usefulness_class"] = usefulness_class
-        if usefulness_summary:
-            artifact_data["usefulness_summary"] = usefulness_summary
-        else:
-            # Remove if empty
-            artifact_data.pop("usefulness_summary", None)
+    # Generate unique review artifact filename and artifact_id (single source of truth)
+    import uuid
+    review_uuid = str(uuid.uuid4())[:8]
+    review_filename = f"{run_id}-next-check-execution-usefulness-review-{review_uuid}.json"
 
-        # Update context fields for stage-aware feedback
-        context_fields = _extract_context_fields(entry)
-        for field_name, field_value in context_fields.items():
-            if field_value is not None:
-                artifact_data[field_name] = field_value
-            else:
-                # Remove if None to keep artifact clean
-                artifact_data.pop(field_name, None)
+    # Build review artifact with all context fields
+    review_artifact: dict[str, object] = {
+        "purpose": ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_USEFULNESS_REVIEW.value,
+        "tool_name": tool_name,
+        "run_id": run_id,
+        "run_label": execution_artifact.get("run_label", ""),
+        "cluster_label": cluster_label,
+        "status": status,
+        "timestamp": timestamp,
+        "reviewed_at": datetime.now(UTC).isoformat(),
+        # Immutable artifact instance identity for provenance/debugging
+        "artifact_id": f"usefulness-review-{review_uuid}",
+        # Link back to original execution artifact
+        "source_artifact": str(artifact_path),
+        # Usefulness judgment
+        "usefulness_class": usefulness_class,
+        "usefulness_summary": usefulness_summary,
+        # Include execution summary for context
+        "summary": execution_artifact.get("summary"),
+        "duration_ms": execution_artifact.get("duration_ms"),
+    }
 
-        # Write the updated artifact back
-        full_artifact_path.write_text(json.dumps(artifact_data, indent=2), encoding="utf-8")
+    # Add optional context fields if provided
+    context_fields = _extract_context_fields(entry)
+    for field_name, field_value in context_fields.items():
+        if field_value is not None:
+            review_artifact[field_name] = field_value
+
+    # Write the review artifact (only if not dry run)
+    if not dry_run:
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        review_path = external_analysis_dir / review_filename
+        review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
 
     return ProcessResult(updated=True, skipped=False)
 

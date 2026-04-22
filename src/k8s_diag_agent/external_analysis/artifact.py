@@ -30,6 +30,7 @@ class ExternalAnalysisPurpose(StrEnum):
     NEXT_CHECK_APPROVAL = "next-check-approval"
     NEXT_CHECK_EXECUTION = "next-check-execution"
     NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW = "next-check-execution-alertmanager-review"
+    NEXT_CHECK_EXECUTION_USEFULNESS_REVIEW = "next-check-execution-usefulness-review"
     DIAGNOSTIC_PACK_REVIEW = "diagnostic-pack-review"
 
 

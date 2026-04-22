@@ -2190,7 +2190,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         """Handle operator feedback on next-check execution usefulness.
 
         Accepts artifactPath, usefulnessClass (useful|partial|noisy|empty),
-        and optional usefulnessSummary, then updates the execution artifact in-place.
+        and optional usefulnessSummary, then creates a separate review artifact
+        to preserve the immutable execution artifact.
+
+        This follows the same pattern as Alertmanager relevance feedback.
         """
         content_length = int(self.headers.get("Content-Length") or 0)
         if content_length <= 0:
@@ -2232,6 +2235,28 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "usefulnessSummary must be a string"}, 400)
             return
 
+        # Optional context fields for stage-aware feedback
+        review_stage = payload.get("reviewStage")
+        if review_stage is not None and not isinstance(review_stage, str):
+            self._send_json({"error": "reviewStage must be a string"}, 400)
+            return
+        workstream = payload.get("workstream")
+        if workstream is not None and not isinstance(workstream, str):
+            self._send_json({"error": "workstream must be a string"}, 400)
+            return
+        problem_class = payload.get("problemClass")
+        if problem_class is not None and not isinstance(problem_class, str):
+            self._send_json({"error": "problemClass must be a string"}, 400)
+            return
+        judgment_scope = payload.get("judgmentScope")
+        if judgment_scope is not None and not isinstance(judgment_scope, str):
+            self._send_json({"error": "judgmentScope must be a string"}, 400)
+            return
+        reviewer_confidence = payload.get("reviewerConfidence")
+        if reviewer_confidence is not None and not isinstance(reviewer_confidence, str):
+            self._send_json({"error": "reviewerConfidence must be a string"}, 400)
+            return
+
         # Resolve artifact path securely
         try:
             artifact_path = (self.runs_dir / artifact_path_rel).resolve()
@@ -2245,44 +2270,98 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             return
 
         if not artifact_path.exists():
-            self._send_json({"error": "Artifact not found"}, 404)
+            self._send_json({"error": "Execution artifact not found"}, 404)
             return
 
-        # Read, update, and write the artifact
+        # Read the execution artifact to extract metadata
         try:
-            artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
+            execution_artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
         except Exception as exc:
-            self._send_json({"error": f"Unable to read artifact: {exc}"}, 500)
+            self._send_json({"error": f"Unable to read execution artifact: {exc}"}, 500)
             return
 
-        # Update usefulness fields
-        artifact_data["usefulness_class"] = usefulness_class.value
-        if usefulness_summary:
-            artifact_data["usefulness_summary"] = usefulness_summary
-        elif "usefulness_summary" in artifact_data:
-            # Clear if empty string provided
-            del artifact_data["usefulness_summary"]
+        # Extract execution metadata for the review artifact
+        run_id = execution_artifact.get("run_id", "")
+        cluster_label = execution_artifact.get("cluster_label", "")
+        tool_name = execution_artifact.get("tool_name", "")
+        status = execution_artifact.get("status", "")
+        timestamp = execution_artifact.get("timestamp", datetime.now(UTC).isoformat())
+
+        # Generate unique review artifact filename and artifact_id (single source of truth)
+        import uuid
+        review_uuid = str(uuid.uuid4())[:8]
+        review_filename = f"{run_id}-next-check-execution-usefulness-review-{review_uuid}.json"
+        artifact_id = f"usefulness-review-{review_uuid}"
+
+        # Write review artifact to external-analysis directory
+        external_analysis_dir = self._health_root / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+        review_path = external_analysis_dir / review_filename
+
+        # Build review artifact with all context fields
+        review_artifact: dict[str, object] = {
+            "purpose": ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_USEFULNESS_REVIEW.value,
+            "tool_name": tool_name,
+            "run_id": run_id,
+            "run_label": execution_artifact.get("run_label", ""),
+            "cluster_label": cluster_label,
+            "status": status,
+            "timestamp": timestamp,
+            "reviewed_at": datetime.now(UTC).isoformat(),
+            # Immutable artifact instance identity for provenance/debugging
+            "artifact_id": artifact_id,
+            # Link back to original execution artifact
+            "source_artifact": str(artifact_path.relative_to(self._health_root)),
+            # Usefulness judgment
+            "usefulness_class": usefulness_class.value,
+            "usefulness_summary": usefulness_summary,
+            # Include execution summary for context
+            "summary": execution_artifact.get("summary"),
+            "duration_ms": execution_artifact.get("duration_ms"),
+        }
+
+        # Add optional context fields if provided
+        if review_stage:
+            review_artifact["review_stage"] = review_stage
+        if workstream:
+            review_artifact["workstream"] = workstream
+        if problem_class:
+            review_artifact["problem_class"] = problem_class
+        if judgment_scope:
+            review_artifact["judgment_scope"] = judgment_scope
+        if reviewer_confidence:
+            review_artifact["reviewer_confidence"] = reviewer_confidence
 
         try:
-            artifact_path.write_text(json.dumps(artifact_data, indent=2), encoding="utf-8")
+            review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
         except Exception as exc:
-            self._send_json({"error": f"Unable to persist feedback: {exc}"}, 500)
+            self._send_json({"error": f"Unable to persist review artifact: {exc}"}, 500)
             return
 
         logger.info(
             "Operator recorded usefulness feedback",
             extra={
-                "artifact": str(artifact_path),
+                "review_artifact": str(review_path),
+                "source_artifact": str(artifact_path),
                 "usefulness_class": usefulness_class.value,
                 "usefulness_summary": usefulness_summary,
             },
         )
+
+        # Invalidate UI caches so the new review shows up immediately
+        ui_index_path = self.runs_dir / "health" / "ui-index.json"
+        if ui_index_path.exists():
+            try:
+                ui_index_path.touch()
+            except Exception:
+                pass  # Non-fatal
 
         self._send_json({
             "status": "success",
             "summary": "Usefulness feedback recorded",
             "usefulnessClass": usefulness_class.value,
             "usefulnessSummary": usefulness_summary,
+            "reviewArtifactPath": str(review_path.relative_to(self._health_root)),
         })
 
     def _handle_alertmanager_relevance_feedback(self) -> None:

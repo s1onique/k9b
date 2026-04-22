@@ -667,8 +667,13 @@ class TestIdempotentImport(unittest.TestCase):
         new_mtime = artifact_path.stat().st_mtime
         self.assertEqual(original_mtime, new_mtime)
 
-    def test_reimport_different_summary_updates(self) -> None:
-        """Test that reimporting with different summary updates the artifact."""
+    def test_reimport_different_summary_creates_new_review(self) -> None:
+        """Test that reimporting with different summary creates new review artifact (immutability pattern).
+
+        Under the new immutability pattern, feedback is written to separate review artifacts
+        instead of mutating the original execution artifact. Each unique feedback creates
+        a new review artifact with a unique UUID.
+        """
         run_id = "test-run"
         artifact_path = self._create_execution_artifact(run_id, 0)
         relative_path = str(artifact_path.relative_to(self.health_dir))
@@ -691,11 +696,19 @@ class TestIdempotentImport(unittest.TestCase):
         )
         self.assertEqual(result1.success_count, 1)
 
-        # Verify first import
+        # Verify original execution artifact is NOT mutated (immutability pattern)
         data1 = json.loads(artifact_path.read_text(encoding="utf-8"))
-        self.assertEqual(data1["usefulness_summary"], "First summary")
+        self.assertIsNone(data1.get("usefulness_summary"))
 
-        # Second import with different summary
+        # Verify review artifact was created
+        external_analysis_dir = self.health_dir / "external-analysis"
+        review_artifacts = list(external_analysis_dir.glob("*-next-check-execution-usefulness-review-*.json"))
+        self.assertEqual(len(review_artifacts), 1)
+        review1 = json.loads(review_artifacts[0].read_text(encoding="utf-8"))
+        self.assertEqual(review1["usefulness_summary"], "First summary")
+        self.assertEqual(review1["purpose"], "next-check-execution-usefulness-review")
+
+        # Second import with different summary creates NEW review artifact
         feedback_file2 = self._create_feedback_file(
             [
                 {
@@ -713,9 +726,14 @@ class TestIdempotentImport(unittest.TestCase):
         )
         self.assertEqual(result2.updated_count, 1)
 
-        # Verify update
-        data2 = json.loads(artifact_path.read_text(encoding="utf-8"))
-        self.assertEqual(data2["usefulness_summary"], "Updated summary")
+        # Verify second review artifact was created
+        review_artifacts = list(external_analysis_dir.glob("*-next-check-execution-usefulness-review-*.json"))
+        self.assertEqual(len(review_artifacts), 2)  # Two separate review artifacts
+
+        # Find the second review artifact
+        reviews = [json.loads(r.read_text(encoding="utf-8")) for r in review_artifacts]
+        review2 = next(r for r in reviews if r["usefulness_summary"] == "Updated summary")
+        self.assertEqual(review2["usefulness_summary"], "Updated summary")
 
     def test_import_creates_summary_artifact(self) -> None:
         """Test that import creates the summary artifact."""
