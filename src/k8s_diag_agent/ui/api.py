@@ -257,6 +257,20 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     rankingReason: str | None
 
     alertmanagerProvenance: AlertmanagerProvenancePayload | None
+    feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
+
+
+class FeedbackAdaptationProvenancePayload(TypedDict, total=False):
+    """Payload for feedback adaptation provenance data on next-check candidates/queue items."""
+    feedbackAdaptation: bool
+    adaptationReason: str | None
+    originalBonus: int
+    suppressedBonus: int
+    penaltyApplied: int
+    explanation: str | None
+    feedbackSummary: str | None
+
+
 class AlertmanagerProvenancePayload(TypedDict, total=False):
     """Payload for alertmanager provenance data on next-check candidates/queue items."""
     matchedDimensions: list[str]
@@ -299,6 +313,7 @@ class NextCheckQueueItemPayload(TypedDict, total=False):
     resultSummary: str | None
     workstream: str | None
     alertmanagerProvenance: AlertmanagerProvenancePayload | None
+    feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
 
 
 class NextCheckQueueCandidateAccountingPayload(TypedDict):
@@ -1303,6 +1318,21 @@ def _serialize_next_check_queue(
             if item.alertmanager_provenance.signal_status:
                 provenance["signalStatus"] = item.alertmanager_provenance.signal_status
 
+        # Build feedback adaptation provenance dict if present
+        feedback_provenance: FeedbackAdaptationProvenancePayload | None = None
+        if item.feedback_adaptation_provenance is not None:
+            feedback_provenance = {
+                "feedbackAdaptation": item.feedback_adaptation_provenance.feedback_adaptation,
+                "adaptationReason": item.feedback_adaptation_provenance.adaptation_reason,
+                "originalBonus": item.feedback_adaptation_provenance.original_bonus,
+                "suppressedBonus": item.feedback_adaptation_provenance.suppressed_bonus,
+                "penaltyApplied": item.feedback_adaptation_provenance.penalty_applied,
+            }
+            if item.feedback_adaptation_provenance.explanation is not None:
+                feedback_provenance["explanation"] = item.feedback_adaptation_provenance.explanation
+            if item.feedback_adaptation_provenance.feedback_summary is not None:
+                feedback_provenance["feedbackSummary"] = item.feedback_adaptation_provenance.feedback_summary
+
         entry: NextCheckQueueItemPayload = {
             "candidateId": item.candidate_id,
             "candidateIndex": item.candidate_index,
@@ -1337,6 +1367,8 @@ def _serialize_next_check_queue(
         }
         if provenance is not None:
             entry["alertmanagerProvenance"] = provenance
+        if feedback_provenance is not None:
+            entry["feedbackAdaptationProvenance"] = feedback_provenance
         entries.append(entry)
     if promotions:
         for promo_entry in promotions:
@@ -1556,6 +1588,21 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         if view.alertmanager_provenance.signal_status:
             provenance["signalStatus"] = view.alertmanager_provenance.signal_status
 
+    # Build feedback adaptation provenance dict if present
+    feedback_provenance: FeedbackAdaptationProvenancePayload | None = None
+    if view.feedback_adaptation_provenance is not None:
+        feedback_provenance = {
+            "feedbackAdaptation": view.feedback_adaptation_provenance.feedback_adaptation,
+            "adaptationReason": view.feedback_adaptation_provenance.adaptation_reason,
+            "originalBonus": view.feedback_adaptation_provenance.original_bonus,
+            "suppressedBonus": view.feedback_adaptation_provenance.suppressed_bonus,
+            "penaltyApplied": view.feedback_adaptation_provenance.penalty_applied,
+        }
+        if view.feedback_adaptation_provenance.explanation is not None:
+            feedback_provenance["explanation"] = view.feedback_adaptation_provenance.explanation
+        if view.feedback_adaptation_provenance.feedback_summary is not None:
+            feedback_provenance["feedbackSummary"] = view.feedback_adaptation_provenance.feedback_summary
+
     payload: NextCheckCandidatePayload = {
         "description": view.description,
         "targetCluster": view.target_cluster,
@@ -1593,6 +1640,8 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         payload["rankingReason"] = view.ranking_reason
     if provenance is not None:
         payload["alertmanagerProvenance"] = provenance
+    if feedback_provenance is not None:
+        payload["feedbackAdaptationProvenance"] = feedback_provenance
     return payload
 
 

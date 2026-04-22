@@ -15,6 +15,7 @@ import { useRunSelection } from "./hooks/useRunSelection";
 import { useUIState } from "./hooks/useUIState";
 import type {
   AlertmanagerProvenance,
+  FeedbackAdaptationProvenance,
   AutoInterpretation,
   ClusterDetailPayload,
   FleetPayload,
@@ -969,6 +970,58 @@ const getAlertmanagerProvenanceSubtext = (provenance: AlertmanagerProvenance): s
   
   return parts.join(" · ");
 
+};
+
+const formatFeedbackAdaptationProvenance = (provenance: FeedbackAdaptationProvenance): string => {
+  const { feedbackAdaptation, adaptationReason, suppressedBonus, penaltyApplied } = provenance;
+  
+  if (!feedbackAdaptation) {
+    return "No feedback adaptation";
+  }
+  
+  const parts: string[] = [];
+  
+  if (adaptationReason) {
+    parts.push(adaptationReason);
+  }
+  
+  if (suppressedBonus > 0) {
+    parts.push(`Suppressed: ${suppressedBonus}`);
+  }
+  
+  if (penaltyApplied !== 0) {
+    parts.push(`Penalty: ${penaltyApplied}`);
+  }
+  
+  return parts.length > 0 ? parts.join(" · ") : "Feedback adaptation applied";
+};
+
+const getFeedbackAdaptationProvenanceSubtext = (provenance: FeedbackAdaptationProvenance): string => {
+  const { originalBonus, suppressedBonus, penaltyApplied, explanation, feedbackSummary } = provenance;
+  
+  const parts: string[] = [];
+  
+  if (originalBonus > 0) {
+    parts.push(`Original bonus: ${originalBonus}`);
+  }
+  
+  if (suppressedBonus > 0) {
+    parts.push(`Suppressed: ${suppressedBonus}`);
+  }
+  
+  if (penaltyApplied !== 0) {
+    parts.push(`Penalty applied: ${penaltyApplied}`);
+  }
+  
+  if (explanation) {
+    parts.push(`Explanation: ${explanation}`);
+  }
+  
+  if (feedbackSummary) {
+    parts.push(`Feedback: ${feedbackSummary}`);
+  }
+  
+  return parts.length > 0 ? parts.join(" · ") : "Feedback adaptation applied";
 };
 export const ProposalList = ({
   proposals,
@@ -2156,6 +2209,8 @@ const App = () => {
       getNotRunnableExplanation={getNotRunnableExplanation}
       getAlertmanagerProvenanceSubtext={getAlertmanagerProvenanceSubtext}
       formatAlertmanagerProvenance={formatAlertmanagerProvenance}
+      getFeedbackAdaptationProvenanceSubtext={getFeedbackAdaptationProvenanceSubtext}
+      formatFeedbackAdaptationProvenance={formatFeedbackAdaptationProvenance}
       getAlertmanagerPromotionSubtext={getAlertmanagerPromotionSubtext}
       formatAlertmanagerPromotion={formatAlertmanagerPromotion}
       onRefresh={refresh}

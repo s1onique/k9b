@@ -13,6 +13,7 @@ import type {
   NextCheckQueueStatus,
   NextCheckExecutionHistoryEntry,
   NextCheckExecutionResponse,
+  FeedbackAdaptationProvenance,
 } from "../types";
 import {
   artifactUrl,
@@ -102,6 +103,9 @@ export interface QueuePanelProps {
   formatAlertmanagerProvenance: (provenance: import("../types").AlertmanagerProvenance) => string;
   getAlertmanagerPromotionSubtext: (rankingReason: string) => string | null;
   formatAlertmanagerPromotion: (rankingReason: string) => string;
+  // Feedback adaptation display helpers
+  getFeedbackAdaptationProvenanceSubtext: (provenance: import("../types").FeedbackAdaptationProvenance) => string;
+  formatFeedbackAdaptationProvenance: (provenance: import("../types").FeedbackAdaptationProvenance) => string;
   // Callbacks
   onRefresh: () => void;
 }
@@ -206,6 +210,8 @@ export const QueuePanel = ({
   formatAlertmanagerProvenance,
   getAlertmanagerPromotionSubtext,
   formatAlertmanagerPromotion,
+  getFeedbackAdaptationProvenanceSubtext,
+  formatFeedbackAdaptationProvenance,
   onRefresh,
 }: QueuePanelProps) => {
   // Derive filtersActive from filter state
@@ -541,11 +547,17 @@ export const QueuePanel = ({
                         <div className="queue-item-blocker-note">
                           <span className="queue-item-blocker-icon">⏸</span>
                           <span className="queue-item-blocker-text">{item.priorityRationale}</span>
-                          {item.alertmanagerProvenance ? (
+                          {item.alertmanagerProvenance && (
                             <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title={getAlertmanagerProvenanceSubtext(item.alertmanagerProvenance)}>
                               🔔 {formatAlertmanagerProvenance(item.alertmanagerProvenance)}
                             </span>
-                          ) : item.rankingReason ? (
+                          )}
+                          {item.feedbackAdaptationProvenance && (
+                            <span className="ranking-reason-badge ranking-reason-badge--feedback" title={getFeedbackAdaptationProvenanceSubtext(item.feedbackAdaptationProvenance)}>
+                              📝 {formatFeedbackAdaptationProvenance(item.feedbackAdaptationProvenance)}
+                            </span>
+                          )}
+                          {!item.alertmanagerProvenance && !item.feedbackAdaptationProvenance && item.rankingReason && (
                             item.rankingReason.startsWith("alertmanager-context:") ? (
                               <span className="ranking-reason-badge ranking-reason-badge--alertmanager" title={getAlertmanagerPromotionSubtext(item.rankingReason) ?? "Ranking influenced by Alertmanager snapshot"}>
                                 🔔 {formatAlertmanagerPromotion(item.rankingReason)}
@@ -553,7 +565,7 @@ export const QueuePanel = ({
                             ) : (
                               <span className="ranking-reason-badge">{item.rankingReason}</span>
                             )
-                          ) : null}
+                          )}
                         </div>
                       ) : null}
                     </div>

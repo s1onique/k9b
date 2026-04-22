@@ -343,6 +343,18 @@ class AlertmanagerProvenanceView:
 
 
 @dataclass(frozen=True)
+class FeedbackAdaptationProvenanceView:
+    """View model for feedback adaptation provenance tracking."""
+    feedback_adaptation: bool
+    adaptation_reason: str | None = None
+    original_bonus: int = 0
+    suppressed_bonus: int = 0
+    penalty_applied: int = 0
+    explanation: str | None = None
+    feedback_summary: str | None = None
+
+
+@dataclass(frozen=True)
 class AlertmanagerSourceView:
     """View model for a single Alertmanager source in the inventory."""
     source_id: str
@@ -435,6 +447,7 @@ class NextCheckCandidateView:
     priority_rationale: str | None
     ranking_reason: str | None
     alertmanager_provenance: AlertmanagerProvenanceView | None = None
+    feedback_adaptation_provenance: FeedbackAdaptationProvenanceView | None = None
 
 
 @dataclass(frozen=True)
@@ -534,6 +547,7 @@ class NextCheckQueueItemView:
     result_summary: str | None = None
     workstream: str | None = None
     alertmanager_provenance: AlertmanagerProvenanceView | None = None
+    feedback_adaptation_provenance: FeedbackAdaptationProvenanceView | None = None
 
 
 @dataclass(frozen=True)
@@ -1446,6 +1460,8 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
             continue
         provenance_raw = entry.get("alertmanagerProvenance") or entry.get("alertmanager_provenance")
         provenance = _build_alertmanager_provenance_view(provenance_raw)
+        feedback_provenance_raw = entry.get("feedbackAdaptationProvenance") or entry.get("feedback_adaptation_provenance")
+        feedback_provenance = _build_feedback_adaptation_provenance_view(feedback_provenance_raw)
         entries.append(
             NextCheckQueueItemView(
                 candidate_id=_coerce_optional_str(entry.get("candidateId")),
@@ -1479,6 +1495,7 @@ def _build_next_check_queue_view(raw: object | None) -> tuple[NextCheckQueueItem
                 queue_status=_coerce_str(entry.get("queueStatus")),
                 workstream=_coerce_optional_str(entry.get("workstream")),
                 alertmanager_provenance=provenance,
+                feedback_adaptation_provenance=feedback_provenance,
             )
         )
     return tuple(entries)
@@ -1618,9 +1635,12 @@ def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCand
 
     provenance_raw = raw.get("alertmanagerProvenance") or raw.get("alertmanager_provenance")
     provenance = _build_alertmanager_provenance_view(provenance_raw)
+    feedback_provenance_raw = raw.get("feedbackAdaptationProvenance") or raw.get("feedback_adaptation_provenance")
+    feedback_provenance = _build_feedback_adaptation_provenance_view(feedback_provenance_raw)
 
     return NextCheckCandidateView(
         alertmanager_provenance=provenance,
+        feedback_adaptation_provenance=feedback_provenance,
         candidate_id=_coerce_optional_str(raw.get("candidateId")),
         description=_coerce_str(raw.get("description")),
         target_cluster=_coerce_optional_str(raw.get("targetCluster")),
@@ -1811,6 +1831,23 @@ def _build_alertmanager_provenance_view(raw: object | None) -> AlertmanagerProve
         base_bonus=_coerce_int(raw.get("baseBonus") or raw.get("base_bonus") or 0),
         severity_summary=severity_summary,
         signal_status=_coerce_optional_str(raw.get("signalStatus") or raw.get("signal_status")),
+    )
+
+
+def _build_feedback_adaptation_provenance_view(
+    raw: object | None,
+) -> FeedbackAdaptationProvenanceView | None:
+    """Build FeedbackAdaptationProvenanceView from raw JSON data."""
+    if not isinstance(raw, Mapping):
+        return None
+    return FeedbackAdaptationProvenanceView(
+        feedback_adaptation=bool(raw.get("feedbackAdaptation") or raw.get("feedback_adaptation")),
+        adaptation_reason=_coerce_optional_str(raw.get("adaptationReason") or raw.get("adaptation_reason")),
+        original_bonus=_coerce_int(raw.get("originalBonus") or raw.get("original_bonus") or 0),
+        suppressed_bonus=_coerce_int(raw.get("suppressedBonus") or raw.get("suppressed_bonus") or 0),
+        penalty_applied=_coerce_int(raw.get("penaltyApplied") or raw.get("penalty_applied") or 0),
+        explanation=_coerce_optional_str(raw.get("explanation")),
+        feedback_summary=_coerce_optional_str(raw.get("feedbackSummary") or raw.get("feedback_summary")),
     )
 
 

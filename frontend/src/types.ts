@@ -309,6 +309,20 @@ export type AlertmanagerProvenance = {
   signalStatus: string | null;
 };
 
+/**
+ * Structured provenance for feedback-driven adaptation of bonus/penalty values.
+ * Tracks how the original bonus was modified based on feedback signals.
+ */
+export type FeedbackAdaptationProvenance = {
+  feedbackAdaptation: boolean;
+  adaptationReason?: string | null;
+  originalBonus: number;
+  suppressedBonus: number;
+  penaltyApplied: number;
+  explanation?: string | null;
+  feedbackSummary?: string | null;
+};
+
 export type NextCheckPlanCandidate = {
     description: string;
     targetCluster: string | null;
@@ -351,6 +365,8 @@ export type NextCheckPlanCandidate = {
     rankingReason?: string | null;
     /** Structured Alertmanager provenance - preferred over rankingReason when present */
     alertmanagerProvenance?: AlertmanagerProvenance | null;
+    /** Structured feedback adaptation provenance - tracks bonus/penalty adjustments from feedback signals */
+    feedbackAdaptationProvenance?: FeedbackAdaptationProvenance | null;
 };
 
 export type NextCheckQueueItem = NextCheckPlanCandidate & {
