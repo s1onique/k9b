@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -23,10 +23,12 @@ from pathlib import Path
 from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
+from ..identity.artifact import new_artifact_id as _new_artifact_id
 
 # Module constants
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 _HISTORY_FILENAME = "history.json"
+_HISTORY_DIRNAME = "history"
 _TRUTHY_ENV_VALUES = {"1", "true", "yes", "y", "on"}
 
 
@@ -242,3 +244,117 @@ def persist_history(history: dict[str, HealthHistoryEntry], history_path: Path) 
     """Persist health history to a JSON file."""
     data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
     _write_json(data, history_path)
+
+
+@dataclass(frozen=True)
+class HealthHistoryFactArtifact:
+    """Immutable per-run-per-cluster history fact artifact.
+
+    Each artifact captures the health state for a specific cluster at a specific run.
+    These artifacts are written once and never modified, providing an immutable audit trail.
+
+    The artifact contains:
+    - artifact_id: unique identifier for this fact
+    - run_id: the run that produced this fact
+    - cluster_id: the cluster this fact is about
+    - created_at: when this fact was created (immutable timestamp)
+    - entry: the HealthHistoryEntry data for this cluster/run
+    """
+    artifact_id: str
+    run_id: str
+    cluster_id: str
+    created_at: datetime
+    entry: HealthHistoryEntry
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this fact artifact to a dictionary for JSON storage."""
+        return {
+            "artifact_id": self.artifact_id,
+            "run_id": self.run_id,
+            "cluster_id": self.cluster_id,
+            "created_at": self.created_at.isoformat(),
+            "entry": self.entry.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> HealthHistoryFactArtifact:
+        """Parse a history fact artifact from a dictionary."""
+        created_at_value = data.get("created_at")
+        if isinstance(created_at_value, str):
+            parsed_created_at = datetime.fromisoformat(created_at_value.replace("Z", "+00:00"))
+        else:
+            parsed_created_at = datetime.now(UTC)
+
+        entry_data = data.get("entry", {})
+        cluster_id = data.get("cluster_id", entry_data.get("cluster_id", ""))
+        entry = HealthHistoryEntry.from_dict(cluster_id, entry_data)
+
+        return cls(
+            artifact_id=str(data.get("artifact_id", "")),
+            run_id=str(data.get("run_id", "")),
+            cluster_id=cluster_id,
+            created_at=parsed_created_at,
+            entry=entry,
+        )
+
+
+def persist_history_fact_artifacts(
+    history: dict[str, HealthHistoryEntry],
+    run_id: str,
+    history_dir: Path,
+    artifact_id_fn: Callable[[], str] | None = None,
+) -> list[Path]:
+    """Write immutable history fact artifacts for each cluster in history.
+
+    Creates one fact artifact per cluster under the history directory.
+    The artifacts are self-describing and sufficient for later reconstruction.
+    
+    Filename format: {run_id}-{cluster_id}-{artifact_id}.json
+    This ties the path to the immutable instance identity, preventing
+    accidental overwrites when the same cluster is processed in multiple runs.
+
+    Args:
+        history: mapping of cluster_id to HealthHistoryEntry
+        run_id: the current run identifier
+        history_dir: directory to write fact artifacts (creates if needed)
+        artifact_id_fn: optional callable to generate artifact IDs;
+                        defaults to new_artifact_id (UUIDv7) for repo consistency
+
+    Returns:
+        list of paths where fact artifacts were written
+
+    Raises:
+        FileExistsError: if an artifact with the same run_id, cluster_id,
+                         and artifact_id already exists (immutability guarantee)
+    """
+    _id_fn = artifact_id_fn or _new_artifact_id
+    written_paths: list[Path] = []
+    created_at = datetime.now(UTC)
+
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    for cluster_id, entry in history.items():
+        artifact_id = _id_fn()
+        artifact = HealthHistoryFactArtifact(
+            artifact_id=artifact_id,
+            run_id=run_id,
+            cluster_id=cluster_id,
+            created_at=created_at,
+            entry=entry,
+        )
+        # Include artifact_id in filename for immutable-instance-safe paths
+        filename = f"{run_id}-{cluster_id}-{artifact_id}.json"
+        path = history_dir / filename
+        
+        # Reject overwrite: fail fast if path already exists (immutability contract)
+        if path.exists():
+            raise FileExistsError(
+                f"History fact artifact already exists at {path}; "
+                f"immutability contract violated for run_id={run_id}, "
+                f"cluster_id={cluster_id}, artifact_id={artifact_id}"
+            )
+        
+        _write_json(artifact.to_dict(), path)
+        written_paths.append(path)
+
+    return written_paths

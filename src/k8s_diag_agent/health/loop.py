@@ -54,6 +54,7 @@ from .loop_history import (
     _watched_crd_versions,
     _watched_release_versions,
     _write_json,
+    persist_history_fact_artifacts,
 )
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
@@ -2027,7 +2028,7 @@ class HealthLoopRunner:
         auto_artifacts = self._run_auto_drilldown_analysis(drilldowns, directories)
         manual_artifacts = self._run_external_analysis(records, directories)
         external_artifacts = [*auto_artifacts, *manual_artifacts]
-        self._persist_history(history, directories["history"])
+        self._persist_history(history, directories)
         review_path, proposals = self._write_review_artifact(assessments, drilldowns, directories)
         enrichment_artifact = self._run_review_enrichment(review_path, directories)
         if enrichment_artifact:
@@ -2111,6 +2112,7 @@ class HealthLoopRunner:
             "proposals": root / "proposals",
             "notifications": root / "notifications",
             "history": root / _HISTORY_FILENAME,
+            "history_facts": root / "history",
             "external_analysis": root / "external-analysis",
         }
         for key, path in subdirs.items():
@@ -3027,7 +3029,37 @@ class HealthLoopRunner:
                 history[cluster_id] = HealthHistoryEntry.from_dict(cluster_id, entry)
         return history
 
-    def _persist_history(self, history: dict[str, HealthHistoryEntry], history_path: Path) -> None:
+    def _persist_history(self, history: dict[str, HealthHistoryEntry], directories: dict[str, Path]) -> None:
+        # First, write immutable fact artifacts for each cluster
+        history_facts_dir = directories.get("history_facts")
+        if history_facts_dir:
+            try:
+                persist_history_fact_artifacts(
+                    history=history,
+                    run_id=self.run_id,
+                    history_dir=history_facts_dir,
+                    artifact_id_fn=new_artifact_id,
+                )
+                self._log_event(
+                    "health-loop",
+                    "INFO",
+                    "History fact artifacts written",
+                    artifact_count=len(history),
+                    history_facts_dir=str(history_facts_dir),
+                    event="history-facts-written",
+                )
+            except Exception as exc:
+                # Fact artifact write failure is non-fatal; log and continue
+                self._log_event(
+                    "health-loop",
+                    "WARNING",
+                    "Failed to write history fact artifacts",
+                    severity_reason=str(exc),
+                    event="history-facts-failed",
+                )
+
+        # Then, write the mutable aggregate history.json (backward compatibility)
+        history_path = directories["history"]
         data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
         _write_json(data, history_path)
 
