@@ -8,15 +8,24 @@
 # - This policy prioritizes complete diagnostics over fast failure
 #
 # Usage:
-#   scripts/verify_all.sh          # compact output (default)
-#   scripts/verify_all.sh --json   # JSON output to stdout only
-#   STEP_VERBOSE=1 scripts/verify_all.sh  # verbose output
+#   scripts/verify_all.sh                    # full gate (all steps)
+#   scripts/verify_all.sh --json              # full gate, JSON output only
+#   scripts/verify_all.sh --python-only      # Python lane only
+#   scripts/verify_all.sh --frontend-only    # Frontend lane only
+#   scripts/verify_all.sh --python-only --json
+#   STEP_VERBOSE=1 scripts/verify_all.sh     # verbose output
+#
+# Scope options:
+#   --python-only    Run only ruff-lint, unit-tests, mypy (Python lane)
+#   --frontend-only  Run only npm-ci, npm-test-ui, npm-build (Frontend lane)
+#   (no flag)        Run all steps (full canonical gate)
 #
 # Output contract:
 #   - Compact mode: one line per step (PASS/FAIL with duration)
 #   - Success: VERIFICATION GATE: PASSED
 #   - Failure: step name, exit code, log excerpt, log path
 #   - JSON mode: pure JSON summary on stdout (no progress output)
+#   - Scoped runs: only intended steps run; other lane is skipped
 #
 # JSON mode output contract (--json flag):
 #   - stdout: valid JSON only (no compact progress lines, no VERIFICATION GATE text)
@@ -39,6 +48,7 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 
 STEP_JSON_MODE=""
+STEP_SCOPE="all"  # Default: run all steps
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --json)
@@ -46,14 +56,26 @@ while [[ $# -gt 0 ]]; do
             export STEP_JSON_MODE
             shift
             ;;
+        --python-only)
+            STEP_SCOPE="python"
+            shift
+            ;;
+        --frontend-only)
+            STEP_SCOPE="frontend"
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--json]"
-            echo "  --json   Emit only JSON summary to stdout"
+            echo "Usage: $0 [--json] [--python-only] [--frontend-only]"
+            echo "  --json           Emit only JSON summary to stdout"
+            echo "  --python-only     Run only Python lane steps"
+            echo "  --frontend-only   Run only Frontend lane steps"
+            echo ""
+            echo "Without scope flags, runs all steps (full gate)."
             exit 0
             ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Usage: $0 [--json]" >&2
+            echo "Usage: $0 [--json] [--python-only] [--frontend-only]" >&2
             exit 1
             ;;
     esac
@@ -263,7 +285,8 @@ _run_and_record() {
         local current_time=$(date +%s)
         local elapsed=$(( current_time - start_time ))
         local remainder=$(( elapsed % STEP_HEARTBEAT_INTERVAL ))
-        if (( remainder == 0 )); then
+        # Suppress heartbeats in JSON mode
+        if (( remainder == 0 )) && [[ -z "${STEP_JSON_MODE:-}" ]]; then
             echo "[HINT:HEARTBEAT] step=${step_id} elapsed=${elapsed}s log=${log_file}"
         fi
     done
@@ -320,17 +343,40 @@ _run_frontend_lane() {
     popd >/dev/null
 }
 
-# Launch both lanes concurrently
-_run_python_lane &
-python_pid=$!
-_run_frontend_lane &
-frontend_pid=$!
+# Launch lanes based on scope
+# - "all": run both lanes concurrently
+# - "python": run only Python lane (no parallelism needed)
+# - "frontend": run only Frontend lane (no parallelism needed)
+python_exit=0
+frontend_exit=0
 
-# Wait for both lanes and capture exit codes
-wait $python_pid
-python_exit=$?
-wait $frontend_pid
-frontend_exit=$?
+case "$STEP_SCOPE" in
+    all)
+        # Run both lanes concurrently
+        _run_python_lane &
+        python_pid=$!
+        _run_frontend_lane &
+        frontend_pid=$!
+        
+        # Wait for both lanes and capture exit codes
+        wait $python_pid
+        python_exit=$?
+        wait $frontend_pid
+        frontend_exit=$?
+        ;;
+    python)
+        # Run only Python lane
+        # Note: Do NOT reset lane state file after running - it's already populated
+        _run_python_lane
+        python_exit=$?
+        ;;
+    frontend)
+        # Run only Frontend lane
+        # Note: Do NOT reset lane state file after running - it's already populated
+        _run_frontend_lane
+        frontend_exit=$?
+        ;;
+esac
 
 # Merge lane state into step results for summary
 # This ensures final summary reflects canonical ordering (python steps first, then frontend)

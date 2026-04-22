@@ -1718,5 +1718,245 @@ class TestParallelLanes(unittest.TestCase):
                     f"Frontend lane should include {expected}")
 
 
+class TestScopedVerificationModes(unittest.TestCase):
+    """Test verify_all.sh scoped verification modes (--python-only, --frontend-only)."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    VERIFY_ALL = REPO_ROOT / "scripts" / "verify_all.sh"
+    STEP_RUNNER = REPO_ROOT / "scripts" / "step_runner.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.VERIFY_ALL.exists():
+            self.skipTest("verify_all.sh not found")
+        os.chmod(self.VERIFY_ALL, 0o755)
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_scoped_")
+        os.makedirs(self._tmp_dir, exist_ok=True)
+        # Clean up any existing lock
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        if lock_dir.exists():
+            import shutil
+            shutil.rmtree(lock_dir, ignore_errors=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory and lock."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        if lock_dir.exists():
+            shutil.rmtree(lock_dir, ignore_errors=True)
+
+    def test_python_only_flag_accepted(self) -> None:
+        """verify_all.sh --python-only should be accepted without error."""
+        env = os.environ.copy()
+        env.pop("VERIFY_ALL_ACTIVE", None)
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--python-only", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            cwd=self.REPO_ROOT,
+        )
+        self.assertEqual(result.returncode, 0)
+
+    def test_frontend_only_flag_accepted(self) -> None:
+        """verify_all.sh --frontend-only should be accepted without error."""
+        env = os.environ.copy()
+        env.pop("VERIFY_ALL_ACTIVE", None)
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--frontend-only", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            cwd=self.REPO_ROOT,
+        )
+        self.assertEqual(result.returncode, 0)
+
+    def test_python_only_runs_only_python_steps(self) -> None:
+        """verify_all.sh --python-only should run only Python lane steps."""
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full scoped verification test")
+
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--python-only", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+
+        # Should emit valid JSON
+        try:
+            data = json.loads(result.stdout.strip())
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout is not valid JSON: {e}")
+
+        # Should have only Python lane steps (ruff-lint, unit-tests, mypy)
+        step_ids = [s["id"] for s in data["steps"]]
+        expected_python = ["ruff-lint", "unit-tests", "mypy"]
+        for step in expected_python:
+            self.assertIn(step, step_ids, f"Should include {step} in python-only mode")
+
+        # Should NOT have frontend steps
+        frontend_steps = ["npm-ci", "npm-test-ui", "npm-build"]
+        for step in frontend_steps:
+            self.assertNotIn(step, step_ids, f"Should NOT include {step} in python-only mode")
+
+    def test_frontend_only_runs_only_frontend_steps(self) -> None:
+        """verify_all.sh --frontend-only should run only Frontend lane steps."""
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full scoped verification test")
+
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--frontend-only", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+
+        # Should emit valid JSON
+        try:
+            data = json.loads(result.stdout.strip())
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout is not valid JSON: {e}")
+
+        # Should have only Frontend lane steps (npm-ci, npm-test-ui, npm-build)
+        step_ids = [s["id"] for s in data["steps"]]
+        expected_frontend = ["npm-ci", "npm-test-ui", "npm-build"]
+        for step in expected_frontend:
+            self.assertIn(step, step_ids, f"Should include {step} in frontend-only mode")
+
+        # Should NOT have python steps
+        python_steps = ["ruff-lint", "unit-tests", "mypy"]
+        for step in python_steps:
+            self.assertNotIn(step, step_ids, f"Should NOT include {step} in frontend-only mode")
+
+    def test_scoped_modes_exit_code_correct(self) -> None:
+        """Scoped modes should return correct exit codes (0 on success, non-zero on failure)."""
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full scoped verification test")
+
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--python-only", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+
+        data = json.loads(result.stdout.strip())
+
+        # Exit code should match status
+        if data["status"] == "failed":
+            self.assertNotEqual(result.returncode, 0,
+                "Exit code should be non-zero when steps fail")
+        else:
+            self.assertEqual(result.returncode, 0,
+                "Exit code should be 0 when all steps pass")
+
+    def test_scope_flags_combinable_with_json(self) -> None:
+        """Scope flags (--python-only, --frontend-only) should be combinable with --json."""
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full scoped verification test")
+
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--python-only", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+
+        # stdout should be valid JSON
+        try:
+            json.loads(result.stdout.strip())
+        except json.JSONDecodeError as e:
+            self.fail(f"Combined --python-only --json should emit valid JSON: {e}")
+
+        # Should NOT contain compact progress lines
+        self.assertNotRegex(result.stdout, r"\[\w+-\w+\]\s+(?:PASS|FAIL)\s*\(",
+            "Combined mode should not contain compact progress lines")
+
+        # stderr should be quiet
+        self.assertNotIn("VERIFICATION GATE", result.stderr,
+            "stderr should not contain VERIFICATION GATE in JSON mode")
+
+    def test_default_mode_runs_all_steps(self) -> None:
+        """Default mode (no scope flags) should run all steps from both lanes."""
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full scoped verification test")
+
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+
+        data = json.loads(result.stdout.strip())
+        step_ids = [s["id"] for s in data["steps"]]
+
+        # Should have all 6 steps
+        expected_all = ["ruff-lint", "unit-tests", "mypy", "npm-ci", "npm-test-ui", "npm-build"]
+        for step in expected_all:
+            self.assertIn(step, step_ids, f"Default mode should include {step}")
+
+    def test_recursion_protection_preserved_in_scoped_modes(self) -> None:
+        """Scoped modes should still reject recursive invocation."""
+        env = os.environ.copy()
+        env["VERIFY_ALL_ACTIVE"] = "1"
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--python-only"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            cwd=self.REPO_ROOT,
+        )
+
+        self.assertNotEqual(result.returncode, 0,
+            "Recursive invocation should fail even in scoped mode")
+        self.assertIn("recursion detected", result.stderr.lower())
+
+    def test_lock_protection_preserved_in_scoped_modes(self) -> None:
+        """Scoped modes should still reject concurrent runs."""
+        # Create a fake lock with an active-looking PID
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "pid"
+        fake_pid = str(os.getpid())
+        lock_file.write_text(fake_pid + "\n")
+
+        try:
+            env = os.environ.copy()
+            env.pop("VERIFY_ALL_ACTIVE", None)
+
+            result = subprocess.run(
+                [str(self.VERIFY_ALL), "--frontend-only"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=env,
+                cwd=self.REPO_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0,
+                "Concurrent run should be rejected even in scoped mode")
+            self.assertIn("Another verification run is active", result.stderr)
+        finally:
+            if lock_file.exists():
+                lock_file.unlink()
+
+
 if __name__ == "__main__":
     unittest.main()
