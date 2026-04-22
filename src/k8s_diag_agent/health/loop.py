@@ -32,7 +32,7 @@ from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, Ne
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
-from .adaptation import HealthProposal, collect_trigger_details, generate_proposals_from_review
+from .adaptation import HealthProposal
 from .baseline import BaselineDriftCategory, BaselinePolicy, resolve_baseline_policy_path
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .drilldown_assessor import assess_drilldown_artifact
@@ -54,11 +54,11 @@ from .loop_history import (
     _watched_release_versions,
     _write_json,
 )
-from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_proposal_created_notification, build_suspicious_comparison_notification, write_notification_artifact
-from .review_feedback import build_health_review
+from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
+from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import _build_provider_execution, _serialize_review_enrichment_policy, write_health_ui_index
 from .utils import normalize_ref
-from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator, HealthAssessmentValidator, HealthProposalValidator
+from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator, HealthAssessmentValidator
 
 
 def _parse_manual_triggers(values: Sequence[str]) -> list[ManualComparison]:
@@ -2822,14 +2822,20 @@ class HealthLoopRunner:
         drilldowns: list[DrilldownArtifact],
         directories: dict[str, Path],
     ) -> tuple[Path | None, tuple[HealthProposal, ...]]:
-        directory = directories["reviews"]
-        proposal_records: list[HealthProposal] = []
+        """Build health review and generate proposals from assessments and drilldowns.
+
+        Delegates to loop_review_pipeline module for the core pipeline logic.
+        Notifications for proposals are created inside the extracted module.
+        """
         try:
-            review = build_health_review(
+            review_path, proposals = _write_review_and_proposals_impl(
                 run_id=self.run_id,
+                run_label=self.run_label,
                 assessments=assessments,
                 drilldowns=drilldowns,
+                directories=directories,
                 warning_threshold=self.config.trigger_policy.warning_event_threshold,
+                baseline_policy=self.config.baseline_policy,
             )
         except Exception as exc:
             self._log_event(
@@ -2840,52 +2846,32 @@ class HealthLoopRunner:
                 event="review-failed",
             )
             return None, ()
-        path = directory / f"{self.run_id}-review.json"
-        _write_json(review.to_dict(), path)
+
+        if review_path is None:
+            return None, ()
+
         self._log_event(
             "review-assessment",
             "INFO",
             "Health review written",
-            artifact_path=str(path),
+            artifact_path=str(review_path),
             assessment_count=len(assessments),
             drilldown_count=len(drilldowns),
             event="review-created",
         )
-        try:
-            trigger_details = collect_trigger_details(directories["triggers"], self.run_id)
-            proposals = generate_proposals_from_review(
-                review=review,
-                review_path=path,
-                run_id=self.run_id,
-                warning_threshold=self.config.trigger_policy.warning_event_threshold,
-                baseline_policy=self.config.baseline_policy,
-                trigger_details=trigger_details,
-            )
+
+        if proposals:
             for proposal in proposals:
-                proposal_path = directories["proposals"] / f"{proposal.proposal_id}.json"
-                HealthProposalValidator.validate(proposal.to_dict())
-                _write_json(proposal.to_dict(), proposal_path)
                 self._log_event(
                     "proposal-promotion",
                     "INFO",
                     "Health proposal written",
                     proposal_id=proposal.proposal_id,
-                    artifact_path=str(proposal_path),
+                    artifact_path=proposal.artifact_path,
                     event="proposal-generated",
                 )
-                proposal_with_path = replace(proposal, artifact_path=str(proposal_path))
-                proposal_records.append(proposal_with_path)
-                notification = build_proposal_created_notification(self.run_id, proposal)
-                self._record_notification(directories["notifications"], notification)
-        except Exception as exc:
-            self._log_event(
-                "proposal-promotion",
-                "ERROR",
-                "Health proposal generation failed",
-                severity_reason=str(exc),
-                event="proposal-failed",
-            )
-        return path, tuple(proposal_records)
+
+        return review_path, proposals
 
     def _determine_drilldown_reasons(
         self,
