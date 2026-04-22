@@ -84,8 +84,9 @@ STEP_LONG_RUNNING_HINTS="${STEP_LONG_RUNNING_HINTS:-unit-tests npm-test-ui npm-c
 _STEP_LONG_RUNNING_HINTS=($STEP_LONG_RUNNING_HINTS)
 
 # Heartbeat configuration
-STEP_HEARTBEAT_INTERVAL="${STEP_HEARTBEAT_INTERVAL:-60}"
-_STEP_LAST_HEARTBEAT=0
+STEP_HEARTBEAT_INTERVAL="${STEP_HEARTBEAT_INTERVAL:-10}"
+
+# Internal: background job tracking for live heartbeat (unused - per-step heartbeat is self-contained)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -142,14 +143,17 @@ _step_emit_hint() {
 }
 
 # Emit heartbeat line (compact human mode only)
+# Format: [HINT:HEARTBEAT] step=<id> elapsed=<Ns> log=<path>
 # Returns 0 if heartbeat was emitted, 1 otherwise
 _step_emit_heartbeat() {
-    local current_time="$1"
-    local elapsed="$2"
-    # Only emit heartbeat if interval has passed
-    if (( current_time - _STEP_LAST_HEARTBEAT >= STEP_HEARTBEAT_INTERVAL )); then
-        _STEP_LAST_HEARTBEAT=$current_time
-        echo "[HEARTBEAT] ${elapsed}s elapsed"
+    local elapsed="$1"
+    local step_id="$2"
+    local log_file="$3"
+    # Only emit heartbeat if elapsed time crosses an interval boundary
+    # Fire when elapsed % interval == 0 (first heartbeat at exactly interval seconds)
+    local remainder=$(( elapsed % STEP_HEARTBEAT_INTERVAL ))
+    if (( remainder == 0 )); then
+        echo "[HINT:HEARTBEAT] step=${step_id} elapsed=${elapsed}s log=${log_file}"
         return 0
     fi
     return 1
@@ -255,23 +259,39 @@ step_run_continue() {
         "$@" >> "$log_file" 2>&1
         exit_code=$?
     else
-        # Compact: capture to log only, emit single result line
-        "$@" >> "$log_file" 2>&1
+        # Compact mode: run subprocess in background and poll for live heartbeats
+        local poll_interval=1  # Poll every 1 second for heartbeats
+        
+        # Initialize heartbeat tracking for this step: last heartbeat was at (start_time - interval)
+        # This ensures first heartbeat fires when elapsed >= interval for THIS step
+        local _step_last_heartbeat=$(( start_time - STEP_HEARTBEAT_INTERVAL ))
+        
+        # Start subprocess in background, writing to log file
+        "$@" >> "$log_file" 2>&1 &
+        local bg_pid=$!
+        
+        # Poll until subprocess completes
+        while kill -0 "$bg_pid" 2>/dev/null; do
+            sleep "$poll_interval"
+            
+            # Check if heartbeat interval has elapsed for THIS step
+            local current_time=$(date +%s)
+            local elapsed=$(( current_time - start_time ))
+            # Use remainder check for interval boundaries relative to step start
+            local remainder=$(( elapsed % STEP_HEARTBEAT_INTERVAL ))
+            if (( remainder == 0 )); then
+                echo "[HINT:HEARTBEAT] step=${step_id} elapsed=${elapsed}s log=${log_file}"
+            fi
+        done
+        
+        # Wait for subprocess to finish and capture exit code
+        wait "$bg_pid"
         exit_code=$?
     fi
 
     end_time=$(date +%s)
     duration_ms=$(_step_duration_ms "$start_time" "$end_time")
     local duration_fmt=$(_step_format_duration "$duration_ms")
-
-    # Emit heartbeat for long-running steps (compact human mode only)
-    # Check if total elapsed time since run start exceeds heartbeat interval
-    if [[ -z "${STEP_JSON_MODE:-}" ]] && [[ -z "${STEP_VERBOSE:-}" ]]; then
-        local total_elapsed=$(( end_time - run_start ))
-        if (( duration_ms >= (STEP_HEARTBEAT_INTERVAL * 1000) )); then
-            _step_emit_heartbeat "$end_time" "$total_elapsed"
-        fi
-    fi
 
     if (( exit_code == 0 )); then
         _STEP_RESULTS["$step_id"]="PASS|$duration_ms|$exit_code"

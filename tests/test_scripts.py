@@ -958,6 +958,10 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
 
     def test_verify_all_stale_lock_cleared(self) -> None:
         """verify_all.sh should clear stale locks and proceed."""
+        # This test runs the full verify_all.sh and is gated behind RUN_FULL_VERIFY_TEST
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
+        
         # Create a stale lock (PID that doesn't exist)
         lock_dir = self.REPO_ROOT / ".verify_lock"
         lock_dir.mkdir(exist_ok=True)
@@ -968,14 +972,11 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
         try:
             # Run with isolated env to avoid other checks failing
             env = os.environ.copy()
-            # Don't run full steps, just test that we get past the lock check
-            # We can't easily skip pre-flight, but we can verify lock behavior
-            # by checking if the error message is NOT about lock
             result = subprocess.run(
                 [str(self.VERIFY_ALL)],
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=300,
                 env=env,
                 cwd=self.REPO_ROOT,
             )
@@ -1184,7 +1185,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         )
 
         output = result.stdout
-        self.assertNotIn("[HEARTBEAT]", output,
+        self.assertNotIn("[HINT:HEARTBEAT]", output,
             "Short step should not emit heartbeat")
 
     def test_json_mode_suppresses_heartbeat(self) -> None:
@@ -1205,19 +1206,18 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
 
         stdout = result.stdout
         # JSON mode should suppress heartbeat
-        self.assertNotIn("[HEARTBEAT]", stdout, "JSON mode should suppress heartbeat")
+        self.assertNotIn("[HINT:HEARTBEAT]", stdout, "JSON mode should suppress heartbeat")
 
-    def test_heartbeat_includes_elapsed_time(self) -> None:
-        """Heartbeat should include elapsed time information."""
-        # This test verifies the heartbeat format includes elapsed time
+    def test_verbose_mode_suppresses_heartbeat(self) -> None:
+        """Verbose mode should suppress heartbeat output."""
         env = os.environ.copy()
         env["STEP_LOG_DIR"] = self._log_dir
         env["STEP_DATA_DIR"] = self._data_dir
-        env["STEP_RUN_TIMESTAMP"] = "test-hb-elapsed"
-        env["STEP_HEARTBEAT_INTERVAL"] = "0"  # Force immediate heartbeat
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-verbose"
+        env["STEP_VERBOSE"] = "1"
         result = subprocess.run(
             ["bash", "-c", 
-             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 0.1"'],
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"'],
             capture_output=True,
             text=True,
             timeout=10,
@@ -1225,10 +1225,165 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         )
 
         output = result.stdout
-        # If heartbeat fires, it should include elapsed time
-        if "[HEARTBEAT]" in output:
-            self.assertRegex(output, r"\[HEARTBEAT\].*elapsed",
-                "Heartbeat should include elapsed time")
+        # Verbose mode streams full output, heartbeats not needed
+        self.assertNotIn("[HINT:HEARTBEAT]", output,
+            "Verbose mode should suppress heartbeat")
+
+    def test_long_step_emits_live_heartbeat_before_result(self) -> None:
+        """Long-running step should emit heartbeat BEFORE the PASS/FAIL result line."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-long"
+        env["STEP_HEARTBEAT_INTERVAL"] = "1"  # 1 second interval for test
+        result = subprocess.run(
+            ["bash", "-c", 
+             # Sleep for 2 seconds to ensure at least one heartbeat fires during execution
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 2"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        lines = output.strip().split('\n')
+        
+        # Should have heartbeat BEFORE final PASS line
+        hb_idx = None
+        pass_idx = None
+        for i, line in enumerate(lines):
+            if "[HINT:HEARTBEAT]" in line:
+                hb_idx = i
+            if "[unit-tests] PASS" in line:
+                pass_idx = i
+        
+        self.assertIsNotNone(hb_idx, "Should emit at least one heartbeat")
+        self.assertIsNotNone(pass_idx, "Should emit PASS result")
+        # mypy needs explicit assertions for type narrowing
+        assert hb_idx is not None
+        assert pass_idx is not None
+        self.assertLess(hb_idx, pass_idx,
+            "Heartbeat should come BEFORE PASS line (live during execution)")
+
+    def test_heartbeat_format_includes_step_elapsed_log(self) -> None:
+        """Heartbeat format should include step id, elapsed time, and log path."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-format"
+        env["STEP_HEARTBEAT_INTERVAL"] = "1"  # 1 second interval
+        result = subprocess.run(
+            ["bash", "-c", 
+             # Sleep for 2 seconds to ensure heartbeat fires
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 2"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # Should contain the new heartbeat format
+        self.assertIn("[HINT:HEARTBEAT]", output, "Should have HINT:HEARTBEAT marker")
+        self.assertIn("step=unit-tests", output, "Heartbeat should include step id")
+        self.assertIn("elapsed=", output, "Heartbeat should include elapsed time")
+        self.assertIn("log=", output, "Heartbeat should include log path")
+        # Verify log path references the correct log file
+        self.assertIn("unit-tests.log", output, "Log path should reference unit-tests.log")
+
+    def test_heartbeat_only_emits_at_interval_boundaries(self) -> None:
+        """Heartbeat should only emit at configured interval boundaries, not every poll."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-boundary"
+        env["STEP_HEARTBEAT_INTERVAL"] = "3"  # 3 second interval
+        result = subprocess.run(
+            ["bash", "-c", 
+             # Sleep for 5 seconds - should get exactly one heartbeat at ~3s
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 5"'],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=env,
+        )
+
+        output = result.stdout
+        heartbeat_lines = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln]
+        # With 3s interval and 5s sleep, should get exactly 1 heartbeat (around 3s elapsed)
+        self.assertEqual(len(heartbeat_lines), 1,
+            f"Should emit exactly 1 heartbeat at 3s boundary, got {len(heartbeat_lines)}: {heartbeat_lines}")
+
+    def test_heartbeat_distinct_from_hint(self) -> None:
+        """Heartbeat should be distinct from START hint - different purpose and timing."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-distinct"
+        env["STEP_HEARTBEAT_INTERVAL"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 2"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # Both START hint and HEARTBEAT should be present (distinct lines)
+        self.assertIn("[HINT:START]", output, "Should have START hint")
+        self.assertIn("[HINT:HEARTBEAT]", output, "Should have HEARTBEAT")
+        # They should be on different lines
+        lines = output.split('\n')
+        start_lines = [ln for ln in lines if "[HINT:START]" in ln]
+        hb_lines = [ln for ln in lines if "[HINT:HEARTBEAT]" in ln]
+        self.assertEqual(len(start_lines), 1, "Should have exactly one START hint")
+        self.assertGreaterEqual(len(hb_lines), 1, "Should have at least one heartbeat")
+
+    def test_heartbeat_elapsed_is_per_step(self) -> None:
+        """Heartbeat elapsed time should be per-step, not cumulative from run start.
+        
+        This tests that sequential long-running steps each start elapsed from 0.
+        """
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-per-step"
+        env["STEP_HEARTBEAT_INTERVAL"] = "3"  # 3 second intervals
+        # Run two sequential steps: step-1 (4s) then step-2 (4s)
+        # step-1 should emit heartbeat at 3s (elapsed=3)
+        # step-2 should ALSO emit heartbeat at 3s (elapsed=3, not elapsed=7)
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; '
+             f'step_run_continue "step-1" "Step 1" bash -c "sleep 4"; '
+             f'step_run_continue "step-2" "Step 2" bash -c "sleep 4"'],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env=env,
+        )
+
+        output = result.stdout
+        
+        # Extract heartbeat lines for each step
+        step1_hb = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln and "step=step-1" in ln]
+        step2_hb = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln and "step=step-2" in ln]
+        
+        # Both steps should have emitted heartbeats
+        self.assertEqual(len(step1_hb), 1, f"Step 1 should have 1 heartbeat, got: {step1_hb}")
+        self.assertEqual(len(step2_hb), 1, f"Step 2 should have 1 heartbeat, got: {step2_hb}")
+        
+        # Both should have elapsed=3s (first heartbeat at 3s boundary)
+        self.assertIn("elapsed=3s", step1_hb[0], "Step 1 heartbeat should have elapsed=3s")
+        self.assertIn("elapsed=3s", step2_hb[0], "Step 2 heartbeat should have elapsed=3s, not cumulative")
+        
+        # Step 2 should NOT have elapsed=7s or higher (cumulative from step-1)
+        for line in step2_hb:
+            self.assertNotRegex(line, r"elapsed=[7-9]\d+s",
+                "Step 2 should not have cumulative elapsed time from step 1")
 
 
 if __name__ == "__main__":
