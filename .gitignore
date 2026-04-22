@@ -91,3 +91,4 @@ podman/
 
 runs/verification/
 tests/tmp-health/
+.verify_lock/
