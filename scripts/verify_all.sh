@@ -18,6 +18,18 @@
 #   - Failure: step name, exit code, log excerpt, log path
 #   - JSON mode: pure JSON summary on stdout (no progress output)
 #
+# JSON mode output contract (--json flag):
+#   - stdout: valid JSON only (no compact progress lines, no VERIFICATION GATE text)
+#   - stderr: quiet except for truly fatal wrapper/preflight errors
+#   - Fatal errors that go to stderr:
+#     * Recursion detection (VERIFY_ALL_ACTIVE already set)
+#     * Lock conflicts (another verification run active)
+#     * Missing interpreter (python not found)
+#     * Missing npm (npm not installed)
+#     * Argument parsing errors
+#   - Non-fatal errors (step failures): ONLY in stdout JSON, never on stderr
+#   - Exit code: 0 on success, non-zero on any failure
+#
 # Logs are stored in runs/verification/ with timestamped per-step files.
 
 set -uo pipefail
