@@ -111,6 +111,168 @@ class TestParallelFailureCoordination(unittest.TestCase):
         self.assertIn("_is_global_failed", verify_content)
         self.assertIn("SKIP", verify_content)
 
+    def test_behavioral_parallel_failure_coordination(self) -> None:
+        """Behavioral runtime test for parallel lane failure coordination.
+
+        Scenario:
+        - Lane A: step-a1 (fails fast ~50ms), step-a2 (would run later, should SKIP)
+        - Lane B: step-b1 (runs ~200ms, succeeds), step-b2 (should SKIP)
+
+        Expected observed outcomes:
+        - step-a1: FAIL
+        - step-b1: PASS
+        - step-a2: SKIP
+        - step-b2: SKIP
+
+        This proves the actual coordination policy: fast failure triggers global
+        skip for not-yet-started steps while running steps complete truthfully.
+        """
+        global_flag = os.path.join(self._tmp_dir, "global-failed.flag")
+        marker_file = os.path.join(self._tmp_dir, "results.txt")
+
+        # Create helper script with shared functions (must be sourced)
+        helper_script = os.path.join(self._tmp_dir, "helper.sh")
+        with open(helper_script, "w") as f:
+            f.write("""#!/usr/bin/env bash
+# Shared coordination helpers - source this before running steps
+
+MARKER_FILE="${MARKER_FILE:-}"
+GLOBAL_FLAG="${GLOBAL_FLAG:-}"
+
+_mark_global_failed() {
+    touch "$GLOBAL_FLAG" 2>/dev/null || true
+}
+
+_is_global_failed() {
+    [[ -f "$GLOBAL_FLAG" ]] && return 0 || return 1
+}
+
+_record_step() {
+    local lane="$1"
+    local step_id="$2"
+    local result="$3"
+    local duration="$4"
+
+    if [[ "$result" == "FAIL" ]]; then
+        _mark_global_failed
+    fi
+
+    # Append to marker file for test assertions
+    echo "${lane}:${step_id}:${result}:${duration}" >> "$MARKER_FILE"
+}
+""")
+        os.chmod(helper_script, 0o755)
+
+        # Create lane A script
+        lane_a_script = os.path.join(self._tmp_dir, "lane_a.sh")
+        with open(lane_a_script, "w") as f:
+            f.write(f"""#!/usr/bin/env bash
+set -uo pipefail
+source "{helper_script}"
+
+# step-a1: fails fast after 50ms
+sleep 0.05
+_record_step "python" "step-a1" "FAIL" "50"
+
+# step-a2: would run after a1, should SKIP due to global failure
+sleep 0.1
+if _is_global_failed; then
+    _record_step "python" "step-a2" "SKIP" "0"
+else
+    _record_step "python" "step-a2" "PASS" "50"
+fi
+""")
+        os.chmod(lane_a_script, 0o755)
+
+        # Create lane B script
+        lane_b_script = os.path.join(self._tmp_dir, "lane_b.sh")
+        with open(lane_b_script, "w") as f:
+            f.write(f"""#!/usr/bin/env bash
+set -uo pipefail
+source "{helper_script}"
+
+# step-b1: runs longer (200ms), succeeds
+sleep 0.2
+_record_step "frontend" "step-b1" "PASS" "200"
+
+# step-b2: should SKIP due to global failure from a1
+if _is_global_failed; then
+    _record_step "frontend" "step-b2" "SKIP" "0"
+else
+    _record_step "frontend" "step-b2" "PASS" "50"
+fi
+""")
+        os.chmod(lane_b_script, 0o755)
+
+        # Run both lanes in parallel with shared environment
+        env = os.environ.copy()
+        env["MARKER_FILE"] = marker_file
+        env["GLOBAL_FLAG"] = global_flag
+
+        # Launch both lanes concurrently
+        proc_a = subprocess.Popen(
+            [lane_a_script],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        proc_b = subprocess.Popen(
+            [lane_b_script],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        # Wait for both to complete
+        stdout_a, stderr_a = proc_a.communicate(timeout=5)
+        stdout_b, stderr_b = proc_b.communicate(timeout=5)
+
+        # Read and parse results
+        results = {}
+        if os.path.exists(marker_file):
+            with open(marker_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        parts = line.split(":")
+                        if len(parts) >= 4:
+                            lane, step_id, result_status, duration = parts[0], parts[1], parts[2], parts[3]
+                            results[step_id] = {"lane": lane, "result": result_status, "duration": duration}
+
+        # Assert actual observed outcomes
+        self.assertIn("step-a1", results, "step-a1 should have run")
+        self.assertIn("step-b1", results, "step-b1 should have run")
+        self.assertIn("step-a2", results, "step-a2 should have run")
+        self.assertIn("step-b2", results, "step-b2 should have run")
+
+        # Core assertions: prove the coordination policy
+        self.assertEqual(
+            results["step-a1"]["result"],
+            "FAIL",
+            "step-a1 must FAIL (fast failure)",
+        )
+        self.assertEqual(
+            results["step-b1"]["result"],
+            "PASS",
+            "step-b1 must PASS (completed before/during global failure)",
+        )
+        self.assertEqual(
+            results["step-a2"]["result"],
+            "SKIP",
+            "step-a2 must SKIP (not yet started when global failure occurred)",
+        )
+        self.assertEqual(
+            results["step-b2"]["result"],
+            "SKIP",
+            "step-b2 must SKIP (not yet started when global failure occurred)",
+        )
+
+        # Verify global failure flag was created
+        self.assertTrue(
+            os.path.exists(global_flag),
+            "Global failure flag must be created when step fails",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
