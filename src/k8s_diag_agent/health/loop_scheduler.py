@@ -127,8 +127,9 @@ class HealthLoopScheduler:
         max_runs: int | None,
         run_once: bool,
         output_dir: Path,
+        scripts_dir: Path,
+        run_health_loop_fn: Callable[..., tuple[int, list[Any], list[Any], list[Any], list[Any], Any]],
         run_label: str | None = None,
-        run_health_loop_fn: Callable[..., tuple[int, list[Any], list[Any], list[Any], list[Any], Any]] | None = None,
     ) -> None:
         self._config_path = config_path
         self._manual_triggers = tuple(manual_triggers)
@@ -155,7 +156,7 @@ class HealthLoopScheduler:
         self._lock_skip_streak = 0
         self._lock_skip_escalation_threshold = self._LOCK_SKIP_ESCALATION_THRESHOLD
 
-        # Injected function to avoid circular imports
+        self._scripts_dir = scripts_dir
         self._run_health_loop_fn = run_health_loop_fn
 
     def _log_event(self, severity: str, message: str, **metadata: Any) -> None:
@@ -802,7 +803,6 @@ class HealthLoopScheduler:
 
     def _maybe_build_diagnostic_pack(self, run_id: str) -> None:
         """Build diagnostic pack if configured via environment."""
-        from .loop import _SCRIPTS_DIR
         from .loop_history import _env_is_truthy
         env_value = os.environ.get("HEALTH_BUILD_DIAGNOSTIC_PACK")
         if not _env_is_truthy(env_value):
@@ -816,7 +816,7 @@ class HealthLoopScheduler:
             )
             return
         runs_dir = str(self._runs_dir_base)
-        build_script = _SCRIPTS_DIR / "build_diagnostic_pack.py"
+        build_script = self._scripts_dir / "build_diagnostic_pack.py"
         build_cmd = [
             sys.executable,
             str(build_script),
@@ -836,7 +836,7 @@ class HealthLoopScheduler:
                 event="diag-pack-build-failed",
             )
             return
-        update_script = _SCRIPTS_DIR / "update_ui_index.py"
+        update_script = self._scripts_dir / "update_ui_index.py"
         update_cmd = [
             sys.executable,
             str(update_script),
@@ -866,7 +866,6 @@ class HealthLoopScheduler:
 
     def run(self) -> int:
         """Execute the scheduler loop, running health loops at configured intervals."""
-        from .loop import run_health_loop as _run_health_loop_default
         from .loop_history import _build_runtime_run_id
         executed_runs = 0
         last_exit = 0
@@ -877,8 +876,7 @@ class HealthLoopScheduler:
             max_runs=self._max_runs,
             run_once=self._run_once,
         )
-        # Use injected function or fall back to loop.py's run_health_loop
-        _run_health_loop = self._run_health_loop_fn or _run_health_loop_default
+        _run_health_loop = self._run_health_loop_fn
         try:
             while True:
                 if self._run_once and executed_runs >= 1:
@@ -984,8 +982,14 @@ def schedule_health_loop(
     This function loads the configuration and creates a scheduler that manages
     lock-based execution of health loops.
     """
+    from .loop import run_health_loop
     from .loop_history import HealthRunConfig, _safe_label
     from .structured_logging import emit_structured_log
+
+    # Compute scripts_dir relative to project root
+    project_root = Path(__file__).resolve().parents[3]
+    scripts_dir = project_root / "scripts"
+
     try:
         config = HealthRunConfig.load(config_path)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -1007,6 +1011,8 @@ def schedule_health_loop(
         max_runs=max_runs,
         run_once=run_once,
         output_dir=config.output_dir,
+        scripts_dir=scripts_dir,
+        run_health_loop_fn=run_health_loop,
         run_label=config.run_label,
     )
     return scheduler.run()

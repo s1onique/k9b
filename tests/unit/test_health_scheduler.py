@@ -20,11 +20,16 @@ from k8s_diag_agent.health.loop import (
 )
 
 
+def _mock_run_health_loop(*args: object, **kwargs: object) -> tuple[int, list[object], list[object], list[object], list[object], ExternalAnalysisSettings]:
+    return (0, [], [], [], [], ExternalAnalysisSettings())
+
+
 class HealthSchedulerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.mkdtemp())
         self.config_path = self.tmpdir / "health-config.json"
         self.output_dir = self.tmpdir / "runs"
+        self.scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
         self._uuid_patcher = patch(
             "k8s_diag_agent.health.loop_scheduler.uuid4",
             return_value=SimpleNamespace(hex="instance-123"),
@@ -51,29 +56,39 @@ class HealthSchedulerTests(unittest.TestCase):
             max_runs=max_runs,
             run_once=run_once,
             output_dir=self.output_dir,
+            scripts_dir=self.scripts_dir,
+            run_health_loop_fn=_mock_run_health_loop,
         )
         return scheduler
 
     def test_scheduler_runs_up_to_max(self) -> None:
         scheduler = self._make_scheduler(interval_seconds=1, max_runs=3, run_once=False)
+        run_results: list[int] = []
+        def tracking_mock(*args: object, **kwargs: object) -> tuple[int, list[object], list[object], list[object], list[object], ExternalAnalysisSettings]:
+            run_results.append(1)
+            return (0, [], [], [], [], ExternalAnalysisSettings())
+        scheduler._run_health_loop_fn = tracking_mock
         with patch.object(scheduler, "_acquire_lock", return_value=True), patch.object(
             scheduler, "_release_lock", return_value=None
-        ), patch("k8s_diag_agent.health.loop.run_health_loop") as run_mock, patch(
-            "k8s_diag_agent.health.loop.time.sleep"
-        ):
-            run_mock.return_value = (0, [], [], [], [], ExternalAnalysisSettings())
+        ), patch.object(scheduler, "_log_event"):
             exit_code = scheduler.run()
         self.assertEqual(exit_code, 0)
-        self.assertEqual(run_mock.call_count, 3)
+        self.assertEqual(len(run_results), 3)
 
     def test_scheduler_skips_when_lock_present(self) -> None:
         scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
+        run_count = 0
+        def tracking_mock(*args: object, **kwargs: object) -> tuple[int, list[object], list[object], list[object], list[object], ExternalAnalysisSettings]:
+            nonlocal run_count
+            run_count += 1
+            return (0, [], [], [], [], ExternalAnalysisSettings())
+        scheduler._run_health_loop_fn = tracking_mock
         with patch.object(scheduler, "_acquire_lock", return_value=False), patch.object(
             scheduler, "_release_lock", return_value=None
-        ), patch("k8s_diag_agent.health.loop.run_health_loop") as run_mock:
+        ), patch.object(scheduler, "_log_event"):
             exit_code = scheduler.run()
         self.assertEqual(exit_code, 0)
-        self.assertEqual(run_mock.call_count, 0)
+        self.assertEqual(run_count, 0)
 
     def test_acquire_lock_removes_stale_lock_file(self) -> None:
         scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=True)
@@ -455,11 +470,11 @@ class HealthSchedulerTests(unittest.TestCase):
     def test_summary_metadata_includes_health_counts(self) -> None:
         scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=False)
         assessment = SimpleNamespace(run_id="run-123", health_rating=HealthRating.HEALTHY)
+        def tracking_mock(*args: object, **kwargs: object) -> tuple[int, list[object], list[object], list[object], list[object], ExternalAnalysisSettings]:
+            return (0, [assessment], [], [], [], ExternalAnalysisSettings())
+        scheduler._run_health_loop_fn = tracking_mock
         with patch.object(scheduler, "_acquire_lock", return_value=True), patch.object(
             scheduler, "_release_lock", return_value=None
-        ), patch(
-            "k8s_diag_agent.health.loop.run_health_loop",
-            return_value=(0, [assessment], [], [], [], ExternalAnalysisSettings()),
         ), patch.object(scheduler, "_log_event") as log_mock:
             exit_code = scheduler.run()
         self.assertEqual(exit_code, 0)
