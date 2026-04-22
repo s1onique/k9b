@@ -88,3 +88,6 @@ frontend/.cache/
 frontend/coverage/
 frontend/tsconfig.tsbuildinfo
 podman/
+
+runs/verification/
+tests/tmp-health/
