@@ -78,6 +78,15 @@ _STEP_FAILED=false
 _STEP_CURRENT=""
 _STEP_LOG_FILE=""
 
+# Long-running step hints (emit START/INFO before these in compact mode)
+# Format: space-separated step IDs
+STEP_LONG_RUNNING_HINTS="${STEP_LONG_RUNNING_HINTS:-unit-tests npm-test-ui npm-ci npm-build}"
+_STEP_LONG_RUNNING_HINTS=($STEP_LONG_RUNNING_HINTS)
+
+# Heartbeat configuration
+STEP_HEARTBEAT_INTERVAL="${STEP_HEARTBEAT_INTERVAL:-60}"
+_STEP_LAST_HEARTBEAT=0
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -110,6 +119,39 @@ _step_format_duration() {
 # Check for verbose mode (can be passed via env or first arg --verbose)
 _step_check_verbose() {
     [[ -n "$STEP_VERBOSE" ]] && return 0
+    return 1
+}
+
+# Check if step_id is in the long-running hints list
+_step_needs_hint() {
+    local step_id="$1"
+    for hint_step in "${_STEP_LONG_RUNNING_HINTS[@]}"; do
+        if [[ "$step_id" == "$hint_step" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Emit START hint for long-running steps (compact human mode only)
+_step_emit_hint() {
+    local step_id="$1"
+    local log_file="$2"
+    # Hint line format for machine parsing: START|<step_id>|<log_path>
+    echo "[HINT:START] step=${step_id} log=${log_file}"
+}
+
+# Emit heartbeat line (compact human mode only)
+# Returns 0 if heartbeat was emitted, 1 otherwise
+_step_emit_heartbeat() {
+    local current_time="$1"
+    local elapsed="$2"
+    # Only emit heartbeat if interval has passed
+    if (( current_time - _STEP_LAST_HEARTBEAT >= STEP_HEARTBEAT_INTERVAL )); then
+        _STEP_LAST_HEARTBEAT=$current_time
+        echo "[HEARTBEAT] ${elapsed}s elapsed"
+        return 0
+    fi
     return 1
 }
 
@@ -193,6 +235,16 @@ step_run_continue() {
 
     start_time=$(date +%s)
 
+    # Track run start time for heartbeat
+    local run_start="${STEP_RUN_START_TIME:-$start_time}"
+    export STEP_RUN_START_TIME="$run_start"
+
+    # Emit hint for long-running steps BEFORE execution (compact human mode only)
+    # This gives machines a chance to parse progress before the step runs
+    if [[ -z "${STEP_JSON_MODE:-}" ]] && [[ -z "${STEP_VERBOSE:-}" ]] && _step_needs_hint "$step_id"; then
+        _step_emit_hint "$step_id" "$log_file"
+    fi
+
     if _step_check_verbose; then
         # Verbose: stream header and output to both console and log
         echo "[$step_id] $message" | tee "$log_file"
@@ -211,6 +263,15 @@ step_run_continue() {
     end_time=$(date +%s)
     duration_ms=$(_step_duration_ms "$start_time" "$end_time")
     local duration_fmt=$(_step_format_duration "$duration_ms")
+
+    # Emit heartbeat for long-running steps (compact human mode only)
+    # Check if total elapsed time since run start exceeds heartbeat interval
+    if [[ -z "${STEP_JSON_MODE:-}" ]] && [[ -z "${STEP_VERBOSE:-}" ]]; then
+        local total_elapsed=$(( end_time - run_start ))
+        if (( duration_ms >= (STEP_HEARTBEAT_INTERVAL * 1000) )); then
+            _step_emit_heartbeat "$end_time" "$total_elapsed"
+        fi
+    fi
 
     if (( exit_code == 0 )); then
         _STEP_RESULTS["$step_id"]="PASS|$duration_ms|$exit_code"

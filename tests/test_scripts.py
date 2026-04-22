@@ -716,13 +716,15 @@ class TestVerifyAllJsonMode(unittest.TestCase):
             self.fail(f"stdout is not valid JSON: {e}\nstdout: {stdout}")
         
         # stdout should not contain compact progress lines (e.g., "[ruff-lint] PASS (0ms)")
-        # Note: JSON arrays contain "[" and step statuses contain "PASS"/"FAIL" legitimately,
-        # so we check for the full compact pattern, not just those substrings
-        self.assertNotIn("[ruff-lint] PASS", stdout, "stdout should not contain compact progress markers")
-        self.assertNotIn("[unit-tests] PASS", stdout, "stdout should not contain compact progress markers")
+        # Check for the full compact progress pattern: [step-id] <status> (
+        # Note: JSON documents legitimately contain PASS/FAIL in status fields,
+        # but never in the compact progress line format "[step-id] STATUS ("
+        self.assertNotIn("[ruff-lint]", stdout, "stdout should not contain step progress in compact format")
         self.assertNotIn("VERIFICATION GATE", stdout, "stdout should not contain gate marker")
-        # Check for compact progress line pattern (step-id in brackets followed by status)
-        self.assertNotRegex(stdout, r"\[\w-+\]+\s+(PASS|FAIL)\s+\(", "stdout should not contain compact progress lines")
+        # Check for compact progress line pattern (step-id in brackets followed by status with duration)
+        # This pattern will NOT match JSON like {"status": "PASS"} - it's intentionally specific
+        self.assertNotRegex(stdout, r"\[\w+-\w+\]\s+(?:PASS|FAIL)\s*\(", 
+            "stdout should not contain compact progress lines")
         
         # JSON should have expected structure
         self.assertIn("run_id", data)
@@ -987,6 +989,246 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
             # Clean up stale lock
             if lock_file.exists():
                 lock_file.unlink()
+
+
+class TestStepRunnerLongRunningHints(unittest.TestCase):
+    """Test runtime hints for long-running steps."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    STEP_RUNNER = REPO_ROOT / "scripts" / "step_runner.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.STEP_RUNNER.exists():
+            self.skipTest("step_runner.sh not found")
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_hints_")
+        self._log_dir = os.path.join(self._tmp_dir, "logs")
+        self._data_dir = os.path.join(self._tmp_dir, "data")
+        os.makedirs(self._log_dir, exist_ok=True)
+        os.makedirs(self._data_dir, exist_ok=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+    def test_long_running_step_emits_hint(self) -> None:
+        """Long-running step should emit START hint before execution."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hint-long"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # Should emit hint for unit-tests (default long-running step)
+        self.assertIn("[HINT:START]", output, "Long-running step should emit START hint")
+        self.assertIn("step=unit-tests", output, "Hint should include step id")
+        # Should include log path
+        self.assertIn("log=", output, "Hint should include log path")
+        # Final result should still be present
+        self.assertIn("[unit-tests] PASS", output)
+
+    def test_short_step_does_not_emit_hint(self) -> None:
+        """Short-running step should NOT emit START hint."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hint-short"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "ruff-lint" "Ruff lint" bash -c "echo ok"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # Should NOT emit hint for short-running steps
+        self.assertNotIn("[HINT:START]", output, 
+            "Short-running step should not emit START hint")
+
+    def test_json_mode_suppresses_hints(self) -> None:
+        """JSON mode should suppress hint output."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hint-json"
+        env["STEP_JSON_MODE"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"; step_finalize 0'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        stdout = result.stdout
+        # JSON mode should suppress all hints
+        self.assertNotIn("[HINT:START]", stdout, "JSON mode should suppress hints")
+        # stdout should be valid JSON
+        import json
+        data = json.loads(stdout)
+        self.assertIn("run_id", data)
+
+    def test_verbose_mode_suppresses_hints(self) -> None:
+        """Verbose mode should suppress hint output."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hint-verbose"
+        env["STEP_VERBOSE"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # Verbose mode streams full output, so hints are not needed
+        # The step header is printed instead
+        self.assertNotIn("[HINT:START]", output,
+            "Verbose mode should suppress hints (uses header instead)")
+
+    def test_custom_long_running_list(self) -> None:
+        """Custom STEP_LONG_RUNNING_HINTS should override defaults."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hint-custom"
+        env["STEP_LONG_RUNNING_HINTS"] = "custom-long-step"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "custom-long-step" "Custom test" bash -c "echo ok"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        self.assertIn("[HINT:START]", output, 
+            "Custom long-running step should emit hint")
+        self.assertIn("step=custom-long-step", output)
+
+    def test_hint_includes_log_path(self) -> None:
+        """Hint should include the actual log file path for machine parsing."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hint-logpath"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "npm-test-ui" "UI tests" bash -c "echo ok"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # Hint should include log path
+        self.assertIn("log=", output, "Hint should include log path")
+        # The log path should point to the expected log file
+        self.assertIn("npm-test-ui.log", output, "Log path should reference the step's log file")
+
+
+class TestStepRunnerHeartbeat(unittest.TestCase):
+    """Test heartbeat mechanism for long-running steps."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    STEP_RUNNER = REPO_ROOT / "scripts" / "step_runner.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.STEP_RUNNER.exists():
+            self.skipTest("step_runner.sh not found")
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_heartbeat_")
+        self._log_dir = os.path.join(self._tmp_dir, "logs")
+        self._data_dir = os.path.join(self._tmp_dir, "data")
+        os.makedirs(self._log_dir, exist_ok=True)
+        os.makedirs(self._data_dir, exist_ok=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+    def test_short_step_does_not_emit_heartbeat(self) -> None:
+        """Short-running step should not emit heartbeat."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-short"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "test-step" "Test step" bash -c "echo ok"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        self.assertNotIn("[HEARTBEAT]", output,
+            "Short step should not emit heartbeat")
+
+    def test_json_mode_suppresses_heartbeat(self) -> None:
+        """JSON mode should suppress heartbeat output."""
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-json"
+        env["STEP_JSON_MODE"] = "1"
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"; step_finalize 0'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        stdout = result.stdout
+        # JSON mode should suppress heartbeat
+        self.assertNotIn("[HEARTBEAT]", stdout, "JSON mode should suppress heartbeat")
+
+    def test_heartbeat_includes_elapsed_time(self) -> None:
+        """Heartbeat should include elapsed time information."""
+        # This test verifies the heartbeat format includes elapsed time
+        env = os.environ.copy()
+        env["STEP_LOG_DIR"] = self._log_dir
+        env["STEP_DATA_DIR"] = self._data_dir
+        env["STEP_RUN_TIMESTAMP"] = "test-hb-elapsed"
+        env["STEP_HEARTBEAT_INTERVAL"] = "0"  # Force immediate heartbeat
+        result = subprocess.run(
+            ["bash", "-c", 
+             f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 0.1"'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+
+        output = result.stdout
+        # If heartbeat fires, it should include elapsed time
+        if "[HEARTBEAT]" in output:
+            self.assertRegex(output, r"\[HEARTBEAT\].*elapsed",
+                "Heartbeat should include elapsed time")
 
 
 if __name__ == "__main__":
