@@ -54,6 +54,7 @@ from .loop_history import (
     _watched_release_versions,
     _write_json,
 )
+from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import _build_provider_execution, _serialize_review_enrichment_policy, write_health_ui_index
@@ -3142,22 +3143,9 @@ class HealthLoopRunner:
     def _choose_free_local_port(self) -> int:
         """Choose a free local TCP port for port-forward.
         
-        Returns:
-            A free port number on localhost.
-            
-        Raises:
-            RuntimeError: If no free port can be found.
+        Delegates to the extracted port-forward helpers module.
         """
-        import socket
-        for attempt in range(10):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.bind(("127.0.0.1", 0))
-                    port: int = sock.getsockname()[1]
-                    return port
-            except OSError:
-                continue
-        raise RuntimeError("Could not find a free local port for port-forward")
+        return _choose_free_local_port()
 
     def _wait_for_port_ready(
         self,
@@ -3168,24 +3156,9 @@ class HealthLoopRunner:
     ) -> bool:
         """Wait for a TCP port to become accepting connections.
         
-        Args:
-            host: The host to check (typically "127.0.0.1").
-            port: The port to check.
-            timeout_seconds: Maximum time to wait.
-            poll_interval: Time between connection attempts.
-            
-        Returns:
-            True if the port became ready within the timeout, False otherwise.
+        Delegates to the extracted port-forward helpers module.
         """
-        import socket
-        deadline = time.monotonic() + timeout_seconds
-        while time.monotonic() < deadline:
-            try:
-                with socket.create_connection((host, port), timeout=0.5):
-                    return True
-            except OSError:
-                time.sleep(poll_interval)
-        return False
+        return _wait_for_port_ready(host, port, timeout_seconds, poll_interval)
 
     def _start_alertmanager_port_forward(
         self,
