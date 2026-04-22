@@ -36,6 +36,12 @@ from .image_pull_secret import ImagePullSecretInsight, ImagePullSecretInspector
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
+from .loop_config_helpers import (
+    _parse_comparison_intent,
+    _parse_manual_external_analysis_requests,
+    _parse_manual_triggers,
+    _parse_threshold,
+)
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_history import (
     HealthHistoryEntry,
@@ -62,34 +68,6 @@ from .notifications import NotificationArtifact, build_degraded_health_notificat
 from .ui import write_health_ui_index
 from .utils import normalize_ref
 from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator, HealthAssessmentValidator
-
-
-def _parse_manual_triggers(values: Sequence[str]) -> list[ManualComparison]:
-    manual: list[ManualComparison] = []
-    for raw_value in values:
-        if ":" not in raw_value:
-            continue
-        primary, secondary = raw_value.split(":", 1)
-        manual.append(
-            ManualComparison(primary=normalize_ref(primary), secondary=normalize_ref(secondary))
-        )
-    return manual
-
-
-def _parse_manual_external_analysis_requests(
-    values: Sequence[str],
-) -> list[ManualExternalAnalysisRequest]:
-    manual: list[ManualExternalAnalysisRequest] = []
-    for raw_value in values:
-        if ":" not in raw_value:
-            continue
-        tool_raw, target_raw = raw_value.split(":", 1)
-        tool = tool_raw.strip().lower()
-        target = normalize_ref(target_raw)
-        if not tool or not target:
-            continue
-        manual.append(ManualExternalAnalysisRequest(tool=tool, target=target))
-    return manual
 
 
 class BaselineRegistry:
@@ -131,27 +109,6 @@ def _resolve_peer_role(
             if role:
                 return role
     return None
-
-
-def _parse_threshold(value: Any | None) -> int:
-    """Parse a threshold value from config, returning 0 for invalid inputs."""
-    if value is None:
-        return 0
-    try:
-        threshold = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, threshold)
-
-
-def _parse_comparison_intent(value: Any | None) -> ComparisonIntent:
-    """Parse a comparison intent from config, defaulting to SUSPICIOUS_DRIFT."""
-    if value is None:
-        return ComparisonIntent.SUSPICIOUS_DRIFT
-    try:
-        return ComparisonIntent(str(value))
-    except ValueError:
-        return ComparisonIntent.SUSPICIOUS_DRIFT
 
 
 def _validate_suspicious_pairs(
