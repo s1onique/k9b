@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,13 +25,16 @@ from .health.adaptation import (
     ProposalLifecycleStatus,
     evaluate_proposal,
     render_proposal_patch,
-    with_lifecycle_status,
 )
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
 from .health.notifications import (
     build_proposal_checked_notification,
     write_notification_artifact,
+)
+from .health.proposal_lifecycle_events import (
+    ProposalLifecycleEvent,
+    write_proposal_lifecycle_event,
 )
 from .health.summary import format_health_summary, gather_health_summary
 from .llm.assessor_schema import AssessorAssessment
@@ -547,14 +550,32 @@ def handle_check_proposal(args: argparse.Namespace) -> int:
         args.proposal.parent / "notifications",
         notification,
     )
-    evaluated_proposal = replace(proposal, promotion_evaluation=evaluation)
-    promoted = with_lifecycle_status(
-        evaluated_proposal,
-        ProposalLifecycleStatus.CHECKED,
+    # Write an immutable lifecycle event artifact instead of mutating the base proposal
+    event = ProposalLifecycleEvent(
+        proposal_id=proposal.proposal_id,
+        proposal_artifact_id=proposal.artifact_id,
+        status=ProposalLifecycleStatus.CHECKED,
+        transition="check",
         note=f"Replayed against {args.fixture}",
+        provenance={
+            "artifact_path": str(args.proposal),
+            "fixture_path": str(args.fixture),
+            "evaluation": evaluation.to_dict(),
+        },
     )
-    if promoted is not proposal:
-        args.proposal.write_text(json.dumps(promoted.to_dict(), indent=2), encoding="utf-8")
+    transitions_dir = args.proposal.parent / "transitions"
+    event_path = write_proposal_lifecycle_event(event, transitions_dir)
+    emit_structured_log(
+        component="proposal-lifecycle-event",
+        severity="INFO",
+        message="Lifecycle event written",
+        run_label=run_label,
+        run_id=proposal.source_run_id or None,
+        proposal_id=proposal.proposal_id,
+        artifact_path=str(event_path),
+        event="lifecycle-event",
+        metadata={"transition": "check", "status": event.status.value},
+    )
     return 0
 
 
@@ -596,13 +617,23 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     if args.note:
         note_parts.append(args.note)
     updated_note = " | ".join(note_parts)
-    updated = with_lifecycle_status(
-        proposal,
-        ProposalLifecycleStatus.ACCEPTED,
+
+    # Write an immutable lifecycle event artifact instead of mutating the base proposal
+    event = ProposalLifecycleEvent(
+        proposal_id=proposal.proposal_id,
+        proposal_artifact_id=proposal.artifact_id,
+        status=ProposalLifecycleStatus.ACCEPTED,
+        transition="promote",
         note=updated_note,
+        provenance={
+            "artifact_path": str(args.proposal),
+            "patch_path": str(patch_path),
+            "operator_note": args.note,
+        },
     )
-    if updated is not proposal:
-        args.proposal.write_text(json.dumps(updated.to_dict(), indent=2), encoding="utf-8")
+    transitions_dir = args.proposal.parent / "transitions"
+    event_path = write_proposal_lifecycle_event(event, transitions_dir)
+
     run_label = proposal.source_run_id or proposal.proposal_id
     metadata = {
         "noise_reduction": evaluation.noise_reduction,
@@ -621,6 +652,17 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
         artifact_path=str(patch_path),
         metadata=metadata,
         event="promotion",
+    )
+    emit_structured_log(
+        component="proposal-lifecycle-event",
+        severity="INFO",
+        message="Lifecycle event written",
+        run_label=run_label,
+        run_id=proposal.source_run_id or None,
+        proposal_id=proposal.proposal_id,
+        artifact_path=str(event_path),
+        event="lifecycle-event",
+        metadata={"transition": "promote", "status": event.status.value},
     )
     print(f"Promotion patch written to '{patch_path}'")
     return 0

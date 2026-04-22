@@ -130,7 +130,9 @@ def write_health_ui_index(
         for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True)
     ]
     latest_drilldown = drilldown_entries[0] if drilldown_entries else None
-    proposals_data = [_serialize_proposal(proposal, output_dir) for proposal in proposals]
+    # Wire transitions_dir for current-state derivation from event artifacts
+    transitions_dir = output_dir / "proposals" / "transitions"
+    proposals_data = [_serialize_proposal(proposal, output_dir, transitions_dir) for proposal in proposals]
     drilldown_availability = _serialize_drilldown_availability(records, drilldown_map, output_dir)
     external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
     historical_entries = _collect_historical_external_analysis_entries(output_dir / "external-analysis")

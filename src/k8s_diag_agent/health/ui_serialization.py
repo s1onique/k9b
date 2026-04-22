@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from ..external_analysis.artifact import ExternalAnalysisStatus
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
+from .proposal_lifecycle_events import derive_current_proposal_status
 from .ui_shared import _relative_path
 
 if TYPE_CHECKING:
@@ -105,15 +106,24 @@ def _serialize_drilldown(artifact: DrilldownArtifact, root_dir: Path) -> dict[st
     }
 
 
-def _serialize_proposal(proposal: HealthProposal, root_dir: Path) -> dict[str, object]:
-    latest_status = proposal.lifecycle_history[-1]
+def _serialize_proposal(
+    proposal: HealthProposal,
+    root_dir: Path,
+    transitions_dir: Path | None = None,
+) -> dict[str, object]:
+    # Use event artifacts for current status if available, fallback to embedded history
+    if transitions_dir:
+        status = derive_current_proposal_status(proposal.to_dict(), transitions_dir)
+    else:
+        status = proposal.lifecycle_history[-1].status
+
     data: dict[str, object] = {
         "proposal_id": proposal.proposal_id,
         "target": proposal.target,
         "confidence": proposal.confidence.value,
         "rationale": proposal.rationale,
         "expected_benefit": proposal.expected_benefit,
-        "status": latest_status.status.value,
+        "status": status.value,
         "lifecycle_history": [entry.to_dict() for entry in proposal.lifecycle_history],
         "source_run_id": proposal.source_run_id,
         "artifact_path": _relative_path(root_dir, proposal.artifact_path),
