@@ -698,7 +698,7 @@ class TestAlertmanagerSnapshotCollectionPortForward:
             with patch("subprocess.Popen", return_value=mock_process):
                 with patch.object(runner, "_choose_free_local_port", return_value=18457):
                     with patch.object(runner, "_wait_for_port_ready", return_value=True):
-                        with patch("k8s_diag_agent.health.loop.write_alertmanager_artifacts", side_effect=write_with_error):
+                        with patch("k8s_diag_agent.health.loop_alertmanager_snapshot.write_alertmanager_artifacts", side_effect=write_with_error):
                             runner._run_alertmanager_snapshot_collection({"root": temp_dir})
 
         # Verify cleanup was called even after write failure
