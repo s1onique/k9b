@@ -26,7 +26,7 @@ class HealthSchedulerTests(unittest.TestCase):
         self.config_path = self.tmpdir / "health-config.json"
         self.output_dir = self.tmpdir / "runs"
         self._uuid_patcher = patch(
-            "k8s_diag_agent.health.loop.uuid4",
+            "k8s_diag_agent.health.loop_scheduler.uuid4",
             return_value=SimpleNamespace(hex="instance-123"),
         )
         self._uuid_patcher.start()
