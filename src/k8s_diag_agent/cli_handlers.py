@@ -34,6 +34,7 @@ from .health.notifications import (
 )
 from .health.proposal_lifecycle_events import (
     ProposalLifecycleEvent,
+    derive_proposal_evaluation_from_events,
     write_proposal_lifecycle_event,
 )
 from .health.summary import format_health_summary, gather_health_summary
@@ -586,7 +587,13 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"Unable to read proposal: {exc}", file=sys.stderr)
         return 1
-    evaluation = proposal.promotion_evaluation
+
+    # Derive evaluation from lifecycle events first, fall back to embedded evaluation for legacy proposals
+    transitions_dir = args.proposal.parent / "transitions"
+    evaluation = derive_proposal_evaluation_from_events(proposal.proposal_id, transitions_dir)
+    if not evaluation:
+        # Fall back to embedded promotion_evaluation for backward compatibility with legacy proposals
+        evaluation = proposal.promotion_evaluation
     if not evaluation:
         print("Proposal must be replayed and evaluated before promotion.", file=sys.stderr)
         return 1

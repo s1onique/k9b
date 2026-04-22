@@ -22,10 +22,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..identity.artifact import new_artifact_id
 from .adaptation import ProposalLifecycleStatus
+
+if TYPE_CHECKING:
+    from .adaptation import ProposalEvaluation
 
 
 def _now_iso() -> str:
@@ -174,3 +177,56 @@ def derive_current_proposal_status(
                     pass
 
     return ProposalLifecycleStatus.PENDING
+
+
+def derive_proposal_evaluation_from_events(
+    proposal_id: str,
+    transitions_dir: Path | None,
+) -> ProposalEvaluation | None:
+    """Derive the latest usable proposal evaluation from lifecycle event artifacts.
+
+    When proposals are checked, the evaluation data is stored in the check event's
+    provenance. This helper retrieves the latest evaluation from check-related events.
+
+    Args:
+        proposal_id: The proposal identifier to look up.
+        transitions_dir: Directory containing transition artifacts.
+
+    Returns:
+        A ProposalEvaluation parsed from the latest check event's provenance,
+        or None if no evaluation data is found.
+    """
+    # Import here to avoid circular dependency at runtime
+    from .adaptation import ProposalEvaluation
+
+    if not transitions_dir or not transitions_dir.is_dir():
+        return None
+
+    # Look for check transition events (they contain evaluation data)
+    pattern = f"{proposal_id}-check-*.json"
+    candidates: list[tuple[datetime, ProposalEvaluation]] = []
+
+    for path in sorted(transitions_dir.glob(pattern)):
+        try:
+            import json
+
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            event = ProposalLifecycleEvent.from_dict(raw)
+
+            # Extract evaluation from provenance
+            provenance = event.provenance
+            if provenance and isinstance(provenance, Mapping):
+                eval_raw = provenance.get("evaluation")
+                if eval_raw and isinstance(eval_raw, Mapping):
+                    evaluation = ProposalEvaluation.from_dict(eval_raw)
+                    created = datetime.fromisoformat(event.created_at)
+                    candidates.append((created, evaluation))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+
+    if not candidates:
+        return None
+
+    # Sort by timestamp descending, return the latest evaluation
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]

@@ -14,6 +14,7 @@ from k8s_diag_agent.health.adaptation import (
 from k8s_diag_agent.health.proposal_lifecycle_events import (
     ProposalLifecycleEvent,
     derive_current_proposal_status,
+    derive_proposal_evaluation_from_events,
     write_proposal_lifecycle_event,
 )
 
@@ -527,6 +528,200 @@ class UISerializationPreferTransitionsTests(unittest.TestCase):
 
         self.assertEqual(counts_map.get("checked", 0), 1)
         self.assertEqual(counts_map.get("pending", 0), 1)
+
+
+class DeriveProposalEvaluationTests(unittest.TestCase):
+    """Tests for proposal evaluation derivation from lifecycle events.
+
+    Under the immutable lifecycle model, check events store evaluation data
+    in provenance. Promotion must derive evaluation from events first, then
+    fall back to embedded promotion_evaluation for legacy proposals.
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.root = Path(self.tmpdir.name)
+        self.transitions_dir = self.root / "transitions"
+        self.transitions_dir.mkdir()
+
+    def _write_check_event_with_evaluation(
+        self,
+        proposal_id: str,
+        artifact_id: str,
+        created_at: str,
+        evaluation: dict[str, str],
+    ) -> None:
+        """Write a check event with evaluation in provenance."""
+        data = {
+            "artifact_id": artifact_id,
+            "proposal_id": proposal_id,
+            "status": "checked",
+            "transition": "check",
+            "created_at": created_at,
+            "provenance": {
+                "artifact_path": f"/proposals/{proposal_id}.json",
+                "fixture_path": "/fixtures/test.json",
+                "evaluation": evaluation,
+            },
+        }
+        filename = f"{proposal_id}-check-{artifact_id}.json"
+        (self.transitions_dir / filename).write_text(json.dumps(data), encoding="utf-8")
+
+    def test_derives_evaluation_from_check_event_provenance(self) -> None:
+        """Verify evaluation can be extracted from check event provenance."""
+        eval_data = {
+            "proposal_id": "eval-test-1",
+            "noise_reduction": "Likely 50% noise reduction",
+            "signal_loss": "Low signal loss",
+            "test_outcome": "Fixture evaluation passed",
+        }
+        self._write_check_event_with_evaluation(
+            "eval-test-1",
+            "artifact-001",
+            "2026-04-07T10:00:00+00:00",
+            eval_data,
+        )
+
+        result = derive_proposal_evaluation_from_events("eval-test-1", self.transitions_dir)
+
+        self.assertIsNotNone(result)
+        assert result is not None  # for type checker
+        self.assertEqual(result.noise_reduction, "Likely 50% noise reduction")
+        self.assertEqual(result.signal_loss, "Low signal loss")
+        self.assertEqual(result.test_outcome, "Fixture evaluation passed")
+
+    def test_returns_none_when_no_events_exist(self) -> None:
+        """Verify None is returned when no transition events exist."""
+        result = derive_proposal_evaluation_from_events("no-events", self.transitions_dir)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_transitions_dir_is_none(self) -> None:
+        """Verify backward compatibility: returns None when transitions_dir is None."""
+        result = derive_proposal_evaluation_from_events("no-dir", None)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_no_evaluation_in_provenance(self) -> None:
+        """Verify None is returned when events exist but have no evaluation."""
+        data = {
+            "artifact_id": "no-eval-001",
+            "proposal_id": "no-eval",
+            "status": "checked",
+            "transition": "check",
+            "created_at": "2026-04-07T10:00:00+00:00",
+            "provenance": {"artifact_path": "/test.json"},
+        }
+        (self.transitions_dir / "no-eval-check-no-eval-001.json").write_text(
+            json.dumps(data), encoding="utf-8"
+        )
+
+        result = derive_proposal_evaluation_from_events("no-eval", self.transitions_dir)
+        self.assertIsNone(result)
+
+    def test_prefers_latest_check_event(self) -> None:
+        """Verify that when multiple check events exist, the latest is used."""
+        # Write earlier check event
+        eval_earlier = {
+            "proposal_id": "eval-latest",
+            "noise_reduction": "Earlier evaluation",
+            "signal_loss": "Earlier loss",
+            "test_outcome": "Earlier test",
+        }
+        self._write_check_event_with_evaluation(
+            "eval-latest",
+            "earlier-001",
+            "2026-04-07T09:00:00+00:00",
+            eval_earlier,
+        )
+
+        # Write later check event
+        eval_later = {
+            "proposal_id": "eval-latest",
+            "noise_reduction": "Later evaluation - 70%",
+            "signal_loss": "Later loss - low",
+            "test_outcome": "Later test - passed",
+        }
+        self._write_check_event_with_evaluation(
+            "eval-latest",
+            "later-002",
+            "2026-04-07T11:00:00+00:00",
+            eval_later,
+        )
+
+        result = derive_proposal_evaluation_from_events("eval-latest", self.transitions_dir)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.noise_reduction, "Later evaluation - 70%")
+        self.assertEqual(result.test_outcome, "Later test - passed")
+
+    def test_ignores_promote_events_for_evaluation(self) -> None:
+        """Verify that promote events (which have no evaluation) are not used."""
+        # Write check event with evaluation
+        eval_data = {
+            "proposal_id": "check-only",
+            "noise_reduction": "Check evaluation",
+            "signal_loss": "Check loss",
+            "test_outcome": "Check test",
+        }
+        self._write_check_event_with_evaluation(
+            "check-only",
+            "check-001",
+            "2026-04-07T09:00:00+00:00",
+            eval_data,
+        )
+
+        # Write promote event (no evaluation)
+        promote_data = {
+            "artifact_id": "promote-001",
+            "proposal_id": "check-only",
+            "status": "accepted",
+            "transition": "promote",
+            "created_at": "2026-04-07T12:00:00+00:00",
+            "provenance": {"patch_path": "/patches/test.patch"},
+        }
+        (self.transitions_dir / "check-only-promote-promote-001.json").write_text(
+            json.dumps(promote_data), encoding="utf-8"
+        )
+
+        result = derive_proposal_evaluation_from_events("check-only", self.transitions_dir)
+
+        # Should still get evaluation from check event, not promote
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.noise_reduction, "Check evaluation")
+
+    def test_evaluation_roundtrip_through_event_provenance(self) -> None:
+        """Verify evaluation stored in check event provenance can be read back."""
+        original_eval = {
+            "proposal_id": "roundtrip-test",
+            "noise_reduction": "Roundtrip noise reduction",
+            "signal_loss": "Roundtrip signal loss",
+            "test_outcome": "Roundtrip test outcome",
+        }
+        self._write_check_event_with_evaluation(
+            "roundtrip-test",
+            "roundtrip-001",
+            "2026-04-07T10:00:00+00:00",
+            original_eval,
+        )
+
+        # Read back the event
+        event_path = self.transitions_dir / "roundtrip-test-check-roundtrip-001.json"
+        raw = json.loads(event_path.read_text(encoding="utf-8"))
+        restored_event = ProposalLifecycleEvent.from_dict(raw)
+
+        # Verify provenance contains evaluation
+        assert restored_event.provenance is not None
+        eval_raw = restored_event.provenance.get("evaluation")
+        self.assertIsNotNone(eval_raw)
+
+        # Derive evaluation
+        result = derive_proposal_evaluation_from_events("roundtrip-test", self.transitions_dir)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.noise_reduction, "Roundtrip noise reduction")
 
 
 if __name__ == "__main__":
