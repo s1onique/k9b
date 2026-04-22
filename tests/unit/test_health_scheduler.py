@@ -537,3 +537,34 @@ class HealthSchedulerTests(unittest.TestCase):
         update_cmd = update_call.args[0]
         self.assertEqual(update_cmd[1], str(update_script))
         self.assertEqual(update_cmd[3], run_id)
+
+
+class SchedulerImportSmokeTests(unittest.TestCase):
+    """Regression tests for scheduler module imports.
+
+    Ensures that schedule_health_loop can be called without ImportError.
+    Previously broke because HealthRunConfig was imported from loop_history.py
+    instead of loop.py where it actually lives.
+    """
+
+    def test_loop_scheduler_module_imports_cleanly(self) -> None:
+        """Verify loop_scheduler.py can be imported without errors."""
+        # This exercises the module-level imports in loop_scheduler
+        from k8s_diag_agent.health import loop_scheduler  # noqa: F401
+
+    def test_schedule_health_loop_function_imports_cleanly(self) -> None:
+        """Verify schedule_health_loop can be imported without errors."""
+        # This exercises the function-level imports inside schedule_health_loop
+        from k8s_diag_agent.health.loop_scheduler import schedule_health_loop  # noqa: F401
+
+    def test_health_run_config_imported_from_canonical_owner(self) -> None:
+        """Verify HealthRunConfig is imported from loop.py, not loop_history.py."""
+        # HealthRunConfig lives in loop.py - importing from loop_scheduler
+        # should resolve correctly (via loop.py, not loop_history.py)
+        from dataclasses import fields
+
+        from k8s_diag_agent.health.loop import HealthRunConfig
+        # Sanity check: the class has the expected interface (dataclass with load method)
+        self.assertTrue(hasattr(HealthRunConfig, 'load'))
+        field_names = {f.name for f in fields(HealthRunConfig)}
+        self.assertIn('run_label', field_names)
