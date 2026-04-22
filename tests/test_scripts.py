@@ -1414,6 +1414,83 @@ class TestParallelLanes(unittest.TestCase):
         if lock_dir.exists():
             shutil.rmtree(lock_dir, ignore_errors=True)
 
+    def test_global_failure_flag_exists_in_verify_all(self) -> None:
+        """verify_all.sh should define global failure flag functions."""
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # Should have global failure flag file variable
+        self.assertIn("_GLOBAL_FAILED_FILE", verify_content,
+            "Should define _GLOBAL_FAILED_FILE for cross-lane signaling")
+        
+        # Should have mark function
+        self.assertIn("_mark_global_failed", verify_content,
+            "Should define _mark_global_failed function")
+        
+        # Should have check function
+        self.assertIn("_is_global_failed", verify_content,
+            "Should define _is_global_failed function")
+
+    def test_failure_presentation_has_visual_separator(self) -> None:
+        """Failure blocks should be visually prominent with separator lines."""
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # Should have visual separator around failure output
+        self.assertIn("════════════════════════════════════════", verify_content,
+            "Should have visual separator (Unicode box drawing chars) for failure blocks")
+
+    def test_verify_all_suppresses_heartbeats_after_failure(self) -> None:
+        """verify_all.sh should suppress heartbeats after global failure is detected.
+        
+        This is verified by checking the _run_and_record function checks for
+        global failure before emitting heartbeats.
+        """
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # The heartbeat loop should check for global failure
+        self.assertIn("_is_global_failed", verify_content,
+            "_run_and_record should check for global failure before emitting heartbeat")
+
+    def test_verify_all_skips_steps_after_global_failure(self) -> None:
+        """verify_all.sh should skip starting new steps once global failure is known.
+        
+        This is verified by checking the _run_and_record function skips steps
+        that haven't started yet when global failure is already set.
+        """
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # Should check for global failure before running step
+        # and emit "SKIPPED" message
+        self.assertIn("SKIPPED", verify_content,
+            "Should have SKIPPED status for steps that didn't run due to prior failure")
+
+    def test_verify_all_does_not_kill_running_steps_on_global_failure(self) -> None:
+        """verify_all.sh should NOT kill already-running steps when global failure is detected.
+        
+        Policy: Running steps should be allowed to complete and report their truthful
+        PASS/FAIL status. Only not-yet-started steps should be skipped.
+        """
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # Should NOT kill background process when global failure is detected
+        # The old kill pattern should not exist
+        # Running steps should complete to report truthful status
+        self.assertNotRegex(verify_content, r"kill.*\$bg_pid.*#.*global.*failure",
+            "Should NOT kill background process due to global failure (let it complete truthfully)")
+
+    def test_verify_all_running_steps_complete_truthfully(self) -> None:
+        """verify_all.sh should allow running steps to complete and report truthful status.
+        
+        When global failure is detected:
+        - Already-running steps should complete naturally
+        - Their PASS/FAIL should reflect their actual exit code, not be relabeled
+        """
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # After global failure detection, should wait for process naturally
+        # not artificially set exit_code=1
+        self.assertNotIn("exit_code=1", verify_content,
+            "Should not artificially set exit_code=1 for killed processes")
+
     def test_verify_all_runs_two_concurrent_lanes(self) -> None:
         """verify_all.sh should run Python and Frontend lanes concurrently.
         

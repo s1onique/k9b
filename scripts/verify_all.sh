@@ -147,8 +147,27 @@ fi
 # Shared state file for tracking lane results
 _LANE_STATE_FILE="$REPO_ROOT/runs/verification/${_RUN_TIMESTAMP}-lane-state.json"
 
+# Global failure flag file - created when any step fails across both lanes
+# This enables early termination signaling to other running steps
+_GLOBAL_FAILED_FILE="$REPO_ROOT/runs/verification/${_RUN_TIMESTAMP}-global-failed.flag"
+
 # Initialize lane state
 echo '{"python": [], "frontend": []}' > "$_LANE_STATE_FILE"
+
+# Initialize global failure flag as not existing
+unset _GLOBAL_FAILED_SET
+
+# Function to mark global failure immediately
+_mark_global_failed() {
+    # Touch the flag file - this is the signal for other lanes
+    touch "$_GLOBAL_FAILED_FILE" 2>/dev/null || true
+    _GLOBAL_FAILED_SET=true
+}
+
+# Function to check if global failure has been marked
+_is_global_failed() {
+    [[ -f "$_GLOBAL_FAILED_FILE" ]] && return 0 || return 1
+}
 
 # Function to record step result in lane state
 _record_step_result() {
@@ -158,6 +177,11 @@ _record_step_result() {
     local duration_ms="$4"
     local exit_code="$5"
     local log_file="${STEP_LOG_DIR}/${_RUN_TIMESTAMP}-${step_id}.log"
+    
+    # If this step failed, mark global failure immediately
+    if [[ "$result" == "FAIL" ]]; then
+        _mark_global_failed
+    fi
     
     # Append to lane state file (simple JSON array append simulation)
     local tmp_file="${_LANE_STATE_FILE}.tmp"
@@ -199,6 +223,19 @@ _run_and_record() {
     local start_time end_time duration_ms exit_code
     start_time=$(date +%s)
     
+    # Check for global failure before starting the step
+    # If another lane has already failed, skip this step to avoid noise
+    if _is_global_failed; then
+        # Mark this step as skipped (no actual run)
+        duration_ms=0
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] SKIPPED (already failed) - $message"
+        fi
+        _record_step_result "$lane" "$step_id" "SKIP" "$duration_ms" "0"
+        _STEP_RESULTS["$step_id"]="SKIP|${duration_ms}|0"
+        return 0
+    fi
+    
     if [[ -z "${STEP_JSON_MODE:-}" ]] && [[ -z "${STEP_VERBOSE:-}" ]] && _step_needs_hint "$step_id"; then
         _step_emit_hint "$step_id" "$log_file"
     fi
@@ -212,6 +249,17 @@ _run_and_record() {
     
     while kill -0 "$bg_pid" 2>/dev/null; do
         sleep "$poll_interval"
+        
+        # Check for global failure - suppress heartbeats after first failure
+        # DO NOT kill running steps - let them complete truthfully
+        # Only prevent unnecessary work by skipping future not-yet-started steps
+        if _is_global_failed; then
+            # Global failure detected - stop emitting heartbeats
+            # But let the step finish naturally to get truthful PASS/FAIL
+            # Just break out of heartbeat loop without killing the process
+            break
+        fi
+        
         local current_time=$(date +%s)
         local elapsed=$(( current_time - start_time ))
         local remainder=$(( elapsed % STEP_HEARTBEAT_INTERVAL ))
@@ -220,6 +268,9 @@ _run_and_record() {
         fi
     done
     
+    # Wait for subprocess to finish and capture exit code
+    # This step may have been running when global failure occurred, but it should
+    # complete naturally to report its truthful PASS/FAIL status
     wait "$bg_pid"
     exit_code=$?
     
@@ -232,8 +283,13 @@ _run_and_record() {
         result="FAIL"
         _STEP_FAILED=true
         if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            # Add visual separator before failure block for prominence
+            echo "" >&2
+            echo "═══════════════════════════════════════════════════════════" >&2
             echo "[$step_id] FAIL (${duration_fmt}) - $message" >&2
             _step_print_failure_info "$step_id" "$exit_code" "$log_file" "$duration_fmt"
+            echo "═══════════════════════════════════════════════════════════" >&2
+            echo "" >&2
         fi
     else
         if [[ -z "${STEP_JSON_MODE:-}" ]]; then
