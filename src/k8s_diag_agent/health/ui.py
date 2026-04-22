@@ -35,6 +35,23 @@ from .ui_next_check_execution import (
     _determine_execution_state,
     _latest_outcome_artifact,
 )
+from .ui_serialization import (  # noqa: F401  # re-exported for tests
+    _ANALYSIS_STATUS_ORDER,
+    _LLM_ACTIVITY_LIMIT,
+    _NOTIFICATION_HISTORY_LIMIT,
+    _PROPOSAL_STATUS_ORDER,
+    _RATING_ORDER,
+    _serialize_assessment,  # noqa: F401  # re-exported for tests
+    _serialize_cluster,
+    _serialize_drilldown,
+    _serialize_drilldown_availability,
+    _serialize_fleet_status,
+    _serialize_latest_assessment,
+    _serialize_notification_history,
+    _serialize_proposal,
+    _serialize_proposal_status_summary,
+    _stringify_notification_value,  # noqa: F401  # re-exported for tests
+)
 from .ui_shared import _relative_path
 
 # Re-export: required by test_health_ui.py
@@ -68,89 +85,6 @@ if TYPE_CHECKING:
 
 # Directory name for stable "latest" diagnostic pack mirror files
 LATEST_PACK_DIR_NAME = "latest"
-
-
-def _serialize_cluster(
-    record: HealthSnapshotRecord,
-    assessment_map: Mapping[str, HealthAssessmentArtifact | None],
-    drilldown_map: Mapping[str, DrilldownArtifact],
-    root_dir: Path,
-) -> dict[str, object]:
-    assessment = assessment_map.get(record.target.label)
-    warning_events = len(record.snapshot.health_signals.warning_events)
-    pod_counts = record.snapshot.health_signals.pod_counts
-    snapshot_path = _relative_path(root_dir, record.path)
-    assessment_path = _relative_path(root_dir, assessment.artifact_path if assessment else None)
-    drilldown = drilldown_map.get(record.target.label)
-    if drilldown:
-        drilldown_path = _relative_path(root_dir, drilldown.artifact_path)
-        drilldown_timestamp = drilldown.timestamp.isoformat()
-        trigger_reason = drilldown.trigger_reasons[0] if drilldown.trigger_reasons else None
-    else:
-        drilldown_path = None
-        drilldown_timestamp = None
-        trigger_reason = None
-    return {
-        "label": record.target.label,
-        "context": record.target.context,
-        "cluster_class": record.target.cluster_class,
-        "cluster_role": record.target.cluster_role,
-        "health_rating": assessment.health_rating.value if assessment else "unknown",
-        "warnings": warning_events,
-        "non_running_pods": pod_counts.non_running,
-        "node_count": record.snapshot.metadata.node_count,
-        "control_plane_version": record.snapshot.metadata.control_plane_version or "unknown",
-        "baseline_cohort": record.target.baseline_cohort,
-        "baseline_policy_path": record.baseline_policy_path,
-        "missing_evidence": list(assessment.missing_evidence) if assessment else [],
-        "latest_run_timestamp": record.snapshot.metadata.captured_at.isoformat(),
-        "top_trigger_reason": trigger_reason,
-        "artifact_paths": {
-            "snapshot": snapshot_path,
-            "assessment": assessment_path,
-            "drilldown": drilldown_path,
-        },
-        "drilldown_available": bool(drilldown),
-        "drilldown_timestamp": drilldown_timestamp,
-    }
-
-
-def _serialize_drilldown(artifact: DrilldownArtifact, root_dir: Path) -> dict[str, object]:
-    pod_entries = [pod.to_dict() for pod in artifact.non_running_pods]
-    rollout_entries = [entry.to_dict() for entry in artifact.rollout_status]
-    return {
-        "label": artifact.label,
-        "context": artifact.context,
-        "cluster_id": artifact.cluster_id,
-        "trigger_reasons": list(artifact.trigger_reasons),
-        "missing_evidence": list(artifact.missing_evidence),
-        "warning_events": len(artifact.warning_events),
-        "non_running_pods": pod_entries,
-        "summary": artifact.evidence_summary,
-        "rollout_status": rollout_entries,
-        "pattern_details": artifact.pattern_details,
-        "artifact_path": _relative_path(root_dir, artifact.artifact_path),
-    }
-
-
-def _serialize_proposal(proposal: HealthProposal, root_dir: Path) -> dict[str, object]:
-    latest_status = proposal.lifecycle_history[-1]
-    data: dict[str, object] = {
-        "proposal_id": proposal.proposal_id,
-        "target": proposal.target,
-        "confidence": proposal.confidence.value,
-        "rationale": proposal.rationale,
-        "expected_benefit": proposal.expected_benefit,
-        "status": latest_status.status.value,
-        "lifecycle_history": [entry.to_dict() for entry in proposal.lifecycle_history],
-        "source_run_id": proposal.source_run_id,
-        "artifact_path": _relative_path(root_dir, proposal.artifact_path),
-        "review_artifact": _relative_path(root_dir, proposal.source_artifact_path),
-    }
-    # Thread artifact_id for provenance/debugging surfaces (optional)
-    if proposal.artifact_id:
-        data["artifact_id"] = proposal.artifact_id
-    return data
 
 
 def _serialize_review_enrichment_policy(policy: ReviewEnrichmentPolicy) -> dict[str, object]:
@@ -324,20 +258,6 @@ def _latest_drilldown_map(drilldowns: Sequence[DrilldownArtifact]) -> dict[str, 
     return mapping
 
 
-_RATING_ORDER = ("degraded", "healthy", "unknown")
-_PROPOSAL_STATUS_ORDER = (
-    "pending",
-    "checked",
-    "accepted",
-    "rejected",
-    "applied",
-    "proposed",
-    "replayed",
-    "promoted",
-)
-_ANALYSIS_STATUS_ORDER = tuple(status.value for status in ExternalAnalysisStatus)
-_LLM_ACTIVITY_LIMIT = 20
-_NOTIFICATION_HISTORY_LIMIT = 20
 _NEXT_CHECK_EXECUTION_HISTORY_LIMIT = 5
 _NEXT_CHECK_QUEUE_STATUS_ORDER = (
     "approved-ready",
@@ -355,84 +275,6 @@ _NEXT_CHECK_QUEUE_PRIORITY_ORDER = {
 _QUEUE_STATUS_ORDER = {status: idx for idx, status in enumerate(_NEXT_CHECK_QUEUE_STATUS_ORDER)}
 _SCOPE_CURRENT_RUN = "current_run"
 _SCOPE_RETAINED_HISTORY = "retained_history"
-
-
-def _serialize_fleet_status(clusters: Sequence[dict[str, object]]) -> dict[str, object]:
-    counts: dict[str, int] = {}
-    degraded: list[str] = []
-    for cluster in clusters:
-        rating = str(cluster.get("health_rating") or "unknown").lower()
-        counts[rating] = counts.get(rating, 0) + 1
-        if rating == "degraded":
-            degraded.append(str(cluster.get("label")))
-    ordered: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for rating in _RATING_ORDER:
-        if rating in counts:
-            ordered.append({"rating": rating, "count": counts[rating]})
-            seen.add(rating)
-    for rating, count in sorted(counts.items()):
-        if rating in seen:
-            continue
-        ordered.append({"rating": rating, "count": count})
-    return {"rating_counts": ordered, "degraded_clusters": degraded}
-
-
-def _serialize_proposal_status_summary(proposals: Sequence[dict[str, object]]) -> dict[str, object]:
-    counts: dict[str, int] = {}
-    for proposal in proposals:
-        status = str(proposal.get("status") or "unknown").lower()
-        counts[status] = counts.get(status, 0) + 1
-    ordered: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for status in _PROPOSAL_STATUS_ORDER:
-        if status in counts:
-            ordered.append({"status": status, "count": counts[status]})
-            seen.add(status)
-    for status, count in sorted(counts.items()):
-        if status in seen:
-            continue
-        ordered.append({"status": status, "count": count})
-    return {"status_counts": ordered}
-
-
-def _serialize_drilldown_availability(
-    records: Sequence[HealthSnapshotRecord],
-    drilldown_map: Mapping[str, DrilldownArtifact],
-    root_dir: Path,
-) -> dict[str, object]:
-    coverage: list[dict[str, object]] = []
-    available = 0
-    missing_labels: list[str] = []
-    for record in sorted(records, key=lambda item: item.target.label):
-        artifact = drilldown_map.get(record.target.label)
-        if artifact:
-            available += 1
-            timestamp = artifact.timestamp.isoformat()
-            path = _relative_path(root_dir, artifact.artifact_path)
-            available_flag = True
-        else:
-            timestamp = None
-            path = None
-            missing_labels.append(record.target.label)
-            available_flag = False
-        coverage.append(
-            {
-                "label": record.target.label,
-                "context": record.target.context,
-                "available": available_flag,
-                "timestamp": timestamp,
-                "artifact_path": path,
-            }
-        )
-    total = len(records)
-    return {
-        "total_clusters": total,
-        "available": available,
-        "missing": max(total - available, 0),
-        "coverage": coverage,
-        "missing_clusters": missing_labels,
-    }
 
 
 def _serialize_external_analysis(
@@ -798,43 +640,19 @@ def _build_command_preview(description: object | None, target_context: str | Non
 
 
 def _derive_ranking_reason(entry: Mapping[str, object]) -> str | None:
-    """Derive a structured ranking-reason/provenance category.
-
-    Returns a compact machine-readable category that explains why a check
-    is in its current ranking position. This complements priorityRationale
-    (human-readable) with provenance metadata.
-
-    Returns one of:
-    - "duplicate": candidate is a duplicate of existing evidence
-    - "approval-gated": requires operator approval before execution
-    - "stale-approval": approval record is stale or orphaned
-    - "execution-gated": blocked by execution gating (blockingReason)
-    - "planner-gated": blocked by planner gating (gatingReason)
-    - "safety-gated": blocked by safety gating (safetyReason)
-    - "deterministic-secondary": secondary priority from deterministic checks
-    - "fallback": fallback priority candidate
-    - "already-executed": execution completed successfully
-    - "execution-failed": execution failed or timed out
-    - None: no structured ranking reason applies
-
-    This provides provenance metadata distinct from priorityRationale.
-    """
-    # 1. Duplicate
+    """Derive a structured ranking-reason/provenance category."""
     if bool(entry.get("duplicateOfExistingEvidence")):
         return "duplicate"
 
-    # 2. Stale or orphaned approval
     approval_state = str(entry.get("approvalState") or "").lower()
     if approval_state == "approval-stale":
         return "stale-approval"
     if approval_state == "approval-orphaned":
         return "stale-approval"
 
-    # 3. Approval required
     if bool(entry.get("requiresOperatorApproval")):
         return "approval-gated"
 
-    # 4. Blocked by gating reasons (checked in order of specificity)
     if entry.get("safetyReason"):
         return "safety-gated"
     if entry.get("blockingReason"):
@@ -842,14 +660,12 @@ def _derive_ranking_reason(entry: Mapping[str, object]) -> str | None:
     if entry.get("gatingReason"):
         return "planner-gated"
 
-    # 5. Execution state
     execution_state = str(entry.get("executionState") or "").lower()
     if execution_state == "executed-success":
         return "already-executed"
     if execution_state in ("executed-failed", "timed-out"):
         return "execution-failed"
 
-    # 6. Priority label
     priority_label = str(entry.get("priorityLabel") or "").lower()
     if priority_label == "secondary":
         return "deterministic-secondary"
@@ -860,39 +676,23 @@ def _derive_ranking_reason(entry: Mapping[str, object]) -> str | None:
 
 
 def _derive_priority_rationale(entry: Mapping[str, object]) -> str | None:
-    """Derive a compact operator-facing explanation for why an item is in its current state.
-
-    Precedence:
-    1. If original priorityRationale exists: preserve it (from planner/enrichment)
-    2. duplicate / already covered
-    3. approval required / stale approval
-    4. blocked by safety or normalization gating
-    5. completed / already executed
-    6. secondary / lower-priority follow-up
-    7. null if no meaningful rationale exists
-
-    This is presentation normalization, not a new policy layer.
-    """
-    # 0. Preserve original priorityRationale from planner/enrichment if present
+    """Derive a compact operator-facing explanation for why an item is in its current state."""
     original_priority_rationale = entry.get("priorityRationale")
     if isinstance(original_priority_rationale, str) and original_priority_rationale.strip():
         return original_priority_rationale.strip()
 
-    # 1. Duplicate / already covered
     if bool(entry.get("duplicateOfExistingEvidence")):
         dup_reason = entry.get("duplicateReason")
         if dup_reason:
             return "Already covered by existing evidence"
         return "Already covered by existing evidence"
 
-    # 2. Stale or orphaned approval
     approval_state = str(entry.get("approvalState") or "").lower()
     if approval_state == "approval-stale":
         return "Approval is stale"
     if approval_state == "approval-orphaned":
         return "Approval record orphaned"
 
-    # 3. Approval required
     requires_approval = bool(entry.get("requiresOperatorApproval"))
     if requires_approval:
         approval_reason = entry.get("approvalReason")
@@ -900,7 +700,6 @@ def _derive_priority_rationale(entry: Mapping[str, object]) -> str | None:
             return "Approval required before execution"
         return "Approval required before execution"
 
-    # 4. Blocked by safety or normalization gating
     safety_reason = entry.get("safetyReason")
     blocking_reason = entry.get("blockingReason")
     gating_reason = entry.get("gatingReason")
@@ -911,14 +710,12 @@ def _derive_priority_rationale(entry: Mapping[str, object]) -> str | None:
     if gating_reason:
         return "Blocked by planner gating"
 
-    # 5. Completed / already executed (checked before priority label)
     execution_state = str(entry.get("executionState") or "").lower()
     if execution_state == "executed-success":
         return "Already executed"
     if execution_state in ("executed-failed", "timed-out"):
         return "Execution failed"
 
-    # 6. Secondary / lower-priority follow-up
     priority_label = str(entry.get("priorityLabel") or "").lower()
     if priority_label == "secondary":
         return "Secondary follow-up"
@@ -966,9 +763,6 @@ def _build_next_check_queue(
         queue_entry["commandPreview"] = _build_command_preview(entry.get("description"), target_context)
         queue_entry["priorityRationale"] = _derive_priority_rationale(queue_entry)
         queue_entry["rankingReason"] = _derive_ranking_reason(queue_entry)
-        # Route demoted CRD checks to drift/parity workstream for visibility
-        # When a candidate is demoted due to early incident triage context,
-        # it should still be visible in drift-oriented workstream
         ranking_policy_reason = entry.get("rankingPolicyReason")
         if isinstance(ranking_policy_reason, str) and "crd-demoted-early-incident-triage" in ranking_policy_reason:
             queue_entry["workstream"] = "drift"
@@ -1289,6 +1083,7 @@ def _summarize_deterministic_checks(
         "deterministicClusterCount": deterministic_clusters,
         "drilldownReadyCount": drilldown_ready,
     }
+
 
 def _build_candidate_accounting(plan_entry: Mapping[str, object] | None) -> dict[str, int]:
     candidates = _pluck_plan_candidates(plan_entry)
@@ -1615,7 +1410,7 @@ def _build_auto_drilldown_execution(
         )
     elif unattempted:
         notes_parts.append(
-            f"{unattempted} eligible drilldown(s) were not processed by the provider log."  # noqa: E501
+            f"{unattempted} eligible drilldown(s) were not processed by the provider log."
         )
     notes = " ".join(notes_parts) if notes_parts else None
     return {
@@ -1764,7 +1559,7 @@ def _serialize_auto_drilldown_interpretations(
 def _parse_optional_int(value: object | None) -> int | None:
     if value is None:
         return None
-    if isinstance(value, (int,)):  # keep ints as is
+    if isinstance(value, (int,)):
         return int(value)
     if isinstance(value, float):
         return int(value)
@@ -1785,11 +1580,7 @@ def _coerce_sequence(value: object | None) -> tuple[str, ...]:
 
 
 def _parse_timestamp(value: object | None) -> datetime | None:
-    """Parse an ISO timestamp string to timezone-aware UTC datetime.
-
-    Uses centralized datetime_utils to ensure all parsed datetimes
-    are timezone-aware UTC for safe comparison operations.
-    """
+    """Parse an ISO timestamp string to timezone-aware UTC datetime."""
     return parse_iso_to_utc(value)
 
 
@@ -1899,56 +1690,6 @@ def _compute_llm_stats(entries: Sequence[object], scope: str) -> dict[str, objec
     }
 
 
-def _serialize_notification_history(
-    records: Sequence[NotificationRecord],
-    root_dir: Path,
-    limit: int = _NOTIFICATION_HISTORY_LIMIT,
-) -> list[dict[str, object]]:
-    entries: list[dict[str, object]] = []
-    sorted_records = sorted(records, key=lambda item: item[0].timestamp, reverse=True)
-    for artifact, path in sorted_records[:limit]:
-        detail_entries = [
-            {"label": str(key), "value": _stringify_notification_value(value)}
-            for key, value in sorted(artifact.details.items())
-        ]
-        entry: dict[str, object] = {
-            "kind": artifact.kind,
-            "summary": artifact.summary,
-            "timestamp": artifact.timestamp,
-            "run_id": artifact.run_id,
-            "cluster_label": artifact.cluster_label,
-            "context": artifact.context,
-            "details": detail_entries,
-            "artifact_path": _relative_path(root_dir, path),
-        }
-        # Thread artifact_id for provenance/debugging surfaces (optional)
-        if artifact.artifact_id:
-            entry["artifact_id"] = artifact.artifact_id
-        entries.append(entry)
-    return entries
-
-
-def _stringify_notification_value(value: object | None) -> str:
-    if value is None:
-        return "-"
-    if isinstance(value, str):
-        return value
-    try:
-        return json.dumps(value, ensure_ascii=False)
-    except TypeError:
-        return str(value)
-
-
-def _serialize_latest_assessment(
-    assessments: Sequence[HealthAssessmentArtifact],
-    root_dir: Path,
-) -> dict[str, object] | None:
-    if not assessments:
-        return None
-    latest = max(assessments, key=lambda artifact: artifact.timestamp)
-    return _serialize_assessment(latest, root_dir)
-
-
 _RUN_ID_TIMESTAMP_PATTERN = re.compile(r"(\d{8}T\d{6}Z)$")
 
 
@@ -2030,31 +1771,12 @@ def _percentile_value(values: list[float], percentile: float) -> int:
     return int(values[idx])
 
 
-def _serialize_assessment(artifact: HealthAssessmentArtifact, root_dir: Path) -> dict[str, object]:
-    data: dict[str, object] = dict(artifact.assessment or {})
-    data.update(
-        {
-            "cluster_label": artifact.label,
-            "context": artifact.context,
-            "timestamp": artifact.timestamp.isoformat(),
-            "health_rating": artifact.health_rating.value,
-            "missing_evidence": list(artifact.missing_evidence),
-            "artifact_path": _relative_path(root_dir, artifact.artifact_path),
-            "snapshot_path": _relative_path(root_dir, artifact.snapshot_path),
-        }
-    )
-    return data
-
-
 def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, object] | None:
-    """Read and serialize Alertmanager compact artifact for UI.
-    
-    Returns None if the artifact is not available or cannot be read.
-    """
+    """Read and serialize Alertmanager compact artifact for UI."""
     compact = read_alertmanager_compact(output_dir / f"{run_id}-alertmanager-compact.json")
     if compact is None:
         return None
-    
+
     # Build by_cluster summaries
     by_cluster: list[dict[str, Any]] = []
     for summary in compact.by_cluster:
@@ -2067,7 +1789,7 @@ def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, 
             "affected_namespaces": list(summary.affected_namespaces),
             "affected_services": list(summary.affected_services),
         })
-    
+
     return {
         "status": compact.status,
         "alert_count": compact.alert_count,
@@ -2084,48 +1806,34 @@ def _serialize_alertmanager_compact(output_dir: Path, run_id: str) -> dict[str, 
 
 
 def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, object] | None:
-    """Read and serialize Alertmanager sources inventory artifact for UI.
-    
-    This function applies operator overrides (promote/disable) to the source
-    inventory before serialization. It reads both run-scoped overrides AND the
-    durable cross-run registry to ensure promoted sources persist across runs.
-    
-    UI-derived fields (is_manual, is_tracking, can_disable, can_promote,
-    display_origin, display_state, provenance_summary, and aggregate counts)
-    are computed by _build_alertmanager_sources_view() in ui/model.py.
-    
-    Returns None if the artifact is not available or cannot be read.
-    """
+    """Read and serialize Alertmanager sources inventory artifact for UI."""
     inventory = read_alertmanager_sources(output_dir / f"{run_id}-alertmanager-sources.json")
     if inventory is None:
         return None
-    
+
     # Load operator overrides and compute effective states (run-scoped)
     overrides_path = output_dir / f"{run_id}-alertmanager-source-overrides.json"
     overrides = read_source_overrides(overrides_path)
     effective_states: dict[str, str] = {}
     if overrides:
         effective_states = merge_source_overrides(overrides)
-    
+
     # Load the durable cross-run registry for promoted/disabled sources
-    # This ensures operator actions persist across runs
     from ..external_analysis.alertmanager_source_registry import (
         RegistryDesiredState,
         read_source_registry,
     )
     registry = read_source_registry(output_dir)
-    
+
     sources = []
     for source in inventory.sources.values():
         source_id = source.source_id
         cluster_context = source.cluster_context or "unknown"
-        
+
         # Apply run-scoped override effective state if present
         effective_state = effective_states.get(source_id)
-        
-        # Track whether this source was promoted via registry (not just effective_state)
-        # Registry entries are keyed by the canonical key (preferring cluster_label over cluster_context)
-        # See: build_canonical_registry_key() in alertmanager_source_registry.py
+
+        # Track whether this source was promoted via registry
         promoted_via_registry = False
         if registry:
             from ..external_analysis.alertmanager_source_registry import build_canonical_registry_key
@@ -2137,16 +1845,12 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             entry = registry.entries.get(registry_key)
             if entry:
                 if entry.desired_state == RegistryDesiredState.MANUAL:
-                    # Source was promoted by operator - apply promoted state
-                    # effective_state takes precedence if set, otherwise use registry state
                     if not effective_state:
                         effective_state = "manual"
-                    # Mark as promoted via registry (not run-scoped override)
                     promoted_via_registry = True
                 elif entry.desired_state == RegistryDesiredState.DISABLED:
-                    # Source was disabled by operator - skip it
                     continue
-        
+
         source_data = {
             "source_id": source_id,
             "endpoint": source.endpoint,
@@ -2160,31 +1864,21 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             "last_error": source.last_error,
             "verified_version": source.verified_version,
             "confidence_hints": list(source.confidence_hints),
-            # Include canonical_identity for cross-run registry matching
-            # This is the stable identity used by the UI server when writing registry entries
             "canonical_identity": source.canonical_identity,
-            # Include cluster_label for per-cluster UI filtering
-            # This is the operator-facing cluster label from the discovery context
             "cluster_label": source.cluster_label,
             "cluster_context": source.cluster_context,
         }
-        
-        # Include manual_source_mode if present (backward compatible)
-        # For promoted sources from registry, set manual_source_mode to operator-promoted
-        # Only label as promoted if this specific source matched a registry entry
+
         if source.manual_source_mode.value != "not-manual":
             source_data["manual_source_mode"] = source.manual_source_mode.value
         elif promoted_via_registry:
-            # Source was promoted via registry (not run-scoped override)
-            # Set manual_source_mode to indicate promoted
             source_data["manual_source_mode"] = "operator-promoted"
-        
-        # Apply effective state override if present (e.g., "disabled" or "manual")
+
         if effective_state:
             source_data["effective_state"] = effective_state
-        
+
         sources.append(source_data)
-    
+
     return {
         "sources": sources,
         "total_count": len(sources),
