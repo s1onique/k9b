@@ -25,7 +25,9 @@
 #   - Success: VERIFICATION GATE: PASSED
 #   - Failure: step name, exit code, log excerpt, log path
 #   - JSON mode: pure JSON summary on stdout (no progress output)
-#   - Scoped runs: only intended steps run; other lane is skipped
+#   - Scoped runs: only intended lane's steps run; other lane is not referenced
+#   - Parallel full-gate: steps in the non-failed lane continue; steps that haven't
+#     started when a failure is detected show as SKIP
 #
 # JSON mode output contract (--json flag):
 #   - stdout: valid JSON only (no compact progress lines, no VERIFICATION GATE text)
@@ -71,6 +73,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --frontend-only   Run only Frontend lane steps"
             echo ""
             echo "Without scope flags, runs all steps (full gate)."
+            echo ""
+            echo "Environment variables:"
+            echo "  STEP_VERBOSE=1    Stream full step output to console"
             exit 0
             ;;
         *)
