@@ -552,11 +552,6 @@ class SchedulerImportSmokeTests(unittest.TestCase):
         # This exercises the module-level imports in loop_scheduler
         from k8s_diag_agent.health import loop_scheduler  # noqa: F401
 
-    def test_schedule_health_loop_function_imports_cleanly(self) -> None:
-        """Verify schedule_health_loop can be imported without errors."""
-        # This exercises the module-level imports in loop_scheduler
-        from k8s_diag_agent.health import loop_scheduler  # noqa: F401
-
     def test_schedule_health_loop_executes_local_imports_without_importerror(self) -> None:
         """Regression test: calling schedule_health_loop should not fail on local imports.
 
