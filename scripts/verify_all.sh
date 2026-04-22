@@ -28,6 +28,53 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/step_runner.sh
 source "$SCRIPT_DIR/step_runner.sh"
 
+# ---------------------------------------------------------------------------
+# Recursion protection
+# ---------------------------------------------------------------------------
+
+if [[ -n "${VERIFY_ALL_ACTIVE:-}" ]]; then
+    echo "ERROR: verify_all.sh recursion detected." >&2
+    echo "VERIFY_ALL_ACTIVE is already set (value: $VERIFY_ALL_ACTIVE)." >&2
+    echo "Do not invoke verify_all.sh from within a verify_all context." >&2
+    exit 2
+fi
+export VERIFY_ALL_ACTIVE=1
+
+# ---------------------------------------------------------------------------
+# Single-instance lock
+# ---------------------------------------------------------------------------
+
+_LOCK_DIR="$REPO_ROOT/.verify_lock"
+_LOCK_FILE="$_LOCK_DIR/pid"
+
+_acquire_lock() {
+    mkdir -p "$_LOCK_DIR" 2>/dev/null || {
+        echo "ERROR: Cannot create lock directory '$_LOCK_DIR'." >&2
+        exit 3
+    }
+    
+    if [[ -f "$_LOCK_FILE" ]]; then
+        local pid
+        pid=$(cat "$_LOCK_FILE" 2>/dev/null)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            echo "ERROR: Another verification run is active (PID: $pid)." >&2
+            echo "Wait for it to complete or kill it before running again." >&2
+            exit 4
+        fi
+        # Stale lock - remove it
+        rm -f "$_LOCK_FILE"
+    fi
+    
+    echo $$ > "$_LOCK_FILE"
+}
+
+_release_lock() {
+    rm -f "$_LOCK_FILE"
+}
+
+_acquire_lock
+trap _release_lock EXIT
+
 # Ensure verification output directory exists
 mkdir -p "$REPO_ROOT/runs/verification"
 
@@ -53,7 +100,7 @@ fi
 # ---------------------------------------------------------------------------
 
 step_run_continue "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
-step_run_continue "unit-tests" "Running unit tests" "$PYTHON" -m unittest discover tests
+step_run_continue "unit-tests" "Running unit tests" env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests
 step_run_continue "mypy" "Running mypy" "$PYTHON" -m mypy src tests
 
 # Frontend steps (use pushd/popd to stay in same shell context)

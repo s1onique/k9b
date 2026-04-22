@@ -83,7 +83,7 @@ class TestStepRunner(unittest.TestCase):
         self.assertIn("[test-pass] PASS", output)
         self.assertIn("Test pass step", output)
         # Should be exactly one result line (not two - no separate header)
-        lines = [l for l in output.strip().split('\n') if 'test-pass' in l]
+        lines = [ln for ln in output.strip().split('\n') if 'test-pass' in ln]
         self.assertEqual(len(lines), 1, "Compact mode should emit exactly one result line per step")
 
     def test_step_runner_failure_includes_log_excerpt(self) -> None:
@@ -504,6 +504,140 @@ class TestStepRunnerOutputContracts(unittest.TestCase):
         self.assertIn("Failure excerpt", stderr)
         self.assertIn("LOG FILE:", stderr)
         self.assertIn("EXIT CODE:", stderr)
+
+
+class TestVerifyAllRecursionAndLock(unittest.TestCase):
+    """Test recursion protection, lock mechanism, and integration test blocking."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    VERIFY_ALL = REPO_ROOT / "scripts" / "verify_all.sh"
+    STEP_RUNNER = REPO_ROOT / "scripts" / "step_runner.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.VERIFY_ALL.exists():
+            self.skipTest("verify_all.sh not found")
+        os.chmod(self.VERIFY_ALL, 0o755)
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_verify_all_")
+        self._log_dir = os.path.join(self._tmp_dir, "logs")
+        self._data_dir = os.path.join(self._tmp_dir, "data")
+        os.makedirs(self._log_dir, exist_ok=True)
+        os.makedirs(self._data_dir, exist_ok=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+        # Clean up lock directory if it was created
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        if lock_dir.exists():
+            shutil.rmtree(lock_dir, ignore_errors=True)
+
+    def test_verify_all_rejects_recursive_invocation(self) -> None:
+        """verify_all.sh should reject recursive invocation with VERIFY_ALL_ACTIVE set."""
+        env = os.environ.copy()
+        env["VERIFY_ALL_ACTIVE"] = "1"
+        result = subprocess.run(
+            [str(self.VERIFY_ALL)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            cwd=self.REPO_ROOT,
+        )
+
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, "Recursive invocation should fail")
+        self.assertIn("recursion detected", output.lower())
+
+    def test_verify_all_unit_tests_blocked_under_verify_context(self) -> None:
+        """Unittest step should block RUN_FULL_VERIFY_TEST when VERIFY_ALL_ACTIVE is set."""
+        # Verify that unittest step sets VERIFY_ALL_ACTIVE and clears RUN_FULL_VERIFY_TEST
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # Find the unit-tests step_run_continue line
+        import re
+        unit_tests_pattern = r'step_run_continue\s+"unit-tests".*?env\s+.*?VERIFY_ALL_ACTIVE=1'
+        self.assertRegex(verify_content, unit_tests_pattern,
+            "unit-tests step should pass VERIFY_ALL_ACTIVE=1 to env")
+        
+        # Verify RUN_FULL_VERIFY_TEST is cleared (set to empty or not passed)
+        unit_tests_line_pattern = r'step_run_continue\s+"unit-tests"[^;]+'
+        match = re.search(unit_tests_line_pattern, verify_content)
+        self.assertIsNotNone(match, "Should find unit-tests step line")
+        # mypy needs us to assert again for type narrowing
+        assert match is not None
+        line = match.group(0)
+        # Should have RUN_FULL_VERIFY_TEST= with nothing after it (clearing it)
+        self.assertIn("RUN_FULL_VERIFY_TEST=", line,
+            "unit-tests step should clear RUN_FULL_VERIFY_TEST")
+
+    def test_verify_all_concurrent_launch_rejected(self) -> None:
+        """Second concurrent verify_all.sh run should be rejected by lock."""
+        # Create a fake lock with an active-looking PID to simulate concurrent run
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "pid"
+        # Write the current shell's PID - it's definitely running
+        fake_pid = str(os.getpid())
+        lock_file.write_text(fake_pid + "\n")
+        
+        try:
+            # Clear VERIFY_ALL_ACTIVE from env to avoid triggering recursion check first
+            env = os.environ.copy()
+            env.pop("VERIFY_ALL_ACTIVE", None)
+            
+            result = subprocess.run(
+                [str(self.VERIFY_ALL)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=env,
+                cwd=self.REPO_ROOT,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, "Concurrent run should be rejected")
+            self.assertIn("Another verification run is active", output)
+        finally:
+            # Clean up our fake lock
+            if lock_file.exists():
+                lock_file.unlink()
+
+    def test_verify_all_stale_lock_cleared(self) -> None:
+        """verify_all.sh should clear stale locks and proceed."""
+        # Create a stale lock (PID that doesn't exist)
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "pid"
+        stale_pid = "999998"
+        lock_file.write_text(stale_pid + "\n")
+        
+        try:
+            # Run with isolated env to avoid other checks failing
+            env = os.environ.copy()
+            # Don't run full steps, just test that we get past the lock check
+            # We can't easily skip pre-flight, but we can verify lock behavior
+            # by checking if the error message is NOT about lock
+            result = subprocess.run(
+                [str(self.VERIFY_ALL)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=env,
+                cwd=self.REPO_ROOT,
+            )
+
+            output = result.stdout + result.stderr
+            # If there's a lock error, it should NOT be about "Another verification run"
+            if result.returncode != 0:
+                self.assertNotIn("Another verification run is active", output,
+                    "Stale lock should be cleared, not cause rejection")
+        finally:
+            # Clean up stale lock
+            if lock_file.exists():
+                lock_file.unlink()
 
 
 if __name__ == "__main__":
