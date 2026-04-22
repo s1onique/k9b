@@ -8,8 +8,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus, ReviewStage, Workstream
+from .alertmanager_feedback import (
+    RunScopedAlertmanagerFeedback,
+    build_feedback_from_execution_artifacts,
+    compute_feedback_adjusted_bonus,
+)
 from .review_input import AlertmanagerContext, ReviewEnrichmentInput, ReviewSelectionContext, build_review_enrichment_input
 
 
@@ -722,6 +728,7 @@ def _compute_candidate_sort_score(
     workstream: Workstream | None = None,
     review_stage: ReviewStage | None = None,
     alertmanager_signal: AlertmanagerRankingSignal | None = None,
+    alertmanager_feedback: RunScopedAlertmanagerFeedback | None = None,
 ) -> tuple[int, bool, int, bool, bool, bool]:
     """Compute ranking score for a candidate.
     
@@ -732,6 +739,9 @@ def _compute_candidate_sort_score(
     - am_ns_match (bool): namespace match occurred
     - am_cluster_match (bool): cluster match occurred
     - am_service_match (bool): service match occurred
+    
+    Note: feedback-based suppression is applied later in _rank_candidates
+    to preserve provenance tracking.
     """
     score = 0
     crd_demotion_applied = False
@@ -787,6 +797,7 @@ def _rank_candidates(
     workstream: Workstream | None = None,
     review_stage: ReviewStage | None = None,
     alertmanager_signal: AlertmanagerRankingSignal | None = None,
+    alertmanager_feedback: RunScopedAlertmanagerFeedback | None = None,
 ) -> tuple[NextCheckCandidate, ...]:
     """Rank candidates and attach ranking policy reasons and provenance for observability.
     
@@ -797,21 +808,52 @@ def _rank_candidates(
         alertmanager_signal: Optional Alertmanager ranking signal for bonus computation.
             If None, ranking proceeds without Alertmanager influence.
             No live Alertmanager fetch is performed - only run-scoped context is used.
+        alertmanager_feedback: Optional run-scoped Alertmanager feedback for demoting
+            similar candidates that the operator marked as not relevant or noisy.
+            If None, no feedback-based demotion is applied.
+            All adaptation is run-scoped only - no cross-run persistence.
     """
+    # Track feedback adjustments for provenance
+    feedback_adjustments: dict[str, tuple[int, str | None, dict[str, Any] | None]] = {}
+    
+    # First pass: compute base scores
     scored: list[tuple[int, NextCheckCandidate, bool, int, str | None, bool, bool, bool]] = []
     for candidate in candidates:
         score, demotion_applied, am_bonus, am_ns_match, am_cluster_match, am_service_match = _compute_candidate_sort_score(
             candidate, workstream, review_stage, alertmanager_signal
         )
         
+        # Apply feedback-based bonus suppression if feedback is available
+        final_bonus = am_bonus
+        if am_bonus > 0 and alertmanager_feedback is not None and alertmanager_feedback.feedback_entries:
+            suppressed_bonus, adaptation_rationale, adaptation_provenance = compute_feedback_adjusted_bonus(
+                am_bonus,
+                candidate.target_cluster,
+                candidate.target_context,
+                candidate.description,
+                alertmanager_feedback,
+            )
+            if suppressed_bonus != am_bonus and adaptation_rationale:
+                # Score was adjusted - update score and track for provenance
+                score = score - am_bonus + suppressed_bonus
+                final_bonus = suppressed_bonus
+                feedback_adjustments[candidate.candidate_id] = (
+                    suppressed_bonus,
+                    adaptation_rationale,
+                    adaptation_provenance,
+                )
+        
         # Build ranking policy reason
         ranking_reason: str | None = None
         if demotion_applied:
             ranking_reason = f"crd-demoted-early-incident-triage:{workstream.value if workstream else 'none'}:{review_stage.value if review_stage else 'none'}"
+        elif candidate.candidate_id in feedback_adjustments:
+            # Feedback suppressed the bonus - update the rationale
+            ranking_reason = feedback_adjustments[candidate.candidate_id][1]
         elif am_bonus > 0 and alertmanager_signal is not None:
             ranking_reason = _build_alertmanager_rationale(am_ns_match, am_cluster_match, am_service_match, alertmanager_signal)
         
-        scored.append((score, candidate, demotion_applied, am_bonus, ranking_reason, am_ns_match, am_cluster_match, am_service_match))
+        scored.append((score, candidate, demotion_applied, final_bonus, ranking_reason, am_ns_match, am_cluster_match, am_service_match))
     
     # Sort by score (descending) then by description (ascending) for determinism
     scored.sort(key=lambda entry: (-entry[0], entry[1].description))
@@ -820,6 +862,8 @@ def _rank_candidates(
     ranked: list[NextCheckCandidate] = []
     for score, candidate, demotion_applied, am_bonus, ranking_reason, am_ns_match, am_cluster_match, am_service_match in scored:
         provenance: AlertmanagerRankingProvenance | None = None
+        feedback_provenance: dict[str, Any] | None = None
+        
         if am_bonus > 0 and alertmanager_signal is not None and (am_ns_match or am_cluster_match or am_service_match):
             # Compute base bonus (before severity adjustment) for provenance
             base_bonus = 0
@@ -834,7 +878,11 @@ def _rank_candidates(
                 base_bonus, am_bonus, alertmanager_signal
             )
         
-        if ranking_reason is not None or provenance is not None:
+        # Add feedback provenance if this candidate was adjusted
+        if candidate.candidate_id in feedback_adjustments:
+            feedback_provenance = feedback_adjustments[candidate.candidate_id][2]
+        
+        if ranking_reason is not None or provenance is not None or feedback_provenance is not None:
             # Create new candidate with ranking policy reason and provenance set
             ranked.append(
                 NextCheckCandidate(
@@ -861,6 +909,7 @@ def _rank_candidates(
                     priority_label=candidate.priority_label,
                     ranking_policy_reason=ranking_reason,
                     alertmanager_provenance=provenance,
+                    feedback_adaptation_provenance=feedback_provenance,
                 )
             )
         else:
@@ -895,6 +944,9 @@ class NextCheckCandidate:
     ranking_policy_reason: str | None = None
     # Structured provenance for Alertmanager-driven ranking (if any)
     alertmanager_provenance: AlertmanagerRankingProvenance | None = None
+    # Run-scoped provenance for feedback-based Alertmanager bonus suppression
+    # Set when operator marked Alertmanager relevance as not_relevant/noisy in this run
+    feedback_adaptation_provenance: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, object | str | bool]:
         result: dict[str, object | str | bool] = {
@@ -924,6 +976,8 @@ class NextCheckCandidate:
             result["rankingPolicyReason"] = self.ranking_policy_reason
         if self.alertmanager_provenance is not None:
             result["alertmanagerProvenance"] = self.alertmanager_provenance.to_dict()
+        if self.feedback_adaptation_provenance is not None:
+            result["feedbackAdaptationProvenance"] = self.feedback_adaptation_provenance
         return result
 
 
@@ -951,6 +1005,7 @@ def plan_next_checks(
     review_path: Path,
     run_id: str,
     enrichment_artifact: ExternalAnalysisArtifact,
+    execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
 ) -> NextCheckPlan | None:
     if enrichment_artifact.status != ExternalAnalysisStatus.SUCCESS:
         return None
@@ -1092,7 +1147,14 @@ def plan_next_checks(
             context.alertmanager_context
         )
     
-    sorted_candidates = _rank_candidates(candidates, workstream, review_stage, alertmanager_signal)
+    # Build run-scoped Alertmanager feedback from execution artifacts
+    # This enables run-scoped learning: operator marking Alertmanager relevance as
+    # not_relevant/noisy suppresses similar Alertmanager-driven candidates
+    alertmanager_feedback: RunScopedAlertmanagerFeedback | None = None
+    if execution_artifacts:
+        alertmanager_feedback = build_feedback_from_execution_artifacts(execution_artifacts)
+    
+    sorted_candidates = _rank_candidates(candidates, workstream, review_stage, alertmanager_signal, alertmanager_feedback)
     return NextCheckPlan(
         run_id=run_id,
         review_path=review_path,

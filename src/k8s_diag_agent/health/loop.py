@@ -2175,7 +2175,14 @@ class HealthLoopRunner:
         enrichment_artifact = self._run_review_enrichment(review_path, directories)
         if enrichment_artifact:
             external_artifacts.append(enrichment_artifact)
-        plan_artifact = self._run_next_check_planning(review_path, enrichment_artifact, directories)
+        # Filter to execution artifacts for run-scoped feedback
+        execution_artifacts = tuple(
+            a for a in external_artifacts
+            if a.purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION
+        )
+        plan_artifact = self._run_next_check_planning(
+            review_path, enrichment_artifact, directories, execution_artifacts
+        )
         if plan_artifact:
             external_artifacts.append(plan_artifact)
         healthy_count = sum(
@@ -2839,6 +2846,7 @@ class HealthLoopRunner:
         review_path: Path | None,
         enrichment_artifact: ExternalAnalysisArtifact | None,
         directories: dict[str, Path],
+        execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
     ) -> ExternalAnalysisArtifact | None:
         if not review_path or not enrichment_artifact:
             # Log that planner was skipped because no enrichment artifact
@@ -2853,7 +2861,7 @@ class HealthLoopRunner:
                 event="next-check-planning-skipped",
             )
             return None
-        plan = plan_next_checks(review_path, self.run_id, enrichment_artifact)
+        plan = plan_next_checks(review_path, self.run_id, enrichment_artifact, execution_artifacts)
         if not plan:
             # Log that planner produced no candidates
             self._log_event(
