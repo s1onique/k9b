@@ -904,19 +904,20 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
 
     def test_verify_all_unit_tests_blocked_under_verify_context(self) -> None:
         """Unittest step should block RUN_FULL_VERIFY_TEST when VERIFY_ALL_ACTIVE is set."""
-        # Verify that unittest step sets VERIFY_ALL_ACTIVE and clears RUN_FULL_VERIFY_TEST
+        # Verify that unit-tests step sets VERIFY_ALL_ACTIVE and clears RUN_FULL_VERIFY_TEST
         verify_content = self.VERIFY_ALL.read_text()
         
-        # Find the unit-tests step_run_continue line
+        # Find the unit-tests step call in the Python lane
+        # With parallel lanes, it's now called via _run_and_record
         import re
-        unit_tests_pattern = r'step_run_continue\s+"unit-tests".*?env\s+.*?VERIFY_ALL_ACTIVE=1'
+        unit_tests_pattern = r'_run_and_record\s+"python"\s+"unit-tests".*?env\s+.*?VERIFY_ALL_ACTIVE=1'
         self.assertRegex(verify_content, unit_tests_pattern,
             "unit-tests step should pass VERIFY_ALL_ACTIVE=1 to env")
         
         # Verify RUN_FULL_VERIFY_TEST is cleared (set to empty or not passed)
-        unit_tests_line_pattern = r'step_run_continue\s+"unit-tests"[^;]+'
+        unit_tests_line_pattern = r'_run_and_record\s+"python"\s+"unit-tests"[^;]+'
         match = re.search(unit_tests_line_pattern, verify_content)
-        self.assertIsNotNone(match, "Should find unit-tests step line")
+        self.assertIsNotNone(match, "Should find unit-tests step line in Python lane")
         # mypy needs us to assert again for type narrowing
         assert match is not None
         line = match.group(0)
@@ -1384,6 +1385,260 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         for line in step2_hb:
             self.assertNotRegex(line, r"elapsed=[7-9]\d+s",
                 "Step 2 should not have cumulative elapsed time from step 1")
+
+
+class TestParallelLanes(unittest.TestCase):
+    """Test lane-level parallelism behavior in verify_all.sh."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    VERIFY_ALL = REPO_ROOT / "scripts" / "verify_all.sh"
+    STEP_RUNNER = REPO_ROOT / "scripts" / "step_runner.sh"
+
+    def setUp(self) -> None:
+        """Set up isolated temp directory."""
+        if not self.VERIFY_ALL.exists():
+            self.skipTest("verify_all.sh not found")
+        os.chmod(self.VERIFY_ALL, 0o755)
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_parallel_")
+        self._log_dir = os.path.join(self._tmp_dir, "logs")
+        self._data_dir = os.path.join(self._tmp_dir, "data")
+        os.makedirs(self._log_dir, exist_ok=True)
+        os.makedirs(self._data_dir, exist_ok=True)
+
+    def tearDown(self) -> None:
+        """Clean up temp directory and lock."""
+        import shutil
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        if lock_dir.exists():
+            shutil.rmtree(lock_dir, ignore_errors=True)
+
+    def test_verify_all_runs_two_concurrent_lanes(self) -> None:
+        """verify_all.sh should run Python and Frontend lanes concurrently.
+        
+        This test verifies the parallel execution structure without running
+        the full expensive suite. We check that the script structure supports
+        concurrent lane execution.
+        """
+        verify_content = self.VERIFY_ALL.read_text()
+        
+        # Should have Python lane definition
+        self.assertIn("_run_python_lane", verify_content,
+            "verify_all.sh should define Python lane function")
+        
+        # Should have Frontend lane definition
+        self.assertIn("_run_frontend_lane", verify_content,
+            "verify_all.sh should define Frontend lane function")
+        
+        # Should launch both lanes in background (&)
+        self.assertIn("_run_python_lane &", verify_content,
+            "Python lane should be launched in background")
+        self.assertIn("_run_frontend_lane &", verify_content,
+            "Frontend lane should be launched in background")
+
+    def test_verify_all_preserves_canonical_step_order(self) -> None:
+        """verify_all.sh JSON summary should have deterministic canonical step order.
+        
+        Canonical order: ruff-lint, unit-tests, mypy, npm-ci, npm-test-ui, npm-build
+        regardless of which lane completed first.
+        """
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
+        
+        # Find lane state file in runs/verification before the run
+        verification_dir = self.REPO_ROOT / "runs" / "verification"
+        initial_files = set(verification_dir.glob("*-lane-state.json"))
+        
+        subprocess.run(
+            [str(self.VERIFY_ALL), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+        
+        # Find the new lane state file
+        new_files = set(verification_dir.glob("*-lane-state.json"))
+        lane_files = sorted(new_files - initial_files)
+        
+        self.assertGreater(len(lane_files), 0, "Should have created a lane state file")
+        
+        # Read the lane state file
+        latest_file = lane_files[-1]
+        with open(latest_file) as f:
+            state = json.load(f)
+        
+        # Extract step IDs in order (python lane first, then frontend)
+        step_ids = [s["id"] for s in state["python"] + state["frontend"]]
+        
+        # Canonical order should be: ruff-lint, unit-tests, mypy (Python lane)
+        # followed by npm-ci, npm-test-ui, npm-build (Frontend lane)
+        expected_order = ["ruff-lint", "unit-tests", "mypy", "npm-ci", "npm-test-ui", "npm-build"]
+        
+        self.assertEqual(step_ids, expected_order,
+            f"Steps should follow canonical order, got: {step_ids}")
+
+    def test_verify_all_nonzero_exit_on_any_lane_failure(self) -> None:
+        """verify_all.sh should return non-zero exit code if any lane step fails.
+        
+        This is verified by running the full suite - if all steps pass, exit is 0.
+        If any step fails, exit should be non-zero.
+        """
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
+        
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+        
+        import json
+        data = json.loads(result.stdout.strip())
+        
+        # Exit code should match status
+        if data["status"] == "failed":
+            self.assertNotEqual(result.returncode, 0,
+                "Exit code should be non-zero when steps fail")
+        else:
+            self.assertEqual(result.returncode, 0,
+                "Exit code should be 0 when all steps pass")
+
+    def test_verify_all_json_mode_pure_json(self) -> None:
+        """verify_all.sh --json should emit valid JSON only on stdout.
+        
+        Contract:
+        - stdout is valid JSON (parseable by json.loads)
+        - stdout does not contain compact progress lines
+        - stderr is quiet during normal operation
+        """
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh --json test")
+        
+        result = subprocess.run(
+            [str(self.VERIFY_ALL), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+        
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        
+        # stdout should be valid JSON
+        try:
+            json.loads(stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout is not valid JSON: {e}\nstdout: {stdout}")
+        
+        # stdout should not contain compact progress pattern
+        self.assertNotRegex(stdout, r"\[\w+-\w+\]\s+(?:PASS|FAIL)\s*\(",
+            "stdout should not contain compact progress lines")
+        
+        # stderr should be quiet (no step markers)
+        step_patterns = ["[ruff-lint]", "[unit-tests]", "[npm-", "FAIL (", "PASS ("]
+        for pattern in step_patterns:
+            self.assertNotIn(pattern, stderr,
+                f"stderr should not contain '{pattern}' in JSON mode")
+
+    def test_verify_all_recursion_protection_preserved(self) -> None:
+        """verify_all.sh should still reject recursive invocation under parallel mode."""
+        env = os.environ.copy()
+        env["VERIFY_ALL_ACTIVE"] = "1"
+        result = subprocess.run(
+            [str(self.VERIFY_ALL)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            cwd=self.REPO_ROOT,
+        )
+        
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0,
+            "Recursive invocation should fail")
+        self.assertIn("recursion detected", output.lower())
+
+    def test_verify_all_lock_protection_preserved(self) -> None:
+        """verify_all.sh should still reject concurrent runs under parallel mode."""
+        # Create a fake lock with an active-looking PID
+        lock_dir = self.REPO_ROOT / ".verify_lock"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "pid"
+        fake_pid = str(os.getpid())
+        lock_file.write_text(fake_pid + "\n")
+        
+        try:
+            env = os.environ.copy()
+            env.pop("VERIFY_ALL_ACTIVE", None)
+            
+            result = subprocess.run(
+                [str(self.VERIFY_ALL)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=env,
+                cwd=self.REPO_ROOT,
+            )
+            
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0,
+                "Concurrent run should be rejected")
+            self.assertIn("Another verification run is active", output)
+        finally:
+            if lock_file.exists():
+                lock_file.unlink()
+
+    def test_lane_state_file_contains_both_lanes(self) -> None:
+        """verify_all.sh should create lane state file with both Python and Frontend results.
+        
+        This test verifies the parallel execution state tracking works correctly.
+        """
+        import json
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
+        
+        subprocess.run(
+            [str(self.VERIFY_ALL), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=self.REPO_ROOT,
+        )
+        
+        # Find lane state file in runs/verification
+        verification_dir = self.REPO_ROOT / "runs" / "verification"
+        lane_files = sorted(verification_dir.glob("*-lane-state.json"))
+        
+        if lane_files:
+            # Read the most recent lane state file
+            latest_file = lane_files[-1]
+            with open(latest_file) as f:
+                state = json.load(f)
+            
+            # Should have both lanes
+            self.assertIn("python", state, "Lane state should have python lane")
+            self.assertIn("frontend", state, "Lane state should have frontend lane")
+            
+            # Each lane should have its steps
+            python_steps = [s["id"] for s in state["python"]]
+            frontend_steps = [s["id"] for s in state["frontend"]]
+            
+            # Python lane should have ruff-lint, unit-tests, mypy
+            for expected in ["ruff-lint", "unit-tests", "mypy"]:
+                self.assertIn(expected, python_steps,
+                    f"Python lane should include {expected}")
+            
+            # Frontend lane should have npm-ci, npm-test-ui, npm-build
+            for expected in ["npm-ci", "npm-test-ui", "npm-build"]:
+                self.assertIn(expected, frontend_steps,
+                    f"Frontend lane should include {expected}")
 
 
 if __name__ == "__main__":

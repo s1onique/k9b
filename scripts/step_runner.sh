@@ -86,8 +86,6 @@ _STEP_LONG_RUNNING_HINTS=($STEP_LONG_RUNNING_HINTS)
 # Heartbeat configuration
 STEP_HEARTBEAT_INTERVAL="${STEP_HEARTBEAT_INTERVAL:-10}"
 
-# Internal: background job tracking for live heartbeat (unused - per-step heartbeat is self-contained)
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

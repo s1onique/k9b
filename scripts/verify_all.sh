@@ -134,28 +134,203 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Run verification steps (use step_run_continue to continue on failure
-# and track all results before finalizing)
+# Run verification steps in parallel lanes
+#
+# Two lanes run concurrently:
+#   - Python lane: ruff-lint, unit-tests, mypy
+#   - Frontend lane: npm-ci, npm-test-ui, npm-build
+#
+# Each lane is internally sequential.
+# Step results are tracked via shared state files for final summary ordering.
 # ---------------------------------------------------------------------------
 
-step_run_continue "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
-step_run_continue "unit-tests" "Running unit tests" env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests
-step_run_continue "mypy" "Running mypy" "$PYTHON" -m mypy src tests
+# Shared state file for tracking lane results
+_LANE_STATE_FILE="$REPO_ROOT/runs/verification/${_RUN_TIMESTAMP}-lane-state.json"
 
-# Frontend steps (use pushd/popd to stay in same shell context)
-pushd "$REPO_ROOT/frontend" >/dev/null
-step_run_continue "npm-ci" "Installing frontend deps (npm ci)" npm ci
-step_run_continue "npm-test-ui" "Running frontend UI tests" npm run test:ui
-step_run_continue "npm-build" "Building frontend" npm run build
-popd >/dev/null
+# Initialize lane state
+echo '{"python": [], "frontend": []}' > "$_LANE_STATE_FILE"
+
+# Function to record step result in lane state
+_record_step_result() {
+    local lane="$1"
+    local step_id="$2"
+    local result="$3"
+    local duration_ms="$4"
+    local exit_code="$5"
+    local log_file="${STEP_LOG_DIR}/${_RUN_TIMESTAMP}-${step_id}.log"
+    
+    # Append to lane state file (simple JSON array append simulation)
+    local tmp_file="${_LANE_STATE_FILE}.tmp"
+    # Use Python to properly update JSON (more reliable than bash for JSON)
+    "$PYTHON" -c "
+import json
+state_file = '$_LANE_STATE_FILE'
+step = {
+    'id': '$step_id',
+    'status': '$result',
+    'duration_ms': $duration_ms,
+    'exit_code': $exit_code,
+    'log_file': '$log_file'
+}
+try:
+    with open(state_file, 'r') as f:
+        state = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    state = {'python': [], 'frontend': []}
+state['$lane'].append(step)
+with open(state_file, 'w') as f:
+    json.dump(state, f)
+"
+}
+
+# Run a step and record result to lane state
+_run_and_record() {
+    local lane="$1"
+    local step_id="$2"
+    local message="$3"
+    shift 3
+    
+    _STEP_CURRENT="$step_id"
+    _STEP_ORDER+=("$step_id")
+    
+    local log_file="${STEP_LOG_DIR}/${_RUN_TIMESTAMP}-${step_id}.log"
+    > "$log_file"
+    
+    local start_time end_time duration_ms exit_code
+    start_time=$(date +%s)
+    
+    if [[ -z "${STEP_JSON_MODE:-}" ]] && [[ -z "${STEP_VERBOSE:-}" ]] && _step_needs_hint "$step_id"; then
+        _step_emit_hint "$step_id" "$log_file"
+    fi
+    
+    # Run the command (capture output, track time)
+    local poll_interval=1
+    local _step_last_heartbeat=$(( start_time - STEP_HEARTBEAT_INTERVAL ))
+    
+    "$@" >> "$log_file" 2>&1 &
+    local bg_pid=$!
+    
+    while kill -0 "$bg_pid" 2>/dev/null; do
+        sleep "$poll_interval"
+        local current_time=$(date +%s)
+        local elapsed=$(( current_time - start_time ))
+        local remainder=$(( elapsed % STEP_HEARTBEAT_INTERVAL ))
+        if (( remainder == 0 )); then
+            echo "[HINT:HEARTBEAT] step=${step_id} elapsed=${elapsed}s log=${log_file}"
+        fi
+    done
+    
+    wait "$bg_pid"
+    exit_code=$?
+    
+    end_time=$(date +%s)
+    duration_ms=$(_step_duration_ms "$start_time" "$end_time")
+    local duration_fmt=$(_step_format_duration "$duration_ms")
+    
+    local result="PASS"
+    if (( exit_code != 0 )); then
+        result="FAIL"
+        _STEP_FAILED=true
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] FAIL (${duration_fmt}) - $message" >&2
+            _step_print_failure_info "$step_id" "$exit_code" "$log_file" "$duration_fmt"
+        fi
+    else
+        if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+            echo "[$step_id] PASS (${duration_fmt}) - $message"
+        fi
+    fi
+    
+    # Record result to shared state
+    _record_step_result "$lane" "$step_id" "$result" "$duration_ms" "$exit_code"
+    
+    # Also update local step results for compatibility
+    _STEP_RESULTS["$step_id"]="${result}|${duration_ms}|${exit_code}"
+}
+
+# Run Python lane in background
+_run_python_lane() {
+    _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
+    _run_and_record "python" "unit-tests" "Running unit tests" env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests
+    _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src tests
+}
+
+# Run Frontend lane in background
+_run_frontend_lane() {
+    pushd "$REPO_ROOT/frontend" >/dev/null
+    _run_and_record "frontend" "npm-ci" "Installing frontend deps (npm ci)" npm ci
+    _run_and_record "frontend" "npm-test-ui" "Running frontend UI tests" npm run test:ui
+    _run_and_record "frontend" "npm-build" "Building frontend" npm run build
+    popd >/dev/null
+}
+
+# Launch both lanes concurrently
+_run_python_lane &
+python_pid=$!
+_run_frontend_lane &
+frontend_pid=$!
+
+# Wait for both lanes and capture exit codes
+wait $python_pid
+python_exit=$?
+wait $frontend_pid
+frontend_exit=$?
+
+# Merge lane state into step results for summary
+# This ensures final summary reflects canonical ordering (python steps first, then frontend)
+if [[ -f "$_LANE_STATE_FILE" ]]; then
+    "$PYTHON" -c "
+import json
+with open('$_LANE_STATE_FILE', 'r') as f:
+    state = json.load(f)
+for step in state['python']:
+    lane = 'python'
+for step in state['frontend']:
+    lane = 'frontend'
+"
+    # Import lane results into step runner's internal state
+    # Reset _STEP_ORDER to canonical sequence
+    _STEP_ORDER=()
+    _STEP_RESULTS=()
+    # Source the lane state and merge
+    eval "$("$PYTHON" -c "
+import json
+with open('$_LANE_STATE_FILE', 'r') as f:
+    state = json.load(f)
+# Merge: python lane first, then frontend lane
+for step in state['python'] + state['frontend']:
+    print(f'_STEP_ORDER+=(\"{step[\"id\"]}\")')
+    print(f'_STEP_RESULTS[\"{step[\"id\"]}\"]=\"{step[\"status\"]}|{step[\"duration_ms\"]}|{step[\"exit_code\"]}\"')
+    if step['status'] == 'FAIL':
+        print('_STEP_FAILED=true')
+")"
+fi
+
+# Determine overall exit code (non-zero if either lane failed)
+if (( python_exit != 0 )) || (( frontend_exit != 0 )); then
+    _OVERALL_EXIT=1
+else
+    _OVERALL_EXIT=0
+fi
 
 # ---------------------------------------------------------------------------
 # Finalize
 # ---------------------------------------------------------------------------
 
-# Use the tracked failure state to determine exit code
-if step_check_failed; then
-    step_finalize 1
-else
-    step_finalize 0
+# Determine exit code: non-zero if any step failed (tracked via lane results)
+final_exit=0
+if [[ -f "$_LANE_STATE_FILE" ]]; then
+    # Check if any step failed from lane state
+    failed_count=$("$PYTHON" -c "
+import json
+with open('$_LANE_STATE_FILE', 'r') as f:
+    state = json.load(f)
+failed = sum(1 for s in state['python'] + state['frontend'] if s['status'] == 'FAIL')
+print(failed)
+")
+    if (( failed_count > 0 )); then
+        final_exit=1
+    fi
 fi
+
+step_finalize $final_exit
