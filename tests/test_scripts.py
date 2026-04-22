@@ -2036,7 +2036,7 @@ class TestAtomicLockRaces(unittest.TestCase):
         # Track results from each process
         results: list[tuple[int, str, str]] = []  # (exit_code, stdout, stderr)
         
-        def run_verify():
+        def run_verify() -> tuple[int, str, str]:
             """Run verify_all.sh in a subprocess and return results."""
             env = os.environ.copy()
             env.pop("VERIFY_ALL_ACTIVE", None)
@@ -2103,7 +2103,7 @@ class TestAtomicLockRaces(unittest.TestCase):
         
         num_concurrent = 8
         
-        def spawn_verify():
+        def spawn_verify() -> tuple[int, str]:
             env = os.environ.copy()
             env.pop("VERIFY_ALL_ACTIVE", None)
             result = subprocess.run(
