@@ -102,13 +102,29 @@ def write_notification_artifact(directory: Path, artifact: NotificationArtifact)
     Notification artifacts are immutable: once written, they must not be overwritten.
     This function rejects writes to an existing path to enforce the immutability contract.
 
+    Filename format:
+    - With artifact_id: {timestamp}-{kind}-{artifact_id}.json
+    - Without artifact_id (legacy): {timestamp}-{kind}.json
+
+    The artifact_id suffix ensures uniqueness for same-second same-kind notifications
+    while preserving append-only immutability (each artifact_id is a unique UUIDv7).
+
     Raises:
         FileExistsError: If the artifact path already exists (immutability guarantee)
     """
-    filename = f"{artifact.timestamp}-{artifact.kind}.json"
-    path = directory / filename
+    # Include artifact_id in filename for uniqueness when available
+    # This prevents same-second same-kind collision (e.g., two clusters becoming
+    # degraded in the same second) while preserving immutability via unique IDs
+    if artifact.artifact_id:
+        filename = f"{artifact.timestamp}-{artifact.kind}-{artifact.artifact_id}.json"
+        context = f"timestamp={artifact.timestamp}, kind={artifact.kind}, artifact_id={artifact.artifact_id}"
+    else:
+        # Legacy artifacts without artifact_id use the original format
+        # (immutability relies on timestamps being unique, which was the original contract)
+        filename = f"{artifact.timestamp}-{artifact.kind}.json"
+        context = f"timestamp={artifact.timestamp}, kind={artifact.kind}"
 
-    context = f"timestamp={artifact.timestamp}, kind={artifact.kind}"
+    path = directory / filename
     return write_append_only_json_artifact(path, artifact.to_dict(), context=context)
 
 

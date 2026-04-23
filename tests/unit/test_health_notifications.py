@@ -261,43 +261,50 @@ class TestNotificationArtifactImmutability(unittest.TestCase):
             path = write_notification_artifact(notifications_dir, artifact)
 
             self.assertTrue(path.exists())
-            self.assertEqual(path.name, "20260423T120000-degraded-health.json")
+            # Filename includes artifact_id since artifact has one
+            self.assertTrue(path.name.startswith("20260423T120000-degraded-health-"))
+            self.assertTrue(path.name.endswith(".json"))
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_immutability_rejects_overwrite_same_path(self) -> None:
-        """Attempting to write the same immutable notification artifact path again raises FileExistsError.
+        """Attempting to write an artifact with the same artifact_id again raises FileExistsError.
 
-        This test uses controlled timestamps to force a path collision, demonstrating
-        that notification artifacts are immutable and cannot be overwritten.
+        This test verifies that immutability is enforced via artifact_id uniqueness.
+        With the fix, same-second same-kind with distinct artifact_ids succeeds,
+        but same artifact_id still raises FileExistsError.
         """
         tmpdir = Path(tempfile.mkdtemp())
         try:
             notifications_dir = tmpdir / "notifications"
             notifications_dir.mkdir(parents=True, exist_ok=True)
 
-            # Create two artifacts with identical timestamp and kind (same path)
-            artifact1 = _make_artifact_with_timestamp(
+            # Create two artifacts with the SAME artifact_id (identical identity)
+            shared_artifact_id = new_artifact_id()
+
+            artifact1 = NotificationArtifact(
                 timestamp="20260423T120000",
                 kind="proposal-created",
                 summary="First proposal",
                 details={"target": "cluster-a"},
                 run_id="run-immutability-002",
+                artifact_id=shared_artifact_id,
             )
 
-            artifact2 = _make_artifact_with_timestamp(
+            artifact2 = NotificationArtifact(
                 timestamp="20260423T120000",
                 kind="proposal-created",
                 summary="Second proposal (should fail)",
                 details={"target": "cluster-b"},
                 run_id="run-immutability-002",
+                artifact_id=shared_artifact_id,  # Same artifact_id = same artifact
             )
 
             # First write succeeds
             path1 = write_notification_artifact(notifications_dir, artifact1)
             self.assertTrue(path1.exists())
 
-            # Second write to same path raises FileExistsError
+            # Second write with same artifact_id raises FileExistsError
             with self.assertRaises(FileExistsError) as context:
                 write_notification_artifact(notifications_dir, artifact2)
 
@@ -383,12 +390,13 @@ class TestNotificationArtifactImmutability(unittest.TestCase):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_immutability_error_message_includes_path_context(self) -> None:
-        """FileExistsError message includes timestamp and kind for debugging."""
+        """FileExistsError message includes timestamp, kind, and artifact_id for debugging."""
         tmpdir = Path(tempfile.mkdtemp())
         try:
             notifications_dir = tmpdir / "notifications"
             notifications_dir.mkdir(parents=True, exist_ok=True)
 
+            # Create artifact with controlled timestamp
             artifact1 = _make_artifact_with_timestamp(
                 timestamp="20260423T120000",
                 kind="external-analysis",
@@ -396,11 +404,14 @@ class TestNotificationArtifactImmutability(unittest.TestCase):
                 run_id="run-immutability-005",
             )
 
-            artifact2 = _make_artifact_with_timestamp(
+            # Create second artifact with SAME artifact_id to trigger collision
+            artifact2 = NotificationArtifact(
                 timestamp="20260423T120000",
                 kind="external-analysis",
                 summary="Duplicate analysis",
+                details={},
                 run_id="run-immutability-005",
+                artifact_id=artifact1.artifact_id,  # Same artifact_id = same path
             )
 
             write_notification_artifact(notifications_dir, artifact1)
@@ -409,10 +420,10 @@ class TestNotificationArtifactImmutability(unittest.TestCase):
                 write_notification_artifact(notifications_dir, artifact2)
 
             error_msg = str(context.exception)
-            # Error should mention the path
-            self.assertIn("20260423T120000-external-analysis.json", error_msg)
             # Error should mention immutability
             self.assertIn("immutability contract violated", error_msg)
+            # Error should include the artifact_id in context
+            self.assertIn(artifact1.artifact_id, error_msg)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -455,6 +466,358 @@ class TestNotificationArtifactImmutability(unittest.TestCase):
             # Should have 4 distinct files
             self.assertEqual(len(written_paths), 4)
             self.assertEqual(len(set(written_paths)), 4)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestHealthLoopRunnerNotificationPath(unittest.TestCase):
+    """Regression tests for the real notification recording path in HealthLoopRunner.
+
+    This tests the actual call path from health/loop.py that was failing:
+    _record_notification(directory, artifact) -> write_notification_artifact(directory, artifact)
+
+    These tests exercise the fix through the real implementation, not just the artifact layer.
+    """
+
+    def test_record_notification_handles_same_second_same_kind(self) -> None:
+        """HealthLoopRunner._record_notification handles same-second same-kind notifications.
+
+        This is the real call-path regression test for the scheduler crash:
+        - The health loop creates degraded-health notifications for multiple clusters
+        - When two clusters degrade in the same second, they have the same timestamp
+        - The fix ensures they have distinct artifact_ids, so they don't collide
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # Import the actual _record_notification method from HealthLoopRunner
+            from k8s_diag_agent.health.loop import HealthLoopRunner
+            from k8s_diag_agent.health.notifications import (
+                NotificationArtifact,
+                make_notification_artifact,
+            )
+
+            # Create two degraded-health notifications with same timestamp (simulating
+            # two clusters becoming degraded in the same second during health loop)
+            artifact1 = make_notification_artifact(
+                kind="degraded-health",
+                summary="cluster-a degraded (warning)",
+                details={"warnings": ["CPU pressure"], "cluster": "cluster-a"},
+                run_id="run-call-path-001",
+                cluster_label="cluster-a",
+            )
+            artifact2 = make_notification_artifact(
+                kind="degraded-health",
+                summary="cluster-b degraded (warning)",
+                details={"warnings": ["memory pressure"], "cluster": "cluster-b"},
+                run_id="run-call-path-001",
+                cluster_label="cluster-b",
+            )
+
+            # Force same timestamp to simulate same-second event
+            artifact1 = NotificationArtifact(
+                kind=artifact1.kind,
+                summary=artifact1.summary,
+                details=artifact1.details,
+                run_id=artifact1.run_id,
+                cluster_label=artifact1.cluster_label,
+                context=artifact1.context,
+                timestamp="20260423T081258",  # Same timestamp as artifact2
+                artifact_id=artifact1.artifact_id,  # Distinct ID
+            )
+            artifact2 = NotificationArtifact(
+                kind=artifact2.kind,
+                summary=artifact2.summary,
+                details=artifact2.details,
+                run_id=artifact2.run_id,
+                cluster_label=artifact2.cluster_label,
+                context=artifact2.context,
+                timestamp="20260423T081258",  # Same timestamp as artifact1
+                artifact_id=artifact2.artifact_id,  # Distinct ID
+            )
+
+            # Use HealthLoopRunner._record_notification (the real failing path)
+            # Initialize required attributes that __init__ would set
+            runner = HealthLoopRunner.__new__(HealthLoopRunner)
+            runner._notification_records = []  # Required by _record_notification
+
+            path1 = runner._record_notification(notifications_dir, artifact1)
+            path2 = runner._record_notification(notifications_dir, artifact2)
+
+            # Both files should exist and be distinct
+            self.assertTrue(path1.exists())
+            self.assertTrue(path2.exists())
+            self.assertNotEqual(path1, path2)
+
+            # Content should be correct
+            content1 = json.loads(path1.read_text(encoding="utf-8"))
+            content2 = json.loads(path2.read_text(encoding="utf-8"))
+            self.assertEqual(content1["summary"], "cluster-a degraded (warning)")
+            self.assertEqual(content2["summary"], "cluster-b degraded (warning)")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_record_notification_rejects_true_duplicate(self) -> None:
+        """HealthLoopRunner._record_notification rejects writes with same artifact_id.
+
+        Even through the real call path, true duplicates (same artifact_id)
+        should still raise FileExistsError to preserve immutability.
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            from k8s_diag_agent.health.loop import HealthLoopRunner
+            from k8s_diag_agent.health.notifications import NotificationArtifact
+
+            # Create artifact with explicit artifact_id
+            shared_id = "shared-artifact-id-999"
+            artifact1 = NotificationArtifact(
+                kind="degraded-health",
+                summary="First notification",
+                details={"cluster": "cluster-x"},
+                run_id="run-call-path-002",
+                cluster_label="cluster-x",
+                timestamp="20260423T120000",
+                artifact_id=shared_id,
+            )
+            artifact2 = NotificationArtifact(
+                kind="degraded-health",
+                summary="Duplicate notification",
+                details={"cluster": "cluster-y"},
+                run_id="run-call-path-002",
+                cluster_label="cluster-y",
+                timestamp="20260423T120000",
+                artifact_id=shared_id,  # Same artifact_id = same identity
+            )
+
+            runner = HealthLoopRunner.__new__(HealthLoopRunner)
+            runner._notification_records = []  # Required by _record_notification
+            path1 = runner._record_notification(notifications_dir, artifact1)
+            self.assertTrue(path1.exists())
+
+            # Second write should raise FileExistsError
+            with self.assertRaises(FileExistsError):
+                runner._record_notification(notifications_dir, artifact2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestNotificationArtifactIdempotencyFix(unittest.TestCase):
+    """Regression tests for the same-second same-kind notification collision fix.
+
+    These tests verify that notification artifacts with the same timestamp and kind
+    can coexist when they have unique artifact_ids, preventing scheduler crashes
+    in multi-cluster scenarios where multiple clusters become degraded in the same second.
+    """
+
+    def test_same_second_same_kind_with_artifact_ids_succeeds(self) -> None:
+        """Two same-second same-kind notifications with distinct artifact_ids write successfully.
+
+        This is the core regression test for the collision fix. When two clusters
+        become degraded in the same second, they should produce distinct filenames
+        based on their unique artifact_ids.
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create two artifacts with same timestamp and kind (simulating two clusters
+            # becoming degraded in the same second)
+            artifact1 = make_notification_artifact(
+                kind="degraded-health",
+                summary="Cluster A degraded",
+                details={"cluster": "cluster-a"},
+                run_id="run-regression-001",
+            )
+            artifact2 = make_notification_artifact(
+                kind="degraded-health",
+                summary="Cluster B degraded",
+                details={"cluster": "cluster-b"},
+                run_id="run-regression-001",
+            )
+
+            # Ensure they have the same timestamp (simulating same-second event)
+            # by setting timestamps directly (bypass the factory's auto-timestamp)
+            artifact1 = NotificationArtifact(
+                kind=artifact1.kind,
+                summary=artifact1.summary,
+                details=artifact1.details,
+                run_id=artifact1.run_id,
+                cluster_label=artifact1.cluster_label,
+                context=artifact1.context,
+                timestamp="20260423T081258",  # Same timestamp
+                artifact_id=artifact1.artifact_id,  # Distinct IDs
+            )
+            artifact2 = NotificationArtifact(
+                kind=artifact2.kind,
+                summary=artifact2.summary,
+                details=artifact2.details,
+                run_id=artifact2.run_id,
+                cluster_label=artifact2.cluster_label,
+                context=artifact2.context,
+                timestamp="20260423T081258",  # Same timestamp
+                artifact_id=artifact2.artifact_id,  # Distinct IDs
+            )
+
+            # Both writes should succeed
+            path1 = write_notification_artifact(notifications_dir, artifact1)
+            path2 = write_notification_artifact(notifications_dir, artifact2)
+
+            # Both files should exist
+            self.assertTrue(path1.exists())
+            self.assertTrue(path2.exists())
+
+            # Filenames should be different
+            self.assertNotEqual(path1, path2)
+
+            # Both should contain correct content
+            content1 = json.loads(path1.read_text(encoding="utf-8"))
+            content2 = json.loads(path2.read_text(encoding="utf-8"))
+            self.assertEqual(content1["summary"], "Cluster A degraded")
+            self.assertEqual(content2["summary"], "Cluster B degraded")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_filename_includes_artifact_id_when_available(self) -> None:
+        """Notification artifact filenames include artifact_id suffix when present."""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            artifact = make_notification_artifact(
+                kind="degraded-health",
+                summary="Test notification",
+                details={},
+                run_id="run-filename-test",
+            )
+
+            path = write_notification_artifact(notifications_dir, artifact)
+
+            # Filename should include artifact_id
+            self.assertIn(artifact.artifact_id, path.name)
+            self.assertIn(artifact.timestamp, path.name)
+            self.assertIn(artifact.kind, path.name)
+            self.assertTrue(path.name.endswith(".json"))
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_legacy_artifact_without_artifact_id_uses_original_filename(self) -> None:
+        """Legacy artifacts without artifact_id use the original {timestamp}-{kind}.json format."""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create artifact without artifact_id (legacy style)
+            artifact = NotificationArtifact(
+                kind="degraded-health",
+                summary="Legacy notification",
+                details={},
+                run_id="run-legacy",
+                timestamp="20260423T081258",
+                artifact_id=None,  # Legacy artifact
+            )
+
+            path = write_notification_artifact(notifications_dir, artifact)
+
+            # Filename should NOT include artifact_id
+            self.assertEqual(path.name, "20260423T081258-degraded-health.json")
+            self.assertNotIn("-", path.name.split(".")[0].split("-")[-1])  # Last segment shouldn't be UUID
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_immutability_error_message_includes_artifact_id(self) -> None:
+        """FileExistsError includes artifact_id in context when artifact_id is present."""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create artifact with controlled timestamp and explicit artifact_id
+            artifact1 = NotificationArtifact(
+                timestamp="20260423T120000",
+                kind="degraded-health",
+                summary="First notification",
+                details={},
+                run_id="run-error-msg",
+                artifact_id="test-artifact-id-12345",
+            )
+
+            # Write first artifact
+            write_notification_artifact(notifications_dir, artifact1)
+
+            # Try to write again with same artifact_id (should fail)
+            artifact2 = NotificationArtifact(
+                timestamp="20260423T120000",
+                kind="degraded-health",
+                summary="Duplicate notification",
+                details={},
+                run_id="run-error-msg",
+                artifact_id="test-artifact-id-12345",  # Same artifact_id
+            )
+
+            with self.assertRaises(FileExistsError) as context:
+                write_notification_artifact(notifications_dir, artifact2)
+
+            error_msg = str(context.exception)
+            # Should include immutability contract violation
+            self.assertIn("immutability contract violated", error_msg)
+            # Should include artifact_id in context for debugging
+            self.assertIn("test-artifact-id-12345", error_msg)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_multiple_same_second_degraded_health_notifications(self) -> None:
+        """Simulate multiple clusters becoming degraded in the same second (scheduler scenario)."""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            clusters = ["cluster-a", "cluster-b", "cluster-c"]
+            written_paths = []
+
+            # Simulate scheduler health loop: three clusters become degraded in same second
+            for cluster in clusters:
+                artifact = make_notification_artifact(
+                    kind="degraded-health",
+                    summary=f"{cluster} degraded (warning)",
+                    details={"warnings": ["CPU pressure"], "cluster": cluster},
+                    run_id="run-scheduler-001",
+                    cluster_label=cluster,
+                )
+                # Force same timestamp to simulate same-second event
+                artifact = NotificationArtifact(
+                    kind=artifact.kind,
+                    summary=artifact.summary,
+                    details=artifact.details,
+                    run_id=artifact.run_id,
+                    cluster_label=artifact.cluster_label,
+                    context=artifact.context,
+                    timestamp="20260423T081258",  # Same timestamp
+                    artifact_id=artifact.artifact_id,  # Unique IDs
+                )
+                path = write_notification_artifact(notifications_dir, artifact)
+                written_paths.append(path)
+
+            # All three files should exist
+            for path in written_paths:
+                self.assertTrue(path.exists())
+
+            # Should have 3 distinct files
+            self.assertEqual(len(written_paths), 3)
+            self.assertEqual(len(set(written_paths)), 3)
+
+            # Verify content
+            for i, cluster in enumerate(clusters):
+                content = json.loads(written_paths[i].read_text(encoding="utf-8"))
+                self.assertEqual(content["summary"], f"{cluster} degraded (warning)")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
