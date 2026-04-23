@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import json
 import re as _re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ..datetime_utils import ensure_utc
 from ..identity.artifact import new_artifact_id
