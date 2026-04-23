@@ -33,13 +33,6 @@ import type {
   ProposalsPayload,
   ProviderExecution,
   ProviderExecutionBranch,
-  ReviewEnrichment,
-  ReviewEnrichmentStatus,
-  RunPayload,
-  RunsListEntry,
-  RunsListPayload,
-  DeterministicNextCheckSummary,
-  NextCheckApprovalResponse,
   DeterministicNextCheckPromotionRequest,
 } from "./types";
 import "./index.css";
@@ -1287,9 +1280,6 @@ const App = () => {
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
   const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
-  const [promotionStatus, setPromotionStatus] = useState<Record<string, PromotionStatus>>({});
-  const [promotingDeterministic, setPromotingDeterministic] = useState<Record<string, boolean>>({});
-  const [promotionMessages, setPromotionMessages] = useState<Record<string, string>>({});
   const clusterHighlightTimer = useRef<number | null>(null);
   const executionHighlightTimer = useRef<number | null>(null);
   const queueHighlightTimer = useRef<number | null>(null);
@@ -1299,8 +1289,6 @@ const App = () => {
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
-
-  // Promotion status is now managed by the useAppData hook via hookPromotionStatus
 
   // Handle batch execution for a run - refreshes runs list and selected run via hooks
   const handleBatchExecution = useCallback(async (runId: string) => {
