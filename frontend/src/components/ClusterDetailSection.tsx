@@ -6,8 +6,9 @@
  *
  * Extracted from App.tsx as part of the second-pass decomposition effort.
  * Queue state and execution state ownership remain in App.tsx.
- * The "Next check plan" sub-slice has been further extracted into
- * ClusterNextCheckPlanSection.tsx.
+ * Sub-slices:
+ * - "Next check plan" → ClusterNextCheckPlanSection.tsx
+ * - "Related context" (drilldown, proposals, notifications) → ClusterRelatedContextSection.tsx
  */
 
 import type {
@@ -19,6 +20,8 @@ import type {
 import { EvidenceDetails } from "./EvidenceDetails";
 import { ClusterNextCheckPlanSection } from "./ClusterNextCheckPlanSection";
 import type { ClusterNextCheckPlanSectionProps } from "./ClusterNextCheckPlanSection";
+import { ClusterRelatedContextSection } from "./ClusterRelatedContextSection";
+import type { ClusterRelatedContextSectionProps } from "./ClusterRelatedContextSection";
 
 // Re-export execution/approval result types for App.tsx consumers
 export type { ExecutionErrorResult, ExecutionResult, ApprovalResult } from "./ClusterNextCheckPlanSection";
@@ -441,61 +444,16 @@ export const ClusterDetailSection: React.FC<ClusterDetailSectionProps> = ({
                   </div>
                 )}
               </article>
-              <div className="cluster-lists">
-                <div className="drilldown-summary">
-                  <h3>Drilldown summary</h3>
-                  <p className="small">
-                    {clusterDetail.drilldownAvailability.available}/
-                    {clusterDetail.drilldownAvailability.totalClusters} ready ·
-                    Missing: {clusterDetail.drilldownAvailability.missingClusters.join(", ") || "none"}
-                  </p>
-                  <div className="drilldown-grid">
-                    {clusterDetail.drilldownCoverage.map((entry) => (
-                      <article
-                        className={`drilldown-card ${entry.available ? "available" : "missing"}`}
-                        key={entry.label}
-                      >
-                        <header>
-                          <strong>{entry.label}</strong>
-                          <span>{entry.available ? "Ready" : "Missing"}</span>
-                        </header>
-                        <p className="small">Context: {entry.context}</p>
-                        <p className="small">Captured: {entry.timestamp || "pending"}</p>
-                        {entry.artifactPath ? (
-                          <a
-                            className="link"
-                            href={artifactUrl(entry.artifactPath)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View drilldown
-                          </a>
-                        ) : null}
-                      </article>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3>Related proposals</h3>
-                  {clusterDetail.relatedProposals.map((proposal) => (
-                    <div className="related-card" key={proposal.proposalId}>
-                      <p className="eyebrow">{proposal.proposalId}</p>
-                      <p className="small">{proposal.target}</p>
-                      <span className={statusClass(proposal.status)}>{proposal.status}</span>
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <h3>Related notifications</h3>
-                  {clusterDetail.relatedNotifications.map((notification) => (
-                    <div className="related-card" key={notification.timestamp + notification.kind}>
-                      <p className="eyebrow">{notification.kind}</p>
-                      <p className="small">{notification.summary}</p>
-                      <span className="small">{formatTimestamp(notification.timestamp)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Lower supporting-context block - delegated to ClusterRelatedContextSection */}
+              <ClusterRelatedContextSection
+                drilldownAvailability={clusterDetail.drilldownAvailability}
+                drilldownCoverage={clusterDetail.drilldownCoverage}
+                relatedProposals={clusterDetail.relatedProposals}
+                relatedNotifications={clusterDetail.relatedNotifications}
+                artifactUrl={artifactUrl}
+                formatTimestamp={formatTimestamp}
+                statusClass={statusClass}
+              />
             </>
           ) : (
             <p className="muted">Loading cluster evidence…</p>
