@@ -4,12 +4,10 @@
  * Renders the cluster detail panel with findings, hypotheses, next checks,
  * drilldown coverage, related proposals, and notification references.
  *
- * Extracted from App.tsx as part of the second-pass decomposition effort.
- * Queue state and execution state ownership remain in App.tsx.
- * Sub-slices:
- * - "Next check plan" → ClusterNextCheckPlanSection.tsx
- * - "Related context" (drilldown, proposals, notifications) → ClusterRelatedContextSection.tsx
- * - "Tabbed evidence" (findings, hypotheses, next checks) → ClusterEvidenceTabsSection.tsx
+ * Composes three sub-sections:
+ * - ClusterNextCheckPlanSection - next check plan with execution/approval controls
+ * - ClusterEvidenceTabsSection - tabbed findings, hypotheses, next checks
+ * - ClusterRelatedContextSection - drilldown coverage, proposals, notifications
  */
 
 import type {
@@ -18,13 +16,10 @@ import type {
   FleetPayload,
   ArtifactLink,
 } from "../types";
-import { EvidenceDetails } from "./EvidenceDetails";
 import { ClusterNextCheckPlanSection } from "./ClusterNextCheckPlanSection";
 import type { ClusterNextCheckPlanSectionProps } from "./ClusterNextCheckPlanSection";
 import { ClusterRelatedContextSection } from "./ClusterRelatedContextSection";
-import type { ClusterRelatedContextSectionProps } from "./ClusterRelatedContextSection";
 import { ClusterEvidenceTabsSection } from "./ClusterEvidenceTabsSection";
-import type { ClusterEvidenceTabsSectionProps } from "./ClusterEvidenceTabsSection";
 
 // Re-export execution/approval result types for App.tsx consumers
 export type { ExecutionErrorResult, ExecutionResult, ApprovalResult } from "./ClusterNextCheckPlanSection";
@@ -102,8 +97,7 @@ export interface ClusterDetailSectionProps {
   statusClass: (status: string) => string;
 
   // Next check plan sub-slice - delegated to ClusterNextCheckPlanSection
-  // These props are forwarded directly to the sub-component
-  nextCheckPlanSectionProps: Omit<ClusterNextCheckPlanSectionProps, never>;
+  nextCheckPlanSectionProps: ClusterNextCheckPlanSectionProps;
 }
 
 // =============================================================================

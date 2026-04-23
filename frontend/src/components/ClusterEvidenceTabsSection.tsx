@@ -11,7 +11,7 @@
  * No state ownership changes - this is a purely presentational slice.
  */
 
-import type { ClusterDetailPayload, ArtifactLink } from "../types";
+import type { ClusterDetailPayload } from "../types";
 import { EvidenceDetails } from "./EvidenceDetails";
 
 // =============================================================================
