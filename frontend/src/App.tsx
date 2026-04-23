@@ -2200,13 +2200,6 @@ const App = () => {
         selectedClusterLabel={selectedClusterLabel}
         selectedCluster={selectedCluster}
         fleet={fleet}
-        planCandidates={planCandidates}
-        orphanedApprovals={orphanedApprovals}
-        planArtifactLink={planArtifactLink}
-        planSummaryText={planSummaryText}
-        planCandidateCountLabel={planCandidateCountLabel}
-        planStatusText={planStatusText}
-        outcomeSummary={outcomeSummary}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         clusterDetailExpanded={clusterDetailExpanded}
@@ -2217,20 +2210,31 @@ const App = () => {
         recencyTimestamp={recencyTimestamp}
         clusterFresh={clusterFresh}
         clusterRecency={clusterRecency}
-        executionResults={executionResults}
-        approvalResults={approvalResults}
-        executingCandidate={executingCandidate}
-        approvingCandidate={approvingCandidate}
         handleClusterSelection={handleClusterSelection}
-        handleApproveCandidate={handleApproveCandidate}
-        handleManualExecution={handleManualExecution}
-        onRefresh={refresh}
-        buildCandidateKey={buildCandidateKey}
-        isManualExecutionAllowed={isManualExecutionAllowed}
         artifactUrl={artifactUrl}
         formatTimestamp={formatTimestamp}
-        relativeRecency={relativeRecency}
         statusClass={statusClass}
+        nextCheckPlanSectionProps={{
+          planCandidates,
+          orphanedApprovals,
+          planArtifactLink,
+          planSummaryText,
+          planCandidateCountLabel,
+          planStatusText,
+          outcomeSummary,
+          selectedClusterLabel,
+          executionResults,
+          approvalResults,
+          executingCandidate,
+          approvingCandidate,
+          handleApproveCandidate,
+          handleManualExecution,
+          onRefresh: refresh,
+          buildCandidateKey,
+          isManualExecutionAllowed,
+          artifactUrl,
+          relativeRecency,
+        }}
       />
     {/* Workflow Lane: Improve the System */}
     <div className="workflow-lane-header">
