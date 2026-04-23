@@ -179,6 +179,7 @@ class ProposalView:
     artifact_path: str | None
     review_path: str | None
     lifecycle_history: tuple[tuple[str, str, str | None], ...]
+    artifact_id: str | None = None  # Immutable artifact identity (UUIDv7); None for legacy
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,7 @@ class NotificationView:
     context: str | None
     details: tuple[tuple[str, str], ...]
     artifact_path: str | None
+    artifact_id: str | None = None  # Immutable artifact identity (UUIDv7); None for legacy
 
 
 @dataclass(frozen=True)
@@ -917,6 +919,7 @@ def _build_proposal_view(proposal: Mapping[str, object]) -> ProposalView:
         artifact_path=_coerce_optional_str(proposal.get("artifact_path")),
         review_path=_coerce_optional_str(proposal.get("review_artifact")),
         lifecycle_history=lifecycle_history,
+        artifact_id=_coerce_optional_str(proposal.get("artifact_id")),
     )
 
 
@@ -1125,6 +1128,7 @@ def _build_notification_history(raw: object | None) -> tuple[NotificationView, .
                 context=_coerce_optional_str(entry.get("context")),
                 details=_build_notification_details(entry.get("details")),
                 artifact_path=_coerce_optional_str(entry.get("artifact_path")),
+                artifact_id=_coerce_optional_str(entry.get("artifact_id")),
             )
         )
     return tuple(entries)

@@ -608,6 +608,8 @@ class ProposalEntry(TypedDict):
     latestNote: str | None
     lifecycle: list[LifecycleEntry]
     artifacts: list[ArtifactLink]
+    # Immutable artifact identity (UUIDv7); None for legacy artifacts
+    artifactId: str | None
 
 
 class ProposalsPayload(TypedDict):
@@ -629,6 +631,8 @@ class NotificationEntry(TypedDict):
     context: str | None
     details: list[NotificationDetail]
     artifactPath: str | None
+    # Immutable artifact identity (UUIDv7); None for legacy artifacts
+    artifactId: str | None
 
 
 class NotificationsPayload(TypedDict):
@@ -1108,7 +1112,7 @@ def _serialize_proposal(proposal: ProposalView) -> ProposalEntry:
         artifacts.append({"label": "Proposal JSON", "path": proposal.artifact_path})
     if proposal.review_path:
         artifacts.append({"label": "Review JSON", "path": proposal.review_path})
-    return {
+    entry: ProposalEntry = {
         "proposalId": proposal.proposal_id,
         "target": proposal.target,
         "status": proposal.status,
@@ -1122,7 +1126,9 @@ def _serialize_proposal(proposal: ProposalView) -> ProposalEntry:
             for status, timestamp, note in proposal.lifecycle_history
         ],
         "artifacts": artifacts,
+        "artifactId": proposal.artifact_id,
     }
+    return entry
 
 
 def _serialize_notification(entry: NotificationView) -> NotificationEntry:
@@ -1135,6 +1141,7 @@ def _serialize_notification(entry: NotificationView) -> NotificationEntry:
         "context": entry.context,
         "details": [{"label": label, "value": value} for label, value in entry.details],
         "artifactPath": entry.artifact_path,
+        "artifactId": entry.artifact_id,
     }
 
 

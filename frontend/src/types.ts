@@ -233,6 +233,8 @@ export type ProposalEntry = {
   latestNote: string | null;
   lifecycle: LifecycleEntry[];
   artifacts: ArtifactLink[];
+  /** Immutable artifact identity (UUIDv7); null for legacy artifacts */
+  artifactId: string | null;
 };
 
 export type ProposalsPayload = {
@@ -254,6 +256,8 @@ export type NotificationEntry = {
   context: string | null;
   details: NotificationDetail[];
   artifactPath: string | null;
+  /** Immutable artifact identity (UUIDv7); null for legacy artifacts */
+  artifactId: string | null;
 };
 
 export type NotificationsPayload = {
