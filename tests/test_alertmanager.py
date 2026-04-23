@@ -257,16 +257,26 @@ def test_snapshot_to_compact_deterministic_ordering() -> None:
     snapshot = normalize_alertmanager_payload(raw)
     compact1 = snapshot_to_compact(snapshot, max_alerts=10)
     compact2 = snapshot_to_compact(snapshot, max_alerts=10)
-    # Same input produces same bytes
-    assert compact1.to_json_bytes() == compact2.to_json_bytes()
+    # artifact_id is unique per instance (UUIDv7), so full byte equality won't match
+    # Instead, verify the deterministic fields are consistent
+    assert compact1.status == compact2.status == "ok"
+    assert compact1.alert_count == compact2.alert_count == 4
     # Severity counts sorted
     assert compact1.severity_counts == (("critical", 1), ("warning", 3))
+    assert compact2.severity_counts == (("critical", 1), ("warning", 3))
     # Top alert names sorted by count desc, then name
     assert compact1.top_alert_names == ("AlertA", "AlertB", "AlertC")
+    assert compact2.top_alert_names == ("AlertA", "AlertB", "AlertC")
     # Namespaces sorted
     assert compact1.affected_namespaces == ("ns-a", "ns-b", "ns-c")
+    assert compact2.affected_namespaces == ("ns-a", "ns-b", "ns-c")
     # Clusters extracted
     assert compact1.affected_clusters == ("prod",)
+    assert compact2.affected_clusters == ("prod",)
+    # artifact_id is unique per compact instance (expected behavior)
+    assert compact1.artifact_id is not None
+    assert compact2.artifact_id is not None
+    assert compact1.artifact_id != compact2.artifact_id
 
 
 def test_snapshot_to_compact_truncation() -> None:

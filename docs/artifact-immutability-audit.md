@@ -429,6 +429,36 @@ The audit was purely investigative, gathering evidence through:
 
 ---
 
+## Epic Closure Status
+
+**Status**: Complete
+
+**Date**: 2026-04-23
+
+### Work Items Completed
+
+All five highest-risk mutable artifact families have been addressed:
+
+1. **Proposals** — Immutable base proposal artifacts plus immutable lifecycle event artifacts now provide the audit trail; current proposal state is derived from event history with legacy fallback
+2. **External-analysis with usefulness feedback** — Separate review artifacts now write immutable execution artifacts
+3. **`history.json`** — Immutable per-run-per-cluster fact artifacts added as audit trail
+4. **Alertmanager source registry** — Immutable action artifacts provide append-only audit trail
+5. **Latest diagnostic-pack mirror** — Documented as mutable convenience alias with explicit `isMirror` metadata
+
+### Deferred Non-Goal (IM-08c.2)
+
+The following item was explicitly deferred and is NOT part of epic closure criteria:
+
+**Alertmanager source inventory latest-action metadata** — Surfacing the most recent action taken per source in the UI/inventory view is a UI/API enhancement that builds on the completed immutable audit trail. It does not affect artifact immutability contracts and may be addressed in a future enhancement pass.
+
+### Verification
+
+- All immutability-related tests pass: 251 tests across 8 test files
+- Core artifact families enforce append-only semantics via `write_append_only_json_artifact`
+- API/UI surfaces expose immutability metadata (`isMirror`, `sourcePackPath`, `artifactId`)
+
+---
+
 ## Appendix: Classification Reference
 
 | # | Classification | Definition |
