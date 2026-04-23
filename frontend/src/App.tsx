@@ -1480,33 +1480,6 @@ const App = () => {
     clearStoredQueueViewState();
   };
 
-  useEffect(() => {
-    persistQueueViewState({
-      clusterFilter: queueClusterFilter,
-      statusFilter: queueStatusFilter,
-      commandFamilyFilter: queueCommandFamilyFilter,
-      priorityFilter: queuePriorityFilter,
-      workstreamFilter: queueWorkstreamFilter,
-      searchText: queueSearch,
-      focusMode: queueFocusMode,
-      sortOption: queueSortOption,
-    });
-  }, [
-    queueClusterFilter,
-    queueStatusFilter,
-    queueCommandFamilyFilter,
-    queuePriorityFilter,
-    queueWorkstreamFilter,
-    queueSearch,
-    queueFocusMode,
-    queueSortOption,
-  ]);
-
-  // Persist execution history filter state
-  useEffect(() => {
-    persistExecutionHistoryFilter(executionHistoryFilter);
-  }, [executionHistoryFilter]);
-
   const isManualExecutionAllowed = (candidate: NextCheckPlanCandidate) => {
     const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
     if (!hasCandidateIdentifier) {
