@@ -1,17 +1,40 @@
 """Operator overrides for Alertmanager source management.
 
-This module handles explicit operator actions on Alertmanager sources:
-- promote: Convert a discovered/auto-tracked source to manual
-- disable: Remove auto-tracking from a non-manual source
+## Conceptual Clarification
 
-Overrides are persisted as a separate artifact to preserve discovery data
-and remain composable with future reconciliation logic.
+This module handles two distinct concepts that are sometimes conflated:
 
-Design rationale:
+1. **Per-run override artifacts** (`{run_id}-alertmanager-source-overrides.json`)
+   - Run-scoped mutable artifacts that apply effective state within a single run
+   - Derived support artifacts for UI display and run-scoped state computation
+   - NOT the authoritative cross-run source of truth
+   - Overwritten each run with the latest per-run overrides
+
+2. **Immutable action artifacts** (`alertmanager-source-actions/`)
+   - Append-only audit trail written once per action (never overwritten)
+   - Each action creates a new file with unique artifact_id
+   - Provides cross-run audit capability beyond the current run
+   - Survives beyond run-scoped overrides
+
+## Source-of-Truth Boundary
+
+The durable cross-run source of truth for operator intent is the **registry**
+(`alertmanager-source-registry.json`), NOT the per-run override artifacts.
+
+- **Registry**: Mutable cross-run store; records operator promote/disable decisions
+  that persist across runs. This is the authoritative source for cross-run intent.
+- **Per-run overrides**: Run-scoped mutable artifacts; derived from registry state
+  for UI display within the current run.
+- **Immutable action artifacts**: Append-only audit trail; provides evidence trail
+  independent of current registry state.
+
+## Design Rationale
+
 - Manual sources are authoritative and never silently deleted
 - Promotion preserves endpoint/namespace/name as pinned identity
 - Disable is explicit and reversible (re-enable via discovery)
 - Separate artifact keeps overrides auditable and composable
+- Immutable action artifacts provide cross-run audit trail independent of registry
 """
 
 from __future__ import annotations
@@ -100,8 +123,20 @@ class SourceOverride:
 class AlertmanagerSourceOverrides:
     """Collection of operator overrides for Alertmanager sources.
     
-    This artifact is separate from the discovery inventory to preserve
-    discovery data and keep overrides auditable.
+    Per-run override artifacts are DERIVED support artifacts for UI display
+    and run-scoped state computation. They are NOT the authoritative cross-run
+    source of truth.
+    
+    The durable cross-run source of truth is the registry
+    (`alertmanager-source-registry.json`), which records operator promote/disable
+    decisions that persist across runs.
+    
+    Artifact lifecycle:
+    - Written: Per-run, overwritten each run with latest overrides
+    - Read by: UI for display of effective state in current run
+    - Authority: Derived from registry; NOT the source of truth
+    
+    For immutable cross-run audit trail, see write_source_action_artifact().
     """
     overrides: dict[str, SourceOverride] = field(default_factory=dict)
     cluster_context: str | None = None

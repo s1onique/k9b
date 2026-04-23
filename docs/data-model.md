@@ -40,6 +40,31 @@
    
    The `registry_key` format is `{cluster_label}:{canonical_identity}` (preferred) or `{cluster_context}:{canonical_identity}` as fallback. Artifacts are append-only (unique filename per action via UUID suffix) and non-fatal to write—failure is logged but does not block the action response. The artifacts survive beyond run-scoped overrides, providing cross-run audit capability.
 
+### Alertmanager Source Artifact Contract
+
+The Alertmanager source management involves four distinct artifact types with different mutability semantics. **Do not conflate these—future code or operators may treat per-run overrides as authoritative when they are not the durable cross-run source of truth.**
+
+| Artifact | Path Pattern | Scope | Mutability | Authority |
+|----------|-------------|-------|------------|-----------|
+| Discovery inventory | `{run_id}-alertmanager-sources.json` | Run | Immutable (written once per run) | Immutable evidence |
+| **Per-run overrides** | `{run_id}-alertmanager-source-overrides.json` | **Run** | **Mutable** (overwritten per run) | **NOT authoritative**; derived support artifact for UI |
+| **Registry** | `alertmanager-source-registry.json` | Cross-run | Mutable (overwrites cross-run) | **Authoritative source of truth** for cross-run intent |
+| Action artifacts | `alertmanager-source-actions/{run_id}-{source_id}-{action}-{artifact_id}.json` | Cross-run | Immutable (append-only, UUID per action) | Immutable audit trail; survives beyond run-scoped state |
+
+**Source-of-truth boundary:**
+
+- **Registry** (`alertmanager-source-registry.json`) is the **authoritative cross-run source of truth** for operator promote/disable decisions. The discovery loop reads from the registry to apply desired state to discovered sources.
+
+- **Per-run overrides** (`{run_id}-alertmanager-source-overrides.json`) are **derived run-scoped support artifacts**. They provide effective state computation for UI display within a single run and are NOT the durable source of truth. They are overwritten each run with the latest per-run overrides.
+
+- **Immutable action artifacts** (`alertmanager-source-actions/`) provide an **append-only audit trail** for operator actions. Each action creates a new artifact with a unique artifact_id (UUIDv7). They survive beyond run-scoped overrides and provide cross-run audit capability independent of current registry state.
+
+**Contract summary:**
+- Cross-run operator intent lives in the **registry**, not in per-run override artifacts
+- Per-run overrides are derived from registry state for UI display within the current run
+- Immutable action artifacts provide append-only audit trail independent of current state
+- Do not use per-run override artifacts as the authoritative source for cross-run persistence
+
    You can now configure an optional `external_analysis.retention` block with `max_artifacts` and/or `max_age_days` so the scheduler prunes older JSON files before the UI recomputes the retained-history stats; pruning only touches historical files and never deletes the artifacts produced by the current run.
 - **History and notifications** – `runs/health/history.json` keeps per-target history used for regression detection. This aggregate file is mutable: each run overwrites the previous state so it always reflects the latest observation for each cluster.
   
