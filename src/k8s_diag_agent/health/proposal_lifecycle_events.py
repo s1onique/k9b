@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..identity.artifact import new_artifact_id
+from ..identity.artifact import new_artifact_id, write_append_only_json_artifact
 from .adaptation import ProposalLifecycleStatus
 
 if TYPE_CHECKING:
@@ -128,25 +128,14 @@ def write_proposal_lifecycle_event(
     Raises:
         FileExistsError: If the artifact path already exists (immutability guarantee)
     """
-    import json
-
-    transitions_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{event.proposal_id}-{event.transition}-{event.artifact_id}.json"
-    artifact_path = transitions_dir / filename
+    path = transitions_dir / filename
 
-    # Reject overwrite: fail fast if path already exists (immutability contract)
-    if artifact_path.exists():
-        raise FileExistsError(
-            f"Proposal lifecycle event artifact already exists at {artifact_path}; "
-            f"immutability contract violated for proposal_id={event.proposal_id}, "
-            f"transition={event.transition}, artifact_id={event.artifact_id}"
-        )
-
-    artifact_path.write_text(
-        json.dumps(event.to_dict(), indent=2),
-        encoding="utf-8",
+    context = (
+        f"proposal_id={event.proposal_id}, transition={event.transition}, "
+        f"artifact_id={event.artifact_id}"
     )
-    return artifact_path
+    return write_append_only_json_artifact(path, event.to_dict(), context=context)
 
 
 def derive_current_proposal_status(

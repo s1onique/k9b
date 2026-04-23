@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -11,7 +10,7 @@ from pathlib import Path
 from typing import cast
 
 from ..datetime_utils import now_utc, parse_iso_to_utc
-from ..identity.artifact import new_artifact_id
+from ..identity.artifact import new_artifact_id, write_append_only_json_artifact
 
 
 class ExternalAnalysisStatus(StrEnum):
@@ -329,15 +328,8 @@ def write_external_analysis_artifact(path: Path, artifact: ExternalAnalysisArtif
     Raises:
         FileExistsError: If the artifact path already exists (immutability guarantee)
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Reject overwrite: fail fast if path already exists (immutability contract)
-    if path.exists():
-        raise FileExistsError(
-            f"External analysis artifact already exists at {path}; "
-            f"immutability contract violated for run_id={artifact.run_id}, "
-            f"cluster_label={artifact.cluster_label}, tool_name={artifact.tool_name}"
-        )
-
-    path.write_text(json.dumps(artifact.to_dict(), indent=2), encoding="utf-8")
-    return path
+    context = (
+        f"run_id={artifact.run_id}, cluster_label={artifact.cluster_label}, "
+        f"tool_name={artifact.tool_name}"
+    )
+    return write_append_only_json_artifact(path, artifact.to_dict(), context=context)
