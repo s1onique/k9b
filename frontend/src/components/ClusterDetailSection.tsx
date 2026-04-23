@@ -9,6 +9,7 @@
  * Sub-slices:
  * - "Next check plan" → ClusterNextCheckPlanSection.tsx
  * - "Related context" (drilldown, proposals, notifications) → ClusterRelatedContextSection.tsx
+ * - "Tabbed evidence" (findings, hypotheses, next checks) → ClusterEvidenceTabsSection.tsx
  */
 
 import type {
@@ -22,6 +23,8 @@ import { ClusterNextCheckPlanSection } from "./ClusterNextCheckPlanSection";
 import type { ClusterNextCheckPlanSectionProps } from "./ClusterNextCheckPlanSection";
 import { ClusterRelatedContextSection } from "./ClusterRelatedContextSection";
 import type { ClusterRelatedContextSectionProps } from "./ClusterRelatedContextSection";
+import { ClusterEvidenceTabsSection } from "./ClusterEvidenceTabsSection";
+import type { ClusterEvidenceTabsSectionProps } from "./ClusterEvidenceTabsSection";
 
 // Re-export execution/approval result types for App.tsx consumers
 export type { ExecutionErrorResult, ExecutionResult, ApprovalResult } from "./ClusterNextCheckPlanSection";
@@ -364,86 +367,13 @@ export const ClusterDetailSection: React.FC<ClusterDetailSectionProps> = ({
               {nextCheckPlanSectionProps.planCandidates.length ? (
                 <ClusterNextCheckPlanSection {...nextCheckPlanSectionProps} />
               ) : null}
-              <div className="tab-list" role="tablist" aria-label="Cluster detail tabs">
-                {[
-                  { id: "findings", label: "Findings" },
-                  { id: "hypotheses", label: "Hypotheses" },
-                  { id: "checks", label: "Next checks" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={`tab ${activeTab === tab.id ? "active" : ""}`}
-                    onClick={() => setActiveTab(tab.id as "findings" | "hypotheses" | "checks")}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              <article className="tab-panel">
-                {activeTab === "findings" && (
-                  <div className="finding-list">
-                    {clusterDetail.findings.map((finding) => (
-                      <article className="finding-card" key={`${finding.label}-${finding.context}`}>
-                        <header>
-                          <div>
-                            <strong>
-                              {finding.label || "cluster"} · {finding.context || "n/a"}
-                            </strong>
-                            <p className="muted">
-                              Triggers: {finding.triggerReasons.join(", ") || "none"}
-                            </p>
-                            <p className="small">
-                              Warnings: {finding.warningEvents} · Non-running pods: {finding.nonRunningPods}
-                            </p>
-                          </div>
-                          {finding.artifactPath ? (
-                            <a
-                              className="link"
-                              href={artifactUrl(finding.artifactPath)}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              View raw evidence
-                            </a>
-                          ) : null}
-                        </header>
-                        <EvidenceDetails title="Summary" entries={finding.summaryEntries} />
-                        <EvidenceDetails title="Patterns" entries={finding.patternDetails} />
-                        {finding.rolloutStatus.length ? (
-                          <p className="small">Rollout status: {finding.rolloutStatus.join(", ")}</p>
-                        ) : null}
-                      </article>
-                    ))}
-                  </div>
-                )}
-                {activeTab === "hypotheses" && (
-                  <div className="finding-list">
-                    {clusterDetail.hypotheses.map((hypothesis) => (
-                      <article className="finding-card compact" key={hypothesis.description}>
-                        <strong>{hypothesis.description}</strong>
-                        <p className="small">
-                          Confidence: {hypothesis.confidence} · Layer: {hypothesis.probableLayer}
-                        </p>
-                        <p className="small">Falsifier: {hypothesis.falsifier}</p>
-                      </article>
-                    ))}
-                  </div>
-                )}
-                {activeTab === "checks" && (
-                  <div className="finding-list">
-                    {clusterDetail.nextChecks.map((check) => (
-                      <article className="finding-card compact" key={check.description}>
-                        <strong>{check.description}</strong>
-                        <p className="small">
-                          Owner: {check.owner} · Method: {check.method}
-                        </p>
-                        <p className="small">Evidence: {check.evidenceNeeded.join(", ") || "n/a"}</p>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </article>
+              {/* Tabbed evidence sub-slice - delegated to ClusterEvidenceTabsSection */}
+              <ClusterEvidenceTabsSection
+                clusterDetail={clusterDetail}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                artifactUrl={artifactUrl}
+              />
               {/* Lower supporting-context block - delegated to ClusterRelatedContextSection */}
               <ClusterRelatedContextSection
                 drilldownAvailability={clusterDetail.drilldownAvailability}
