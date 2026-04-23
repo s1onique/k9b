@@ -16,6 +16,7 @@ import { useUIState } from "./hooks/useUIState";
 import { useQueueState } from "./hooks/useQueueState";
 import type {
   AlertmanagerProvenance,
+  ArtifactLink,
   FeedbackAdaptationProvenance,
   AutoInterpretation,
   ClusterDetailPayload,
@@ -37,14 +38,9 @@ import type {
 } from "./types";
 import "./index.css";
 import { ThemeSwitch } from "./ThemeSwitch";
-import Pagination from "./components/Pagination";
 import { HeaderBranding } from "./components/HeaderBranding";
-import { InterpretationBlock } from "./components/InterpretationBlock";
 import { RunDiagnosticPackPanel } from "./components/RunDiagnosticPackPanel";
 import { LLMActivityPanel } from "./components/LLMActivityPanel";
-import { FailureFollowUpBlock } from "./components/FailureFollowUpBlock";
-import { ResultInterpretationBlock } from "./components/ResultInterpretationBlock";
-import { EvidenceDetails } from "./components/EvidenceDetails";
 import {
   AdvisoryTopConcernsSection,
   AdvisoryEvidenceGapsSection,
@@ -52,9 +48,8 @@ import {
   AdvisoryFocusNotesSection,
 } from "./components/AdvisorySections";
 import { ReviewEnrichmentPanel } from "./components/ReviewEnrichmentPanel";
-import { DiagnosticPackReviewList } from "./components/DiagnosticPackReviewList";
 import { DiagnosticPackReviewPanel } from "./components/DiagnosticPackReviewPanel";
-import { ExecutionLine, ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
+import { ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
 import {
   ExecutionHistoryPanel,
   buildExecutionEntryKey,
@@ -224,9 +219,10 @@ const renderLlmStatsLine = (stats: LLMStats, modifier?: string) => {
   );
 };
 
+// Autorefresh options and storage key used by header UI (state managed in useRunSelection hook)
+// AUTOREFRESH_STORAGE_KEY retained for test compatibility
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
-const DEFAULT_AUTOREFRESH_SECONDS = 5;
-const AUTOREFRESH_OPTIONS = [
+export const AUTOREFRESH_OPTIONS = [
   { label: "Off", value: "off" },
   { label: "5s", value: "5" },
   { label: "10s", value: "10" },
@@ -234,32 +230,6 @@ const AUTOREFRESH_OPTIONS = [
   { label: "1m", value: "60" },
   { label: "5m", value: "300" },
 ];
-
-const readStoredAutoRefreshInterval = () => {
-  if (typeof window === "undefined") {
-    return DEFAULT_AUTOREFRESH_SECONDS;
-  }
-  const stored = window.localStorage.getItem(AUTOREFRESH_STORAGE_KEY);
-  if (!stored) {
-    return DEFAULT_AUTOREFRESH_SECONDS;
-  }
-  if (stored === "off") {
-    return null;
-  }
-  const parsed = Number(stored);
-  if (Number.isNaN(parsed) || parsed <= 0) {
-    return DEFAULT_AUTOREFRESH_SECONDS;
-  }
-  return parsed;
-};
-
-const persistAutoRefreshInterval = (value: string) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
-};
-
 
 const buildClusterRecommendedArtifacts = (detail?: ClusterDetailPayload) => {
   if (!detail) {
