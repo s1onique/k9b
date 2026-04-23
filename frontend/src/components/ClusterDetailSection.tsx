@@ -201,6 +201,7 @@ export interface ClusterDetailSectionProps {
   handleClusterSelection: (label: string, options?: { expand?: boolean }) => void;
   handleApproveCandidate: (candidate: NextCheckPlanCandidate, candidateKey: string) => Promise<void>;
   handleManualExecution: (candidate: NextCheckPlanCandidate, candidateKey: string) => Promise<void>;
+  onRefresh: () => void;
 
   // Helpers
   buildCandidateKey: (candidate: NextCheckPlanCandidate, index: number) => string;
@@ -244,6 +245,7 @@ export const ClusterDetailSection: React.FC<ClusterDetailSectionProps> = ({
   handleClusterSelection,
   handleApproveCandidate,
   handleManualExecution,
+  onRefresh,
   buildCandidateKey,
   isManualExecutionAllowed,
   artifactUrl,
@@ -829,9 +831,7 @@ export const ClusterDetailSection: React.FC<ClusterDetailSectionProps> = ({
                                 <button
                                   type="button"
                                   className="link tiny next-check-refresh-action"
-                                  onClick={() => {
-                                    /* refresh is handled by parent */
-                                  }}
+                                  onClick={onRefresh}
                                 >
                                   Refresh now
                                 </button>

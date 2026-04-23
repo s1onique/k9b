@@ -2224,6 +2224,7 @@ const App = () => {
         handleClusterSelection={handleClusterSelection}
         handleApproveCandidate={handleApproveCandidate}
         handleManualExecution={handleManualExecution}
+        onRefresh={refresh}
         buildCandidateKey={buildCandidateKey}
         isManualExecutionAllowed={isManualExecutionAllowed}
         artifactUrl={artifactUrl}
