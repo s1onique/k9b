@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from k8s_diag_agent.external_analysis.adapter import (
     AuthError,
     ExternalAnalysisAdapterConfig,
@@ -995,3 +997,159 @@ def test_error_snapshot_persistence_and_roundtrip(tmp_path: Path) -> None:
     assert len(loaded.alerts) == 0
     assert loaded.alert_count == 0
     assert "503" in loaded.errors[0]
+
+
+# --- Alertmanager artifact immutability tests ---
+
+def test_alertmanager_snapshot_write_succeeds_normally(tmp_path: Path) -> None:
+    """Writing an Alertmanager snapshot artifact to a new path succeeds."""
+    raw = {"data": {"alerts": [_make_alert("ImmutTest", "warning")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    run_id = "immut-snapshot-test"
+
+    path = write_alertmanager_snapshot(tmp_path, snapshot, run_id)
+
+    assert path.exists()
+    assert f"{run_id}-alertmanager-snapshot.json" == path.name
+
+
+def test_alertmanager_snapshot_immutability_rejects_overwrite(tmp_path: Path) -> None:
+    """Attempting to write the same immutable Alertmanager snapshot path again raises FileExistsError.
+    
+    Alertmanager snapshot artifacts are immutable and cannot be overwritten.
+    This test demonstrates the immutability contract enforced by write_alertmanager_snapshot().
+    """
+    raw = {"data": {"alerts": [_make_alert("OverwriteTest", "warning")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    run_id = "immut-snapshot-overwrite-test"
+
+    # First write succeeds
+    path1 = write_alertmanager_snapshot(tmp_path, snapshot, run_id)
+    assert path1.exists()
+
+    # Second write to same path raises FileExistsError
+    with pytest.raises(FileExistsError) as exc_info:
+        write_alertmanager_snapshot(tmp_path, snapshot, run_id)
+    
+    assert "immutability contract violated" in str(exc_info.value)
+    assert "alertmanager-snapshot" in str(exc_info.value)
+
+
+def test_alertmanager_compact_write_succeeds_normally(tmp_path: Path) -> None:
+    """Writing an Alertmanager compact artifact to a new path succeeds."""
+    raw = {"data": {"alerts": [_make_alert("CompactImmutTest", "info")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    compact = snapshot_to_compact(snapshot)
+    run_id = "immut-compact-test"
+
+    path = write_alertmanager_compact(tmp_path, compact, run_id)
+
+    assert path.exists()
+    assert f"{run_id}-alertmanager-compact.json" == path.name
+
+
+def test_alertmanager_compact_immutability_rejects_overwrite(tmp_path: Path) -> None:
+    """Attempting to write the same immutable Alertmanager compact path again raises FileExistsError.
+    
+    Alertmanager compact artifacts are immutable and cannot be overwritten.
+    This test demonstrates the immutability contract enforced by write_alertmanager_compact().
+    """
+    raw = {"data": {"alerts": [_make_alert("CompactOverwriteTest", "info")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    compact = snapshot_to_compact(snapshot)
+    run_id = "immut-compact-overwrite-test"
+
+    # First write succeeds
+    path1 = write_alertmanager_compact(tmp_path, compact, run_id)
+    assert path1.exists()
+
+    # Second write to same path raises FileExistsError
+    with pytest.raises(FileExistsError) as exc_info:
+        write_alertmanager_compact(tmp_path, compact, run_id)
+    
+    assert "immutability contract violated" in str(exc_info.value)
+    assert "alertmanager-compact" in str(exc_info.value)
+
+
+def test_alertmanager_artifacts_both_immutable(tmp_path: Path) -> None:
+    """Both snapshot and compact artifacts are immutable within the same run."""
+    raw = {"data": {"alerts": [_make_alert("BothImmut", "critical")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    compact = snapshot_to_compact(snapshot)
+    run_id = "immut-both-test"
+
+    # Write both artifacts
+    snap_path, compact_path = write_alertmanager_artifacts(tmp_path, run_id, snapshot, compact)
+    assert snap_path.exists()
+    assert compact_path.exists()
+
+    # Attempting to overwrite snapshot raises FileExistsError
+    with pytest.raises(FileExistsError):
+        write_alertmanager_snapshot(tmp_path, snapshot, run_id)
+
+    # Attempting to overwrite compact raises FileExistsError
+    with pytest.raises(FileExistsError):
+        write_alertmanager_compact(tmp_path, compact, run_id)
+
+
+def test_alertmanager_distinct_run_ids_write_successfully(tmp_path: Path) -> None:
+    """Distinct Alertmanager artifacts with different run_ids write successfully.
+    
+    Immutability doesn't block normal operation - different artifacts with different
+    run_ids should write without conflict.
+    """
+    raw = {"data": {"alerts": [_make_alert("DistinctRun", "warning")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    compact = snapshot_to_compact(snapshot)
+
+    run_id_1 = "immut-distinct-run-1"
+    run_id_2 = "immut-distinct-run-2"
+
+    # Write artifacts for first run
+    snap_path1, compact_path1 = write_alertmanager_artifacts(
+        tmp_path, run_id_1, snapshot, compact
+    )
+    assert snap_path1.exists()
+    assert compact_path1.exists()
+
+    # Write artifacts for second run (different paths)
+    snap_path2, compact_path2 = write_alertmanager_artifacts(
+        tmp_path, run_id_2, snapshot, compact
+    )
+    assert snap_path2.exists()
+    assert compact_path2.exists()
+
+    # Paths should be different
+    assert snap_path1 != snap_path2
+    assert compact_path1 != compact_path2
+
+
+def test_alertmanager_artifacts_backward_compatible_flow(tmp_path: Path) -> None:
+    """Normal Alertmanager flows remain backward compatible.
+    
+    This test verifies that the immutability guard doesn't break
+    the standard Alertmanager artifact writing pattern where each run
+    produces unique snapshot and compact artifacts.
+    """
+    raw = {"data": {"alerts": [_make_alert("BackwardCompat", "error")]}}
+    snapshot = normalize_alertmanager_payload(raw)
+    compact = snapshot_to_compact(snapshot)
+    
+    run_id = "backward-compat-run"
+    
+    # Write the standard pair of artifacts
+    snap_path, compact_path = write_alertmanager_artifacts(
+        tmp_path, run_id, snapshot, compact
+    )
+    
+    assert snap_path.exists()
+    assert compact_path.exists()
+    
+    # Read back and verify contents
+    loaded_snap = read_alertmanager_snapshot(snap_path)
+    loaded_compact = read_alertmanager_compact(compact_path)
+    
+    assert loaded_snap is not None
+    assert loaded_compact is not None
+    assert loaded_snap.status == snapshot.status
+    assert loaded_compact.status == compact.status

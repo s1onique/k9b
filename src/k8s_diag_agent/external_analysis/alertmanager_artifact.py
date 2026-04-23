@@ -15,10 +15,24 @@ if TYPE_CHECKING:
 def write_alertmanager_snapshot(directory: Path, snapshot: AlertmanagerSnapshot, run_id: str) -> Path:
     """Write Alertmanager snapshot to run artifact directory.
     
+    Alertmanager snapshot artifacts are immutable: once written, they must not be overwritten.
+    This function rejects writes to an existing path to enforce the immutability contract.
+    
     Returns the path to the written file.
+    
+    Raises:
+        FileExistsError: If the artifact path already exists (immutability guarantee)
     """
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{run_id}-alertmanager-snapshot.json"
+
+    # Reject overwrite: fail fast if path already exists (immutability contract)
+    if path.exists():
+        raise FileExistsError(
+            f"Alertmanager snapshot artifact already exists at {path}; "
+            f"immutability contract violated for run_id={run_id}"
+        )
+
     path.write_text(json.dumps(snapshot.to_dict(), indent=2), encoding="utf-8")
     return path
 
@@ -26,10 +40,24 @@ def write_alertmanager_snapshot(directory: Path, snapshot: AlertmanagerSnapshot,
 def write_alertmanager_compact(directory: Path, compact: AlertmanagerCompact, run_id: str) -> Path:
     """Write Alertmanager compact summarization to run artifact directory.
     
+    Alertmanager compact artifacts are immutable: once written, they must not be overwritten.
+    This function rejects writes to an existing path to enforce the immutability contract.
+    
     Returns the path to the written file.
+    
+    Raises:
+        FileExistsError: If the artifact path already exists (immutability guarantee)
     """
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{run_id}-alertmanager-compact.json"
+
+    # Reject overwrite: fail fast if path already exists (immutability contract)
+    if path.exists():
+        raise FileExistsError(
+            f"Alertmanager compact artifact already exists at {path}; "
+            f"immutability contract violated for run_id={run_id}"
+        )
+
     path.write_text(json.dumps(compact.to_dict(), indent=2), encoding="utf-8")
     return path
 
@@ -136,10 +164,24 @@ def alertmanager_artifacts_exist(root: Path, run_id: str) -> tuple[bool, bool]:
 def write_alertmanager_sources(directory: Path, inventory: AlertmanagerSourceInventory, run_id: str) -> Path:
     """Write Alertmanager sources inventory to run artifact directory.
     
+    Alertmanager sources inventory artifacts are immutable: once written, they must not be overwritten.
+    This function rejects writes to an existing path to enforce the immutability contract.
+    
     Returns the path to the written file.
+    
+    Raises:
+        FileExistsError: If the artifact path already exists (immutability guarantee)
     """
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{run_id}-alertmanager-sources.json"
+
+    # Reject overwrite: fail fast if path already exists (immutability contract)
+    if path.exists():
+        raise FileExistsError(
+            f"Alertmanager sources artifact already exists at {path}; "
+            f"immutability contract violated for run_id={run_id}"
+        )
+
     path.write_text(json.dumps(inventory.to_dict(), indent=2), encoding="utf-8")
     return path
 
