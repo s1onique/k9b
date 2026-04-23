@@ -2924,9 +2924,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "reason": reason,
         }
 
-        # Include action artifact path if it was written
+        # Include action artifact path and id if it was written
         if action_artifact_path is not None:
             response["actionArtifactPath"] = str(action_artifact_path.relative_to(self._health_root))
+            # Extract artifact_id from the written artifact for identity surfacing
+            try:
+                artifact_content = json.loads(action_artifact_path.read_text(encoding="utf-8"))
+                if "artifact_id" in artifact_content:
+                    response["actionArtifactId"] = artifact_content["artifact_id"]
+            except Exception:
+                # Non-fatal: log but don't fail the response
+                logger.warning(
+                    "Failed to read artifact_id from action artifact",
+                    extra={"source_id": path_source_id, "artifact_path": str(action_artifact_path)},
+                )
 
         self._send_json(response)
 
