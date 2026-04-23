@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
-from urllib.parse import parse_qs, unquote
+from urllib.parse import unquote
 
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -677,9 +677,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             if route.startswith("/api/"):
                 self._handle_api(route, query)
             elif route == "/artifact":
-                self._serve_artifact(query)
+                from .server_static import serve_artifact
+                serve_artifact(self, query)
             else:
-                self._serve_static(route)
+                from .server_static import serve_static
+                serve_static(self, route)
         except Exception:
             # Log any uncaught exceptions as ERROR access logs
             self._status_code = 500
@@ -1698,121 +1700,6 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
 
         self._send_json(response)
-    def _serve_static(self, route: str) -> None:
-        target = route or "/"
-        if target.endswith("/"):
-            target += "index.html"
-        candidate = (self.static_dir / target.lstrip("/")).resolve()
-        static_root = self.static_dir.resolve()
-        if not str(candidate).startswith(str(static_root)) or not candidate.exists():
-            candidate = static_root / "index.html"
-            if not candidate.exists():
-                self._send_text(404, "Static assets unavailable")
-                return
-        self._send_file(candidate)
-
-    def _serve_artifact(self, query: str) -> None:
-        params = parse_qs(query)
-        paths = params.get("path")
-        if not paths:
-            self._send_text(400, "Artifact path required")
-            return
-        requested = Path(paths[0])
-        requested_relative = str(requested)
-        try:
-            artifact_path = (self.runs_dir / requested).resolve()
-        except Exception:  # pragma: no cover - defensive guard
-            self._log_artifact_request(requested_relative, None, None, "invalid-path", 400)
-            self._send_text(400, "Invalid artifact path")
-            return
-        root_resolved = self.runs_dir.resolve()
-        normalized_path = str(artifact_path)
-        within_allowed_root = normalized_path.startswith(str(root_resolved))
-        if not within_allowed_root:
-            self._log_artifact_request(
-                requested_relative, normalized_path, str(root_resolved),
-                "path-escape-attempt", 400
-            )
-            self._send_text(400, "Invalid artifact path")
-            return
-        exists = artifact_path.exists()
-        if not exists:
-            self._log_artifact_request(
-                requested_relative, normalized_path, str(root_resolved),
-                "not-found", 404
-            )
-            self._send_text(404, "Artifact not found")
-            return
-        status = "success"
-        if artifact_path.suffix.lower() == ".zip":
-            try:
-                artifact_bytes = artifact_path.read_bytes()
-            except OSError as exc:
-                self._log_artifact_request(
-                    requested_relative, normalized_path, str(root_resolved),
-                    "read-error", 500
-                )
-                self._send_text(500, f"Unable to read artifact: {exc}")
-                return
-            self.send_response(200)
-            self.send_header("Content-Type", "application/zip")
-            self.send_header("Content-Length", str(len(artifact_bytes)))
-            self.send_header(
-                "Content-Disposition",
-                f"attachment; filename=\"{artifact_path.name}\"",
-            )
-            self.end_headers()
-            self.wfile.write(artifact_bytes)
-            self._log_artifact_request(
-                requested_relative, normalized_path, str(root_resolved),
-                status, 200
-            )
-            return
-        try:
-            payload = artifact_path.read_text(encoding="utf-8")
-        except OSError as exc:
-            self._log_artifact_request(
-                requested_relative, normalized_path, str(root_resolved),
-                "read-error", 500
-            )
-            self._send_text(500, f"Unable to read artifact: {exc}")
-            return
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(payload.encode("utf-8"))
-        self._log_artifact_request(
-            requested_relative, normalized_path, str(root_resolved),
-            status, 200
-        )
-
-    def _log_artifact_request(
-        self,
-        requested_relative: str,
-        normalized_absolute: str | None,
-        runs_root: str | None,
-        result: str,
-        status_code: int,
-    ) -> None:
-        """Log structured information about artifact download requests."""
-        emit_structured_log(
-            component="artifact-download",
-            message="Artifact download request",
-            severity="INFO" if status_code < 400 else "WARNING",
-            run_label="",
-            run_id="",
-            metadata={
-                "requested_relative_path": requested_relative,
-                "normalized_absolute_path": normalized_absolute,
-                "runs_root": runs_root,
-                "health_root": str(Path(runs_root) / "health") if runs_root else None,
-                "exists": normalized_absolute and Path(normalized_absolute).exists() if normalized_absolute else False,
-                "within_allowed_root": normalized_absolute and runs_root and normalized_absolute.startswith(runs_root) if (normalized_absolute and runs_root) else False,
-                "result": result,
-                "status_code": status_code,
-            },
-        )
-
     def _load_context(self, requested_run_id: str | None = None) -> UIIndexContext | None:
         """Load the UI context, optionally for a specific run.
 
