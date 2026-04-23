@@ -310,6 +310,34 @@ class ExternalAnalysisArtifact:
 
 
 def write_external_analysis_artifact(path: Path, artifact: ExternalAnalysisArtifact) -> Path:
+    """Write an external analysis artifact to disk.
+
+    External analysis artifacts are immutable: once written, they must not be overwritten.
+    This function rejects writes to an existing path to enforce the immutability contract.
+
+    The immutability contract means that the same path (run_id + cluster_label + tool_name
+    combination) should never be written twice. This protects against accidental overwrites
+    that could lose audit trail information.
+
+    Mutable exceptions (NOT covered by this guard):
+    - history.json
+    - alertmanager-source-registry.json
+    - ui-index.json
+    - diagnostic-packs/latest/
+    - other explicitly documented mutable/derived artifacts
+
+    Raises:
+        FileExistsError: If the artifact path already exists (immutability guarantee)
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Reject overwrite: fail fast if path already exists (immutability contract)
+    if path.exists():
+        raise FileExistsError(
+            f"External analysis artifact already exists at {path}; "
+            f"immutability contract violated for run_id={artifact.run_id}, "
+            f"cluster_label={artifact.cluster_label}, tool_name={artifact.tool_name}"
+        )
+
     path.write_text(json.dumps(artifact.to_dict(), indent=2), encoding="utf-8")
     return path

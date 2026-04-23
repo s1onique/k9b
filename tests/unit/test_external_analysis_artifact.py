@@ -1226,5 +1226,254 @@ class TestAlertmanagerRelevanceFields(unittest.TestCase):
         self.assertIsNone(artifact.alertmanager_relevance)
 
 
+class TestExternalAnalysisArtifactImmutability(unittest.TestCase):
+    """Tests for external analysis artifact immutability guardrail.
+
+    External analysis artifacts are immutable: once written, they must not be overwritten.
+    This class tests the immutability contract enforced by write_external_analysis_artifact().
+
+    Mutable exceptions (NOT covered by this guardrail):
+    - history.json
+    - alertmanager-source-registry.json
+    - ui-index.json
+    - diagnostic-packs/latest/
+    - other explicitly documented mutable/derived artifacts
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_write_artifact_succeeds_normally(self) -> None:
+        """Writing an external analysis artifact to a new path succeeds."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-001",
+            cluster_label="cluster-a",
+            summary="First analysis",
+        )
+
+        output_path = self.tmpdir / "external-analysis" / "run-immut-001-cluster-a-k8sgpt.json"
+        result = write_external_analysis_artifact(output_path, artifact)
+
+        self.assertTrue(result.exists())
+        self.assertEqual(result, output_path)
+
+    def test_immutability_rejects_overwrite_same_path(self) -> None:
+        """Attempting to write the same immutable external analysis artifact path again raises FileExistsError.
+
+        This test demonstrates that external analysis artifacts are immutable and cannot be overwritten.
+        The path uniqueness comes from run_id + cluster_label + tool_name combination.
+        """
+        artifact1 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-002",
+            cluster_label="cluster-b",
+            summary="First analysis",
+        )
+
+        artifact2 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-002",
+            cluster_label="cluster-b",
+            summary="Second analysis (should fail)",
+        )
+
+        output_path = self.tmpdir / "external-analysis" / "run-immut-002-cluster-b-k8sgpt.json"
+
+        # First write succeeds
+        result1 = write_external_analysis_artifact(output_path, artifact1)
+        self.assertTrue(result1.exists())
+
+        # Second write to same path raises FileExistsError
+        with self.assertRaises(FileExistsError) as context:
+            write_external_analysis_artifact(output_path, artifact2)
+
+        error_msg = str(context.exception)
+        self.assertIn("already exists", error_msg)
+        self.assertIn("immutability contract violated", error_msg)
+        self.assertIn("run_id=run-immut-002", error_msg)
+        self.assertIn("cluster_label=cluster-b", error_msg)
+        self.assertIn("tool_name=k8sgpt", error_msg)
+
+    def test_immutability_distinct_path_succeeds(self) -> None:
+        """A distinct external analysis artifact with different path writes successfully.
+
+        This verifies that immutability doesn't block normal operation - different
+        artifacts with different paths should write without conflict.
+        """
+        artifact1 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-003",
+            cluster_label="cluster-c",
+            summary="First analysis",
+        )
+
+        artifact2 = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="run-immut-003",
+            cluster_label="cluster-c",
+            summary="Second analysis (different tool)",
+        )
+
+        output_path1 = self.tmpdir / "external-analysis" / "run-immut-003-cluster-c-k8sgpt.json"
+        output_path2 = self.tmpdir / "external-analysis" / "run-immut-003-cluster-c-llamacpp.json"
+
+        result1 = write_external_analysis_artifact(output_path1, artifact1)
+        result2 = write_external_analysis_artifact(output_path2, artifact2)
+
+        self.assertTrue(result1.exists())
+        self.assertTrue(result2.exists())
+        self.assertNotEqual(result1, result2)
+
+    def test_immutability_distinct_run_succeeds(self) -> None:
+        """External analysis artifacts with different run_ids write successfully.
+
+        Each run produces its own artifacts, so different runs don't conflict.
+        """
+        artifact1 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-004-a",
+            cluster_label="cluster-d",
+            summary="Analysis from run A",
+        )
+
+        artifact2 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-004-b",
+            cluster_label="cluster-d",
+            summary="Analysis from run B",
+        )
+
+        output_path1 = self.tmpdir / "external-analysis" / "run-immut-004-a-cluster-d-k8sgpt.json"
+        output_path2 = self.tmpdir / "external-analysis" / "run-immut-004-b-cluster-d-k8sgpt.json"
+
+        result1 = write_external_analysis_artifact(output_path1, artifact1)
+        result2 = write_external_analysis_artifact(output_path2, artifact2)
+
+        self.assertTrue(result1.exists())
+        self.assertTrue(result2.exists())
+        self.assertNotEqual(result1, result2)
+
+    def test_immutability_distinct_cluster_succeeds(self) -> None:
+        """External analysis artifacts with different cluster_labels write successfully.
+
+        Different clusters have different artifact paths, so they don't conflict.
+        """
+        artifact1 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-005",
+            cluster_label="cluster-e-1",
+            summary="Analysis for cluster 1",
+        )
+
+        artifact2 = ExternalAnalysisArtifact(
+            tool_name="k8sgpt",
+            run_id="run-immut-005",
+            cluster_label="cluster-e-2",
+            summary="Analysis for cluster 2",
+        )
+
+        output_path1 = self.tmpdir / "external-analysis" / "run-immut-005-cluster-e-1-k8sgpt.json"
+        output_path2 = self.tmpdir / "external-analysis" / "run-immut-005-cluster-e-2-k8sgpt.json"
+
+        result1 = write_external_analysis_artifact(output_path1, artifact1)
+        result2 = write_external_analysis_artifact(output_path2, artifact2)
+
+        self.assertTrue(result1.exists())
+        self.assertTrue(result2.exists())
+        self.assertNotEqual(result1, result2)
+
+    def test_immutability_error_message_includes_context(self) -> None:
+        """FileExistsError message includes path and identity fields for debugging."""
+        artifact = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="run-immut-006",
+            cluster_label="cluster-f",
+            summary="First analysis",
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+        )
+
+        output_path = self.tmpdir / "external-analysis" / "review-enrichment.json"
+
+        write_external_analysis_artifact(output_path, artifact)
+
+        # Try to write again with same artifact
+        artifact2 = ExternalAnalysisArtifact(
+            tool_name="llamacpp",
+            run_id="run-immut-006",
+            cluster_label="cluster-f",
+            summary="Second analysis (should fail)",
+            purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+        )
+
+        with self.assertRaises(FileExistsError) as context:
+            write_external_analysis_artifact(output_path, artifact2)
+
+        error_msg = str(context.exception)
+        # Error should mention the path
+        self.assertIn(str(output_path), error_msg)
+        # Error should mention immutability
+        self.assertIn("immutability contract violated", error_msg)
+        # Error should include identity context
+        self.assertIn("run_id=run-immut-006", error_msg)
+        self.assertIn("cluster_label=cluster-f", error_msg)
+        self.assertIn("tool_name=llamacpp", error_msg)
+
+    def test_backward_compat_distinct_artifacts_unchanged(self) -> None:
+        """Normal external analysis flows remain backward compatible.
+
+        This test verifies that the immutability guard doesn't break
+        the standard external analysis pattern where each invocation
+        writes to a unique path.
+
+        Note: Production paths include purpose information in filenames for
+        special-purpose artifacts (plan, execution, enrichment), ensuring
+        different purposes don't collide on the same path.
+        """
+        # Simulate normal flow with production-style paths that include purpose
+        scenarios = [
+            # (run_id, cluster, tool, purpose, filename_pattern)
+            ("run-normal-001", "cluster-a", "k8sgpt", ExternalAnalysisPurpose.MANUAL,
+             "run-normal-001-cluster-a-k8sgpt.json"),
+            ("run-normal-001", "cluster-b", "k8sgpt", ExternalAnalysisPurpose.MANUAL,
+             "run-normal-001-cluster-b-k8sgpt.json"),
+            ("run-normal-001", "cluster-a", "llamacpp", ExternalAnalysisPurpose.AUTO_DRILLDOWN,
+             "run-normal-001-cluster-a-auto-llamacpp.json"),
+            # Different purposes with purpose in filename to avoid collision
+            ("run-normal-002", "cluster-a", "llamacpp", ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+             "run-normal-002-review-enrichment-llamacpp.json"),
+            ("run-normal-002", "cluster-a", "k8sgpt", ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
+             "run-normal-002-next-check-plan.json"),
+            # Multiple executions with index in filename
+            ("run-normal-003", "cluster-x", "kubectl", ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+             "run-normal-003-next-check-execution-0.json"),
+            ("run-normal-003", "cluster-x", "kubectl", ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+             "run-normal-003-next-check-execution-1.json"),
+        ]
+
+        written_paths = []
+        for run_id, cluster, tool, purpose, filename in scenarios:
+            artifact = ExternalAnalysisArtifact(
+                tool_name=tool,
+                run_id=run_id,
+                cluster_label=cluster,
+                purpose=purpose,
+            )
+            output_path = self.tmpdir / "external-analysis" / filename
+            result = write_external_analysis_artifact(output_path, artifact)
+            written_paths.append(result)
+
+        # All paths should exist
+        for path in written_paths:
+            self.assertTrue(path.exists())
+
+        # Should have 7 distinct files (no conflicts)
+        self.assertEqual(len(written_paths), 7)
+        self.assertEqual(len(set(written_paths)), 7)
+
+
 if __name__ == "__main__":
     unittest.main()
