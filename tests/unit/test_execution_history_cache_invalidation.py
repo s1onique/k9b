@@ -242,7 +242,7 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
 
             # Step 2: Simulate execution by pretending it happened (mock just prevents actual cmd execution)
             with mock.patch(
-                "k8s_diag_agent.ui.server.execute_manual_next_check",
+                "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
                 return_value=executed_artifact
             ):
                 req = urllib.request.Request(
@@ -362,7 +362,7 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
         try:
             # Mock to prevent actual command execution
             with mock.patch(
-                "k8s_diag_agent.ui.server.execute_manual_next_check",
+                "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
                 return_value=executed_artifact
             ):
                 req = urllib.request.Request(

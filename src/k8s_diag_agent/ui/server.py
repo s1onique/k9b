@@ -43,10 +43,7 @@ from ..external_analysis.deterministic_next_check_promotion import (
     collect_promoted_queue_entries,
     write_deterministic_next_check_promotion,
 )
-from ..external_analysis.manual_next_check import (
-    ManualNextCheckError,
-    execute_manual_next_check,
-)
+from ..external_analysis.manual_next_check import ManualNextCheckError
 from ..external_analysis.next_check_approval import (
     log_next_check_approval_event,
     record_next_check_approval,
@@ -61,6 +58,16 @@ _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
     r"^/api/runs/([^/]+)/alertmanager-sources/([^/]+)/action$"
 )
 
+
+# Re-export execute_manual_next_check for backward compatibility with existing tests/mocks
+from ..external_analysis.manual_next_check import execute_manual_next_check  # noqa: E402, F401
+
+# Re-export next-check mutation handlers from server_next_checks
+from .server_next_checks import (  # noqa: E402, F401
+    handle_deterministic_promotion,
+    handle_next_check_approval,
+    handle_next_check_execution,
+)
 
 # Re-export read-only helpers from server_read_support for backward compatibility
 from .server_read_support import (  # noqa: E402, F401
@@ -703,14 +710,15 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self._response_bytes = 0
 
         try:
+            # Delegate next-check mutation handlers to server_next_checks module
             if route == "/api/deterministic-next-check/promote":
-                self._handle_deterministic_promotion()
+                handle_deterministic_promotion(self)
                 return
             if route == "/api/next-check-execution":
-                self._handle_next_check_execution()
+                handle_next_check_execution(self)
                 return
             if route == "/api/next-check-approval":
-                self._handle_next_check_approval()
+                handle_next_check_approval(self)
                 return
             if route == "/api/next-check-execution-usefulness":
                 self._handle_usefulness_feedback()

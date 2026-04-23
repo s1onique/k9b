@@ -425,7 +425,7 @@ class RunApiServerTests(unittest.TestCase):
         # which is called at line 182 in server.py. We verify this indirectly by ensuring
         # the endpoint succeeds and doesn't crash.
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
             server, thread = self._start_server()
@@ -987,7 +987,7 @@ class RunApiServerTests(unittest.TestCase):
             },
         )
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check", return_value=manual_artifact
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check", return_value=manual_artifact
         ) as mock_execute:
             server, thread = self._start_server()
             try:
@@ -1374,7 +1374,7 @@ class RunApiServerTests(unittest.TestCase):
         self._write_index(plan_artifact)
         self._ensure_cluster_entry("cluster-a", "prod")
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             side_effect=ManualNextCheckError("approval required"),
         ):
             server, thread = self._start_server()
@@ -1456,7 +1456,7 @@ class RunApiServerTests(unittest.TestCase):
             captured_logs.append(result)
             return result
         
-        with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
+        with mock.patch("k8s_diag_agent.structured_logging.emit_structured_log", side_effect=capture_emit):
             server, thread = self._start_server()
             try:
                 # Request a candidate that doesn't exist (index 99)
@@ -1620,7 +1620,7 @@ class RunApiServerTests(unittest.TestCase):
             },
         )
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ) as mock_execute:
             server, thread = self._start_server()
@@ -1717,7 +1717,7 @@ class RunApiServerTests(unittest.TestCase):
         )
         
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
             server, thread = self._start_server()
@@ -1848,7 +1848,7 @@ class RunApiServerTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
             server, thread = self._start_server()
@@ -2029,7 +2029,7 @@ class RunApiServerTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "k8s_diag_agent.ui.server.execute_manual_next_check",
+            "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
             server, thread = self._start_server()
