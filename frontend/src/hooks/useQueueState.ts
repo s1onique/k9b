@@ -254,6 +254,12 @@ export interface UseQueueStateParams {
   runQueue: NextCheckQueueItem[] | null | undefined;
 }
 
+export type QueueGroup = {
+  status: NextCheckQueueStatus;
+  label: string;
+  items: NextCheckQueueItem[];
+};
+
 export interface UseQueueStateReturn {
   // Filter state
   queueClusterFilter: string;
@@ -281,6 +287,8 @@ export interface UseQueueStateReturn {
   // Derived queue
   filteredQueue: NextCheckQueueItem[];
   sortedQueue: NextCheckQueueItem[];
+  // Derived queue groups
+  queueGroups: QueueGroup[];
 }
 
 export const useQueueState = ({ runQueue }: UseQueueStateParams): UseQueueStateReturn => {
@@ -464,6 +472,15 @@ export const useQueueState = ({ runQueue }: UseQueueStateParams): UseQueueStateR
     return copy;
   }, [filteredQueue, queueSortOption]);
 
+  // Derived: queue groups (status buckets with non-empty groups only)
+  const queueGroups = NEXT_CHECK_QUEUE_STATUS_ORDER.map((status) => ({
+    status,
+    label: NEXT_CHECK_QUEUE_STATUS_LABELS[status],
+    items: sortedQueue.filter(
+      (entry) => ((entry.queueStatus as NextCheckQueueStatus) ?? "duplicate-or-stale") === status
+    ),
+  })).filter((group) => group.items.length > 0);
+
   return {
     // Filter state
     queueClusterFilter,
@@ -491,5 +508,7 @@ export const useQueueState = ({ runQueue }: UseQueueStateParams): UseQueueStateR
     // Derived queue
     filteredQueue,
     sortedQueue,
+    // Derived queue groups
+    queueGroups,
   };
 };

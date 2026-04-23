@@ -13,6 +13,7 @@ import { useAppData } from "./hooks/useAppData";
 import { useRunData } from "./hooks/useRunData";
 import { useRunSelection } from "./hooks/useRunSelection";
 import { useUIState } from "./hooks/useUIState";
+import { useQueueState } from "./hooks/useQueueState";
 import type {
   AlertmanagerProvenance,
   FeedbackAdaptationProvenance,
@@ -1250,30 +1251,37 @@ const App = () => {
     toggleQueueDetails,
   } = useUIState();
 
-  // Queue state - extracted to useQueueState hook
-  const initialQueueViewState = useMemo(() => readStoredQueueViewState(), []);
-  const [queueClusterFilter, setQueueClusterFilter] = useState(
-    initialQueueViewState.clusterFilter
-  );
-  const [queueStatusFilter, setQueueStatusFilter] = useState<NextCheckQueueStatus | "all">(
-    initialQueueViewState.statusFilter
-  );
-  const [queueCommandFamilyFilter, setQueueCommandFamilyFilter] = useState(
-    initialQueueViewState.commandFamilyFilter
-  );
-  const [queuePriorityFilter, setQueuePriorityFilter] = useState(
-    initialQueueViewState.priorityFilter
-  );
-  const [queueWorkstreamFilter, setQueueWorkstreamFilter] = useState(
-    initialQueueViewState.workstreamFilter
-  );
-  const [queueSearch, setQueueSearch] = useState(initialQueueViewState.searchText);
-  const [queueSortOption, setQueueSortOption] = useState<QueueSortOption>(
-    initialQueueViewState.sortOption
-  );
-  const [queueFocusMode, setQueueFocusMode] = useState<QueueFocusMode>(
-    initialQueueViewState.focusMode
-  );
+  // Queue state - derived from run data
+  const runQueue: NextCheckQueueItem[] = run?.nextCheckQueue ?? [];
+
+  // Queue state - managed by useQueueState hook
+  const {
+    queueClusterFilter,
+    queueStatusFilter,
+    queueCommandFamilyFilter,
+    queuePriorityFilter,
+    queueWorkstreamFilter,
+    queueSearch,
+    queueSortOption,
+    queueFocusMode,
+    setQueueClusterFilter,
+    setQueueStatusFilter,
+    setQueueCommandFamilyFilter,
+    setQueuePriorityFilter,
+    setQueueWorkstreamFilter,
+    setQueueSearch,
+    setQueueSortOption,
+    setQueueFocusMode,
+    queueClusterOptions,
+    queueCommandFamilyOptions,
+    queuePriorityOptions,
+    queueWorkstreamOptions,
+    filteredQueue,
+    sortedQueue,
+    queueGroups,
+  } = useQueueState({ runQueue });
+
+  // Execution/approval transient state - stays in App.tsx (per-execution lifecycle)
   const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
@@ -1426,7 +1434,6 @@ const App = () => {
       candidate.targetCluster ?? selectedClusterLabel ?? "global"
     }`;
 
-  const runQueue: NextCheckQueueItem[] = run?.nextCheckQueue ?? [];
   const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
   const queueExplanation = run?.nextCheckQueueExplanation ?? null;
 
@@ -1463,128 +1470,6 @@ const App = () => {
     }
     return null;
   };
-  const formatCluster = (value: string | null | undefined) =>
-    value && value.trim() ? value : "Unassigned";
-  const formatCommandFamily = (value: string | null | undefined) =>
-    value && value.trim() ? value : "Unspecified";
-  const formatPriority = (value: string | null | undefined) =>
-    (value ?? "unknown").toLowerCase();
-
-  const queueClusterOptions = useMemo(() => {
-    const values = new Set<string>();
-    runQueue.forEach((entry) => values.add(formatCluster(entry.targetCluster)));
-    return Array.from(values).sort();
-  }, [runQueue]);
-
-  const queueCommandFamilyOptions = useMemo(() => {
-    const values = new Set<string>();
-    runQueue.forEach((entry) => values.add(formatCommandFamily(entry.suggestedCommandFamily)));
-    return Array.from(values).sort();
-  }, [runQueue]);
-
-  const queuePriorityOptions = useMemo(() => {
-    const values = new Set<string>();
-    runQueue.forEach((entry) => values.add(formatPriority(entry.priorityLabel)));
-    return Array.from(values).sort();
-  }, [runQueue]);
-
-  const queueWorkstreamOptions = useMemo(() => {
-    const values = new Set<string>();
-    runQueue.forEach((entry) => {
-      if (entry.workstream && entry.workstream.trim()) {
-        values.add(entry.workstream);
-      }
-    });
-    return Array.from(values).sort();
-  }, [runQueue]);
-
-  const formatWorkstream = (value: string | null | undefined) =>
-    value && value.trim() ? value : "Unassigned";
-
-  const queueSearchTerm = queueSearch.trim().toLowerCase();
-  const filteredQueue = useMemo(() => {
-    const focusStatuses = QUEUE_FOCUS_FILTERS[queueFocusMode];
-    return runQueue.filter((item) => {
-      const status = (item.queueStatus as NextCheckQueueStatus) ?? "duplicate-or-stale";
-      if (queueStatusFilter !== "all" && status !== queueStatusFilter) {
-        return false;
-      }
-      if (focusStatuses.length && !focusStatuses.includes(status)) {
-        return false;
-      }
-      const clusterValue = formatCluster(item.targetCluster);
-      if (queueClusterFilter !== "all" && clusterValue !== queueClusterFilter) {
-        return false;
-      }
-      const commandFamilyValue = formatCommandFamily(item.suggestedCommandFamily);
-      if (queueCommandFamilyFilter !== "all" && commandFamilyValue !== queueCommandFamilyFilter) {
-        return false;
-      }
-      const priorityValue = formatPriority(item.priorityLabel);
-      if (queuePriorityFilter !== "all" && priorityValue !== queuePriorityFilter) {
-        return false;
-      }
-      const workstreamValue = formatWorkstream(item.workstream);
-      if (queueWorkstreamFilter !== "all" && workstreamValue !== queueWorkstreamFilter) {
-        return false;
-      }
-      if (!queueSearchTerm) {
-        return true;
-      }
-      const haystack = [item.description, item.sourceReason, item.expectedSignal]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(queueSearchTerm);
-    });
-  }, [
-    runQueue,
-    queueClusterFilter,
-    queueStatusFilter,
-    queueCommandFamilyFilter,
-    queuePriorityFilter,
-    queueWorkstreamFilter,
-    queueSearchTerm,
-    queueFocusMode,
-  ]);
-
-  const sortedQueue = useMemo(() => {
-    if (queueSortOption === "default") {
-      return filteredQueue;
-    }
-    const copy = [...filteredQueue];
-    if (queueSortOption === "priority") {
-      copy.sort(
-        (a, b) => queuePriorityRank(a.priorityLabel) - queuePriorityRank(b.priorityLabel)
-      );
-    } else if (queueSortOption === "cluster") {
-      copy.sort((a, b) =>
-        formatCluster(a.targetCluster).localeCompare(formatCluster(b.targetCluster))
-      );
-    } else if (queueSortOption === "activity") {
-      copy.sort(
-        (a, b) => queueTimestampValue(b.latestTimestamp) - queueTimestampValue(a.latestTimestamp)
-      );
-    }
-    return copy;
-  }, [filteredQueue, queueSortOption]);
-
-  const filtersActive =
-    queueClusterFilter !== "all" ||
-    queueStatusFilter !== "all" ||
-    queueCommandFamilyFilter !== "all" ||
-    queuePriorityFilter !== "all" ||
-    queueWorkstreamFilter !== "all" ||
-    Boolean(queueSearchTerm) ||
-    queueFocusMode !== "none";
-
-  const queueGroups = NEXT_CHECK_QUEUE_STATUS_ORDER.map((status) => ({
-    status,
-    label: NEXT_CHECK_QUEUE_STATUS_LABELS[status],
-    items: sortedQueue.filter(
-      (entry) => ((entry.queueStatus as NextCheckQueueStatus) ?? "duplicate-or-stale") === status
-    ),
-  })).filter((group) => group.items.length > 0);
 
   const toggleQueueFocusPreset = (mode: QueueFocusMode) => {
     setQueueFocusMode((current) => (current === mode ? "none" : mode));
