@@ -359,10 +359,10 @@ export const useQueueState = ({ runQueue }: UseQueueStateParams): UseQueueStateR
     return Array.from(values).sort();
   }, [queueItems]);
 
-  // Derived: priority options
+  // Derived: priority options (canonical lowercase values for state/filter/storage)
   const queuePriorityOptions = useMemo(() => {
     const values = new Set<string>();
-    queueItems.forEach((entry) => values.add(formatPriority(entry.priorityLabel)));
+    queueItems.forEach((entry) => values.add(normalizeQueuePriority(entry.priorityLabel)));
     return Array.from(values).sort();
   }, [queueItems]);
 
@@ -411,8 +411,8 @@ export const useQueueState = ({ runQueue }: UseQueueStateParams): UseQueueStateR
         return false;
       }
 
-      // Priority filter
-      const priorityValue = formatPriority(item.priorityLabel);
+      // Priority filter (compare canonical lowercase values)
+      const priorityValue = normalizeQueuePriority(item.priorityLabel);
       if (queuePriorityFilter !== "all" && priorityValue !== queuePriorityFilter) {
         return false;
       }

@@ -303,7 +303,7 @@ export const QueuePanel = ({
               <option value="all">All priorities</option>
               {queuePriorityOptions.map((entry) => (
                 <option key={entry} value={entry}>
-                  {entry}
+                  {formatCandidatePriority(entry)}
                 </option>
               ))}
             </select>
