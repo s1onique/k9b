@@ -456,6 +456,10 @@ class DiagnosticPackPayload(TypedDict, total=False):
     label: str | None
     reviewBundlePath: str | None
     reviewInput14bPath: str | None
+    # Semantic metadata: indicates whether reviewBundlePath/reviewInput14bPath point to
+    # the mutable latest/ mirror (true) or immutable run-scoped artifacts (false).
+    # Consumers should NOT treat isMirror=true paths as immutable references.
+    isMirror: bool | None
 
 
 class ClusterAlertSummaryPayload(TypedDict, total=False):
@@ -1523,13 +1527,17 @@ def _serialize_diagnostic_pack_review(
 def _serialize_diagnostic_pack(view: DiagnosticPackView | None) -> DiagnosticPackPayload | None:
     if not view:
         return None
-    return {
+    result: DiagnosticPackPayload = {
         "path": view.path,
         "timestamp": view.timestamp,
         "label": view.label,
         "reviewBundlePath": view.review_bundle_path,
         "reviewInput14bPath": view.review_input_14b_path,
     }
+    # Additive semantic metadata: indicates whether review paths point to mutable latest/ mirror
+    if view.is_mirror is not None:
+        result["isMirror"] = view.is_mirror
+    return result
 
 
 def _serialize_orphaned_approval(view: NextCheckOrphanedApprovalView) -> NextCheckOrphanedApprovalPayload:

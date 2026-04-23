@@ -172,6 +172,11 @@ def _serialize_diagnostic_pack(
     if review_input_14b_path:
         result["review_input_14b_path"] = _relative_path(root_dir, review_input_14b_path)
 
+    # Additive semantic metadata: the review paths above point to the mutable latest/ mirror
+    # This flag signals to API/UI consumers that these paths are NOT immutable references.
+    if review_bundle_path or review_input_14b_path:
+        result["isMirror"] = True
+
     return result
 
 

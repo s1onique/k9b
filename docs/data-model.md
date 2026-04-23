@@ -6,6 +6,35 @@
 - Make the per-run flow and extension seams explicit: which parts are deterministic, which are optional provider-assisted branches, and where assessments/drilldowns/reviews/proposals live.
 - Highlight the policy boundaries that keep this agent evidence-centric, artifact-driven, and incapable of autonomous cluster mutation without operator review.
 
+### Diagnostic Pack Artifact Taxonomy
+
+The diagnostic pack system uses a layered artifact strategy with distinct mutability semantics:
+
+| Artifact | Path | Scope | Mutability | Authority |
+|----------|------|-------|------------|-----------|
+| Pack ZIP | `diagnostic-packs/diagnostic-pack-{run_id}-{timestamp}.zip` | Run | Immutable (written once) | **Immutable source of truth** |
+| Run-scoped contents | `diagnostic-packs/{run_id}/` | Run | Immutable (written once) | Immutable source of truth |
+| **Latest mirror** | `diagnostic-packs/latest/` | Global | **Mutable** (overwritten in place) | **NOT authoritative**; convenience alias only |
+
+#### Latest mirror semantics
+
+**The `diagnostic-packs/latest/` directory is a mutable derived convenience alias, NOT an immutable artifact.**
+
+- It exists for operator convenience and UI/API convenience paths.
+- It is overwritten in place when new diagnostic packs are generated or refreshed.
+- Immutable truth lives in the actual diagnostic pack ZIP file and run-scoped pack contents.
+- API/UI consumers must NOT treat `latest/` paths as immutable references.
+
+**Source-of-truth boundary:**
+
+- **Pack ZIP files** (`diagnostic-packs/diagnostic-pack-{run_id}-{timestamp}.zip`) are immutable once written.
+- **Run-scoped contents** (`diagnostic-packs/{run_id}/`) are immutable once written.
+- **`latest/` mirror** is derived and mutable—use for convenience only.
+
+**API payload guidance:**
+
+When the diagnostic pack payload includes `reviewBundlePath` or `reviewInput14bPath`, consumers should check the `isMirror` field to determine whether these paths point to mutable mirror locations. When `isMirror` is `true`, these paths are convenience aliases and should not be treated as immutable references.
+
 ## Core entities (current reality)
 
 - **run_label** – declared in `runs/health-config*.json`, recorded verbatim inside every artifact, and treated as the stable fleet identifier that links a series of runs to the same policy. The deprecated per-run `run_id` field is now interpreted as `run_label` when present so legacy configs continue to work.

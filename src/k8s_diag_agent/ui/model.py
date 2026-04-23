@@ -303,6 +303,9 @@ class DiagnosticPackView:
     label: str | None
     review_bundle_path: str | None
     review_input_14b_path: str | None
+    # Semantic metadata: True when review paths point to mutable latest/ mirror,
+    # False/None when paths point to immutable run-scoped artifacts.
+    is_mirror: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -1724,12 +1727,20 @@ def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysis
 def _build_diagnostic_pack_view(raw: object | None) -> DiagnosticPackView | None:
     if not isinstance(raw, Mapping):
         return None
+    # Parse isMirror field - handle both camelCase (API) and snake_case (internal)
+    is_mirror_value = raw.get("isMirror")
+    if is_mirror_value is None:
+        is_mirror_value = raw.get("is_mirror")
+    is_mirror: bool | None = None
+    if is_mirror_value is not None:
+        is_mirror = bool(is_mirror_value)
     return DiagnosticPackView(
         path=_coerce_optional_str(raw.get("path")),
         timestamp=_coerce_optional_str(raw.get("timestamp")),
         label=_coerce_optional_str(raw.get("label")),
         review_bundle_path=_coerce_optional_str(raw.get("review_bundle_path")),
         review_input_14b_path=_coerce_optional_str(raw.get("review_input_14b_path")),
+        is_mirror=is_mirror,
     )
 
 
