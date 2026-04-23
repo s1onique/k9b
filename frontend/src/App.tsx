@@ -59,8 +59,6 @@ import {
   ExecutionHistoryPanel,
   buildExecutionEntryKey,
   formatDuration,
-  persistExecutionHistoryFilter,
-  readStoredExecutionHistoryFilter,
 } from "./components/ExecutionHistoryPanel";
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
