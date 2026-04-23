@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..datetime_utils import ensure_utc
 from ..identity.artifact import new_artifact_id
@@ -264,7 +264,7 @@ def _write_source_action_artifact_impl(
     resulting_state: str | None = None,
     reason: str | None = None,
     previous_desired_state: str | None = None,
-    artifact_id_fn: callable = None,
+    artifact_id_fn: Callable[[], str] | None = None,
     timestamp: datetime | None = None,
 ) -> Path:
     """Internal implementation for writing source action artifacts.

@@ -304,26 +304,34 @@ class TestWriteSourceActionArtifactImpl:
         """Should raise FileExistsError when writing to same path twice."""
         fixed_artifact_id = "fixed-id-for-overwrite-test"
         fixed_timestamp = datetime(2024, 7, 1, 0, 0, 0, tzinfo=UTC)
-        
-        kwargs = {
-            "directory": tmp_path,
-            "run_id": "run-overwrite-test",
-            "source_id": "source-overwrite",
-            "action": SourceAction.DISABLE,
-            "cluster_label": "cluster",
-            "cluster_context": None,
-            "canonical_identity": "ns/name",
-            "artifact_id_fn": lambda: fixed_artifact_id,
-            "timestamp": fixed_timestamp,
-        }
 
         # First write should succeed
-        path1 = _write_source_action_artifact_impl(**kwargs)
+        path1 = _write_source_action_artifact_impl(
+            directory=tmp_path,
+            run_id="run-overwrite-test",
+            source_id="source-overwrite",
+            action=SourceAction.DISABLE,
+            cluster_label="cluster",
+            cluster_context=None,
+            canonical_identity="ns/name",
+            artifact_id_fn=lambda: fixed_artifact_id,
+            timestamp=fixed_timestamp,
+        )
         assert path1.exists()
 
         # Second write to same path should raise FileExistsError
         with pytest.raises(FileExistsError) as exc_info:
-            _write_source_action_artifact_impl(**kwargs)
+            _write_source_action_artifact_impl(
+                directory=tmp_path,
+                run_id="run-overwrite-test",
+                source_id="source-overwrite",
+                action=SourceAction.DISABLE,
+                cluster_label="cluster",
+                cluster_context=None,
+                canonical_identity="ns/name",
+                artifact_id_fn=lambda: fixed_artifact_id,
+                timestamp=fixed_timestamp,
+            )
         
         assert "already exists" in str(exc_info.value)
 
