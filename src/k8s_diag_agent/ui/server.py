@@ -21,6 +21,7 @@ from ..external_analysis.alertmanager_source_actions import (
     AlertmanagerSourceOverrides,
     SourceAction,
     SourceOverride,
+    write_source_action_artifact,
 )
 from ..external_analysis.alertmanager_source_registry import (
     AlertmanagerSourceRegistry,
@@ -2835,6 +2836,53 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 },
             )
 
+        # Write the immutable action artifact for audit trail
+        # This creates an append-only record that survives beyond run-scoped overrides
+        action_artifact_path: Path | None = None
+        try:
+            # Get previous desired state for the registry entry if it existed
+            previous_desired_state: str | None = None
+            if existing_entry is not None:
+                previous_desired_state = existing_entry.desired_state.value if existing_entry.desired_state else None
+
+            action_artifact_path = write_source_action_artifact(
+                directory=self._health_root,
+                run_id=context.run.run_id,
+                source_id=path_source_id,
+                action=action,
+                cluster_label=cluster_label,
+                cluster_context=sources_view.cluster_context,
+                canonical_identity=source_view.canonical_identity,
+                endpoint=source_view.endpoint,
+                namespace=source_view.namespace,
+                name=source_view.name,
+                original_origin=source_view.origin,
+                original_state=source_view.state,
+                resulting_state=desired_state.value,
+                reason=reason,
+                previous_desired_state=previous_desired_state,
+            )
+            logger.debug(
+                "Wrote source action artifact",
+                extra={
+                    "action_artifact": str(action_artifact_path),
+                    "source_id": path_source_id,
+                    "action": action.value,
+                },
+            )
+        except Exception as exc:
+            # Non-fatal: log warning but don't fail the request
+            # The override and registry were already written successfully
+            logger.warning(
+                "Failed to write source action artifact",
+                extra={
+                    "source_id": path_source_id,
+                    "cluster_label": cluster_label,
+                    "action": action.value,
+                    "error": str(exc),
+                },
+            )
+
         # Invalidate UI caches by touching ui-index.json
         # This ensures the next /api/run request rebuilds the payload with new source state
         ui_index_path = self.runs_dir / "health" / "ui-index.json"
@@ -2866,14 +2914,21 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
-        self._send_json({
+        # Build response with artifact paths
+        response = {
             "status": "success",
             "summary": f"Source {path_source_id} {action_label}",
             "sourceId": path_source_id,
             "action": action.value,
             "artifactPath": str(overrides_path.relative_to(self.runs_dir)),
             "reason": reason,
-        })
+        }
+
+        # Include action artifact path if it was written
+        if action_artifact_path is not None:
+            response["actionArtifactPath"] = str(action_artifact_path.relative_to(self._health_root))
+
+        self._send_json(response)
 
     def _serve_static(self, route: str) -> None:
         target = route or "/"

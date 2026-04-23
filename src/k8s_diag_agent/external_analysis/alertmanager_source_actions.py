@@ -17,6 +17,7 @@ Design rationale:
 from __future__ import annotations
 
 import json
+import re as _re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..datetime_utils import ensure_utc
+from ..identity.artifact import new_artifact_id
 
 
 class SourceAction(StrEnum):
@@ -225,3 +227,205 @@ def merge_source_overrides(
             effective_states[source_id] = "manual"
     
     return effective_states
+
+
+def _sanitize_for_filename(value: str) -> str:
+    """Sanitize a string for use in filenames.
+    
+    Replaces characters that are problematic in filenames with underscores.
+    Preserves alphanumeric, hyphens, underscores, and dots.
+    Colons and slashes are replaced because they're not safe across all filesystems
+    (colons are problematic on macOS, slashes are path separators everywhere).
+    """
+    if not value:
+        return "empty"
+    # Replace characters that are problematic in filenames
+    result = _re.sub(r'[<>:"/"|?*]', "_", value)
+    # Collapse multiple underscores
+    result = _re.sub(r'_+', "_", result)
+    # Strip leading/trailing underscores
+    result = result.strip("_")
+    return result if result else "sanitized"
+
+
+def _write_source_action_artifact_impl(
+    directory: Path,
+    run_id: str,
+    source_id: str,
+    action: SourceAction,
+    cluster_label: str | None,
+    cluster_context: str | None,
+    canonical_identity: str,
+    endpoint: str | None = None,
+    namespace: str | None = None,
+    name: str | None = None,
+    original_origin: str | None = None,
+    original_state: str | None = None,
+    resulting_state: str | None = None,
+    reason: str | None = None,
+    previous_desired_state: str | None = None,
+    artifact_id_fn: callable = None,
+    timestamp: datetime | None = None,
+) -> Path:
+    """Internal implementation for writing source action artifacts.
+
+    This helper accepts injectable dependencies (artifact_id_fn, timestamp) for
+    testing and reproducibility. Production code should use write_source_action_artifact().
+    
+    Args:
+        artifact_id_fn: Optional callable to generate artifact IDs; defaults to new_artifact_id()
+        timestamp: Optional datetime to use for created_at/timestamp; defaults to now()
+        
+    Returns:
+        Path to the written artifact
+    """
+    # Create the action artifacts directory
+    action_dir = directory / "alertmanager-source-actions"
+    action_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate artifact ID using repo standard (UUIDv7)
+    if artifact_id_fn is None:
+        artifact_id_fn = new_artifact_id
+    artifact_id = artifact_id_fn()
+    
+    # Sanitize source_id for filename safety
+    sanitized_source_id = _sanitize_for_filename(source_id)
+    
+    # Build filename: {run_id}-{sanitized_source_id}-{action}-{artifact_id}.json
+    filename = f"{run_id}-{sanitized_source_id}-{action.value}-{artifact_id}.json"
+    path = action_dir / filename
+    
+    # Reject overwrite if path already exists (immutability guarantee)
+    if path.exists():
+        raise FileExistsError(f"Action artifact path already exists: {path}")
+    
+    # Generate timestamp once and reuse for both fields
+    if timestamp is None:
+        timestamp = datetime.now(UTC)
+    ts_str = timestamp.isoformat()
+    
+    # Build the artifact payload
+    artifact = {
+        # Artifact identity
+        "artifact_id": artifact_id,
+        "run_id": run_id,
+        "action": action.value,
+        
+        # Timestamps - use the same value for both (single timestamp for audit)
+        "created_at": ts_str,
+        "timestamp": ts_str,
+        
+        # Source identity
+        "source_id": source_id,
+        "canonical_identity": canonical_identity,
+        "cluster_label": cluster_label,
+        "cluster_context": cluster_context,
+        "registry_key": f"{(cluster_label or cluster_context or 'unknown')}:{canonical_identity}",
+        
+        # Source details at time of action
+        "endpoint": endpoint,
+        "namespace": namespace,
+        "name": name,
+        
+        # State tracking for audit trail
+        "original_origin": original_origin,
+        "original_state": original_state,
+        "resulting_state": resulting_state,
+        "previous_desired_state": previous_desired_state,
+        
+        # Audit metadata
+        "reason": reason,
+        "schema_version": "1",
+    }
+    
+    # Write the artifact
+    path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+    
+    return path
+
+
+def write_source_action_artifact(
+    directory: Path,
+    run_id: str,
+    source_id: str,
+    action: SourceAction,
+    cluster_label: str | None,
+    cluster_context: str | None,
+    canonical_identity: str,
+    endpoint: str | None = None,
+    namespace: str | None = None,
+    name: str | None = None,
+    original_origin: str | None = None,
+    original_state: str | None = None,
+    resulting_state: str | None = None,
+    reason: str | None = None,
+    previous_desired_state: str | None = None,
+) -> Path:
+    """Write an immutable action artifact for Alertmanager source actions.
+    
+    This creates an append-only audit trail for operator actions on Alertmanager
+    sources. Each action produces a new artifact with a unique filename that
+    cannot be overwritten.
+    
+    Artifact path pattern:
+    runs/health/alertmanager-source-actions/{run_id}-{sanitized_source_id}-{action}-{artifact_id}.json
+    
+    Uses repo-standard UUIDv7 artifact IDs for immutable identity consistency.
+    
+    Args:
+        directory: Directory to write the artifact (typically health root)
+        run_id: Run identifier for this action
+        source_id: Source identifier from the action request
+        action: The action taken (promote/disable)
+        cluster_label: Operator-facing cluster label (preferred for stability)
+        cluster_context: Kubernetes context (may change)
+        canonical_identity: Canonical source identity (namespace/name)
+        endpoint: Source endpoint at time of action
+        namespace: Source namespace at time of action
+        name: Source name at time of action
+        original_origin: Source origin before action
+        original_state: Source state before action
+        resulting_state: Resulting desired state after action
+        reason: Operator-provided reason for the action
+        previous_desired_state: Previous desired state if registry entry existed
+        
+    Returns:
+        Path to the written artifact
+        
+    Raises:
+        FileExistsError: If the artifact path already exists
+    """
+    return _write_source_action_artifact_impl(
+        directory=directory,
+        run_id=run_id,
+        source_id=source_id,
+        action=action,
+        cluster_label=cluster_label,
+        cluster_context=cluster_context,
+        canonical_identity=canonical_identity,
+        endpoint=endpoint,
+        namespace=namespace,
+        name=name,
+        original_origin=original_origin,
+        original_state=original_state,
+        resulting_state=resulting_state,
+        reason=reason,
+        previous_desired_state=previous_desired_state,
+    )
+
+
+def source_action_artifact_path(
+    directory: Path,
+    run_id: str,
+    source_id: str,
+    action: SourceAction,
+    artifact_id: str,
+) -> Path:
+    """Compute the expected path for a source action artifact.
+    
+    This is the inverse of write_source_action_artifact's path generation.
+    Used for lookup and validation.
+    """
+    sanitized_source_id = _sanitize_for_filename(source_id)
+    filename = f"{run_id}-{sanitized_source_id}-{action.value}-{artifact_id}.json"
+    return directory / "alertmanager-source-actions" / filename
