@@ -306,6 +306,10 @@ class DiagnosticPackView:
     # Semantic metadata: True when review paths point to mutable latest/ mirror,
     # False/None when paths point to immutable run-scoped artifacts.
     is_mirror: bool | None = None
+    # Immutable source-of-truth reference: the pack ZIP path that corresponds to
+    # the mirror paths when isMirror=True. Exposed so operators can reference
+    # the exact immutable pack that generated the current mirror content.
+    source_pack_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1734,6 +1738,13 @@ def _build_diagnostic_pack_view(raw: object | None) -> DiagnosticPackView | None
     is_mirror: bool | None = None
     if is_mirror_value is not None:
         is_mirror = bool(is_mirror_value)
+    # Parse sourcePackPath field - immutable pack reference when isMirror=true
+    source_pack_path: str | None = None
+    source_pack_value = raw.get("sourcePackPath")
+    if source_pack_value is None:
+        source_pack_value = raw.get("source_pack_path")
+    if source_pack_value is not None:
+        source_pack_path = _coerce_optional_str(source_pack_value)
     return DiagnosticPackView(
         path=_coerce_optional_str(raw.get("path")),
         timestamp=_coerce_optional_str(raw.get("timestamp")),
@@ -1741,6 +1752,7 @@ def _build_diagnostic_pack_view(raw: object | None) -> DiagnosticPackView | None
         review_bundle_path=_coerce_optional_str(raw.get("review_bundle_path")),
         review_input_14b_path=_coerce_optional_str(raw.get("review_input_14b_path")),
         is_mirror=is_mirror,
+        source_pack_path=source_pack_path,
     )
 
 

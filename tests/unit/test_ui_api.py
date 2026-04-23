@@ -236,6 +236,128 @@ class UIApiTests(unittest.TestCase):
         # isMirror should not be present when is_mirror is None
         self.assertNotIn("isMirror", payload)
 
+    def test_diagnostic_pack_source_pack_path_present_when_is_mirror_true(self) -> None:
+        """Test that sourcePackPath is present when isMirror=true."""
+        from k8s_diag_agent.ui.api import _serialize_diagnostic_pack
+        from k8s_diag_agent.ui.model import DiagnosticPackView
+
+        # Create a view with is_mirror=True (mirrored latest/ paths)
+        mirror_view = DiagnosticPackView(
+            path="diagnostic-packs/diagnostic-pack-run-1.zip",
+            timestamp="2026-01-01T00:00:00Z",
+            label="test-label",
+            review_bundle_path="diagnostic-packs/latest/review_bundle.json",
+            review_input_14b_path="diagnostic-packs/latest/review_input_14b.json",
+            is_mirror=True,
+        )
+        payload = _serialize_diagnostic_pack(mirror_view)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        # sourcePackPath should be present when isMirror=true
+        self.assertIn("sourcePackPath", payload)
+        # sourcePackPath should fall back to path when source_pack_path is not set
+        self.assertEqual(payload.get("sourcePackPath"), "diagnostic-packs/diagnostic-pack-run-1.zip")
+
+    def test_diagnostic_pack_source_pack_path_uses_explicit_source_pack_path(self) -> None:
+        """Test that sourcePackPath uses explicit source_pack_path when provided."""
+        from k8s_diag_agent.ui.api import _serialize_diagnostic_pack
+        from k8s_diag_agent.ui.model import DiagnosticPackView
+
+        # Create a view with explicit source_pack_path
+        mirror_view = DiagnosticPackView(
+            path="diagnostic-packs/diagnostic-pack-run-1.zip",
+            timestamp="2026-01-01T00:00:00Z",
+            label="test-label",
+            review_bundle_path="diagnostic-packs/latest/review_bundle.json",
+            review_input_14b_path="diagnostic-packs/latest/review_input_14b.json",
+            is_mirror=True,
+            source_pack_path="diagnostic-packs/diagnostic-pack-run-1-20260101T000000Z.zip",
+        )
+        payload = _serialize_diagnostic_pack(mirror_view)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        # sourcePackPath should use the explicit source_pack_path
+        self.assertEqual(
+            payload.get("sourcePackPath"),
+            "diagnostic-packs/diagnostic-pack-run-1-20260101T000000Z.zip"
+        )
+
+    def test_diagnostic_pack_source_pack_path_omitted_when_is_mirror_false(self) -> None:
+        """Test that sourcePackPath is omitted when isMirror=false."""
+        from k8s_diag_agent.ui.api import _serialize_diagnostic_pack
+        from k8s_diag_agent.ui.model import DiagnosticPackView
+
+        # Create a view with is_mirror=False (run-scoped paths)
+        run_scoped_view = DiagnosticPackView(
+            path="diagnostic-packs/diagnostic-pack-run-1.zip",
+            timestamp="2026-01-01T00:00:00Z",
+            label="test-label",
+            review_bundle_path="diagnostic-packs/run-1/review_bundle.json",
+            review_input_14b_path="diagnostic-packs/run-1/review_input_14b.json",
+            is_mirror=False,
+        )
+        payload = _serialize_diagnostic_pack(run_scoped_view)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        # sourcePackPath should not be present when isMirror=false
+        self.assertNotIn("sourcePackPath", payload)
+
+    def test_diagnostic_pack_source_pack_path_omitted_when_is_mirror_none(self) -> None:
+        """Test that sourcePackPath is omitted when isMirror is None (legacy data)."""
+        from k8s_diag_agent.ui.api import _serialize_diagnostic_pack
+        from k8s_diag_agent.ui.model import DiagnosticPackView
+
+        # Create a view without is_mirror (legacy/preexisting data)
+        legacy_view = DiagnosticPackView(
+            path="diagnostic-packs/diagnostic-pack-run-1.zip",
+            timestamp="2026-01-01T00:00:00Z",
+            label="test-label",
+            review_bundle_path="diagnostic-packs/latest/review_bundle.json",
+            review_input_14b_path="diagnostic-packs/latest/review_input_14b.json",
+            is_mirror=None,
+        )
+        payload = _serialize_diagnostic_pack(legacy_view)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        # sourcePackPath should not be present when is_mirror is None
+        self.assertNotIn("sourcePackPath", payload)
+
+    def test_diagnostic_pack_is_mirror_and_source_pack_path_semantically_consistent(self) -> None:
+        """Test that isMirror and sourcePackPath are semantically consistent."""
+        from k8s_diag_agent.ui.api import _serialize_diagnostic_pack
+        from k8s_diag_agent.ui.model import DiagnosticPackView
+
+        # Test case 1: isMirror=true implies sourcePackPath is present
+        mirror_view = DiagnosticPackView(
+            path="diagnostic-packs/diagnostic-pack-run-1.zip",
+            timestamp="2026-01-01T00:00:00Z",
+            label="test-label",
+            review_bundle_path="diagnostic-packs/latest/review_bundle.json",
+            review_input_14b_path="diagnostic-packs/latest/review_input_14b.json",
+            is_mirror=True,
+        )
+        mirror_payload = _serialize_diagnostic_pack(mirror_view)
+        self.assertIsNotNone(mirror_payload)
+        assert mirror_payload is not None
+        # When isMirror=true, sourcePackPath should be present
+        self.assertIn("sourcePackPath", mirror_payload)
+        self.assertIsNotNone(mirror_payload.get("sourcePackPath"))
+
+        # Test case 2: isMirror=false implies sourcePackPath is absent
+        run_scoped_view = DiagnosticPackView(
+            path="diagnostic-packs/diagnostic-pack-run-1.zip",
+            timestamp="2026-01-01T00:00:00Z",
+            label="test-label",
+            review_bundle_path="diagnostic-packs/run-1/review_bundle.json",
+            review_input_14b_path="diagnostic-packs/run-1/review_input_14b.json",
+            is_mirror=False,
+        )
+        run_scoped_payload = _serialize_diagnostic_pack(run_scoped_view)
+        self.assertIsNotNone(run_scoped_payload)
+        assert run_scoped_payload is not None
+        # When isMirror=false, sourcePackPath should be absent
+        self.assertNotIn("sourcePackPath", run_scoped_payload)
+
     def test_serialize_queue_appends_promoted_entries(self) -> None:
         promotions = [
             {

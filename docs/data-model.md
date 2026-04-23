@@ -35,6 +35,10 @@ The diagnostic pack system uses a layered artifact strategy with distinct mutabi
 
 When the diagnostic pack payload includes `reviewBundlePath` or `reviewInput14bPath`, consumers should check the `isMirror` field to determine whether these paths point to mutable mirror locations. When `isMirror` is `true`, these paths are convenience aliases and should not be treated as immutable references.
 
+**`sourcePackPath` field:**
+
+When `isMirror` is `true`, the payload also exposes `sourcePackPath` pointing to the immutable pack ZIP file that corresponds to the current mirror content. This allows operators to reference the exact immutable source-of-truth artifact even when reviewing mutable mirror files. When `isMirror` is `false` or `null`, `sourcePackPath` is omitted.
+
 ## Core entities (current reality)
 
 - **run_label** – declared in `runs/health-config*.json`, recorded verbatim inside every artifact, and treated as the stable fleet identifier that links a series of runs to the same policy. The deprecated per-run `run_id` field is now interpreted as `run_label` when present so legacy configs continue to work.

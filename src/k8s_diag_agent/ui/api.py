@@ -460,6 +460,10 @@ class DiagnosticPackPayload(TypedDict, total=False):
     # the mutable latest/ mirror (true) or immutable run-scoped artifacts (false).
     # Consumers should NOT treat isMirror=true paths as immutable references.
     isMirror: bool | None
+    # Immutable source-of-truth reference: the pack ZIP path that corresponds to
+    # the mirror paths when isMirror=true. Exposed so operators can reference
+    # the exact immutable pack that generated the current mirror content.
+    sourcePackPath: str | None
 
 
 class ClusterAlertSummaryPayload(TypedDict, total=False):
@@ -1537,6 +1541,13 @@ def _serialize_diagnostic_pack(view: DiagnosticPackView | None) -> DiagnosticPac
     # Additive semantic metadata: indicates whether review paths point to mutable latest/ mirror
     if view.is_mirror is not None:
         result["isMirror"] = view.is_mirror
+    # When isMirror=True, expose the immutable source pack reference so operators
+    # can use the exact pack ZIP that generated the current mirror content.
+    # Use view.source_pack_path if provided, otherwise fall back to view.path.
+    if view.is_mirror:
+        source_pack = view.source_pack_path if view.source_pack_path is not None else view.path
+        if source_pack is not None:
+            result["sourcePackPath"] = source_pack
     return result
 
 
