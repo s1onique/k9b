@@ -514,6 +514,12 @@ class NextCheckExecutionHistoryEntryView:
     # Alertmanager relevance judgment from operator feedback
     alertmanager_relevance: str | None = None
     alertmanager_relevance_summary: str | None = None
+    # Artifact identity for immutability traceability
+    artifact_id: str | None = None
+    # Usefulness review artifact identity fields
+    usefulness_artifact_id: str | None = None
+    usefulness_artifact_path: str | None = None
+    usefulness_reviewed_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1450,6 +1456,12 @@ def _build_execution_history_view(raw: object | None) -> tuple[NextCheckExecutio
                 # Alertmanager relevance judgment from operator feedback
                 alertmanager_relevance=_coerce_optional_str(entry.get("alertmanagerRelevance")),
                 alertmanager_relevance_summary=_coerce_optional_str(entry.get("alertmanagerRelevanceSummary")),
+                # Artifact identity for immutability traceability
+                artifact_id=_coerce_optional_str(entry.get("artifactId")),
+                # Usefulness review artifact identity fields
+                usefulness_artifact_id=_coerce_optional_str(entry.get("usefulnessArtifactId")),
+                usefulness_artifact_path=_coerce_optional_str(entry.get("usefulnessArtifactPath")),
+                usefulness_reviewed_at=_coerce_optional_str(entry.get("usefulnessReviewedAt")),
             )
         )
     return tuple(entries)

@@ -91,6 +91,12 @@ class NextCheckExecutionHistoryEntry(TypedDict, total=False):
     alertmanagerProvenance: dict[str, object] | None
     alertmanagerRelevance: str | None
     alertmanagerRelevanceSummary: str | None
+    # Artifact identity for immutability traceability
+    artifactId: str | None
+    # Usefulness review artifact identity fields
+    usefulnessArtifactId: str | None
+    usefulnessArtifactPath: str | None
+    usefulnessReviewedAt: str | None
 
 
 class FreshnessPayload(TypedDict, total=False):
@@ -1567,6 +1573,12 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
             # Provenance fields for traceability
             "candidateId": entry.candidate_id,
             "candidateIndex": entry.candidate_index,
+            # Artifact identity for immutability traceability
+            "artifactId": entry.artifact_id,
+            # Usefulness review artifact identity fields
+            "usefulnessArtifactId": entry.usefulness_artifact_id,
+            "usefulnessArtifactPath": entry.usefulness_artifact_path,
+            "usefulnessReviewedAt": entry.usefulness_reviewed_at,
         }
         # Include Alertmanager provenance if present
         if entry.alertmanager_provenance is not None:

@@ -433,6 +433,7 @@ def _build_next_check_execution_history(
         if artifact.pack_refresh_status:
             pack_refresh_status = artifact.pack_refresh_status.value
         artifact_path_str = _relative_path(root_dir, artifact.artifact_path)
+
         entry: dict[str, object] = {
             "timestamp": artifact.timestamp.isoformat(),
             "clusterLabel": artifact.cluster_label,
@@ -451,6 +452,10 @@ def _build_next_check_execution_history(
             "candidateId": payload.get("candidateId"),
             "candidateIndex": payload.get("candidateIndex"),
         }
+
+        # Thread execution artifact identity for traceability
+        if artifact.artifact_id:
+            entry["artifactId"] = artifact.artifact_id
 
         # Get the execution artifact path for review lookup
         raw_artifact_path = artifact.artifact_path
@@ -475,6 +480,16 @@ def _build_next_check_execution_history(
                         entry["usefulnessSummary"] = usefulness_summary
                 except ValueError:
                     pass  # Invalid usefulness class, fall through
+            # Thread review artifact identity fields
+            usefulness_artifact_id = usefulness_review.get("artifact_id")
+            if isinstance(usefulness_artifact_id, str) and usefulness_artifact_id:
+                entry["usefulnessArtifactId"] = usefulness_artifact_id
+            usefulness_artifact_path = usefulness_review.get("artifact_path")
+            if isinstance(usefulness_artifact_path, str) and usefulness_artifact_path:
+                entry["usefulnessArtifactPath"] = _relative_path(root_dir, usefulness_artifact_path)
+            reviewed_at = usefulness_review.get("reviewed_at")
+            if isinstance(reviewed_at, str) and reviewed_at:
+                entry["usefulnessReviewedAt"] = reviewed_at
 
         # Fall back to legacy embedded usefulness fields on execution artifact
         elif artifact.usefulness_class is not None:

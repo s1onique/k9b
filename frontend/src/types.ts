@@ -58,6 +58,12 @@ export type NextCheckExecutionHistoryEntry = {
   // Review artifact metadata for persisted feedback
   alertmanagerReviewArtifactPath?: string | null;
   alertmanagerReviewedAt?: string | null;
+  // Artifact identity for immutability traceability
+  artifactId?: string | null;
+  // Usefulness review artifact identity fields
+  usefulnessArtifactId?: string | null;
+  usefulnessArtifactPath?: string | null;
+  usefulnessReviewedAt?: string | null;
 };
 
 export type StatusCount = {
