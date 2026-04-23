@@ -106,6 +106,145 @@ class LifecycleEventWriteTests(unittest.TestCase):
         self.assertEqual(data["provenance"]["fixture_path"], "/test/fixture.json")
 
 
+class LifecycleEventImmutabilityTests(unittest.TestCase):
+    """Tests verifying proposal lifecycle event artifact immutability.
+
+    Proposal lifecycle event artifacts are immutable: once written, they must
+    not be overwritten. This enforces the audit trail contract for transitions.
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.root = Path(self.tmpdir.name)
+        self.transitions_dir = self.root / "transitions"
+
+    def test_write_event_succeeds_normally(self) -> None:
+        """Verify writing a new proposal lifecycle event succeeds."""
+        event = ProposalLifecycleEvent(
+            proposal_id="test-proposal",
+            status=ProposalLifecycleStatus.CHECKED,
+            transition="check",
+        )
+        path = write_proposal_lifecycle_event(event, self.transitions_dir)
+        self.assertTrue(path.exists())
+
+    def test_write_same_event_path_raises_fileexistserror(self) -> None:
+        """Verify writing the same immutable path raises FileExistsError.
+
+        Under the immutability contract, the same proposal_id + transition +
+        artifact_id combination should never be written twice.
+        """
+        event = ProposalLifecycleEvent(
+            proposal_id="immutability-test",
+            status=ProposalLifecycleStatus.CHECKED,
+            transition="check",
+            artifact_id="fixed-artifact-id-123",  # Fixed ID for deterministic path
+        )
+
+        # First write succeeds
+        first_path = write_proposal_lifecycle_event(event, self.transitions_dir)
+        self.assertTrue(first_path.exists())
+
+        # Second write to the same path raises FileExistsError
+        with self.assertRaises(FileExistsError) as ctx:
+            write_proposal_lifecycle_event(event, self.transitions_dir)
+
+        self.assertIn("immutability contract violated", str(ctx.exception))
+        self.assertIn("proposal_id=immutability-test", str(ctx.exception))
+        self.assertIn("transition=check", str(ctx.exception))
+        self.assertIn("artifact_id=fixed-artifact-id-123", str(ctx.exception))
+
+    def test_distinct_event_path_writes_successfully(self) -> None:
+        """Verify writing a different event to the same proposal succeeds.
+
+        The immutability guard is per unique path (proposal_id + transition +
+        artifact_id). A different artifact_id creates a different path.
+        """
+        event1 = ProposalLifecycleEvent(
+            proposal_id="same-proposal",
+            status=ProposalLifecycleStatus.CHECKED,
+            transition="check",
+            artifact_id="artifact-first",
+        )
+        event2 = ProposalLifecycleEvent(
+            proposal_id="same-proposal",
+            status=ProposalLifecycleStatus.CHECKED,
+            transition="check",
+            artifact_id="artifact-second",  # Different ID = different path
+        )
+
+        path1 = write_proposal_lifecycle_event(event1, self.transitions_dir)
+        path2 = write_proposal_lifecycle_event(event2, self.transitions_dir)
+
+        self.assertTrue(path1.exists())
+        self.assertTrue(path2.exists())
+        self.assertNotEqual(path1, path2)
+
+    def test_same_proposal_different_transition_writes_successfully(self) -> None:
+        """Verify writing different transition types to the same proposal succeeds.
+
+        The immutability guard is per unique path (proposal_id + transition +
+        artifact_id). A different transition creates a different path.
+        """
+        check_event = ProposalLifecycleEvent(
+            proposal_id="multi-transition",
+            status=ProposalLifecycleStatus.CHECKED,
+            transition="check",
+            artifact_id="transition-check",
+        )
+        promote_event = ProposalLifecycleEvent(
+            proposal_id="multi-transition",
+            status=ProposalLifecycleStatus.ACCEPTED,
+            transition="promote",
+            artifact_id="transition-promote",  # Different transition = different path
+        )
+
+        check_path = write_proposal_lifecycle_event(check_event, self.transitions_dir)
+        promote_path = write_proposal_lifecycle_event(promote_event, self.transitions_dir)
+
+        self.assertTrue(check_path.exists())
+        self.assertTrue(promote_path.exists())
+        self.assertNotEqual(check_path, promote_path)
+
+    def test_backward_compatible_normal_lifecycle_flow(self) -> None:
+        """Verify normal proposal lifecycle flows remain backward compatible.
+
+        This test ensures that the typical flow of:
+        1. Create check event
+        2. Create promote event
+
+        Still works correctly after the immutability guard was added.
+        """
+        check_event = ProposalLifecycleEvent(
+            proposal_id="normal-flow",
+            status=ProposalLifecycleStatus.CHECKED,
+            transition="check",
+            note="Checked and verified",
+        )
+        promote_event = ProposalLifecycleEvent(
+            proposal_id="normal-flow",
+            status=ProposalLifecycleStatus.ACCEPTED,
+            transition="promote",
+            note="Promoted by operator",
+        )
+
+        check_path = write_proposal_lifecycle_event(check_event, self.transitions_dir)
+        promote_path = write_proposal_lifecycle_event(promote_event, self.transitions_dir)
+
+        self.assertTrue(check_path.exists())
+        self.assertTrue(promote_path.exists())
+
+        # Verify artifact contents
+        check_data = json.loads(check_path.read_text(encoding="utf-8"))
+        promote_data = json.loads(promote_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(check_data["status"], "checked")
+        self.assertEqual(check_data["note"], "Checked and verified")
+        self.assertEqual(promote_data["status"], "accepted")
+        self.assertEqual(promote_data["note"], "Promoted by operator")
+
+
 class DeriveCurrentStatusTests(unittest.TestCase):
     """Tests for current-status derivation from event artifacts."""
 

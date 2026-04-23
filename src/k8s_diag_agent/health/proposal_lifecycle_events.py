@@ -103,8 +103,20 @@ def write_proposal_lifecycle_event(
 ) -> Path:
     """Write an immutable proposal lifecycle event artifact.
 
-    The filename encodes proposal_id, transition, and artifact_id for
-    stable, debuggable identities.
+    Proposal lifecycle event artifacts are immutable: once written, they must
+    not be overwritten. This function rejects writes to an existing path to
+    enforce the immutability contract.
+
+    The immutability contract means that the same path (proposal_id + transition
+    + artifact_id combination) should never be written twice. Each event is
+    uniquely identified by its artifact_id, so duplicate writes are a bug.
+
+    Mutable exceptions (NOT covered by this guard):
+    - history.json
+    - alertmanager-source-registry.json
+    - ui-index.json
+    - diagnostic-packs/latest/
+    - other explicitly documented mutable/derived artifacts
 
     Args:
         event: The lifecycle event to write.
@@ -112,11 +124,23 @@ def write_proposal_lifecycle_event(
 
     Returns:
         Path to the written artifact.
+
+    Raises:
+        FileExistsError: If the artifact path already exists (immutability guarantee)
     """
+    import json
+
     transitions_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{event.proposal_id}-{event.transition}-{event.artifact_id}.json"
     artifact_path = transitions_dir / filename
-    import json
+
+    # Reject overwrite: fail fast if path already exists (immutability contract)
+    if artifact_path.exists():
+        raise FileExistsError(
+            f"Proposal lifecycle event artifact already exists at {artifact_path}; "
+            f"immutability contract violated for proposal_id={event.proposal_id}, "
+            f"transition={event.transition}, artifact_id={event.artifact_id}"
+        )
 
     artifact_path.write_text(
         json.dumps(event.to_dict(), indent=2),
