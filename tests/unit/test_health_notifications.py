@@ -1,4 +1,4 @@
-"""Tests for notification artifact identity (artifact_id field)."""
+"""Tests for notification artifact identity (artifact_id field) and immutability."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from k8s_diag_agent.health.notifications import (
     NotificationArtifact,
@@ -14,6 +15,24 @@ from k8s_diag_agent.health.notifications import (
     write_notification_artifact,
 )
 from k8s_diag_agent.identity.artifact import new_artifact_id
+
+
+def _make_artifact_with_timestamp(
+    timestamp: str,
+    kind: str = "test-kind",
+    summary: str = "Test summary",
+    details: dict[str, Any] | None = None,
+    run_id: str | None = None,
+) -> NotificationArtifact:
+    """Create a notification artifact with a controlled timestamp for testing immutability."""
+    return NotificationArtifact(
+        kind=kind,
+        summary=summary,
+        details=details or {"test": "data"},
+        timestamp=timestamp,
+        artifact_id=new_artifact_id(),
+        run_id=run_id,
+    )
 
 
 class TestNotificationArtifactId(unittest.TestCase):
@@ -213,6 +232,229 @@ class TestNotificationArtifactId(unittest.TestCase):
 
             restored = NotificationArtifact.from_dict(raw)
             self.assertEqual(restored.artifact_id, original_id)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestNotificationArtifactImmutability(unittest.TestCase):
+    """Tests for notification artifact immutability guardrail.
+
+    Notification artifacts are immutable: once written, they must not be overwritten.
+    This class tests the immutability contract enforced by write_notification_artifact().
+    """
+
+    def test_write_notification_artifact_succeeds_normally(self) -> None:
+        """Writing a notification artifact to a new path succeeds."""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            artifact = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="degraded-health",
+                summary="Cluster degraded",
+                details={"warnings": ["CPU spike"]},
+                run_id="run-immutability-001",
+            )
+
+            path = write_notification_artifact(notifications_dir, artifact)
+
+            self.assertTrue(path.exists())
+            self.assertEqual(path.name, "20260423T120000-degraded-health.json")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_immutability_rejects_overwrite_same_path(self) -> None:
+        """Attempting to write the same immutable notification artifact path again raises FileExistsError.
+
+        This test uses controlled timestamps to force a path collision, demonstrating
+        that notification artifacts are immutable and cannot be overwritten.
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create two artifacts with identical timestamp and kind (same path)
+            artifact1 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="proposal-created",
+                summary="First proposal",
+                details={"target": "cluster-a"},
+                run_id="run-immutability-002",
+            )
+
+            artifact2 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="proposal-created",
+                summary="Second proposal (should fail)",
+                details={"target": "cluster-b"},
+                run_id="run-immutability-002",
+            )
+
+            # First write succeeds
+            path1 = write_notification_artifact(notifications_dir, artifact1)
+            self.assertTrue(path1.exists())
+
+            # Second write to same path raises FileExistsError
+            with self.assertRaises(FileExistsError) as context:
+                write_notification_artifact(notifications_dir, artifact2)
+
+            self.assertIn("already exists", str(context.exception))
+            self.assertIn("immutability contract violated", str(context.exception))
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_immutability_distinct_path_succeeds(self) -> None:
+        """A distinct notification artifact with different timestamp writes successfully.
+
+        This verifies that immutability doesn't block normal operation - different
+        artifacts with different paths should write without conflict.
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # First artifact
+            artifact1 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="degraded-health",
+                summary="First notification",
+                run_id="run-immutability-003",
+            )
+
+            # Second artifact with different timestamp (different path)
+            artifact2 = _make_artifact_with_timestamp(
+                timestamp="20260423T120001",
+                kind="degraded-health",
+                summary="Second notification",
+                run_id="run-immutability-003",
+            )
+
+            path1 = write_notification_artifact(notifications_dir, artifact1)
+            path2 = write_notification_artifact(notifications_dir, artifact2)
+
+            self.assertTrue(path1.exists())
+            self.assertTrue(path2.exists())
+            self.assertNotEqual(path1, path2)
+
+            # Verify both files contain correct content
+            content1 = json.loads(path1.read_text(encoding="utf-8"))
+            content2 = json.loads(path2.read_text(encoding="utf-8"))
+
+            self.assertEqual(content1["summary"], "First notification")
+            self.assertEqual(content2["summary"], "Second notification")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_immutability_distinct_kind_succeeds(self) -> None:
+        """Artifacts with same timestamp but different kinds write successfully.
+
+        Different kinds produce different filenames, so they don't conflict.
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            artifact1 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="degraded-health",
+                summary="Health issue",
+                run_id="run-immutability-004",
+            )
+
+            artifact2 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="suspicious-comparison",
+                summary="Comparison issue",
+                run_id="run-immutability-004",
+            )
+
+            path1 = write_notification_artifact(notifications_dir, artifact1)
+            path2 = write_notification_artifact(notifications_dir, artifact2)
+
+            self.assertTrue(path1.exists())
+            self.assertTrue(path2.exists())
+            self.assertNotEqual(path1, path2)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_immutability_error_message_includes_path_context(self) -> None:
+        """FileExistsError message includes timestamp and kind for debugging."""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            artifact1 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="external-analysis",
+                summary="First analysis",
+                run_id="run-immutability-005",
+            )
+
+            artifact2 = _make_artifact_with_timestamp(
+                timestamp="20260423T120000",
+                kind="external-analysis",
+                summary="Duplicate analysis",
+                run_id="run-immutability-005",
+            )
+
+            write_notification_artifact(notifications_dir, artifact1)
+
+            with self.assertRaises(FileExistsError) as context:
+                write_notification_artifact(notifications_dir, artifact2)
+
+            error_msg = str(context.exception)
+            # Error should mention the path
+            self.assertIn("20260423T120000-external-analysis.json", error_msg)
+            # Error should mention immutability
+            self.assertIn("immutability contract violated", error_msg)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_backward_compat_normal_flow_unchanged(self) -> None:
+        """Normal notification flows remain backward compatible.
+
+        This test verifies that the immutability guard doesn't break
+        the standard notification writing pattern where each notification
+        gets a unique timestamp.
+        """
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            notifications_dir = tmpdir / "notifications"
+            notifications_dir.mkdir(parents=True, exist_ok=True)
+
+            # Simulate a normal notification flow with multiple notifications
+            # each having a different timestamp
+            timestamps = [
+                ("20260423T120000", "degraded-health", "Cluster A degraded"),
+                ("20260423T120001", "degraded-health", "Cluster B degraded"),
+                ("20260423T120002", "proposal-created", "Proposal X created"),
+                ("20260423T120003", "external-analysis", "Analysis complete"),
+            ]
+
+            written_paths = []
+            for timestamp, kind, summary in timestamps:
+                artifact = _make_artifact_with_timestamp(
+                    timestamp=timestamp,
+                    kind=kind,
+                    summary=summary,
+                    run_id="run-backward-compat",
+                )
+                path = write_notification_artifact(notifications_dir, artifact)
+                written_paths.append(path)
+
+            # All paths should exist
+            for path in written_paths:
+                self.assertTrue(path.exists())
+
+            # Should have 4 distinct files
+            self.assertEqual(len(written_paths), 4)
+            self.assertEqual(len(set(written_paths)), 4)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

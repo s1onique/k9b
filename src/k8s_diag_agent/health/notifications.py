@@ -98,9 +98,25 @@ def make_notification_artifact(
 
 
 def write_notification_artifact(directory: Path, artifact: NotificationArtifact) -> Path:
+    """Write a notification artifact to disk.
+
+    Notification artifacts are immutable: once written, they must not be overwritten.
+    This function rejects writes to an existing path to enforce the immutability contract.
+
+    Raises:
+        FileExistsError: If the artifact path already exists (immutability guarantee)
+    """
     directory.mkdir(parents=True, exist_ok=True)
     filename = f"{artifact.timestamp}-{artifact.kind}.json"
     path = directory / filename
+
+    # Reject overwrite: fail fast if path already exists (immutability contract)
+    if path.exists():
+        raise FileExistsError(
+            f"Notification artifact already exists at {path}; "
+            f"immutability contract violated for timestamp={artifact.timestamp}, kind={artifact.kind}"
+        )
+
     path.write_text(json.dumps(artifact.to_dict(), indent=2), encoding="utf-8")
     return path
 
