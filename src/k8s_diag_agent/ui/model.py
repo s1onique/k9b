@@ -28,6 +28,12 @@ from .model_deterministic_next_checks import (  # noqa: F401 - re-exported for i
     _build_deterministic_next_check_summary_view,
     _build_deterministic_next_checks_view,
 )
+from .model_external_analysis import (  # noqa: F401 - re-exported for import compatibility
+    ExternalAnalysisSummary,
+    ExternalAnalysisView,
+    _build_external_analysis,
+    _build_external_analysis_view,
+)
 from .model_feedback import (
     FeedbackAdaptationProvenanceView,  # noqa: F401 - re-exported for import compatibility
     FeedbackSummaryView,  # noqa: F401 - re-exported for import compatibility
@@ -286,16 +292,9 @@ class NotificationView:
     artifact_id: str | None = None  # Immutable artifact identity (UUIDv7); None for legacy
 
 
-@dataclass(frozen=True)
-class ExternalAnalysisView:
-    tool_name: str
-    cluster_label: str | None
-    status: str
-    summary: str | None
-    findings: tuple[str, ...]
-    suggested_next_checks: tuple[str, ...]
-    timestamp: str
-    artifact_path: str | None
+# ExternalAnalysisView and ExternalAnalysisSummary are re-exported from
+# model_external_analysis.py for import compatibility.
+# noqa: F401 - these are re-exported from model_external_analysis.py
 
 
 @dataclass(frozen=True)
@@ -391,11 +390,9 @@ class DiagnosticPackView:
 # _build_next_check_candidate_view remains here as it has a dependency on ui_planner_queue
 # (_derive_priority_rationale, _derive_ranking_reason).
 
-@dataclass(frozen=True)
-class ExternalAnalysisSummary:
-    count: int
-    status_counts: tuple[tuple[str, int], ...]
-    artifacts: tuple[ExternalAnalysisView, ...]
+# ExternalAnalysisSummary and ExternalAnalysisView are re-exported from
+# model_external_analysis.py for import compatibility.
+# noqa: F401 - these are re-exported from model_external_analysis.py
 
 
 @dataclass(frozen=True)
@@ -825,26 +822,8 @@ def _build_notification_details(raw: object | None) -> tuple[tuple[str, str], ..
     return tuple(details)
 
 
-def _build_external_analysis(raw: object | None) -> ExternalAnalysisSummary:
-    if not isinstance(raw, Mapping):
-        return ExternalAnalysisSummary(count=0, status_counts=(), artifacts=())
-    status_counts_raw = raw.get("status_counts") or ()
-    status_counts = tuple(
-        (_coerce_str(entry.get("status")), _coerce_int(entry.get("count")))
-        for entry in status_counts_raw
-        if isinstance(entry, Mapping)
-    )
-    artifacts_raw = raw.get("artifacts") or ()
-    artifacts = tuple(
-        _build_external_analysis_view(entry)
-        for entry in artifacts_raw
-        if isinstance(entry, Mapping)
-    )
-    return ExternalAnalysisSummary(
-        count=_coerce_int(raw.get("count")),
-        status_counts=status_counts,
-        artifacts=artifacts,
-    )
+# _build_external_analysis and _build_external_analysis_view are re-exported from
+# model_external_analysis.py for import compatibility.
 
 
 def _build_llm_activity(raw: object | None) -> LLMActivityView:
@@ -1162,17 +1141,7 @@ def _build_review_enrichment_status_view(raw: object | None) -> ReviewEnrichment
     )
 
 
-def _build_external_analysis_view(raw: Mapping[str, object]) -> ExternalAnalysisView:
-    return ExternalAnalysisView(
-        tool_name=_coerce_str(raw.get("tool_name")),
-        cluster_label=_coerce_optional_str(raw.get("cluster_label")),
-        status=_coerce_str(raw.get("status")),
-        summary=_coerce_optional_str(raw.get("summary")),
-        findings=_coerce_sequence(raw.get("findings")),
-        suggested_next_checks=_coerce_sequence(raw.get("suggested_next_checks")),
-        timestamp=_coerce_str(raw.get("timestamp")),
-        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
-    )
+# _build_external_analysis_view is re-exported from model_external_analysis.py.
 
 
 def _build_diagnostic_pack_view(raw: object | None) -> DiagnosticPackView | None:
