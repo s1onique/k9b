@@ -130,6 +130,7 @@ class LLMPolicyViewInstantiationTests(unittest.TestCase):
         )
         view = LLMPolicyView(auto_drilldown=ad_policy)
         self.assertIsNotNone(view.auto_drilldown)
+        assert view.auto_drilldown is not None
         self.assertEqual(view.auto_drilldown.provider, "openai")
 
     def test_llm_policy_view_null_auto_drilldown(self) -> None:
@@ -233,6 +234,7 @@ class BuildLLMPolicyBuilderTests(unittest.TestCase):
 
         result = _build_llm_policy_view({})
         self.assertIsInstance(result, LLMPolicyView)
+        assert result is not None
         self.assertIsNone(result.auto_drilldown)
 
     def test_build_llm_policy_view_with_auto_drilldown(self) -> None:
@@ -253,7 +255,9 @@ class BuildLLMPolicyBuilderTests(unittest.TestCase):
         }
         result = _build_llm_policy_view(raw)
         self.assertIsInstance(result, LLMPolicyView)
+        assert result is not None
         self.assertIsNotNone(result.auto_drilldown)
+        assert result.auto_drilldown is not None
         self.assertEqual(result.auto_drilldown.provider, "openai")
         self.assertEqual(result.auto_drilldown.max_per_run, 5)
 
@@ -291,6 +295,7 @@ class BuildAutoDrilldownPolicyBuilderTests(unittest.TestCase):
         }
         result = _build_auto_drilldown_policy_view(raw)
         self.assertIsInstance(result, AutoDrilldownPolicyView)
+        assert result is not None
         self.assertEqual(result.enabled, True)
         self.assertEqual(result.provider, "openai")
         self.assertEqual(result.max_per_run, 5)
@@ -304,6 +309,7 @@ class BuildAutoDrilldownPolicyBuilderTests(unittest.TestCase):
         raw: dict[str, object] = {}
         result = _build_auto_drilldown_policy_view(raw)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.enabled, False)  # bool(None) = False
         self.assertEqual(result.provider, "-")  # _coerce_str default
         self.assertEqual(result.max_per_run, 0)  # _coerce_int default
@@ -324,6 +330,7 @@ class BuildAutoDrilldownPolicyBuilderTests(unittest.TestCase):
         }
         result = _build_auto_drilldown_policy_view(raw)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.max_per_run, 5)
         self.assertEqual(result.used_this_run, 2)
 
@@ -389,8 +396,11 @@ class BuildProviderExecutionViewBuilderTests(unittest.TestCase):
         }
         result = _build_provider_execution_view(raw)
         self.assertIsInstance(result, ProviderExecutionView)
+        assert result is not None
         self.assertIsNotNone(result.auto_drilldown)
         self.assertIsNotNone(result.review_enrichment)
+        assert result.auto_drilldown is not None
+        assert result.review_enrichment is not None
         self.assertEqual(result.auto_drilldown.provider, "openai")
         self.assertEqual(result.review_enrichment.provider, "anthropic")
 
