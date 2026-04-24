@@ -5,6 +5,7 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import requests
@@ -12,7 +13,7 @@ import requests
 from .assessor_schema import AssessorAssessment
 from .base import LLMProvider
 
-DEFAULT_TIMEOUT_SECONDS = 90
+DEFAULT_TIMEOUT_SECONDS = 120
 
 if TYPE_CHECKING:
     from .base import LLMAssessmentInput
@@ -370,4 +371,106 @@ class LlamaCppProvider(LLMProvider):
         return assessment
 
 
-__all__ = ["LlamaCppProvider", "LlamaCppProviderConfig"]
+class LLMFailureClass(StrEnum):
+    """Classification of LLM provider failures for diagnostics and observability."""
+
+    LLM_CLIENT_READ_TIMEOUT = "llm_client_read_timeout"
+    LLM_CLIENT_CONNECT_TIMEOUT = "llm_client_connect_timeout"
+    LLM_SERVER_HTTP_ERROR = "llm_server_http_error"
+    LLM_RESPONSE_PARSE_ERROR = "llm_response_parse_error"
+    LLM_CLIENT_REQUEST_ERROR = "llm_client_request_error"
+    LLM_ADAPTER_ERROR = "llm_adapter_error"
+
+
+def classify_llm_failure(
+    exc: BaseException,
+    response: requests.Response | None = None,
+) -> tuple[LLMFailureClass, str]:
+    """Classify an LLM provider exception into a stable failure class.
+
+    This helper distinguishes common failure modes for better diagnostics:
+    - Read timeout (server slow to respond)
+    - Connect timeout (cannot reach server)
+    - HTTP errors (4xx/5xx responses)
+    - Response parse errors (malformed output)
+    - Client request errors (other requests lib errors)
+    - Adapter errors (unexpected exceptions)
+
+    Args:
+        exc: The exception that caused the failure.
+        response: The HTTP response object if available.
+
+    Returns:
+        Tuple of (failure_class, exception_type_name)
+    """
+    exc_name = exc.__class__.__name__
+
+    # Check for HTTP error responses first
+    if response is not None:
+        status_code = getattr(response, "status_code", None)
+        if status_code is not None:
+            if 400 <= status_code < 600:
+                return LLMFailureClass.LLM_SERVER_HTTP_ERROR, exc_name
+
+    # Classify HTTPError even without response (e.g., pre-response errors)
+    if isinstance(exc, requests.HTTPError):
+        return LLMFailureClass.LLM_SERVER_HTTP_ERROR, exc_name
+
+    # Classify by exception type
+    if isinstance(exc, requests.Timeout):
+        # requests.Timeout has two subclasses: ConnectTimeout and ReadTimeout
+        # but they may not always be distinguishable, so check class name
+        if "Connect" in exc_name or "connect" in str(exc).lower():
+            return LLMFailureClass.LLM_CLIENT_CONNECT_TIMEOUT, exc_name
+        return LLMFailureClass.LLM_CLIENT_READ_TIMEOUT, exc_name
+
+    if isinstance(exc, requests.ConnectionError):
+        err_msg = str(exc).lower()
+        if "timeout" in err_msg or "timed out" in err_msg:
+            return LLMFailureClass.LLM_CLIENT_CONNECT_TIMEOUT, exc_name
+        return LLMFailureClass.LLM_CLIENT_REQUEST_ERROR, exc_name
+
+    if isinstance(exc, requests.RequestException):
+        return LLMFailureClass.LLM_CLIENT_REQUEST_ERROR, exc_name
+
+    if isinstance(exc, (ValueError, json.JSONDecodeError)):
+        return LLMFailureClass.LLM_RESPONSE_PARSE_ERROR, exc_name
+
+    # Default to adapter error for unexpected exceptions
+    return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
+
+
+@dataclass(frozen=True)
+class LLMFailureMetadata:
+    """Structured metadata for LLM provider failures."""
+
+    failure_class: str
+    exception_type: str
+    timeout_seconds: int | None = None
+    elapsed_ms: int | None = None
+    endpoint: str | None = None
+    summary: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
+            "failure_class": self.failure_class,
+            "exception_type": self.exception_type,
+        }
+        if self.timeout_seconds is not None:
+            result["timeout_seconds"] = self.timeout_seconds
+        if self.elapsed_ms is not None:
+            result["elapsed_ms"] = self.elapsed_ms
+        if self.endpoint is not None:
+            result["endpoint"] = self.endpoint
+        if self.summary is not None:
+            result["summary"] = self.summary
+        return result
+
+
+__all__ = [
+    "LlamaCppProvider",
+    "LlamaCppProviderConfig",
+    "LLMFailureClass",
+    "LLMFailureMetadata",
+    "classify_llm_failure",
+]

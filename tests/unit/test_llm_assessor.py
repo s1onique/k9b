@@ -389,7 +389,7 @@ class LlamaCppProviderTest(unittest.TestCase):
         self.assertEqual(payload["messages"][1]["content"], "some prompt")
         headers = session.calls[0][2]
         self.assertEqual(headers["Authorization"], "Bearer secret")
-        self.assertEqual(session.calls[0][3], 90)
+        self.assertEqual(session.calls[0][3], 120)
 
     def test_request_headers_skip_authorization_without_api_key(self) -> None:
         response = _FakeResponse(
@@ -435,7 +435,7 @@ class LlamaCppProviderTest(unittest.TestCase):
             provider.assess("prompt", self._dummy_payload())
         message = str(ctx.exception)
         self.assertIn("Endpoint http://example.com/api/v1/chat/completions", message)
-        self.assertIn("timeout=90s", message)
+        self.assertIn("timeout=120s", message)
 
     def test_validates_response_schema(self) -> None:
         response = _FakeResponse({"choices": [{"message": {"content": json.dumps({})}}]})

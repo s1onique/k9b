@@ -11,8 +11,11 @@ from typing import Any
 from ..llm.base import LLMAssessmentInput
 from ..llm.llamacpp_provider import (
     _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
+    DEFAULT_TIMEOUT_SECONDS,
     LlamaCppProvider,
     LlamaCppProviderConfig,
+    LLMFailureMetadata,
+    classify_llm_failure,
 )
 from .adapter import (
     ExternalAnalysisAdapter,
@@ -165,12 +168,25 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             )
         except Exception as exc:  # noqa: BLE001
             duration_ms = int((time.perf_counter() - start) * 1000)
+            # Classify the failure for structured metadata
+            failure_class, exc_type = classify_llm_failure(exc)
+            config = self._http_provider._config if self._http_provider else None
+            timeout_value = config.timeout_seconds if config else DEFAULT_TIMEOUT_SECONDS
+            failure_metadata = LLMFailureMetadata(
+                failure_class=failure_class.value,
+                exception_type=exc_type,
+                timeout_seconds=timeout_value,
+                elapsed_ms=duration_ms,
+                endpoint=config.endpoint if config else None,
+                summary=str(exc),
+            ).to_dict()
             return self._build_failure_artifact(
                 request,
                 duration_ms,
                 str(exc),
                 ExternalAnalysisStatus.FAILED,
                 error_summary=str(exc),
+                failure_metadata=failure_metadata,
             )
 
     def _prepare_provider_request(
@@ -390,6 +406,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         *,
         error_summary: str | None = None,
         skip_reason: str | None = None,
+        failure_metadata: dict[str, object] | None = None,
     ) -> ExternalAnalysisArtifact:
         return ExternalAnalysisArtifact(
             tool_name=self.name,
@@ -406,6 +423,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             payload=None,
             error_summary=error_summary,
             skip_reason=skip_reason,
+            failure_metadata=failure_metadata,
         )
 
 

@@ -2551,11 +2551,13 @@ class HealthLoopRunner:
             self._log_event(
                 "external-analysis",
                 severity,
-                "Auto drilldown interpretation recorded",
+                "Auto drilldown interpretation failed" if status == ExternalAnalysisStatus.FAILED else "Auto drilldown interpretation recorded",
                 tool=provider_name,
                 cluster_label=drilldown.label,
                 status=status.value,
                 artifact_path=str(artifact_path),
+                error_summary=error_summary,
+                duration_ms=duration_ms,
                 event="auto-drilldown",
             )
             artifacts.append(artifact)
@@ -2684,19 +2686,26 @@ class HealthLoopRunner:
         error_summary = artifact.error_summary
         skip_reason = artifact.skip_reason
 
+        # Additional failure metadata for failed status
+        log_kwargs: dict[str, Any] = {
+            "run_label": self.run_label,
+            "run_id": self.run_id,
+            "provider": provider or "unspecified",
+            "artifact_path": str(artifact_path),
+            "status": artifact.status.value,
+            "next_checks_count": next_checks_count,
+            "error_summary": error_summary,
+            "skip_reason": skip_reason,
+            "event": "review-enrichment-result",
+        }
+        # Include failure metadata for FAILED status if available
+        if artifact.status == ExternalAnalysisStatus.FAILED and artifact.duration_ms is not None:
+            log_kwargs["elapsed_ms"] = artifact.duration_ms
         self._log_event(
             "review-enrichment",
             severity,
             message,
-            run_label=self.run_label,
-            run_id=self.run_id,
-            provider=provider or "unspecified",
-            artifact_path=str(artifact_path),
-            status=artifact.status.value,
-            next_checks_count=next_checks_count,
-            error_summary=error_summary,
-            skip_reason=skip_reason,
-            event="review-enrichment-result",
+            **log_kwargs,
         )
         return artifact
 
