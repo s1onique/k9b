@@ -10,7 +10,9 @@ from typing import cast
 
 from .model_feedback import (
     FeedbackAdaptationProvenanceView,
+    FeedbackSummaryView,  # noqa: F401 - re-exported for import compatibility
     _build_feedback_adaptation_provenance_view,
+    _build_feedback_summary_view,  # noqa: F401 - re-exported for import compatibility
 )
 from .model_primitives import (
     _ORIGIN_LABELS,
