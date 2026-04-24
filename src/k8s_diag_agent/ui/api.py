@@ -151,21 +151,42 @@ def build_run_payload(
         "artifacts": _collect_run_artifacts(context),
         "runStats": _serialize_run_stats(context.run.run_stats),
         "llmStats": _serialize_llm_stats(context.run.llm_stats),
-        "historicalLlmStats": (_serialize_llm_stats(context.run.historical_llm_stats) if context.run.historical_llm_stats else None),
+        "historicalLlmStats": (
+            _serialize_llm_stats(context.run.historical_llm_stats)
+            if context.run.historical_llm_stats
+            else None
+        ),
         "llmActivity": _serialize_llm_activity(context.run.llm_activity),
         "llmPolicy": _serialize_llm_policy(context.run.llm_policy),
         "reviewEnrichment": _serialize_review_enrichment(context.run.review_enrichment),
-        "reviewEnrichmentStatus": _serialize_review_enrichment_status(context.run.review_enrichment_status),
+        "reviewEnrichmentStatus": _serialize_review_enrichment_status(
+            context.run.review_enrichment_status
+        ),
         "providerExecution": _serialize_provider_execution(context.run.provider_execution),
-        "freshness": _build_freshness_payload(context.run.timestamp, context.run.scheduler_interval_seconds),
+        "freshness": _build_freshness_payload(
+            context.run.timestamp, context.run.scheduler_interval_seconds
+        ),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
-        "nextCheckQueue": _serialize_next_check_queue(context.run.next_check_queue, promotions),
-        "nextCheckQueueExplanation": _serialize_queue_explanation(context.run.next_check_queue_explanation),
-        "deterministicNextChecks": _serialize_deterministic_next_checks(context.run.deterministic_next_checks),
-        "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
-        "diagnosticPackReview": _serialize_diagnostic_pack_review(context.run.diagnostic_pack_review),
+        "nextCheckQueue": _serialize_next_check_queue(
+            context.run.next_check_queue,
+            promotions,
+        ),
+        "nextCheckQueueExplanation": _serialize_queue_explanation(
+            context.run.next_check_queue_explanation
+        ),
+        "deterministicNextChecks": _serialize_deterministic_next_checks(
+            context.run.deterministic_next_checks
+        ),
+        "plannerAvailability": _serialize_planner_availability(
+            context.run.planner_availability
+        ),
+        "diagnosticPackReview": _serialize_diagnostic_pack_review(
+            context.run.diagnostic_pack_review
+        ),
         "diagnosticPack": _serialize_diagnostic_pack(context.run.diagnostic_pack),
-        "nextCheckExecutionHistory": _serialize_execution_history(context.run.next_check_execution_history),
+        "nextCheckExecutionHistory": _serialize_execution_history(
+            context.run.next_check_execution_history
+        ),
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
     }
@@ -540,7 +561,6 @@ def _serialize_auto_interpretation(interpretation: AutoDrilldownInterpretationVi
     }
 
 
-# _serialize_review_enrichment moved to api_review_enrichment.py
 
 
 def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanPayload | None:
@@ -929,7 +949,6 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
     return payload
 
 
-# _serialize_review_enrichment_status moved to api_review_enrichment.py
 
 
 def _serialize_provider_execution(view: ProviderExecutionView | None) -> ProviderExecutionPayload | None:
