@@ -31,6 +31,28 @@ from .api_alertmanager import (  # noqa: F401 - re-exported for backward compati
     _serialize_alertmanager_sources,
 )
 
+# Import ClusterDetail serializers from extracted module.
+# Re-export for backward compatibility: callers importing from api.py continue to work.
+from .api_cluster_detail import (  # noqa: F401 - re-exported for backward compatibility
+    _build_problem_summary,
+    _build_proposal_summary,
+    _filter_related_notifications,
+    _filter_related_proposals,
+    _serialize_assessment_summary,
+    _serialize_auto_interpretation,
+    _serialize_cluster,
+    _serialize_drilldown,
+    _serialize_drilldown_summary,
+    _serialize_findings,
+    _serialize_hypothesis,
+    _serialize_next_check,
+    _serialize_notification,
+    _serialize_proposal,
+    _serialize_rating_counts,
+    _serialize_recommended_action,
+    _serialize_status_counts,
+)
+
 # Import DiagnosticPack serializers from extracted module.
 # Re-export for backward compatibility: callers importing from api.py continue to work.
 from .api_diagnostic_pack import (  # noqa: F401 - re-exported for backward compatibility
@@ -120,17 +142,9 @@ from .api_review_enrichment import (  # noqa: F401 - re-exported for backward co
     _serialize_review_enrichment_status,
 )
 from .model import (
-    AssessmentHypothesisView,
-    AssessmentNextCheckView,
-    AssessmentView,
-    AutoDrilldownInterpretationView,
-    ClusterView,
     DeterministicNextCheckClusterView,
     DeterministicNextCheckSummaryView,
     DeterministicNextChecksView,
-    DrilldownAvailabilityView,
-    DrilldownCoverageEntry,
-    FindingsView,
     NextCheckCandidateView,
     NextCheckExecutionHistoryEntryView,
     NextCheckOrphanedApprovalView,
@@ -139,10 +153,7 @@ from .model import (
     NextCheckQueueClusterStateView,
     NextCheckQueueExplanationView,
     NextCheckQueueItemView,
-    NotificationView,
     PlannerAvailabilityView,
-    ProposalView,
-    RecommendedActionView,
     RunStatsView,
     UIIndexContext,
 )
@@ -278,19 +289,6 @@ def _collect_run_artifacts(context: UIIndexContext) -> list[ArtifactLink]:
     return artifacts
 
 
-def _serialize_plan_candidates_for_cluster(label: str | None, plan: NextCheckPlanView | None) -> list[NextCheckCandidatePayload]:
-    if not plan:
-        return []
-    payloads: list[NextCheckCandidatePayload] = []
-    for index, candidate in enumerate(plan.candidates):
-        if label and candidate.target_cluster and candidate.target_cluster != label:
-            continue
-        payload = _serialize_next_check_candidate(candidate)
-        payload["candidateIndex"] = index
-        payloads.append(payload)
-    return payloads
-
-
 def _build_freshness_payload(
     timestamp_value: str | None,
     expected_interval_seconds: int | None,
@@ -321,198 +319,6 @@ def _serialize_run_stats(stats: RunStatsView) -> RunStatsPayload:
         "p95RunDurationSeconds": stats.p95_run_duration_seconds,
         "p99RunDurationSeconds": stats.p99_run_duration_seconds,
     }
-
-
-def _build_problem_summary(context: UIIndexContext) -> ProblemSummary:
-    findings = context.latest_findings
-    if findings and findings.trigger_reasons:
-        detail = " · ".join(findings.trigger_reasons)
-        return {"title": "Trigger reasons", "detail": detail}
-    assessment = context.latest_assessment
-    if assessment and assessment.findings:
-        first = assessment.findings[0]
-        return {"title": "Assessment finding", "detail": first.description}
-    return {"title": "Fleet status", "detail": "Awaiting fresh evidence"}
-
-
-def _serialize_cluster(cluster: ClusterView) -> ClusterSummaryPayload:
-    return {
-        "label": cluster.label,
-        "context": cluster.context,
-        "clusterClass": cluster.cluster_class,
-        "clusterRole": cluster.cluster_role,
-        "baselineCohort": cluster.baseline_cohort,
-        "controlPlaneVersion": cluster.control_plane_version,
-        "healthRating": cluster.health_rating,
-        "warnings": cluster.warnings,
-        "nonRunningPods": cluster.non_running_pods,
-        "latestRunTimestamp": cluster.latest_run_timestamp,
-        "topTriggerReason": cluster.top_trigger_reason,
-        "drilldownAvailable": cluster.drilldown_available,
-        "drilldownTimestamp": cluster.drilldown_timestamp,
-        "missingEvidence": list(cluster.missing_evidence),
-    }
-
-
-def _serialize_rating_counts(entries: tuple[tuple[str, int], ...]) -> list[RatingCount]:
-    return [{"rating": rating, "count": count} for rating, count in entries]
-
-
-def _serialize_status_counts(entries: tuple[tuple[str, int], ...]) -> list[StatusCount]:
-    return [{"status": status, "count": count} for status, count in entries]
-
-
-def _build_proposal_summary(context: UIIndexContext) -> ProposalSummaryPayload:
-    counts = {status.lower(): count for status, count in context.proposal_status_summary.status_counts}
-    total = sum(count for count in counts.values())
-    return {
-        "pending": counts.get("pending", 0),
-        "total": total,
-        "statusCounts": _serialize_status_counts(context.proposal_status_summary.status_counts),
-    }
-
-
-def _serialize_proposal(proposal: ProposalView) -> ProposalEntry:
-    artifacts: list[ArtifactLink] = []
-    if proposal.artifact_path:
-        artifacts.append({"label": "Proposal JSON", "path": proposal.artifact_path})
-    if proposal.review_path:
-        artifacts.append({"label": "Review JSON", "path": proposal.review_path})
-    entry: ProposalEntry = {
-        "proposalId": proposal.proposal_id,
-        "target": proposal.target,
-        "status": proposal.status,
-        "confidence": proposal.confidence,
-        "rationale": proposal.rationale,
-        "expectedBenefit": proposal.expected_benefit,
-        "sourceRunId": proposal.source_run_id,
-        "latestNote": proposal.latest_note,
-        "lifecycle": [{"status": status, "timestamp": timestamp, "note": note} for status, timestamp, note in proposal.lifecycle_history],
-        "artifacts": artifacts,
-        "artifactId": proposal.artifact_id,
-    }
-    return entry
-
-
-def _serialize_notification(entry: NotificationView) -> NotificationEntry:
-    return {
-        "kind": entry.kind,
-        "summary": entry.summary,
-        "timestamp": entry.timestamp,
-        "runId": entry.run_id,
-        "clusterLabel": entry.cluster_label,
-        "context": entry.context,
-        "details": [{"label": label, "value": value} for label, value in entry.details],
-        "artifactPath": entry.artifact_path,
-        "artifactId": entry.artifact_id,
-    }
-
-
-def _serialize_drilldown_summary(availability: DrilldownAvailabilityView) -> DrilldownSummaryPayload:
-    return {
-        "totalClusters": availability.total_clusters,
-        "available": availability.available,
-        "missing": availability.missing,
-        "missingClusters": list(availability.missing_clusters),
-    }
-
-
-def _serialize_drilldown(entry: DrilldownCoverageEntry) -> DrilldownCoveragePayload:
-    return {
-        "label": entry.label,
-        "context": entry.context,
-        "available": entry.available,
-        "timestamp": entry.timestamp,
-        "artifactPath": entry.artifact_path,
-    }
-
-
-def _serialize_findings(findings: FindingsView | None) -> FindingEntry:
-    if findings is None:
-        return {
-            "label": None,
-            "context": None,
-            "triggerReasons": [],
-            "warningEvents": 0,
-            "nonRunningPods": 0,
-            "summaryEntries": [],
-            "patternDetails": [],
-            "rolloutStatus": [],
-            "artifactPath": None,
-        }
-    return {
-        "label": findings.label,
-        "context": findings.context,
-        "triggerReasons": list(findings.trigger_reasons),
-        "warningEvents": findings.warning_events,
-        "nonRunningPods": findings.non_running_pods,
-        "summaryEntries": [{"label": label, "value": value} for label, value in findings.summary],
-        "patternDetails": [{"label": label, "value": value} for label, value in findings.pattern_details],
-        "rolloutStatus": list(findings.rollout_status),
-        "artifactPath": findings.artifact_path,
-    }
-
-
-def _serialize_hypothesis(hypothesis: AssessmentHypothesisView) -> HypothesisEntry:
-    return {
-        "description": hypothesis.description,
-        "confidence": hypothesis.confidence,
-        "probableLayer": hypothesis.probable_layer,
-        "falsifier": hypothesis.what_would_falsify,
-    }
-
-
-def _serialize_next_check(check: AssessmentNextCheckView) -> NextCheckEntry:
-    return {
-        "description": check.description,
-        "owner": check.owner,
-        "method": check.method,
-        "evidenceNeeded": list(check.evidence_needed),
-    }
-
-
-def _serialize_recommended_action(action: RecommendedActionView | None) -> RecommendedActionPayload | None:
-    if not action:
-        return None
-    return {
-        "actionType": action.action_type,
-        "description": action.description,
-        "references": list(action.references),
-        "safetyLevel": action.safety_level,
-    }
-
-
-def _serialize_assessment_summary(assessment: AssessmentView | None) -> AssessmentSummaryPayload | None:
-    if not assessment:
-        return None
-    return {
-        "healthRating": assessment.health_rating,
-        "missingEvidence": list(assessment.missing_evidence),
-        "probableLayer": assessment.probable_layer,
-        "overallConfidence": assessment.overall_confidence,
-        "artifactPath": assessment.artifact_path,
-        "snapshotPath": assessment.snapshot_path,
-    }
-
-
-def _serialize_auto_interpretation(interpretation: AutoDrilldownInterpretationView | None) -> DrilldownInterpretationPayload | None:
-    if not interpretation:
-        return None
-    payload = dict(interpretation.payload) if interpretation.payload else None
-    return {
-        "adapter": interpretation.adapter,
-        "status": interpretation.status,
-        "summary": interpretation.summary,
-        "timestamp": interpretation.timestamp,
-        "artifactPath": interpretation.artifact_path,
-        "provider": interpretation.provider,
-        "durationMs": interpretation.duration_ms,
-        "payload": payload,
-        "errorSummary": interpretation.error_summary,
-        "skipReason": interpretation.skip_reason,
-    }
-
-
 
 
 def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanPayload | None:
@@ -777,6 +583,7 @@ def _serialize_execution_history(entries: tuple[NextCheckExecutionHistoryEntryVi
 
 
 def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCandidatePayload:
+    """Serialize next-check candidate view to payload dict."""
     # Build provenance dict if present
     provenance: AlertmanagerProvenancePayload | None = None
     if view.alertmanager_provenance is not None:
@@ -854,22 +661,20 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
     return payload
 
 
-
-
-def _filter_related_proposals(label: str | None, proposals: tuple[ProposalView, ...]) -> list[ProposalEntry]:
-    if label:
-        matching = [p for p in proposals if label in p.target or label in (p.latest_note or "")]
-        if matching:
-            return [_serialize_proposal(p) for p in matching[:3]]
-    return [_serialize_proposal(p) for p in proposals[:3]]
-
-
-def _filter_related_notifications(label: str | None, notifications: tuple[NotificationView, ...]) -> list[NotificationEntry]:
-    if label:
-        matching = [n for n in notifications if n.cluster_label == label]
-        if matching:
-            return [_serialize_notification(entry) for entry in matching[:3]]
-    return [_serialize_notification(entry) for entry in notifications[:3]]
+def _serialize_plan_candidates_for_cluster(
+    label: str | None, plan: NextCheckPlanView | None
+) -> list[NextCheckCandidatePayload]:
+    """Serialize next-check plan candidates filtered for a specific cluster."""
+    if not plan:
+        return []
+    payloads: list[NextCheckCandidatePayload] = []
+    for index, candidate in enumerate(plan.candidates):
+        if label and candidate.target_cluster and candidate.target_cluster != label:
+            continue
+        payload = _serialize_next_check_candidate(candidate)
+        payload["candidateIndex"] = index
+        payloads.append(payload)
+    return payloads
 
 
 def _derive_review_status(execution_count: int, reviewed_count: int) -> str:
