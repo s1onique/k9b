@@ -44,6 +44,14 @@ from .model_feedback import (
     _build_feedback_adaptation_provenance_view,
     _build_feedback_summary_view,  # noqa: F401 - re-exported for import compatibility
 )
+from .model_llm_activity import (  # noqa: F401 - re-exported for import compatibility
+    LLMActivityEntryView,
+    LLMActivitySummaryView,
+    LLMActivityView,
+    _build_llm_activity,
+    _build_llm_activity_entry,
+    _build_llm_activity_summary,
+)
 from .model_next_check_execution import (  # noqa: F401 - re-exported for import compatibility
     NextCheckExecutionHistoryEntryView,
     _build_execution_history_view,
@@ -151,32 +159,9 @@ class LLMStatsView:
     scope: str = "current_run"
 
 
-@dataclass(frozen=True)
-class LLMActivityEntryView:
-    timestamp: str | None
-    run_id: str | None
-    run_label: str | None
-    cluster_label: str | None
-    tool_name: str | None
-    provider: str | None
-    purpose: str | None
-    status: str | None
-    latency_ms: int | None
-    artifact_path: str | None
-    summary: str | None
-    error_summary: str | None
-    skip_reason: str | None
-
-
-@dataclass(frozen=True)
-class LLMActivitySummaryView:
-    retained_entries: int
-
-
-@dataclass(frozen=True)
-class LLMActivityView:
-    entries: tuple[LLMActivityEntryView, ...]
-    summary: LLMActivitySummaryView
+# LLMActivityEntryView, LLMActivitySummaryView, and LLMActivityView are re-exported
+# from model_llm_activity.py for import compatibility.
+# noqa: F401 - these are re-exported from model_llm_activity.py
 
 
 @dataclass(frozen=True)
@@ -820,22 +805,6 @@ def _build_notification_details(raw: object | None) -> tuple[tuple[str, str], ..
 # model_external_analysis.py for import compatibility.
 
 
-def _build_llm_activity(raw: object | None) -> LLMActivityView:
-    if not isinstance(raw, Mapping):
-        return LLMActivityView(
-            entries=(),
-            summary=LLMActivitySummaryView(retained_entries=0),
-        )
-    entries_raw = raw.get("entries") or ()
-    entries = tuple(
-        _build_llm_activity_entry(entry)
-        for entry in entries_raw
-        if isinstance(entry, Mapping)
-    )
-    summary = _build_llm_activity_summary(raw.get("summary"))
-    return LLMActivityView(entries=entries, summary=summary)
-
-
 def _build_llm_policy_view(raw: object | None) -> LLMPolicyView | None:
     if not isinstance(raw, Mapping):
         return None
@@ -882,30 +851,6 @@ def _build_execution_branch_view(raw: object | None) -> ProviderExecutionBranchV
         budget_limited=_coerce_optional_int(raw.get("budgetLimited")),
         notes=_coerce_optional_str(raw.get("notes")),
     )
-
-
-def _build_llm_activity_entry(raw: Mapping[str, object]) -> LLMActivityEntryView:
-    return LLMActivityEntryView(
-        timestamp=_coerce_optional_str(raw.get("timestamp")),
-        run_id=_coerce_optional_str(raw.get("run_id")),
-        run_label=_coerce_optional_str(raw.get("run_label")),
-        cluster_label=_coerce_optional_str(raw.get("cluster_label")),
-        tool_name=_coerce_optional_str(raw.get("tool_name")),
-        provider=_coerce_optional_str(raw.get("provider")),
-        purpose=_coerce_optional_str(raw.get("purpose")),
-        status=_coerce_optional_str(raw.get("status")),
-        latency_ms=_coerce_optional_int(raw.get("latency_ms")),
-        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
-        summary=_coerce_optional_str(raw.get("summary")),
-        error_summary=_coerce_optional_str(raw.get("error_summary")),
-        skip_reason=_coerce_optional_str(raw.get("skip_reason")),
-    )
-
-
-def _build_llm_activity_summary(raw: object | None) -> LLMActivitySummaryView:
-    if not isinstance(raw, Mapping):
-        return LLMActivitySummaryView(retained_entries=0)
-    return LLMActivitySummaryView(retained_entries=_coerce_int(raw.get("retained_entries")))
 
 
 def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | None:
