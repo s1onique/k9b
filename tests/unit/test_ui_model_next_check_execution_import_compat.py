@@ -102,9 +102,10 @@ class TestExecutionHistoryImportsReExportedFromModel(unittest.TestCase):
         ]
         result = _build_execution_history_view(raw)
         self.assertEqual(len(result), 1)
-        self.assertIsNotNone(result[0].alertmanager_provenance)
-        self.assertEqual(result[0].alertmanager_provenance.matched_dimensions, ("namespace",))
-        self.assertEqual(result[0].alertmanager_provenance.applied_bonus, 10)
+        provenance = result[0].alertmanager_provenance
+        assert provenance is not None
+        self.assertEqual(provenance.matched_dimensions, ("namespace",))
+        self.assertEqual(provenance.applied_bonus, 10)
 
 
 class TestExecutionHistoryImportsDirectlyFromModule(unittest.TestCase):

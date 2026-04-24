@@ -21,7 +21,7 @@ from .model_alertmanager import (  # noqa: F401 - re-exported for import compati
     _build_alertmanager_sources_view,
 )
 from .model_feedback import (
-    FeedbackAdaptationProvenanceView,
+    FeedbackAdaptationProvenanceView,  # noqa: F401 - re-exported for import compatibility
     FeedbackSummaryView,  # noqa: F401 - re-exported for import compatibility
     _build_feedback_adaptation_provenance_view,
     _build_feedback_summary_view,  # noqa: F401 - re-exported for import compatibility
@@ -30,6 +30,18 @@ from .model_next_check_execution import (  # noqa: F401 - re-exported for import
     NextCheckExecutionHistoryEntryView,
     _build_execution_history_view,
 )
+from .model_next_check_plan import (  # noqa: F401 - re-exported for import compatibility
+    NextCheckCandidateView,
+    NextCheckOrphanedApprovalView,
+    NextCheckOutcomeCountView,
+    NextCheckPlanView,
+    _build_next_check_candidate_view_from_plan,
+)
+
+# Note: _build_next_check_plan_view, _build_orphaned_approval_view, _build_outcome_count_view
+# are NOT re-exported because model.py has local definitions used by _build_next_check_plan_view
+# (which uses _build_next_check_candidate_view with ui_planner_queue dependency).
+# _build_next_check_candidate_view_from_plan is re-exported for compatibility.
 from .model_next_check_queue import (  # noqa: F401 - re-exported for import compatibility
     NextCheckQueueCandidateAccountingView,
     NextCheckQueueClusterStateView,
@@ -348,74 +360,14 @@ class DiagnosticPackView:
     source_pack_path: str | None = None
 
 
-@dataclass(frozen=True)
-class NextCheckCandidateView:
-    candidate_id: str | None
-    priority_label: str | None
-    description: str
-    target_cluster: str | None
-    source_reason: str | None
-    expected_signal: str | None
-    suggested_command_family: str | None
-    safe_to_automate: bool
-    requires_operator_approval: bool
-    risk_level: str
-    estimated_cost: str
-    confidence: str
-    gating_reason: str | None
-    duplicate_of_existing_evidence: bool
-    duplicate_evidence_description: str | None
-    approval_status: str | None
-    approval_artifact_path: str | None
-    approval_timestamp: str | None
-    candidate_index: int | None
-    normalization_reason: str | None
-    safety_reason: str | None
-    approval_reason: str | None
-    duplicate_reason: str | None
-    blocking_reason: str | None
-    approval_state: str | None
-    execution_state: str | None
-    outcome_status: str | None
-    latest_artifact_path: str | None
-    latest_timestamp: str | None
-    priority_rationale: str | None
-    ranking_reason: str | None
-    alertmanager_provenance: AlertmanagerProvenanceView | None = None
-    feedback_adaptation_provenance: FeedbackAdaptationProvenanceView | None = None
+# Note: NextCheckCandidateView, NextCheckOrphanedApprovalView, NextCheckOutcomeCountView,
+# and NextCheckPlanView are re-exported from model_next_check_plan.py for import compatibility.
 
+# _build_next_check_plan_view, _build_orphaned_approval_view, _build_outcome_count_view,
+# and _build_next_check_candidate_view_from_plan are also re-exported from model_next_check_plan.py.
 
-@dataclass(frozen=True)
-class NextCheckOrphanedApprovalView:
-    approval_status: str | None
-    candidate_id: str | None
-    candidate_index: int | None
-    candidate_description: str | None
-    target_cluster: str | None
-    plan_artifact_path: str | None
-    approval_artifact_path: str | None
-    approval_timestamp: str | None
-
-
-@dataclass(frozen=True)
-class NextCheckOutcomeCountView:
-    status: str
-    count: int
-
-
-@dataclass(frozen=True)
-class NextCheckPlanView:
-    status: str
-    summary: str | None
-    artifact_path: str | None
-    review_path: str | None
-    enrichment_artifact_path: str | None
-    candidate_count: int
-    candidates: tuple[NextCheckCandidateView, ...]
-    orphaned_approvals: tuple[NextCheckOrphanedApprovalView, ...]
-    outcome_counts: tuple[NextCheckOutcomeCountView, ...]
-    orphaned_approval_count: int
-
+# _build_next_check_candidate_view remains here as it has a dependency on ui_planner_queue
+# (_derive_priority_rationale, _derive_ranking_reason).
 
 @dataclass(frozen=True)
 class DeterministicNextCheckSummaryView:
