@@ -130,11 +130,13 @@ from .model_primitives import (
     _stringify,  # noqa: F401 - re-exported for test compatibility
     _value_from_mapping,
 )
-from .model_proposals import (  # noqa: F401 - re-exported for import compatibility
+from .model_proposal_status import (  # noqa: F401 - re-exported for import compatibility
     ProposalStatusSummary,
+    _build_proposal_status_summary,
+)
+from .model_proposals import (  # noqa: F401 - re-exported for import compatibility
     ProposalView,
     _build_lifecycle_history,
-    _build_proposal_status_summary,
     _build_proposal_view,
 )
 from .model_run_status import (  # noqa: F401 - re-exported for import compatibility

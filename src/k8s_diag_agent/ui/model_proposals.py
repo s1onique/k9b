@@ -5,10 +5,11 @@ to enable focused modularization while preserving behavior and import compatibil
 
 Symbols extracted:
 - ProposalView: proposal dataclass
-- ProposalStatusSummary: proposal status aggregation dataclass
 - _build_proposal_view: builder for ProposalView from Mapping
-- _build_proposal_status_summary: builder for ProposalStatusSummary from Mapping
 - _build_lifecycle_history: helper for proposal lifecycle tuple construction
+
+Note: ProposalStatusSummary and _build_proposal_status_summary have been extracted
+to model_proposal_status.py.
 """
 
 from __future__ import annotations
@@ -17,9 +18,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from .model_primitives import (
-    _coerce_int,
     _coerce_optional_str,
     _coerce_str,
+)
+from .model_proposal_status import (  # noqa: F401 - re-exported for import compatibility
+    ProposalStatusSummary,
+    _build_proposal_status_summary,
 )
 
 
@@ -39,13 +43,6 @@ class ProposalView:
     review_path: str | None
     lifecycle_history: tuple[tuple[str, str, str | None], ...]
     artifact_id: str | None = None  # Immutable artifact identity (UUIDv7); None for legacy
-
-
-@dataclass(frozen=True)
-class ProposalStatusSummary:
-    """View model for aggregated proposal status counts."""
-
-    status_counts: tuple[tuple[str, int], ...]
 
 
 def _build_proposal_view(proposal: Mapping[str, object]) -> ProposalView:
@@ -77,26 +74,6 @@ def _build_proposal_view(proposal: Mapping[str, object]) -> ProposalView:
         lifecycle_history=lifecycle_history,
         artifact_id=_coerce_optional_str(proposal.get("artifact_id")),
     )
-
-
-def _build_proposal_status_summary(raw: object | None) -> ProposalStatusSummary:
-    """Build a ProposalStatusSummary from raw proposal status summary data.
-
-    Args:
-        raw: Raw proposal status summary data or None
-
-    Returns:
-        ProposalStatusSummary with aggregated status counts
-    """
-    if not isinstance(raw, Mapping):
-        return ProposalStatusSummary(status_counts=())
-    counts_raw = raw.get("status_counts") or ()
-    status_counts = tuple(
-        (_coerce_str(entry.get("status")), _coerce_int(entry.get("count")))
-        for entry in counts_raw
-        if isinstance(entry, Mapping)
-    )
-    return ProposalStatusSummary(status_counts=status_counts)
 
 
 def _build_lifecycle_history(raw: object | None) -> tuple[tuple[str, str, str | None], ...]:
