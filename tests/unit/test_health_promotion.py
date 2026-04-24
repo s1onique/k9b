@@ -53,7 +53,8 @@ class HealthPromotionTest(unittest.TestCase):
             output_dir=self.promotions,
             note=note,
         )
-        return handle_promote_proposal(args)
+        result = handle_promote_proposal(args)
+        return int(result)
 
     def test_supported_threshold_promotion_writes_patch(self) -> None:
         proposal = HealthProposal(
@@ -222,7 +223,8 @@ class PromotionWithImmutableLifecycleTests(unittest.TestCase):
             output_dir=self.promotions,
             note=note,
         )
-        return handle_promote_proposal(args)
+        result = handle_promote_proposal(args)
+        return int(result)
 
     def _create_proposal(self, proposal_id: str) -> HealthProposal:
         """Create a base proposal with CHECKED status (but no embedded evaluation)."""

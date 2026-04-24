@@ -99,7 +99,7 @@ class TestClusterViewDataclassBehavior(unittest.TestCase):
             drilldown_path=None,
         )
         with self.assertRaises(Exception):  # dataclasses.FrozenInstanceError
-            view.label = "modified"  # type: ignore
+            view.label = "modified"
 
     def test_cluster_view_with_optional_fields_none(self) -> None:
         """ClusterView should accept None values for optional fields."""

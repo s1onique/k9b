@@ -988,7 +988,7 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         prov2 = ranked2[0].alertmanager_provenance
         self.assertIsNotNone(prov1)
         self.assertIsNotNone(prov2)
-        self.assertEqual(prov1.to_dict(), prov2.to_dict())  # type: ignore[union-attr]
+        self.assertEqual(prov1.to_dict(), prov2.to_dict())
 
     def test_unrelated_candidates_no_bonus(self) -> None:
         """Unrelated candidates should not receive bonus or provenance."""

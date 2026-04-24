@@ -323,6 +323,7 @@ class BuildAutoDrilldownPolicyBuilderTests(unittest.TestCase):
             "skippedThisRun": "1",
         }
         result = _build_auto_drilldown_policy_view(raw)
+        self.assertIsNotNone(result)
         self.assertEqual(result.max_per_run, 5)
         self.assertEqual(result.used_this_run, 2)
 
@@ -350,6 +351,7 @@ class BuildProviderExecutionViewBuilderTests(unittest.TestCase):
 
         result = _build_provider_execution_view({})
         self.assertIsInstance(result, ProviderExecutionView)
+        assert result is not None  # satisfies mypy: result can't be None to access attributes
         self.assertIsNone(result.auto_drilldown)
         self.assertIsNone(result.review_enrichment)
 
@@ -429,6 +431,17 @@ class BuildExecutionBranchViewBuilderTests(unittest.TestCase):
         }
         result = _build_execution_branch_view(raw)
         self.assertIsInstance(result, ProviderExecutionBranchView)
+        if result is None:
+            self.fail("Expected non-None result from _build_execution_branch_view")
+        self.assertIsNotNone(result.enabled)
+        self.assertIsNotNone(result.eligible)
+        self.assertIsNotNone(result.provider)
+        self.assertIsNotNone(result.max_per_run)
+        self.assertIsNotNone(result.attempted)
+        self.assertIsNotNone(result.succeeded)
+        self.assertIsNotNone(result.failed)
+        self.assertIsNotNone(result.unattempted)
+        self.assertIsNotNone(result.notes)
         self.assertEqual(result.enabled, True)
         self.assertEqual(result.eligible, 10)
         self.assertEqual(result.provider, "openai")
@@ -451,6 +464,10 @@ class BuildExecutionBranchViewBuilderTests(unittest.TestCase):
         }
         result = _build_execution_branch_view(raw)
         self.assertIsInstance(result, ProviderExecutionBranchView)
+        if result is None:
+            self.fail("Expected non-None result from _build_execution_branch_view")
+        self.assertIsNotNone(result.attempted)
+        self.assertIsNotNone(result.succeeded)
         self.assertEqual(result.attempted, 5)
         self.assertEqual(result.succeeded, 3)
         self.assertIsNone(result.enabled)
@@ -474,6 +491,11 @@ class BuildExecutionBranchViewBuilderTests(unittest.TestCase):
             "budgetLimited": "0",
         }
         result = _build_execution_branch_view(raw)
+        if result is None:
+            self.fail("Expected non-None result from _build_execution_branch_view")
+        self.assertIsNotNone(result.eligible)
+        self.assertIsNotNone(result.max_per_run)
+        self.assertIsNotNone(result.attempted)
         self.assertEqual(result.eligible, 10)
         self.assertEqual(result.max_per_run, 5)
         self.assertEqual(result.attempted, 3)

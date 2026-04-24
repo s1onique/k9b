@@ -413,7 +413,7 @@ class TestWriteDeterministicNextCheckPromotion(unittest.TestCase):
         self.assertEqual(artifact.purpose, ExternalAnalysisPurpose.NEXT_CHECK_PROMOTION)
         
         # Check file exists
-        artifact_path_str: str = artifact.artifact_path  # type: ignore[assignment]
+        artifact_path_str: str = artifact.artifact_path
         artifact_path = self.tmpdir / artifact_path_str
         self.assertTrue(artifact_path.exists())
 
@@ -566,7 +566,7 @@ class TestWriteDeterministicNextCheckPromotion(unittest.TestCase):
             summary={"description": "JSON test"},
         )
         
-        artifact_path_str: str = artifact.artifact_path  # type: ignore[assignment]
+        artifact_path_str: str = artifact.artifact_path
         artifact_path = self.tmpdir / artifact_path_str
         data = json.loads(artifact_path.read_text(encoding="utf-8"))
         

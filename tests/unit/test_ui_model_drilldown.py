@@ -8,6 +8,7 @@ Verifies that findings/drilldown-related symbols remain importable from both:
 from __future__ import annotations
 
 import unittest
+from typing import Any
 
 from k8s_diag_agent.ui.model import (
     DrilldownAvailabilityView as Model_DrilldownAvailabilityView,
@@ -168,7 +169,7 @@ class TestBuildFindingsBehavior(unittest.TestCase):
 
     def test_build_findings_with_missing_fields(self) -> None:
         """_build_findings should handle missing fields gracefully."""
-        raw = {}
+        raw: dict[str, Any] = {}
         result = _build_findings(raw)
         assert isinstance(result, FindingsView)
         assert result.label is None

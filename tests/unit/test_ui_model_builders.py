@@ -765,8 +765,8 @@ class BuildOptionalLLMStatsViewTests(unittest.TestCase):
         }
         result = _build_optional_llm_stats_view(raw)
         self.assertIsInstance(result, LLMStatsView)
-        view: LLMStatsView = result  # type: ignore[assignment]
-        self.assertEqual(view.total_calls, 10)
+        assert result is not None  # for mypy
+        self.assertEqual(result.total_calls, 10)
 
 
 if __name__ == "__main__":

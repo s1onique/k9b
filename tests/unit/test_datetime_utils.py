@@ -30,33 +30,33 @@ class TestParseIsoToUtc(unittest.TestCase):
         """Parse timestamp with explicit +00:00 offset."""
         result = parse_iso_to_utc("2024-01-15T10:30:00+00:00")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_negative_offset(self) -> None:
         """Parse timestamp with negative timezone offset."""
         result = parse_iso_to_utc("2024-01-15T10:30:00-05:00")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
         # -5 hours from UTC
-        self.assertEqual(result.hour, 15)  # type: ignore[union-attr]
+        self.assertEqual(result.hour, 15)
 
     def test_parses_z_suffix(self) -> None:
         """Parse timestamp with Z suffix (ISO 8601 legacy)."""
         result = parse_iso_to_utc("2024-01-15T10:30:00Z")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_naive_timestamp(self) -> None:
         """Parse naive timestamp (no timezone) - assumes UTC."""
         result = parse_iso_to_utc("2024-01-15T10:30:00")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_microseconds(self) -> None:
         """Parse timestamp with microseconds."""
         result = parse_iso_to_utc("2024-01-15T10:30:00.123456+00:00")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
 
     def test_returns_none_for_none(self) -> None:
         """Returns None for None input."""
@@ -82,15 +82,15 @@ class TestParseIsoToUtc(unittest.TestCase):
         """Parse timestamp with timezone offset without colon (e.g., +0000)."""
         result = parse_iso_to_utc("2024-01-15T10:30:00+0000")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_negative_offset_without_colon(self) -> None:
         """Parse timestamp with negative timezone offset without colon (e.g., -0500)."""
         result = parse_iso_to_utc("2024-01-15T10:30:00-0500")
         self.assertIsNotNone(result)
-        self.assertEqual(result.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(result.tzinfo, UTC)
         # -5 hours from UTC
-        self.assertEqual(result.hour, 15)  # type: ignore[union-attr]
+        self.assertEqual(result.hour, 15)
 
 
 class TestEnsureUtc(unittest.TestCase):
@@ -174,7 +174,7 @@ class TestSafeComparisons(unittest.TestCase):
         dt2 = parse_iso_to_utc("2024-01-15T11:00:00Z")
         self.assertIsNotNone(dt1)
         self.assertIsNotNone(dt2)
-        self.assertTrue(dt1 < dt2)  # type: ignore[operator]
+        self.assertTrue(dt1 < dt2)
 
     def test_parsed_vs_now_comparison(self) -> None:
         """Parsed datetime can be safely compared with now_utc()."""
@@ -182,7 +182,7 @@ class TestSafeComparisons(unittest.TestCase):
         now = now_utc()
         self.assertIsNotNone(dt)
         # Historical timestamp should be less than now
-        self.assertTrue(dt < now)  # type: ignore[operator]
+        self.assertTrue(dt < now)
 
     def test_parsed_naive_vs_aware_comparison(self) -> None:
         """Naive parsed datetime can be safely compared with aware datetime."""
@@ -193,10 +193,10 @@ class TestSafeComparisons(unittest.TestCase):
         self.assertIsNotNone(naive_dt)
         self.assertIsNotNone(aware_dt)
         # Both should now be UTC-aware
-        self.assertEqual(naive_dt.tzinfo, UTC)  # type: ignore[union-attr]
-        self.assertEqual(aware_dt.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(naive_dt.tzinfo, UTC)
+        self.assertEqual(aware_dt.tzinfo, UTC)
         # Safe to compare
-        self.assertTrue(naive_dt < aware_dt)  # type: ignore[operator]
+        self.assertTrue(naive_dt < aware_dt)
 
 
 class TestFromJsonRoundTrip(unittest.TestCase):
@@ -217,7 +217,7 @@ class TestFromJsonRoundTrip(unittest.TestCase):
         dt = parse_iso_to_utc(naive_string)
         # AFTER FIX: dt.tzinfo is UTC
         self.assertIsNotNone(dt)
-        self.assertEqual(dt.tzinfo, UTC)  # type: ignore[union-attr]
+        self.assertEqual(dt.tzinfo, UTC)
 
 
 if __name__ == "__main__":

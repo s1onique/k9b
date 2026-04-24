@@ -5,7 +5,10 @@ and their builder functions can be imported from both the ui.model module (for b
 compatibility) and the ui.model_llm_activity module (the new canonical location).
 """
 
+from __future__ import annotations
+
 import unittest
+from typing import Any
 
 
 class LLMActivityImportCompatibilityTests(unittest.TestCase):
@@ -300,7 +303,7 @@ class BuildLLMActivityEntryBuilderTests(unittest.TestCase):
         """_build_llm_activity_entry should treat missing keys as None."""
         from k8s_diag_agent.ui.model import LLMActivityEntryView, _build_llm_activity_entry
 
-        raw = {}
+        raw: dict[str, Any] = {}
         result = _build_llm_activity_entry(raw)
         self.assertIsInstance(result, LLMActivityEntryView)
         self.assertIsNone(result.timestamp)

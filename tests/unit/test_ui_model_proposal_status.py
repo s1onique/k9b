@@ -98,14 +98,14 @@ class TestBuildProposalStatusSummaryBehavior(unittest.TestCase):
 
     def test_build_proposal_status_summary_with_missing_fields(self) -> None:
         """_build_proposal_status_summary should handle missing fields gracefully."""
-        raw = {}
+        raw: dict[str, object] = {}
         result = _build_proposal_status_summary(raw)
         assert isinstance(result, ProposalStatusSummary)
         assert result.status_counts == ()
 
     def test_build_proposal_status_summary_with_empty_status_counts(self) -> None:
         """_build_proposal_status_summary should handle empty status_counts list."""
-        raw = {
+        raw: dict[str, object] = {
             "status_counts": [],
         }
         result = _build_proposal_status_summary(raw)

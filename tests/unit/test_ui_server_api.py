@@ -1093,7 +1093,7 @@ class RunApiServerTests(unittest.TestCase):
                 metadata=metadata,
             )
             captured_logs.append(result)
-            return result
+            return dict(result)
         
         with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
             server, thread = self._start_server()
@@ -1158,7 +1158,7 @@ class RunApiServerTests(unittest.TestCase):
                 metadata=metadata,
             )
             captured_logs.append(result)
-            return result
+            return dict(result)
         
         try:
             # Set threshold to 0 to force WARNING severity
@@ -1214,7 +1214,7 @@ class RunApiServerTests(unittest.TestCase):
                 metadata=metadata,
             )
             captured_logs.append(result)
-            return result
+            return dict(result)
         
         with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
             server, thread = self._start_server()
@@ -1268,7 +1268,7 @@ class RunApiServerTests(unittest.TestCase):
                 metadata=metadata,
             )
             captured_logs.append(result)
-            return result
+            return dict(result)
         
         with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
             server, thread = self._start_server()
@@ -1454,7 +1454,7 @@ class RunApiServerTests(unittest.TestCase):
                 metadata=metadata,
             )
             captured_logs.append(result)
-            return result
+            return dict(result)
         
         with mock.patch("k8s_diag_agent.structured_logging.emit_structured_log", side_effect=capture_emit):
             server, thread = self._start_server()
@@ -1775,7 +1775,7 @@ class RunApiServerTests(unittest.TestCase):
         )
         artifact_path = artifact.artifact_path
         assert artifact_path is not None
-        return self.runs_dir / artifact_path
+        return Path(self.runs_dir / artifact_path)
 
     def test_next_check_execution_finds_deterministic_promoted_candidate(self) -> None:
         """Test that execution endpoint finds deterministic promoted candidates.

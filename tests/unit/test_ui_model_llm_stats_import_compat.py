@@ -184,6 +184,7 @@ class BuildOptionalLLMStatsBuilderTests(unittest.TestCase):
         raw = {"totalCalls": 10, "successfulCalls": 10, "failedCalls": 0}
         result = _build_optional_llm_stats_view(raw)
         self.assertIsInstance(result, LLMStatsView)
+        assert result is not None
         self.assertEqual(result.total_calls, 10)
 
 
@@ -209,6 +210,7 @@ class LLMStatsModuleDirectImportTests(unittest.TestCase):
         raw = {"totalCalls": 20, "successfulCalls": 18, "failedCalls": 2}
         result = _build_optional_llm_stats_view(raw)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.total_calls, 20)
 
     def test_provider_breakdown_entry_from_llm_stats_module(self) -> None:

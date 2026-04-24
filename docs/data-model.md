@@ -243,3 +243,60 @@ Each extension that affects a durable artifact also requires updating the releva
 2. **Document before changing.** Update this file (and the schema docs) whenever you touch an artifact, review metric, or proposal contract so future maintainers do not have to reverse-engineer behavior from code.
 3. **Preserve replayability.** If a future index (SQLite/PostgreSQL/Elastic) is introduced, it should sit alongside the JSON artifacts, and every run should still be reconstructible from the file tree.
 4. **Safety posture stays intact.** The no-autonomous-mutation principle and the requirement to gate proposals through `check-proposal`/`render_proposal_patch` remain unchanged.
+
+## UI model modularization (closure note)
+
+The UI model layer (`src/k8s_diag_agent/ui/`) is organized as a composition barrel with focused domain modules. This section documents final ownership after the M-17–M-22 modularization slices.
+
+### model.py responsibilities
+
+`src/k8s_diag_agent/ui/model.py` serves two roles:
+
+| Role | Description |
+|------|-------------|
+| **Composition/root builder** | Owns `RunView`, `UIIndexContext`, `load_ui_index`, `build_ui_context`, `_build_next_check_plan_view`, and `_build_next_check_candidate_view` |
+| **Backward-compatibility barrel** | Re-exports all symbols from focused modules so existing import paths continue to work |
+
+The barrel re-exports carry `# noqa: F401` to suppress unused-import warnings and a comment stating "re-exported for import compatibility". This is intentional and stable.
+
+### Focused module ownership table
+
+| Module | Owner symbols | Rationale |
+|--------|--------------|-----------|
+| `model_primitives.py` | `_coerce_*`, `_stringify`, `_value_from_mapping` | Dependency-free coercers; no module imports these directly from other ui modules |
+| `model_cluster.py` | `ClusterView`, `_build_cluster_view` | Domain-focused extraction |
+| `model_assessment.py` | `AssessmentView`, `AssessmentFindingView`, `AssessmentHypothesisView`, `AssessmentNextCheckView`, `RecommendedActionView`, `_build_assessment_*` | Domain-focused extraction |
+| `model_review_enrichment.py` | `ReviewEnrichmentView`, `ReviewEnrichmentStatusView`, `_build_review_enrichment_*` | Domain-focused extraction |
+| `model_diagnostic_pack.py` | `DiagnosticPackView`, `DiagnosticPackReviewView`, `_build_diagnostic_pack_*` | Domain-focused extraction |
+| `model_next_check_plan.py` | `NextCheckPlanView`, `NextCheckCandidateView`, `NextCheckOrphanedApprovalView`, `NextCheckOutcomeCountView`, `_build_next_check_plan_view`, `_build_next_check_candidate_view_from_plan`, `_build_orphaned_approval_view`, `_build_outcome_count_view` | Dataclasses and most builders live here; `_build_next_check_candidate_view` remains in model.py due to `ui_planner_queue` dependency |
+| `model_next_check_queue.py` | `NextCheckQueueItemView`, `NextCheckQueueExplanationView`, `NextCheckQueueCandidateAccountingView`, `NextCheckQueueClusterStateView`, `_build_next_check_queue_view`, `_build_queue_*` | Domain-focused extraction |
+| `model_next_check_execution.py` | `NextCheckExecutionHistoryEntryView`, `_build_execution_history_view` | Domain-focused extraction |
+| `model_deterministic_next_checks.py` | `DeterministicNextChecksView`, `DeterministicNextCheckSummaryView`, `DeterministicNextCheckClusterView`, `_build_deterministic_next_checks_view`, `_build_deterministic_next_check_cluster_view`, `_build_deterministic_next_check_summary_view` | Domain-focused extraction |
+| `model_llm_activity.py` | `LLMActivityView`, `LLMActivityEntryView`, `LLMActivitySummaryView`, `_build_llm_activity_*` | Domain-focused extraction |
+| `model_llm_stats.py` | `LLMStatsView`, `ProviderBreakdownEntry`, `_build_llm_stats_view`, `_build_optional_llm_stats_view` | Domain-focused extraction |
+| `model_llm_policy.py` | `LLMPolicyView`, `AutoDrilldownPolicyView`, `ProviderExecutionView`, `ProviderExecutionBranchView`, `_build_llm_policy_view`, `_build_auto_drilldown_policy_view`, `_build_provider_execution_view`, `_build_execution_branch_view` | Domain-focused extraction |
+| `model_drilldown.py` | `FindingsView`, `DrilldownAvailabilityView`, `DrilldownCoverageEntry`, `_build_findings`, `_build_drilldown_availability`, `_build_drilldown_coverage` | Domain-focused extraction |
+| `model_proposals.py` | `ProposalView`, `_build_proposal_view`, `_build_lifecycle_history` | Domain-focused extraction |
+| `model_proposal_status.py` | `ProposalStatusSummary`, `_build_proposal_status_summary` | Domain-focused extraction |
+| `model_notifications.py` | `NotificationView`, `_build_notification_history`, `_build_notification_details` | Domain-focused extraction |
+| `model_external_analysis.py` | `ExternalAnalysisView`, `ExternalAnalysisSummary`, `_build_external_analysis`, `_build_external_analysis_view` | Domain-focused extraction |
+| `model_auto_drilldown.py` | `AutoDrilldownInterpretationView`, `_build_auto_drilldown_interpretations` | Domain-focused extraction |
+| `model_fleet.py` | `FleetStatusSummary`, `_build_fleet_status` | Domain-focused extraction |
+| `model_run_status.py` | `RunStatsView`, `PlannerAvailabilityView`, `_build_run_stats_view`, `_build_planner_availability_view` | Domain-focused extraction |
+| `model_alertmanager.py` | `AlertmanagerCompactView`, `AlertmanagerSourcesView`, `AlertmanagerSourceView`, `AlertmanagerProvenanceView`, `AlertmanagerEvidenceReferenceView`, `ClusterAlertSummaryView`, `_build_alertmanager_*` | Domain-focused extraction |
+| `model_feedback.py` | `FeedbackSummaryView`, `FeedbackAdaptationProvenanceView`, `_build_feedback_summary_view`, `_build_feedback_adaptation_provenance_view` | Domain-focused extraction |
+
+### Rule for adding new UI model dataclasses/builders
+
+1. If the dataclass/builder has no cross-module dependencies, create a new focused module (e.g., `model_<domain>.py`).
+2. If the dataclass/builder is composed entirely from existing exported types and is the natural composition point, it may live in `model.py`.
+3. Add a `# noqa: F401 - re-exported for import compatibility` comment for any symbol re-exported from a focused module.
+4. Update this table when ownership changes.
+
+### Rule for compatibility re-exports
+
+Re-exports in `model.py` are stable contracts. Do not remove or rename re-exported symbols without a deprecation period. Breaking changes to re-exported symbols must be a separate epic with migration guidance.
+
+### Note on behavior-changing cleanup
+
+Boolean truthy parsing changes (e.g., converting `bool(raw.get("field"))` to use `_coerce_optional_bool`) are behavior-changing and must be a separate epic. The current codebase uses `bool()` for several fields in `_build_next_check_candidate_view`; changing these to string-aware coercion is out of scope for this modularization effort.

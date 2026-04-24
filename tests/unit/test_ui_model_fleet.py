@@ -8,6 +8,7 @@ Verifies that fleet-status-summary symbols remain importable from both:
 from __future__ import annotations
 
 import unittest
+from typing import Any
 
 from k8s_diag_agent.ui.model import (
     FleetStatusSummary as Model_FleetStatusSummary,
@@ -105,7 +106,7 @@ class TestBuildFleetStatusBehavior(unittest.TestCase):
 
     def test_build_fleet_status_with_missing_fields(self) -> None:
         """_build_fleet_status should handle missing fields gracefully."""
-        raw = {}
+        raw: dict[str, Any] = {}
         result = _build_fleet_status(raw)
         assert isinstance(result, FleetStatusSummary)
         assert result.rating_counts == ()

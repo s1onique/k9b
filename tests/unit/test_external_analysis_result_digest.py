@@ -97,7 +97,7 @@ class TestResultDigestClass(unittest.TestCase):
         )
 
         with self.assertRaises(AttributeError):
-            digest.result_digest = "CHANGED"  # type: ignore[misc]
+            digest.result_digest = "CHANGED"
 
     def test_result_digest_with_empty_tuples(self) -> None:
         """Test ResultDigest with empty tuple fields."""
@@ -579,7 +579,7 @@ class TestBuildResultDigestStdioDigests(unittest.TestCase):
         digest = build_result_digest(artifact)
 
         self.assertIsNotNone(digest.stdout_digest)
-        stdout_digest: str = digest.stdout_digest  # type: ignore[assignment]
+        stdout_digest: str = digest.stdout_digest
         self.assertNotIn("error", stdout_digest.lower())
 
     def test_stdout_digest_is_none_when_stderr_truncated_not_set(self) -> None:

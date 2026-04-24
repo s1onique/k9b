@@ -575,7 +575,7 @@ class RunArtifactValidatorTest(unittest.TestCase):
         self.assertEqual(artifact.snapshot_pair.secondary_snapshot_id, "snap-2")
 
         self.assertIsNotNone(artifact.assessment)
-        self.assertEqual(artifact.assessment.assessment_id, "assess-1")  # type: ignore[union-attr]
+        self.assertEqual(artifact.assessment.assessment_id, "assess-1")
 
         self.assertEqual(len(artifact.validation_results), 2)
         self.assertFalse(artifact.validation_results[1].passed)
