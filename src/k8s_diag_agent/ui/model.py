@@ -6,7 +6,23 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import SupportsInt, cast
+from typing import cast
+
+from .model_primitives import (
+    _coerce_int,
+    _coerce_optional_bool,
+    _coerce_optional_int,
+    _coerce_optional_str,
+    _coerce_sequence,
+    _coerce_str,
+    _coerce_str_tuple,
+    _ORIGIN_LABELS,
+    _serialize_map,
+    _STATE_COLOR_HINTS,
+    _STATE_LABELS,
+    _stringify,
+    _value_from_mapping,
+)
 
 
 @dataclass(frozen=True)
@@ -967,86 +983,6 @@ def _build_findings(raw: object | None) -> FindingsView | None:
     )
 
 
-def _coerce_str(value: object | None) -> str:
-    if value is None:
-        return "-"
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _coerce_optional_str(value: object | None) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _coerce_str_tuple(value: object | None) -> tuple[str, ...]:
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        return tuple(str(item) for item in value)
-    if value is None:
-        return ()
-    return (str(value),)
-
-
-def _coerce_int(value: object | None) -> int:
-    if value is None:
-        return 0
-    if isinstance(value, SupportsInt):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return 0
-    return 0
-
-
-def _coerce_optional_int(value: object | None) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, SupportsInt):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return None
-    return None
-
-
-def _coerce_optional_bool(value: object | None) -> bool | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    normalized = str(value).strip().lower()
-    if normalized in ("true", "1", "yes", "on"):
-        return True
-    if normalized in ("false", "0", "no", "off"):
-        return False
-    return None
-
-
-def _coerce_sequence(value: object | None) -> tuple[str, ...]:
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        return tuple(str(item) for item in value)
-    if value is None:
-        return ()
-    return (str(value),)
-
-
-def _serialize_map(value: object | None) -> tuple[tuple[str, str], ...]:
-    if not isinstance(value, Mapping):
-        return ()
-    results: list[tuple[str, str]] = []
-    for key, entry in value.items():
-        results.append((str(key), _stringify(entry)))
-    return tuple(results)
-
-
 def _build_fleet_status(raw: object | None) -> FleetStatusSummary:
     if not isinstance(raw, Mapping):
         return FleetStatusSummary(rating_counts=(), degraded_clusters=())
@@ -1086,23 +1022,6 @@ def _build_lifecycle_history(raw: object | None) -> tuple[tuple[str, str, str | 
             note = None
         entries.append((status, timestamp, note))
     return tuple(entries)
-
-
-def _value_from_mapping(mapping: object | None, key: str) -> object | None:
-    if isinstance(mapping, Mapping):
-        return mapping.get(key)
-    return None
-
-
-def _stringify(value: object | None) -> str:
-    if value is None:
-        return "-"
-    if isinstance(value, str):
-        return value
-    try:
-        return json.dumps(value, ensure_ascii=False)
-    except TypeError:
-        return str(value)
 
 
 def _build_drilldown_availability(raw: object | None) -> DrilldownAvailabilityView:
@@ -1997,31 +1916,6 @@ def _build_alertmanager_compact_view(raw: object | None) -> AlertmanagerCompactV
         captured_at=_coerce_str(raw.get("captured_at")),
         by_cluster=by_cluster,
     )
-
-
-# Human-readable labels for origin and state values
-_ORIGIN_LABELS: dict[str, str] = {
-    "manual": "Manual",
-    "alertmanager-crd": "Alertmanager CRD",
-    "prometheus-crd-config": "Prometheus Config",
-    "service-heuristic": "Service Heuristic",
-}
-
-_STATE_LABELS: dict[str, str] = {
-    "manual": "Manual",
-    "auto-tracked": "Auto-tracked",
-    "discovered": "Discovered",
-    "degraded": "Degraded",
-    "missing": "Missing",
-}
-
-_STATE_COLOR_HINTS: dict[str, str] = {
-    "manual": "green",
-    "auto-tracked": "green",
-    "discovered": "yellow",
-    "degraded": "red",
-    "missing": "gray",
-}
 
 
 def _build_alertmanager_sources_view(raw: object | None) -> AlertmanagerSourcesView | None:
