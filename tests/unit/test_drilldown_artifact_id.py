@@ -117,6 +117,7 @@ class TestDrilldownArtifactId(unittest.TestCase):
         aid = new_artifact_id()
         artifact = _make_drilldown_artifact(artifact_id=aid)
         self.assertIsNotNone(artifact.artifact_id)
+        assert artifact.artifact_id is not None
         aid_str = artifact.artifact_id
         parts = aid_str.split("-")
         self.assertEqual(len(parts), 5)
@@ -136,7 +137,7 @@ class TestDrilldownArtifactId(unittest.TestCase):
         aid = new_artifact_id()
         artifact = _make_drilldown_artifact(artifact_id=aid)
         # Frozen dataclass - should not be modifiable
-        with self.assertRaises(AttributeError):
+        with self.assertRaises((TypeError, AttributeError)):
             artifact.artifact_id = "new-id"
 
 

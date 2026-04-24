@@ -30,12 +30,14 @@ class TestParseIsoToUtc(unittest.TestCase):
         """Parse timestamp with explicit +00:00 offset."""
         result = parse_iso_to_utc("2024-01-15T10:30:00+00:00")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_negative_offset(self) -> None:
         """Parse timestamp with negative timezone offset."""
         result = parse_iso_to_utc("2024-01-15T10:30:00-05:00")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
         # -5 hours from UTC
         self.assertEqual(result.hour, 15)
@@ -44,18 +46,21 @@ class TestParseIsoToUtc(unittest.TestCase):
         """Parse timestamp with Z suffix (ISO 8601 legacy)."""
         result = parse_iso_to_utc("2024-01-15T10:30:00Z")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_naive_timestamp(self) -> None:
         """Parse naive timestamp (no timezone) - assumes UTC."""
         result = parse_iso_to_utc("2024-01-15T10:30:00")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_microseconds(self) -> None:
         """Parse timestamp with microseconds."""
         result = parse_iso_to_utc("2024-01-15T10:30:00.123456+00:00")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
 
     def test_returns_none_for_none(self) -> None:
@@ -82,12 +87,14 @@ class TestParseIsoToUtc(unittest.TestCase):
         """Parse timestamp with timezone offset without colon (e.g., +0000)."""
         result = parse_iso_to_utc("2024-01-15T10:30:00+0000")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
 
     def test_parses_negative_offset_without_colon(self) -> None:
         """Parse timestamp with negative timezone offset without colon (e.g., -0500)."""
         result = parse_iso_to_utc("2024-01-15T10:30:00-0500")
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.tzinfo, UTC)
         # -5 hours from UTC
         self.assertEqual(result.hour, 15)
@@ -174,6 +181,8 @@ class TestSafeComparisons(unittest.TestCase):
         dt2 = parse_iso_to_utc("2024-01-15T11:00:00Z")
         self.assertIsNotNone(dt1)
         self.assertIsNotNone(dt2)
+        assert dt1 is not None
+        assert dt2 is not None
         self.assertTrue(dt1 < dt2)
 
     def test_parsed_vs_now_comparison(self) -> None:
@@ -181,6 +190,7 @@ class TestSafeComparisons(unittest.TestCase):
         dt = parse_iso_to_utc("2024-01-15T10:30:00+00:00")
         now = now_utc()
         self.assertIsNotNone(dt)
+        assert dt is not None
         # Historical timestamp should be less than now
         self.assertTrue(dt < now)
 
@@ -192,6 +202,8 @@ class TestSafeComparisons(unittest.TestCase):
         aware_dt = parse_iso_to_utc("2024-01-15T11:00:00+00:00")
         self.assertIsNotNone(naive_dt)
         self.assertIsNotNone(aware_dt)
+        assert naive_dt is not None
+        assert aware_dt is not None
         # Both should now be UTC-aware
         self.assertEqual(naive_dt.tzinfo, UTC)
         self.assertEqual(aware_dt.tzinfo, UTC)
@@ -217,6 +229,7 @@ class TestFromJsonRoundTrip(unittest.TestCase):
         dt = parse_iso_to_utc(naive_string)
         # AFTER FIX: dt.tzinfo is UTC
         self.assertIsNotNone(dt)
+        assert dt is not None
         self.assertEqual(dt.tzinfo, UTC)
 
 

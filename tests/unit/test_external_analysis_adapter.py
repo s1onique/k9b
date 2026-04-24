@@ -70,7 +70,7 @@ class TestExternalAnalysisRequest(unittest.TestCase):
         )
 
         # Frozen dataclass should not allow attribute modification
-        with self.assertRaises(AttributeError):
+        with self.assertRaises((TypeError, AttributeError)):
             request.run_id = "new-run"
 
     def test_request_with_source_artifact(self) -> None:

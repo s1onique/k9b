@@ -579,6 +579,7 @@ class TestBuildResultDigestStdioDigests(unittest.TestCase):
         digest = build_result_digest(artifact)
 
         self.assertIsNotNone(digest.stdout_digest)
+        assert digest.stdout_digest is not None
         stdout_digest: str = digest.stdout_digest
         self.assertNotIn("error", stdout_digest.lower())
 

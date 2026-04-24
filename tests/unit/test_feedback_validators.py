@@ -571,10 +571,12 @@ class RunArtifactValidatorTest(unittest.TestCase):
         self.assertEqual(artifact.unexpected_drift_categories, ("configmaps",))
 
         self.assertIsNotNone(artifact.snapshot_pair)
+        assert artifact.snapshot_pair is not None
         self.assertEqual(artifact.snapshot_pair.primary_snapshot_id, "snap-1")
         self.assertEqual(artifact.snapshot_pair.secondary_snapshot_id, "snap-2")
 
         self.assertIsNotNone(artifact.assessment)
+        assert artifact.assessment is not None
         self.assertEqual(artifact.assessment.assessment_id, "assess-1")
 
         self.assertEqual(len(artifact.validation_results), 2)
