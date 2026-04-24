@@ -138,7 +138,7 @@ class TestDrilldownArtifactId(unittest.TestCase):
         artifact = _make_drilldown_artifact(artifact_id=aid)
         # Frozen dataclass - should not be modifiable
         with self.assertRaises((TypeError, AttributeError)):
-            artifact.artifact_id = "new-id"
+            artifact.artifact_id = "new-id"  # type: ignore[misc]
 
 
 if __name__ == "__main__":

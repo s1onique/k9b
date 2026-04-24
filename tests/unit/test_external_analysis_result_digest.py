@@ -97,7 +97,7 @@ class TestResultDigestClass(unittest.TestCase):
         )
 
         with self.assertRaises(AttributeError):
-            digest.result_digest = "CHANGED"
+            digest.result_digest = "CHANGED"  # type: ignore[misc]
 
     def test_result_digest_with_empty_tuples(self) -> None:
         """Test ResultDigest with empty tuple fields."""

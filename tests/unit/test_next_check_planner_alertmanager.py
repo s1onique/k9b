@@ -988,6 +988,8 @@ class TestRankingWithAlertmanagerSignal(unittest.TestCase):
         prov2 = ranked2[0].alertmanager_provenance
         self.assertIsNotNone(prov1)
         self.assertIsNotNone(prov2)
+        assert prov1 is not None
+        assert prov2 is not None
         self.assertEqual(prov1.to_dict(), prov2.to_dict())
 
     def test_unrelated_candidates_no_bonus(self) -> None:

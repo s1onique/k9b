@@ -180,6 +180,8 @@ class BuildPlannerAvailabilityBuilderTests(unittest.TestCase):
         }
         result = _build_planner_availability_view(raw)
         self.assertIsInstance(result, PlannerAvailabilityView)
+        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.status, "available")
         self.assertEqual(result.reason, "Ready to process")
 
@@ -194,6 +196,8 @@ class BuildPlannerAvailabilityBuilderTests(unittest.TestCase):
         }
         result = _build_planner_availability_view(raw)
         self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIsNotNone(result.artifact_path)
         self.assertEqual(result.artifact_path, "/path/to/artifact")
         self.assertEqual(result.next_action_hint, "Wait for next run")
 
@@ -208,6 +212,8 @@ class BuildPlannerAvailabilityBuilderTests(unittest.TestCase):
         }
         result = _build_planner_availability_view(raw)
         self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIsNotNone(result.artifact_path)
         self.assertEqual(result.artifact_path, "/path/to/artifact")
         self.assertEqual(result.next_action_hint, "Wait for next run")
 
@@ -234,6 +240,8 @@ class RunStatusModuleDirectImportTests(unittest.TestCase):
         raw = {"status": "available", "reason": "Ready"}
         result = _build_planner_availability_view(raw)
         self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIsNotNone(result.status)
         self.assertEqual(result.status, "available")
 
     def test_run_stats_view_from_run_status_module(self) -> None:
