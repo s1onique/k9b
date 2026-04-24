@@ -15,10 +15,10 @@ from k8s_diag_agent.ui.model import (
     _coerce_sequence,
     _coerce_str,
     _coerce_str_tuple,
-    _serialize_map,
     _stringify,
     _value_from_mapping,
 )
+from k8s_diag_agent.ui.model_primitives import _serialize_map
 
 
 class CoerceStrTests(unittest.TestCase):
