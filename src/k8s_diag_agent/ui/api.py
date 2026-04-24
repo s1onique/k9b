@@ -90,6 +90,13 @@ from .api_payloads import (  # noqa: F401 - re-exported for backward compatibili
     RunStatsPayload,
     StatusCount,
 )
+
+# Import ReviewEnrichment serializers from extracted module.
+# Re-export for backward compatibility: callers importing from api.py continue to work.
+from .api_review_enrichment import (  # noqa: F401 - re-exported for backward compatibility
+    _serialize_review_enrichment,
+    _serialize_review_enrichment_status,
+)
 from .model import (
     AssessmentHypothesisView,
     AssessmentNextCheckView,
@@ -121,8 +128,6 @@ from .model import (
     ProviderExecutionBranchView,
     ProviderExecutionView,
     RecommendedActionView,
-    ReviewEnrichmentStatusView,
-    ReviewEnrichmentView,
     RunStatsView,
     UIIndexContext,
 )
@@ -146,37 +151,21 @@ def build_run_payload(
         "artifacts": _collect_run_artifacts(context),
         "runStats": _serialize_run_stats(context.run.run_stats),
         "llmStats": _serialize_llm_stats(context.run.llm_stats),
-        "historicalLlmStats": (
-            _serialize_llm_stats(context.run.historical_llm_stats)
-            if context.run.historical_llm_stats
-            else None
-        ),
+        "historicalLlmStats": (_serialize_llm_stats(context.run.historical_llm_stats) if context.run.historical_llm_stats else None),
         "llmActivity": _serialize_llm_activity(context.run.llm_activity),
         "llmPolicy": _serialize_llm_policy(context.run.llm_policy),
         "reviewEnrichment": _serialize_review_enrichment(context.run.review_enrichment),
-        "reviewEnrichmentStatus": _serialize_review_enrichment_status(
-            context.run.review_enrichment_status
-        ),
+        "reviewEnrichmentStatus": _serialize_review_enrichment_status(context.run.review_enrichment_status),
         "providerExecution": _serialize_provider_execution(context.run.provider_execution),
-        "freshness": _build_freshness_payload(
-            context.run.timestamp, context.run.scheduler_interval_seconds
-        ),
+        "freshness": _build_freshness_payload(context.run.timestamp, context.run.scheduler_interval_seconds),
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
-        "nextCheckQueue": _serialize_next_check_queue(
-            context.run.next_check_queue, promotions
-        ),
-        "nextCheckQueueExplanation": _serialize_queue_explanation(
-            context.run.next_check_queue_explanation
-        ),
-        "deterministicNextChecks": _serialize_deterministic_next_checks(
-            context.run.deterministic_next_checks
-        ),
+        "nextCheckQueue": _serialize_next_check_queue(context.run.next_check_queue, promotions),
+        "nextCheckQueueExplanation": _serialize_queue_explanation(context.run.next_check_queue_explanation),
+        "deterministicNextChecks": _serialize_deterministic_next_checks(context.run.deterministic_next_checks),
         "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
         "diagnosticPackReview": _serialize_diagnostic_pack_review(context.run.diagnostic_pack_review),
         "diagnosticPack": _serialize_diagnostic_pack(context.run.diagnostic_pack),
-        "nextCheckExecutionHistory": _serialize_execution_history(
-            context.run.next_check_execution_history
-        ),
+        "nextCheckExecutionHistory": _serialize_execution_history(context.run.next_check_execution_history),
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
     }
@@ -208,23 +197,13 @@ def build_notifications_payload(context: UIIndexContext) -> NotificationsPayload
     return {"notifications": [_serialize_notification(entry) for entry in context.notification_history]}
 
 
-def build_cluster_detail_payload(
-    context: UIIndexContext, *, cluster_label: str | None = None
-) -> ClusterDetailPayload:
+def build_cluster_detail_payload(context: UIIndexContext, *, cluster_label: str | None = None) -> ClusterDetailPayload:
     assessment = context.latest_assessment
     findings = context.latest_findings
     label = cluster_label or (assessment.cluster_label if assessment else findings.label if findings else None)
-    cluster_context = (
-        assessment.context
-        if assessment and assessment.context != "-"
-        else findings.context
-        if findings
-        else None
-    )
+    cluster_context = assessment.context if assessment and assessment.context != "-" else findings.context if findings else None
     artifacts = _collect_run_artifacts(context)
-    interpretation_view = (
-        context.auto_drilldown_interpretations.get(label) if label else None
-    )
+    interpretation_view = context.auto_drilldown_interpretations.get(label) if label else None
     return {
         "selectedClusterLabel": label,
         "selectedClusterContext": cluster_context,
@@ -263,9 +242,7 @@ def _collect_run_artifacts(context: UIIndexContext) -> list[ArtifactLink]:
     return artifacts
 
 
-def _serialize_plan_candidates_for_cluster(
-    label: str | None, plan: NextCheckPlanView | None
-) -> list[NextCheckCandidatePayload]:
+def _serialize_plan_candidates_for_cluster(label: str | None, plan: NextCheckPlanView | None) -> list[NextCheckCandidatePayload]:
     if not plan:
         return []
     payloads: list[NextCheckCandidatePayload] = []
@@ -437,10 +414,7 @@ def _serialize_proposal(proposal: ProposalView) -> ProposalEntry:
         "expectedBenefit": proposal.expected_benefit,
         "sourceRunId": proposal.source_run_id,
         "latestNote": proposal.latest_note,
-        "lifecycle": [
-            {"status": status, "timestamp": timestamp, "note": note}
-            for status, timestamp, note in proposal.lifecycle_history
-        ],
+        "lifecycle": [{"status": status, "timestamp": timestamp, "note": note} for status, timestamp, note in proposal.lifecycle_history],
         "artifacts": artifacts,
         "artifactId": proposal.artifact_id,
     }
@@ -548,9 +522,7 @@ def _serialize_assessment_summary(assessment: AssessmentView | None) -> Assessme
     }
 
 
-def _serialize_auto_interpretation(
-    interpretation: AutoDrilldownInterpretationView | None
-) -> DrilldownInterpretationPayload | None:
+def _serialize_auto_interpretation(interpretation: AutoDrilldownInterpretationView | None) -> DrilldownInterpretationPayload | None:
     if not interpretation:
         return None
     payload = dict(interpretation.payload) if interpretation.payload else None
@@ -568,36 +540,7 @@ def _serialize_auto_interpretation(
     }
 
 
-def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnrichmentPayload | None:
-    if not view:
-        return None
-    # Serialize alertmanager evidence references if present
-    alertmanager_refs: list[AlertmanagerEvidenceReferencePayload] | None = None
-    if view.alertmanager_evidence_references:
-        alertmanager_refs = [
-            {
-                "cluster": ref.cluster,
-                "matchedDimensions": list(ref.matched_dimensions),
-                "reason": ref.reason,
-                "usedFor": ref.used_for,
-            }
-            for ref in view.alertmanager_evidence_references
-        ]
-    return {
-        "status": view.status,
-        "provider": view.provider,
-        "timestamp": view.timestamp,
-        "summary": view.summary,
-        "triageOrder": list(view.triage_order),
-        "topConcerns": list(view.top_concerns),
-        "evidenceGaps": list(view.evidence_gaps),
-        "nextChecks": list(view.next_checks),
-        "focusNotes": list(view.focus_notes),
-        "alertmanagerEvidenceReferences": alertmanager_refs,
-        "artifactPath": view.artifact_path,
-        "errorSummary": view.error_summary,
-        "skipReason": view.skip_reason,
-    }
+# _serialize_review_enrichment moved to api_review_enrichment.py
 
 
 def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanPayload | None:
@@ -611,12 +554,8 @@ def _serialize_next_check_plan(view: NextCheckPlanView | None) -> NextCheckPlanP
         "enrichmentArtifactPath": view.enrichment_artifact_path,
         "candidateCount": view.candidate_count,
         "candidates": [_serialize_next_check_candidate(entry) for entry in view.candidates],
-        "orphanedApprovals": [
-            _serialize_orphaned_approval(entry) for entry in view.orphaned_approvals
-        ],
-        "outcomeCounts": [
-            {"status": entry.status, "count": entry.count} for entry in view.outcome_counts
-        ],
+        "orphanedApprovals": [_serialize_orphaned_approval(entry) for entry in view.orphaned_approvals],
+        "outcomeCounts": [{"status": entry.status, "count": entry.count} for entry in view.outcome_counts],
         "orphanedApprovalCount": view.orphaned_approval_count,
     }
 
@@ -743,9 +682,7 @@ def _serialize_queue_explanation(
         "hint": explanation.hint,
         "plannerArtifactPath": explanation.planner_artifact_path,
         "clusterState": _serialize_queue_cluster_state(explanation.cluster_state),
-        "candidateAccounting": _serialize_queue_candidate_accounting(
-            explanation.candidate_accounting
-        ),
+        "candidateAccounting": _serialize_queue_candidate_accounting(explanation.candidate_accounting),
         "deterministicNextChecksAvailable": explanation.deterministic_next_checks_available,
         "recommendedNextActions": list(explanation.recommended_next_actions),
     }
@@ -774,10 +711,7 @@ def _serialize_deterministic_next_check_cluster(
         "context": view.context,
         "topProblem": view.top_problem,
         "deterministicNextCheckCount": view.deterministic_next_check_count,
-        "deterministicNextCheckSummaries": [
-            _serialize_deterministic_next_check_summary(entry)
-            for entry in view.deterministic_next_check_summaries
-        ],
+        "deterministicNextCheckSummaries": [_serialize_deterministic_next_check_summary(entry) for entry in view.deterministic_next_check_summaries],
         "drilldownAvailable": view.drilldown_available,
         "assessmentArtifactPath": view.assessment_artifact_path,
         "drilldownArtifactPath": view.drilldown_artifact_path,
@@ -792,9 +726,7 @@ def _serialize_deterministic_next_checks(
     return {
         "clusterCount": view.cluster_count,
         "totalNextCheckCount": view.total_next_check_count,
-        "clusters": [
-            _serialize_deterministic_next_check_cluster(entry) for entry in view.clusters
-        ],
+        "clusters": [_serialize_deterministic_next_check_cluster(entry) for entry in view.clusters],
     }
 
 
@@ -997,21 +929,7 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
     return payload
 
 
-def _serialize_review_enrichment_status(
-    view: ReviewEnrichmentStatusView | None,
-) -> ReviewEnrichmentStatusPayload | None:
-    if not view:
-        return None
-    return {
-        "status": view.status,
-        "reason": view.reason,
-        "provider": view.provider,
-        "policyEnabled": view.policy_enabled,
-        "providerConfigured": view.provider_configured,
-        "adapterAvailable": view.adapter_available,
-        "runEnabled": view.run_enabled,
-        "runProvider": view.run_provider,
-    }
+# _serialize_review_enrichment_status moved to api_review_enrichment.py
 
 
 def _serialize_provider_execution(view: ProviderExecutionView | None) -> ProviderExecutionPayload | None:
@@ -1021,9 +939,7 @@ def _serialize_provider_execution(view: ProviderExecutionView | None) -> Provide
     if view.auto_drilldown:
         payload["autoDrilldown"] = _serialize_provider_execution_branch(view.auto_drilldown)
     if view.review_enrichment:
-        payload["reviewEnrichment"] = _serialize_provider_execution_branch(
-            view.review_enrichment
-        )
+        payload["reviewEnrichment"] = _serialize_provider_execution_branch(view.review_enrichment)
     return payload or None
 
 
@@ -1185,19 +1101,19 @@ def _compute_batch_eligibility_from_cache(
     all_execution_indices: dict[str, set[int]],
 ) -> tuple[bool, int]:
     """Compute batch eligibility using pre-scanned data (no filesystem access).
-    
+
     This is the optimized version that uses data pre-loaded in Stage 3b
     to eliminate per-row filesystem operations.
-    
+
     Returns:
         Tuple of (batchExecutable: bool, batchEligibleCount: int)
     """
     from typing import cast
-    
+
     plan_data = all_plan_data.get(run_id)
     if not plan_data:
         return False, 0
-    
+
     # Get candidates from plan
     candidates_data: list[dict[str, object]] = []
     if "candidates" in plan_data and isinstance(plan_data["candidates"], list):
@@ -1257,10 +1173,10 @@ def _compute_batch_eligibility_from_cache(
 
 def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] | None:
     """Extract only the required fields from review artifact using ijson streaming.
-    
+
     This is a fast-path for extracting run_id, timestamp, run_label, and cluster_count
     without loading the entire JSON file into memory.
-    
+
     Returns:
         Dictionary with extracted fields, or None if extraction fails.
     """
@@ -1275,7 +1191,7 @@ def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] |
                 # Early exit once we have all required fields
                 if len(extracted) >= 4:
                     break
-            
+
             # Validate we got the required fields
             if "run_id" not in extracted or "timestamp" not in extracted:
                 return None
@@ -1283,7 +1199,7 @@ def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] |
                 return None
             if not isinstance(extracted["timestamp"], str):
                 return None
-            
+
             return extracted
     except Exception:
         return None
@@ -1333,11 +1249,11 @@ def build_runs_list(
         review_files = list(reviews_dir.glob("*-review.json"))
     timings["reviews_glob_only_ms"] = (time_module.perf_counter() - reviews_glob_only_start) * 1000
     timings["reviews_files_found"] = len(review_files)
-    
+
     # Sub-stage: reviews parse (read and parse JSON)
     # Use ijson streaming fast-path with fallback to full parse
     reviews_parse_start = time_module.perf_counter()
-    
+
     # Initialize fast-path telemetry
     review_fast_path_attempted = 0
     review_fast_path_succeeded = 0
@@ -1345,15 +1261,15 @@ def build_runs_list(
     review_fast_path_failure_json = 0
     review_fast_path_failure_missing_field = 0
     review_fast_path_failure_other = 0
-    
+
     for review_path in review_files:
         raw: dict[str, object] | None = None
         fast_path_used = False
-        
+
         # Try ijson streaming fast-path first
         review_fast_path_attempted += 1
         extracted = _extract_review_metadata_streaming(review_path)
-        
+
         if extracted is not None:
             # Fast path succeeded
             raw = extracted
@@ -1367,14 +1283,14 @@ def build_runs_list(
             except Exception:
                 review_fast_path_failure_json += 1
                 continue
-            
+
             # Verify required fields exist in full parse result
             run_id = raw.get("run_id")
             timestamp = raw.get("timestamp")
             if not isinstance(run_id, str) or not isinstance(timestamp, str):
                 review_fast_path_failure_missing_field += 1
                 continue
-        
+
         # Process the extracted/parsed data
         reviews_parsed += 1
         run_id = raw.get("run_id")
@@ -1404,7 +1320,7 @@ def build_runs_list(
             "execution_count": 0,
             "reviewed_count": 0,
         }
-    
+
     # Record fast-path telemetry
     timings["review_fast_path_attempted"] = review_fast_path_attempted
     timings["review_fast_path_succeeded"] = review_fast_path_succeeded
@@ -1412,7 +1328,7 @@ def build_runs_list(
     timings["review_fast_path_failure_json"] = review_fast_path_failure_json
     timings["review_fast_path_failure_missing_field"] = review_fast_path_failure_missing_field
     timings["review_fast_path_failure_other"] = review_fast_path_failure_other
-    
+
     timings["reviews_parse_ms"] = (time_module.perf_counter() - reviews_parse_start) * 1000
 
     timings["reviews_glob_ms"] = (time_module.perf_counter() - reviews_scan_start) * 1000
@@ -1431,11 +1347,11 @@ def build_runs_list(
         # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
         # e.g., "run-2024-01-15" should match before "run-2024"
         sorted_run_ids = sorted(run_entries.keys(), key=len, reverse=True)
-        
+
         # Find all execution artifacts
         exec_artifact_files = list(external_analysis_dir.glob("*-next-check-execution*.json"))
     timings["execution_glob_only_ms"] = (time_module.perf_counter() - execution_glob_only_start) * 1000
-    
+
     # Sub-stage: execution parse (read and parse JSON)
     execution_parse_start = time_module.perf_counter()
     for artifact_path in exec_artifact_files:
@@ -1482,7 +1398,7 @@ def build_runs_list(
 
     # Stage 3: Build the runs list sorted by timestamp (most recent first)
     row_assembly_start = time_module.perf_counter()
-    
+
     # Sub-stage 3a: Pre-scan diagnostic-packs directory to avoid O(runs * dirs) existence checks
     # Map run_id -> whether review artifact exists
     review_artifact_exists: dict[str, bool] = {}
@@ -1495,11 +1411,11 @@ def build_runs_list(
                 review_path = run_dir / "next_check_usefulness_review.json"
                 review_artifact_exists[run_id] = review_path.exists()
     timings["review_artifact_prescan_ms"] = (time_module.perf_counter() - review_artifact_scan_start) * 1000
-    
+
     # Sub-stage 3b: Pre-scan external-analysis directory for batch eligibility
     # This eliminates O(runs * files) per-row filesystem access
     batch_eligibility_prescan_start = time_module.perf_counter()
-    
+
     # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
     # e.g., "run-2024-01-15" should match before "run-2024"
     sorted_run_ids_3b = sorted(run_entries.keys(), key=len, reverse=True)
@@ -1511,7 +1427,7 @@ def build_runs_list(
         plan_files = list(external_analysis_dir.glob("*-next-check-plan*.json"))
     timings["batch_plan_glob_ms"] = (time_module.perf_counter() - batch_plan_glob_start) * 1000
     timings["batch_plan_files_found"] = len(plan_files)
-    
+
     # Sub-stage: next-check-plan parse and matching
     batch_plan_parse_start = time_module.perf_counter()
     all_plan_data: dict[str, dict[str, object]] = {}
@@ -1527,7 +1443,7 @@ def build_runs_list(
                 except Exception:
                     continue
     timings["batch_plan_parse_ms"] = (time_module.perf_counter() - batch_plan_parse_start) * 1000
-    
+
     # Sub-stage: execution artifact glob
     batch_exec_glob_start = time_module.perf_counter()
     exec_files: list[Path] = []
@@ -1535,7 +1451,7 @@ def build_runs_list(
         exec_files = list(external_analysis_dir.glob("*-next-check-execution*.json"))
     timings["batch_exec_glob_ms"] = (time_module.perf_counter() - batch_exec_glob_start) * 1000
     timings["batch_exec_files_found"] = len(exec_files)
-    
+
     # Sub-stage: execution artifact parse and matching
     batch_exec_parse_start = time_module.perf_counter()
     all_execution_indices: dict[str, set[int]] = {run_id: set() for run_id in run_entries}
@@ -1553,18 +1469,18 @@ def build_runs_list(
                 except Exception:
                     continue
     timings["batch_exec_parse_ms"] = (time_module.perf_counter() - batch_exec_parse_start) * 1000
-    
+
     # Matching and cache construction are included in parse stages above (they're interleaved)
     timings["batch_run_id_matching_ms"] = 0.0  # Included in parse stages
     timings["batch_cache_construction_ms"] = 0.0  # Included in parse stages
-    
+
     timings["batch_eligibility_prescan_ms"] = (time_module.perf_counter() - batch_eligibility_prescan_start) * 1000
-    
+
     # Sub-stage 3c: Build rows (now uses pre-scanned data)
     runs_list: list[RunsListEntry] = []
     review_download_paths_found = 0
     batch_eligible_runs = 0
-    
+
     # Sub-stage timings for row assembly breakdown
     review_status_row_ms_total = 0.0
     review_download_path_row_ms_total = 0.0
@@ -1572,7 +1488,7 @@ def build_runs_list(
     artifact_lookup_row_ms_total = 0.0
     timestamp_normalization_row_ms_total = 0.0
     label_normalization_row_ms_total = 0.0
-    
+
     for run_id, entry in run_entries.items():
         # Sub-stage: review_status computation (simple, fast)
         row_start = time_module.perf_counter()
@@ -1583,7 +1499,7 @@ def build_runs_list(
         # A run with no executions should NOT be marked as triaged
         triaged = execution_count > 0 and reviewed_count > 0
         review_status_row_ms_total += (time_module.perf_counter() - row_start) * 1000
-        
+
         # Sub-stage: review_download_path lookup (uses pre-computed map - no FS)
         row_start = time_module.perf_counter()
         # Determine review download path for runs with executions
@@ -1598,30 +1514,28 @@ def build_runs_list(
             # DO NOT fallback to /latest/ - historical runs must have run-specific artifacts
             # If only /latest/ exists today, historical rows should NOT show misleading download links
         review_download_path_row_ms_total += (time_module.perf_counter() - row_start) * 1000
-        
+
         # Sub-stage: batch eligibility computation (uses pre-scanned data - no FS)
         row_start = time_module.perf_counter()
         # Compute batch eligibility using pre-scanned data (no per-row filesystem access)
-        batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(
-            run_id, all_plan_data, all_execution_indices
-        )
+        batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(run_id, all_plan_data, all_execution_indices)
         if batch_executable:
             batch_eligible_runs += 1
         batch_eligibility_row_ms_total += (time_module.perf_counter() - row_start) * 1000
-        
+
         # Sub-stage: artifact_lookup (simple dict access - already done above)
         row_start = time_module.perf_counter()
         # Artifact lookup is implicit in the above - we use pre-computed maps
         artifact_lookup_row_ms_total += (time_module.perf_counter() - row_start) * 1000
-        
+
         # Sub-stage: timestamp normalization (simple - already parsed earlier)
         row_start = time_module.perf_counter()
         timestamp_normalization_row_ms_total += (time_module.perf_counter() - row_start) * 1000
-        
+
         # Sub-stage: label normalization (simple - already done earlier)
         row_start = time_module.perf_counter()
         label_normalization_row_ms_total += (time_module.perf_counter() - row_start) * 1000
-        
+
         runs_list.append(
             RunsListEntry(
                 runId=cast(str, entry["run_id"]),
@@ -1637,7 +1551,7 @@ def build_runs_list(
                 batchEligibleCount=batch_eligible_count,
             )
         )
-    
+
     # Record sub-stage timings
     timings["review_status_row_ms"] = round(review_status_row_ms_total, 2)
     timings["review_download_path_row_ms"] = round(review_download_path_row_ms_total, 2)
@@ -1658,7 +1572,7 @@ def build_runs_list(
     runs_list.sort(key=lambda r: r["timestamp"], reverse=True)
     timings["sort_ms"] = (time_module.perf_counter() - sort_start) * 1000
     timings["batch_eligible_runs"] = batch_eligible_runs
-    
+
     # Initialize counters (proves no per-row FS work is happening)
     timings["path_exists_calls"] = 0
     timings["stat_calls"] = 0
