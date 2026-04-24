@@ -119,6 +119,12 @@ from .model_primitives import (
     _stringify,  # noqa: F401 - re-exported for test compatibility
     _value_from_mapping,
 )
+from .model_run_status import (  # noqa: F401 - re-exported for import compatibility
+    PlannerAvailabilityView,
+    RunStatsView,
+    _build_planner_availability_view,
+    _build_run_stats_view,
+)
 
 
 @dataclass(frozen=True)
@@ -149,37 +155,6 @@ class RunView:
     deterministic_next_checks: DeterministicNextChecksView | None
     diagnostic_pack_review: DiagnosticPackReviewView | None
     diagnostic_pack: DiagnosticPackView | None
-
-
-@dataclass(frozen=True)
-class RunStatsView:
-    last_run_duration_seconds: int | None = None
-    total_runs: int = 0
-    p50_run_duration_seconds: int | None = None
-    p95_run_duration_seconds: int | None = None
-    p99_run_duration_seconds: int | None = None
-
-
-# ProviderBreakdownEntry and LLMStatsView are re-exported from model_llm_stats.py
-# for import compatibility.
-# noqa: F401 - these are re-exported from model_llm_stats.py
-
-# _build_llm_stats_view and _build_optional_llm_stats_view are also re-exported
-# from model_llm_stats.py for import compatibility.
-# noqa: F401 - these are re-exported from model_llm_stats.py
-
-# LLMActivityEntryView, LLMActivitySummaryView, and LLMActivityView are re-exported
-# from model_llm_activity.py for import compatibility.
-# noqa: F401 - these are re-exported from model_llm_activity.py
-
-
-@dataclass(frozen=True)
-class PlannerAvailabilityView:
-    status: str
-    reason: str | None
-    hint: str | None
-    artifact_path: str | None
-    next_action_hint: str | None
 
 
 @dataclass(frozen=True)
@@ -531,19 +506,6 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     )
 
 
-def _build_run_stats_view(raw: object | None) -> RunStatsView:
-    if not isinstance(raw, Mapping):
-        return RunStatsView()
-    return RunStatsView(
-        last_run_duration_seconds=_coerce_optional_int(raw.get("last_run_duration_seconds")),
-        total_runs=_coerce_int(raw.get("total_runs")),
-        p50_run_duration_seconds=_coerce_optional_int(raw.get("p50_run_duration_seconds")),
-        p95_run_duration_seconds=_coerce_optional_int(raw.get("p95_run_duration_seconds")),
-        p99_run_duration_seconds=_coerce_optional_int(raw.get("p99_run_duration_seconds")),
-    )
-
-
-
 def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
     artifacts = cluster.get("artifact_paths")
     snapshot = _coerce_optional_str(_value_from_mapping(artifacts, "snapshot"))
@@ -730,20 +692,6 @@ def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | 
         artifact_path=_coerce_optional_str(raw.get("artifactPath")),
         error_summary=_coerce_optional_str(raw.get("errorSummary")),
         skip_reason=_coerce_optional_str(raw.get("skipReason")),
-    )
-
-
-def _build_planner_availability_view(raw: object | None) -> PlannerAvailabilityView | None:
-    if not isinstance(raw, Mapping):
-        return None
-    return PlannerAvailabilityView(
-        status=_coerce_str(raw.get("status")),
-        reason=_coerce_optional_str(raw.get("reason")),
-        hint=_coerce_optional_str(raw.get("hint")),
-        artifact_path=_coerce_optional_str(raw.get("artifactPath"))
-        or _coerce_optional_str(raw.get("artifact_path")),
-        next_action_hint=_coerce_optional_str(raw.get("nextActionHint"))
-        or _coerce_optional_str(raw.get("next_action_hint")),
     )
 
 
