@@ -24,6 +24,9 @@ from .model_deterministic_next_checks import (  # noqa: F401 - re-exported for i
     DeterministicNextCheckClusterView,
     DeterministicNextCheckSummaryView,
     DeterministicNextChecksView,
+    _build_deterministic_next_check_cluster_view,
+    _build_deterministic_next_check_summary_view,
+    _build_deterministic_next_checks_view,
 )
 from .model_feedback import (
     FeedbackAdaptationProvenanceView,  # noqa: F401 - re-exported for import compatibility
@@ -376,20 +379,17 @@ class DiagnosticPackView:
 # Note: NextCheckCandidateView, NextCheckOrphanedApprovalView, NextCheckOutcomeCountView,
 # and NextCheckPlanView are re-exported from model_next_check_plan.py for import compatibility.
 
-# DeterministicNextCheckSummaryView, DeterministicNextCheckClusterView, and
-# DeterministicNextChecksView are re-exported from model_deterministic_next_checks.py for
-# import compatibility.
+# DeterministicNextCheckSummaryView, DeterministicNextCheckClusterView,
+# DeterministicNextChecksView, _build_deterministic_next_checks_view,
+# _build_deterministic_next_check_cluster_view, and
+# _build_deterministic_next_check_summary_view are re-exported from
+# model_deterministic_next_checks.py for import compatibility.
 
 # _build_next_check_plan_view, _build_orphaned_approval_view, _build_outcome_count_view,
 # and _build_next_check_candidate_view_from_plan are also re-exported from model_next_check_plan.py.
 
 # _build_next_check_candidate_view remains here as it has a dependency on ui_planner_queue
 # (_derive_priority_rationale, _derive_ranking_reason).
-
-# _build_deterministic_next_checks_view, _build_deterministic_next_check_cluster_view, and
-# _build_deterministic_next_check_summary_view remain here because they're used by build_ui_context
-# which needs deterministic next-check data. The builders are also re-exported from
-# model_deterministic_next_checks.py for import compatibility.
 
 @dataclass(frozen=True)
 class ExternalAnalysisSummary:
@@ -1076,55 +1076,6 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
         orphaned_approvals=orphaned,
         outcome_counts=outcome_counts,
         orphaned_approval_count=orphaned_count,
-    )
-
-
-def _build_deterministic_next_checks_view(raw: object | None) -> DeterministicNextChecksView | None:
-    if not isinstance(raw, Mapping):
-        return None
-    clusters_raw = raw.get("clusters") or ()
-    clusters = tuple(
-        _build_deterministic_next_check_cluster_view(entry)
-        for entry in clusters_raw
-        if isinstance(entry, Mapping)
-    )
-    return DeterministicNextChecksView(
-        cluster_count=_coerce_int(raw.get("clusterCount")),
-        total_next_check_count=_coerce_int(raw.get("totalNextCheckCount")),
-        clusters=clusters,
-    )
-
-
-def _build_deterministic_next_check_cluster_view(raw: Mapping[str, object]) -> DeterministicNextCheckClusterView:
-    summaries_raw = raw.get("deterministicNextCheckSummaries") or ()
-    summaries = tuple(
-        _build_deterministic_next_check_summary_view(entry)
-        for entry in summaries_raw
-        if isinstance(entry, Mapping)
-    )
-    return DeterministicNextCheckClusterView(
-        label=_coerce_str(raw.get("label")),
-        context=_coerce_str(raw.get("context")),
-        top_problem=_coerce_optional_str(raw.get("topProblem")),
-        deterministic_next_check_count=_coerce_int(raw.get("deterministicNextCheckCount")),
-        deterministic_next_check_summaries=summaries,
-        drilldown_available=bool(raw.get("drilldownAvailable")),
-        assessment_artifact_path=_coerce_optional_str(raw.get("assessmentArtifactPath")),
-        drilldown_artifact_path=_coerce_optional_str(raw.get("drilldownArtifactPath")),
-    )
-
-
-def _build_deterministic_next_check_summary_view(raw: Mapping[str, object]) -> DeterministicNextCheckSummaryView:
-    return DeterministicNextCheckSummaryView(
-        description=_coerce_str(raw.get("description")),
-        owner=_coerce_str(raw.get("owner")),
-        method=_coerce_str(raw.get("method")),
-        evidence_needed=_coerce_sequence(raw.get("evidenceNeeded")),
-        workstream=_coerce_str(raw.get("workstream")),
-        urgency=_coerce_str(raw.get("urgency")),
-        is_primary_triage=bool(raw.get("isPrimaryTriage")),
-        why_now=_coerce_str(raw.get("whyNow")),
-        priority_score=_coerce_optional_int(raw.get("priorityScore")),
     )
 
 
