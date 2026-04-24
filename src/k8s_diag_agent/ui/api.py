@@ -23,10 +23,18 @@ import ijson
 from ..datetime_utils import parse_iso_to_utc
 from ..health.freshness import freshness_status
 
+# Import Alertmanager serializers from extracted module.
+# Re-export for backward compatibility: callers importing from api.py continue to work.
+from .api_alertmanager import (  # noqa: F401 - re-exported for backward compatibility
+    _serialize_alertmanager_compact,
+    _serialize_alertmanager_source,
+    _serialize_alertmanager_sources,
+)
+
 # Re-export all payload TypedDicts for backwards compatibility.
 # Consumers should migrate to importing from ui.api_payloads directly,
 # but existing imports from ui.api will continue to work.
-from .api_payloads import (
+from .api_payloads import (  # noqa: F401 - re-exported for backward compatibility
     AlertmanagerCompactPayload,
     AlertmanagerEvidenceReferencePayload,
     AlertmanagerProvenancePayload,
@@ -34,7 +42,6 @@ from .api_payloads import (
     AlertmanagerSourcesPayload,
     ArtifactLink,
     AssessmentSummaryPayload,
-    ClusterAlertSummaryPayload,
     ClusterDetailPayload,
     ClusterSummaryPayload,
     DeterministicNextCheckClusterPayload,
@@ -83,9 +90,6 @@ from .api_payloads import (
     StatusCount,
 )
 from .model import (
-    AlertmanagerCompactView,
-    AlertmanagerSourcesView,
-    AlertmanagerSourceView,
     AssessmentHypothesisView,
     AssessmentNextCheckView,
     AssessmentView,
@@ -174,91 +178,6 @@ def build_run_payload(
         ),
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
-    }
-
-
-def _serialize_alertmanager_compact(view: AlertmanagerCompactView | None) -> AlertmanagerCompactPayload | None:
-    if not view:
-        return None
-    # Serialize per-cluster summaries
-    by_cluster_payload: list[ClusterAlertSummaryPayload] = []
-    for summary in view.by_cluster:
-        by_cluster_payload.append({
-            "cluster": summary.cluster,
-            "alert_count": summary.alert_count,
-            "severity_counts": {str(k): v for k, v in summary.severity_counts},
-            "state_counts": {str(k): v for k, v in summary.state_counts},
-            "top_alert_names": list(summary.top_alert_names),
-            "affected_namespaces": list(summary.affected_namespaces),
-            "affected_services": list(summary.affected_services),
-        })
-    return {
-        "status": view.status,
-        "alert_count": view.alert_count,
-        "severity_counts": {str(k): v for k, v in view.severity_counts},
-        "state_counts": {str(k): v for k, v in view.state_counts},
-        "top_alert_names": list(view.top_alert_names),
-        "affected_namespaces": list(view.affected_namespaces),
-        "affected_clusters": list(view.affected_clusters),
-        "affected_services": list(view.affected_services),
-        "truncated": view.truncated,
-        "captured_at": view.captured_at,
-        "by_cluster": by_cluster_payload,
-    }
-
-
-def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> AlertmanagerSourcePayload:
-    """Serialize a single Alertmanager source to payload dict."""
-    return {
-        "source_id": view.source_id,
-        "endpoint": view.endpoint,
-        "namespace": view.namespace,
-        "name": view.name,
-        "origin": view.origin,
-        "state": view.state,
-        "discovered_at": view.discovered_at,
-        "verified_at": view.verified_at,
-        "last_check": view.last_check,
-        "last_error": view.last_error,
-        "verified_version": view.verified_version,
-        "confidence_hints": list(view.confidence_hints),
-        # Deduplication provenance fields
-        "merged_provenances": list(view.merged_provenances),
-        "display_provenance": view.display_provenance,
-        # Computed UI fields
-        "is_manual": view.is_manual,
-        "is_tracking": view.is_tracking,
-        "can_disable": view.can_disable,
-        "can_promote": view.can_promote,
-        "display_origin": view.display_origin,
-        "display_state": view.display_state,
-        "provenance_summary": view.provenance_summary,
-        # Manual source mode for distinct status display
-        "manual_source_mode": view.manual_source_mode,
-        # Cluster association for per-cluster UI filtering
-        "cluster_label": view.cluster_label,
-        # Identity fields for cross-run historical tracking
-        # canonical_entity_id: deterministic hash from normalized defining facts
-        "canonicalEntityId": view.canonical_entity_id,
-        # Identity anchors for cross-cluster disambiguation
-        "cluster_uid": view.cluster_uid,
-        "object_uid": view.object_uid,
-    }
-
-
-def _serialize_alertmanager_sources(view: AlertmanagerSourcesView | None) -> AlertmanagerSourcesPayload | None:
-    """Serialize the full Alertmanager source inventory to payload."""
-    if not view:
-        return None
-    return {
-        "sources": [_serialize_alertmanager_source(s) for s in view.sources],
-        "total_count": view.total_count,
-        "tracked_count": view.tracked_count,
-        "manual_count": view.manual_count,
-        "degraded_count": view.degraded_count,
-        "missing_count": view.missing_count,
-        "discovery_timestamp": view.discovery_timestamp,
-        "cluster_context": view.cluster_context,
     }
 
 

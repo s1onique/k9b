@@ -10,8 +10,6 @@ before serializer extraction begins.
 
 from __future__ import annotations
 
-import pytest
-
 
 # === Canonical source imports ===
 def test_import_run_payload_from_api_payloads() -> None:
