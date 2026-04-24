@@ -36,6 +36,10 @@ from .model_auto_drilldown import (  # noqa: F401 - re-exported for import compa
     AutoDrilldownInterpretationView,
     _build_auto_drilldown_interpretations,
 )
+from .model_cluster import (  # noqa: F401 - re-exported for import compatibility
+    ClusterView,
+    _build_cluster_view,
+)
 from .model_deterministic_next_checks import (  # noqa: F401 - re-exported for import compatibility
     DeterministicNextCheckClusterView,
     DeterministicNextCheckSummaryView,
@@ -142,11 +146,11 @@ from .model_primitives import (
     _coerce_optional_bool,  # noqa: F401 - re-exported for test compatibility
     _coerce_optional_int,
     _coerce_optional_str,
-    _coerce_sequence,
+    _coerce_sequence,  # noqa: F401 - re-exported for test compatibility
     _coerce_str,
     _coerce_str_tuple,  # noqa: F401 - re-exported for test compatibility
     _stringify,  # noqa: F401 - re-exported for test compatibility
-    _value_from_mapping,
+    _value_from_mapping,  # noqa: F401 - re-exported for test compatibility
 )
 from .model_proposal_status import (  # noqa: F401 - re-exported for import compatibility
     ProposalStatusSummary,
@@ -201,28 +205,8 @@ class RunView:
     diagnostic_pack: DiagnosticPackView | None
 
 
-@dataclass(frozen=True)
-class ClusterView:
-    label: str
-    context: str
-    cluster_class: str
-    cluster_role: str
-    baseline_cohort: str
-    node_count: int
-    control_plane_version: str
-    health_rating: str
-    warnings: int
-    non_running_pods: int
-    baseline_policy_path: str
-    missing_evidence: tuple[str, ...]
-    latest_run_timestamp: str
-    top_trigger_reason: str | None
-    drilldown_available: bool
-    drilldown_timestamp: str | None
-    snapshot_path: str | None
-    assessment_path: str | None
-    drilldown_path: str | None
-
+# ClusterView is re-exported from model_cluster.py for import compatibility.
+# _build_cluster_view is re-exported from model_cluster.py for import compatibility.
 
 # DrilldownCoverageEntry, DrilldownAvailabilityView, _build_drilldown_availability,
 # and _build_drilldown_coverage are re-exported from model_drilldown.py for import compatibility.
@@ -397,34 +381,6 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         next_check_queue=run.next_check_queue,
         alertmanager_compact=alertmanager_compact,
         alertmanager_sources=alertmanager_sources,
-    )
-
-
-def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
-    artifacts = cluster.get("artifact_paths")
-    snapshot = _coerce_optional_str(_value_from_mapping(artifacts, "snapshot"))
-    assessment = _coerce_optional_str(_value_from_mapping(artifacts, "assessment"))
-    drilldown = _coerce_optional_str(_value_from_mapping(artifacts, "drilldown"))
-    return ClusterView(
-        label=_coerce_str(cluster.get("label")),
-        context=_coerce_str(cluster.get("context")),
-        cluster_class=_coerce_str(cluster.get("cluster_class")),
-        cluster_role=_coerce_str(cluster.get("cluster_role")),
-        baseline_cohort=_coerce_str(cluster.get("baseline_cohort")),
-        node_count=_coerce_int(cluster.get("node_count")),
-        control_plane_version=_coerce_str(cluster.get("control_plane_version")),
-        health_rating=_coerce_str(cluster.get("health_rating")),
-        warnings=_coerce_int(cluster.get("warnings")),
-        non_running_pods=_coerce_int(cluster.get("non_running_pods")),
-        baseline_policy_path=_coerce_str(cluster.get("baseline_policy_path")),
-        missing_evidence=_coerce_sequence(cluster.get("missing_evidence")),
-        latest_run_timestamp=_coerce_str(cluster.get("latest_run_timestamp")),
-        top_trigger_reason=_coerce_optional_str(cluster.get("top_trigger_reason")),
-        drilldown_available=bool(cluster.get("drilldown_available")),
-        drilldown_timestamp=_coerce_optional_str(cluster.get("drilldown_timestamp")),
-        snapshot_path=snapshot,
-        assessment_path=assessment,
-        drilldown_path=drilldown,
     )
 
 
