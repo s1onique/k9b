@@ -27,7 +27,6 @@ from k8s_diag_agent.ui.model import (
 from k8s_diag_agent.ui.model import (
     _build_findings as Model__build_findings,
 )
-
 from k8s_diag_agent.ui.model_drilldown import (
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,

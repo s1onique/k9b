@@ -52,6 +52,10 @@ from .model_feedback import (
     _build_feedback_adaptation_provenance_view,
     _build_feedback_summary_view,  # noqa: F401 - re-exported for import compatibility
 )
+from .model_fleet import (  # noqa: F401 - re-exported for import compatibility
+    FleetStatusSummary,
+    _build_fleet_status,
+)
 from .model_llm_activity import (  # noqa: F401 - re-exported for import compatibility
     LLMActivityEntryView,
     LLMActivitySummaryView,
@@ -344,10 +348,7 @@ class AssessmentView:
     snapshot_path: str | None
 
 
-@dataclass(frozen=True)
-class FleetStatusSummary:
-    rating_counts: tuple[tuple[str, int], ...]
-    degraded_clusters: tuple[str, ...]
+# FleetStatusSummary is re-exported from model_fleet.py for import compatibility.
 
 
 @dataclass(frozen=True)
@@ -503,19 +504,6 @@ def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
 
 # _build_findings, _build_drilldown_availability, and _build_drilldown_coverage
 # are re-exported from model_drilldown.py for import compatibility.
-
-
-def _build_fleet_status(raw: object | None) -> FleetStatusSummary:
-    if not isinstance(raw, Mapping):
-        return FleetStatusSummary(rating_counts=(), degraded_clusters=())
-    counts_raw = raw.get("rating_counts") or ()
-    rating_counts = tuple(
-        (_coerce_str(entry.get("rating")), _coerce_int(entry.get("count")))
-        for entry in counts_raw
-        if isinstance(entry, Mapping)
-    )
-    degraded = _coerce_sequence(raw.get("degraded_clusters"))
-    return FleetStatusSummary(rating_counts=rating_counts, degraded_clusters=degraded)
 
 
 # _build_notification_history and _build_notification_details are re-exported from
