@@ -106,26 +106,20 @@ from .model_next_check_execution import (  # noqa: F401 - re-exported for import
     NextCheckExecutionHistoryEntryView,
     _build_execution_history_view,
 )
+
+# Backward-compatibility aliases: _build_orphaned_approval_view and _build_outcome_count_view
+# are re-exported from model_next_check_plan.py so that callers who import these builders
+# from model.py continue to work.
+# noqa: F401 - re-exported from model_next_check_plan.py
 from .model_next_check_plan import (  # noqa: F401 - re-exported for import compatibility
     NextCheckCandidateView,
     NextCheckOrphanedApprovalView,
     NextCheckOutcomeCountView,
     NextCheckPlanView,
     _build_next_check_candidate_view_from_plan,
+    _build_orphaned_approval_view,  # noqa: F401
+    _build_outcome_count_view,  # noqa: F401
 )
-
-# Note: _build_next_check_plan_view is NOT re-exported because model.py has a local definition
-# that uses _build_next_check_candidate_view with ui_planner_queue dependency.
-#
-# _build_orphaned_approval_view and _build_outcome_count_view are defined locally in model.py
-# (and aliased from model_next_check_plan.py below for backward compatibility).
-# _build_next_check_candidate_view_from_plan is re-exported for compatibility.
-# Backward-compatibility aliases: re-export from model_next_check_plan.py so that
-# callers who import these builders from model.py continue to work. The local definitions
-# in model.py remain the primary implementations (used by _build_next_check_plan_view).
-# noqa: F811 - aliases intentionally share names with local definitions below
-from .model_next_check_plan import _build_orphaned_approval_view as _build_orphaned_approval_view  # noqa: F401
-from .model_next_check_plan import _build_outcome_count_view as _build_outcome_count_view  # noqa: F401
 from .model_next_check_queue import (  # noqa: F401 - re-exported for import compatibility
     NextCheckQueueCandidateAccountingView,
     NextCheckQueueClusterStateView,
@@ -233,20 +227,18 @@ class RunView:
 # model_diagnostic_pack.py for import compatibility.
 # noqa: F401 - these are re-exported from model_diagnostic_pack.py
 
-# Note: NextCheckCandidateView, NextCheckOrphanedApprovalView, NextCheckOutcomeCountView,
-# and NextCheckPlanView are re-exported from model_next_check_plan.py for import compatibility.
+# NextCheckCandidateView, NextCheckOrphanedApprovalView, NextCheckOutcomeCountView,
+# NextCheckPlanView, _build_next_check_candidate_view_from_plan, _build_orphaned_approval_view,
+# and _build_outcome_count_view are re-exported from model_next_check_plan.py.
+
+# _build_next_check_candidate_view remains here as it has a dependency on ui_planner_queue
+# (_derive_priority_rationale, _derive_ranking_reason).
 
 # DeterministicNextCheckSummaryView, DeterministicNextCheckClusterView,
 # DeterministicNextChecksView, _build_deterministic_next_checks_view,
 # _build_deterministic_next_check_cluster_view, and
 # _build_deterministic_next_check_summary_view are re-exported from
 # model_deterministic_next_checks.py for import compatibility.
-
-# _build_next_check_plan_view, _build_orphaned_approval_view, _build_outcome_count_view,
-# and _build_next_check_candidate_view_from_plan are also re-exported from model_next_check_plan.py.
-
-# _build_next_check_candidate_view remains here as it has a dependency on ui_planner_queue
-# (_derive_priority_rationale, _derive_ranking_reason).
 
 # ExternalAnalysisSummary and ExternalAnalysisView are re-exported from
 # model_external_analysis.py for import compatibility.
@@ -435,26 +427,6 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
         orphaned_approvals=orphaned,
         outcome_counts=outcome_counts,
         orphaned_approval_count=orphaned_count,
-    )
-
-
-def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphanedApprovalView:  # type: ignore[no-redef]  # noqa: F811
-    return NextCheckOrphanedApprovalView(
-        approval_status=_coerce_optional_str(raw.get("approvalStatus")),
-        candidate_id=_coerce_optional_str(raw.get("candidateId")),
-        candidate_index=_coerce_optional_int(raw.get("candidateIndex")),
-        candidate_description=_coerce_optional_str(raw.get("candidateDescription")),
-        target_cluster=_coerce_optional_str(raw.get("targetCluster")),
-        plan_artifact_path=_coerce_optional_str(raw.get("planArtifactPath")),
-        approval_artifact_path=_coerce_optional_str(raw.get("approvalArtifactPath")),
-        approval_timestamp=_coerce_optional_str(raw.get("approvalTimestamp")),
-    )
-
-
-def _build_outcome_count_view(raw: Mapping[str, object]) -> NextCheckOutcomeCountView:  # type: ignore[no-redef]  # noqa: F811
-    return NextCheckOutcomeCountView(
-        status=_coerce_str(raw.get("status")),
-        count=_coerce_int(raw.get("count")),
     )
 
 
