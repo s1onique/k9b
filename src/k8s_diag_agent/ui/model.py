@@ -62,6 +62,12 @@ from .model_llm_policy import (  # noqa: F401 - re-exported for import compatibi
     _build_llm_policy_view,
     _build_provider_execution_view,
 )
+from .model_llm_stats import (  # noqa: F401 - re-exported for import compatibility
+    LLMStatsView,
+    ProviderBreakdownEntry,
+    _build_llm_stats_view,
+    _build_optional_llm_stats_view,
+)
 from .model_next_check_execution import (  # noqa: F401 - re-exported for import compatibility
     NextCheckExecutionHistoryEntryView,
     _build_execution_history_view,
@@ -149,25 +155,13 @@ class RunStatsView:
     p99_run_duration_seconds: int | None = None
 
 
-@dataclass(frozen=True)
-class ProviderBreakdownEntry:
-    provider: str
-    calls: int
-    failed_calls: int
+# ProviderBreakdownEntry and LLMStatsView are re-exported from model_llm_stats.py
+# for import compatibility.
+# noqa: F401 - these are re-exported from model_llm_stats.py
 
-
-@dataclass(frozen=True)
-class LLMStatsView:
-    total_calls: int
-    successful_calls: int
-    failed_calls: int
-    last_call_timestamp: str | None
-    p50_latency_ms: int | None
-    p95_latency_ms: int | None
-    p99_latency_ms: int | None
-    provider_breakdown: tuple[ProviderBreakdownEntry, ...]
-    scope: str = "current_run"
-
+# _build_llm_stats_view and _build_optional_llm_stats_view are also re-exported
+# from model_llm_stats.py for import compatibility.
+# noqa: F401 - these are re-exported from model_llm_stats.py
 
 # LLMActivityEntryView, LLMActivitySummaryView, and LLMActivityView are re-exported
 # from model_llm_activity.py for import compatibility.
@@ -552,47 +546,6 @@ def _build_run_stats_view(raw: object | None) -> RunStatsView:
         p99_run_duration_seconds=_coerce_optional_int(raw.get("p99_run_duration_seconds")),
     )
 
-
-def _build_llm_stats_view(raw: object | None) -> LLMStatsView:
-    if not isinstance(raw, Mapping):
-        return LLMStatsView(
-            total_calls=0,
-            successful_calls=0,
-            failed_calls=0,
-            last_call_timestamp=None,
-            p50_latency_ms=None,
-            p95_latency_ms=None,
-            p99_latency_ms=None,
-            provider_breakdown=(),
-        )
-    breakdown_raw = raw.get("providerBreakdown") or ()
-    breakdown = tuple(
-        ProviderBreakdownEntry(
-            provider=_coerce_str(entry.get("provider")),
-            calls=_coerce_int(entry.get("calls")),
-            failed_calls=_coerce_int(entry.get("failedCalls")),
-        )
-        for entry in breakdown_raw
-        if isinstance(entry, Mapping)
-    )
-    scope_value = _coerce_optional_str(raw.get("scope")) or "current_run"
-    return LLMStatsView(
-        total_calls=_coerce_int(raw.get("totalCalls")),
-        successful_calls=_coerce_int(raw.get("successfulCalls")),
-        failed_calls=_coerce_int(raw.get("failedCalls")),
-        last_call_timestamp=_coerce_optional_str(raw.get("lastCallTimestamp")),
-        p50_latency_ms=_coerce_optional_int(raw.get("p50LatencyMs")),
-        p95_latency_ms=_coerce_optional_int(raw.get("p95LatencyMs")),
-        p99_latency_ms=_coerce_optional_int(raw.get("p99LatencyMs")),
-        provider_breakdown=breakdown,
-        scope=scope_value,
-    )
-
-
-def _build_optional_llm_stats_view(raw: object | None) -> LLMStatsView | None:
-    if not isinstance(raw, Mapping):
-        return None
-    return _build_llm_stats_view(raw)
 
 
 def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
