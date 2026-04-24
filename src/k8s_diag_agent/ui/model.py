@@ -20,6 +20,11 @@ from .model_alertmanager import (  # noqa: F401 - re-exported for import compati
     _build_alertmanager_provenance_view,
     _build_alertmanager_sources_view,
 )
+from .model_deterministic_next_checks import (  # noqa: F401 - re-exported for import compatibility
+    DeterministicNextCheckClusterView,
+    DeterministicNextCheckSummaryView,
+    DeterministicNextChecksView,
+)
 from .model_feedback import (
     FeedbackAdaptationProvenanceView,  # noqa: F401 - re-exported for import compatibility
     FeedbackSummaryView,  # noqa: F401 - re-exported for import compatibility
@@ -371,43 +376,20 @@ class DiagnosticPackView:
 # Note: NextCheckCandidateView, NextCheckOrphanedApprovalView, NextCheckOutcomeCountView,
 # and NextCheckPlanView are re-exported from model_next_check_plan.py for import compatibility.
 
+# DeterministicNextCheckSummaryView, DeterministicNextCheckClusterView, and
+# DeterministicNextChecksView are re-exported from model_deterministic_next_checks.py for
+# import compatibility.
+
 # _build_next_check_plan_view, _build_orphaned_approval_view, _build_outcome_count_view,
 # and _build_next_check_candidate_view_from_plan are also re-exported from model_next_check_plan.py.
 
 # _build_next_check_candidate_view remains here as it has a dependency on ui_planner_queue
 # (_derive_priority_rationale, _derive_ranking_reason).
 
-@dataclass(frozen=True)
-class DeterministicNextCheckSummaryView:
-    description: str
-    owner: str
-    method: str
-    evidence_needed: tuple[str, ...]
-    workstream: str
-    urgency: str
-    is_primary_triage: bool
-    why_now: str
-    priority_score: int | None = None
-
-
-@dataclass(frozen=True)
-class DeterministicNextCheckClusterView:
-    label: str
-    context: str
-    top_problem: str | None
-    deterministic_next_check_count: int
-    deterministic_next_check_summaries: tuple[DeterministicNextCheckSummaryView, ...]
-    drilldown_available: bool
-    assessment_artifact_path: str | None
-    drilldown_artifact_path: str | None
-
-
-@dataclass(frozen=True)
-class DeterministicNextChecksView:
-    cluster_count: int
-    total_next_check_count: int
-    clusters: tuple[DeterministicNextCheckClusterView, ...]
-
+# _build_deterministic_next_checks_view, _build_deterministic_next_check_cluster_view, and
+# _build_deterministic_next_check_summary_view remain here because they're used by build_ui_context
+# which needs deterministic next-check data. The builders are also re-exported from
+# model_deterministic_next_checks.py for import compatibility.
 
 @dataclass(frozen=True)
 class ExternalAnalysisSummary:
