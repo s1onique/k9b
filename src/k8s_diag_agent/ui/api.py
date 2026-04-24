@@ -38,6 +38,14 @@ from .api_diagnostic_pack import (  # noqa: F401 - re-exported for backward comp
     _serialize_diagnostic_pack_review,
 )
 
+# Import LLM serializers from extracted module.
+# Re-export for backward compatibility: callers importing from api.py continue to work.
+from .api_llm import (  # noqa: F401 - re-exported for backward compatibility
+    _serialize_llm_activity,
+    _serialize_llm_policy,
+    _serialize_llm_stats,
+)
+
 # Re-export all payload TypedDicts for backwards compatibility.
 # Consumers should migrate to importing from ui.api_payloads directly,
 # but existing imports from ui.api will continue to work.
@@ -123,9 +131,6 @@ from .model import (
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
     FindingsView,
-    LLMActivityView,
-    LLMPolicyView,
-    LLMStatsView,
     NextCheckCandidateView,
     NextCheckExecutionHistoryEntryView,
     NextCheckOrphanedApprovalView,
@@ -315,69 +320,6 @@ def _serialize_run_stats(stats: RunStatsView) -> RunStatsPayload:
         "p50RunDurationSeconds": stats.p50_run_duration_seconds,
         "p95RunDurationSeconds": stats.p95_run_duration_seconds,
         "p99RunDurationSeconds": stats.p99_run_duration_seconds,
-    }
-
-
-def _serialize_llm_stats(stats: LLMStatsView) -> LLMStatsPayload:
-    return {
-        "totalCalls": stats.total_calls,
-        "successfulCalls": stats.successful_calls,
-        "failedCalls": stats.failed_calls,
-        "lastCallTimestamp": stats.last_call_timestamp,
-        "p50LatencyMs": stats.p50_latency_ms,
-        "p95LatencyMs": stats.p95_latency_ms,
-        "p99LatencyMs": stats.p99_latency_ms,
-        "providerBreakdown": [
-            {
-                "provider": entry.provider,
-                "calls": entry.calls,
-                "failedCalls": entry.failed_calls,
-            }
-            for entry in stats.provider_breakdown
-        ],
-        "scope": stats.scope,
-    }
-
-
-def _serialize_llm_activity(activity: LLMActivityView) -> LLMActivityPayload:
-    return {
-        "entries": [
-            {
-                "timestamp": entry.timestamp,
-                "runId": entry.run_id,
-                "runLabel": entry.run_label,
-                "clusterLabel": entry.cluster_label,
-                "toolName": entry.tool_name,
-                "provider": entry.provider,
-                "purpose": entry.purpose,
-                "status": entry.status,
-                "latencyMs": entry.latency_ms,
-                "artifactPath": entry.artifact_path,
-                "summary": entry.summary,
-                "errorSummary": entry.error_summary,
-                "skipReason": entry.skip_reason,
-            }
-            for entry in activity.entries
-        ],
-        "summary": {"retainedEntries": activity.summary.retained_entries},
-    }
-
-
-def _serialize_llm_policy(policy: LLMPolicyView | None) -> LLMPolicyPayload | None:
-    if not policy or not policy.auto_drilldown:
-        return None
-    auto = policy.auto_drilldown
-    return {
-        "autoDrilldown": {
-            "enabled": auto.enabled,
-            "provider": auto.provider,
-            "maxPerRun": auto.max_per_run,
-            "usedThisRun": auto.used_this_run,
-            "successfulThisRun": auto.successful_this_run,
-            "failedThisRun": auto.failed_this_run,
-            "skippedThisRun": auto.skipped_this_run,
-            "budgetExhausted": auto.budget_exhausted,
-        }
     }
 
 
