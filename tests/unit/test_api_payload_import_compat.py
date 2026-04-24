@@ -187,6 +187,23 @@ def test_import_review_enrichment_payload_from_api_payloads() -> None:
     assert payload["status"] == "completed"
 
 
+def test_import_cluster_alert_summary_payload_from_api_payloads() -> None:
+    """ClusterAlertSummaryPayload can be imported from the canonical api_payloads module."""
+    from k8s_diag_agent.ui.api_payloads import ClusterAlertSummaryPayload
+
+    assert ClusterAlertSummaryPayload is not None
+    payload: ClusterAlertSummaryPayload = {
+        "cluster": "prod-cluster-1",
+        "alert_count": 5,
+        "severity_counts": {"critical": 2, "warning": 3},
+        "state_counts": {"firing": 4, "resolved": 1},
+        "top_alert_names": ["PodNotReady", "HighMemoryUsage"],
+        "affected_namespaces": ["default", "kube-system"],
+        "affected_services": ["nginx", "redis"],
+    }
+    assert payload["cluster"] == "prod-cluster-1"
+
+
 # === Legacy re-export imports ===
 def test_import_run_payload_from_api() -> None:
     """RunPayload can be imported from the legacy api re-export."""
@@ -228,6 +245,13 @@ def test_import_review_enrichment_payload_from_api() -> None:
     from k8s_diag_agent.ui.api import ReviewEnrichmentPayload
 
     assert ReviewEnrichmentPayload is not None
+
+
+def test_import_cluster_alert_summary_payload_from_api() -> None:
+    """ClusterAlertSummaryPayload can be imported from the legacy api re-export."""
+    from k8s_diag_agent.ui.api import ClusterAlertSummaryPayload
+
+    assert ClusterAlertSummaryPayload is not None
 
 
 # === Identity tests: both import paths yield the same class ===
@@ -278,6 +302,16 @@ def test_review_enrichment_payload_identity() -> None:
     from k8s_diag_agent.ui.api import ReviewEnrichmentPayload as FromApi
     from k8s_diag_agent.ui.api_payloads import (
         ReviewEnrichmentPayload as FromPayloads,
+    )
+
+    assert FromApi is FromPayloads
+
+
+def test_cluster_alert_summary_payload_identity() -> None:
+    """Both import paths yield the same ClusterAlertSummaryPayload class."""
+    from k8s_diag_agent.ui.api import ClusterAlertSummaryPayload as FromApi
+    from k8s_diag_agent.ui.api_payloads import (
+        ClusterAlertSummaryPayload as FromPayloads,
     )
 
     assert FromApi is FromPayloads

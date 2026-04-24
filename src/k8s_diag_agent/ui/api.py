@@ -42,6 +42,7 @@ from .api_payloads import (  # noqa: F401 - re-exported for backward compatibili
     AlertmanagerSourcesPayload,
     ArtifactLink,
     AssessmentSummaryPayload,
+    ClusterAlertSummaryPayload,
     ClusterDetailPayload,
     ClusterSummaryPayload,
     DeterministicNextCheckClusterPayload,
