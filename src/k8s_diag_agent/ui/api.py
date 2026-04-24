@@ -31,6 +31,13 @@ from .api_alertmanager import (  # noqa: F401 - re-exported for backward compati
     _serialize_alertmanager_sources,
 )
 
+# Import DiagnosticPack serializers from extracted module.
+# Re-export for backward compatibility: callers importing from api.py continue to work.
+from .api_diagnostic_pack import (  # noqa: F401 - re-exported for backward compatibility
+    _serialize_diagnostic_pack,
+    _serialize_diagnostic_pack_review,
+)
+
 # Re-export all payload TypedDicts for backwards compatibility.
 # Consumers should migrate to importing from ui.api_payloads directly,
 # but existing imports from ui.api will continue to work.
@@ -113,8 +120,6 @@ from .model import (
     DeterministicNextCheckClusterView,
     DeterministicNextCheckSummaryView,
     DeterministicNextChecksView,
-    DiagnosticPackReviewView,
-    DiagnosticPackView,
     DrilldownAvailabilityView,
     DrilldownCoverageEntry,
     FindingsView,
@@ -767,53 +772,6 @@ def _serialize_planner_availability(
         "artifactPath": view.artifact_path,
         "nextActionHint": view.next_action_hint,
     }
-
-
-def _serialize_diagnostic_pack_review(
-    view: DiagnosticPackReviewView | None,
-) -> DiagnosticPackReviewPayload | None:
-    if not view:
-        return None
-    return {
-        "timestamp": view.timestamp,
-        "summary": view.summary,
-        "majorDisagreements": list(view.major_disagreements),
-        "missingChecks": list(view.missing_checks),
-        "rankingIssues": list(view.ranking_issues),
-        "genericChecks": list(view.generic_checks),
-        "recommendedNextActions": list(view.recommended_next_actions),
-        "driftMisprioritized": view.drift_misprioritized,
-        "confidence": view.confidence,
-        "providerStatus": view.provider_status,
-        "providerSummary": view.provider_summary,
-        "providerErrorSummary": view.provider_error_summary,
-        "providerSkipReason": view.provider_skip_reason,
-        "providerReview": dict(view.provider_review) if view.provider_review else None,
-        "artifactPath": view.artifact_path,
-    }
-
-
-def _serialize_diagnostic_pack(view: DiagnosticPackView | None) -> DiagnosticPackPayload | None:
-    if not view:
-        return None
-    result: DiagnosticPackPayload = {
-        "path": view.path,
-        "timestamp": view.timestamp,
-        "label": view.label,
-        "reviewBundlePath": view.review_bundle_path,
-        "reviewInput14bPath": view.review_input_14b_path,
-    }
-    # Additive semantic metadata: indicates whether review paths point to mutable latest/ mirror
-    if view.is_mirror is not None:
-        result["isMirror"] = view.is_mirror
-    # When isMirror=True, expose the immutable source pack reference so operators
-    # can use the exact pack ZIP that generated the current mirror content.
-    # Use view.source_pack_path if provided, otherwise fall back to view.path.
-    if view.is_mirror:
-        source_pack = view.source_pack_path if view.source_pack_path is not None else view.path
-        if source_pack is not None:
-            result["sourcePackPath"] = source_pack
-    return result
 
 
 def _serialize_orphaned_approval(view: NextCheckOrphanedApprovalView) -> NextCheckOrphanedApprovalPayload:
