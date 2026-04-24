@@ -91,6 +91,13 @@ from .api_payloads import (  # noqa: F401 - re-exported for backward compatibili
     StatusCount,
 )
 
+# Import ProviderExecution serializers from extracted module.
+# Re-export for backward compatibility: callers importing from api.py continue to work.
+from .api_provider_execution import (  # noqa: F401 - re-exported for backward compatibility
+    _serialize_provider_execution,
+    _serialize_provider_execution_branch,
+)
+
 # Import ReviewEnrichment serializers from extracted module.
 # Re-export for backward compatibility: callers importing from api.py continue to work.
 from .api_review_enrichment import (  # noqa: F401 - re-exported for backward compatibility
@@ -125,8 +132,6 @@ from .model import (
     NotificationView,
     PlannerAvailabilityView,
     ProposalView,
-    ProviderExecutionBranchView,
-    ProviderExecutionView,
     RecommendedActionView,
     RunStatsView,
     UIIndexContext,
@@ -949,35 +954,6 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
     return payload
 
 
-
-
-def _serialize_provider_execution(view: ProviderExecutionView | None) -> ProviderExecutionPayload | None:
-    if not view:
-        return None
-    payload: ProviderExecutionPayload = {}
-    if view.auto_drilldown:
-        payload["autoDrilldown"] = _serialize_provider_execution_branch(view.auto_drilldown)
-    if view.review_enrichment:
-        payload["reviewEnrichment"] = _serialize_provider_execution_branch(view.review_enrichment)
-    return payload or None
-
-
-def _serialize_provider_execution_branch(
-    branch: ProviderExecutionBranchView,
-) -> ProviderExecutionBranchPayload:
-    return {
-        "enabled": branch.enabled,
-        "provider": branch.provider,
-        "maxPerRun": branch.max_per_run,
-        "eligible": branch.eligible,
-        "attempted": branch.attempted,
-        "succeeded": branch.succeeded,
-        "failed": branch.failed,
-        "skipped": branch.skipped,
-        "unattempted": branch.unattempted,
-        "budgetLimited": branch.budget_limited,
-        "notes": branch.notes,
-    }
 
 
 def _filter_related_proposals(label: str | None, proposals: tuple[ProposalView, ...]) -> list[ProposalEntry]:
