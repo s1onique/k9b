@@ -20,6 +20,10 @@ from .model_alertmanager import (  # noqa: F401 - re-exported for import compati
     _build_alertmanager_provenance_view,
     _build_alertmanager_sources_view,
 )
+from .model_auto_drilldown import (  # noqa: F401 - re-exported for import compatibility
+    AutoDrilldownInterpretationView,
+    _build_auto_drilldown_interpretations,
+)
 from .model_deterministic_next_checks import (  # noqa: F401 - re-exported for import compatibility
     DeterministicNextCheckClusterView,
     DeterministicNextCheckSummaryView,
@@ -296,19 +300,9 @@ class NotificationView:
 # model_external_analysis.py for import compatibility.
 # noqa: F401 - these are re-exported from model_external_analysis.py
 
-
-@dataclass(frozen=True)
-class AutoDrilldownInterpretationView:
-    adapter: str
-    status: str
-    summary: str | None
-    timestamp: str
-    artifact_path: str | None
-    provider: str | None
-    duration_ms: int | None
-    payload: Mapping[str, object] | None
-    error_summary: str | None
-    skip_reason: str | None
+# AutoDrilldownInterpretationView and _build_auto_drilldown_interpretations are re-exported
+# from model_auto_drilldown.py for import compatibility.
+# noqa: F401 - these are re-exported from model_auto_drilldown.py
 
 
 @dataclass(frozen=True)
@@ -912,30 +906,6 @@ def _build_llm_activity_summary(raw: object | None) -> LLMActivitySummaryView:
     if not isinstance(raw, Mapping):
         return LLMActivitySummaryView(retained_entries=0)
     return LLMActivitySummaryView(retained_entries=_coerce_int(raw.get("retained_entries")))
-
-
-def _build_auto_drilldown_interpretations(
-    raw: object | None,
-) -> Mapping[str, AutoDrilldownInterpretationView]:
-    if not isinstance(raw, Mapping):
-        return {}
-    interpretations: dict[str, AutoDrilldownInterpretationView] = {}
-    for label, entry in raw.items():
-        if not isinstance(label, str) or not isinstance(entry, Mapping):
-            continue
-        interpretations[label] = AutoDrilldownInterpretationView(
-            adapter=_coerce_str(entry.get("adapter")),
-            status=_coerce_str(entry.get("status")),
-            summary=_coerce_optional_str(entry.get("summary")),
-            timestamp=_coerce_str(entry.get("timestamp")),
-            artifact_path=_coerce_optional_str(entry.get("artifact_path")),
-            provider=_coerce_optional_str(entry.get("provider")),
-            duration_ms=_coerce_optional_int(entry.get("duration_ms")),
-            payload=entry.get("payload") if isinstance(entry.get("payload"), Mapping) else None,
-            error_summary=_coerce_optional_str(entry.get("error_summary")),
-            skip_reason=_coerce_optional_str(entry.get("skip_reason")),
-        )
-    return interpretations
 
 
 def _build_review_enrichment_view(raw: object | None) -> ReviewEnrichmentView | None:
