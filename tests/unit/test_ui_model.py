@@ -306,6 +306,154 @@ class UIViewModelTests(unittest.TestCase):
         self.assertEqual(dup.priority_rationale, "Already covered by existing evidence")
 
 
+class TestNextCheckPlanFullDerivation(unittest.TestCase):
+    """Regression tests proving full candidate derivation path is preserved.
+
+    _build_next_check_plan_view in model.py must use _build_next_check_candidate_view
+    (which derives priority_rationale and ranking_reason via ui_planner_queue helpers).
+    """
+
+    def test_build_next_check_plan_view_importable_from_model(self) -> None:
+        """_build_next_check_plan_view should be importable from model.py."""
+        from k8s_diag_agent.ui.model import _build_next_check_plan_view
+
+        assert _build_next_check_plan_view is not None
+
+    def test_model_build_next_check_plan_derives_priority_rationale(self) -> None:
+        """model.py _build_next_check_plan_view derives priority_rationale from candidate data."""
+        from k8s_diag_agent.ui.model import _build_next_check_plan_view
+
+        # Candidate with duplicate evidence - should get "Already covered by existing evidence"
+        raw: dict[str, object] = {
+            "status": "success",
+            "candidates": [
+                {
+                    "candidateId": "dup-candidate",
+                    "description": "Check pod logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "cheap",
+                    "confidence": "high",
+                    "duplicateOfExistingEvidence": True,
+                    "duplicateEvidenceDescription": "Check pod logs from previous run",
+                    "priorityLabel": "fallback",
+                },
+            ],
+            "candidateCount": 1,
+        }
+        result = _build_next_check_plan_view(raw)
+        assert result is not None
+        assert len(result.candidates) == 1
+        candidate = result.candidates[0]
+        # priority_rationale should be derived by ui_planner_queue helpers
+        assert candidate.priority_rationale is not None, (
+            "priority_rationale should be derived via ui_planner_queue helpers"
+        )
+        assert candidate.priority_rationale == "Already covered by existing evidence"
+
+    def test_model_build_next_check_plan_derives_ranking_reason(self) -> None:
+        """model.py _build_next_check_plan_view derives ranking_reason from candidate data."""
+        from k8s_diag_agent.ui.model import _build_next_check_plan_view
+
+        # Test that duplicate candidates get ranking_reason = "duplicate"
+        raw: dict[str, object] = {
+            "status": "success",
+            "candidates": [
+                {
+                    "candidateId": "dup-candidate",
+                    "description": "Check node status",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "cheap",
+                    "confidence": "high",
+                    "duplicateOfExistingEvidence": True,
+                    "duplicateReason": "exact_match",
+                },
+            ],
+            "candidateCount": 1,
+        }
+        result = _build_next_check_plan_view(raw)
+        assert result is not None
+        assert len(result.candidates) == 1
+        candidate = result.candidates[0]
+        # ranking_reason should be "duplicate" for candidates with duplicateOfExistingEvidence=True
+        assert candidate.ranking_reason == "duplicate", (
+            f"Expected ranking_reason='duplicate' for duplicate candidate, got {candidate.ranking_reason}"
+        )
+
+    def test_model_build_next_check_plan_returns_none_for_non_mapping(self) -> None:
+        """_build_next_check_plan_view should return None for non-Mapping input."""
+        from k8s_diag_agent.ui.model import _build_next_check_plan_view
+
+        assert _build_next_check_plan_view(None) is None
+        assert _build_next_check_plan_view("not a mapping") is None
+
+    def test_model_build_next_check_plan_uses_full_candidate_builder(self) -> None:
+        """model.py _build_next_check_plan_view uses _build_next_check_candidate_view internally."""
+        from k8s_diag_agent.ui.model import (
+            NextCheckCandidateView,
+            _build_next_check_plan_view,
+        )
+
+        # A plan with multiple candidates of different types
+        raw: dict[str, object] = {
+            "status": "success",
+            "candidates": [
+                {
+                    "candidateId": "primary-candidate",
+                    "description": "Check kubelet logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "cheap",
+                    "confidence": "high",
+                    "duplicateOfExistingEvidence": False,
+                    "priorityLabel": "primary",
+                },
+                {
+                    "candidateId": "blocked-candidate",
+                    "description": "Unknown command",
+                    "safeToAutomate": False,
+                    "requiresOperatorApproval": True,
+                    "riskLevel": "high",
+                    "estimatedCost": "expensive",
+                    "confidence": "low",
+                    "duplicateOfExistingEvidence": False,
+                    "gatingReason": "Command not recognized",
+                    "priorityLabel": "fallback",
+                },
+                {
+                    "candidateId": "dup-candidate",
+                    "description": "Check pod metrics",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "riskLevel": "low",
+                    "estimatedCost": "cheap",
+                    "confidence": "high",
+                    "duplicateOfExistingEvidence": True,
+                    "duplicateEvidenceDescription": "Check pod metrics from baseline",
+                    "priorityLabel": "fallback",
+                },
+            ],
+            "candidateCount": 3,
+        }
+        result = _build_next_check_plan_view(raw)
+        assert result is not None
+        assert result.candidate_count == 3
+        assert len(result.candidates) == 3
+
+        # Verify all candidates are proper NextCheckCandidateView instances
+        for candidate in result.candidates:
+            assert isinstance(candidate, NextCheckCandidateView)
+
+        # Verify derivation worked for the duplicate candidate
+        dup = next((c for c in result.candidates if c.candidate_id == "dup-candidate"), None)
+        assert dup is not None
+        assert dup.priority_rationale == "Already covered by existing evidence"
+
+
 class AlertmanagerSourcesViewTests(unittest.TestCase):
     def test_alertmanager_sources_derives_computed_fields(self) -> None:
         raw_sources = _alertmanager_sources_raw()

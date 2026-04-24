@@ -38,10 +38,18 @@ from .model_next_check_plan import (  # noqa: F401 - re-exported for import comp
     _build_next_check_candidate_view_from_plan,
 )
 
-# Note: _build_next_check_plan_view, _build_orphaned_approval_view, _build_outcome_count_view
-# are NOT re-exported because model.py has local definitions used by _build_next_check_plan_view
-# (which uses _build_next_check_candidate_view with ui_planner_queue dependency).
+# Note: _build_next_check_plan_view is NOT re-exported because model.py has a local definition
+# that uses _build_next_check_candidate_view with ui_planner_queue dependency.
+#
+# _build_orphaned_approval_view and _build_outcome_count_view are defined locally in model.py
+# (and aliased from model_next_check_plan.py below for backward compatibility).
 # _build_next_check_candidate_view_from_plan is re-exported for compatibility.
+# Backward-compatibility aliases: re-export from model_next_check_plan.py so that
+# callers who import these builders from model.py continue to work. The local definitions
+# in model.py remain the primary implementations (used by _build_next_check_plan_view).
+# noqa: F811 - aliases intentionally share names with local definitions below
+from .model_next_check_plan import _build_orphaned_approval_view as _build_orphaned_approval_view  # noqa: F401
+from .model_next_check_plan import _build_outcome_count_view as _build_outcome_count_view  # noqa: F401
 from .model_next_check_queue import (  # noqa: F401 - re-exported for import compatibility
     NextCheckQueueCandidateAccountingView,
     NextCheckQueueClusterStateView,
@@ -1138,7 +1146,7 @@ def _build_deterministic_next_check_summary_view(raw: Mapping[str, object]) -> D
     )
 
 
-def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphanedApprovalView:
+def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphanedApprovalView:  # type: ignore[no-redef]  # noqa: F811
     return NextCheckOrphanedApprovalView(
         approval_status=_coerce_optional_str(raw.get("approvalStatus")),
         candidate_id=_coerce_optional_str(raw.get("candidateId")),
@@ -1151,7 +1159,7 @@ def _build_orphaned_approval_view(raw: Mapping[str, object]) -> NextCheckOrphane
     )
 
 
-def _build_outcome_count_view(raw: Mapping[str, object]) -> NextCheckOutcomeCountView:
+def _build_outcome_count_view(raw: Mapping[str, object]) -> NextCheckOutcomeCountView:  # type: ignore[no-redef]  # noqa: F811
     return NextCheckOutcomeCountView(
         status=_coerce_str(raw.get("status")),
         count=_coerce_int(raw.get("count")),

@@ -41,6 +41,18 @@ class TestPlanCandidateImportsFromModel(unittest.TestCase):
 
         assert _build_next_check_candidate_view_from_plan is not None
 
+    def test_build_orphaned_approval_view_importable_from_model(self) -> None:
+        """_build_orphaned_approval_view should be importable from model."""
+        from k8s_diag_agent.ui.model import _build_orphaned_approval_view
+
+        assert _build_orphaned_approval_view is not None
+
+    def test_build_outcome_count_view_importable_from_model(self) -> None:
+        """_build_outcome_count_view should be importable from model."""
+        from k8s_diag_agent.ui.model import _build_outcome_count_view
+
+        assert _build_outcome_count_view is not None
+
 
 class TestPlanCandidateImportsDirectlyFromModule(unittest.TestCase):
     """Verify plan/candidate symbols are importable directly from model_next_check_plan.py."""
