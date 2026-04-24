@@ -102,6 +102,11 @@ from .model_next_check_queue import (  # noqa: F401 - re-exported for import com
     _build_queue_cluster_state_view,
     _build_queue_explanation_view,
 )
+from .model_notifications import (  # noqa: F401 - re-exported for import compatibility
+    NotificationView,
+    _build_notification_details,
+    _build_notification_history,
+)
 from .model_primitives import (
     _coerce_int,
     _coerce_optional_bool,
@@ -234,18 +239,9 @@ class DrilldownAvailabilityView:
     coverage: tuple[DrilldownCoverageEntry, ...]
 
 
-@dataclass(frozen=True)
-class NotificationView:
-    kind: str
-    summary: str
-    timestamp: str
-    run_id: str | None
-    cluster_label: str | None
-    context: str | None
-    details: tuple[tuple[str, str], ...]
-    artifact_path: str | None
-    artifact_id: str | None = None  # Immutable artifact identity (UUIDv7); None for legacy
-
+# NotificationView, _build_notification_history, and _build_notification_details
+# are re-exported from model_notifications.py for import compatibility.
+# noqa: F401 - these are re-exported from model_notifications.py
 
 # ExternalAnalysisView and ExternalAnalysisSummary are re-exported from
 # model_external_analysis.py for import compatibility.
@@ -690,41 +686,8 @@ def _build_drilldown_coverage(raw: Mapping[str, object]) -> DrilldownCoverageEnt
     )
 
 
-def _build_notification_history(raw: object | None) -> tuple[NotificationView, ...]:
-    if not isinstance(raw, Sequence):
-        return ()
-    entries: list[NotificationView] = []
-    for entry in raw:
-        if not isinstance(entry, Mapping):
-            continue
-        entries.append(
-            NotificationView(
-                kind=_coerce_str(entry.get("kind")),
-                summary=_coerce_str(entry.get("summary")),
-                timestamp=_coerce_str(entry.get("timestamp")),
-                run_id=_coerce_optional_str(entry.get("run_id")),
-                cluster_label=_coerce_optional_str(entry.get("cluster_label")),
-                context=_coerce_optional_str(entry.get("context")),
-                details=_build_notification_details(entry.get("details")),
-                artifact_path=_coerce_optional_str(entry.get("artifact_path")),
-                artifact_id=_coerce_optional_str(entry.get("artifact_id")),
-            )
-        )
-    return tuple(entries)
-
-
-def _build_notification_details(raw: object | None) -> tuple[tuple[str, str], ...]:
-    if not isinstance(raw, Sequence):
-        return ()
-    details: list[tuple[str, str]] = []
-    for detail in raw:
-        if not isinstance(detail, Mapping):
-            continue
-        label = _coerce_str(detail.get("label"))
-        value = _coerce_str(detail.get("value"))
-        details.append((label, value))
-    return tuple(details)
-
+# _build_notification_history and _build_notification_details are re-exported from
+# model_notifications.py for import compatibility.
 
 # _build_external_analysis and _build_external_analysis_view are re-exported from
 # model_external_analysis.py for import compatibility.
