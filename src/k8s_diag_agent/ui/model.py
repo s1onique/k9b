@@ -32,6 +32,14 @@ from .model_deterministic_next_checks import (  # noqa: F401 - re-exported for i
     _build_deterministic_next_check_summary_view,
     _build_deterministic_next_checks_view,
 )
+from .model_drilldown import (  # noqa: F401 - re-exported for import compatibility
+    DrilldownAvailabilityView,
+    DrilldownCoverageEntry,
+    FindingsView,
+    _build_drilldown_availability,
+    _build_drilldown_coverage,
+    _build_findings,
+)
 from .model_external_analysis import (  # noqa: F401 - re-exported for import compatibility
     ExternalAnalysisSummary,
     ExternalAnalysisView,
@@ -115,7 +123,6 @@ from .model_primitives import (
     _coerce_sequence,
     _coerce_str,
     _coerce_str_tuple,  # noqa: F401 - re-exported for test compatibility
-    _serialize_map,
     _stringify,  # noqa: F401 - re-exported for test compatibility
     _value_from_mapping,
 )
@@ -187,23 +194,8 @@ class ClusterView:
     drilldown_path: str | None
 
 
-@dataclass(frozen=True)
-class DrilldownCoverageEntry:
-    label: str
-    context: str
-    available: bool
-    timestamp: str | None
-    artifact_path: str | None
-
-
-@dataclass(frozen=True)
-class DrilldownAvailabilityView:
-    total_clusters: int
-    available: int
-    missing: int
-    missing_clusters: tuple[str, ...]
-    coverage: tuple[DrilldownCoverageEntry, ...]
-
+# DrilldownCoverageEntry, DrilldownAvailabilityView, _build_drilldown_availability,
+# and _build_drilldown_coverage are re-exported from model_drilldown.py for import compatibility.
 
 # NotificationView, _build_notification_history, and _build_notification_details
 # are re-exported from model_notifications.py for import compatibility.
@@ -301,18 +293,7 @@ class DiagnosticPackView:
 # model_external_analysis.py for import compatibility.
 # noqa: F401 - these are re-exported from model_external_analysis.py
 
-
-@dataclass(frozen=True)
-class FindingsView:
-    label: str | None
-    context: str | None
-    trigger_reasons: tuple[str, ...]
-    warning_events: int
-    non_running_pods: int
-    summary: tuple[tuple[str, str], ...]
-    rollout_status: tuple[str, ...]
-    pattern_details: tuple[tuple[str, str], ...]
-    artifact_path: str | None = None
+# FindingsView is re-exported from model_drilldown.py for import compatibility.
 
 
 @dataclass(frozen=True)
@@ -520,20 +501,8 @@ def _build_cluster_view(cluster: Mapping[str, object]) -> ClusterView:
     )
 
 
-def _build_findings(raw: object | None) -> FindingsView | None:
-    if not isinstance(raw, Mapping):
-        return None
-    return FindingsView(
-        label=_coerce_optional_str(raw.get("label")),
-        context=_coerce_optional_str(raw.get("context")),
-        trigger_reasons=_coerce_sequence(raw.get("trigger_reasons")),
-        warning_events=_coerce_int(raw.get("warning_events")),
-        non_running_pods=_coerce_int(raw.get("non_running_pods")),
-        summary=_serialize_map(raw.get("summary")),
-        rollout_status=_coerce_sequence(raw.get("rollout_status")),
-        pattern_details=_serialize_map(raw.get("pattern_details")),
-        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
-    )
+# _build_findings, _build_drilldown_availability, and _build_drilldown_coverage
+# are re-exported from model_drilldown.py for import compatibility.
 
 
 def _build_fleet_status(raw: object | None) -> FleetStatusSummary:
@@ -547,40 +516,6 @@ def _build_fleet_status(raw: object | None) -> FleetStatusSummary:
     )
     degraded = _coerce_sequence(raw.get("degraded_clusters"))
     return FleetStatusSummary(rating_counts=rating_counts, degraded_clusters=degraded)
-
-
-def _build_drilldown_availability(raw: object | None) -> DrilldownAvailabilityView:
-    if not isinstance(raw, Mapping):
-        return DrilldownAvailabilityView(
-            total_clusters=0,
-            available=0,
-            missing=0,
-            missing_clusters=(),
-            coverage=(),
-        )
-    coverage_raw = raw.get("coverage") or ()
-    coverage = tuple(
-        _build_drilldown_coverage(entry)
-        for entry in coverage_raw
-        if isinstance(entry, Mapping)
-    )
-    return DrilldownAvailabilityView(
-        total_clusters=_coerce_int(raw.get("total_clusters")),
-        available=_coerce_int(raw.get("available")),
-        missing=_coerce_int(raw.get("missing")),
-        missing_clusters=_coerce_sequence(raw.get("missing_clusters")),
-        coverage=coverage,
-    )
-
-
-def _build_drilldown_coverage(raw: Mapping[str, object]) -> DrilldownCoverageEntry:
-    return DrilldownCoverageEntry(
-        label=_coerce_str(raw.get("label")),
-        context=_coerce_str(raw.get("context")),
-        available=bool(raw.get("available")),
-        timestamp=_coerce_optional_str(raw.get("timestamp")),
-        artifact_path=_coerce_optional_str(raw.get("artifact_path")),
-    )
 
 
 # _build_notification_history and _build_notification_details are re-exported from
