@@ -320,6 +320,26 @@ export type AlertmanagerProvenance = {
 };
 
 /**
+ * Structured feedback summary providing detailed breakdown of feedback signals.
+ * Used for provenance display and diagnostics.
+ * 
+ * The `summaryText` field is a legacy fallback - when input was a legacy string,
+ * it's preserved here so old tooltip text can still be displayed.
+ */
+export type FeedbackSummary = {
+  /** Total number of feedback entries across all sources */
+  totalEntries: number;
+  /** Namespaces that received feedback */
+  namespacesWithFeedback: string[];
+  /** Clusters that received feedback */
+  clustersWithFeedback: string[];
+  /** Services that received feedback */
+  servicesWithFeedback: string[];
+  /** Legacy fallback: preserved text when input was a legacy string */
+  summaryText?: string | null;
+};
+
+/**
  * Structured provenance for feedback-driven adaptation of bonus/penalty values.
  * Tracks how the original bonus was modified based on feedback signals.
  */
@@ -330,7 +350,8 @@ export type FeedbackAdaptationProvenance = {
   suppressedBonus: number;
   penaltyApplied: number;
   explanation?: string | null;
-  feedbackSummary?: string | null;
+  /** Structured feedback summary - preferred over legacy string shape */
+  feedbackSummary?: FeedbackSummary | null;
 };
 
 export type NextCheckPlanCandidate = {

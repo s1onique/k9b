@@ -18,6 +18,7 @@ import type {
   AlertmanagerProvenance,
   ArtifactLink,
   FeedbackAdaptationProvenance,
+  FeedbackSummary,
   AutoInterpretation,
   ClusterDetailPayload,
   FleetPayload,
@@ -959,6 +960,29 @@ const formatFeedbackAdaptationProvenance = (provenance: FeedbackAdaptationProven
   return parts.length > 0 ? parts.join(" · ") : "Feedback adaptation applied";
 };
 
+/** Format structured feedback summary for tooltip display.
+ * Handles both modern structured FeedbackSummary and legacy string fallback.
+ */
+const formatFeedbackSummary = (summary: FeedbackSummary): string => {
+  // Legacy fallback: preserve original text if summaryText is present
+  // (indicates input was a legacy string that was wrapped into structured shape)
+  if (summary.summaryText) {
+    return summary.summaryText;
+  }
+  
+  const parts: string[] = [];
+  if (summary.totalEntries > 0) {
+    parts.push(`${summary.totalEntries} entries`);
+  }
+  const nsCount = summary.namespacesWithFeedback.length;
+  const clusterCount = summary.clustersWithFeedback.length;
+  const svcCount = summary.servicesWithFeedback.length;
+  if (nsCount > 0) parts.push(`${nsCount} ns`);
+  if (clusterCount > 0) parts.push(`${clusterCount} cluster(s)`);
+  if (svcCount > 0) parts.push(`${svcCount} service(s)`);
+  return parts.length > 0 ? parts.join(', ') : 'No feedback';
+};
+
 const getFeedbackAdaptationProvenanceSubtext = (provenance: FeedbackAdaptationProvenance): string => {
   const { originalBonus, suppressedBonus, penaltyApplied, explanation, feedbackSummary } = provenance;
   
@@ -981,10 +1005,14 @@ const getFeedbackAdaptationProvenanceSubtext = (provenance: FeedbackAdaptationPr
   }
   
   if (feedbackSummary) {
-    parts.push(`Feedback: ${feedbackSummary}`);
+    // Handle both structured FeedbackSummary and legacy string shape
+    const summaryText = typeof feedbackSummary === 'string' 
+      ? feedbackSummary 
+      : formatFeedbackSummary(feedbackSummary);
+    parts.push(`Feedback: ${summaryText}`);
   }
   
-  return parts.length > 0 ? parts.join(" · ") : "Feedback adaptation applied";
+  return parts.length > 0 ? parts.join(' · ') : 'Feedback adaptation applied';
 };
 export const ProposalList = ({
   proposals,

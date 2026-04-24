@@ -266,6 +266,14 @@ class NextCheckCandidatePayload(TypedDict, total=False):
     feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
 
 
+class FeedbackSummaryPayload(TypedDict):
+    """Structured payload for feedback summary in provenance display."""
+    totalEntries: int
+    namespacesWithFeedback: list[str]
+    clustersWithFeedback: list[str]
+    servicesWithFeedback: list[str]
+
+
 class FeedbackAdaptationProvenancePayload(TypedDict, total=False):
     """Payload for feedback adaptation provenance data on next-check candidates/queue items."""
     feedbackAdaptation: bool
@@ -274,7 +282,7 @@ class FeedbackAdaptationProvenancePayload(TypedDict, total=False):
     suppressedBonus: int
     penaltyApplied: int
     explanation: str | None
-    feedbackSummary: str | None
+    feedbackSummary: FeedbackSummaryPayload | None
 
 
 class AlertmanagerProvenancePayload(TypedDict, total=False):
@@ -1352,7 +1360,13 @@ def _serialize_next_check_queue(
             if item.feedback_adaptation_provenance.explanation is not None:
                 feedback_provenance["explanation"] = item.feedback_adaptation_provenance.explanation
             if item.feedback_adaptation_provenance.feedback_summary is not None:
-                feedback_provenance["feedbackSummary"] = item.feedback_adaptation_provenance.feedback_summary
+                fs = item.feedback_adaptation_provenance.feedback_summary
+                feedback_provenance["feedbackSummary"] = {
+                    "totalEntries": fs.total_entries,
+                    "namespacesWithFeedback": list(fs.namespaces_with_feedback),
+                    "clustersWithFeedback": list(fs.clusters_with_feedback),
+                    "servicesWithFeedback": list(fs.services_with_feedback),
+                }
 
         entry: NextCheckQueueItemPayload = {
             "candidateId": item.candidate_id,
@@ -1639,7 +1653,13 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
         if view.feedback_adaptation_provenance.explanation is not None:
             feedback_provenance["explanation"] = view.feedback_adaptation_provenance.explanation
         if view.feedback_adaptation_provenance.feedback_summary is not None:
-            feedback_provenance["feedbackSummary"] = view.feedback_adaptation_provenance.feedback_summary
+            fs = view.feedback_adaptation_provenance.feedback_summary
+            feedback_provenance["feedbackSummary"] = {
+                "totalEntries": fs.total_entries,
+                "namespacesWithFeedback": list(fs.namespaces_with_feedback),
+                "clustersWithFeedback": list(fs.clusters_with_feedback),
+                "servicesWithFeedback": list(fs.services_with_feedback),
+            }
 
     payload: NextCheckCandidatePayload = {
         "description": view.description,
