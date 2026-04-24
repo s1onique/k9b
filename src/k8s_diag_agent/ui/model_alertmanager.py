@@ -13,6 +13,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from .model_primitives import (
+    _ORIGIN_LABELS,
+    _STATE_LABELS,
     _coerce_int,
     _coerce_optional_str,
     _coerce_str,
@@ -125,10 +127,6 @@ class AlertmanagerSourcesView:
     missing_count: int
     discovery_timestamp: str | None
     cluster_context: str | None
-
-
-# Re-export primitives for convenience in builder helpers
-from .model_primitives import _ORIGIN_LABELS, _STATE_LABELS  # noqa: E402
 
 
 def _build_alertmanager_evidence_reference_view(

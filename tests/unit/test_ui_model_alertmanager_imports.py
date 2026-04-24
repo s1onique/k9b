@@ -6,14 +6,12 @@ from k8s_diag_agent.ui.model after extraction to model_alertmanager.py.
 
 from __future__ import annotations
 
-import pytest
-
 from k8s_diag_agent.ui.model import (
     AlertmanagerCompactView,
     AlertmanagerEvidenceReferenceView,
     AlertmanagerProvenanceView,
-    AlertmanagerSourceView,
     AlertmanagerSourcesView,
+    AlertmanagerSourceView,
     ClusterAlertSummaryView,
     _build_alertmanager_compact_view,
     _build_alertmanager_evidence_reference_view,
@@ -27,37 +25,30 @@ class TestAlertmanagerImportsReExportedFromModel:
 
     def test_alertmanager_compact_view_importable(self) -> None:
         """AlertmanagerCompactView should be importable from model."""
-        from k8s_diag_agent.ui.model import AlertmanagerCompactView
         assert AlertmanagerCompactView is not None
 
     def test_alertmanager_evidence_reference_view_importable(self) -> None:
         """AlertmanagerEvidenceReferenceView should be importable from model."""
-        from k8s_diag_agent.ui.model import AlertmanagerEvidenceReferenceView
         assert AlertmanagerEvidenceReferenceView is not None
 
     def test_alertmanager_provenance_view_importable(self) -> None:
         """AlertmanagerProvenanceView should be importable from model."""
-        from k8s_diag_agent.ui.model import AlertmanagerProvenanceView
         assert AlertmanagerProvenanceView is not None
 
     def test_alertmanager_source_view_importable(self) -> None:
         """AlertmanagerSourceView should be importable from model."""
-        from k8s_diag_agent.ui.model import AlertmanagerSourceView
         assert AlertmanagerSourceView is not None
 
     def test_alertmanager_sources_view_importable(self) -> None:
         """AlertmanagerSourcesView should be importable from model."""
-        from k8s_diag_agent.ui.model import AlertmanagerSourcesView
         assert AlertmanagerSourcesView is not None
 
     def test_cluster_alert_summary_view_importable(self) -> None:
         """ClusterAlertSummaryView should be importable from model."""
-        from k8s_diag_agent.ui.model import ClusterAlertSummaryView
         assert ClusterAlertSummaryView is not None
 
     def test_build_alertmanager_compact_view_importable(self) -> None:
         """_build_alertmanager_compact_view should be importable from model."""
-        from k8s_diag_agent.ui.model import _build_alertmanager_compact_view
         assert _build_alertmanager_compact_view is not None
         assert callable(_build_alertmanager_compact_view)
 
