@@ -8,7 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+from .model_feedback import (
+    FeedbackAdaptationProvenanceView,
+    _build_feedback_adaptation_provenance_view,
+)
 from .model_primitives import (
+    _ORIGIN_LABELS,
+    _STATE_LABELS,
     _coerce_int,
     _coerce_optional_bool,
     _coerce_optional_int,
@@ -16,11 +22,8 @@ from .model_primitives import (
     _coerce_sequence,
     _coerce_str,
     _coerce_str_tuple,
-    _ORIGIN_LABELS,
     _serialize_map,
-    _STATE_COLOR_HINTS,
-    _STATE_LABELS,
-    _stringify,
+    _stringify,  # noqa: F401 - re-exported for test compatibility
     _value_from_mapping,
 )
 
@@ -367,31 +370,8 @@ class AlertmanagerProvenanceView:
     signal_status: str | None = None
 
 
-@dataclass(frozen=True)
-class FeedbackSummaryView:
-    """Structured feedback summary for provenance display.
-
-    Canonical shape for feedbackSummary across planner → backend → API → frontend.
-    Supports structured input (current) and legacy string input (backward compat).
-    """
-    total_entries: int = 0
-    namespaces_with_feedback: tuple[str, ...] = field(default_factory=tuple)
-    clusters_with_feedback: tuple[str, ...] = field(default_factory=tuple)
-    services_with_feedback: tuple[str, ...] = field(default_factory=tuple)
-    # Legacy fallback: preserved text when input was a legacy string
-    summary_text: str | None = None
 
 
-@dataclass(frozen=True)
-class FeedbackAdaptationProvenanceView:
-    """View model for feedback adaptation provenance tracking."""
-    feedback_adaptation: bool
-    adaptation_reason: str | None = None
-    original_bonus: int = 0
-    suppressed_bonus: int = 0
-    penalty_applied: int = 0
-    explanation: str | None = None
-    feedback_summary: FeedbackSummaryView | None = None
 
 
 @dataclass(frozen=True)
@@ -1807,56 +1787,6 @@ def _build_alertmanager_provenance_view(raw: object | None) -> AlertmanagerProve
     )
 
 
-def _build_feedback_summary_view(raw: object | None) -> FeedbackSummaryView | None:
-    """Build FeedbackSummaryView from raw JSON data (structured feedback_summary)."""
-    if not isinstance(raw, Mapping):
-        return None
-    return FeedbackSummaryView(
-        total_entries=_coerce_int(raw.get("total_entries") or raw.get("totalEntries") or 0),
-        namespaces_with_feedback=_coerce_str_tuple(
-            raw.get("namespaces_with_feedback") or raw.get("namespacesWithFeedback")
-        ),
-        clusters_with_feedback=_coerce_str_tuple(
-            raw.get("clusters_with_feedback") or raw.get("clustersWithFeedback")
-        ),
-        services_with_feedback=_coerce_str_tuple(
-            raw.get("services_with_feedback") or raw.get("servicesWithFeedback")
-        ),
-    )
-
-
-def _build_feedback_adaptation_provenance_view(
-    raw: object | None,
-) -> FeedbackAdaptationProvenanceView | None:
-    """Build FeedbackAdaptationProvenanceView from raw JSON data.
-    
-    Handles both:
-    - Structured shape (current): feedback_summary is an object with fields
-    - Legacy string shape (backward compat): feedback_summary is a string
-    """
-    if not isinstance(raw, Mapping):
-        return None
-    
-    # Parse feedback_summary - handle both structured object and legacy string
-    feedback_summary_raw = raw.get("feedback_summary") or raw.get("feedbackSummary")
-    feedback_summary: FeedbackSummaryView | None = None
-    if feedback_summary_raw is not None:
-        if isinstance(feedback_summary_raw, Mapping):
-            # Structured shape (current)
-            feedback_summary = _build_feedback_summary_view(feedback_summary_raw)
-        elif isinstance(feedback_summary_raw, str) and feedback_summary_raw.strip():
-            # Legacy string shape - preserve the original text in summary_text field
-            feedback_summary = FeedbackSummaryView(summary_text=feedback_summary_raw.strip())
-    
-    return FeedbackAdaptationProvenanceView(
-        feedback_adaptation=bool(raw.get("feedbackAdaptation") or raw.get("feedback_adaptation")),
-        adaptation_reason=_coerce_optional_str(raw.get("adaptationReason") or raw.get("adaptation_reason")),
-        original_bonus=_coerce_int(raw.get("originalBonus") or raw.get("original_bonus") or 0),
-        suppressed_bonus=_coerce_int(raw.get("suppressedBonus") or raw.get("suppressed_bonus") or 0),
-        penalty_applied=_coerce_int(raw.get("penaltyApplied") or raw.get("penalty_applied") or 0),
-        explanation=_coerce_optional_str(raw.get("explanation")),
-        feedback_summary=feedback_summary,
-    )
 
 
 def _build_alertmanager_compact_view(raw: object | None) -> AlertmanagerCompactView | None:
