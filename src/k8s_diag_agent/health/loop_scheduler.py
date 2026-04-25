@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
-    pass
+    from .loop import HealthRunConfig
 
 
 # Module-level constants
@@ -158,6 +158,8 @@ class HealthLoopScheduler:
 
         self._scripts_dir = scripts_dir
         self._run_health_loop_fn = run_health_loop_fn
+        # Store config reference for effective config logging at startup
+        self._run_config: HealthRunConfig | None = None
 
     def _log_event(self, severity: str, message: str, **metadata: Any) -> None:
         """Emit a structured log event for the scheduler."""
@@ -864,6 +866,29 @@ class HealthLoopScheduler:
             event="diag-pack-generated",
         )
 
+
+    def _log_effective_scheduler_config(self) -> None:
+        """Emit the effective scheduler configuration log event.
+
+        This is called once at startup, after config/env has been resolved
+        but before the first run begins.
+        """
+        from .loop_config_logging import _log_effective_scheduler_config as _emit_config_log
+
+        config = self._run_config
+        if config is None:
+            # Config not available - skip logging to avoid errors
+            return
+
+        _emit_config_log(
+            config=config,
+            interval_seconds=self._interval_seconds,
+            max_runs=self._max_runs,
+            run_once=self._run_once,
+            log_fn=self._log_event,
+        )
+
+
     def run(self) -> int:
         """Execute the scheduler loop, running health loops at configured intervals."""
         from .loop_history import _build_runtime_run_id
@@ -876,6 +901,8 @@ class HealthLoopScheduler:
             max_runs=self._max_runs,
             run_once=self._run_once,
         )
+        # Emit effective scheduler config log (one-time startup event)
+        self._log_effective_scheduler_config()
         _run_health_loop = self._run_health_loop_fn
         try:
             while True:
@@ -1015,6 +1042,8 @@ def schedule_health_loop(
         run_health_loop_fn=run_health_loop,
         run_label=config.run_label,
     )
+    # Pass config to scheduler for effective config logging
+    scheduler._run_config = config
     return scheduler.run()
 
 
