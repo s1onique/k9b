@@ -37,15 +37,25 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
     pod_lines = [f"{pod.namespace}/{pod.name} ({pod.phase}) reason={pod.reason}" for pod in artifact.non_running_pods]
     rollout_lines = [f"{entry.kind} {entry.namespace}/{entry.name}: desired={entry.desired_replicas}, available={entry.available_replicas}, unavailable={entry.unavailable_replicas}" for entry in artifact.rollout_status]
 
+    # Schema reminder matching AssessorAssessment.from_dict() required fields:
+    # - observed_signals[].id, description, layer, evidence_id, severity
+    # - findings[].description, supporting_signals, layer
+    # - hypotheses[].description, confidence, probable_layer, what_would_falsify
+    # - next_evidence_to_collect[].description, owner, method, evidence_needed
+    # - recommended_action.type, description, references, safety_level
     schema_reminder = (
-        '{"observed_signals": [{"id": "signal-1", "description": "Brief signal.", '
-        '"layer": "workload|control-plane|network|storage", "severity": "info|warning|critical"}], '
-        '"findings": [{"description": "Brief finding.", "layer": "workload|control-plane|network|storage"}], '
+        '{"observed_signals": [{"id": "sig-1", "description": "Brief signal.", '
+        '"layer": "workload|control-plane|network|storage", "evidence_id": "evt-1", '
+        '"severity": "info|warning|critical"}], '
+        '"findings": [{"description": "Brief finding.", "supporting_signals": ["sig-1"], '
+        '"layer": "workload|control-plane|network|storage"}], '
         '"hypotheses": [{"description": "Brief hypothesis.", "confidence": "low|medium|high", '
         '"probable_layer": "node|control-plane|workload|network|storage", '
         '"what_would_falsify": "Brief falsification check."}], '
-        '"next_evidence_to_collect": [{"description": "Brief diagnostic query.", "method": "kubectl|api|logs|metrics"}], '
-        '"recommended_action": {"type": "observation|mitigation|rollback", "description": "Brief action.", '
+        '"next_evidence_to_collect": [{"description": "Brief diagnostic query.", "owner": "platform-engineer", '
+        '"method": "kubectl|api|logs|metrics", "evidence_needed": ["kubectl top pod"]}], '
+        '"recommended_action": {"type": "observation|mitigation|rollback", '
+        '"description": "Brief action.", "references": ["sig-1"], '
         '"safety_level": "low-risk|change-with-caution|potentially-disruptive"}, '
         '"safety_level": "low-risk|change-with-caution|potentially-disruptive", '
         '"probable_layer_of_origin": "workload|node|control-plane|network|storage", '

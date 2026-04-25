@@ -7,11 +7,7 @@ from datetime import UTC, datetime
 
 from k8s_diag_agent.health.drilldown import DrilldownArtifact
 from k8s_diag_agent.llm.drilldown_prompts import build_drilldown_prompt
-from k8s_diag_agent.llm.llamacpp_provider import (
-    DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN,
-    LLMFailureMetadata,
-    LLMResponseParseError,
-)
+from k8s_diag_agent.llm.llamacpp_provider import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, LLMFailureMetadata, LLMResponseParseError
 
 
 def _make_drilldown() -> DrilldownArtifact:
@@ -115,6 +111,40 @@ class TestPromptContainsBoundsConstraints(unittest.TestCase):
         """Test prompt contains Constraint: directive."""
         prompt = build_drilldown_prompt(_make_drilldown())
         self.assertIn("Constraint:", prompt)
+
+
+class TestPromptContainsRequiredSchemaFields(unittest.TestCase):
+    """Test auto-drilldown prompt schema reminder includes all required fields."""
+
+    def test_prompt_contains_evidence_id_in_observed_signals(self) -> None:
+        """Test prompt schema reminder includes evidence_id for observed_signals."""
+        prompt = build_drilldown_prompt(_make_drilldown())
+        # evidence_id is required for AssessorSignal.from_dict()
+        self.assertIn("evidence_id", prompt)
+
+    def test_prompt_contains_supporting_signals_in_findings(self) -> None:
+        """Test prompt schema reminder includes supporting_signals for findings."""
+        prompt = build_drilldown_prompt(_make_drilldown())
+        # supporting_signals is included to keep the model output aligned with the compact schema and stable shape
+        self.assertIn("supporting_signals", prompt)
+
+    def test_prompt_contains_owner_in_next_evidence_to_collect(self) -> None:
+        """Test prompt schema reminder includes owner for next_evidence_to_collect."""
+        prompt = build_drilldown_prompt(_make_drilldown())
+        # owner is required for AssessorNextCheck.from_dict()
+        self.assertIn("owner", prompt)
+
+    def test_prompt_contains_evidence_needed_in_next_evidence_to_collect(self) -> None:
+        """Test prompt schema reminder includes evidence_needed for next_evidence_to_collect."""
+        prompt = build_drilldown_prompt(_make_drilldown())
+        # evidence_needed is included to keep the model output aligned with the compact schema and stable shape
+        self.assertIn("evidence_needed", prompt)
+
+    def test_prompt_contains_references_in_recommended_action(self) -> None:
+        """Test prompt schema reminder includes references for recommended_action."""
+        prompt = build_drilldown_prompt(_make_drilldown())
+        # references is included to keep the model output aligned with the compact schema and stable shape
+        self.assertIn("references", prompt)
 
 
 class TestDefaultMaxTokens(unittest.TestCase):

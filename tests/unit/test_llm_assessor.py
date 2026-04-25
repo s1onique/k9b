@@ -10,13 +10,7 @@ from unittest.mock import patch
 import requests
 
 from k8s_diag_agent.cli import main
-from k8s_diag_agent.collect.cluster_snapshot import (
-    ClusterSnapshot,
-    ClusterSnapshotMetadata,
-    CollectionStatus,
-    CRDRecord,
-    HelmReleaseRecord,
-)
+from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot, ClusterSnapshotMetadata, CollectionStatus, CRDRecord, HelmReleaseRecord
 from k8s_diag_agent.compare.two_cluster import ComparisonIntentMetadata, compare_snapshots
 from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
 from k8s_diag_agent.llm.llamacpp_provider import LlamaCppProvider, LlamaCppProviderConfig
@@ -210,6 +204,107 @@ class AssessorSchemaTest(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("recommended_action", message)
         self.assertIn("str", message)
+
+    def test_observed_signals_requires_evidence_id(self) -> None:
+        """Test that observed_signals entries require evidence_id field."""
+        payload = _mock_assessment_payload()
+        # Remove evidence_id from observed_signals[0]
+        del payload["observed_signals"][0]["evidence_id"]
+        with self.assertRaises(ValueError) as ctx:
+            AssessorAssessment.from_dict(payload)
+        message = str(ctx.exception)
+        self.assertIn("evidence_id", message)
+
+    def test_findings_defaults_empty_when_supporting_signals_missing(self) -> None:
+        """Test that findings entries default supporting_signals to empty list when missing."""
+        payload = _mock_assessment_payload()
+        # Remove supporting_signals from findings[0] - should default to empty list
+        del payload["findings"][0]["supporting_signals"]
+        # Should NOT raise - supporting_signals defaults to empty list
+        assessment = AssessorAssessment.from_dict(payload)
+        self.assertEqual(len(assessment.findings), 1)
+        self.assertEqual(assessment.findings[0].supporting_signals, [])
+
+    def test_next_evidence_to_collect_requires_owner(self) -> None:
+        """Test that next_evidence_to_collect entries require owner field."""
+        payload = _mock_assessment_payload()
+        # Remove owner from next_evidence_to_collect[0]
+        del payload["next_evidence_to_collect"][0]["owner"]
+        with self.assertRaises(ValueError) as ctx:
+            AssessorAssessment.from_dict(payload)
+        message = str(ctx.exception)
+        self.assertIn("owner", message)
+
+    def test_next_evidence_to_collect_defaults_evidence_needed_to_empty(self) -> None:
+        """Test that next_evidence_to_collect entries default evidence_needed to empty list when missing."""
+        payload = _mock_assessment_payload()
+        # Remove evidence_needed from next_evidence_to_collect[0] - should default to empty list
+        del payload["next_evidence_to_collect"][0]["evidence_needed"]
+        # Should NOT raise - evidence_needed defaults to empty list
+        assessment = AssessorAssessment.from_dict(payload)
+        self.assertEqual(len(assessment.next_evidence_to_collect), 1)
+        self.assertEqual(assessment.next_evidence_to_collect[0].evidence_needed, [])
+
+    def test_recommended_action_defaults_references_to_empty(self) -> None:
+        """Test that recommended_action defaults references to empty list when missing."""
+        payload = _mock_assessment_payload()
+        # Remove references from recommended_action - should default to empty list
+        del payload["recommended_action"]["references"]
+        # Should NOT raise - references defaults to empty list
+        assessment = AssessorAssessment.from_dict(payload)
+        self.assertIsNotNone(assessment.recommended_action)
+        self.assertEqual(assessment.recommended_action.references, [])
+
+    def test_minimal_valid_assessment_with_all_required_fields(self) -> None:
+        """Test that a minimal valid assessment with all required fields parses successfully."""
+        minimal_payload = {
+            "observed_signals": [
+                {
+                    "id": "sig-1",
+                    "description": "A signal",
+                    "layer": "workload",
+                    "evidence_id": "evt-1",
+                    "severity": "info",
+                }
+            ],
+            "findings": [
+                {
+                    "description": "A finding",
+                    "supporting_signals": ["sig-1"],
+                    "layer": "workload",
+                }
+            ],
+            "hypotheses": [
+                {
+                    "description": "A hypothesis",
+                    "confidence": "low",
+                    "probable_layer": "workload",
+                    "what_would_falsify": "Nothing",
+                }
+            ],
+            "next_evidence_to_collect": [
+                {
+                    "description": "A check",
+                    "owner": "engineer",
+                    "method": "kubectl",
+                    "evidence_needed": ["data"],
+                }
+            ],
+            "recommended_action": {
+                "type": "observation",
+                "description": "An action",
+                "references": ["sig-1"],
+                "safety_level": "low-risk",
+            },
+            "safety_level": "low-risk",
+        }
+        # Should not raise
+        assessment = AssessorAssessment.from_dict(minimal_payload)
+        self.assertEqual(len(assessment.observed_signals), 1)
+        self.assertEqual(len(assessment.findings), 1)
+        self.assertEqual(len(assessment.hypotheses), 1)
+        self.assertEqual(len(assessment.next_evidence_to_collect), 1)
+        self.assertIsNotNone(assessment.recommended_action)
 
 
 class PromptBuilderTest(unittest.TestCase):
