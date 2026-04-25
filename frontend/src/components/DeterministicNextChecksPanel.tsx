@@ -322,7 +322,7 @@ export function DeterministicNextChecksPanel({
       ) : (
         <div className="deterministic-empty-state">
           <p className="muted small">No evidence-based checks are available for this run.</p>
-          <p className="muted tiny">Review the cluster detail for evidence-based checks to promote.</p>
+          <p className="muted tiny">Deterministic suggestions are unavailable for this selected run. Use the Work list below for the full queue of planner candidates.</p>
         </div>
       )}
     </section>

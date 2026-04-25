@@ -419,6 +419,22 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     }
   }, [selectedRunId, latestRunId]);
 
+  // Guard: If the selected run is no longer in the runs list (stale localStorage),
+  // fall back to the latest run. This handles cases where:
+  // - Historical runs were deleted
+  // - localStorage references a run_id that no longer exists
+  // - The selected run was invalidated server-side
+  useEffect(() => {
+    if (!selectedRunId || runs.length === 0) {
+      return;
+    }
+    const runExists = runs.some((r) => r.runId === selectedRunId);
+    if (!runExists && latestRunId) {
+      // Selected run is stale - fall back to latest
+      setSelectedRunIdState(latestRunId);
+    }
+  }, [selectedRunId, runs, latestRunId]);
+
   // Auto-refresh polling for runs list - polls the runs list endpoint
   // to surface new runs without requiring a full browser reload.
   useEffect(() => {
