@@ -1,0 +1,34 @@
+{
+  "choices": [
+    {
+      "text": "Return exactly this JSON and nothing else: {\"ok\": true}\nReturn exactly this JSON and nothing else: {\"ok\": true}\nReturn exactly this JSON and nothing else: {\"ok\": true}\nReturn exactly this JSON and nothing else: {\"ok\": true}\nReturn exactly this JSON and nothing else:",
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "length"
+    }
+  ],
+  "created": 1777120250,
+  "model": "model.gguf",
+  "system_fingerprint": "b8925-0adede866",
+  "object": "text_completion",
+  "usage": {
+    "completion_tokens": 64,
+    "prompt_tokens": 14,
+    "total_tokens": 78,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-Oqnst8TLBxyeLW5uuN3RlrPKrOXKoySB",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 14,
+    "prompt_ms": 53.98,
+    "prompt_per_token_ms": 3.8557142857142854,
+    "prompt_per_second": 259.35531678399406,
+    "predicted_n": 64,
+    "predicted_ms": 1513.004,
+    "predicted_per_token_ms": 23.6406875,
+    "predicted_per_second": 42.299954263174456
+  }
+}

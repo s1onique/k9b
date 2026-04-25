@@ -76,6 +76,7 @@ class LlamaCppProviderConfig:
     max_tokens_auto_drilldown: int = DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
     max_tokens_review_enrichment: int = DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
     response_format_json: bool = False
+    enable_thinking: bool = False
     # Generation settings for structured JSON output
     temperature: float | None = 0.0
     top_p: float | None = None
@@ -83,6 +84,20 @@ class LlamaCppProviderConfig:
     repeat_penalty: float | None = None
     seed: int | None = None
     stop: tuple[str, ...] | None = None
+
+    @staticmethod
+    def _parse_enable_thinking(value: str | None) -> bool:
+        """Parse enable_thinking from env var, defaulting to False."""
+        if value is None:
+            return False
+        trimmed = value.strip().lower()
+        if trimmed in ("true", "1", "yes"):
+            return True
+        if trimmed in ("false", "0", "no", ""):
+            return False
+        # Unknown value - default to False for safety
+        return False
+
 
     @property
     def endpoint(self) -> str:
@@ -105,6 +120,8 @@ class LlamaCppProviderConfig:
             settings["seed"] = self.seed
         if self.stop is not None:
             settings["stop_count"] = len(self.stop)
+        # Always include enable_thinking to reflect the config value
+        settings["enable_thinking"] = self.enable_thinking
         return settings
 
     @classmethod
@@ -138,6 +155,7 @@ class LlamaCppProviderConfig:
         repeat_penalty = cls._parse_repeat_penalty(source.get("LLAMA_CPP_REPEAT_PENALTY"))
         seed = cls._parse_seed(source.get("LLAMA_CPP_SEED"))
         stop = cls._parse_stop(source.get("LLAMA_CPP_STOP"))
+        enable_thinking = cls._parse_enable_thinking(source.get("LLAMA_CPP_ENABLE_THINKING"))
         return cls(
             base_url=base_url,
             model=model,
@@ -152,8 +170,10 @@ class LlamaCppProviderConfig:
             repeat_penalty=repeat_penalty,
             seed=seed,
             stop=stop,
+            enable_thinking=enable_thinking,
         )
     @staticmethod
+
     def _parse_timeout(value: str | None) -> int:
         if value is None:
             return DEFAULT_TIMEOUT_SECONDS
@@ -339,6 +359,10 @@ class LlamaCppProvider(LLMProvider):
             payload["seed"] = config.seed
         if config.stop is not None:
             payload["stop"] = list(config.stop)
+        # Disable thinking mode for Qwen-based models
+        payload["chat_template_kwargs"] = {
+            "enable_thinking": config.enable_thinking
+        }
         return payload
 
     def _request_headers(self, config: LlamaCppProviderConfig) -> dict[str, str]:

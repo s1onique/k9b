@@ -5,6 +5,17 @@ BASE_URL="${LLAMA_CPP_BASE_URL:-http://192.168.99.134:32597}"
 MODEL="${LLAMA_CPP_MODEL:-openai/qwen}"
 OUT_DIR="${OUT_DIR:-runs/llamacpp-checks/$(date -u +%Y%m%dT%H%M%SZ)}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-90}"
+ENABLE_THINKING="${LLAMA_CPP_ENABLE_THINKING:-false}"
+
+# Normalize LLAMA_CPP_ENABLE_THINKING to valid JSON boolean
+_normalize_enable_thinking() {
+  local val="${1:-false}"
+  case "${val,,}" in
+    true|1|yes) echo "true" ;;
+    *) echo "false" ;;
+  esac
+}
+ENABLE_THINKING_JSON="$(_normalize_enable_thinking "$ENABLE_THINKING")"
 
 mkdir -p "$OUT_DIR"
 
@@ -162,6 +173,7 @@ main() {
   log "MODEL=$MODEL"
   log "OUT_DIR=$OUT_DIR"
   log "TIMEOUT_SECONDS=$TIMEOUT_SECONDS"
+  log "ENABLE_THINKING=$ENABLE_THINKING_JSON"
 
   local required_failures=0
   local diagnostic_failures=0
@@ -179,7 +191,10 @@ main() {
     }
   ],
   "temperature": 0,
-  "max_tokens": 64
+  "max_tokens": 64,
+  "chat_template_kwargs": {
+    "enable_thinking": $ENABLE_THINKING_JSON
+  }
 }
 JSON
 )"
@@ -199,7 +214,10 @@ JSON
   "top_p": 0.8,
   "repeat_penalty": 1.15,
   "seed": 42,
-  "max_tokens": 64
+  "max_tokens": 64,
+  "chat_template_kwargs": {
+    "enable_thinking": $ENABLE_THINKING_JSON
+  }
 }
 JSON
 )"
@@ -219,6 +237,9 @@ JSON
   "max_tokens": 64,
   "response_format": {
     "type": "json_object"
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": $ENABLE_THINKING_JSON
   }
 }
 JSON

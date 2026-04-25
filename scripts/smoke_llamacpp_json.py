@@ -89,6 +89,7 @@ def run_smoke_test() -> dict[str, Any]:
             "repeat_penalty": config.repeat_penalty,
             "seed": config.seed,
             "stop_count": len(config.stop) if config.stop else 0,
+            "enable_thinking": config.enable_thinking,
         }
         result["max_tokens"] = max_tokens
         

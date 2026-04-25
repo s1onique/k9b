@@ -1,0 +1,21 @@
+URL=http://192.168.99.134:32597/v1/chat/completions
+PAYLOAD={
+  "model": "openai/qwen",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Return exactly this JSON and nothing else: {\"ok\": true}"
+    }
+  ],
+  "temperature": 0,
+  "top_p": 0.8,
+  "repeat_penalty": 1.15,
+  "seed": 42,
+  "max_tokens": 64,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  }
+}
+curl_exit_code=0
+finish_reason=stop
+content_valid_json=true

@@ -1,0 +1,8 @@
+{
+  "base_url": "http://192.168.99.134:32597",
+  "model": "openai/qwen",
+  "out_dir": "runs/llamacpp-checks/20260425T123042Z",
+  "required_failures": 0,
+  "diagnostic_failures": 1,
+  "overall_status": "PASS"
+}

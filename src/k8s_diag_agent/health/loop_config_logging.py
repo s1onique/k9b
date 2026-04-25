@@ -268,6 +268,7 @@ def _add_llamacpp_fields(metadata: dict[str, Any]) -> None:
         metadata["llamacpp_seed"] = llamacpp_config.seed
     if llamacpp_config.stop is not None:
         metadata["llamacpp_stop_count"] = len(llamacpp_config.stop)
+    metadata["llamacpp_enable_thinking"] = llamacpp_config.enable_thinking
 
     # API key presence indicator (never log the actual key)
     if llamacpp_config.api_key:

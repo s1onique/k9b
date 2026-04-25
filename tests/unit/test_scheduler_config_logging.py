@@ -385,6 +385,41 @@ class TestLlamaCppFieldsDirectly(unittest.TestCase):
         self.assertEqual(metadata.get("llamacpp_seed"), 42)
         self.assertEqual(metadata.get("llamacpp_stop_count"), 2)
 
+
+    def test_llamacpp_enable_thinking_defaults_false(self) -> None:
+        """Test that enable_thinking defaults to False."""
+        os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"
+        os.environ["LLAMA_CPP_MODEL"] = "llama3"
+        # Do not set LLAMA_CPP_ENABLE_THINKING - should default to False
+
+
+        metadata: dict = {}
+        _add_llamacpp_fields(metadata)
+
+        self.assertFalse(metadata.get("llamacpp_enable_thinking"))
+
+    def test_llamacpp_enable_thinking_true(self) -> None:
+        """Test that enable_thinking=true is captured."""
+        os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"
+        os.environ["LLAMA_CPP_MODEL"] = "llama3"
+        os.environ["LLAMA_CPP_ENABLE_THINKING"] = "true"
+
+        metadata: dict = {}
+        _add_llamacpp_fields(metadata)
+
+        self.assertTrue(metadata.get("llamacpp_enable_thinking"))
+
+    def test_llamacpp_enable_thinking_false(self) -> None:
+        """Test that enable_thinking=false is captured."""
+        os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"
+        os.environ["LLAMA_CPP_MODEL"] = "llama3"
+        os.environ["LLAMA_CPP_ENABLE_THINKING"] = "false"
+
+        metadata: dict = {}
+        _add_llamacpp_fields(metadata)
+
+        self.assertFalse(metadata.get("llamacpp_enable_thinking"))
+
     def test_llamacpp_stop_count_only_no_content(self) -> None:
         """Test that stop sequences count is logged but not content."""
         os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"

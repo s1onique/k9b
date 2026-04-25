@@ -401,6 +401,40 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         self.assertIn("stop", session.last_payload)
         self.assertEqual(session.last_payload["stop"], ["END", "STOP"])
 
+
+    def test_assess_includes_chat_template_kwargs_enable_thinking_false(self) -> None:
+        """Test that assess includes chat_template_kwargs.enable_thinking=false by default."""
+        response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+        session = _CapturingSession(response)
+        config = LlamaCppProviderConfig(
+            base_url="http://example.com/api",
+            model="test-model",
+        )
+        provider = LlamaCppProvider(
+            config=config,
+            session_factory=lambda: cast(requests.Session, session),
+        )
+        provider.assess("prompt", _dummy_payload(), validate_schema=False)
+        self.assertIn("chat_template_kwargs", session.last_payload)
+        self.assertEqual(session.last_payload["chat_template_kwargs"]["enable_thinking"], False)
+
+    def test_assess_includes_chat_template_kwargs_enable_thinking_true(self) -> None:
+        """Test that assess includes chat_template_kwargs.enable_thinking=true when configured."""
+        response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+        session = _CapturingSession(response)
+        config = LlamaCppProviderConfig(
+            base_url="http://example.com/api",
+            model="test-model",
+            enable_thinking=True,
+        )
+        provider = LlamaCppProvider(
+            config=config,
+            session_factory=lambda: cast(requests.Session, session),
+        )
+        provider.assess("prompt", _dummy_payload(), validate_schema=False)
+        self.assertIn("chat_template_kwargs", session.last_payload)
+        self.assertEqual(session.last_payload["chat_template_kwargs"]["enable_thinking"], True)
+
     def test_assess_omits_temperature_when_none(self) -> None:
         """Test that assess omits temperature when it's None (not default 0.0)."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
@@ -478,7 +512,7 @@ class TestGenerationSettingsProperty(unittest.TestCase):
         )
         # Only temperature has a non-None default (0.0)
         settings = config.generation_settings
-        self.assertEqual(settings, {"temperature": 0.0})
+        self.assertEqual(settings, {"temperature": 0.0, "enable_thinking": False})
 
     def test_generation_settings_includes_non_none_values(self) -> None:
         """Test that generation_settings includes all non-None values."""

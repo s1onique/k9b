@@ -35,6 +35,7 @@ services:
       KUBECONFIG: /app/kubeconfig/config
       PYTHONPATH: /app/src
       HEALTH_BUILD_DIAGNOSTIC_PACK: 1
+      LLAMA_CPP_ENABLE_THINKING: false
     volumes:
       - ./runs:/app/runs
       - ./podman/kubeconfig:/app/kubeconfig:Z

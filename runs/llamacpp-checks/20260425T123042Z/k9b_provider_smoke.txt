@@ -1,0 +1,20 @@
+llama.cpp JSON Smoke Test
+==================================================
+Success: True
+Response parsed: True
+Elapsed: 60854ms
+Failure class: None
+Exception type: None
+Response prefix: {"ok": true}
+
+Generation settings used:
+  temperature: 0.0
+  top_p: None
+  top_k: None
+  repeat_penalty: None
+  seed: None
+  stop_count: 0
+  enable_thinking: False
+
+==================================================
+SMOKE TEST: PASSED
