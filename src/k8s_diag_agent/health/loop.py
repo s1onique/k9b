@@ -2497,6 +2497,13 @@ class HealthLoopRunner:
             payload: dict[str, object] | None = None
             error_summary: str | None = None
             skip_reason: str | None = None
+            # Build actual prompt first for exact measurement.
+            # Note: assess_drilldown_artifact() also builds the prompt internally.
+            # Since build_drilldown_prompt() is deterministic, the measured chars
+            # should match the actual prompt sent to the LLM.
+            from ..llm.drilldown_prompts import build_drilldown_prompt
+            actual_prompt = build_drilldown_prompt(drilldown)
+            actual_prompt_chars = len(actual_prompt) if actual_prompt else 0
             try:
                 assessment = assess_drilldown_artifact(drilldown, provider_name=provider_name)
                 payload = assessment.to_dict()
@@ -2514,11 +2521,48 @@ class HealthLoopRunner:
                 skip_reason = str(exc)
                 error_summary = None
                 payload = None
+                failure_metadata: dict[str, object] | None = None
             except Exception as exc:
                 status = ExternalAnalysisStatus.FAILED
                 summary = str(exc)
                 error_summary = str(exc)
                 payload = None
+                # Build prompt diagnostics for failure logging and artifact
+                elapsed_ms = int((time.perf_counter() - start) * 1000)
+                from .drilldown_assessor import build_drilldown_prompt_diagnostics
+                try:
+                    prompt_diags = build_drilldown_prompt_diagnostics(
+                        drilldown,
+                        provider_name=provider_name,
+                        actual_prompt_chars=actual_prompt_chars,
+                        elapsed_ms=elapsed_ms,
+                        failure_class="llm_adapter_error",
+                        exception_type=exc.__class__.__name__,
+                    )
+                    # Log structured diagnostics for failure observability
+                    self._log_event(
+                        "llm-prompt-diagnostics",
+                        "ERROR",
+                        "Auto-drilldown LLM call failed",
+                        operation=prompt_diags.get("operation"),
+                        provider=prompt_diags.get("provider"),
+                        prompt_chars=prompt_diags.get("prompt_chars"),
+                        prompt_tokens_estimate=prompt_diags.get("prompt_tokens_estimate"),
+                        actual_prompt_chars=prompt_diags.get("actual_prompt_chars"),
+                        actual_prompt_tokens_estimate=prompt_diags.get("actual_prompt_tokens_estimate"),
+                        section_coverage_ratio=prompt_diags.get("section_coverage_ratio"),
+                        prompt_section_count=prompt_diags.get("prompt_section_count"),
+                        top_prompt_sections=[
+                            s.get("name") for s in prompt_diags.get("top_prompt_sections", [])
+                        ],
+                        elapsed_ms=elapsed_ms,
+                        failure_class="llm_adapter_error",
+                        exception_type=exc.__class__.__name__,
+                    )
+                    failure_metadata = {"prompt_diagnostics": prompt_diags}
+                except Exception:  # noqa: BLE001
+                    # If diagnostics extraction fails, log with fallback
+                    failure_metadata = None
             duration_ms = int((time.perf_counter() - start) * 1000)
             artifact = ExternalAnalysisArtifact(
                 tool_name="llm-autodrilldown",
@@ -2539,6 +2583,7 @@ class HealthLoopRunner:
                 payload=payload,
                 error_summary=error_summary,
                 skip_reason=skip_reason,
+                failure_metadata=failure_metadata,
             )
             write_external_analysis_artifact(artifact_path, artifact)
             severity = (
