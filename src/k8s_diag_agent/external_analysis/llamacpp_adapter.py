@@ -11,6 +11,7 @@ from typing import Any
 from ..llm.base import LLMAssessmentInput
 from ..llm.llamacpp_provider import (
     _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
+    DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT,
     DEFAULT_TIMEOUT_SECONDS,
     LlamaCppProvider,
     LlamaCppProviderConfig,
@@ -144,11 +145,17 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             )
         prompt, payload = self._prepare_provider_request(request)
         try:
+            review_enrichment_max_tokens = (
+                self._http_provider._config.max_tokens_review_enrichment
+                if self._http_provider and self._http_provider._config
+                else DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
+            )
             assessment = self._http_provider.assess(
                 prompt,
                 payload,
                 validate_schema=False,
                 system_instructions=_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
+                max_tokens=review_enrichment_max_tokens,
             )
             parsed = ReviewEnrichmentPayload.from_dict(assessment)
             duration_ms = int((time.perf_counter() - start) * 1000)

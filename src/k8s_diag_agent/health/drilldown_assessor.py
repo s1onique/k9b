@@ -12,11 +12,52 @@ from ..security import sanitize_payload
 from .drilldown import DrilldownArtifact
 
 
-def assess_drilldown_artifact(artifact: DrilldownArtifact, provider_name: str = "default") -> AssessorAssessment:
-    """Run the named provider against a drilldown artifact."""
+def resolve_drilldown_max_tokens(
+    provider_name: str,
+    explicit_max_tokens: int | None = None,
+) -> int | None:
+    """Resolve max_tokens for drilldown artifact assessment.
 
+
+    This helper avoids importing get_provider or LlamaCppProvider in health/loop.py
+    by encapsulating provider resolution logic here.
+
+
+    Args:
+        provider_name: The LLM provider name (e.g., "llamacpp").
+        explicit_max_tokens: Explicit max_tokens value if provided by caller.
+
+
+    Returns:
+        The explicit_max_tokens if provided, otherwise the provider-specific
+        default from LlamaCppProvider.max_tokens_for_operation("auto-drilldown"),
+        or None if provider doesn't support auto-drilldown max_tokens.
+    """
+    if explicit_max_tokens is not None:
+        return explicit_max_tokens
+    if provider_name != "llamacpp":
+        return None
+    from ..llm.llamacpp_provider import LlamaCppProvider
+    from ..llm.provider import get_provider
+    prov = get_provider(provider_name)
+    if isinstance(prov, LlamaCppProvider):
+        return prov.max_tokens_for_operation("auto-drilldown")
+    return None
+
+
+
+
+
+def assess_drilldown_artifact(
+    artifact: DrilldownArtifact,
+    provider_name: str = "default",
+    *,
+    max_tokens: int | None = None,
+) -> AssessorAssessment:
+    """Run the named provider against a drilldown artifact."""
     prompt = build_drilldown_prompt(artifact)
     provider = get_provider(provider_name)
+
     differences: dict[str, object] = {
         reason: artifact.evidence_summary for reason in artifact.trigger_reasons
     }
@@ -35,7 +76,13 @@ def assess_drilldown_artifact(artifact: DrilldownArtifact, provider_name: str = 
         comparison_metadata=None,
         collection_statuses=sanitize_payload({"drilldown": artifact.collection_timestamps}),
     )
-    raw_assessment = provider.assess(prompt, payload)
+    # Use provider-specific max_tokens if not explicitly provided
+    effective_max_tokens = max_tokens
+    if effective_max_tokens is None and provider_name == "llamacpp":
+        from ..llm.llamacpp_provider import LlamaCppProvider
+        if isinstance(provider, LlamaCppProvider):
+            effective_max_tokens = provider.max_tokens_for_operation("auto-drilldown")
+    raw_assessment = provider.assess(prompt, payload, max_tokens=effective_max_tokens)
     return AssessorAssessment.from_dict(raw_assessment)
 
 
@@ -142,6 +189,7 @@ def build_drilldown_prompt_diagnostics(
     provider_name: str = "llamacpp",
     *,
     actual_prompt_chars: int | None = None,
+    max_tokens: int | None = None,
     timeout_seconds: int | None = None,
     elapsed_ms: int | None = None,
     failure_class: str | None = None,
@@ -153,11 +201,13 @@ def build_drilldown_prompt_diagnostics(
     and computes diagnostics. If actual_prompt_chars is provided, uses exact
     measurement from the actual prompt sent to the LLM.
 
+
     Args:
         artifact: The drilldown artifact
         provider_name: The LLM provider name
         actual_prompt_chars: Exact character count of the actual prompt sent to LLM.
                            If None, uses section-based measurement.
+        max_tokens: The max_tokens completion budget if any
         timeout_seconds: The timeout configured for the call
         elapsed_ms: Time taken for the call
         failure_class: Failure classification if call failed
@@ -172,6 +222,7 @@ def build_drilldown_prompt_diagnostics(
         operation="auto-drilldown",
         sections=sections,
         actual_prompt_chars=actual_prompt_chars,
+        max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
         elapsed_ms=elapsed_ms,
         failure_class=failure_class,

@@ -24,6 +24,9 @@ from ..external_analysis.config import ExternalAnalysisSettings, parse_external_
 from ..external_analysis.next_check_planner import plan_next_checks
 from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..identity.artifact import new_artifact_id
+from ..llm.llamacpp_provider import (
+    classify_llm_failure,
+)
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
@@ -2497,6 +2500,7 @@ class HealthLoopRunner:
             payload: dict[str, object] | None = None
             error_summary: str | None = None
             skip_reason: str | None = None
+            failure_metadata: dict[str, object] | None = None
             # Build actual prompt first for exact measurement.
             # Note: assess_drilldown_artifact() also builds the prompt internally.
             # Since build_drilldown_prompt() is deterministic, the measured chars
@@ -2505,6 +2509,7 @@ class HealthLoopRunner:
             actual_prompt = build_drilldown_prompt(drilldown)
             actual_prompt_chars = len(actual_prompt) if actual_prompt else 0
             try:
+                # max_tokens will be resolved by assess_drilldown_artifact using provider config
                 assessment = assess_drilldown_artifact(drilldown, provider_name=provider_name)
                 payload = assessment.to_dict()
                 summary = (
@@ -2528,16 +2533,25 @@ class HealthLoopRunner:
                 error_summary = str(exc)
                 payload = None
                 # Build prompt diagnostics for failure logging and artifact
+                failure_metadata: dict[str, object] | None = None
                 elapsed_ms = int((time.perf_counter() - start) * 1000)
                 from .drilldown_assessor import build_drilldown_prompt_diagnostics
                 try:
+                    # Classify the exception properly - check __cause__ and __context__ for wrapped exceptions
+                    classified_failure_class, classified_exc_type = classify_llm_failure(exc)
+                    # Resolve max_tokens for diagnostics using the drilldown_assessor helper
+                    diagnostic_max_tokens: int | None = None
+                    if provider_name == "llamacpp":
+                        from .drilldown_assessor import resolve_drilldown_max_tokens
+                        diagnostic_max_tokens = resolve_drilldown_max_tokens(provider_name)
                     prompt_diags = build_drilldown_prompt_diagnostics(
                         drilldown,
                         provider_name=provider_name,
                         actual_prompt_chars=actual_prompt_chars,
+                        max_tokens=diagnostic_max_tokens,
                         elapsed_ms=elapsed_ms,
-                        failure_class="llm_adapter_error",
-                        exception_type=exc.__class__.__name__,
+                        failure_class=classified_failure_class.value,
+                        exception_type=classified_exc_type,
                     )
                     # Log structured diagnostics for failure observability
                     self._log_event(
@@ -2556,8 +2570,8 @@ class HealthLoopRunner:
                             s.get("name") for s in prompt_diags.get("top_prompt_sections", [])
                         ],
                         elapsed_ms=elapsed_ms,
-                        failure_class="llm_adapter_error",
-                        exception_type=exc.__class__.__name__,
+                        failure_class=classified_failure_class.value,
+                        exception_type=classified_exc_type,
                     )
                     failure_metadata = {"prompt_diagnostics": prompt_diags}
                 except Exception:  # noqa: BLE001

@@ -14,6 +14,8 @@ from .assessor_schema import AssessorAssessment
 from .base import LLMProvider
 
 DEFAULT_TIMEOUT_SECONDS = 120
+DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 768
+DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 1200
 
 if TYPE_CHECKING:
     from .base import LLMAssessmentInput
@@ -71,6 +73,8 @@ class LlamaCppProviderConfig:
     model: str
     api_key: str | None = None
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
+    max_tokens_auto_drilldown: int = DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
+    max_tokens_review_enrichment: int = DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
 
     @property
     def endpoint(self) -> str:
@@ -98,11 +102,15 @@ class LlamaCppProviderConfig:
             if stripped:
                 api_key = stripped
         timeout_seconds = cls._parse_timeout(source.get("LLAMA_CPP_TIMEOUT_SECONDS"))
+        max_tokens_auto_drilldown = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN"), DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
+        max_tokens_review_enrichment = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT"), DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
         return cls(
             base_url=base_url,
             model=model,
             api_key=api_key,
             timeout_seconds=timeout_seconds,
+            max_tokens_auto_drilldown=max_tokens_auto_drilldown,
+            max_tokens_review_enrichment=max_tokens_review_enrichment,
         )
 
     @staticmethod
@@ -120,6 +128,22 @@ class LlamaCppProviderConfig:
             ) from exc
         if parsed <= 0:
             raise ValueError("LLAMA_CPP_TIMEOUT_SECONDS must be a positive integer")
+        return parsed
+
+    @staticmethod
+    def _parse_max_tokens(value: str | None, default: int) -> int:
+        """Parse max_tokens from env var, returning default if not set or invalid."""
+        if value is None:
+            return default
+        trimmed = value.strip()
+        if not trimmed:
+            return default
+        try:
+            parsed = int(trimmed)
+        except ValueError:
+            return default
+        if parsed <= 0:
+            return default
         return parsed
 
 
@@ -151,9 +175,10 @@ class LlamaCppProvider(LLMProvider):
         config: LlamaCppProviderConfig,
         *,
         system_instructions: str | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         system = system_instructions if system_instructions is not None else _SYSTEM_INSTRUCTIONS
-        return {
+        payload: dict[str, Any] = {
             "model": config.model,
             "temperature": 0.0,
             "messages": [
@@ -161,6 +186,9 @@ class LlamaCppProvider(LLMProvider):
                 {"role": "user", "content": prompt},
             ],
         }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        return payload
 
     def _request_headers(self, config: LlamaCppProviderConfig) -> dict[str, str]:
         headers: dict[str, str] = {
@@ -332,6 +360,22 @@ class LlamaCppProvider(LLMProvider):
         context.append(f"timeout={timeout_seconds}s")
         return "llama.cpp request failed: " + "; ".join(context)
 
+    def max_tokens_for_operation(self, operation: str) -> int | None:
+        """Get max_tokens for a given operation type.
+
+        Args:
+            operation: One of "auto-drilldown" or "review-enrichment"
+
+        Returns:
+            The configured max_tokens for the operation, or None if not applicable
+        """
+        config, _, _ = self._ensure_ready()
+        if operation == "auto-drilldown":
+            return config.max_tokens_auto_drilldown
+        elif operation == "review-enrichment":
+            return config.max_tokens_review_enrichment
+        return None
+
     def assess(
         self,
         prompt: str,
@@ -339,9 +383,10 @@ class LlamaCppProvider(LLMProvider):
         *,
         validate_schema: bool = True,
         system_instructions: str | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
-        request_payload = self._build_payload(prompt, config, system_instructions=system_instructions)
+        request_payload = self._build_payload(prompt, config, system_instructions=system_instructions, max_tokens=max_tokens)
         response: requests.Response | None = None
         timeout_seconds = config.timeout_seconds
         try:
@@ -385,8 +430,10 @@ class LLMFailureClass(StrEnum):
 def classify_llm_failure(
     exc: BaseException,
     response: requests.Response | None = None,
+    _seen: frozenset[int] | None = None,
 ) -> tuple[LLMFailureClass, str]:
     """Classify an LLM provider exception into a stable failure class.
+
 
     This helper distinguishes common failure modes for better diagnostics:
     - Read timeout (server slow to respond)
@@ -395,15 +442,27 @@ def classify_llm_failure(
     - Response parse errors (malformed output)
     - Client request errors (other requests lib errors)
     - Adapter errors (unexpected exceptions)
+    For wrapped exceptions (e.g., RuntimeError wrapping a requests.RequestException),
+    this function checks the exception chain via __cause__ and __context__ to
+    preserve the original classification.
 
     Args:
         exc: The exception that caused the failure.
         response: The HTTP response object if available.
+        _seen: Internal - set of seen exception ids to prevent infinite recursion.
 
     Returns:
         Tuple of (failure_class, exception_type_name)
     """
     exc_name = exc.__class__.__name__
+    # Cycle protection: track seen exceptions by id
+    if _seen is None:
+        _seen = frozenset()
+    exc_id = id(exc)
+    if exc_id in _seen:
+        # Cycle detected - return adapter error to prevent infinite loop
+        return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
+    new_seen = _seen | {exc_id}
 
     # Check for HTTP error responses first
     if response is not None:
@@ -411,12 +470,39 @@ def classify_llm_failure(
         if status_code is not None:
             if 400 <= status_code < 600:
                 return LLMFailureClass.LLM_SERVER_HTTP_ERROR, exc_name
-
     # Classify HTTPError even without response (e.g., pre-response errors)
     if isinstance(exc, requests.HTTPError):
         return LLMFailureClass.LLM_SERVER_HTTP_ERROR, exc_name
+    # For RuntimeError, check if it\'s wrapping a requests exception
+    # by traversing the exception chain (__cause__ and __context__)
+    if isinstance(exc, RuntimeError):
+        # Check the __cause__ first (explicit chaining via 'raise X from Y')
+        cause = getattr(exc, '__cause__', None)
+        if cause is not None and not isinstance(cause, BaseException):
+            cause = None
+        if cause is not None:
+            # Recursively classify the cause with cycle protection
+            cause_class, cause_name = classify_llm_failure(cause, response, new_seen)
+            return cause_class, cause_name
+        # Check __context__ for implicit exception chaining
+        context = getattr(exc, '__context__', None)
+        if context is not None and isinstance(context, requests.RequestException):
+            # Return the context exception\'s type to preserve the inner exception
+            return _classify_request_exception(context, context.__class__.__name__)
+        # Fallback: check if the RuntimeError message contains timeout keywords
+        exc_msg = str(exc).lower()
+        if 'timeout' in exc_msg or 'timed out' in exc_msg:
+            if 'connect' in exc_msg:
+                return LLMFailureClass.LLM_CLIENT_CONNECT_TIMEOUT, exc_name
+            return LLMFailureClass.LLM_CLIENT_READ_TIMEOUT, exc_name
+        # Default to adapter error for unexpected RuntimeErrors
+        return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
+    return _classify_request_exception(exc, exc_name)
 
-    # Classify by exception type
+
+
+def _classify_request_exception(exc: BaseException, exc_name: str) -> tuple[LLMFailureClass, str]:
+    """Helper to classify a requests.RequestException or similar."""
     if isinstance(exc, requests.Timeout):
         # requests.Timeout has two subclasses: ConnectTimeout and ReadTimeout
         # but they may not always be distinguishable, so check class name
@@ -468,6 +554,9 @@ class LLMFailureMetadata:
 
 
 __all__ = [
+    "DEFAULT_TIMEOUT_SECONDS",
+    "DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN",
+    "DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT",
     "LlamaCppProvider",
     "LlamaCppProviderConfig",
     "LLMFailureClass",

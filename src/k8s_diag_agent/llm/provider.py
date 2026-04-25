@@ -28,6 +28,7 @@ class DefaultLLMProvider(LLMProvider):
         payload: LLMAssessmentInput,
         *,
         validate_schema: bool = True,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         differences = payload.comparison.get("differences") or {}
         diff_keys = sorted(differences)
