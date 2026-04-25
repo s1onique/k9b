@@ -1996,7 +1996,7 @@ class HealthLoopRunner:
         )
 
     @staticmethod
-    def _failure_metadata_field(metadata: dict[str, object] | None, key: str) -> str | None:
+    def _failure_metadata_field(metadata: dict[str, object] | None, key: str) -> Any:
         """Extract a field from failure metadata, checking top-level and nested prompt_diagnostics.
 
         This helper enables result logs to extract failure details from either:
@@ -2008,17 +2008,22 @@ class HealthLoopRunner:
             key: The field name to extract (e.g., "failure_class", "exception_type")
 
         Returns:
-            The field value as string, or None if not found
+            The field value (str for text fields, bool for boolean fields), or None if not found
         """
         if not metadata:
             return None
         value = metadata.get(key)
-        if value:
+        if value is not None:
+            # Preserve boolean values as-is; convert other truthy values to string
+            if isinstance(value, bool):
+                return value
             return str(value)
         prompt_diags = metadata.get("prompt_diagnostics")
         if isinstance(prompt_diags, dict):
             value = prompt_diags.get(key)
-            if value:
+            if value is not None:
+                if isinstance(value, bool):
+                    return value
                 return str(value)
         return None
 
@@ -2528,7 +2533,7 @@ class HealthLoopRunner:
             payload: dict[str, object] | None = None
             error_summary: str | None = None
             skip_reason: str | None = None
-            failure_metadata: dict[str, object] | None
+            failure_metadata: dict[str, object] | None = None
             # Build actual prompt first for exact measurement.
             # Note: assess_drilldown_artifact() also builds the prompt internally.
             # Since build_drilldown_prompt() is deterministic, the measured chars
@@ -2573,12 +2578,85 @@ class HealthLoopRunner:
                 next_checks = tuple(entry.description for entry in assessment.next_evidence_to_collect)
                 status = ExternalAnalysisStatus.SUCCESS
             except ValueError as exc:
-                status = ExternalAnalysisStatus.SKIPPED
-                summary = str(exc)
-                skip_reason = str(exc)
-                error_summary = None
-                payload = None
-                failure_metadata = None
+                # LLMResponseParseError is a ValueError subclass: handle it with structured failure metadata
+                from ..llm.llamacpp_provider import LLMResponseParseError
+                from .drilldown_assessor import build_drilldown_prompt_diagnostics
+                if isinstance(exc, LLMResponseParseError):
+                    status = ExternalAnalysisStatus.FAILED
+                    summary = str(exc)
+                    error_summary = str(exc)
+                    payload = None
+                    skip_reason = None
+                    elapsed_ms = int((time.perf_counter() - start) * 1000)
+                    # Determine failure class based on length cap
+                    if exc.completion_stopped_by_length is True:
+                        failure_class_value = "llm_response_parse_error_length_capped"
+                    else:
+                        failure_class_value = "llm_response_parse_error"
+                    # Build structured top-level failure metadata
+                    exc_diags = exc.to_diagnostics()
+                    max_toks: int | None = None
+                    if provider_name == "llamacpp":
+                        from .drilldown_assessor import resolve_drilldown_max_tokens
+                        max_toks = resolve_drilldown_max_tokens(provider_name)
+                    prompt_diags = build_drilldown_prompt_diagnostics(
+                        drilldown,
+                        provider_name=provider_name,
+                        actual_prompt_chars=actual_prompt_chars,
+                        max_tokens=max_toks,
+                        elapsed_ms=elapsed_ms,
+                        failure_class=failure_class_value,
+                        exception_type="LLMResponseParseError",
+                    )
+                    llm_call_id_val = build_llm_call_id(
+                        self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label
+                    )
+                    failure_metadata = {
+                        "failure_class": failure_class_value,
+                        "exception_type": "LLMResponseParseError",
+                        "finish_reason": exc_diags.get("finish_reason"),
+                        "completion_stopped_by_length": exc_diags.get("completion_stopped_by_length"),
+                        "response_content_chars": exc_diags.get("response_content_chars"),
+                        "response_content_prefix": exc_diags.get("response_content_prefix"),
+                        "max_tokens": exc_diags.get("max_tokens"),
+                        "provider": provider_name,
+                        "operation": "auto-drilldown",
+                        "llm_call_id": llm_call_id_val,
+                        "llm_call": True,
+                        "prompt_diagnostics": prompt_diags,
+                    }
+                    self._log_event(
+                        "llm-prompt-diagnostics",
+                        "ERROR",
+                        "Auto-drilldown LLM call failed",
+                        llm_call=True,
+                        llm_call_id=llm_call_id_val,
+                        llm_provider=provider_name,
+                        llm_operation="auto-drilldown",
+                        llm_phase="diagnostics",
+                        operation=prompt_diags.get("operation"),
+                        provider=prompt_diags.get("provider"),
+                        prompt_chars=prompt_diags.get("prompt_chars"),
+                        prompt_tokens_estimate=prompt_diags.get("prompt_tokens_estimate"),
+                        actual_prompt_chars=prompt_diags.get("actual_prompt_chars"),
+                        actual_prompt_tokens_estimate=prompt_diags.get("actual_prompt_tokens_estimate"),
+                        section_coverage_ratio=prompt_diags.get("section_coverage_ratio"),
+                        prompt_section_count=prompt_diags.get("prompt_section_count"),
+                        top_prompt_sections=[
+                            s.get("name") for s in prompt_diags.get("top_prompt_sections", [])
+                        ],
+                        elapsed_ms=elapsed_ms,
+                        failure_class=failure_class_value,
+                        exception_type="LLMResponseParseError",
+                    )
+                else:
+                    # Non-LLM ValueError: preserve existing SKIPPED behavior
+                    status = ExternalAnalysisStatus.SKIPPED
+                    summary = str(exc)
+                    skip_reason = str(exc)
+                    error_summary = None
+                    payload = None
+                    failure_metadata = None
             except Exception as exc:
                 status = ExternalAnalysisStatus.FAILED
                 summary = str(exc)
@@ -2721,6 +2799,11 @@ class HealthLoopRunner:
                 max_tokens=result_max_tokens,
                 failure_class=result_failure_class,
                 exception_type=result_exception_type,
+                finish_reason=HealthLoopRunner._failure_metadata_field(failure_metadata, "finish_reason"),
+                completion_stopped_by_length=HealthLoopRunner._failure_metadata_field(
+                    failure_metadata,
+                    "completion_stopped_by_length",
+                ),
                 skip_reason=result_skip_reason,
             )
             artifacts.append(artifact)

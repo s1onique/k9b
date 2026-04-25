@@ -178,9 +178,9 @@ def extract_drilldown_prompt_sections(artifact: DrilldownArtifact) -> list[Promp
     sections.append(PromptSection(
         name="output_schema",
         text=(
-            'Provide a structured JSON assessment that follows the schema exactly. '
-            'Schema reminder: observed_signals, findings, hypotheses, next_evidence_to_collect, '
-            'recommended_action, safety_level, probable_layer_of_origin, overall_confidence'
+            'Provide a concise structured JSON assessment that follows the schema exactly. '
+            'Constraint: max 3 items each for observed_signals, findings, hypotheses, next_evidence_to_collect. '
+            'Keep descriptions under 80 characters.'
         ),
     ))
 
