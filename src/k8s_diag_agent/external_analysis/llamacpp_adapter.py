@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..llm.base import LLMAssessmentInput
+from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import (
     _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
     DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT,
@@ -268,6 +269,8 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                     exception_type=exc_type,
                 )
 
+            # Build deterministic call ID for review-enrichment operation
+            call_id = build_llm_call_id(request.run_id, "review-enrichment", self.name)
             failure_metadata = LLMFailureMetadata(
                 failure_class=failure_class.value,
                 exception_type=exc_type,
@@ -276,7 +279,11 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 endpoint=config.endpoint if config else None,
                 summary=str(exc),
             ).to_dict()
-            # Include prompt diagnostics in failure metadata
+            # Include llm_* fields and prompt diagnostics in failure metadata
+            failure_metadata["llm_call"] = True
+            failure_metadata["llm_call_id"] = call_id
+            failure_metadata["llm_provider"] = self.name
+            failure_metadata["llm_operation"] = "review-enrichment"
             failure_metadata["prompt_diagnostics"] = prompt_diags.to_dict()
             return self._build_failure_artifact(
                 request,

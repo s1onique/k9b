@@ -292,9 +292,14 @@ def log_prompt_diagnostics(diagnostics: PromptDiagnostics) -> dict[str, object]:
     - section_prompt_chars: sum of named sections
     - section_coverage_ratio: how well sections cover actual prompt (1.0 = exact)
     - section_accounting_exact: whether section sum matches actual prompt (within 1% tolerance)
+    - llm_* fields for LLM call correlation in logs
     """
     top_names = [s.name for s in diagnostics.top_prompt_sections]
     return {
+        "llm_call": True,
+        "llm_provider": diagnostics.provider,
+        "llm_operation": diagnostics.operation,
+        "llm_phase": "diagnostics",
         "operation": diagnostics.operation,
         "provider": diagnostics.provider,
         "actual_prompt_chars": diagnostics.actual_prompt_chars,

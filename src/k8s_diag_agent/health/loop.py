@@ -24,6 +24,7 @@ from ..external_analysis.config import ExternalAnalysisSettings, parse_external_
 from ..external_analysis.next_check_planner import plan_next_checks
 from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..identity.artifact import new_artifact_id
+from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import (
     classify_llm_failure,
 )
@@ -1994,6 +1995,33 @@ class HealthLoopRunner:
             metadata=metadata or None,
         )
 
+    @staticmethod
+    def _failure_metadata_field(metadata: dict[str, object] | None, key: str) -> str | None:
+        """Extract a field from failure metadata, checking top-level and nested prompt_diagnostics.
+
+        This helper enables result logs to extract failure details from either:
+        1. metadata[key] - top-level failure class or exception type
+        2. metadata["prompt_diagnostics"][key] - nested in prompt diagnostics
+
+        Args:
+            metadata: The failure_metadata dict from ExternalAnalysisArtifact
+            key: The field name to extract (e.g., "failure_class", "exception_type")
+
+        Returns:
+            The field value as string, or None if not found
+        """
+        if not metadata:
+            return None
+        value = metadata.get(key)
+        if value:
+            return str(value)
+        prompt_diags = metadata.get("prompt_diagnostics")
+        if isinstance(prompt_diags, dict):
+            value = prompt_diags.get(key)
+            if value:
+                return str(value)
+        return None
+
     def _record_notification(self, directory: Path, artifact: NotificationArtifact) -> Path:
         artifact_path = write_notification_artifact(directory, artifact)
         self._notification_records.append((artifact, artifact_path))
@@ -2508,6 +2536,30 @@ class HealthLoopRunner:
             from ..llm.drilldown_prompts import build_drilldown_prompt
             actual_prompt = build_drilldown_prompt(drilldown)
             actual_prompt_chars = len(actual_prompt) if actual_prompt else 0
+            # Build deterministic call ID for start log
+            start_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
+            # Resolve max_tokens for llama.cpp provider
+            start_max_tokens: int | None = None
+            if provider_name == "llamacpp":
+                from .drilldown_assessor import resolve_drilldown_max_tokens
+                start_max_tokens = resolve_drilldown_max_tokens(provider_name)
+            # Log LLM call start
+            self._log_event(
+                "llm-call",
+                "INFO",
+                "LLM call started",
+                llm_call=True,
+                llm_call_id=start_call_id,
+                llm_provider=provider_name,
+                llm_operation="auto-drilldown",
+                llm_phase="start",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                cluster_label=drilldown.label,
+                max_tokens=start_max_tokens,
+                timeout_seconds=None,
+                actual_prompt_chars=actual_prompt_chars,
+            )
             try:
                 # max_tokens will be resolved by assess_drilldown_artifact using provider config
                 assessment = assess_drilldown_artifact(drilldown, provider_name=provider_name)
@@ -2553,11 +2605,18 @@ class HealthLoopRunner:
                         failure_class=classified_failure_class.value,
                         exception_type=classified_exc_type,
                     )
+                    # Build deterministic call ID for correlation across logs and artifacts
+                    call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
                     # Log structured diagnostics for failure observability
                     self._log_event(
                         "llm-prompt-diagnostics",
                         "ERROR",
                         "Auto-drilldown LLM call failed",
+                        llm_call=True,
+                        llm_call_id=call_id,
+                        llm_provider=provider_name,
+                        llm_operation="auto-drilldown",
+                        llm_phase="diagnostics",
                         operation=prompt_diags.get("operation"),
                         provider=prompt_diags.get("provider"),
                         prompt_chars=prompt_diags.get("prompt_chars"),
@@ -2626,6 +2685,43 @@ class HealthLoopRunner:
                 error_summary=error_summary,
                 duration_ms=duration_ms,
                 event="auto-drilldown",
+            )
+            # Log LLM call result with deterministic call ID for correlation
+            result_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
+            # Extract failure details from failure_metadata if available (check top-level and nested prompt_diagnostics)
+            result_failure_class: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "failure_class")
+            result_exception_type: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "exception_type")
+            result_skip_reason: str | None = None
+            if failure_metadata:
+                nested_diags = failure_metadata.get("prompt_diagnostics")
+                if isinstance(nested_diags, dict):
+                    result_skip_reason = str(nested_diags.get("skip_reason")) if nested_diags.get("skip_reason") else None
+            if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
+                result_skip_reason = skip_reason
+            # Resolve max_tokens for llama.cpp provider
+            result_max_tokens: int | None = None
+            if provider_name == "llamacpp":
+                from .drilldown_assessor import resolve_drilldown_max_tokens
+                result_max_tokens = resolve_drilldown_max_tokens(provider_name)
+            self._log_event(
+                "llm-call",
+                severity,
+                "LLM call completed" if status == ExternalAnalysisStatus.SUCCESS else ("LLM call skipped" if status == ExternalAnalysisStatus.SKIPPED else "LLM call failed"),
+                llm_call=True,
+                llm_call_id=result_call_id,
+                llm_provider=provider_name,
+                llm_operation="auto-drilldown",
+                llm_phase="result",
+                run_id=self.run_id,
+                run_label=self.run_label,
+                cluster_label=drilldown.label,
+                status=status.value,
+                duration_ms=duration_ms,
+                artifact_path=str(artifact_path),
+                max_tokens=result_max_tokens,
+                failure_class=result_failure_class,
+                exception_type=result_exception_type,
+                skip_reason=result_skip_reason,
             )
             artifacts.append(artifact)
             if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
