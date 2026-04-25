@@ -305,6 +305,8 @@ def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None
         *,
         validate_schema: bool = True,
         system_instructions: str | None = None,
+        max_tokens: int | None = None,
+        response_format_json: bool | None = None,
     ) -> dict[str, Any]:
         # Verify system instructions include review enrichment guidance
         assert system_instructions is not None
@@ -352,6 +354,8 @@ def test_llamacpp_adapter_http_invalid_response(monkeypatch: Any, tmp_path: Path
         *,
         validate_schema: bool = True,
         system_instructions: str | None = None,
+        max_tokens: int | None = None,
+        response_format_json: bool | None = None,
     ) -> dict[str, Any]:
         raise ValueError("schema")
     monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
@@ -383,6 +387,8 @@ def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) 
         *,
         validate_schema: bool = True,
         system_instructions: str | None = None,
+        max_tokens: int | None = None,
+        response_format_json: bool | None = None,
     ) -> dict[str, Any]:
         assert validate_schema is False
         return fake_payload
@@ -411,6 +417,8 @@ def test_llamacpp_adapter_http_review_payload_invalid(monkeypatch: Any, tmp_path
         *,
         validate_schema: bool = True,
         system_instructions: str | None = None,
+        max_tokens: int | None = None,
+        response_format_json: bool | None = None,
     ) -> dict[str, Any]:
         return {"triageOrder": [""], "topConcerns": ["latency"], "nextChecks": ["check ingress"], "focusNotes": []}
 

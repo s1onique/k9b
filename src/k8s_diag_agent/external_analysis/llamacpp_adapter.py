@@ -152,13 +152,13 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 if self._http_provider and self._http_provider._config
                 else DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
             )
+            # Let provider config control response_format_json (defaults to False)
             assessment = self._http_provider.assess(
                 prompt,
                 payload,
                 validate_schema=False,
                 system_instructions=_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
                 max_tokens=review_enrichment_max_tokens,
-                response_format_json=True,
             )
             parsed = ReviewEnrichmentPayload.from_dict(assessment)
             duration_ms = int((time.perf_counter() - start) * 1000)
@@ -213,20 +213,23 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 failure_metadata["prompt_diagnostics"] = prompt_diags.to_dict()
             except Exception:
                 pass
+            # Build skip_reason that is bounded for logging
+            skip_reason_bounded = self._bound_skip_reason(str(exc))
             return self._build_failure_artifact(
                 request,
                 duration_ms,
-                str(exc),
+                skip_reason_bounded["summary"],
                 ExternalAnalysisStatus.SKIPPED,
-                skip_reason=str(exc),
+                skip_reason=str(exc),  # Full reason stays in artifact
                 failure_metadata=failure_metadata,
             )
         except ValueError as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
+            skip_reason_bounded = self._bound_skip_reason(str(exc))
             return self._build_failure_artifact(
                 request,
                 duration_ms,
-                str(exc),
+                skip_reason_bounded["summary"],
                 ExternalAnalysisStatus.SKIPPED,
                 skip_reason=str(exc),
             )
@@ -293,6 +296,35 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 error_summary=str(exc),
                 failure_metadata=failure_metadata,
             )
+
+    @staticmethod
+    def _bound_skip_reason(reason: str, max_length: int = 240) -> dict[str, Any]:
+        """Bound skip_reason for artifact summary, preserving full reason in artifact.skip_reason.
+
+        Returns a dict with:
+        - summary: short bounded one-line summary (for artifact summary field)
+        - skip_reason_class: invalid_json | schema_error | skipped | unknown
+        - skip_reason: optional bounded to max_length chars (for logging, not artifact)
+        """
+        reason_lower = reason.lower()
+
+        if "json" in reason_lower or "parse" in reason_lower:
+            skip_reason_class = "invalid_json"
+        elif "schema" in reason_lower:
+            skip_reason_class = "schema_error"
+        else:
+            skip_reason_class = "skipped"
+
+        if len(reason) > max_length:
+            summary = reason[:max_length].rstrip() + "…"
+        else:
+            summary = reason
+
+        return {
+            "summary": summary,
+            "skip_reason_class": skip_reason_class,
+            "skip_reason": reason[:max_length] if len(reason) > max_length else None,
+        }
 
     def _prepare_provider_request(
         self, request: ExternalAnalysisRequest

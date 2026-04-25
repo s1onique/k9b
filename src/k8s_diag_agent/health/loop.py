@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4  # noqa: F401 - re-exported for backward compatibility
 
 from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
@@ -2821,7 +2821,33 @@ class HealthLoopRunner:
                 next_checks_count = len(next_checks)
 
         # Classify the payload shape for observability
-        shape_analysis = classify_review_enrichment_shape(enrichment_payload)
+        # If the artifact was skipped due to invalid JSON/parse error, use invalid-json classification
+        # instead of unrecognized-payload to avoid misleading diagnostics
+        if artifact.status == ExternalAnalysisStatus.SKIPPED and artifact.failure_metadata:
+            failure_meta = cast(dict[str, Any], artifact.failure_metadata)
+            failure_class = str(failure_meta.get("failure_class", ""))
+            exception_type = str(failure_meta.get("exception_type", ""))
+            if "llm_response_parse_error" in failure_class or "LLMResponseParseError" in exception_type:
+                # Create an INVALID_JSON classification with structured output diagnostics
+                from ..external_analysis.review_schema import (
+                    ReviewEnrichmentShapeAnalysis,
+                    ReviewEnrichmentShapeClassification,
+                )
+                shape_analysis = ReviewEnrichmentShapeAnalysis(
+                    classification=ReviewEnrichmentShapeClassification.INVALID_JSON,
+                    reason="LLM response parse error - invalid JSON or length capped",
+                    raw_payload_keys=(),
+                    summary_present=False,
+                    triage_order_count=0,
+                    top_concerns_count=0,
+                    evidence_gaps_count=0,
+                    next_checks_count=0,
+                    focus_notes_count=0,
+                )
+            else:
+                shape_analysis = classify_review_enrichment_shape(enrichment_payload)
+        else:
+            shape_analysis = classify_review_enrichment_shape(enrichment_payload)
 
         # Emit shape classification log
         self._log_event(
@@ -2835,7 +2861,7 @@ class HealthLoopRunner:
             status=artifact.status.value,
             shape_classification=shape_analysis.classification.value,
             reason=shape_analysis.reason,
-            raw_payload_keys=list(shape_analysis.raw_payload_keys)[:10],  # Limit to first 10 keys
+            raw_payload_keys=list(shape_analysis.raw_payload_keys)[:10],
             summary_present=shape_analysis.summary_present,
             triage_order_count=shape_analysis.triage_order_count,
             top_concerns_count=shape_analysis.top_concerns_count,

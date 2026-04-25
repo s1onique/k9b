@@ -77,6 +77,8 @@ class ReviewEnrichmentShapeClassification(StrEnum):
     MIXED_PAYLOAD = "mixed-payload"
     EMPTY_BOUNDED_PAYLOAD = "empty-bounded-payload"
     UNRECOGNIZED_PAYLOAD = "unrecognized-payload"
+    INVALID_JSON = "invalid-json"
+    PARSE_ERROR = "parse-error"
 
 
 def _type_name(value: Any) -> str:

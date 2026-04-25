@@ -75,6 +75,7 @@ class LlamaCppProviderConfig:
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
     max_tokens_auto_drilldown: int = DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
     max_tokens_review_enrichment: int = DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
+    response_format_json: bool = False
 
     @property
     def endpoint(self) -> str:
@@ -104,6 +105,7 @@ class LlamaCppProviderConfig:
         timeout_seconds = cls._parse_timeout(source.get("LLAMA_CPP_TIMEOUT_SECONDS"))
         max_tokens_auto_drilldown = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN"), DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
         max_tokens_review_enrichment = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT"), DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
+        response_format_json = cls._parse_response_format_json(source.get("LLAMA_CPP_RESPONSE_FORMAT_JSON"))
         return cls(
             base_url=base_url,
             model=model,
@@ -111,6 +113,7 @@ class LlamaCppProviderConfig:
             timeout_seconds=timeout_seconds,
             max_tokens_auto_drilldown=max_tokens_auto_drilldown,
             max_tokens_review_enrichment=max_tokens_review_enrichment,
+            response_format_json=response_format_json,
         )
 
     @staticmethod
@@ -145,6 +148,19 @@ class LlamaCppProviderConfig:
         if parsed <= 0:
             return default
         return parsed
+
+    @staticmethod
+    def _parse_response_format_json(value: str | None) -> bool:
+        """Parse response_format_json from env var, defaulting to False."""
+        if value is None:
+            return False
+        trimmed = value.strip().lower()
+        if trimmed in ("true", "1", "yes"):
+            return True
+        if trimmed in ("false", "0", "no", ""):
+            return False
+        # Unknown value - default to False for safety
+        return False
 
 
 class LlamaCppProvider(LLMProvider):
@@ -435,10 +451,20 @@ class LlamaCppProvider(LLMProvider):
         validate_schema: bool = True,
         system_instructions: str | None = None,
         max_tokens: int | None = None,
-        response_format_json: bool = False,
+        response_format_json: bool | None = None,
     ) -> dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
-        request_payload = self._build_payload(prompt, config, system_instructions=system_instructions, max_tokens=max_tokens, response_format_json=response_format_json)
+        # Use config default when response_format_json is None
+        effective_response_format_json = (
+            response_format_json if response_format_json is not None else config.response_format_json
+        )
+        request_payload = self._build_payload(
+            prompt,
+            config,
+            system_instructions=system_instructions,
+            max_tokens=max_tokens,
+            response_format_json=effective_response_format_json,
+        )
         response: requests.Response | None = None
         timeout_seconds = config.timeout_seconds
         try:
