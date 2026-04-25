@@ -72,20 +72,20 @@ class TestLLMResponseParseErrorDiagnostics(unittest.TestCase):
 class TestPromptContainsBoundsConstraints(unittest.TestCase):
     """Test auto-drilldown prompt contains explicit bounded item counts."""
 
-    def test_prompt_contains_max_3_items_constraint(self) -> None:
-        """Test prompt contains max 3 items constraint."""
+    def test_prompt_contains_max_2_items_constraint(self) -> None:
+        """Test prompt contains max 2 items constraint."""
         prompt = build_drilldown_prompt(_make_drilldown())
-        self.assertIn("max 3 items each", prompt)
+        self.assertIn("max 2 items each", prompt)
 
-    def test_prompt_contains_under_80_chars_constraint(self) -> None:
+    def test_prompt_contains_under_60_chars_constraint(self) -> None:
         """Test prompt contains description length constraint."""
         prompt = build_drilldown_prompt(_make_drilldown())
-        self.assertIn("80 characters", prompt)
+        self.assertIn("60 characters", prompt)
 
-    def test_prompt_contains_no_exhaustive_events_constraint(self) -> None:
-        """Test prompt contains no exhaustive event listings constraint."""
+    def test_prompt_contains_no_explain_every_event_constraint(self) -> None:
+        """Test prompt contains do not explain every event constraint."""
         prompt = build_drilldown_prompt(_make_drilldown())
-        self.assertIn("exhaustive event listings", prompt)
+        self.assertIn("Do not explain every event", prompt)
 
     def test_prompt_contains_observed_signals(self) -> None:
         """Test prompt contains observed_signals in schema."""
