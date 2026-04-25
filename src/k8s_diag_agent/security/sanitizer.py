@@ -32,8 +32,46 @@ _SENSITIVE_KEYWORDS = (
 )
 
 
+# Known-safe token-count field names that should NOT be scrubbed.
+# These are numeric budget/observability fields, not credentials.
+_SAFE_TOKEN_COUNT_FIELDS = frozenset((
+    "max_tokens",
+    "prompt_tokens",
+    "prompt_tokens_estimate",
+    "actual_prompt_tokens_estimate",
+    "completion_tokens",
+    "total_tokens",
+    "token_count",
+    "n_tokens",
+    "timeout_seconds",
+    "response_content_chars",
+))
+
+
+def _is_safe_token_count_field(key: str) -> bool:
+    """Check if key is a known-safe token-count or observability field."""
+    if key in _SAFE_TOKEN_COUNT_FIELDS:
+        return True
+    # Allow fields ending in _tokens that are not credential-like
+    if key.endswith("_tokens") and not key.startswith(("access_", "refresh_", "bearer_", "auth_")):
+        return True
+    # Allow fields containing tokens_estimate (prompt token estimation)
+    if "tokens_estimate" in key:
+        return True
+    # Allow fields containing _max_tokens_ (e.g., llamacpp_max_tokens_auto_drilldown)
+    if "_max_tokens_" in key:
+        return True
+    # Allow fields ending with _max_tokens (e.g., llamacpp_max_tokens)
+    if key.endswith("_max_tokens"):
+        return True
+    return False
+
+
 def _is_sensitive_key(key: str) -> bool:
     normalized = key.replace("-", "_").lower()
+    # Allowlist check first - safe token-count fields are never scrubbed
+    if _is_safe_token_count_field(normalized):
+        return False
     return any(keyword in normalized for keyword in _SENSITIVE_KEYWORDS)
 
 

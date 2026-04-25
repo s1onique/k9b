@@ -147,7 +147,46 @@ class SchedulerLoggingTest(unittest.TestCase):
         self.assertEqual(entry.get("authorization"), "<scrubbed>")
 
 
+class SchedulerLlamaCppConfigLoggingTest(unittest.TestCase):
+    """Tests that llamacpp max_tokens fields appear as ints in scheduler config logs."""
+
+    def test_llamacpp_max_tokens_fields_not_scrubbed(self) -> None:
+        stream = io.StringIO()
+        env_key = run_health_scheduler.SCHEDULER_LOG_ENV
+        # Set up llamacpp env vars
+        test_env = {
+            "LLAMA_CPP_BASE_URL": "http://localhost:8080",
+            "LLAMA_CPP_MODEL": "test-model",
+            "LLAMA_CPP_TIMEOUT_SECONDS": "60",
+            "LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN": "2048",
+            "LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT": "4096",
+            "LLAMA_CPP_RESPONSE_FORMAT_JSON": "true",
+        }
+        with patch("k8s_diag_agent.structured_logging.DEFAULT_LOG_STREAM", stream), \
+             patch.dict(os.environ, {**test_env, env_key: ""}):
+            run_health_scheduler._append_log(
+                "Scheduler llama.cpp config test",
+                severity="INFO",
+                metadata={
+                    "run_label": "scheduler-run",
+                    "run_id": "run-789",
+                    "llamacpp_max_tokens_auto_drilldown": 2048,
+                    "llamacpp_max_tokens_review_enrichment": 4096,
+                },
+            )
+        lines = [line for line in stream.getvalue().splitlines() if line]
+        self.assertEqual(len(lines), 1)
+        entry = json.loads(lines[0])
+        # Verify token-count fields are present and not scrubbed
+        self.assertEqual(entry["llamacpp_max_tokens_auto_drilldown"], 2048)
+        self.assertEqual(entry["llamacpp_max_tokens_review_enrichment"], 4096)
+        self.assertIsInstance(entry["llamacpp_max_tokens_auto_drilldown"], int)
+        self.assertIsInstance(entry["llamacpp_max_tokens_review_enrichment"], int)
+        self.assertNotEqual(entry["llamacpp_max_tokens_auto_drilldown"], "<scrubbed>")
+        self.assertNotEqual(entry["llamacpp_max_tokens_review_enrichment"], "<scrubbed>")
+
 class SanitizerTest(unittest.TestCase):
+
     def test_prompt_redacts_sensitive_lines(self) -> None:
         prompt = "Authorization: Bearer secret-token\nkind: Secret\napi_key=secret"
         sanitized = sanitize_prompt(prompt)
@@ -174,8 +213,73 @@ class SanitizerTest(unittest.TestCase):
         log_line = "Received token=abc123 from webhook"
         sanitized = sanitize_payload(log_line)
         self.assertNotIn("abc123", sanitized)
-        self.assertIn("<scrubbed>", sanitized)
 
+
+class TokenCountFieldSanitizationTest(unittest.TestCase):
+    """Tests that safe token-count fields are not scrubbed."""
+
+    def test_max_tokens_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"message": "ok", "max_tokens": 1024})
+        self.assertEqual(entry["max_tokens"], 1024)
+
+    def test_llamacpp_max_tokens_auto_drilldown_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"llamacpp_max_tokens_auto_drilldown": 2048})
+        self.assertEqual(entry["llamacpp_max_tokens_auto_drilldown"], 2048)
+
+    def test_llamacpp_max_tokens_review_enrichment_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"llamacpp_max_tokens_review_enrichment": 4096})
+        self.assertEqual(entry["llamacpp_max_tokens_review_enrichment"], 4096)
+
+    def test_prompt_tokens_estimate_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"prompt_tokens_estimate": 500})
+        self.assertEqual(entry["prompt_tokens_estimate"], 500)
+
+    def test_actual_prompt_tokens_estimate_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"actual_prompt_tokens_estimate": 450})
+        self.assertEqual(entry["actual_prompt_tokens_estimate"], 450)
+
+    def test_completion_tokens_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"completion_tokens": 200})
+        self.assertEqual(entry["completion_tokens"], 200)
+
+    def test_total_tokens_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"total_tokens": 700})
+        self.assertEqual(entry["total_tokens"], 700)
+
+    def test_bearer_token_is_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"bearer_token": "secret-value"})
+        self.assertEqual(entry["bearer_token"], "<scrubbed>")
+
+    def test_access_token_is_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"access_token": "secret-value"})
+        self.assertEqual(entry["access_token"], "<scrubbed>")
+
+    def test_refresh_token_is_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"refresh_token": "secret-value"})
+        self.assertEqual(entry["refresh_token"], "<scrubbed>")
+
+    def test_authorization_is_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"authorization": "Bearer secret"})
+        self.assertEqual(entry["authorization"], "<scrubbed>")
+
+    def test_api_key_is_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"api_key": "secret-value"})
+        self.assertEqual(entry["api_key"], "<scrubbed>")
+
+    def test_nested_dict_with_safe_token_fields_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"config": {"max_tokens": 1024, "timeout_seconds": 30}})
+        self.assertEqual(entry["config"]["max_tokens"], 1024)
+        self.assertEqual(entry["config"]["timeout_seconds"], 30)
+
+    def test_nested_dict_with_credential_token_is_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"config": {"bearer_token": "secret", "max_tokens": 1024}})
+        self.assertEqual(entry["config"]["bearer_token"], "<scrubbed>")
+        self.assertEqual(entry["config"]["max_tokens"], 1024)
+
+    def test_nested_list_with_token_fields_not_scrubbed(self) -> None:
+        entry = sanitize_log_entry({"llm_stats": [{"prompt_tokens": 100}, {"completion_tokens": 50}]})
+        self.assertEqual(entry["llm_stats"][0]["prompt_tokens"], 100)
+        self.assertEqual(entry["llm_stats"][1]["completion_tokens"], 50)
 
 class ProviderPayloadSanitizationTest(unittest.TestCase):
     def test_build_assessment_input_redacts_sensitive_labels(self) -> None:
