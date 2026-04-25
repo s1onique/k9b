@@ -345,6 +345,63 @@ class TestLlamaCppFieldsDirectly(unittest.TestCase):
         self.assertNotIn("pass", url)
         self.assertNotIn("token", url)
 
+    def test_llamacpp_generation_settings_defaults(self) -> None:
+        """Test that generation settings defaults are logged."""
+        os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"
+        os.environ["LLAMA_CPP_MODEL"] = "llama3"
+        # Do not set any generation settings - use defaults
+
+        metadata: dict = {}
+        _add_llamacpp_fields(metadata)
+
+        self.assertTrue(metadata.get("llamacpp_enabled"))
+        # Temperature defaults to 0.0
+        self.assertEqual(metadata.get("llamacpp_temperature"), 0.0)
+        # Other generation settings are None by default, so not logged
+        self.assertNotIn("llamacpp_top_p", metadata)
+        self.assertNotIn("llamacpp_top_k", metadata)
+        self.assertNotIn("llamacpp_repeat_penalty", metadata)
+        self.assertNotIn("llamacpp_seed", metadata)
+        self.assertNotIn("llamacpp_stop_count", metadata)
+
+    def test_llamacpp_generation_settings_all_configured(self) -> None:
+        """Test that all generation settings are logged when configured."""
+        os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"
+        os.environ["LLAMA_CPP_MODEL"] = "llama3"
+        os.environ["LLAMA_CPP_TEMPERATURE"] = "0.05"
+        os.environ["LLAMA_CPP_TOP_P"] = "0.9"
+        os.environ["LLAMA_CPP_TOP_K"] = "40"
+        os.environ["LLAMA_CPP_REPEAT_PENALTY"] = "1.1"
+        os.environ["LLAMA_CPP_SEED"] = "42"
+        os.environ["LLAMA_CPP_STOP"] = "END,STOP"
+
+        metadata: dict = {}
+        _add_llamacpp_fields(metadata)
+
+        self.assertEqual(metadata.get("llamacpp_temperature"), 0.05)
+        self.assertEqual(metadata.get("llamacpp_top_p"), 0.9)
+        self.assertEqual(metadata.get("llamacpp_top_k"), 40)
+        self.assertEqual(metadata.get("llamacpp_repeat_penalty"), 1.1)
+        self.assertEqual(metadata.get("llamacpp_seed"), 42)
+        self.assertEqual(metadata.get("llamacpp_stop_count"), 2)
+
+    def test_llamacpp_stop_count_only_no_content(self) -> None:
+        """Test that stop sequences count is logged but not content."""
+        os.environ["LLAMA_CPP_BASE_URL"] = "http://localhost:11434"
+        os.environ["LLAMA_CPP_MODEL"] = "llama3"
+        os.environ["LLAMA_CPP_STOP"] = "SECRET,END,TERMINATE"
+
+        metadata: dict = {}
+        _add_llamacpp_fields(metadata)
+
+        self.assertEqual(metadata.get("llamacpp_stop_count"), 3)
+        # Ensure actual stop sequences are not logged
+        for value in metadata.values():
+            if isinstance(value, str):
+                assert "SECRET" not in value
+                assert "END" not in value
+
+
     def test_missing_llamacpp_env_does_not_crash(self) -> None:
         """Test that missing llama.cpp env vars don't cause errors."""
         # Ensure no llama.cpp env vars are set

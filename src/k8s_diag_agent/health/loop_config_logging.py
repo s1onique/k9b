@@ -6,7 +6,8 @@ that surface the effective non-secret runtime settings at scheduler startup.
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..external_analysis.config import ExternalAnalysisSettings
 from .loop import HealthRunConfig
@@ -240,7 +241,7 @@ def _add_llamacpp_fields(metadata: dict[str, Any]) -> None:
     try:
         # Use from_env to get effective config including defaults
         # This is pure parsing - no network calls
-        llamacpp_config = LlamaCppProviderConfig.from_env(os.environ)
+        llamacpp_config = LlamaCppProviderConfig.from_env(dict(os.environ))
     except RuntimeError:
         # Missing required env vars - skip logging
         return
@@ -254,6 +255,19 @@ def _add_llamacpp_fields(metadata: dict[str, Any]) -> None:
     metadata["llamacpp_max_tokens_auto_drilldown"] = llamacpp_config.max_tokens_auto_drilldown
     metadata["llamacpp_max_tokens_review_enrichment"] = llamacpp_config.max_tokens_review_enrichment
     metadata["llamacpp_response_format_json"] = llamacpp_config.response_format_json
+
+    # Generation settings for structured JSON output
+    metadata["llamacpp_temperature"] = llamacpp_config.temperature
+    if llamacpp_config.top_p is not None:
+        metadata["llamacpp_top_p"] = llamacpp_config.top_p
+    if llamacpp_config.top_k is not None:
+        metadata["llamacpp_top_k"] = llamacpp_config.top_k
+    if llamacpp_config.repeat_penalty is not None:
+        metadata["llamacpp_repeat_penalty"] = llamacpp_config.repeat_penalty
+    if llamacpp_config.seed is not None:
+        metadata["llamacpp_seed"] = llamacpp_config.seed
+    if llamacpp_config.stop is not None:
+        metadata["llamacpp_stop_count"] = len(llamacpp_config.stop)
 
     # API key presence indicator (never log the actual key)
     if llamacpp_config.api_key:

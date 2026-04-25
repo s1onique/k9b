@@ -76,11 +76,36 @@ class LlamaCppProviderConfig:
     max_tokens_auto_drilldown: int = DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
     max_tokens_review_enrichment: int = DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
     response_format_json: bool = False
+    # Generation settings for structured JSON output
+    temperature: float | None = 0.0
+    top_p: float | None = None
+    top_k: int | None = None
+    repeat_penalty: float | None = None
+    seed: int | None = None
+    stop: tuple[str, ...] | None = None
 
     @property
     def endpoint(self) -> str:
         base = self.base_url.rstrip('/')
         return f"{base}/v1/chat/completions"
+
+    @property
+    def generation_settings(self) -> dict[str, object]:
+        """Return non-None generation settings for logging."""
+        settings: dict[str, object] = {}
+        if self.temperature is not None:
+            settings["temperature"] = self.temperature
+        if self.top_p is not None:
+            settings["top_p"] = self.top_p
+        if self.top_k is not None:
+            settings["top_k"] = self.top_k
+        if self.repeat_penalty is not None:
+            settings["repeat_penalty"] = self.repeat_penalty
+        if self.seed is not None:
+            settings["seed"] = self.seed
+        if self.stop is not None:
+            settings["stop_count"] = len(self.stop)
+        return settings
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> LlamaCppProviderConfig:
@@ -106,6 +131,13 @@ class LlamaCppProviderConfig:
         max_tokens_auto_drilldown = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN"), DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
         max_tokens_review_enrichment = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT"), DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
         response_format_json = cls._parse_response_format_json(source.get("LLAMA_CPP_RESPONSE_FORMAT_JSON"))
+        # Generation settings
+        temperature = cls._parse_temperature(source.get("LLAMA_CPP_TEMPERATURE"))
+        top_p = cls._parse_top_p(source.get("LLAMA_CPP_TOP_P"))
+        top_k = cls._parse_top_k(source.get("LLAMA_CPP_TOP_K"))
+        repeat_penalty = cls._parse_repeat_penalty(source.get("LLAMA_CPP_REPEAT_PENALTY"))
+        seed = cls._parse_seed(source.get("LLAMA_CPP_SEED"))
+        stop = cls._parse_stop(source.get("LLAMA_CPP_STOP"))
         return cls(
             base_url=base_url,
             model=model,
@@ -114,8 +146,13 @@ class LlamaCppProviderConfig:
             max_tokens_auto_drilldown=max_tokens_auto_drilldown,
             max_tokens_review_enrichment=max_tokens_review_enrichment,
             response_format_json=response_format_json,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            repeat_penalty=repeat_penalty,
+            seed=seed,
+            stop=stop,
         )
-
     @staticmethod
     def _parse_timeout(value: str | None) -> int:
         if value is None:
@@ -162,6 +199,89 @@ class LlamaCppProviderConfig:
         # Unknown value - default to False for safety
         return False
 
+    @staticmethod
+    def _parse_temperature(value: str | None) -> float | None:
+        """Parse temperature from env var, defaulting to 0.0."""
+        if value is None:
+            return 0.0
+        trimmed = value.strip()
+        if not trimmed:
+            return 0.0
+        try:
+            return float(trimmed)
+        except ValueError:
+            return 0.0
+
+    @staticmethod
+    def _parse_top_p(value: str | None) -> float | None:
+        """Parse top_p from env var, defaulting to None."""
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        try:
+            parsed = float(trimmed)
+            if 0.0 < parsed <= 1.0:
+                return parsed
+            return None
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_top_k(value: str | None) -> int | None:
+        """Parse top_k from env var, defaulting to None."""
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        try:
+            parsed = int(trimmed)
+            if parsed > 0:
+                return parsed
+            return None
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_repeat_penalty(value: str | None) -> float | None:
+        """Parse repeat_penalty from env var, defaulting to None."""
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        try:
+            return float(trimmed)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_seed(value: str | None) -> int | None:
+        """Parse seed from env var, defaulting to None."""
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        try:
+            return int(trimmed)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_stop(value: str | None) -> tuple[str, ...] | None:
+        """Parse stop sequences from env var, defaulting to None."""
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        # Support comma-separated stop sequences
+        sequences = [s.strip() for s in trimmed.split(",") if s.strip()]
+        return tuple(sequences) if sequences else None
+
 
 class LlamaCppProvider(LLMProvider):
     """Provider implementation that calls an OpenAI-compatible llama.cpp endpoint."""
@@ -197,7 +317,6 @@ class LlamaCppProvider(LLMProvider):
         system = system_instructions if system_instructions is not None else _SYSTEM_INSTRUCTIONS
         payload: dict[str, Any] = {
             "model": config.model,
-            "temperature": 0.0,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -207,6 +326,19 @@ class LlamaCppProvider(LLMProvider):
             payload["max_tokens"] = max_tokens
         if response_format_json:
             payload["response_format"] = {"type": "json_object"}
+        # Apply generation settings from config (only non-None values)
+        if config.temperature is not None:
+            payload["temperature"] = config.temperature
+        if config.top_p is not None:
+            payload["top_p"] = config.top_p
+        if config.top_k is not None:
+            payload["top_k"] = config.top_k
+        if config.repeat_penalty is not None:
+            payload["repeat_penalty"] = config.repeat_penalty
+        if config.seed is not None:
+            payload["seed"] = config.seed
+        if config.stop is not None:
+            payload["stop"] = list(config.stop)
         return payload
 
     def _request_headers(self, config: LlamaCppProviderConfig) -> dict[str, str]:
