@@ -25,6 +25,7 @@ class LLMProvider(ABC):
         payload: LLMAssessmentInput,
         *,
         validate_schema: bool = True,
+        response_format_json: bool = False,
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
         ...

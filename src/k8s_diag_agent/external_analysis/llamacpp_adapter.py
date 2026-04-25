@@ -16,6 +16,7 @@ from ..llm.llamacpp_provider import (
     LlamaCppProvider,
     LlamaCppProviderConfig,
     LLMFailureMetadata,
+    LLMResponseParseError,
     classify_llm_failure,
 )
 from ..llm.prompt_diagnostics import (
@@ -156,6 +157,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 validate_schema=False,
                 system_instructions=_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
                 max_tokens=review_enrichment_max_tokens,
+                response_format_json=True,
             )
             parsed = ReviewEnrichmentPayload.from_dict(assessment)
             duration_ms = int((time.perf_counter() - start) * 1000)
@@ -168,6 +170,55 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 "Invalid review enrichment output",
                 ExternalAnalysisStatus.FAILED,
                 error_summary=str(exc),
+            )
+        except LLMResponseParseError as exc:
+            # Structured output failure - capture diagnostics
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            config = self._http_provider._config if self._http_provider else None
+            timeout_value = config.timeout_seconds if config else DEFAULT_TIMEOUT_SECONDS
+            # Build base failure metadata
+            failure_class_value = (
+                "llm_response_parse_error_length_capped"
+                if exc.completion_stopped_by_length
+                else "llm_response_invalid_json"
+            )
+            failure_metadata = LLMFailureMetadata(
+                failure_class=failure_class_value,
+                exception_type="LLMResponseParseError",
+                timeout_seconds=timeout_value,
+                elapsed_ms=duration_ms,
+                endpoint=config.endpoint if config else None,
+                summary=str(exc),
+                **exc.to_diagnostics(),
+            ).to_dict()
+            # Include prompt diagnostics
+            try:
+                context_for_sections = build_review_enrichment_input(
+                    Path(request.source_artifact) if request.source_artifact else Path("."),
+                    request.run_id
+                )
+                sections = self._extract_prompt_sections(request, context_for_sections)
+                prompt_diags = build_prompt_diagnostics(
+                    provider="llamacpp",
+                    operation="review-enrichment",
+                    sections=sections,
+                    actual_prompt_chars=len(prompt) if prompt else 0,
+                    max_tokens=review_enrichment_max_tokens,
+                    timeout_seconds=timeout_value,
+                    elapsed_ms=duration_ms,
+                    failure_class=failure_class_value,
+                    exception_type="LLMResponseParseError",
+                )
+                failure_metadata["prompt_diagnostics"] = prompt_diags.to_dict()
+            except Exception:
+                pass
+            return self._build_failure_artifact(
+                request,
+                duration_ms,
+                str(exc),
+                ExternalAnalysisStatus.SKIPPED,
+                skip_reason=str(exc),
+                failure_metadata=failure_metadata,
             )
         except ValueError as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)

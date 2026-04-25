@@ -82,7 +82,9 @@ def assess_drilldown_artifact(
         from ..llm.llamacpp_provider import LlamaCppProvider
         if isinstance(provider, LlamaCppProvider):
             effective_max_tokens = provider.max_tokens_for_operation("auto-drilldown")
-    raw_assessment = provider.assess(prompt, payload, max_tokens=effective_max_tokens)
+    raw_assessment = provider.assess(
+        prompt, payload, max_tokens=effective_max_tokens, response_format_json=True
+    )
     return AssessorAssessment.from_dict(raw_assessment)
 
 

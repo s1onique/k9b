@@ -2500,7 +2500,7 @@ class HealthLoopRunner:
             payload: dict[str, object] | None = None
             error_summary: str | None = None
             skip_reason: str | None = None
-            failure_metadata: dict[str, object] | None = None
+            failure_metadata: dict[str, object] | None
             # Build actual prompt first for exact measurement.
             # Note: assess_drilldown_artifact() also builds the prompt internally.
             # Since build_drilldown_prompt() is deterministic, the measured chars
@@ -2526,14 +2526,14 @@ class HealthLoopRunner:
                 skip_reason = str(exc)
                 error_summary = None
                 payload = None
-                failure_metadata: dict[str, object] | None = None
+                failure_metadata = None
             except Exception as exc:
                 status = ExternalAnalysisStatus.FAILED
                 summary = str(exc)
                 error_summary = str(exc)
                 payload = None
                 # Build prompt diagnostics for failure logging and artifact
-                failure_metadata: dict[str, object] | None = None
+                failure_metadata = None
                 elapsed_ms = int((time.perf_counter() - start) * 1000)
                 from .drilldown_assessor import build_drilldown_prompt_diagnostics
                 try:
@@ -2607,10 +2607,18 @@ class HealthLoopRunner:
                 if status == ExternalAnalysisStatus.SKIPPED
                 else "ERROR"
             )
+            # Build status-appropriate log message
+            _interp_label = (
+                "Auto drilldown interpretation failed"
+                if status == ExternalAnalysisStatus.FAILED
+                else "Auto drilldown interpretation skipped"
+                if status == ExternalAnalysisStatus.SKIPPED
+                else "Auto drilldown interpretation recorded"
+            )
             self._log_event(
                 "external-analysis",
                 severity,
-                "Auto drilldown interpretation failed" if status == ExternalAnalysisStatus.FAILED else "Auto drilldown interpretation recorded",
+                _interp_label,
                 tool=provider_name,
                 cluster_label=drilldown.label,
                 status=status.value,

@@ -29,6 +29,7 @@ class DefaultLLMProvider(LLMProvider):
         *,
         validate_schema: bool = True,
         max_tokens: int | None = None,
+        response_format_json: bool = False,
     ) -> dict[str, Any]:
         differences = payload.comparison.get("differences") or {}
         diff_keys = sorted(differences)

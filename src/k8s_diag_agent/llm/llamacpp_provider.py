@@ -176,6 +176,7 @@ class LlamaCppProvider(LLMProvider):
         *,
         system_instructions: str | None = None,
         max_tokens: int | None = None,
+        response_format_json: bool = False,
     ) -> dict[str, Any]:
         system = system_instructions if system_instructions is not None else _SYSTEM_INSTRUCTIONS
         payload: dict[str, Any] = {
@@ -188,6 +189,8 @@ class LlamaCppProvider(LLMProvider):
         }
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
+        if response_format_json:
+            payload["response_format"] = {"type": "json_object"}
         return payload
 
     def _request_headers(self, config: LlamaCppProviderConfig) -> dict[str, str]:
@@ -199,7 +202,7 @@ class LlamaCppProvider(LLMProvider):
             headers["Authorization"] = f"Bearer {config.api_key}"
         return headers
 
-    def _extract_assessment(self, data: Any) -> dict[str, Any]:
+    def _extract_assessment(self, data: Any, *, max_tokens: int | None = None) -> dict[str, Any]:
         payload_snippet = self._payload_snippet(data)
         if not isinstance(data, dict):
             raise ValueError(
@@ -279,13 +282,23 @@ class LlamaCppProvider(LLMProvider):
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
+            # Extract structured output diagnostics before raising
+            resp_diags = self._extract_response_diagnostics(data)
             excerpt = content[:500]
             excerpt_snippet = " ".join(excerpt.split()) or excerpt
             if len(content) > 500:
                 excerpt_snippet = f"{excerpt_snippet}…"
-            raise ValueError(
+            # Check if completion was stopped by length cap
+            finish_reason = resp_diags.get("finish_reason")
+            stopped_by_length = finish_reason == "length" if finish_reason else False
+            raise LLMResponseParseError(
                 f"llama.cpp response text content is not valid JSON (first 500 chars: {excerpt_snippet}); "
-                f"response snippet: {payload_snippet}"
+                f"response snippet: {payload_snippet}",
+                finish_reason=resp_diags.get("finish_reason"),
+                response_content_chars=resp_diags.get("response_content_chars"),
+                response_content_prefix=resp_diags.get("response_content_prefix"),
+                completion_stopped_by_length=stopped_by_length,
+                max_tokens=max_tokens,
             ) from exc
         if not isinstance(parsed, dict):
             raise_shape_error("message JSON", "an object", parsed)
@@ -336,6 +349,44 @@ class LlamaCppProvider(LLMProvider):
             snippet = f"{snippet}…"
         return snippet
 
+    @staticmethod
+    def _extract_response_diagnostics(data: Any, max_prefix_len: int = 200) -> dict[str, Any]:
+        """Extract structured output diagnostics from LLM response.
+
+        Args:
+            data: The parsed JSON response from the LLM
+            max_prefix_len: Maximum length for response content prefix
+
+        Returns:
+            Dict with finish_reason, content chars, content prefix if available
+        """
+        diagnostics: dict[str, Any] = {}
+        try:
+            choices = data.get("choices")
+            if isinstance(choices, list) and choices:
+                top_choice = choices[0]
+                if isinstance(top_choice, dict):
+                    # Extract finish_reason
+                    finish_reason = top_choice.get("finish_reason")
+                    if finish_reason is not None:
+                        diagnostics["finish_reason"] = str(finish_reason)
+                    # Extract content
+                    message = top_choice.get("message")
+                    content: str | None = None
+                    if isinstance(message, dict):
+                        content = message.get("content")
+                    elif isinstance(message, str):
+                        content = message
+                    if content is not None:
+                        diagnostics["response_content_chars"] = len(content)
+                        if content:
+                            prefix = content[:max_prefix_len]
+                            diagnostics["response_content_prefix"] = prefix
+        except Exception:  # noqa: BLE001
+            # Best-effort extraction, don't fail on unexpected response shape
+            pass
+        return diagnostics
+
     @classmethod
     def _build_error_message(
         cls,
@@ -384,9 +435,10 @@ class LlamaCppProvider(LLMProvider):
         validate_schema: bool = True,
         system_instructions: str | None = None,
         max_tokens: int | None = None,
+        response_format_json: bool = False,
     ) -> dict[str, Any]:
         config, session, endpoint = self._ensure_ready()
-        request_payload = self._build_payload(prompt, config, system_instructions=system_instructions, max_tokens=max_tokens)
+        request_payload = self._build_payload(prompt, config, system_instructions=system_instructions, max_tokens=max_tokens, response_format_json=response_format_json)
         response: requests.Response | None = None
         timeout_seconds = config.timeout_seconds
         try:
@@ -403,7 +455,7 @@ class LlamaCppProvider(LLMProvider):
             ) from exc
         assert response is not None
         raw = response.json()
-        assessment = self._extract_assessment(raw)
+        assessment = self._extract_assessment(raw, max_tokens=max_tokens)
         if validate_schema:
             try:
                 validated = AssessorAssessment.from_dict(assessment)
@@ -425,6 +477,9 @@ class LLMFailureClass(StrEnum):
     LLM_RESPONSE_PARSE_ERROR = "llm_response_parse_error"
     LLM_CLIENT_REQUEST_ERROR = "llm_client_request_error"
     LLM_ADAPTER_ERROR = "llm_adapter_error"
+    LLM_RESPONSE_PARSE_ERROR_LENGTH_CAPPED = "llm_response_parse_error_length_capped"
+    LLM_RESPONSE_INVALID_JSON = "llm_response_invalid_json"
+    LLM_RESPONSE_UNRECOGNIZED_PAYLOAD = "llm_response_unrecognized_payload"
 
 
 def classify_llm_failure(
@@ -525,6 +580,39 @@ def _classify_request_exception(exc: BaseException, exc_name: str) -> tuple[LLMF
     # Default to adapter error for unexpected exceptions
     return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
 
+class LLMResponseParseError(ValueError):
+    """Exception raised when LLM response cannot be parsed as valid JSON.
+
+    Carries structured output diagnostics for observability and failure analysis.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        finish_reason: str | None = None,
+        response_content_chars: int | None = None,
+        response_content_prefix: str | None = None,
+        completion_stopped_by_length: bool = False,
+        max_tokens: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.finish_reason = finish_reason
+        self.response_content_chars = response_content_chars
+        self.response_content_prefix = response_content_prefix
+        self.completion_stopped_by_length = completion_stopped_by_length
+        self.max_tokens = max_tokens
+
+    def to_diagnostics(self) -> dict[str, Any]:
+        """Convert to diagnostics dict for failure metadata."""
+        return {
+            "finish_reason": self.finish_reason,
+            "response_content_chars": self.response_content_chars,
+            "response_content_prefix": self.response_content_prefix,
+            "completion_stopped_by_length": self.completion_stopped_by_length,
+            "max_tokens": self.max_tokens,
+        }
+
+
 
 @dataclass(frozen=True)
 class LLMFailureMetadata:
@@ -536,6 +624,15 @@ class LLMFailureMetadata:
     elapsed_ms: int | None = None
     endpoint: str | None = None
     summary: str | None = None
+    # Structured output diagnostics
+    finish_reason: str | None = None
+    response_content_chars: int | None = None
+    response_content_prefix: str | None = None
+    json_parse_error: str | None = None
+    completion_stopped_by_length: bool | None = None
+    max_tokens: int | None = None
+    provider: str | None = None
+    operation: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -550,6 +647,22 @@ class LLMFailureMetadata:
             result["endpoint"] = self.endpoint
         if self.summary is not None:
             result["summary"] = self.summary
+        if self.finish_reason is not None:
+            result["finish_reason"] = self.finish_reason
+        if self.response_content_chars is not None:
+            result["response_content_chars"] = self.response_content_chars
+        if self.response_content_prefix is not None:
+            result["response_content_prefix"] = self.response_content_prefix
+        if self.json_parse_error is not None:
+            result["json_parse_error"] = self.json_parse_error
+        if self.completion_stopped_by_length is not None:
+            result["completion_stopped_by_length"] = self.completion_stopped_by_length
+        if self.max_tokens is not None:
+            result["max_tokens"] = self.max_tokens
+        if self.provider is not None:
+            result["provider"] = self.provider
+        if self.operation is not None:
+            result["operation"] = self.operation
         return result
 
 
@@ -562,4 +675,5 @@ __all__ = [
     "LLMFailureClass",
     "LLMFailureMetadata",
     "classify_llm_failure",
+    "LLMResponseParseError",
 ]
