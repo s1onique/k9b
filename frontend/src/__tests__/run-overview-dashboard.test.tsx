@@ -4,7 +4,7 @@
  * Focused tests for RunOverviewDashboard component.
  * Tests Overview tab content rendering and CTA behaviors.
  *
- * Phase 3 - Run Summary UX Redesign: Overview dashboard.
+ * Phase 5 - Run Summary UX Redesign: High-fidelity Overview polish tests.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -72,9 +72,9 @@ describe("RunOverviewDashboard", () => {
   });
 
   // --------------------------------------------------------------------
-  // Test 1: Overview tab renders KPI strip
+  // Test 1: Overview tab renders KPI strip with visual anchors
   // --------------------------------------------------------------------
-  test("1. Overview tab renders KPI strip plus heading", () => {
+  test("1. Overview tab renders KPI strip with polished cards", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
     // KPI stats should be visible
@@ -84,38 +84,69 @@ describe("RunOverviewDashboard", () => {
     expect(screen.getByText("Proposals")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
 
+    // KPI cards should have kpi-card class
+    const kpiCards = document.querySelectorAll(".kpi-card");
+    expect(kpiCards).toHaveLength(3);
+
+    // KPI cards should have icon and content
+    const kpiIcons = document.querySelectorAll(".kpi-icon");
+    expect(kpiIcons).toHaveLength(3);
+
+    const kpiValues = document.querySelectorAll(".kpi-value");
+    expect(kpiValues).toHaveLength(3);
+
     // Duration summary should be visible
     expect(screen.getByText(/Last 32s/)).toBeInTheDocument();
   });
 
   // --------------------------------------------------------------------
-  // Test 2: "What needs attention now" renders with affected clusters
+  // Test 2: "What needs attention now" renders with actionable cluster rows
   // --------------------------------------------------------------------
-  test("2. 'What needs attention now' renders with affected cluster badges", () => {
+  test("2. 'What needs attention now' renders with actionable cluster rows", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
     // Attention section heading should be visible
     expect(screen.getByRole("heading", { name: "What needs attention now" })).toBeInTheDocument();
 
-    // Affected clusters should be shown
-    expect(screen.getByText("Affected clusters:")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "cluster-a" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "cluster-b" })).toBeInTheDocument();
+    // Should show subtitle "Affected clusters need review"
+    expect(screen.getByText("Affected clusters need review")).toBeInTheDocument();
+
+    // Cluster rows should be present with cluster names
+    expect(screen.getByText("cluster-a")).toBeInTheDocument();
+    expect(screen.getByText("cluster-b")).toBeInTheDocument();
+
+    // Cluster rows should have the correct class for styling
+    const clusterRows = document.querySelectorAll(".attention-cluster-row");
+    expect(clusterRows).toHaveLength(2);
   });
 
   // --------------------------------------------------------------------
-  // Test 3: Affected cluster badges call onFocusClusterForNextChecks
+  // Test 3: Cluster row CTAs call onFocusClusterForNextChecks
   // --------------------------------------------------------------------
-  test("3. Clicking affected cluster badge calls onFocusClusterForNextChecks with exact cluster label", () => {
+  test("3. Clicking cluster row CTA calls onFocusClusterForNextChecks with exact cluster label", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
-    // Click cluster-a badge
-    const clusterABadge = screen.getByRole("button", { name: "cluster-a" });
-    clusterABadge.click();
+    // Click "View checks" button for cluster-a (using testid)
+    const viewChecksClusterA = screen.getByTestId("cluster-badge-cluster-a");
+    viewChecksClusterA.click();
 
     // Verify callback was called with cluster label
     expect(defaultProps.onFocusClusterForNextChecks).toHaveBeenCalledWith("cluster-a");
     expect(defaultProps.onFocusClusterForNextChecks).toHaveBeenCalledTimes(1);
+  });
+
+  // --------------------------------------------------------------------
+  // Test 3b: Attention footer CTA calls onTabChange("next-checks")
+  // --------------------------------------------------------------------
+  test("3b. Clicking 'View all next checks' footer CTA calls onTabChange with next-checks", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Click footer CTA
+    const footerCta = screen.getByTestId("view-next-checks-from-attention");
+    footerCta.click();
+
+    // Verify callback was called with next-checks
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("next-checks");
   });
 
   // --------------------------------------------------------------------
@@ -147,16 +178,25 @@ describe("RunOverviewDashboard", () => {
   });
 
   // --------------------------------------------------------------------
-  // Test 6: Next checks preview renders with candidate count and CTA
+  // Test 6: Next checks preview renders with metric cells
   // --------------------------------------------------------------------
-  test("6. Next checks preview renders candidate count and offers Review next checks CTA", () => {
+  test("6. Next checks preview renders planner status and candidate count as metric cells", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
     // Next checks section should have heading
     expect(screen.getByRole("heading", { name: "Next checks" })).toBeInTheDocument();
 
-    // Candidate count label should be visible (may be combined with status text)
-    expect(screen.getByText(/3 candidates/)).toBeInTheDocument();
+    // Should show Planner metric cell with status
+    expect(screen.getByText("Planner")).toBeInTheDocument();
+    expect(screen.getByText("planned")).toBeInTheDocument();
+
+    // Should show Candidates metric cell
+    expect(screen.getByText("Candidates")).toBeInTheDocument();
+    expect(screen.getByText("3 candidates")).toBeInTheDocument();
+
+    // Metric cells should be present
+    const metricCells = document.querySelectorAll(".metric-cell");
+    expect(metricCells.length).toBeGreaterThanOrEqual(2);
 
     // Primary CTA button should be visible
     const reviewCta = screen.getByTestId("review-next-checks-cta");
@@ -179,19 +219,29 @@ describe("RunOverviewDashboard", () => {
   });
 
   // --------------------------------------------------------------------
-  // Test 8: Artifacts preview shows count and up to 3 labels
+  // Test 8: Artifacts preview shows count and label chips
   // --------------------------------------------------------------------
-  test("8. Artifacts preview shows count and up to 3 artifact labels", () => {
+  test("8. Artifacts preview shows count and up to 3 artifact labels as chips", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
     // Artifacts section should have heading
     expect(screen.getByRole("heading", { name: "Artifacts" })).toBeInTheDocument();
 
-    // Should show total count (text may be split across elements)
-    expect(screen.getByText(/artifacts available/)).toBeInTheDocument();
+    // Should show artifact count prominently
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("artifacts")).toBeInTheDocument();
 
-    // Should show first 3 labels (text may be split across elements)
-    expect(screen.getByText(/run manifest, assessment, telemetry/)).toBeInTheDocument();
+    // Should show label chips for first 3
+    expect(screen.getByText("run manifest")).toBeInTheDocument();
+    expect(screen.getByText("assessment")).toBeInTheDocument();
+    expect(screen.getByText("telemetry")).toBeInTheDocument();
+
+    // Should show "+1 more" indicator
+    expect(screen.getByText("+1 more")).toBeInTheDocument();
+
+    // Artifact label chips should have the correct class
+    const labelChips = document.querySelectorAll(".artifact-label-chip");
+    expect(labelChips).toHaveLength(3);
   });
 
   // --------------------------------------------------------------------
@@ -266,6 +316,9 @@ describe("RunOverviewDashboard", () => {
 
     // Should show no plan message
     expect(screen.getByText("No next checks generated for this run.")).toBeInTheDocument();
+
+    // Should not show metric cells when no plan
+    expect(screen.queryByText("Planner")).not.toBeInTheDocument();
   });
 
   // --------------------------------------------------------------------
@@ -304,6 +357,26 @@ describe("RunOverviewDashboard", () => {
     const reviewCta = screen.getByTestId("review-next-checks-cta");
     expect(reviewCta.tagName).toBe("BUTTON");
     expect(reviewCta).toHaveAttribute("type", "button");
+  });
+
+  // --------------------------------------------------------------------
+  // Test 15: All CTA buttons are keyboard accessible
+  // --------------------------------------------------------------------
+  test("15. All CTA buttons are keyboard accessible", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // All CTAs should be focusable button elements
+    const viewTelemetryCta = screen.getByTestId("view-telemetry-cta");
+    const viewArtifactsCta = screen.getByTestId("view-artifacts-cta");
+    const reviewCta = screen.getByTestId("review-next-checks-cta");
+
+    expect(viewTelemetryCta.tabIndex).toBe(0);
+    expect(viewArtifactsCta.tabIndex).toBe(0);
+    expect(reviewCta.tabIndex).toBe(0);
+
+    // Should be clickable
+    viewTelemetryCta.click();
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("telemetry");
   });
 
   // --------------------------------------------------------------------
@@ -361,49 +434,46 @@ describe("RunOverviewDashboard", () => {
   });
 
   // --------------------------------------------------------------------
-  // Test 19: Secondary CTAs still work and call correct tab changes
+  // Test 19: Secondary CTAs use run-summary-cta-secondary class
   // --------------------------------------------------------------------
-  test("19. Secondary CTAs call correct tab changes", () => {
+  test("19. Secondary CTAs use run-summary-cta-secondary class", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
-    // Click View telemetry CTA
-    screen.getByTestId("view-telemetry-cta").click();
-    expect(defaultProps.onTabChange).toHaveBeenCalledWith("telemetry");
-
-    // Click View artifacts CTA
-    screen.getByTestId("view-artifacts-cta").click();
-    expect(defaultProps.onTabChange).toHaveBeenCalledWith("artifacts");
-  });
-
-  // --------------------------------------------------------------------
-  // Test 20: Attention card "View next checks" CTA also calls correct tab change
-  // --------------------------------------------------------------------
-  test("20. Attention card CTA calls onTabChange with next-checks", () => {
-    render(<RunOverviewDashboard {...defaultProps} />);
-
-    const viewNextChecksCta = screen.getByTestId("view-next-checks-from-attention");
-    expect(viewNextChecksCta.tagName).toBe("BUTTON");
-    viewNextChecksCta.click();
-    expect(defaultProps.onTabChange).toHaveBeenCalledWith("next-checks");
-  });
-
-  // --------------------------------------------------------------------
-  // Test 15: All CTA buttons are keyboard accessible
-  // --------------------------------------------------------------------
-  test("15. All CTA buttons are keyboard accessible", () => {
-    render(<RunOverviewDashboard {...defaultProps} />);
-
-    // All CTAs should be focusable button elements
+    // View telemetry CTA should use secondary class
     const viewTelemetryCta = screen.getByTestId("view-telemetry-cta");
+    expect(viewTelemetryCta).toHaveClass("run-summary-cta-secondary");
+
+    // View artifacts CTA should use secondary class
     const viewArtifactsCta = screen.getByTestId("view-artifacts-cta");
-    const reviewCta = screen.getByTestId("review-next-checks-cta");
+    expect(viewArtifactsCta).toHaveClass("run-summary-cta-secondary");
+  });
 
-    expect(viewTelemetryCta.tabIndex).toBe(0);
-    expect(viewArtifactsCta.tabIndex).toBe(0);
-    expect(reviewCta.tabIndex).toBe(0);
+  // --------------------------------------------------------------------
+  // Test 20: Preview cards have visual anchor headers
+  // --------------------------------------------------------------------
+  test("20. Preview cards have preview-card-header with icons", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
 
-    // Should be clickable
-    viewTelemetryCta.click();
-    expect(defaultProps.onTabChange).toHaveBeenCalledWith("telemetry");
+    // All preview cards should have header with icon
+    const previewHeaders = document.querySelectorAll(".preview-card-header");
+    expect(previewHeaders.length).toBeGreaterThanOrEqual(3);
+
+    // All preview cards should have icon
+    const previewIcons = document.querySelectorAll(".preview-card-icon");
+    expect(previewIcons.length).toBeGreaterThanOrEqual(3);
+  });
+
+  // --------------------------------------------------------------------
+  // Test 21: Attention card has warning icon
+  // --------------------------------------------------------------------
+  test("21. Attention card has attention-icon in header", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Attention card should have warning icon
+    const attentionIcon = document.querySelector(".attention-icon");
+    expect(attentionIcon).toBeInTheDocument();
+
+    // Icon should contain warning character
+    expect(attentionIcon?.textContent).toContain("⚠");
   });
 });

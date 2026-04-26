@@ -82,34 +82,39 @@ const AttentionNowCard = ({
 
   return (
     <div className="run-overview-card attention-now-card" data-testid="attention-now-card">
-      <h3>What needs attention now</h3>
+      <div className="attention-card-header">
+        <span className="attention-icon" aria-hidden="true">⚠</span>
+        <h3>What needs attention now</h3>
+      </div>
       <div className="attention-now-content">
-        {/* Affected cluster badges */}
+        {/* Affected cluster rows */}
         <div className="attention-now-section">
-          <p className="muted tiny">Affected clusters:</p>
-          <div className="attention-now-clusters">
+          <p className="muted tiny attention-subtitle">Affected clusters need review</p>
+          <div className="attention-cluster-rows">
             {discoveryClusters.map((cluster) => (
-              <button
-                type="button"
-                className="cluster-badge"
-                key={cluster}
-                onClick={() => onFocusClusterForNextChecks(cluster)}
-                data-testid={`cluster-badge-${cluster}`}
-              >
-                {cluster}
-              </button>
+              <div className="attention-cluster-row" key={cluster}>
+                <span className="cluster-name">{cluster}</span>
+                <button
+                  type="button"
+                  className="run-summary-cta-secondary attention-cta"
+                  onClick={() => onFocusClusterForNextChecks(cluster)}
+                  data-testid={`cluster-badge-${cluster}`}
+                >
+                  View checks →
+                </button>
+              </div>
             ))}
           </div>
         </div>
       </div>
-      {/* CTA to open Next checks tab */}
+      {/* Footer CTA to open Next checks tab */}
       <button
         type="button"
-        className="link"
+        className="run-summary-cta-secondary"
         onClick={onViewNextChecks}
         data-testid="view-next-checks-from-attention"
       >
-        View next checks →
+        View all next checks →
       </button>
     </div>
   );
@@ -136,15 +141,24 @@ const NextChecksPreviewCard = ({
 }: NextChecksPreviewCardProps) => {
   return (
     <div className="run-overview-card next-checks-preview-card" data-testid="next-checks-preview-card">
-      <h3>Next checks</h3>
+      <div className="preview-card-header">
+        <span className="preview-card-icon" aria-hidden="true">→</span>
+        <h3>Next checks</h3>
+      </div>
       <div className="next-checks-preview-content">
         {runPlan ? (
-          <>
-            <p className="muted tiny">
-              {planStatusText ? `Planner: ${planStatusText} · ` : ""}
-              {planCandidateCountLabel}
-            </p>
-          </>
+          <div className="next-checks-metrics">
+            {planStatusText && (
+              <div className="metric-cell">
+                <span className="metric-label">Planner</span>
+                <span className="metric-value">{planStatusText}</span>
+              </div>
+            )}
+            <div className="metric-cell">
+              <span className="metric-label">Candidates</span>
+              <span className="metric-value">{planCandidateCountLabel}</span>
+            </div>
+          </div>
         ) : (
           <p className="muted tiny">No next checks generated for this run.</p>
         )}
@@ -176,17 +190,20 @@ const LlmTelemetryPreviewCard = ({
 }: LlmTelemetryPreviewCardProps) => {
   return (
     <div className="run-overview-card llm-telemetry-preview-card" data-testid="llm-telemetry-preview-card">
-      <h3>LLM telemetry</h3>
+      <div className="preview-card-header">
+        <span className="preview-card-icon" aria-hidden="true">◈</span>
+        <h3>LLM telemetry</h3>
+      </div>
       <div className="llm-telemetry-preview-content">
         <div className="llm-stats-line">{llmStatsLine}</div>
         {providerBreakdown && (
-          <p className="muted tiny">Providers: {providerBreakdown}</p>
+          <p className="muted tiny llm-provider-preview">Providers: {providerBreakdown}</p>
         )}
       </div>
       {/* CTA */}
       <button
         type="button"
-        className="link"
+        className="run-summary-cta-secondary"
         onClick={onViewTelemetry}
         data-testid="view-telemetry-cta"
       >
@@ -211,29 +228,35 @@ const ArtifactsPreviewCard = ({
 
   return (
     <div className="run-overview-card artifacts-preview-card" data-testid="artifacts-preview-card">
-      <h3>Artifacts</h3>
+      <div className="preview-card-header">
+        <span className="preview-card-icon" aria-hidden="true">▣</span>
+        <h3>Artifacts</h3>
+      </div>
       <div className="artifacts-preview-content">
-        <p className="muted tiny">
-          {totalCount > 0 ? (
-            <>
-              <strong>{totalCount}</strong> artifact{totalCount !== 1 ? "s" : ""} available
-              {previewLabels.length > 0 && (
-                <>
-                  {" "}· {previewLabels.join(", ")}
-                  {totalCount > 3 && "…"}
-                </>
-              )}
-            </>
-          ) : (
-            "No artifacts available for this run."
-          )}
-        </p>
+        {totalCount > 0 ? (
+          <>
+            <div className="artifacts-count">
+              <strong>{totalCount}</strong>
+              <span className="artifacts-count-label">artifact{totalCount !== 1 ? "s" : ""}</span>
+            </div>
+            {previewLabels.length > 0 && (
+              <div className="artifacts-labels">
+                {previewLabels.map((label) => (
+                  <span key={label} className="artifact-label-chip">{label}</span>
+                ))}
+                {totalCount > 3 && <span className="artifacts-more muted tiny">+{totalCount - 3} more</span>}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted tiny">No artifacts available for this run.</p>
+        )}
       </div>
       {/* CTA */}
       {totalCount > 0 && (
         <button
           type="button"
-          className="link"
+          className="run-summary-cta-secondary"
           onClick={onViewArtifacts}
           data-testid="view-artifacts-cta"
         >

@@ -6,6 +6,16 @@
  * Extracted from RunSummaryPanel (E1-3b-step15).
  */
 
+// Visual anchors for KPI cards - simple text-based indicators
+const KPI_ICONS: Record<string, string> = {
+  Clusters: "⬡",
+  Degraded: "◆",
+  Proposals: "▶",
+  Notifications: "◎",
+  Drilldowns: "→",
+  // Default fallback
+};
+
 export interface RunKpiStat {
   label: string;
   value: string | number;
@@ -27,12 +37,19 @@ export const RunKpiStrip = ({
       <div className="run-summary-stats">
         {stats.map((stat) => (
           <article
-            className="run-stat-card"
+            className="run-stat-card kpi-card"
             key={stat.label}
             aria-label={`${stat.label}: ${stat.value}`}
           >
-            <strong>{stat.value}</strong>
-            <span>{stat.label}</span>
+            <div className="kpi-card-inner">
+              <div className="kpi-icon" aria-hidden="true">
+                {KPI_ICONS[stat.label] || "●"}
+              </div>
+              <div className="kpi-content">
+                <strong className="kpi-value">{stat.value}</strong>
+                <span className="kpi-label">{stat.label}</span>
+              </div>
+            </div>
           </article>
         ))}
       </div>

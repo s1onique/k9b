@@ -1,9 +1,11 @@
 /**
  * Run Overview Dashboard Component Styles
- * 
+ *
  * Visual polish and responsive grid layout for the Overview tab dashboard.
  * Provides an operator-first view with clear visual hierarchy.
- * 
+ *
+ * Phase 5: High-fidelity Overview polish - transforms from plain cards to polished operator dashboard.
+ *
  * CSS Ownership:
  * - .run-overview-card       → Shared card surface (background, border, radius, padding, flex, gap)
  * - .attention-now-card      → Warning colors + full-width span
@@ -12,17 +14,40 @@
  * - .artifacts-preview-card   → Artifacts content styling
  * - .run-summary-cta          → Primary CTA button
  * - .run-summary-cta-secondary → Secondary CTA button
- * 
+ * - .preview-card-header     → Icon + heading header for preview cards
+ * - .preview-card-icon        → Visual anchor icon (aria-hidden)
+ * - .attention-card-header    → Warning icon + heading
+ * - .attention-icon           → Warning indicator
+ * - .attention-cluster-rows   → Cluster action rows
+ * - .attention-cluster-row    → Individual cluster row with name + CTA
+ * - .attention-cta            → Compact CTA for attention rows
+ * - .next-checks-metrics      → Metric cells container
+ * - .metric-cell              → Label + value metric cell
+ * - .metric-label             → Small label text
+ * - .metric-value             → Value text
+ * - .artifacts-count          → Count + label display
+ * - .artifacts-count-label    → "artifacts" label
+ * - .artifacts-labels         → Label chips container
+ * - .artifact-label-chip      → Individual artifact label chip
+ * - .artifacts-more           → "+N more" indicator
+ * - .kpi-card                → KPI metric card
+ * - .kpi-card-inner           → Icon + content inner layout
+ * - .kpi-icon                 → Visual anchor icon circle
+ * - .kpi-content              → Value + label content
+ * - .kpi-value                → Large metric value
+ * - .kpi-label                → Small metric label
+ *
  * Theme overrides (solarized-light):
  * - [data-theme="solarized-light"] .run-overview-card
  * - [data-theme="solarized-light"] .attention-now-card
  * - [data-theme="solarized-light"] .run-summary-cta
- * 
+ * - [data-theme="solarized-light"] .kpi-card
+ *
  * Dependencies:
  * - tokens.css (for --color-* tokens)
  * - themes.css (for theme variable values)
- * 
- * Phase: 32 (Run Summary UX Redesign Phase 4 - Visual Polish)
+ *
+ * Phase: 5 (Run Summary UX Redesign Phase 5 - High-fidelity Overview Polish)
  */
 
 /* ==========================================================================
@@ -78,8 +103,36 @@
 }
 
 /* ==========================================================================
+   Preview Card Header (icon + heading)
+   Provides visual hierarchy for preview cards.
+   ========================================================================== */
+
+.preview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preview-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.35rem;
+  background: var(--color-accent-primary, rgba(56, 189, 248, 0.15));
+  color: var(--color-accent-primary-text, #bae6fd);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.preview-card-header h3 {
+  margin: 0;
+}
+
+/* ==========================================================================
    Attention Now Card (prominent when present)
-   Only owns warning colors and full-width behavior.
+   Full-width warning card with actionable cluster rows.
    ========================================================================== */
 
 .attention-now-card {
@@ -88,8 +141,28 @@
   grid-column: 1 / -1;
 }
 
-.attention-now-card h3 {
+.attention-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.attention-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.35rem;
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.2));
   color: var(--color-state-warning-text, #fde047);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.attention-card-header h3 {
+  color: var(--color-state-warning-text, #fde047);
+  margin: 0;
 }
 
 .attention-now-content {
@@ -104,36 +177,92 @@
   gap: 0.4rem;
 }
 
-.attention-now-clusters {
+.attention-subtitle {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  margin: 0;
+  font-size: 0.7rem;
+}
+
+.attention-cluster-rows {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
+}
+
+.attention-cluster-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.5rem;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.attention-cluster-row:hover {
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.7));
+  border-color: var(--color-border-default, rgba(148, 163, 184, 0.3));
+}
+
+.cluster-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #f8fafc);
+}
+
+.attention-cta {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
 }
 
 /* ==========================================================================
    Next Checks Preview Card (prominent - primary action)
-   Specific card class owns any prominence-specific behavior.
+   Shows planner status and candidate count in metric cells.
    ========================================================================== */
 
 .next-checks-preview-content {
   flex: 1;
 }
 
-.next-checks-preview-content p {
-  margin: 0;
+.next-checks-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.metric-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.5rem;
+  min-width: 80px;
+}
+
+.metric-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+.metric-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f8fafc);
 }
 
 /* ==========================================================================
    LLM Telemetry Preview Card (secondary)
-   Specific card class owns telemetry content styling.
+   Shows stats with provider breakdown.
    ========================================================================== */
 
 .llm-telemetry-preview-content {
   flex: 1;
-}
-
-.llm-telemetry-preview-content p {
-  margin: 0;
 }
 
 .llm-stats-line {
@@ -141,17 +270,116 @@
   color: var(--color-text-primary, #f8fafc);
 }
 
+.llm-provider-preview {
+  margin-top: 0.35rem;
+}
+
 /* ==========================================================================
    Artifacts Preview Card (secondary)
-   Specific card class owns artifacts content styling.
+   Shows count and up to 3 labels as chips.
    ========================================================================== */
 
 .artifacts-preview-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.artifacts-preview-content p {
-  margin: 0;
+.artifacts-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.artifacts-count strong {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #f8fafc);
+  line-height: 1;
+}
+
+.artifacts-count-label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+.artifacts-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.artifact-label-chip {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary, #e2e8f0);
+}
+
+.artifacts-more {
+  font-size: 0.65rem;
+}
+
+/* ==========================================================================
+   KPI Cards
+   Icon-led cards with supporting text.
+   ========================================================================== */
+
+.run-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.kpi-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.kpi-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.kpi-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: var(--color-accent-primary, rgba(56, 189, 248, 0.15));
+  color: var(--color-accent-primary-text, #bae6fd);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.kpi-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text-primary, #f8fafc);
+}
+
+.kpi-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
 }
 
 /* ==========================================================================
@@ -169,14 +397,18 @@
   border-radius: 0.5rem;
   color: var(--color-btn-primary-text, #bae6fd);
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
 .run-summary-cta:hover {
   background: var(--color-btn-primary-hover-bg, rgba(56, 189, 248, 0.2));
   border-color: var(--color-btn-primary-hover-border, rgba(56, 189, 248, 0.4));
+}
+
+.run-summary-cta:active {
+  transform: translateY(1px);
 }
 
 .run-summary-cta:focus {
@@ -189,17 +421,25 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.25rem 0;
+  padding: 0.35rem 0.75rem;
   background: transparent;
-  border: none;
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.25));
+  border-radius: 0.4rem;
   color: var(--color-text-link, #38bdf8);
   font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .run-summary-cta-secondary:hover {
+  background: var(--color-accent-primary, rgba(56, 189, 248, 0.1));
+  border-color: var(--color-accent-primary-border, rgba(56, 189, 248, 0.4));
   color: var(--color-accent-primary-text, #bae6fd);
+}
+
+.run-summary-cta-secondary:active {
+  transform: translateY(1px);
 }
 
 .run-summary-cta-secondary:focus {
@@ -239,12 +479,72 @@
   border-color: rgba(181, 137, 0, 0.45);
 }
 
-[data-theme="solarized-light"] .attention-now-card h3 {
+[data-theme="solarized-light"] .attention-icon {
+  background: rgba(181, 137, 0, 0.2);
   color: var(--color-state-warning-text, #b58900);
+}
+
+[data-theme="solarized-light"] .attention-card-header h3 {
+  color: var(--color-state-warning-text, #b58900);
+}
+
+[data-theme="solarized-light"] .attention-cluster-row {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .attention-cluster-row:hover {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .cluster-name {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .preview-card-icon {
+  background: rgba(38, 139, 210, 0.15);
+  color: var(--color-accent-primary-text, #268bd2);
+}
+
+[data-theme="solarized-light"] .metric-cell {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .metric-label {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .metric-value {
+  color: var(--color-text-primary, #002b36);
 }
 
 [data-theme="solarized-light"] .llm-telemetry-preview-card .llm-stats-line {
   color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .artifacts-count strong {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .artifact-label-chip {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .kpi-icon {
+  background: rgba(38, 139, 210, 0.15);
+  color: var(--color-accent-primary-text, #268bd2);
+}
+
+[data-theme="solarized-light"] .kpi-value {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .kpi-label {
+  color: var(--color-text-muted, #657b83);
 }
 
 [data-theme="solarized-light"] .run-summary-cta {
@@ -259,10 +559,13 @@
 }
 
 [data-theme="solarized-light"] .run-summary-cta-secondary {
+  border-color: rgba(147, 161, 161, 0.25);
   color: var(--color-text-link, #268bd2);
 }
 
-[data-theme="solarized-light"] .run-summary-cta-secondary:hover {
+  [data-theme="solarized-light"] .run-summary-cta-secondary:hover {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.4);
   color: var(--color-accent-primary-text, #268bd2);
 }
 
