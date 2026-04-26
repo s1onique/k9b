@@ -248,6 +248,55 @@ Each extension that affects a durable artifact also requires updating the releva
 
 The UI model layer (`src/k8s_diag_agent/ui/`) is organized as a composition barrel with focused domain modules. This section documents final ownership after the M-17–M-22 modularization slices.
 
+### api.py modularization (closure note)
+
+The API serialization layer (`src/k8s_diag_agent/ui/`) mirrors the model layer pattern. After extracting serializer/payload logic from `api.py`, ownership is distributed as follows:
+
+#### api.py responsibilities
+
+`src/k8s_diag_agent/ui/api.py` serves three roles:
+
+| Role | Description |
+|------|-------------|
+| **Public builder surface** | Owns `build_run_payload`, `build_fleet_payload`, `build_proposals_payload`, `build_notifications_payload`, `build_cluster_detail_payload`, `build_runs_list` |
+| **Internal helpers** | Owns `_collect_run_artifacts`, `_build_freshness_payload`, `_serialize_run_stats`, `_derive_review_status`, `_compute_batch_eligibility`, `_compute_batch_eligibility_from_cache`, `_extract_review_metadata_streaming` |
+| **Backward-compatibility barrel** | Re-exports all symbols from `api_payloads.py` and focused `api_*.py` modules so existing import paths continue to work |
+
+The barrel re-exports carry `# noqa: F401` to suppress unused-import warnings and a comment stating "re-exported for backward compatibility". This is intentional and stable.
+
+#### Focused API serializer module ownership table
+
+| Module | Owner symbols | Rationale |
+|--------|--------------|-----------|
+| `api_payloads.py` | All `TypedDict` payload classes (e.g., `RunPayload`, `FleetPayload`, `ClusterDetailPayload`, `RunsListPayload`, etc.) | Contract module; JSON key names, optional vs required fields, and field types are frozen |
+| `api_alertmanager.py` | `_serialize_alertmanager_compact`, `_serialize_alertmanager_source`, `_serialize_alertmanager_sources` | Domain-focused extraction |
+| `api_cluster_detail.py` | `_serialize_cluster`, `_serialize_assessment_summary`, `_serialize_findings`, `_serialize_hypothesis`, `_serialize_next_check`, `_serialize_proposal`, `_serialize_notification`, `_serialize_drilldown`, `_serialize_drilldown_summary`, `_serialize_auto_interpretation`, `_build_problem_summary`, `_build_proposal_summary`, `_filter_related_proposals`, `_filter_related_notifications`, `_serialize_rating_counts`, `_serialize_status_counts`, `_serialize_recommended_action` | Domain-focused extraction |
+| `api_deterministic_next_checks.py` | `_serialize_deterministic_next_checks`, `_serialize_deterministic_next_check_summary`, `_serialize_deterministic_next_check_cluster` | Domain-focused extraction |
+| `api_diagnostic_pack.py` | `_serialize_diagnostic_pack`, `_serialize_diagnostic_pack_review` | Domain-focused extraction |
+| `api_llm.py` | `_serialize_llm_stats`, `_serialize_llm_activity`, `_serialize_llm_policy` | Domain-focused extraction |
+| `api_next_check_plan.py` | `_serialize_next_check_plan`, `_serialize_next_check_candidate`, `_serialize_execution_history`, `_serialize_orphaned_approval`, `_serialize_plan_candidates_for_cluster` | Domain-focused extraction |
+| `api_next_check_queue.py` | `_serialize_next_check_queue`, `_serialize_planner_availability`, `_serialize_queue_explanation`, `_serialize_queue_cluster_state`, `_serialize_queue_candidate_accounting` | Domain-focused extraction |
+| `api_provider_execution.py` | `_serialize_provider_execution`, `_serialize_provider_execution_branch` | Domain-focused extraction |
+| `api_review_enrichment.py` | `_serialize_review_enrichment`, `_serialize_review_enrichment_status` | Domain-focused extraction |
+
+#### Rules for API modularization
+
+1. **TypedDict payloads live in `api_payloads.py`**: All `TypedDict` payload classes represent API response contracts. JSON key names, optional vs required fields, and field types are frozen. Do not add new TypedDict definitions elsewhere.
+
+2. **Serializers live in focused `api_*.py` modules**: Serializer functions (`_serialize_*`) belong in domain-specific modules (e.g., `api_alertmanager.py`, `api_llm.py`). This keeps serializer logic co-located with its domain.
+
+3. **`api.py` remains the public compatibility/composition surface**: `api.py` re-exports all moved symbols for backward compatibility. Existing imports from `ui.api` continue to work without modification.
+
+4. **Legacy imports from `ui.api` are intentionally preserved**: Re-exports in `api.py` are stable contracts. Do not remove or rename re-exported symbols without a deprecation period.
+
+5. **Public builders remain in `api.py`**: Functions like `build_run_payload`, `build_fleet_payload`, `build_cluster_detail_payload`, and `build_runs_list` compose multiple serializers and stay in `api.py` as the public entry points.
+
+6. **Adding new serializers**: Create a new focused `api_<domain>.py` module, implement serializers there, and add re-exports in `api.py` with `# noqa: F401` comments.
+
+#### Note on behavior-changing cleanup
+
+Extracting `build_runs_list()` into a separate module is out of scope for this epic. The function remains in `api.py` as the public builder surface.
+
 ### model.py responsibilities
 
 `src/k8s_diag_agent/ui/model.py` serves two roles:
