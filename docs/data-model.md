@@ -349,3 +349,66 @@ Re-exports in `model.py` are stable contracts. Do not remove or rename re-export
 ### Note on behavior-changing cleanup
 
 Boolean truthy parsing changes (e.g., converting `bool(raw.get("field"))` to use `_coerce_optional_bool`) are behavior-changing and must be a separate epic. The current codebase uses `bool()` for several fields in `_build_next_check_candidate_view`; changing these to string-aware coercion is out of scope for this modularization effort.
+
+## Run Summary UX Redesign (closure note)
+
+The Run Summary UX Redesign extracted run-specific UI logic into focused components and introduced an operator-first Overview dashboard with tabbed drilldown. This section documents final ownership boundaries so future changes do not drift back into a monolith.
+
+### Component ownership
+
+| Component | File | Ownership |
+|-----------|------|------------|
+| Composition root | `RunsPanel.tsx` | Owns `RecentRunsPanel` and `RunSummaryPanel` composition |
+| Run header | `RunHeader.tsx` | Owns run label, collector version, timestamp |
+| KPI strip | `RunKpiStrip.tsx` | Owns KPI stat cards and duration summary |
+| Tab shell | `RunSummaryTabs.tsx` | Owns tab shell, active tab routing, ARIA tab/panel wiring |
+| Overview dashboard | `RunOverviewDashboard.tsx` | Owns Overview dashboard composition |
+| Attention preview | `AttentionNowCard` (local) | Owns degraded-cluster attention content |
+| Next checks preview | `NextChecksPreviewCard` (local) | Owns next-check count and primary CTA |
+| LLM telemetry preview | `LlmTelemetryPreviewCard` (local) | Owns telemetry summary and secondary CTA |
+| Artifacts preview | `ArtifactsPreviewCard` (local) | Owns artifact count and tertiary CTA |
+| Next checks detail | `NextChecksSummaryCard.tsx` | Owns detailed next-check planner content |
+| LLM telemetry detail | `LlmTelemetryCard.tsx` | Owns detailed telemetry content |
+| Past-run notice | `PastRunNotice.tsx` | Owns past-run/stale-latest warning notices |
+
+### UX rules
+
+- **Overview is the default operator summary.** It surfaces the most important run information without requiring tab navigation.
+- **Detailed tabs are for drilldown depth.** Next Checks, Telemetry, and Artifacts tabs provide deeper access when needed.
+- **PastRunNotice must stay outside tabs.** Run freshness and past-run warnings render in `RunSummaryPanel` before the tab shell so operators see them immediately.
+- **Do not hide urgent run freshness/past-run information inside a tab.** This would delay operator awareness of stale runs.
+- **Do not derive health degradation from next-check workflow status counts.** Next-check counts are planning metadata, not health signals.
+- **If real degraded health details are needed, source them from explicit health/run summary data.** Do not synthesize degradation from workflow state.
+
+### CSS ownership
+
+| CSS file | Ownership |
+|----------|-----------|
+| `run-overview-dashboard.css` | Owns Overview dashboard layout/card styling |
+| `.run-overview-card` | Owns shared card surface (background, border, radius, padding, flex, gap) |
+| `.attention-now-card` | Owns warning colors and full-width span |
+| `.next-checks-preview-card` | Owns next checks prominence only |
+| `.llm-telemetry-preview-card` | Owns telemetry content styling only |
+| `.artifacts-preview-card` | Owns artifacts content styling only |
+| `.run-summary-cta` | Owns primary CTA button |
+| `.run-summary-cta-secondary` | Owns secondary CTA button |
+
+Semantic card classes own only semantic differences. Avoid duplicating card surface styling across individual preview card classes - inherit from `.run-overview-card`.
+
+### Testing baseline
+
+| Test file | Coverage |
+|-----------|----------|
+| `run-summary-components.test.tsx` | Extracted component rendering (RunHeader, RunKpiStrip, LlmTelemetryCard, NextChecksSummaryCard, PastRunNotice) |
+| `run-summary-tabs.test.tsx` | Tabs, ARIA wiring, tab content, CTA routing |
+| `run-overview-dashboard.test.tsx` | Overview dashboard sections, CTAs, shared card classes, behavior |
+| `app.test.tsx` | Affected tests account for tab-hidden detailed content |
+
+### Deferred work
+
+The following items are explicitly out of scope for this epic and require separate small patches:
+
+- **Richer degraded-cluster details:** Require explicit backend/UI payload data. Do not derive from workflow state.
+- **Artifacts/provenance tab enrichment:** Can become richer later under a separate patch.
+- **`discoveryVariantCounts` prop:** Can be removed from `RunOverviewDashboard` props if no longer needed by Overview.
+- **Further visual polish:** Can happen under separate small patches.
