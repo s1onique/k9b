@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import cast
 
@@ -691,6 +692,28 @@ def _build_execution_history(
     return history[:5]  # Limit to 5 most recent
 
 
+def _parse_positive_int(value: object | None) -> int | None:
+    """Parse a positive integer duration from various types.
+
+    Returns None for missing, zero, negative, or non-numeric values.
+    Only positive (> 0) durations are included in latency percentiles.
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float):
+        int_val = int(value)
+        return int_val if int_val > 0 else None
+    if isinstance(value, str):
+        try:
+            int_val = int(value)
+            return int_val if int_val > 0 else None
+        except ValueError:
+            return None
+    return None
+
+
 def _build_llm_stats_for_run(
     external_analysis_dir: Path, run_id: str
 ) -> dict[str, object]:
@@ -700,6 +723,8 @@ def _build_llm_stats_for_run(
     failed_calls = 0
     latest_timestamp: str | None = None
     provider_counts: dict[str, dict[str, int]] = {}
+    # Collect positive durations only from successful calls for latency percentile computation
+    successful_durations: list[int] = []
 
     if not external_analysis_dir.exists():
         return {
@@ -727,6 +752,15 @@ def _build_llm_stats_for_run(
             total_calls += 1
             if status == "success":
                 successful_calls += 1
+                # Collect positive duration from successful calls for latency percentiles.
+                # Prefer snake_case field name, fall back to camelCase for compatibility.
+                # Only positive durations are included; zero/negative/missing yield None.
+                duration_ms = artifact_data.get("duration_ms")
+                duration = _parse_positive_int(duration_ms)
+                if duration is None:
+                    duration = _parse_positive_int(artifact_data.get("durationMs"))
+                if duration is not None:
+                    successful_durations.append(duration)
             if status == "failed":
                 failed_calls += 1
 
@@ -752,17 +786,45 @@ def _build_llm_stats_for_run(
         for provider, data in sorted(provider_counts.items())
     ]
 
+    # Compute latency percentiles from successful call durations
+    percentile_values: dict[str, int | None] = {
+        "p50": None,
+        "p95": None,
+        "p99": None,
+    }
+    if successful_durations:
+        float_durations = [float(value) for value in successful_durations]
+        float_durations.sort()
+        percentile_values["p50"] = _percentile_value(float_durations, 50)
+        percentile_values["p95"] = _percentile_value(float_durations, 95)
+        percentile_values["p99"] = _percentile_value(float_durations, 99)
+
     return {
         "totalCalls": total_calls,
         "successfulCalls": successful_calls,
         "failedCalls": failed_calls,
         "lastCallTimestamp": latest_timestamp,
-        "p50LatencyMs": None,
-        "p95LatencyMs": None,
-        "p99LatencyMs": None,
+        "p50LatencyMs": percentile_values["p50"],
+        "p95LatencyMs": percentile_values["p95"],
+        "p99LatencyMs": percentile_values["p99"],
         "providerBreakdown": provider_breakdown,
         "scope": "current_run",
     }
+
+
+# Mirrors the algorithm in health/ui_llm_stats.py for consistency.
+# Local duplication avoids a cross-module dependency from ui to health layer.
+def _percentile_value(values: list[float], percentile: float) -> int | None:
+    """Compute a percentile value from a sorted list of floats.
+
+    Returns None if the input list is empty.
+    Uses nearest-rank method: index = ceil(p/100 * n) - 1.
+    """
+    if not values:
+        return None
+    idx = math.ceil((percentile / 100) * len(values)) - 1
+    idx = max(0, min(idx, len(values) - 1))
+    return int(values[idx])
 
 
 def _build_proposal_status_summary(proposals: list[dict[str, object]]) -> dict[str, object]:
