@@ -380,9 +380,10 @@ describe("RunOverviewDashboard", () => {
   });
 
   // --------------------------------------------------------------------
-  // Test 16: Overview dashboard renders the grid wrapper
+  // Test 16: Overview dashboard renders the grid wrapper with correct card order
+  // Phase 6: Cards are in 2-column grid - Row 1: attention + telemetry, Row 2: next checks + artifacts
   // --------------------------------------------------------------------
-  test("16. Overview dashboard renders the grid wrapper for preview cards", () => {
+  test("16. Overview dashboard renders the 2-column grid with cards in correct DOM order", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
     // Grid wrapper should be present
@@ -390,36 +391,52 @@ describe("RunOverviewDashboard", () => {
     expect(gridWrapper).toBeInTheDocument();
 
     // All preview cards should be inside the grid
-    expect(screen.getByTestId("next-checks-preview-card").parentElement).toBe(gridWrapper);
+    expect(screen.getByTestId("attention-now-card").parentElement).toBe(gridWrapper);
     expect(screen.getByTestId("llm-telemetry-preview-card").parentElement).toBe(gridWrapper);
+    expect(screen.getByTestId("next-checks-preview-card").parentElement).toBe(gridWrapper);
     expect(screen.getByTestId("artifacts-preview-card").parentElement).toBe(gridWrapper);
+
+    // Phase 6: Verify card DOM order matches grid placement
+    // Row 1: attention (col 1), telemetry (col 2)
+    // Row 2: next checks (col 1), artifacts (col 2)
+    const gridChildren = Array.from(gridWrapper.children);
+    expect(gridChildren[0]).toHaveAttribute("data-testid", "attention-now-card");
+    expect(gridChildren[1]).toHaveAttribute("data-testid", "llm-telemetry-preview-card");
+    expect(gridChildren[2]).toHaveAttribute("data-testid", "next-checks-preview-card");
+    expect(gridChildren[3]).toHaveAttribute("data-testid", "artifacts-preview-card");
   });
 
   // --------------------------------------------------------------------
   // Test 17: Preview cards have their specific card classes
+  // Phase 6: Attention card no longer spans full width - it's a compact left-column card
   // --------------------------------------------------------------------
-  test("17. Preview cards have shared run-overview-card class and specific classes", () => {
+  test("17. Preview cards have shared run-overview-card class and specific card type classes", () => {
     render(<RunOverviewDashboard {...defaultProps} />);
 
-    // Next checks preview card has both shared and specific class
+    // Next checks preview card
     const nextChecksCard = screen.getByTestId("next-checks-preview-card");
     expect(nextChecksCard).toHaveClass("run-overview-card");
     expect(nextChecksCard).toHaveClass("next-checks-preview-card");
 
-    // LLM telemetry preview card has both shared and specific class
+    // LLM telemetry preview card
     const telemetryCard = screen.getByTestId("llm-telemetry-preview-card");
     expect(telemetryCard).toHaveClass("run-overview-card");
     expect(telemetryCard).toHaveClass("llm-telemetry-preview-card");
 
-    // Artifacts preview card has both shared and specific class
+    // Artifacts preview card
     const artifactsCard = screen.getByTestId("artifacts-preview-card");
     expect(artifactsCard).toHaveClass("run-overview-card");
     expect(artifactsCard).toHaveClass("artifacts-preview-card");
 
-    // Attention card has both shared and specific class, spans full width
+    // Attention card - compact left-column card (NOT full-width)
     const attentionCard = screen.getByTestId("attention-now-card");
     expect(attentionCard).toHaveClass("run-overview-card");
     expect(attentionCard).toHaveClass("attention-now-card");
+
+    // Phase 6: Attention card has compact styling (smaller padding, tighter spacing)
+    // Verify compact attention card has tighter header spacing
+    const attentionHeader = attentionCard.querySelector(".attention-card-header");
+    expect(attentionHeader).toBeInTheDocument();
   });
 
   // --------------------------------------------------------------------

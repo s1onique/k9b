@@ -290,16 +290,23 @@ export const RunOverviewDashboard = ({
       {/* KPI strip at top */}
       <RunKpiStrip stats={runSummaryStats} durationSummary={runStatsSummary} />
 
-      {/* Preview cards in a responsive grid */}
+      {/* Preview cards in a 2-column responsive grid */}
       <div className="run-overview-grid">
-        {/* "What needs attention now" section - prominent when present */}
+        {/* Row 1, Col 1: "What needs attention now" - compact left-column operational card */}
         <AttentionNowCard
           discoveryClusters={discoveryClusters}
           onFocusClusterForNextChecks={onFocusClusterForNextChecks}
           onViewNextChecks={() => onTabChange("next-checks")}
         />
 
-        {/* Next checks preview - prominent with primary CTA */}
+        {/* Row 1, Col 2: LLM telemetry - compact right-column peer card */}
+        <LlmTelemetryPreviewCard
+          llmStatsLine={runLlmStatsLine}
+          providerBreakdown={providerBreakdown}
+          onViewTelemetry={() => onTabChange("telemetry")}
+        />
+
+        {/* Row 2, Col 1: Next checks - prominent left-column primary action */}
         <NextChecksPreviewCard
           runPlan={runPlan}
           planStatusText={planStatusText}
@@ -307,14 +314,7 @@ export const RunOverviewDashboard = ({
           onViewNextChecks={() => onTabChange("next-checks")}
         />
 
-        {/* Compact LLM telemetry preview - secondary */}
-        <LlmTelemetryPreviewCard
-          llmStatsLine={runLlmStatsLine}
-          providerBreakdown={providerBreakdown}
-          onViewTelemetry={() => onTabChange("telemetry")}
-        />
-
-        {/* Artifacts preview - secondary */}
+        {/* Row 2, Col 2: Artifacts - secondary right-column supporting card */}
         <ArtifactsPreviewCard
           artifacts={artifacts}
           onViewArtifacts={() => onTabChange("artifacts")}

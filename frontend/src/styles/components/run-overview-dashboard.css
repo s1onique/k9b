@@ -4,20 +4,21 @@
  * Visual polish and responsive grid layout for the Overview tab dashboard.
  * Provides an operator-first view with clear visual hierarchy.
  *
- * Phase 5: High-fidelity Overview polish - transforms from plain cards to polished operator dashboard.
+ * Phase 6: Layout refinement - 2-column dashboard grid with compact attention card.
  *
  * CSS Ownership:
- * - .run-overview-card       → Shared card surface (background, border, radius, padding, flex, gap)
- * - .attention-now-card      → Warning colors + full-width span
- * - .next-checks-preview-card → Next checks prominence
- * - .llm-telemetry-preview-card → Telemetry content styling
- * - .artifacts-preview-card   → Artifacts content styling
+ * - .run-overview-grid        → 2-column dashboard grid
+ * - .run-overview-card        → Shared card surface (background, border, radius, padding, flex, gap)
+ * - .attention-now-card       → Warning colors + compact left-column card
+ * - .next-checks-preview-card → Next checks prominence (lower-left)
+ * - .llm-telemetry-preview-card → Telemetry content (top-right)
+ * - .artifacts-preview-card   → Artifacts content (lower-right)
  * - .run-summary-cta          → Primary CTA button
  * - .run-summary-cta-secondary → Secondary CTA button
- * - .preview-card-header     → Icon + heading header for preview cards
+ * - .preview-card-header      → Icon + heading header for preview cards
  * - .preview-card-icon        → Visual anchor icon (aria-hidden)
  * - .attention-card-header    → Warning icon + heading
- * - .attention-icon           → Warning indicator
+ * - .attention-icon          → Warning indicator
  * - .attention-cluster-rows   → Cluster action rows
  * - .attention-cluster-row    → Individual cluster row with name + CTA
  * - .attention-cta            → Compact CTA for attention rows
@@ -31,7 +32,7 @@
  * - .artifact-label-chip      → Individual artifact label chip
  * - .artifacts-more           → "+N more" indicator
  * - .kpi-card                → KPI metric card
- * - .kpi-card-inner           → Icon + content inner layout
+ * - .kpi-card-inner          → Icon + content inner layout
  * - .kpi-icon                 → Visual anchor icon circle
  * - .kpi-content              → Value + label content
  * - .kpi-value                → Large metric value
@@ -47,7 +48,7 @@
  * - tokens.css (for --color-* tokens)
  * - themes.css (for theme variable values)
  *
- * Phase: 5 (Run Summary UX Redesign Phase 5 - High-fidelity Overview Polish)
+ * Phase: 6 (Run Summary UX Redesign Phase 6 - Layout Refinement)
  */
 
 /* ==========================================================================
@@ -65,14 +66,26 @@
    Card Grid Layout
    ========================================================================== */
 
+/**
+ * 2-column dashboard grid for Overview tab.
+ *
+ * Layout:
+ * - Row 1: Attention (left, wider) | LLM telemetry (right, narrower)
+ * - Row 2: Next checks (left, wider) | Artifacts (right, narrower)
+ *
+ * Column ratios:
+ * - Left column: ~55% (1.15fr) - carries attention and next checks
+ * - Right column: ~45% (0.95fr min 320px) - carries telemetry and artifacts
+ */
 .run-overview-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.95fr);
   gap: 1rem;
 }
 
-/* On narrow screens, stack cards vertically */
-@media (max-width: 640px) {
+/* Desktop/tablet wide: 2-column layout as above */
+/* Tablet/narrow: stack cards vertically in specific order */
+@media (max-width: 900px) {
   .run-overview-grid {
     grid-template-columns: 1fr;
   }
@@ -131,73 +144,80 @@
 }
 
 /* ==========================================================================
-   Attention Now Card (prominent when present)
-   Full-width warning card with actionable cluster rows.
+   Attention Now Card (compact left-column operational card)
+   Warning card with actionable cluster rows, optimized for 2-column layout.
    ========================================================================== */
 
 .attention-now-card {
   background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
   border-color: var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
-  grid-column: 1 / -1;
+  /* Explicit grid placement: column 1, row 1 */
+  grid-column: 1;
+  grid-row: 1;
+  /* Compact padding for left-column card */
+  padding: 0.75rem 1rem;
+  gap: 0.5rem;
 }
 
 .attention-card-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .attention-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 0.35rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3rem;
   background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.2));
   color: var(--color-state-warning-text, #fde047);
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   flex-shrink: 0;
 }
 
 .attention-card-header h3 {
   color: var(--color-state-warning-text, #fde047);
   margin: 0;
+  font-size: 0.8rem;
 }
 
 .attention-now-content {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  flex: 1;
 }
 
 .attention-now-section {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 .attention-subtitle {
   color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
   margin: 0;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
 }
 
 .attention-cluster-rows {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .attention-cluster-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
   background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
   border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
-  border-radius: 0.5rem;
+  border-radius: 0.4rem;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -207,20 +227,26 @@
 }
 
 .cluster-name {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--color-text-primary, #f8fafc);
 }
 
 .attention-cta {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.4rem;
 }
 
 /* ==========================================================================
-   Next Checks Preview Card (prominent - primary action)
+   Next Checks Preview Card (prominent - lower-left primary action)
    Shows planner status and candidate count in metric cells.
    ========================================================================== */
+
+.next-checks-preview-card {
+  /* Explicit grid placement: column 1, row 2 */
+  grid-column: 1;
+  grid-row: 2;
+}
 
 .next-checks-preview-content {
   flex: 1;
@@ -257,9 +283,17 @@
 }
 
 /* ==========================================================================
-   LLM Telemetry Preview Card (secondary)
-   Shows stats with provider breakdown.
+   LLM Telemetry Preview Card (top-right peer card)
+   Shows stats with provider breakdown. Compact to fit beside attention card.
    ========================================================================== */
+
+.llm-telemetry-preview-card {
+  /* Explicit grid placement: column 2, row 1 */
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0.75rem 1rem;
+  gap: 0.5rem;
+}
 
 .llm-telemetry-preview-content {
   flex: 1;
@@ -275,9 +309,15 @@
 }
 
 /* ==========================================================================
-   Artifacts Preview Card (secondary)
-   Shows count and up to 3 labels as chips.
+   Artifacts Preview Card (secondary - lower-right)
+   Shows count and up to 3 labels as chips. Smaller supporting card.
    ========================================================================== */
+
+.artifacts-preview-card {
+  /* Explicit grid placement: column 2, row 2 */
+  grid-column: 2;
+  grid-row: 2;
+}
 
 .artifacts-preview-content {
   flex: 1;
@@ -563,7 +603,7 @@
   color: var(--color-text-link, #268bd2);
 }
 
-  [data-theme="solarized-light"] .run-summary-cta-secondary:hover {
+[data-theme="solarized-light"] .run-summary-cta-secondary:hover {
   background: rgba(38, 139, 210, 0.1);
   border-color: rgba(38, 139, 210, 0.4);
   color: var(--color-accent-primary-text, #268bd2);
