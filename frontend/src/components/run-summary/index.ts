@@ -22,3 +22,6 @@ export type { PastRunNoticeProps } from "./PastRunNotice";
 
 export { RunSummaryTabs } from "./RunSummaryTabs";
 export type { RunSummaryTabsProps, RunSummaryTabId } from "./RunSummaryTabs";
+
+export { RunOverviewDashboard } from "./RunOverviewDashboard";
+export type { RunOverviewDashboardProps } from "./RunOverviewDashboard";

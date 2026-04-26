@@ -21,7 +21,7 @@ import type {
 import { artifactUrl } from "../../utils";
 import { LlmTelemetryCard } from "./LlmTelemetryCard";
 import { NextChecksSummaryCard } from "./NextChecksSummaryCard";
-import { RunKpiStrip } from "./RunKpiStrip";
+import { RunOverviewDashboard } from "./RunOverviewDashboard";
 
 // Tab definitions
 export type RunSummaryTabId = "overview" | "next-checks" | "telemetry" | "artifacts";
@@ -145,9 +145,19 @@ export const RunSummaryTabs = ({
           data-testid="panel-overview"
         >
           {activeTab === "overview" && (
-            <RunKpiStrip
-              stats={runSummaryStats}
-              durationSummary={runStatsSummary}
+            <RunOverviewDashboard
+              runSummaryStats={runSummaryStats}
+              runStatsSummary={runStatsSummary}
+              runLlmStatsLine={runLlmStatsLine}
+              providerBreakdown={providerBreakdown}
+              runPlan={runPlan}
+              planStatusText={planStatusText}
+              planCandidateCountLabel={planCandidateCountLabel}
+              discoveryVariantCounts={discoveryVariantCounts}
+              discoveryClusters={discoveryClusters}
+              onFocusClusterForNextChecks={onFocusClusterForNextChecks}
+              artifacts={artifacts}
+              onTabChange={onTabChange}
             />
           )}
         </div>

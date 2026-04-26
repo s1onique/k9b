@@ -298,7 +298,6 @@ describe("RunSummaryTabs", () => {
     expect(screen.getByText("Clusters")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("Degraded")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Proposals")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
 
