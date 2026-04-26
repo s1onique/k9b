@@ -81,7 +81,7 @@ const AttentionNowCard = ({
   }
 
   return (
-    <div className="attention-now-card" data-testid="attention-now-card">
+    <div className="run-overview-card attention-now-card" data-testid="attention-now-card">
       <h3>What needs attention now</h3>
       <div className="attention-now-content">
         {/* Affected cluster badges */}
@@ -135,7 +135,7 @@ const NextChecksPreviewCard = ({
   onViewNextChecks,
 }: NextChecksPreviewCardProps) => {
   return (
-    <div className="next-checks-preview-card" data-testid="next-checks-preview-card">
+    <div className="run-overview-card next-checks-preview-card" data-testid="next-checks-preview-card">
       <h3>Next checks</h3>
       <div className="next-checks-preview-content">
         {runPlan ? (
@@ -175,7 +175,7 @@ const LlmTelemetryPreviewCard = ({
   onViewTelemetry,
 }: LlmTelemetryPreviewCardProps) => {
   return (
-    <div className="llm-telemetry-preview-card" data-testid="llm-telemetry-preview-card">
+    <div className="run-overview-card llm-telemetry-preview-card" data-testid="llm-telemetry-preview-card">
       <h3>LLM telemetry</h3>
       <div className="llm-telemetry-preview-content">
         <div className="llm-stats-line">{llmStatsLine}</div>
@@ -210,7 +210,7 @@ const ArtifactsPreviewCard = ({
   const previewLabels = artifacts.slice(0, 3).map((a) => a.label);
 
   return (
-    <div className="artifacts-preview-card" data-testid="artifacts-preview-card">
+    <div className="run-overview-card artifacts-preview-card" data-testid="artifacts-preview-card">
       <h3>Artifacts</h3>
       <div className="artifacts-preview-content">
         <p className="muted tiny">
@@ -256,7 +256,7 @@ export const RunOverviewDashboard = ({
   runPlan,
   planStatusText,
   planCandidateCountLabel,
-  discoveryVariantCounts,
+  discoveryVariantCounts: _discoveryVariantCounts,
   discoveryClusters,
   onFocusClusterForNextChecks,
   artifacts,
@@ -267,33 +267,36 @@ export const RunOverviewDashboard = ({
       {/* KPI strip at top */}
       <RunKpiStrip stats={runSummaryStats} durationSummary={runStatsSummary} />
 
-      {/* "What needs attention now" section */}
-      <AttentionNowCard
-        discoveryClusters={discoveryClusters}
-        onFocusClusterForNextChecks={onFocusClusterForNextChecks}
-        onViewNextChecks={() => onTabChange("next-checks")}
-      />
+      {/* Preview cards in a responsive grid */}
+      <div className="run-overview-grid">
+        {/* "What needs attention now" section - prominent when present */}
+        <AttentionNowCard
+          discoveryClusters={discoveryClusters}
+          onFocusClusterForNextChecks={onFocusClusterForNextChecks}
+          onViewNextChecks={() => onTabChange("next-checks")}
+        />
 
-      {/* Next checks preview */}
-      <NextChecksPreviewCard
-        runPlan={runPlan}
-        planStatusText={planStatusText}
-        planCandidateCountLabel={planCandidateCountLabel}
-        onViewNextChecks={() => onTabChange("next-checks")}
-      />
+        {/* Next checks preview - prominent with primary CTA */}
+        <NextChecksPreviewCard
+          runPlan={runPlan}
+          planStatusText={planStatusText}
+          planCandidateCountLabel={planCandidateCountLabel}
+          onViewNextChecks={() => onTabChange("next-checks")}
+        />
 
-      {/* Compact LLM telemetry preview */}
-      <LlmTelemetryPreviewCard
-        llmStatsLine={runLlmStatsLine}
-        providerBreakdown={providerBreakdown}
-        onViewTelemetry={() => onTabChange("telemetry")}
-      />
+        {/* Compact LLM telemetry preview - secondary */}
+        <LlmTelemetryPreviewCard
+          llmStatsLine={runLlmStatsLine}
+          providerBreakdown={providerBreakdown}
+          onViewTelemetry={() => onTabChange("telemetry")}
+        />
 
-      {/* Artifacts preview */}
-      <ArtifactsPreviewCard
-        artifacts={artifacts}
-        onViewArtifacts={() => onTabChange("artifacts")}
-      />
+        {/* Artifacts preview - secondary */}
+        <ArtifactsPreviewCard
+          artifacts={artifacts}
+          onViewArtifacts={() => onTabChange("artifacts")}
+        />
+      </div>
     </div>
   );
 };

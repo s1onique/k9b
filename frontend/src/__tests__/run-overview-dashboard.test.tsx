@@ -307,6 +307,87 @@ describe("RunOverviewDashboard", () => {
   });
 
   // --------------------------------------------------------------------
+  // Test 16: Overview dashboard renders the grid wrapper
+  // --------------------------------------------------------------------
+  test("16. Overview dashboard renders the grid wrapper for preview cards", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Grid wrapper should be present
+    const gridWrapper = screen.getByTestId("run-overview-dashboard").querySelector(".run-overview-grid");
+    expect(gridWrapper).toBeInTheDocument();
+
+    // All preview cards should be inside the grid
+    expect(screen.getByTestId("next-checks-preview-card").parentElement).toBe(gridWrapper);
+    expect(screen.getByTestId("llm-telemetry-preview-card").parentElement).toBe(gridWrapper);
+    expect(screen.getByTestId("artifacts-preview-card").parentElement).toBe(gridWrapper);
+  });
+
+  // --------------------------------------------------------------------
+  // Test 17: Preview cards have their specific card classes
+  // --------------------------------------------------------------------
+  test("17. Preview cards have shared run-overview-card class and specific classes", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Next checks preview card has both shared and specific class
+    const nextChecksCard = screen.getByTestId("next-checks-preview-card");
+    expect(nextChecksCard).toHaveClass("run-overview-card");
+    expect(nextChecksCard).toHaveClass("next-checks-preview-card");
+
+    // LLM telemetry preview card has both shared and specific class
+    const telemetryCard = screen.getByTestId("llm-telemetry-preview-card");
+    expect(telemetryCard).toHaveClass("run-overview-card");
+    expect(telemetryCard).toHaveClass("llm-telemetry-preview-card");
+
+    // Artifacts preview card has both shared and specific class
+    const artifactsCard = screen.getByTestId("artifacts-preview-card");
+    expect(artifactsCard).toHaveClass("run-overview-card");
+    expect(artifactsCard).toHaveClass("artifacts-preview-card");
+
+    // Attention card has both shared and specific class, spans full width
+    const attentionCard = screen.getByTestId("attention-now-card");
+    expect(attentionCard).toHaveClass("run-overview-card");
+    expect(attentionCard).toHaveClass("attention-now-card");
+  });
+
+  // --------------------------------------------------------------------
+  // Test 18: Primary CTA (Review next checks) uses run-summary-cta class
+  // --------------------------------------------------------------------
+  test("18. Primary CTA uses run-summary-cta class for prominence", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    const reviewCta = screen.getByTestId("review-next-checks-cta");
+    expect(reviewCta).toHaveClass("run-summary-cta");
+    expect(reviewCta).not.toHaveClass("link");
+  });
+
+  // --------------------------------------------------------------------
+  // Test 19: Secondary CTAs still work and call correct tab changes
+  // --------------------------------------------------------------------
+  test("19. Secondary CTAs call correct tab changes", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Click View telemetry CTA
+    screen.getByTestId("view-telemetry-cta").click();
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("telemetry");
+
+    // Click View artifacts CTA
+    screen.getByTestId("view-artifacts-cta").click();
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("artifacts");
+  });
+
+  // --------------------------------------------------------------------
+  // Test 20: Attention card "View next checks" CTA also calls correct tab change
+  // --------------------------------------------------------------------
+  test("20. Attention card CTA calls onTabChange with next-checks", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    const viewNextChecksCta = screen.getByTestId("view-next-checks-from-attention");
+    expect(viewNextChecksCta.tagName).toBe("BUTTON");
+    viewNextChecksCta.click();
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("next-checks");
+  });
+
+  // --------------------------------------------------------------------
   // Test 15: All CTA buttons are keyboard accessible
   // --------------------------------------------------------------------
   test("15. All CTA buttons are keyboard accessible", () => {
