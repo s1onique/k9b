@@ -1,22 +1,25 @@
 /**
  * RunsPanel.tsx
  *
- * Contains two panel components extracted from App.tsx (E1-3b-step10):
+ * Contains two panel components:
  *   - RecentRunsPanel: displays the runs table with filter bar, pagination,
  *     and detached-mode notice
  *   - RunSummaryPanel: displays the selected run header, summary stats,
  *     LLM telemetry, artifacts, and next-checks preview
  *
- * Both components are verbatim moves from App.tsx; no logic has been changed.
- * Helper types and interfaces specific to runs display are co-located here.
- *
- * Design note: RunSummaryPanel accepts a pre-computed `run` prop (RunPayload)
- * and derives all display values from it. It does not receive individually
- * pre-computed stats to keep the interface stable and co-located.
+ * RunSummaryPanel composes smaller components from run-summary/ directory
+ * (E1-3b-step15 extraction).
  */
 
 import type { NextCheckPlanCandidate, NextCheckStatusVariant, RunPayload, RunsListEntry } from "../types";
 import { artifactUrl, formatTimestamp, relativeRecency, statusClass } from "../utils";
+import {
+  RunHeader,
+  RunKpiStrip,
+  LlmTelemetryCard,
+  NextChecksSummaryCard,
+  PastRunNotice,
+} from "./run-summary";
 
 // Re-export the RunsReviewFilter type for consumers who need it
 export { RUNS_PAGE_SIZE_OPTIONS } from "../hooks/useRunSelection";
@@ -254,34 +257,6 @@ export const RecentRunsPanel = ({
 // RunSummaryPanel
 // ---------------------------------------------------------------------------
 
-// Status variant types (must match App.tsx's NextCheckStatusVariant)
-type RunSummaryNextCheckStatusVariant = "safe" | "approval" | "approved" | "duplicate" | "stale";
-
-// Status label function (must match App.tsx's nextCheckStatusLabel)
-const runSummaryNextCheckStatusLabel = (variant: RunSummaryNextCheckStatusVariant): string => {
-  switch (variant) {
-    case "approval":
-      return "Approval needed";
-    case "approved":
-      return "Approved candidate";
-    case "duplicate":
-      return "Duplicate / already covered";
-    case "stale":
-      return "Approval stale";
-    default:
-      return "Safe candidate";
-  }
-};
-
-// Format age duration (abbreviated)
-const formatAgeDuration = (minutes: number): string => {
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
-};
-
 // Determine freshness level for timestamp (must match App.tsx's isStaleTimestamp)
 const isStaleTimestamp = (timestamp: string | null | undefined): boolean => {
   if (!timestamp) return true;
@@ -339,53 +314,30 @@ export const RunSummaryPanel = ({
   discoveryClusters,
 }: RunSummaryPanelProps) => {
   const runFresh = !isStaleTimestamp(run.timestamp);
-  const runAgeMinutes = Math.floor(dayjs().diff(dayjs(run.timestamp), "minute"));
+
+  // Handler for "Review next checks" button
+  const handleReviewNextChecks = () => {
+    onFocusClusterForNextChecks();
+  };
 
   return (
     <section className="panel run-summary" id="run-detail">
-      <div className="run-summary-head">
-        <div>
-          <p className="eyebrow">Run summary</p>
-          <h2>{run.label}</h2>
-          <p className="muted tiny run-summary-collector">Collector {run.collectorVersion}</p>
-        </div>
-        <div className="run-summary-freshness">
-          <p className="muted small">{formatTimestamp(run.timestamp)}</p>
-        </div>
-      </div>
-      <div className="run-summary-metrics">
-        <div className="run-summary-stats">
-          {runSummaryStats.map((stat) => (
-            <article
-              className="run-stat-card"
-              key={stat.label}
-              aria-label={`${stat.label}: ${stat.value}`}
-            >
-              <strong>{stat.value}</strong>
-              <span>{stat.label}</span>
-            </article>
-          ))}
-        </div>
-        <p className="run-duration-summary muted small">{runStatsSummary}</p>
-      </div>
-      <div className="run-summary-llm">
-        <div className="run-summary-llm-heading">
-          <p className="eyebrow">LLM telemetry</p>
-          <span className="muted tiny">Provider call metrics from artifacts</span>
-        </div>
-        <div className="llm-current-line">
-          {runLlmStatsLine}
-          {providerBreakdown && (
-            <p className="llm-provider-breakdown muted tiny">Providers: {providerBreakdown}</p>
-          )}
-        </div>
-        {historicalLlmStatsLine && (
-          <details className="llm-historical">
-            <summary>Retained history stats</summary>
-            {historicalLlmStatsLine}
-          </details>
-        )}
-      </div>
+      {/* Extracted components (E1-3b-step15) */}
+      <RunHeader
+        label={run.label}
+        collectorVersion={run.collectorVersion}
+        timestamp={run.timestamp}
+      />
+      <RunKpiStrip
+        stats={runSummaryStats}
+        durationSummary={runStatsSummary}
+      />
+      <LlmTelemetryCard
+        llmStatsLine={runLlmStatsLine}
+        historicalLlmStatsLine={historicalLlmStatsLine}
+        providerBreakdown={providerBreakdown}
+      />
+      {/* Artifacts strip - inline as it's a simple mapping */}
       <div className="artifact-strip run-artifacts">
         {run.artifacts.map((artifact) => {
           const url = artifactUrl(artifact.path);
@@ -404,108 +356,32 @@ export const RunSummaryPanel = ({
           );
         })}
       </div>
-      <div className="run-summary-next-checks">
-        <div className="run-summary-next-checks-head">
-          <div>
-            <p className="eyebrow">Next checks</p>
-            <h3>Planner candidates</h3>
-            {runPlan ? (
-              <>
-                <p className="muted tiny">{planSummaryText}</p>
-                {planStatusText ? (
-                  <p className="muted tiny">Planner status: {planStatusText}</p>
-                ) : null}
-              </>
-            ) : (
-              <p className="muted tiny">{plannerReasonText}</p>
-            )}
-            {plannerNextActionHint ? (
-              <p className="muted tiny">{plannerNextActionHint}</p>
-            ) : null}
-            {plannerArtifactUrl ? (
-              <p className="muted tiny">
-                <a className="link" href={plannerArtifactUrl} target="_blank" rel="noreferrer">
-                  View planner artifact
-                </a>
-              </p>
-            ) : null}
-            {runPlan && runPlanCandidates.length ? (
-              <p className="muted tiny">{planCandidateCountLabel}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="run-summary-next-checks-button"
-            onClick={() => onFocusClusterForNextChecks()}
-            disabled={!runPlan}
-          >
-            Review next checks
-          </button>
-        </div>
-        {!runPlan ? (
-          <>
-            <p className="muted small">No next checks generated for this run.</p>
-            {plannerHint ? (
-              <p className="muted tiny">{plannerHint}</p>
-            ) : null}
-          </>
-        ) : runPlanCandidates.length ? (
-          <>
-            <div className="run-summary-next-checks-stats">
-              {discoveryVariantOrder.map((variant) => {
-                const count = discoveryVariantCounts[variant];
-                if (!count) {
-                  return null;
-                }
-                return (
-                  <span
-                    key={variant}
-                    className={`next-check-discovery-pill next-check-discovery-pill-${variant}`}
-                  >
-                    <strong>{count}</strong>
-                    <span>{runSummaryNextCheckStatusLabel(variant)}</span>
-                  </span>
-                );
-              })}
-            </div>
-            <div className="run-summary-next-checks-clusters">
-              <p className="muted tiny">
-                Affected cluster{discoveryClusters.length === 1 ? "" : "s"}: {discoveryClusters.length || "None"}
-              </p>
-              <div className="next-check-cluster-tags">
-                {discoveryClusters.length ? (
-                  discoveryClusters.map((cluster) => (
-                    <button
-                      type="button"
-                      className="next-check-cluster-badge"
-                      key={cluster}
-                      onClick={() => onFocusClusterForNextChecks(cluster)}
-                    >
-                      {cluster}
-                    </button>
-                  ))
-                ) : (
-                  <p className="muted small">
-                    Planner candidates do not target a specific cluster.
-                  </p>
-                )}
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="muted small">Planner created no candidates for this run.</p>
-        )}
-      </div>
-      {!isSelectedRunLatest && (
-        <div className="alert alert-inline alert-past-run">
-          This is a past run collected {formatAgeDuration(dayjs().diff(run.timestamp, "minute"))} ago.
-        </div>
-      )}
-      {isSelectedRunLatest && !runFresh && (
-        <div className="alert alert-inline">
-          Latest run is {runAgeMinutes} minute{runAgeMinutes === 1 ? "" : "s"} old; ensure the scheduler is running.
-        </div>
-      )}
+      <NextChecksSummaryCard
+        runPlan={runPlan ? {
+          summary: runPlan.summary,
+          artifactPath: runPlan.artifactPath,
+          status: runPlan.status,
+          candidateCount: runPlan.candidateCount,
+        } : null}
+        runPlanCandidates={runPlanCandidates}
+        planSummaryText={planSummaryText}
+        planStatusText={planStatusText}
+        plannerReasonText={plannerReasonText}
+        plannerHint={plannerHint}
+        plannerNextActionHint={plannerNextActionHint}
+        plannerArtifactUrl={plannerArtifactUrl}
+        planCandidateCountLabel={planCandidateCountLabel}
+        discoveryVariantOrder={discoveryVariantOrder}
+        discoveryVariantCounts={discoveryVariantCounts}
+        discoveryClusters={discoveryClusters}
+        onReviewNextChecks={handleReviewNextChecks}
+        onFocusClusterForNextChecks={onFocusClusterForNextChecks}
+      />
+      <PastRunNotice
+        isSelectedRunLatest={isSelectedRunLatest}
+        runFresh={runFresh}
+        runTimestamp={run.timestamp}
+      />
     </section>
   );
 };
