@@ -149,6 +149,7 @@ class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
     def test_llamacpp_adapter_adds_llm_fields_to_failure_metadata(self) -> None:
         """LlamaCppAdapter._run_http adds llm_call, llm_call_id, llm_provider, llm_operation to failure_metadata."""
         import inspect
+
         from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
 
         source = inspect.getsource(LlamaCppAdapter._run_http)
@@ -162,6 +163,7 @@ class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
     def test_llamacpp_adapter_uses_build_llm_call_id(self) -> None:
         """LlamaCppAdapter uses build_llm_call_id helper."""
         import inspect
+
         from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
 
         source = inspect.getsource(LlamaCppAdapter._run_http)
@@ -176,6 +178,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_uses_build_llm_call_id(self) -> None:
         """_run_auto_drilldown_analysis uses build_llm_call_id helper."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
@@ -186,6 +189,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_has_start_log(self) -> None:
         """_run_auto_drilldown_analysis includes LLM call start log."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
@@ -199,6 +203,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_has_result_log(self) -> None:
         """_run_auto_drilldown_analysis includes LLM call result log."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
@@ -212,6 +217,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_has_diagnostics_log(self) -> None:
         """_run_auto_drilldown_analysis includes LLM diagnostics log with llm_* fields."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
@@ -225,6 +231,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_result_log_uses_failure_metadata_helper(self) -> None:
         """Result log uses _failure_metadata_field helper to extract failure_class and exception_type."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
@@ -236,6 +243,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_result_log_includes_max_tokens(self) -> None:
         """Result log includes max_tokens for llama.cpp provider."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
@@ -247,6 +255,7 @@ class AutoDrilldownLogsTest(unittest.TestCase):
     def test_auto_drilldown_start_log_includes_max_tokens(self) -> None:
         """Start log includes max_tokens for llama.cpp provider."""
         import inspect
+
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
