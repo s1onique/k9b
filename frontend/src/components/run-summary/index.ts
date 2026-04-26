@@ -19,3 +19,6 @@ export type { NextChecksSummaryCardProps } from "./NextChecksSummaryCard";
 
 export { PastRunNotice } from "./PastRunNotice";
 export type { PastRunNoticeProps } from "./PastRunNotice";
+
+export { RunSummaryTabs } from "./RunSummaryTabs";
+export type { RunSummaryTabsProps, RunSummaryTabId } from "./RunSummaryTabs";

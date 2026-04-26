@@ -329,6 +329,13 @@ describe("App", () => {
     const summaryPanel = document.getElementById("run-detail");
     expect(summaryPanel).not.toBeNull();
     const summaryScoped = within(summaryPanel!);
+
+    // Click "Next checks" tab to reveal next-check content (Phase 2 tabs implementation)
+    const nextChecksTab = await summaryScoped.findByRole("tab", { name: /Next checks/i });
+    await act(async () => {
+      nextChecksTab.click();
+    });
+
     expect(summaryScoped.getByText(UI_STRINGS.planner.plannerCandidates, { exact: false })).toBeInTheDocument();
     expect(summaryScoped.getByText(UI_STRINGS.workflowLanes.safeCandidate, { exact: false })).toBeInTheDocument();
     expect(summaryScoped.getByText(UI_STRINGS.workflowLanes.approvalNeeded, { exact: false })).toBeInTheDocument();
@@ -1516,20 +1523,30 @@ describe("App", () => {
     expect(
       screen.getByText("Last 32s · Runs 12 · P50 24s · P95 48s · P99 1m 4s")
     ).toBeInTheDocument();
-    expect(screen.getByText(/Run LLM calls:/i)).toBeInTheDocument();
-    expect(screen.getByText(/Historical LLM calls:/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Retained history stats/i)).toBeInTheDocument();
+    // Run stats (KPI) visible on Overview tab
     expect(screen.getByText(/^Selected run$/i, { selector: ".hero-run-label" })).toBeInTheDocument();
     expect(screen.getByText(/^Latest$/i, { selector: ".run-badge" })).toBeInTheDocument();
     expect(screen.getAllByText(/ID run-123/i).length).toBeGreaterThan(0);
     expect(
       screen.getByText(/(Fresh|Aging|Stale)$/i, { selector: ".freshness-indicator__label" })
     ).toBeInTheDocument();
-    expect(screen.getByText(/LLM telemetry/i)).toBeInTheDocument();
     expect(screen.getByText(/Collector collector:v1.2.0/i)).toBeInTheDocument();
+
+    // LLM telemetry content is in the Telemetry tab - click to reveal
+    const summaryPanel = document.getElementById("run-detail");
+    expect(summaryPanel).not.toBeNull();
+    const summaryScoped = within(summaryPanel!);
+    const telemetryTab = await summaryScoped.findByRole("tab", { name: /Telemetry/i });
+    await act(async () => {
+      telemetryTab.click();
+    });
+    expect(summaryScoped.getByText(/Run LLM calls:/i)).toBeInTheDocument();
+    expect(summaryScoped.getByText(/Historical LLM calls:/i)).toBeInTheDocument();
+    expect(
+      summaryScoped.getByText(/Providers: k8sgpt 2 \(0 failed\) · default 1 \(1 failed\)/i)
+    ).toBeInTheDocument();
+    expect(summaryScoped.getByText(/Retained history stats/i)).toBeInTheDocument();
+    expect(summaryScoped.getByText(/LLM telemetry/i)).toBeInTheDocument();
   });
 
   test("renders llm policy block with budget details", async () => {

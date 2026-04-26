@@ -13,12 +13,15 @@
 
 import type { NextCheckPlanCandidate, NextCheckStatusVariant, RunPayload, RunsListEntry } from "../types";
 import { artifactUrl, formatTimestamp, relativeRecency, statusClass } from "../utils";
+import { useState } from "react";
 import {
   RunHeader,
   RunKpiStrip,
   LlmTelemetryCard,
   NextChecksSummaryCard,
   PastRunNotice,
+  RunSummaryTabs,
+  type RunSummaryTabId,
 } from "./run-summary";
 
 // Re-export the RunsReviewFilter type for consumers who need it
@@ -315,9 +318,17 @@ export const RunSummaryPanel = ({
 }: RunSummaryPanelProps) => {
   const runFresh = !isStaleTimestamp(run.timestamp);
 
+  // Active tab state - managed locally within the panel
+  const [activeTab, setActiveTab] = useState<RunSummaryTabId>("overview");
+
   // Handler for "Review next checks" button
   const handleReviewNextChecks = () => {
     onFocusClusterForNextChecks();
+  };
+
+  // Handler for tab changes
+  const handleTabChange = (tab: RunSummaryTabId) => {
+    setActiveTab(tab);
   };
 
   return (
@@ -328,35 +339,15 @@ export const RunSummaryPanel = ({
         collectorVersion={run.collectorVersion}
         timestamp={run.timestamp}
       />
-      <RunKpiStrip
-        stats={runSummaryStats}
-        durationSummary={runStatsSummary}
-      />
-      <LlmTelemetryCard
-        llmStatsLine={runLlmStatsLine}
+      {/* Tabbed interface for run summary content */}
+      <RunSummaryTabs
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        runSummaryStats={runSummaryStats}
+        runStatsSummary={runStatsSummary}
+        runLlmStatsLine={runLlmStatsLine}
         historicalLlmStatsLine={historicalLlmStatsLine}
         providerBreakdown={providerBreakdown}
-      />
-      {/* Artifacts strip - inline as it's a simple mapping */}
-      <div className="artifact-strip run-artifacts">
-        {run.artifacts.map((artifact) => {
-          const url = artifactUrl(artifact.path);
-          return (
-            url && (
-              <a
-                key={artifact.label}
-                className="artifact-link run-artifact-link"
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {artifact.label}
-              </a>
-            )
-          );
-        })}
-      </div>
-      <NextChecksSummaryCard
         runPlan={runPlan ? {
           summary: runPlan.summary,
           artifactPath: runPlan.artifactPath,
@@ -376,7 +367,9 @@ export const RunSummaryPanel = ({
         discoveryClusters={discoveryClusters}
         onReviewNextChecks={handleReviewNextChecks}
         onFocusClusterForNextChecks={onFocusClusterForNextChecks}
+        artifacts={run.artifacts}
       />
+      {/* PastRunNotice remains outside tabs - freshness/past-run context is always visible */}
       <PastRunNotice
         isSelectedRunLatest={isSelectedRunLatest}
         runFresh={runFresh}
