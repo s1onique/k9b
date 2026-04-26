@@ -386,7 +386,7 @@ The Run Summary UX Redesign extracted run-specific UI logic into focused compone
 |----------|-----------|
 | `run-overview-dashboard.css` | Owns Overview dashboard layout/card styling |
 | `.run-overview-card` | Owns shared card surface (background, border, radius, padding, flex, gap) |
-| `.attention-now-card` | Owns warning colors and full-width span |
+| `.attention-now-card` | Owns warning colors and compact left-column placement (Phase 6: no full-width span) |
 | `.next-checks-preview-card` | Owns next checks prominence only |
 | `.llm-telemetry-preview-card` | Owns telemetry content styling only |
 | `.artifacts-preview-card` | Owns artifacts content styling only |
@@ -404,7 +404,65 @@ Semantic card classes own only semantic differences. Avoid duplicating card surf
 | `run-overview-dashboard.test.tsx` | Overview dashboard sections, CTAs, shared card classes, behavior |
 | `app.test.tsx` | Affected tests account for tab-hidden detailed content |
 
-### Deferred work
+### Phase 6 layout refinement amendment
+
+The epic was reopened after Phase 5 because the attention card was still too dominant (full-width span) and the overall layout composition did not match the intended operator dashboard shape.
+
+#### Final accepted Overview layout
+
+```
+Overview
+  KPI strip full width
+
+  Row 1:
+    What needs attention now   |   LLM telemetry
+
+  Row 2:
+    Next checks               |   Artifacts
+```
+
+#### Card roles
+
+| Card | Grid position | Role |
+|------|---------------|------|
+| AttentionNowCard | Row 1, Col 1 | Compact left-column operational card. No full-width span. Explicit `grid-column: 1; grid-row: 1`. |
+| LlmTelemetryPreviewCard | Row 1, Col 2 | Top-right peer card beside attention. Explicit `grid-column: 2; grid-row: 1`. |
+| NextChecksPreviewCard | Row 2, Col 1 | Lower-left primary work card with primary CTA. Explicit `grid-column: 1; grid-row: 2`. |
+| ArtifactsPreviewCard | Row 2, Col 2 | Lower-right supporting provenance card. Explicit `grid-column: 2; grid-row: 2`. |
+
+#### AttentionNowCard is intentionally compact
+
+- **No full-width grid span.** Does not use `grid-column: 1 / -1`.
+- Explicit column 1 / row 1 placement: `grid-column: 1; grid-row: 1`.
+- Tight padding (`0.75rem 1rem`) and gap (`0.5rem`) for the left-column card size.
+- Per-cluster `View checks →` CTA on each cluster row.
+- Footer `View all next checks →` CTA.
+- Compact header: smaller icon (1.25rem), tighter gap (0.4rem), smaller heading (0.8rem).
+
+#### Grid CSS contract
+
+```
+.run-overview-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.95fr);
+  gap: 1rem;
+}
+```
+
+- Left column (~55%): carries attention and next checks
+- Right column (~45%, min 320px): carries telemetry and artifacts
+- Responsive: stacks vertically below 900px
+
+#### Attention must not reintroduce full-width span
+
+**Rule:** `.attention-now-card` must not use `grid-column: 1 / -1` unless a future design explicitly changes the dashboard composition. Prefer explicit grid placement (`grid-column: 1; grid-row: 1`) for the attention card in the Overview dashboard grid.
+
+#### Testing coverage
+
+`run-overview-dashboard.test.tsx` now includes:
+- Test 16: Verifies all 4 cards are inside the grid wrapper with correct DOM order
+- Test 17: Verifies cards have correct specific card classes (no grid-column span assertions)
+
+#### Deferred work
 
 The following items are explicitly out of scope for this epic and require separate small patches:
 
