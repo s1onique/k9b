@@ -204,6 +204,49 @@ def test_import_cluster_alert_summary_payload_from_api_payloads() -> None:
     assert payload["cluster"] == "prod-cluster-1"
 
 
+def test_import_alertmanager_provenance_payload_from_api_payloads() -> None:
+    """AlertmanagerProvenancePayload can be imported from the canonical api_payloads module."""
+    from k8s_diag_agent.ui.api_payloads import AlertmanagerProvenancePayload
+
+    assert AlertmanagerProvenancePayload is not None
+    payload: AlertmanagerProvenancePayload = {
+        "matchedDimensions": ["severity", "cluster"],
+        "matchedValues": {"severity": ["critical"], "cluster": ["prod"]},
+        "appliedBonus": 10,
+        "baseBonus": 5,
+    }
+    assert payload["appliedBonus"] == 10
+
+
+def test_import_feedback_adaptation_provenance_payload_from_api_payloads() -> None:
+    """FeedbackAdaptationProvenancePayload can be imported from the canonical api_payloads module."""
+    from k8s_diag_agent.ui.api_payloads import FeedbackAdaptationProvenancePayload
+
+    assert FeedbackAdaptationProvenancePayload is not None
+    payload: FeedbackAdaptationProvenancePayload = {
+        "feedbackAdaptation": True,
+        "adaptationReason": "low_usefulness",
+        "originalBonus": 10,
+        "suppressedBonus": 5,
+        "penaltyApplied": 5,
+    }
+    assert payload["feedbackAdaptation"] is True
+
+
+def test_import_feedback_summary_payload_from_api_payloads() -> None:
+    """FeedbackSummaryPayload can be imported from the canonical api_payloads module."""
+    from k8s_diag_agent.ui.api_payloads import FeedbackSummaryPayload
+
+    assert FeedbackSummaryPayload is not None
+    payload: FeedbackSummaryPayload = {
+        "totalEntries": 100,
+        "namespacesWithFeedback": ["default", "kube-system"],
+        "clustersWithFeedback": ["prod-cluster"],
+        "servicesWithFeedback": ["nginx"],
+    }
+    assert payload["totalEntries"] == 100
+
+
 # === Legacy re-export imports ===
 def test_import_run_payload_from_api() -> None:
     """RunPayload can be imported from the legacy api re-export."""
@@ -252,6 +295,27 @@ def test_import_cluster_alert_summary_payload_from_api() -> None:
     from k8s_diag_agent.ui.api import ClusterAlertSummaryPayload
 
     assert ClusterAlertSummaryPayload is not None
+
+
+def test_import_alertmanager_provenance_payload_from_api() -> None:
+    """AlertmanagerProvenancePayload can be imported from the legacy api re-export."""
+    from k8s_diag_agent.ui.api import AlertmanagerProvenancePayload
+
+    assert AlertmanagerProvenancePayload is not None
+
+
+def test_import_feedback_adaptation_provenance_payload_from_api() -> None:
+    """FeedbackAdaptationProvenancePayload can be imported from the legacy api re-export."""
+    from k8s_diag_agent.ui.api import FeedbackAdaptationProvenancePayload
+
+    assert FeedbackAdaptationProvenancePayload is not None
+
+
+def test_import_feedback_summary_payload_from_api() -> None:
+    """FeedbackSummaryPayload can be imported from the legacy api re-export."""
+    from k8s_diag_agent.ui.api import FeedbackSummaryPayload
+
+    assert FeedbackSummaryPayload is not None
 
 
 # === Identity tests: both import paths yield the same class ===
@@ -312,6 +376,38 @@ def test_cluster_alert_summary_payload_identity() -> None:
     from k8s_diag_agent.ui.api import ClusterAlertSummaryPayload as FromApi
     from k8s_diag_agent.ui.api_payloads import (
         ClusterAlertSummaryPayload as FromPayloads,
+    )
+
+    assert FromApi is FromPayloads
+
+
+def test_alertmanager_provenance_payload_identity() -> None:
+    """Both import paths yield the same AlertmanagerProvenancePayload class."""
+    from k8s_diag_agent.ui.api import AlertmanagerProvenancePayload as FromApi
+    from k8s_diag_agent.ui.api_payloads import (
+        AlertmanagerProvenancePayload as FromPayloads,
+    )
+
+    assert FromApi is FromPayloads
+
+
+def test_feedback_adaptation_provenance_payload_identity() -> None:
+    """Both import paths yield the same FeedbackAdaptationProvenancePayload class."""
+    from k8s_diag_agent.ui.api import (
+        FeedbackAdaptationProvenancePayload as FromApi,
+    )
+    from k8s_diag_agent.ui.api_payloads import (
+        FeedbackAdaptationProvenancePayload as FromPayloads,
+    )
+
+    assert FromApi is FromPayloads
+
+
+def test_feedback_summary_payload_identity() -> None:
+    """Both import paths yield the same FeedbackSummaryPayload class."""
+    from k8s_diag_agent.ui.api import FeedbackSummaryPayload as FromApi
+    from k8s_diag_agent.ui.api_payloads import (
+        FeedbackSummaryPayload as FromPayloads,
     )
 
     assert FromApi is FromPayloads
