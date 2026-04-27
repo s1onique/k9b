@@ -19,7 +19,7 @@ Extraction rationale:
 
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 __all__ = [
     "ArtifactLink",
@@ -82,8 +82,11 @@ __all__ = [
     "RecommendedActionPayload",
     "AssessmentSummaryPayload",
     "ClusterDetailPayload",
+    "ClaimType",
     "IncidentReportFactPayload",
+    "IncidentReportDerivedPayload",
     "IncidentReportInferencePayload",
+    "IncidentReportRecommendationPayload",
     "IncidentReportUnknownPayload",
     "IncidentReportPayload",
     "OperatorWorklistItemPayload",
@@ -872,26 +875,76 @@ class ClusterDetailPayload(TypedDict):
     topProblem: ProblemSummary
 
 
-class IncidentReportFactPayload(TypedDict, total=False):
-    """A deterministic, evidence-backed fact in the incident report."""
+# Constrained claim type literal for incident report taxonomy
+ClaimType = Literal["observed", "derived", "hypothesis", "recommendation", "unknown"]
 
+
+class IncidentReportFactPayload(TypedDict, total=False):
+    """A deterministic, evidence-backed fact in the incident report.
+
+    Corresponds to the "observed" claim type: direct telemetry signals backed
+    by source artifact provenance.
+    """
+
+    claimType: ClaimType  # Always "observed"
     statement: str
     sourceArtifactRefs: list[ArtifactLink]
     confidence: str
 
 
-class IncidentReportInferencePayload(TypedDict, total=False):
-    """A reasoned inference in the incident report, explicitly labeled."""
+class IncidentReportDerivedPayload(TypedDict, total=False):
+    """A deterministic derived conclusion in the incident report.
 
+    Corresponds to the "derived" claim type: conclusions from evidence fields
+    that are deterministic but require interpretation (e.g., "degraded health
+    based on warning threshold"). Originates from assessment/drilldown
+    deterministic fields.
+    """
+
+    claimType: ClaimType  # Always "derived"
+    statement: str
+    sourceFields: list[str]  # Deterministic fields that produced this claim
+    sourceArtifactRefs: list[ArtifactLink]
+    confidence: str
+
+
+class IncidentReportInferencePayload(TypedDict, total=False):
+    """A reasoned inference in the incident report, explicitly labeled.
+
+    Corresponds to the "hypothesis" claim type: plausible causes that still
+    require confirmation. Cannot contain root-cause language without explicit
+    basis. Provider-assisted content (review enrichment) also uses this type.
+    """
+
+    claimType: ClaimType  # Always "hypothesis"
     statement: str
     basis: list[str]
     confidence: str
     sourceArtifactRefs: list[ArtifactLink]
 
 
-class IncidentReportUnknownPayload(TypedDict, total=False):
-    """An explicitly acknowledged unknown or missing-evidence item."""
+class IncidentReportRecommendationPayload(TypedDict, total=False):
+    """An operator action recommendation in the incident report.
 
+    Corresponds to the "recommendation" claim type: safe, low-disruption
+    action suggestions. Separated from findings to prevent mixing observation
+    and prescription. Must include safety level.
+    """
+
+    claimType: ClaimType  # Always "recommendation"
+    statement: str
+    safetyLevel: str
+    sourceArtifactRefs: list[ArtifactLink]
+
+
+class IncidentReportUnknownPayload(TypedDict, total=False):
+    """An explicitly acknowledged unknown or missing-evidence item.
+
+    Corresponds to the "unknown" claim type: data gaps and missing evidence
+    that must NOT be rendered as confident prose or omitted silently.
+    """
+
+    claimType: ClaimType  # Always "unknown"
     statement: str
     whyMissing: str | None
     sourceArtifactRefs: list[ArtifactLink]
@@ -901,6 +954,10 @@ class IncidentReportPayload(TypedDict, total=False):
     """Canonical incident report projection for a selected health run.
 
     Derived from existing artifacts. Not a new immutable source of truth.
+
+    Canonical structured claims live in facts, derived, inferences,
+    recommendations, and unknowns. recommendedActions is legacy display
+    compatibility only.
     """
 
     title: str
@@ -909,12 +966,14 @@ class IncidentReportPayload(TypedDict, total=False):
     impact: str | None
     evidenceSummary: str | None
     facts: list[IncidentReportFactPayload]
+    derived: list[IncidentReportDerivedPayload]
     inferences: list[IncidentReportInferencePayload]
+    recommendations: list[IncidentReportRecommendationPayload]
     unknowns: list[IncidentReportUnknownPayload]
     staleEvidenceWarnings: list[str]
     confidence: str | None
     freshness: FreshnessPayload | None
-    recommendedActions: list[str]
+    recommendedActions: list[str]  # Legacy display compatibility only
     sourceArtifactRefs: list[ArtifactLink]
 
 

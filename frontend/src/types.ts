@@ -852,25 +852,56 @@ export type AlertmanagerSourceActionResponse = {
 // Incident Report and Operator Worklist (Phase 2 - Canonical Incident Surface)
 // ============================================================================
 
+/**
+ * Claim Taxonomy (Epic: Incident Report Content Quality)
+ *
+ * Every claim in the incident report is classified into one of five types:
+ * - observed: Direct telemetry signal (metric, event count, status)
+ * - derived: Deterministic conclusion from evidence fields
+ * - hypothesis: Plausible cause that requires confirmation
+ * - recommendation: Operator action suggestion with safety level
+ * - unknown: Explicitly acknowledged missing evidence
+ *
+ * Invariant: Root-cause language must NOT appear in observed claims.
+ */
+
 export type ArtifactLinkRef = {
   label: string;
   path: string;
 };
 
 export type IncidentReportFactPayload = {
+  claimType: "observed";
   statement: string;
   sourceArtifactRefs: ArtifactLinkRef[];
   confidence: string;
 };
 
+export type IncidentReportDerivedPayload = {
+  claimType: "derived";
+  statement: string;
+  sourceFields: string[];
+  sourceArtifactRefs: ArtifactLinkRef[];
+  confidence: string;
+};
+
 export type IncidentReportInferencePayload = {
+  claimType: "hypothesis";
   statement: string;
   basis: string[];
   confidence: string;
   sourceArtifactRefs: ArtifactLinkRef[];
 };
 
+export type IncidentReportRecommendationPayload = {
+  claimType: "recommendation";
+  statement: string;
+  safetyLevel: string;
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+
 export type IncidentReportUnknownPayload = {
+  claimType: "unknown";
   statement: string;
   whyMissing: string | null;
   sourceArtifactRefs: ArtifactLinkRef[];
@@ -883,12 +914,14 @@ export type IncidentReportPayload = {
   impact: string | null;
   evidenceSummary: string | null;
   facts: IncidentReportFactPayload[];
+  derived: IncidentReportDerivedPayload[];
   inferences: IncidentReportInferencePayload[];
+  recommendations: IncidentReportRecommendationPayload[];
   unknowns: IncidentReportUnknownPayload[];
   staleEvidenceWarnings: string[];
   confidence: string | null;
   freshness: FreshnessPayload | null;
-  recommendedActions: string[];
+  recommendedActions: string[];  // Legacy display compatibility
   sourceArtifactRefs: ArtifactLinkRef[];
 };
 

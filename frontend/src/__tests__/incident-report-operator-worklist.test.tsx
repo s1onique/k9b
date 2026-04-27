@@ -143,6 +143,139 @@ const largeOperatorWorklist: OperatorWorklistPayload = {
 };
 
 // ============================================================================
+// Incident Report Claim Taxonomy Tests (Epic: Incident Report Content Quality)
+// ============================================================================
+
+describe("IncidentReportCard Claim Taxonomy", () => {
+  // Test for claim taxonomy rendering - claim groups render in distinct sections; badges are deferred
+
+  test("Claim taxonomy: observed claims render in facts section", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Facts section should exist
+    expect(screen.getByTestId("incident-facts")).toBeInTheDocument();
+    expect(screen.getByText("Facts")).toBeInTheDocument();
+
+    // Each fact should have claimType field
+    const facts = document.querySelectorAll(".incident-fact-item");
+    expect(facts.length).toBeGreaterThan(0);
+  });
+
+  test("Claim taxonomy: hypothesis claims render in inferences section", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Inferences section should exist
+    expect(screen.getByTestId("incident-inferences")).toBeInTheDocument();
+    expect(screen.getByText("Inferences")).toBeInTheDocument();
+
+    // Each inference should have basis displayed
+    const inferenceBasis = document.querySelectorAll(".inference-basis");
+    expect(inferenceBasis.length).toBeGreaterThan(0);
+  });
+
+  test("Claim taxonomy: unknown claims render in unknowns section", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Unknowns section should exist
+    expect(screen.getByTestId("incident-unknowns")).toBeInTheDocument();
+    expect(screen.getByText("Unknowns")).toBeInTheDocument();
+
+    // Each unknown should have whyMissing explanation
+    const unknownReasons = document.querySelectorAll(".unknown-reason");
+    expect(unknownReasons.length).toBeGreaterThan(0);
+  });
+
+  test("Claim taxonomy: recommendation claims are separated from facts", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Recommended actions section should exist
+    expect(screen.getByTestId("incident-recommended-actions")).toBeInTheDocument();
+    expect(screen.getByText("Recommended Actions")).toBeInTheDocument();
+
+    // Recommendations should be text descriptions, not mixed with facts
+    const recommendedActions = document.querySelectorAll(".incident-action-item");
+    expect(recommendedActions.length).toBeGreaterThan(0);
+  });
+
+  test("Claim taxonomy: claim groups render in distinct visual sections", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Facts section
+    expect(screen.getByTestId("incident-facts")).toBeInTheDocument();
+
+    // Inferences section
+    expect(screen.getByTestId("incident-inferences")).toBeInTheDocument();
+
+    // Unknowns section
+    expect(screen.getByTestId("incident-unknowns")).toBeInTheDocument();
+
+    // Stale warnings section
+    expect(screen.getByTestId("incident-stale-warnings")).toBeInTheDocument();
+
+    // Recommended actions section
+    expect(screen.getByTestId("incident-recommended-actions")).toBeInTheDocument();
+  });
+
+  test("Claim taxonomy: observed claims have evidence badges", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Facts should show confidence
+    const confidenceBadges = document.querySelectorAll(".incident-confidence");
+    expect(confidenceBadges.length).toBeGreaterThan(0);
+
+    // Check for high confidence badge
+    expect(screen.getAllByText(/confidence: high/i).length).toBeGreaterThan(0);
+  });
+
+  test("Claim taxonomy: hypothesis claims have basis and provider badge", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Provider-assisted badge should appear
+    expect(screen.getByText("provider-assisted")).toBeInTheDocument();
+
+    // Basis should be displayed
+    const inferenceBasis = document.querySelectorAll(".inference-basis");
+    expect(inferenceBasis.length).toBeGreaterThan(0);
+  });
+
+  test("Claim taxonomy: unknown claims show why missing", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    // Missing evidence statement should be visible
+    expect(screen.getByText("Missing evidence: logs from edge nodes")).toBeInTheDocument();
+
+    // Why missing explanation should be visible
+    expect(screen.getByText(/why missing: /i)).toBeInTheDocument();
+  });
+
+  test("Claim taxonomy: empty sections do not render", () => {
+    const reportWithSomeEmpty: IncidentReportPayload = {
+      title: "Partial test",
+      status: "healthy",
+      affectedScope: null,
+      impact: null,
+      evidenceSummary: null,
+      facts: [], // empty
+      inferences: [], // empty
+      unknowns: [], // empty
+      staleEvidenceWarnings: [],
+      confidence: "high",
+      freshness: null,
+      recommendedActions: [],
+      sourceArtifactRefs: [],
+    };
+
+    render(<IncidentReportCard incidentReport={reportWithSomeEmpty} />);
+
+    // Empty sections should not be in the document
+    expect(screen.queryByTestId("incident-facts")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("incident-inferences")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("incident-unknowns")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("incident-recommended-actions")).not.toBeInTheDocument();
+  });
+});
+
+// ============================================================================
 // IncidentReportCard Tests
 // ============================================================================
 

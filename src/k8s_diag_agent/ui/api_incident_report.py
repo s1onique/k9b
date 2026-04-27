@@ -22,9 +22,11 @@ from typing import cast
 from .api_payloads import (
     ArtifactLink,
     FreshnessPayload,
+    IncidentReportDerivedPayload,
     IncidentReportFactPayload,
     IncidentReportInferencePayload,
     IncidentReportPayload,
+    IncidentReportRecommendationPayload,
     IncidentReportUnknownPayload,
     OperatorWorklistItemPayload,
     OperatorWorklistPayload,
@@ -57,7 +59,9 @@ def _build_incident_report_payload(
         title = "No degraded clusters detected"
 
     facts: list[IncidentReportFactPayload] = []
+    derived: list[IncidentReportDerivedPayload] = []
     inferences: list[IncidentReportInferencePayload] = []
+    recommendations: list[IncidentReportRecommendationPayload] = []
     unknowns: list[IncidentReportUnknownPayload] = []
     stale_warnings: list[str] = []
     recommended_actions: list[str] = []
@@ -67,45 +71,50 @@ def _build_incident_report_payload(
         path = assessment.artifact_path if assessment else None
         return [{"label": "Assessment", "path": path}] if path else []
 
-    # Build facts from latest assessment when present
+    # Build derived claims from latest assessment when present
+    # Health rating is a deterministic conclusion from evidence fields, not raw telemetry
     assessment = context.latest_assessment
     if assessment is not None:
-        # Health rating is deterministic
         if assessment.health_rating:
-            facts.append(
+            derived.append(
                 {
+                    "claimType": "derived",
                     "statement": f"Cluster {assessment.cluster_label} health rating is {assessment.health_rating}.",
+                    "sourceFields": ["health_rating"],
                     "sourceArtifactRefs": _assessment_refs(),
                     "confidence": "high",
                 }
             )
-        # Missing evidence is deterministic
+        # Missing evidence is an explicit unknown claim
         for missing in assessment.missing_evidence:
             unknowns.append(
                 {
+                    "claimType": "unknown",
                     "statement": f"Missing evidence: {missing}",
                     "whyMissing": "Not collected in this run",
                     "sourceArtifactRefs": _assessment_refs(),
                 }
             )
-        # Hypotheses are inferences
+        # Hypotheses are inference/hypothesis claims
         for hypothesis in assessment.hypotheses:
             inferences.append(
                 {
+                    "claimType": "hypothesis",
                     "statement": hypothesis.description,
                     "basis": [hypothesis.probable_layer],
                     "confidence": hypothesis.confidence,
                     "sourceArtifactRefs": _assessment_refs(),
                 }
             )
-        # Recommended action from assessment is deterministic
+        # Recommended action is a separate recommendation claim (not mixed with facts)
         if assessment.recommended_action is not None:
             action = assessment.recommended_action
-            facts.append(
+            recommendations.append(
                 {
+                    "claimType": "recommendation",
                     "statement": action.description,
+                    "safetyLevel": action.safety_level or "unknown",
                     "sourceArtifactRefs": _assessment_refs(),
-                    "confidence": "high",
                 }
             )
             recommended_actions.append(action.description)
@@ -124,6 +133,7 @@ def _build_incident_report_payload(
         if findings.trigger_reasons:
             facts.append(
                 {
+                    "claimType": "observed",
                     "statement": f"Trigger reasons: {', '.join(findings.trigger_reasons)}",
                     "sourceArtifactRefs": _drilldown_refs(),
                     "confidence": "high",
@@ -132,6 +142,7 @@ def _build_incident_report_payload(
         if findings.warning_events > 0:
             facts.append(
                 {
+                    "claimType": "observed",
                     "statement": f"Warning events observed: {findings.warning_events}",
                     "sourceArtifactRefs": _drilldown_refs(),
                     "confidence": "high",
@@ -140,6 +151,7 @@ def _build_incident_report_payload(
         if findings.non_running_pods > 0:
             facts.append(
                 {
+                    "claimType": "observed",
                     "statement": f"Non-running pods observed: {findings.non_running_pods}",
                     "sourceArtifactRefs": _drilldown_refs(),
                     "confidence": "high",
@@ -165,6 +177,7 @@ def _build_incident_report_payload(
 
         inferences.append(
             {
+                "claimType": "hypothesis",
                 "statement": review_enrichment.summary,
                 "basis": ["review-enrichment"],
                 "confidence": "medium",
@@ -189,6 +202,7 @@ def _build_incident_report_payload(
     if status == "healthy" and not facts and not inferences and not unknowns:
         facts.append(
             {
+                "claimType": "observed",
                 "statement": "No degraded clusters or incidents detected in this run.",
                 "sourceArtifactRefs": deduped_refs or [],
                 "confidence": "high",
@@ -202,10 +216,12 @@ def _build_incident_report_payload(
         "impact": None,
         "evidenceSummary": None,
         "facts": facts,
+        "derived": derived,
         "inferences": inferences,
+        "recommendations": recommendations,
         "unknowns": unknowns,
         "staleEvidenceWarnings": stale_warnings,
-        "confidence": "high" if facts else "low",
+        "confidence": "high" if (facts or derived) else "low",
         "freshness": freshness,
         "recommendedActions": recommended_actions,
         "sourceArtifactRefs": deduped_refs,

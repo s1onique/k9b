@@ -641,3 +641,145 @@ This epic established the quality harness for the canonical incident report and 
 ### Epic status: CLOSED
 
 All acceptance criteria met. No further work planned in this epic.
+
+## Epic: Incident Report Content Quality (OPEN)
+
+This epic introduces a deterministic incident report claim taxonomy and quality gate so the report cannot silently mix facts, hypotheses, recommendations, and unknowns.
+
+### Claim Taxonomy
+
+Every claim in the incident report is classified into one of five types:
+
+| Claim Type | Description | Invariant |
+|------------|-------------|-----------|
+| `observed` | Direct telemetry signal (metric, event count, status) | Must have sourceArtifactRefs |
+| `derived` | Deterministic conclusion from evidence fields | Tracks which fields produced the claim |
+| `hypothesis` | Plausible cause requiring confirmation | Must have non-empty basis |
+| `recommendation` | Operator action suggestion with safety level | Separated from findings |
+| `unknown` | Explicitly acknowledged missing evidence | Must NOT be omitted or invented |
+
+### Payload Types
+
+The following TypedDict types define the claim taxonomy:
+
+```python
+# src/k8s_diag_agent/ui/api_payloads.py
+
+# Constrained claim type literal
+ClaimType = Literal["observed", "derived", "hypothesis", "recommendation", "unknown"]
+
+class IncidentReportFactPayload(TypedDict, total=False):
+    """observed: Direct telemetry signal with evidence/provenance"""
+    claimType: ClaimType  # Literal["observed"]
+    statement: str
+    sourceArtifactRefs: list[ArtifactLink]
+    confidence: str
+
+class IncidentReportDerivedPayload(TypedDict, total=False):
+    """derived: Deterministic conclusion from evidence fields"""
+    claimType: ClaimType  # Literal["derived"]
+    statement: str
+    sourceFields: list[str]
+    sourceArtifactRefs: list[ArtifactLink]
+    confidence: str
+
+class IncidentReportInferencePayload(TypedDict, total=False):
+    """hypothesis: Plausible cause requiring confirmation"""
+    claimType: ClaimType  # Literal["hypothesis"]
+    statement: str
+    basis: list[str]
+    confidence: str
+    sourceArtifactRefs: list[ArtifactLink]
+
+class IncidentReportRecommendationPayload(TypedDict, total=False):
+    """recommendation: Operator action suggestion with safety level"""
+    claimType: ClaimType  # Literal["recommendation"]
+    statement: str
+    safetyLevel: str
+    sourceArtifactRefs: list[ArtifactLink]
+
+class IncidentReportUnknownPayload(TypedDict, total=False):
+    """unknown: Explicitly acknowledged missing evidence"""
+    claimType: ClaimType  # Literal["unknown"]
+    statement: str
+    whyMissing: str | None
+    sourceArtifactRefs: list[ArtifactLink]
+```
+
+### Quality Gates
+
+| Gate | Enforced by | What it protects |
+|------|------------|------------------|
+| observed claims have evidence/provenance | Backend tests | Facts are backed by source artifacts |
+| hypothesis claims have non-empty basis | Backend tests | Inferences are explicitly labeled |
+| recommendations separated from findings | Backend tests | Actions not mixed with observations |
+| unknowns have whyMissing explanation | Backend tests | Missing evidence surfaced, not invented |
+| root-cause language only in hypothesis | Backend tests | No ungrounded causal claims in observed |
+
+### Hard Invariants
+
+1. **observed claims never contain root-cause language** ("caused by", "root cause", "because of")
+2. **hypothesis claims must have non-empty basis** to use root-cause language
+3. **missing evidence must surface as unknown, not be omitted or invented**
+4. **recommendations are separated from findings** to prevent mixing observation and prescription
+5. **No LLM judge added** - deterministic gates are the first defense
+
+### Files Changed
+
+- `src/k8s_diag_agent/ui/api_payloads.py`: Added ClaimType, IncidentReportFactPayload, IncidentReportDerivedPayload, IncidentReportInferencePayload, IncidentReportRecommendationPayload, IncidentReportUnknownPayload
+- `src/k8s_diag_agent/ui/api_incident_report.py`: Updated builder to add claimType to each claim
+- `tests/unit/test_api_incident_report.py`: Added ClaimTaxonomyTests class
+- `frontend/src/types.ts`: Added claimType to incident report types
+- `frontend/src/__tests__/incident-report-operator-worklist.test.tsx`: Added claim taxonomy tests
+
+### Frontend TypeScript Types
+
+```typescript
+// frontend/src/types.ts
+
+export type IncidentReportFactPayload = {
+  claimType: "observed";
+  statement: string;
+  sourceArtifactRefs: ArtifactLinkRef[];
+  confidence: string;
+};
+
+export type IncidentReportInferencePayload = {
+  claimType: "hypothesis";
+  statement: string;
+  basis: string[];
+  confidence: string;
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+
+export type IncidentReportUnknownPayload = {
+  claimType: "unknown";
+  statement: string;
+  whyMissing: string | null;
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+```
+
+### Non-Goals
+
+- No LLM judge added
+- No whole report UX rewrite
+- No operator worklist ranking or pagination changes
+- No breaking schema changes (additive payload fields only)
+
+### Phase 1 Status
+
+**Implemented:**
+- `ClaimType = Literal["observed", "derived", "hypothesis", "recommendation", "unknown"]`
+- Canonical `facts`, `derived`, `inferences`, `recommendations`, `unknowns` fields in `IncidentReportPayload`
+- Health rating classified as `derived` claim (moved from `observed`)
+- `recommendedActions: list[str]` retained as legacy display compatibility
+- Backend tests for all claim type invariants
+
+**Deferred:**
+- Visible frontend claimType badges (visual distinction)
+- Narrative compression and operator-grade wording
+
+### Epic status: CLOSED (Phase 1)
+
+Phase 1 claim taxonomy foundation complete. Next: Phase 2 narrative compression + visible claim semantics.
