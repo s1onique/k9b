@@ -47,10 +47,7 @@ export const ProviderExecutionPanel: React.FC<{
 }> = ({ execution }) => (
   <section className="panel provider-execution" id="provider-execution">
     <div className="section-head">
-      <div>
-        <p className="eyebrow">Provider execution</p>
-        <h2>Provider-assisted branches</h2>
-      </div>
+      <h2>Provider branches</h2>
       <p className="muted small">
         Counts derived from deterministic artifacts and run-config provenance for each branch.
       </p>

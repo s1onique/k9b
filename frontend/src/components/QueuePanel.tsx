@@ -242,7 +242,6 @@ export const QueuePanel = ({
     <section className="panel next-check-queue-panel" id="next-check-queue">
       <div className="section-head">
         <div>
-          <p className="eyebrow">Next-check queue</p>
           <h2>Work list</h2>
           <p className="muted tiny">Curated shortlist for execution; approve, run, or review what already ran.</p>
         </div>

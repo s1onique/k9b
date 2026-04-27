@@ -271,10 +271,7 @@ const ReviewEnrichmentPanel = ({
     <section className="panel review-enrichment" id="review-enrichment">
       {/* Header row with title, metadata, timestamp, and status badge - aligned to section-head pattern */}
       <div className="section-head">
-        <div>
-          <p className="eyebrow">Review enrichment</p>
-          <h2>Provider-assisted advisory</h2>
-        </div>
+        <h2>Provider advisory</h2>
         <div className="status-badges">
           <span className={`status-pill ${statusClass(status)}`}>{status}</span>
           {reviewEnrichment?.timestamp && (

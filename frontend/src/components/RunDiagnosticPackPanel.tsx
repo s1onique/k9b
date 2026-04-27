@@ -34,10 +34,7 @@ export const RunDiagnosticPackPanel = ({
   return (
     <section className="panel diagnostic-pack-download" id="diagnostic-pack-download">
       <div className="section-head">
-        <div>
-          <p className="eyebrow">Diagnostic pack</p>
-          <h2>Run diagnostic package archive</h2>
-        </div>
+        <h2>Run diagnostic package</h2>
       </div>
       {diagnosticPack.label ? (
         <p className="muted tiny">Label: {diagnosticPack.label}</p>

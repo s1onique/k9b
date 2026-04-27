@@ -1100,8 +1100,8 @@ export const UI_STRINGS = {
 export const getQueuePanel = async (
   screen: import("@testing-library/react").Screen,
 ): Promise<ReturnType<typeof within>> => {
-  const eyebrow = await screen.findByText(/Next-check queue/i);
-  const queuePanel = eyebrow.closest(".next-check-queue-panel");
+  const heading = await screen.findByRole("heading", { name: /Work list/i });
+  const queuePanel = heading.closest(".next-check-queue-panel");
   if (!queuePanel) {
     throw new Error("Queue panel is not rendered");
   }

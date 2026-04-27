@@ -92,10 +92,7 @@ export const AlertmanagerSnapshotPanel = ({
   return (
     <section className="panel alertmanager-snapshot" id="alertmanager-snapshot">
       <div className="section-head">
-        <div>
-          <p className="eyebrow">Alertmanager snapshot · {displayLabel}</p>
-          <h2>Alertmanager snapshot</h2>
-        </div>
+        <h2>Alertmanager snapshot · {displayLabel}</h2>
         <span className={`status-pill ${statusClass(statusLabel)}`}>
           {statusLabel}
         </span>
@@ -371,10 +368,7 @@ export const AlertmanagerSourcesPanel = ({
   return (
     <section className="panel alertmanager-sources" id="alertmanager-sources">
       <div className="section-head">
-        <div>
-          <p className="eyebrow">Alertmanager discovery</p>
-          <h2>Alertmanager sources</h2>
-        </div>
+        <h2>Alertmanager sources</h2>
         <span className="muted small">
           {sources.cluster_context ? `Context: ${sources.cluster_context}` : ""}
         </span>

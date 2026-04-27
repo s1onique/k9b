@@ -38,9 +38,8 @@ describe("AlertmanagerSnapshotPanel", () => {
       const compact = makeAlertmanagerCompact({ status: "available" });
       render(<AlertmanagerSnapshotPanel compact={compact} />);
 
-      // Eyebrow shows "Alertmanager snapshot · All clusters" in run-global mode
-      expect(screen.getByText("Alertmanager snapshot · All clusters")).toBeInTheDocument();
-      expect(screen.getByText("Alertmanager snapshot")).toBeInTheDocument();
+      // Header shows "Alertmanager snapshot · All clusters" as h2 (no duplicate eyebrow)
+      expect(screen.getByRole("heading", { name: /Alertmanager snapshot · All clusters/i })).toBeInTheDocument();
     });
 
     it("renders 'Captured' status pill when status is available", () => {
@@ -555,7 +554,7 @@ describe("AlertmanagerSnapshotPanel", () => {
       render(<AlertmanagerSnapshotPanel compact={compact} />);
 
       // Panel should render without errors
-      expect(screen.getByText("Alertmanager snapshot")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Alertmanager snapshot · All clusters/i })).toBeInTheDocument();
       expect(screen.getByText("42")).toBeInTheDocument();
     });
 
@@ -574,7 +573,7 @@ describe("AlertmanagerSnapshotPanel", () => {
       render(<AlertmanagerSnapshotPanel compact={compact} />);
 
       // Panel should render without errors
-      expect(screen.getByText("Alertmanager snapshot")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Alertmanager snapshot · All clusters/i })).toBeInTheDocument();
       expect(screen.getByText("42")).toBeInTheDocument();
     });
   });
@@ -587,7 +586,7 @@ describe("AlertmanagerSnapshotPanel", () => {
       });
       render(<AlertmanagerSnapshotPanel compact={compact} />);
 
-      expect(screen.getByText("Alertmanager snapshot")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Alertmanager snapshot · All clusters/i })).toBeInTheDocument();
       expect(screen.getByText("5")).toBeInTheDocument();
     });
 

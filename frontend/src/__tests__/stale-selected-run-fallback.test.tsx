@@ -22,8 +22,8 @@ import {
 
 // Helper to get the queue panel from the screen
 const getQueuePanel = async () => {
-  const eyebrow = await screen.findByText(/Next-check queue/i);
-  const queuePanel = eyebrow.closest(".next-check-queue-panel");
+  const heading = await screen.findByRole("heading", { name: /Work list/i });
+  const queuePanel = heading.closest(".next-check-queue-panel");
   if (!queuePanel) {
     throw new Error("Queue panel is not rendered");
   }

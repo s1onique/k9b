@@ -1893,13 +1893,13 @@ const App = () => {
       <nav className="cockpit-nav" aria-label="Fleet cockpit sections">
         <a className="cockpit-nav__item" href="#recent-runs">Recent runs</a>
         <a className="cockpit-nav__item" href="#run-detail">Run summary</a>
-        <a className="cockpit-nav__item" href="#review-enrichment">Provider-assisted advisory</a>
-        <a className="cockpit-nav__item" href="#provider-execution">Provider-assisted branches</a>
+        <a className="cockpit-nav__item" href="#review-enrichment">Provider advisory</a>
+        <a className="cockpit-nav__item" href="#provider-execution">Provider branches</a>
         <a className="cockpit-nav__item" href="#diagnostic-pack-download">Diagnostic package</a>
         {run.diagnosticPackReview && (
-          <a className="cockpit-nav__item" href="#diagnostic-pack-review">Review insights</a>
+          <a className="cockpit-nav__item" href="#diagnostic-pack-review">Diagnostic pack review</a>
         )}
-        <a className="cockpit-nav__item" href="#deterministic-next-checks">Evidence checks</a>
+        <a className="cockpit-nav__item" href="#deterministic-next-checks">Deterministic checks</a>
         <a className="cockpit-nav__item" href="#execution-history">Execution review</a>
         <a className="cockpit-nav__item" href="#next-check-queue">Work list</a>
         <a className="cockpit-nav__item" href="#fleet">Fleet overview</a>
@@ -2217,11 +2217,10 @@ const App = () => {
     </div>
       <section className="panel" id="proposals">
         <div className="section-head">
-          <div>
-            <p className="eyebrow">Actionable findings</p>
-            <h2>Action proposals</h2>
-            <p className="muted small">Findings surfaced for triage; actionable improvements for the system.</p>
-          </div>
+          <h2>Action proposals</h2>
+          <span className="muted tiny">
+            Findings surfaced for triage; actionable improvements for the system.
+          </span>
         </div>
         <div className="proposal-controls">
           <label>

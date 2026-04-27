@@ -58,10 +58,7 @@ export const DiagnosticPackReviewPanel = ({
   return (
     <section className="panel diagnostic-pack-review" id="diagnostic-pack-review">
       <div className="section-head">
-        <div>
-          <p className="eyebrow">Diagnostic pack review</p>
-          <h2>Automated review insights</h2>
-        </div>
+        <h2>Diagnostic pack review</h2>
         <span className={`status-pill ${statusClass(providerStatus)}`}>
           {providerStatus}
         </span>

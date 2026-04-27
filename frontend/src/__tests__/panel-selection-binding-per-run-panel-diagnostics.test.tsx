@@ -116,7 +116,7 @@ describe("Panel selection binding - Per-run panels", () => {
 
     // Should show the panel heading
     await waitFor(() => {
-      expect(within(packPanel!).getByRole("heading", { name: /Run diagnostic package archive/i })).toBeInTheDocument();
+      expect(within(packPanel!).getByRole("heading", { name: /Run diagnostic package/i })).toBeInTheDocument();
     });
 
     // --- STRENGTHENED: Assert run-123 specific content BEFORE switching ---
@@ -167,7 +167,7 @@ describe("Panel selection binding - Per-run panels", () => {
 
     // Panel should still be visible
     await waitFor(() => {
-      expect(within(packPanel!).getByRole("heading", { name: /Run diagnostic package archive/i })).toBeInTheDocument();
+      expect(within(packPanel!).getByRole("heading", { name: /Run diagnostic package/i })).toBeInTheDocument();
     });
   });
 

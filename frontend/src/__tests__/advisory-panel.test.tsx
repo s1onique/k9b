@@ -85,7 +85,7 @@ describe("Advisory Panel Components", () => {
 
       // Wait for the component to render
       await waitFor(() => {
-        expect(screen.getAllByText("Provider-assisted advisory")[0]).toBeInTheDocument();
+        expect(screen.getAllByText("Provider advisory")[0]).toBeInTheDocument();
       });
 
       // Check for the header structure - now uses shared section-head pattern
@@ -96,9 +96,8 @@ describe("Advisory Panel Components", () => {
       const header = headerSection?.querySelector(".section-head");
       expect(header).toBeTruthy();
 
-      // Verify eyebrow and title are present
-      expect(header?.textContent).toContain("Review enrichment");
-      expect(header?.textContent).toContain("Provider-assisted advisory");
+      // Verify title is present (eyebrow removed during header normalization)
+      expect(header?.textContent).toContain("Provider advisory");
 
       // Verify status badges container exists
       const statusBadges = header?.querySelector(".status-badges");
@@ -534,7 +533,7 @@ describe("Advisory Panel Components", () => {
       render(<App />);
 
       await waitFor(() => {
-        expect(screen.getAllByText("Provider-assisted advisory")[0]).toBeInTheDocument();
+        expect(screen.getAllByText("Provider advisory")[0]).toBeInTheDocument();
       });
 
       const reviewEnrichment = document.querySelector(".review-enrichment");

@@ -71,8 +71,7 @@ describe("AlertmanagerSourcesPanel", () => {
 
       render(<AlertmanagerSourcesPanel sources={sources} />);
 
-      expect(screen.getByText("Alertmanager sources")).toBeInTheDocument();
-      expect(screen.getByText("Alertmanager discovery")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Alertmanager sources/i })).toBeInTheDocument();
     });
 
     it("renders empty state when no sources are present", () => {

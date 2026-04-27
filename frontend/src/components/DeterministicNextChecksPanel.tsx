@@ -80,9 +80,10 @@ export function DeterministicNextChecksPanel({
     <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
       <div className="section-head">
         <div>
-          <p className="eyebrow">Deterministic evidence</p>
-          <h2>Deterministic next checks</h2>
-          <p className="muted tiny">{deterministicSummary}</p>
+          <h2>Deterministic checks</h2>
+          {deterministicSummary && (
+            <p className="muted tiny">{deterministicSummary}</p>
+          )}
         </div>
         <span className="muted tiny">
           {deterministicChecks?.clusterCount ?? 0} degraded cluster
