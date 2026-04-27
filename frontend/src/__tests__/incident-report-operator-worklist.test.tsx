@@ -1481,3 +1481,154 @@ describe("Phase 3: Content Quality - Report Structure Verification", () => {
     expect(screen.getByText("Review control-plane component status")).toBeInTheDocument();
   });
 });
+
+// ============================================================================
+// Regression: Hook Order Stability with Null/Undef Item IDs
+// ============================================================================
+
+describe("OperatorWorklistCard Hook Order Stability", () => {
+  // Fixture with items that have null/undefined ids - tests key stability
+  // and ensures hooks (via ExpandableText) are called consistently
+  const worklistWithNullId: OperatorWorklistPayload = {
+    items: [
+      { id: null, rank: 1, workstream: "incident", title: "Check node health metrics", description: "", command: "kubectl top nodes", targetCluster: "cluster-a", targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+      { id: undefined, rank: 2, workstream: "evidence", title: "Review pod logs", description: "", command: "kubectl logs", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    ],
+    totalItems: 2,
+    completedItems: 0,
+    pendingItems: 2,
+    blockedItems: 0,
+  };
+
+  // Fixture with different items to test rerender stability
+  const worklistWithDifferentItems: OperatorWorklistPayload = {
+    items: [
+      { id: "new-item-1", rank: 1, workstream: "incident", title: "Collect metrics", description: "", command: "kubectl get pods", targetCluster: "cluster-b", targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+      { id: "new-item-2", rank: 2, workstream: "evidence", title: "Inspect events", description: "", command: "kubectl get events", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+      { id: null, rank: 3, workstream: "incident", title: "Check resource quotas", description: "", command: "kubectl describe resourcequota", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    ],
+    totalItems: 3,
+    completedItems: 0,
+    pendingItems: 3,
+    blockedItems: 0,
+  };
+
+  test("R1. Hook order remains stable when items have null/undefined ids - open/close popup", async () => {
+    // Spy on console.error to catch React hook warnings
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { rerender } = render(<OperatorWorklistCard operatorWorklist={worklistWithNullId} />);
+
+    // Verify first item renders with ExpandableText
+    expect(screen.getByTestId("expandable-text-worklist-title-1")).toBeInTheDocument();
+
+    // Open the title popup
+    const titleTrigger = screen.getByTestId("expandable-text-worklist-title-1");
+    await act(async () => {
+      await userEvent.click(titleTrigger);
+    });
+
+    // Popup should be open
+    expect(screen.getByTestId("expandable-text-worklist-title-1-popup")).toBeInTheDocument();
+
+    // Close the popup
+    const closeButton = screen.getByTestId("expandable-text-worklist-title-1-popup-close");
+    await act(async () => {
+      await userEvent.click(closeButton);
+    });
+
+    // Popup should be closed
+    expect(screen.queryByTestId("expandable-text-worklist-title-1-popup")).not.toBeInTheDocument();
+
+    // Re-render with different worklist - should not throw hook order error
+    rerender(<OperatorWorklistCard operatorWorklist={worklistWithDifferentItems} />);
+
+    // Verify new content renders
+    expect(screen.getByTestId("expandable-text-worklist-title-1")).toBeInTheDocument();
+    expect(screen.getByText("Collect metrics")).toBeInTheDocument();
+
+    // Check no hook errors were reported
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Rendered fewer hooks than expected")
+    );
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Rendered more hooks than during the previous render")
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  test("R2. Hook order remains stable during pagination with null/id items", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { rerender } = render(<OperatorWorklistCard operatorWorklist={worklistWithNullId} />);
+
+    // First item renders
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+    expect(screen.getByTestId("expandable-text-worklist-title-1")).toBeInTheDocument();
+
+    // Navigate to next page (item with undefined id)
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+
+    // Second item should now render
+    expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
+    expect(screen.getByTestId("expandable-text-worklist-title-2")).toBeInTheDocument();
+
+    // Navigate back to first page
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist previous page/i }));
+    });
+
+    // First item should render again
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+
+    // Re-render with different payload - should not throw hook order error
+    rerender(<OperatorWorklistCard operatorWorklist={worklistWithDifferentItems} />);
+
+    // Verify new content with 3 items renders
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+
+    // Check no hook errors were reported
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Rendered fewer hooks than expected")
+    );
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Rendered more hooks than during the previous render")
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  test("R3. Hook order stable when rerendering with null worklist after having items", () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { rerender } = render(<OperatorWorklistCard operatorWorklist={worklistWithNullId} />);
+
+    // Verify items render
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+
+    // Rerender with null worklist
+    rerender(<OperatorWorklistCard operatorWorklist={null} />);
+
+    // Empty state should render
+    expect(screen.getByText("No operator worklist items are available for this run.")).toBeInTheDocument();
+
+    // Rerender back with items
+    rerender(<OperatorWorklistCard operatorWorklist={worklistWithNullId} />);
+
+    // Items should render again
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+
+    // Check no hook errors were reported
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Rendered fewer hooks than expected")
+    );
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Rendered more hooks than during the previous render")
+    );
+
+    consoleSpy.mockRestore();
+  });
+});

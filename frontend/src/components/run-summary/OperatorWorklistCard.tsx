@@ -211,10 +211,8 @@ const WorklistSummary = ({
 // ============================================================================
 
 export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardProps) => {
-  // Pagination state - local to this component
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // Empty state: honest message when no worklist is available
+  // CRITICAL: Early return MUST be before all hooks to maintain consistent hook order
+  // React throws "Rendered fewer hooks than expected" if hook count differs between renders
   if (!operatorWorklist) {
     return (
       <div className="run-overview-card operator-worklist-card" data-testid="operator-worklist-card">
@@ -226,6 +224,9 @@ export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardP
       </div>
     );
   }
+
+  // Pagination state - local to this component
+  const [currentPage, setCurrentPage] = useState(1);
 
   const totalItems = operatorWorklist.items.length;
   const hasItems = totalItems > 0;
@@ -274,7 +275,7 @@ export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardP
         <>
           <ul className="worklist-items">
             {paginatedItems.map((item) => (
-              <WorklistItemRow key={item.id} item={item} />
+              <WorklistItemRow key={item.id ?? item.rank} item={item} />
             ))}
           </ul>
 
