@@ -720,6 +720,421 @@ class GoldenFixtureQueueWithCommandTests(unittest.TestCase):
             self.assertTrue(item["sourceArtifactRefs"])
 
 
+# =============================================================================
+# Content Quality Tests (Phase 3 - Deterministic Quality Fixtures)
+# =============================================================================
+
+
+class ContentQualityTests(unittest.TestCase):
+    """Tests for deterministic content quality rules.
+
+    Phase 3 adds quality fixtures that prevent report content from becoming:
+    - verbose
+    - causally overconfident
+    - operator-hostile
+
+    Quality rules enforced:
+    1. observed claims do not contain causal/root-cause language
+    2. derived claims do not contain unsupported causal/root-cause language
+    3. hypotheses must have non-empty basis
+    4. unknowns must have whyMissing explanation
+    5. recommendations render under "Recommended next actions"
+    6. section headings are concise
+    7. claim statements are reasonably short
+    8. no generic filler phrases
+
+    These are deterministic fixtures, NOT an LLM judge.
+    """
+
+    def test_degraded_report_passes_quality_check(self) -> None:
+        """Golden test: degraded single-cluster report passes all quality rules."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        self.assertTrue(
+            quality_report["passed"],
+            f"Quality check failed: {quality_report['failed_rules']} rules failed. "
+            f"Details: {quality_report['results']}",
+        )
+
+    def test_observed_claims_no_causal_language(self) -> None:
+        """observed claims must not contain causal/root-cause language."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        causal_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "observed_no_causal_language"
+        )
+        self.assertTrue(
+            causal_rule["passed"],
+            f"observed claims contain causal language: {causal_rule['message']}",
+        )
+
+    def test_derived_claims_no_causal_language(self) -> None:
+        """derived claims must not contain unsupported causal/root-cause language."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        causal_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "derived_no_causal_language"
+        )
+        self.assertTrue(
+            causal_rule["passed"],
+            f"derived claims contain causal language: {causal_rule['message']}",
+        )
+
+    def test_hypotheses_have_non_empty_basis(self) -> None:
+        """hypothesis claims must have non-empty basis."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        basis_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "hypotheses_have_basis"
+        )
+        self.assertTrue(
+            basis_rule["passed"],
+            f"hypotheses lack basis: {basis_rule['message']}",
+        )
+
+    def test_unknowns_have_why_missing(self) -> None:
+        """unknown claims must have whyMissing explanation."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        why_missing_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "unknowns_have_why_missing"
+        )
+        self.assertTrue(
+            why_missing_rule["passed"],
+            f"unknowns lack whyMissing: {why_missing_rule['message']}",
+        )
+
+    def test_recommendations_separated_from_findings(self) -> None:
+        """recommendations must be separated from findings (not action verbs in facts/derived)."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        rec_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "recommendations_separated"
+        )
+        self.assertTrue(
+            rec_rule["passed"],
+            f"recommendations not properly separated: {rec_rule['message']}",
+        )
+
+    def test_section_headings_concise(self) -> None:
+        """section headings remain concise (under 50 characters)."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        heading_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "section_headings_concise"
+        )
+        self.assertTrue(
+            heading_rule["passed"],
+            f"section headings not concise: {heading_rule['message']}",
+        )
+
+    def test_claim_statements_reasonably_short(self) -> None:
+        """claim statements are reasonably short (under 200 characters)."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        length_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "claim_statements_short"
+        )
+        self.assertTrue(
+            length_rule["passed"],
+            f"statements too long: {length_rule['message']}",
+        )
+
+    def test_no_filler_phrases(self) -> None:
+        """no generic filler phrases in claim statements."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        filler_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "no_filler_phrases"
+        )
+        self.assertTrue(
+            filler_rule["passed"],
+            f"filler phrases found: {filler_rule['message']}",
+        )
+
+    def test_report_has_full_degraded_shape(self) -> None:
+        """report has full degraded shape: facts, derived, inferences, unknowns, recommendations."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        quality_report = check_incident_report_quality(report)
+        shape_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "report_has_full_degraded_shape"
+        )
+        self.assertTrue(
+            shape_rule["passed"],
+            f"report missing sections: {shape_rule['message']}",
+        )
+
+
+class ContentQualityNegativeTests(unittest.TestCase):
+    """Negative tests: content quality helper rejects bad input.
+
+    This is a test-helper-level failure test, not production sanitizer behavior.
+    """
+
+    def test_quality_helper_rejects_observed_with_causal_language(self) -> None:
+        """observed claim containing causal language is rejected by quality helper."""
+        from tests.fixtures.incident_report_quality import check_claim_has_no_causal_language
+
+        # Create an observed claim with causal language (bad input)
+        bad_claim = {
+            "claimType": "observed",
+            "statement": "The root cause of the crash is memory exhaustion",
+            "sourceArtifactRefs": [],
+            "confidence": "high",
+        }
+
+        result = check_claim_has_no_causal_language("observed", bad_claim)
+        self.assertFalse(
+            result["passed"],
+            f"Expected quality helper to reject causal language, but it passed: {result}",
+        )
+        self.assertIn("causal language", result["message"].lower())
+
+    def test_quality_helper_rejects_derived_with_causal_language(self) -> None:
+        """derived claim containing causal language is rejected by quality helper."""
+        from tests.fixtures.incident_report_quality import check_claim_has_no_causal_language
+
+        # Create a derived claim with causal language (bad input)
+        bad_claim = {
+            "claimType": "derived",
+            "statement": "The pod crash was caused by OOM kill",
+            "sourceFields": ["state", "lastState"],
+            "sourceArtifactRefs": [],
+            "confidence": "medium",
+        }
+
+        result = check_claim_has_no_causal_language("derived", bad_claim)
+        self.assertFalse(
+            result["passed"],
+            f"Expected quality helper to reject causal language, but it passed: {result}",
+        )
+        self.assertIn("causal language", result["message"].lower())
+
+    def test_quality_helper_accepts_observed_without_causal_language(self) -> None:
+        """observed claim without causal language passes quality helper."""
+        from tests.fixtures.incident_report_quality import check_claim_has_no_causal_language
+
+        # Create a good observed claim (no causal language)
+        good_claim = {
+            "claimType": "observed",
+            "statement": "Warning events observed: 5",
+            "sourceArtifactRefs": [],
+            "confidence": "high",
+        }
+
+        result = check_claim_has_no_causal_language("observed", good_claim)
+        self.assertTrue(
+            result["passed"],
+            f"Expected quality helper to accept good claim, but it failed: {result}",
+        )
+
+    def test_quality_helper_accepts_hypothesis_with_basis(self) -> None:
+        """hypothesis with non-empty basis passes quality check."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        # Create a report with a proper hypothesis
+        report = {
+            "facts": [
+                {
+                    "claimType": "observed",
+                    "statement": "Warning events observed: 5",
+                    "sourceArtifactRefs": [],
+                    "confidence": "high",
+                }
+            ],
+            "derived": [],
+            "inferences": [
+                {
+                    "claimType": "hypothesis",
+                    "statement": "Control-plane CPU pressure may be causing latency",
+                    "basis": ["control-plane", "metrics"],
+                    "confidence": "medium",
+                    "sourceArtifactRefs": [],
+                }
+            ],
+            "recommendations": [
+                {
+                    "claimType": "recommendation",
+                    "statement": "Check kubelet logs",
+                    "safetyLevel": "low",
+                    "sourceArtifactRefs": [],
+                }
+            ],
+            "unknowns": [],
+            "recommendedActions": [],
+        }
+
+        quality_report = check_incident_report_quality(report)
+        # Hypotheses have non-empty basis - should pass
+        basis_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "hypotheses_have_basis"
+        )
+        self.assertTrue(basis_rule["passed"])
+
+    def test_quality_helper_rejects_unknown_without_why_missing(self) -> None:
+        """unknown claim without whyMissing fails quality check."""
+        from tests.fixtures.incident_report_quality import check_incident_report_quality
+
+        # Create a report with unknown lacking whyMissing
+        report = {
+            "facts": [],
+            "derived": [],
+            "inferences": [],
+            "recommendations": [],
+            "unknowns": [
+                {
+                    "claimType": "unknown",
+                    "statement": "Missing evidence: logs from edge nodes",
+                    "whyMissing": None,  # Missing!
+                    "sourceArtifactRefs": [],
+                }
+            ],
+            "recommendedActions": [],
+        }
+
+        quality_report = check_incident_report_quality(report)
+        why_missing_rule = next(
+            r for r in quality_report["results"] if r["rule"] == "unknowns_have_why_missing"
+        )
+        self.assertFalse(
+            why_missing_rule["passed"],
+            f"Expected unknown without whyMissing to fail, but it passed: {why_missing_rule}",
+        )
+
+
+class ContentQualityReportStructureTests(unittest.TestCase):
+    """Tests for report structure - verifying the report answers core questions."""
+
+    def test_degraded_report_answers_what_is_observed(self) -> None:
+        """Report answers: what is observed."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        # Should have facts answering "what is observed"
+        self.assertTrue(report["facts"], "Report should have facts answering what is observed")
+
+    def test_degraded_report_answers_what_is_derived(self) -> None:
+        """Report answers: what is derived."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        # Should have derived claims answering "what is derived"
+        self.assertTrue(report["derived"], "Report should have derived claims")
+
+    def test_degraded_report_answers_what_is_hypothesized(self) -> None:
+        """Report answers: what is hypothesized."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        # Should have inferences answering "what is hypothesized"
+        self.assertTrue(report["inferences"], "Report should have hypotheses")
+
+    def test_degraded_report_answers_what_is_unknown(self) -> None:
+        """Report answers: what is unknown."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        # Should have unknowns answering "what is unknown"
+        self.assertTrue(report["unknowns"], "Report should have unknowns for missing evidence")
+
+    def test_degraded_report_answers_what_action_is_recommended(self) -> None:
+        """Report answers: what action is recommended."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+
+        # Should have recommendations or legacy actions
+        has_recommendations = bool(report["recommendations"]) or bool(report["recommendedActions"])
+        self.assertTrue(
+            has_recommendations,
+            "Report should have recommendations answering what action is recommended",
+        )
+
+
 def _sample_freshness(status: str) -> dict[str, object]:
     return {
         "ageSeconds": 600,

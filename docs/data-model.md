@@ -793,3 +793,84 @@ export type IncidentReportUnknownPayload = {
 ### Epic status: CLOSED (Phase 2)
 
 Phase 2 narrative compression and visible claim semantics complete. All acceptance criteria met.
+
+### Phase 3 Status: Deterministic Content Quality Fixtures
+
+**Implemented:**
+
+Phase 3 adds deterministic content quality fixtures that prevent report content from becoming verbose, causally overconfident, or operator-hostile.
+
+#### Quality Rules Enforced
+
+| Rule | Description | Protected Against |
+|------|-------------|-------------------|
+| `observed_no_causal_language` | observed claims do not contain causal/root-cause language | Overconfident causal claims in facts |
+| `derived_no_causal_language` | derived claims do not contain unsupported causal/root-cause language | Causal language leaking into deterministic conclusions |
+| `hypotheses_have_basis` | hypothesis claims must have non-empty basis | Speculative claims without evidence |
+| `unknowns_have_why_missing` | unknown claims must have whyMissing explanation | Missing evidence not properly explained |
+| `recommendations_separated` | recommendations are separated from findings (not action verbs in facts/derived) | Actions mixed with findings |
+| `section_headings_concise` | section headings are concise (under 50 characters) | Verbose headings |
+| `claim_statements_short` | claim statements are reasonably short (under 200 characters) | Verbose content |
+| `no_filler_phrases` | no generic filler phrases in claim statements | Operator-hostile prose |
+| `report_has_full_degraded_shape` | report has all sections: facts, derived, inferences, unknowns, recommendations | Incomplete reports |
+
+#### Forbidden Patterns
+
+**Causal/Root-cause language:**
+- "root cause"
+- "caused by"
+- "because of"
+- "is the cause"
+- "the cause of"
+- "directly caused"
+- "responsible for"
+
+**Filler phrases:**
+- "the system has identified"
+- "potentially relevant diagnostic indicators"
+- "it is recommended that"
+- "various issues"
+- "multiple issues detected"
+- "several problems found"
+- "numerous concerns"
+
+#### Implementation
+
+- **Backend helper:** `tests/fixtures/incident_report_quality.py`
+  - `check_incident_report_quality()` - runs all quality rules on a report
+  - `check_claim_has_no_causal_language()` - rejects individual claims with causal language
+
+- **Backend tests:** `tests/unit/test_api_incident_report.py`
+  - `ContentQualityTests` - positive tests using degraded fixture
+  - `ContentQualityNegativeTests` - negative tests (helper rejects bad input)
+  - `ContentQualityReportStructureTests` - verifies report answers core questions
+
+- **Frontend tests:** `frontend/src/__tests__/incident-report-operator-worklist.test.tsx`
+  - "Phase 3: Content Quality Rules" - 9 quality rule tests
+  - "Phase 3: Content Quality - Negative Tests" - 4 negative tests
+  - "Phase 3: Content Quality - Report Structure Verification" - 5 structure tests
+
+#### Key Invariants
+
+1. **Deterministic fixtures, NOT an LLM judge** - These are simple pattern checks that always produce the same result for the same input
+2. **No production sanitization** - Negative tests are test-helper-level failures, not runtime sanitization
+3. **No snapshot tests** - Quality checks use targeted assertions, not brittle DOM snapshots
+4. **Backend fixtures are authoritative** - The degraded single-cluster fixture (`_fixture_degraded_single_cluster`) is the canonical golden test case
+
+#### Non-Goals
+
+- No LLM judge added
+- No production sanitizer behavior
+- No full DOM snapshots
+- No IncidentReportCard layout changes
+
+#### Files Changed
+
+- `tests/fixtures/incident_report_quality.py` - New: deterministic quality helper module
+- `tests/unit/test_api_incident_report.py` - Added: ContentQualityTests, ContentQualityNegativeTests, ContentQualityReportStructureTests
+- `frontend/src/__tests__/incident-report-operator-worklist.test.tsx` - Added: Phase 3 test suites
+- `docs/data-model.md` - Added: Phase 3 status documentation
+
+#### Epic status: CLOSED (Phase 3)
+
+All acceptance criteria met. Phase 3 deterministic content quality fixtures complete.

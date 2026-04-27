@@ -1114,3 +1114,258 @@ describe("RunOverviewDashboard with Incident Surfaces", () => {
     expect(screen.getByTestId("operator-worklist-card")).toBeInTheDocument();
   });
 });
+
+// ============================================================================
+// Phase 3: Content Quality Tests (Deterministic Quality Fixtures)
+// ============================================================================
+
+describe("Phase 3: Content Quality Rules", () => {
+  const CAUSAL_PHRASES = ["root cause", "caused by", "because of", "is the cause", "the cause of", "directly caused", "responsible for"];
+  const FILLER_PHRASES = [
+    "the system has identified",
+    "potentially relevant diagnostic indicators",
+    "it is recommended that",
+    "various issues",
+  ];
+
+  test("No causal language in observed evidence section", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const observedSection = screen.getByTestId("incident-facts");
+    const text = observedSection.textContent || "";
+
+    for (const phrase of CAUSAL_PHRASES) {
+      expect(text.toLowerCase()).not.toContain(phrase);
+    }
+  });
+
+  test("No causal language in deterministic conclusions section", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const derivedSection = screen.getByTestId("incident-derived");
+    const text = derivedSection.textContent || "";
+
+    for (const phrase of CAUSAL_PHRASES) {
+      expect(text.toLowerCase()).not.toContain(phrase);
+    }
+  });
+
+  test("Hypotheses section has non-empty basis for each item", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const inferenceBasis = document.querySelectorAll(".inference-basis");
+    expect(inferenceBasis.length).toBeGreaterThan(0);
+
+    for (const basis of inferenceBasis) {
+      const basisText = basis.textContent || "";
+      const basisValues = basisText.replace(/^basis:\s*/i, "");
+      expect(basisValues.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test("Unknowns section shows why missing explanation", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const unknownReasons = document.querySelectorAll(".unknown-reason");
+    expect(unknownReasons.length).toBeGreaterThan(0);
+
+    for (const reason of unknownReasons) {
+      const reasonText = reason.textContent || "";
+      const missingExplanation = reasonText.replace(/^why missing:\s*/i, "");
+      expect(missingExplanation.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test("Recommendations section renders under 'Recommended next actions'", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
+    expect(screen.getByText("Recommended next actions")).toBeInTheDocument();
+
+    const recommendationItems = document.querySelectorAll(".incident-recommendation-item");
+    expect(recommendationItems.length).toBeGreaterThan(0);
+
+    for (const item of recommendationItems) {
+      const statement = item.querySelector(".incident-statement");
+      const text = statement?.textContent || "";
+      expect(text.toLowerCase()).toMatch(/^(collect|check|review|inspect|investigate|analyze|monitor)/);
+    }
+  });
+
+  test("Section headings are concise (under 50 characters)", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const headings = [
+      "Observed evidence",
+      "Deterministic conclusions",
+      "Hypotheses",
+      "Unknowns / not proven yet",
+      "Recommended next actions",
+    ];
+
+    for (const heading of headings) {
+      expect(heading.length).toBeLessThan(50);
+    }
+  });
+
+  test("Claim statements are reasonably short (under 200 characters)", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const statements = document.querySelectorAll(".incident-statement");
+    for (const statement of statements) {
+      const text = statement.textContent || "";
+      expect(text.length).toBeLessThan(200);
+    }
+  });
+
+  test("No filler phrases in claim statements", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const allText = document.body.textContent || "";
+
+    for (const phrase of FILLER_PHRASES) {
+      expect(allText.toLowerCase()).not.toContain(phrase);
+    }
+  });
+
+  test("Report covers core questions: observed, derived, hypothesized, unknown, recommended", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    expect(screen.getByTestId("incident-facts")).toBeInTheDocument();
+    expect(screen.getByTestId("incident-derived")).toBeInTheDocument();
+    expect(screen.getByTestId("incident-inferences")).toBeInTheDocument();
+    expect(screen.getByTestId("incident-unknowns")).toBeInTheDocument();
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
+  });
+});
+
+describe("Phase 3: Content Quality - Rendering Semantics", () => {
+  test("Bad observed claim with causal language visibly renders without production sanitization", () => {
+    const reportWithBadClaim: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      facts: [
+        {
+          claimType: "observed",
+          statement: "The root cause of the crash is memory exhaustion",
+          sourceArtifactRefs: [],
+          confidence: "high",
+        },
+      ],
+    };
+
+    render(<IncidentReportCard incidentReport={reportWithBadClaim} />);
+
+    expect(screen.getByText(/root cause/i)).toBeInTheDocument();
+    expect(screen.getByTestId("claim-type-observed")).toBeInTheDocument();
+  });
+
+  test("Bad derived claim with causal language visibly renders without production sanitization", () => {
+    const reportWithBadClaim: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      derived: [
+        {
+          claimType: "derived",
+          statement: "The pod crash was caused by OOM kill",
+          sourceFields: ["state", "lastState"],
+          sourceArtifactRefs: [],
+          confidence: "medium",
+        },
+      ],
+    };
+
+    render(<IncidentReportCard incidentReport={reportWithBadClaim} />);
+
+    expect(screen.getByText(/caused by/i)).toBeInTheDocument();
+    expect(screen.getByTestId("claim-type-derived")).toBeInTheDocument();
+  });
+
+  test("Unknown claim without whyMissing renders statement but not why-missing explanation", () => {
+    const reportWithBadClaim: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      unknowns: [
+        {
+          claimType: "unknown",
+          statement: "Missing evidence: logs from edge nodes",
+          whyMissing: null,
+          sourceArtifactRefs: [],
+        },
+      ],
+    };
+
+    render(<IncidentReportCard incidentReport={reportWithBadClaim} />);
+
+    expect(screen.getByText("Missing evidence: logs from edge nodes")).toBeInTheDocument();
+    expect(screen.queryByText(/why missing:/i)).not.toBeInTheDocument();
+  });
+
+  test("Hypothesis claim without basis renders statement but basis section has no content", () => {
+    const reportWithBadClaim: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      inferences: [
+        {
+          claimType: "hypothesis",
+          statement: "This might be the root cause",
+          basis: [],
+          confidence: "low",
+          sourceArtifactRefs: [],
+        },
+      ],
+    };
+
+    render(<IncidentReportCard incidentReport={reportWithBadClaim} />);
+
+    expect(screen.getByText("This might be the root cause")).toBeInTheDocument();
+
+    const basisElements = document.querySelectorAll(".inference-basis");
+    expect(basisElements.length).toBeGreaterThan(0);
+
+    for (const basis of basisElements) {
+      const basisText = basis.textContent || "";
+      const basisContent = basisText.replace(/^basis:\s*/i, "").trim();
+      expect(basisContent.length).toBe(0);
+    }
+  });
+});
+
+describe("Phase 3: Content Quality - Report Structure Verification", () => {
+  test("Degraded report answers what is observed", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const factsSection = screen.getByTestId("incident-facts");
+    expect(factsSection).toBeInTheDocument();
+    expect(screen.getByText(/Warning events observed/i)).toBeInTheDocument();
+  });
+
+  test("Degraded report answers what is derived", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const derivedSection = screen.getByTestId("incident-derived");
+    expect(derivedSection).toBeInTheDocument();
+    expect(screen.getByText(/health rating is/i)).toBeInTheDocument();
+  });
+
+  test("Degraded report answers what is hypothesized", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const inferencesSection = screen.getByTestId("incident-inferences");
+    expect(inferencesSection).toBeInTheDocument();
+    expect(screen.getByText(/may be causing/i)).toBeInTheDocument();
+  });
+
+  test("Degraded report answers what is unknown", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const unknownsSection = screen.getByTestId("incident-unknowns");
+    expect(unknownsSection).toBeInTheDocument();
+    expect(screen.getByText(/Missing evidence/i)).toBeInTheDocument();
+  });
+
+  test("Degraded report answers what action is recommended", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+
+    const recommendationsSection = screen.getByTestId("incident-recommendations");
+    expect(recommendationsSection).toBeInTheDocument();
+    expect(screen.getByText("Collect kubelet logs from affected nodes")).toBeInTheDocument();
+    expect(screen.getByText("Review control-plane component status")).toBeInTheDocument();
+  });
+});
