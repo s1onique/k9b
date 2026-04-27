@@ -436,7 +436,7 @@ export const RunOverviewDashboard = ({
 
       {/* Phase 2: Canonical incident surface - below the 2-column grid */}
       {/* These are the primary surfaces for incident story + operator action list */}
-      {/* Layout: Operator worklist left (55%), Incident report right (45%) */}
+      {/* Layout: Operator worklist left (62%), Incident report right (38%) */}
       <div className="run-overview-incident-surfaces" data-testid="run-overview-incident-surfaces">
         {/* Operator worklist: Ranked action items with commands (left, primary action surface) */}
         <OperatorWorklistCard operatorWorklist={operatorWorklist} />

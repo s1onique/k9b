@@ -605,3 +605,39 @@ The following items are explicitly out of scope for this epic and require separa
 - **Artifacts/provenance tab enrichment:** Can become richer later under a separate patch.
 - **`discoveryVariantCounts` prop:** Can be removed from `RunOverviewDashboard` props if no longer needed by Overview.
 - **Further visual polish:** Can happen under separate small patches.
+
+## Incident Report Quality Fixtures Epic (CLOSED)
+
+This epic established the quality harness for the canonical incident report and operator worklist surfaces in the Overview dashboard.
+
+### Quality gates
+
+| Gate | Enforced by | What it protects |
+|------|------------|------------------|
+| Projection truthfulness | Backend golden fixtures (`tests/fixtures/incident_report_fixtures.py`) | Facts never contain provider-assisted content; unknowns are explicit; stale evidence is flagged; artifact refs are real or empty |
+| Rendering truthfulness | Frontend UI tests (`incident-report-operator-worklist.test.tsx`) | Cards render correctly; null commands show honest empty state; pagination preserves backend ranks; layout is visually balanced |
+| No LLM judge added | N/A (deterministic gates are first defense) | The quality harness relies on deterministic fixtures and assertions; no LLM-assisted evaluation was introduced |
+
+### Surface roles
+
+| Surface | Role | Layout |
+|---------|------|--------|
+| Operator worklist | Primary action surface. One item per page via shared Pagination. Shows top-ranked next action first. | Left (62% width), stacks on narrow screens |
+| Incident report | Contextual explanation surface. Facts, inferences, unknowns, stale warnings. | Right (38% width), stacks on narrow screens |
+
+### Final configuration
+
+- **Worklist page size:** 1 item per page (DEFAULT_PAGE_SIZE = 1)
+- **Incident surfaces split:** 62% worklist / 38% incident report on desktop; stacks vertically on narrow screens
+- **Pagination:** Shared `Pagination` component; controls hidden when item count ≤ page size
+- **Null command behavior:** "No executable command yet" renders honestly; no fake runnable strings
+
+### Fixture harness coverage
+
+- `tests/fixtures/incident_report_fixtures.py`: Golden fixtures for regression testing
+- `tests/unit/test_api_incident_report.py`: Backend projection tests (facts, inferences, unknowns, stale warnings, null commands, queue metadata)
+- `frontend/src/__tests__/incident-report-operator-worklist.test.tsx`: Frontend rendering tests (card order, pagination, null command, state badges, source links)
+
+### Epic status: CLOSED
+
+All acceptance criteria met. No further work planned in this epic.

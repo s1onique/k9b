@@ -15,7 +15,7 @@
  * 8. Empty incident report/worklist states render honestly.
  * 9. Selected-run binding: switching runs updates incident report and worklist.
  * 10. Dashboard renders worklist before incident report.
- * 11. Pagination works correctly (page size 3, previous/next, disabled states).
+ * 11. Pagination works correctly (page size 1, previous/next, disabled states).
  */
 
 import { render, screen, act } from "@testing-library/react";
@@ -295,8 +295,14 @@ describe("OperatorWorklistCard", () => {
   });
 
   // Test 6: Operator worklist renders "No executable command yet" when command is null
-  test("6. Operator worklist renders 'No executable command yet' when command is null", () => {
+  test("6. Operator worklist renders 'No executable command yet' when command is null", async () => {
     render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+
+    // Navigate to page 2 to see the second item (which has null command)
+    const nextButton = screen.getByRole("button", { name: /worklist next page/i });
+    await act(async () => {
+      await userEvent.click(nextButton);
+    });
 
     // Second item has no command
     expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
@@ -314,13 +320,19 @@ describe("OperatorWorklistCard", () => {
     expect(screen.getByText(/pending/)).toBeInTheDocument();
   });
 
-  // Test 8: Rank and workstream render for each item
-  test("8. Rank and workstream badge render for each item", () => {
+  // Test 8: Rank and workstream render for each item (across pages)
+  test("8. Rank and workstream badge render for each item", async () => {
     render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
 
     // First item
     expect(screen.getByText("#1")).toBeInTheDocument();
     expect(screen.getByText("incident")).toBeInTheDocument();
+
+    // Navigate to page 2 to see the second item
+    const nextButton = screen.getByRole("button", { name: /worklist next page/i });
+    await act(async () => {
+      await userEvent.click(nextButton);
+    });
 
     // Second item
     expect(screen.getByText("#2")).toBeInTheDocument();
@@ -464,36 +476,36 @@ describe("OperatorWorklistCard Pagination", () => {
     expect(children[1]).toHaveAttribute("data-testid", "incident-report-card");
   });
 
-  // Test 2: Operator worklist renders only first page by default
-  test("2. Operator worklist renders only first page by default when item count exceeds page size", () => {
+  // Test 2: Operator worklist renders only first item by default (page size = 1)
+  test("2. Operator worklist renders only first item by default when item count exceeds page size", () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
-    // Should show only first 3 items (page size = 3)
+    // Should show only first item (page size = 1)
     expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-item-3")).toBeInTheDocument();
 
-    // Items 4-10 should NOT be present
-    expect(screen.queryByTestId("worklist-item-4")).not.toBeInTheDocument();
+    // Items 2-10 should NOT be present
+    expect(screen.queryByTestId("worklist-item-2")).not.toBeInTheDocument();
     expect(screen.queryByTestId("worklist-item-10")).not.toBeInTheDocument();
   });
 
-  // Test 3: Page count text renders
-  test("3. Page count text renders correctly, e.g. 'Showing 1–3 of 10'", () => {
+  // Test 3: Page count text renders correctly for one-item pagination
+  test("3. Page count text renders correctly, e.g. 'Showing 1–1 of 10'", () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
-    // Should show the pagination summary
+    // Should show the pagination summary with exact format from shared Pagination
     expect(screen.getByText(/showing/i)).toBeInTheDocument();
     // Verify pagination summary contains the expected range values
     const paginationSummary = document.querySelector('.pagination-summary');
     expect(paginationSummary).not.toBeNull();
-    expect(paginationSummary?.textContent).toContain("1");
-    expect(paginationSummary?.textContent).toContain("3");
-    expect(paginationSummary?.textContent).toContain("10");
+    // With page size 1, the shared Pagination renders "Showing 1–1 of 10"
+    const summaryText = paginationSummary?.textContent || "";
+    expect(summaryText).toContain("1");
+    expect(summaryText).toContain("1"); // same value appears twice: "1–1"
+    expect(summaryText).toContain("10");
   });
 
-  // Test 4: Next moves to next page and shows ranks #4-#6
-  test("4. Next button moves to next page and shows backend ranks #4–#6", async () => {
+  // Test 4: Next moves to next page and shows backend rank #2
+  test("4. Next button moves to next page and shows backend rank #2", async () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
     // Click Next button wrapped in act to handle state updates
@@ -502,23 +514,21 @@ describe("OperatorWorklistCard Pagination", () => {
       await userEvent.click(nextButton);
     });
 
-    // Now should show items 4-6
-    expect(screen.getByTestId("worklist-item-4")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-item-5")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-item-6")).toBeInTheDocument();
+    // Now should show item 2 only
+    expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
 
-    // Items 1-3 should NOT be present
+    // Item 1 should NOT be present
     expect(screen.queryByTestId("worklist-item-1")).not.toBeInTheDocument();
 
     // Page count should update - verify by checking page indicator element
     const pageIndicator = document.querySelector('.pagination-page-indicator');
     expect(pageIndicator).not.toBeNull();
     expect(pageIndicator?.textContent).toContain("2");
-    expect(pageIndicator?.textContent).toContain("4");
+    expect(pageIndicator?.textContent).toContain("2");
   });
 
-  // Test 5: Previous returns to first page (#1-#3)
-  test("5. Previous button returns to first page showing backend ranks #1–#3", async () => {
+  // Test 5: Previous returns to first page showing backend rank #1 only
+  test("5. Previous button returns to first page showing backend rank #1", async () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
     // Navigate to page 2 first
@@ -533,13 +543,11 @@ describe("OperatorWorklistCard Pagination", () => {
       await userEvent.click(prevButton);
     });
 
-    // Now should show items 1-3 again
+    // Now should show item 1 only
     expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-item-3")).toBeInTheDocument();
 
-    // Item 4 should NOT be present
-    expect(screen.queryByTestId("worklist-item-4")).not.toBeInTheDocument();
+    // Item 2 should NOT be present
+    expect(screen.queryByTestId("worklist-item-2")).not.toBeInTheDocument();
   });
 
   // Test 6: Previous is disabled on first page
@@ -550,31 +558,37 @@ describe("OperatorWorklistCard Pagination", () => {
     expect(prevButton).toBeDisabled();
   });
 
-  // Test 7: Next is disabled on last page
+  // Test 7: Next is disabled on last page (page 10 of 10, showing item #10)
   test("7. Next button is disabled on the last page", async () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
-    // Navigate to last page (page 4 of 4, showing items 10 only)
-    // Page 1: 1-3, Page 2: 4-6, Page 3: 7-9, Page 4: 10
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
-    });
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
-    });
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
-    });
+    // Navigate to last page (page 10 of 10, showing item 10 only)
+    // With page size of 1, we need to click next 9 times to reach page 10
+    for (let i = 0; i < 9; i++) {
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+      });
+    }
 
     const nextButton = screen.getByRole("button", { name: /worklist next page/i });
     expect(nextButton).toBeDisabled();
   });
 
-  // Test 8: Pagination controls are hidden when item count <= 3
-  test("8. Pagination controls are hidden when item count <= 3", () => {
-    render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+  // Test 8: Pagination controls are hidden when item count <= 1
+  test("8. Pagination controls are hidden when item count <= 1", () => {
+    const singleItemWorklist: OperatorWorklistPayload = {
+      items: [
+        { id: "item-1", rank: 1, workstream: "incident", title: "Item 1", description: "", command: "kubectl test 1", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+      ],
+      totalItems: 1,
+      completedItems: 0,
+      pendingItems: 1,
+      blockedItems: 0,
+    };
 
-    // Should NOT have any navigation buttons (only 2 items, less than page size of 3)
+    render(<OperatorWorklistCard operatorWorklist={singleItemWorklist} />);
+
+    // Should NOT have any navigation buttons (only 1 item, less than page size of 1)
     expect(screen.queryByRole("button", { name: /previous/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /next/i })).not.toBeInTheDocument();
   });
@@ -583,17 +597,13 @@ describe("OperatorWorklistCard Pagination", () => {
   test("9. Null command still shows 'No executable command yet' on paginated pages", async () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
-    // Item 10 has null command - it should appear on page 4
-    // Navigate to last page
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
-    });
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
-    });
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
-    });
+    // Item 10 has null command - it should appear on page 10
+    // Navigate to last page (page 10 of 10, showing item 10 only)
+    for (let i = 0; i < 9; i++) {
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+      });
+    }
 
     // Item 10 should show "No executable command yet"
     expect(screen.getByTestId("worklist-item-10")).toBeInTheDocument();

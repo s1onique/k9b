@@ -876,12 +876,12 @@
   }
 
   .run-overview-incident-surfaces .operator-worklist-card {
-    flex: 1 1 55%;
-    max-width: 55%;
+    flex: 1 1 62%;
+    max-width: 62%;
   }
 
   .run-overview-incident-surfaces .incident-report-card {
-    flex: 1 1 45%;
-    max-width: 45%;
+    flex: 1 1 38%;
+    max-width: 38%;
   }
 }

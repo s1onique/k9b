@@ -14,7 +14,7 @@
  * - Source artifact links
  *
  * Pagination:
- * - Default page size: 3 items
+ * - Default page size: 1 item per page
  * - Pagination controls hidden when item count <= page size
  * - Preserves backend item rank (e.g., #1, #2, #3...) not local page index
  * - Shows "Showing X–Y of Z" text
@@ -35,7 +35,7 @@ import Pagination from "../Pagination";
 // Constants
 // ============================================================================
 
-const DEFAULT_PAGE_SIZE = 3;
+const DEFAULT_PAGE_SIZE = 1;
 
 // ============================================================================
 // Props
