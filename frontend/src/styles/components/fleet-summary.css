@@ -125,9 +125,82 @@
 }
 
 /* ==========================================================================
-   Run Summary Header
+   Run Summary Header (Single-Line Identity Layout)
    ========================================================================== */
 
+.run-summary-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem 0.75rem;
+  min-width: 0;
+}
+
+.run-summary-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.run-summary-kicker {
+  color: var(--color-accent-primary-text, #bae6fd);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.run-summary-title {
+  color: var(--color-text-primary, #f8fafc);
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-weight: 800;
+  line-height: 1.05;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-summary-collector {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.run-summary-time {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Responsive: compact two-line layout on narrow screens */
+@media (max-width: 760px) {
+  .run-summary-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .run-summary-identity {
+    flex-wrap: wrap;
+    row-gap: 0.2rem;
+  }
+}
+
+/* ==========================================================================
+   Run Summary Header (Legacy Stacked Layout - deprecated)
+   ========================================================================== */
+
+/* Kept for backward compatibility with any imports */
 .run-summary-head {
   display: flex;
   justify-content: space-between;
@@ -141,14 +214,6 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.2rem;
-}
-
-.run-summary-collector {
-  margin: 0.25rem 0 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: rgba(248, 250, 252, 0.6);
 }
 
 /* ==========================================================================
@@ -387,4 +452,25 @@
 [data-theme="solarized-light"] .fleet-metrics article {
   background: rgba(238, 232, 213, 0.88);
   border-color: rgba(147, 161, 161, 0.35);
+}
+
+/* Run summary header (single-line layout) in light theme */
+[data-theme="solarized-light"] .run-summary-header {
+  /* inherits base background from panel */
+}
+
+[data-theme="solarized-light"] .run-summary-kicker {
+  color: var(--color-accent-primary-text, #268bd2);
+}
+
+[data-theme="solarized-light"] .run-summary-title {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .run-summary-collector {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .run-summary-time {
+  color: var(--color-text-muted, #657b83);
 }

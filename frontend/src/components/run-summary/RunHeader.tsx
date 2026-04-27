@@ -1,14 +1,17 @@
 /**
  * RunHeader.tsx
  *
- * Displays the run header section: run label, collector version, and timestamp.
- * Extracted from RunSummaryPanel (E1-3b-step15).
+ * Displays the run header as a single horizontal identity line.
+ * Compressed from stacked layout: kicker, run id, collector version, timestamp.
+ *
+ * Target structure:
+ * RUN SUMMARY  health-run-20260427T145704Z  COLLECTOR 0.0.0                  Apr 27, 2026 14:59 UTC
  */
 
 import { formatTimestamp } from "../../utils";
 
 export interface RunHeaderProps {
-  /** Run display label */
+  /** Run display label (run id) */
   label: string;
   /** Collector version string */
   collectorVersion: string;
@@ -22,15 +25,15 @@ export const RunHeader = ({
   timestamp,
 }: RunHeaderProps) => {
   return (
-    <div className="run-summary-head">
-      <div>
-        <p className="eyebrow">Run summary</p>
-        <h2>{label}</h2>
-        <p className="muted tiny run-summary-collector">Collector {collectorVersion}</p>
+    <header className="run-summary-header">
+      <div className="run-summary-identity">
+        <span className="run-summary-kicker">Run summary</span>
+        <h2 className="run-summary-title">{label}</h2>
+        <span className="run-summary-collector">Collector {collectorVersion}</span>
       </div>
-      <div className="run-summary-freshness">
-        <p className="muted small">{formatTimestamp(timestamp)}</p>
-      </div>
-    </div>
+      <time className="run-summary-time" dateTime={timestamp}>
+        {formatTimestamp(timestamp)}
+      </time>
+    </header>
   );
 };

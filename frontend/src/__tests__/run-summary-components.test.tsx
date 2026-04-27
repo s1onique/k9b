@@ -67,7 +67,7 @@ describe("RunHeader", () => {
       />
     );
 
-    // Should show "Run summary" eyebrow
+    // Should show "Run summary" kicker
     expect(screen.getByText("Run summary")).toBeInTheDocument();
   });
 
@@ -84,6 +84,89 @@ describe("RunHeader", () => {
     // We can verify the formatted output by checking for the expected format
     expect(screen.getByText(/Apr 6, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/12:00 UTC/)).toBeInTheDocument();
+  });
+
+  test("renders as single-line header with correct semantic structure", () => {
+    render(
+      <RunHeader
+        label="health-run-20260427T145704Z"
+        collectorVersion="0.0.0"
+        timestamp="2026-04-27T14:59:00Z"
+      />
+    );
+
+    // Find the h2 by role and assert its closest header has the correct class
+    // Note: nested <header> should not be tested as "banner" landmark
+    const title = screen.getByRole("heading", {
+      level: 2,
+      name: "health-run-20260427T145704Z",
+    });
+    const header = title.closest("header");
+    expect(header).toHaveClass("run-summary-header");
+
+    // Should contain the run summary identity group
+    const identityGroup = header?.querySelector(".run-summary-identity");
+    expect(identityGroup).toBeInTheDocument();
+
+    // Kickers and title should be within the identity group
+    expect(screen.getByText("Run summary")).toBeInTheDocument();
+    expect(screen.getByText("Collector 0.0.0")).toBeInTheDocument();
+  });
+
+  test("uses <time> element for timestamp accessibility", () => {
+    render(
+      <RunHeader
+        label="Test Run"
+        collectorVersion="v1.0"
+        timestamp="2026-04-06T12:00:00Z"
+      />
+    );
+
+    // Should use <time> element for the timestamp
+    const container = document.querySelector(".run-summary-header");
+    const timeElement = container?.querySelector("time");
+    expect(timeElement).toBeInTheDocument();
+    expect(timeElement).toHaveAttribute("dateTime", "2026-04-06T12:00:00Z");
+    expect(timeElement).toHaveClass("run-summary-time");
+  });
+
+  test("long run ids truncate with ellipsis", () => {
+    render(
+      <RunHeader
+        label="health-run-with-very-long-name-that-should-truncate-gracefully-20260427T145704Z"
+        collectorVersion="v1.0"
+        timestamp="2026-04-06T12:00:00Z"
+      />
+    );
+
+    // The title element should have overflow styling for truncation
+    const titleElement = screen.getByText("health-run-with-very-long-name-that-should-truncate-gracefully-20260427T145704Z");
+    expect(titleElement.tagName).toBe("H2");
+    expect(titleElement).toHaveClass("run-summary-title");
+
+    // Verify the title element has the truncation class applied
+    // Note: overflow/ellipsis styles are defined in CSS (fleet-summary.css)
+    // and cannot be tested via toHaveStyle in jsdom (only inline styles work)
+  });
+
+  test("collector and timestamp remain readable on compact layout", () => {
+    render(
+      <RunHeader
+        label="Test Run"
+        collectorVersion="collector:v1.2.0"
+        timestamp="2026-04-06T12:00:00Z"
+      />
+    );
+
+    // Collector should have compact styling
+    const collector = screen.getByText(/Collector/);
+    expect(collector).toHaveClass("run-summary-collector");
+
+    // Timestamp should have compact styling - use DOM query since jsdom doesn't assign "timer" role
+    const container = document.querySelector(".run-summary-header");
+    const timestamp = container?.querySelector("time");
+    expect(timestamp).toBeInTheDocument();
+    expect(timestamp).toHaveClass("run-summary-time");
   });
 });
 
