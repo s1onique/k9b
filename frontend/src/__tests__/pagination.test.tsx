@@ -409,4 +409,92 @@ describe("Pagination Component", () => {
       expect(screen.getByText(/showing/i)).toBeInTheDocument();
     });
   });
+
+  describe("Single-item pagination (pageSize=1)", () => {
+    it("shows 'Item 1 of 8' when pageSize=1 and multiple pages exist", () => {
+      const props = createProps({ 
+        totalItems: 8,
+        totalPages: 8,
+        currentPage: 1,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should show pagination-item-indicator with correct text content
+      const indicator = screen.getByTestId("pagination-item-indicator");
+      expect(indicator).toBeInTheDocument();
+      expect(indicator.textContent).toBe("Item 1 of 8");
+      
+      // Should NOT show "Showing 1–1 of 8" range summary
+      expect(screen.queryByText(/showing/i)).not.toBeInTheDocument();
+    });
+
+    it("shows 'Item 3 of 8' when page changes to page 3", () => {
+      const props = createProps({ 
+        totalItems: 8,
+        totalPages: 8,
+        currentPage: 3,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should show pagination-item-indicator with correct text content
+      const indicator = screen.getByTestId("pagination-item-indicator");
+      expect(indicator).toBeInTheDocument();
+      expect(indicator.textContent).toBe("Item 3 of 8");
+    });
+
+    it("does NOT show 'Item N of M' when pageSize > 1", () => {
+      const props = createProps({ 
+        totalItems: 40,
+        totalPages: 4,
+        currentPage: 1,
+        pageSize: 10,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should show standard range summary instead
+      expect(screen.getByText(/showing/i)).toBeInTheDocument();
+      
+      // Should NOT show pagination-item-indicator
+      expect(screen.queryByTestId("pagination-item-indicator")).not.toBeInTheDocument();
+    });
+
+    it("does NOT show redundant 'Showing N–N of M' when pageSize=1 with multiple pages", () => {
+      const props = createProps({ 
+        totalItems: 8,
+        totalPages: 8,
+        currentPage: 1,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should show pagination-item-indicator
+      expect(screen.getByTestId("pagination-item-indicator")).toBeInTheDocument();
+      
+      // Should NOT show range summary with "showing 1–1 of 8"
+      const paginationSummary = document.querySelector('.pagination-summary');
+      expect(paginationSummary).toBeNull();
+    });
+
+    it("shows range summary when pageSize=1 but only 1 page", () => {
+      const props = createProps({ 
+        totalItems: 1,
+        totalPages: 1,
+        currentPage: 1,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // No nav controls (single page)
+      expect(screen.queryByRole("button", { name: /previous/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /next/i })).not.toBeInTheDocument();
+      
+      // Should NOT show pagination-item-indicator (not needed for single item)
+      expect(screen.queryByTestId("pagination-item-indicator")).not.toBeInTheDocument();
+      
+      // Should show range summary for consistency
+      expect(screen.getByText(/showing/i)).toBeInTheDocument();
+    });
+  });
 });

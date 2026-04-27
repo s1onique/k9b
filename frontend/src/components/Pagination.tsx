@@ -61,6 +61,10 @@ const Pagination = ({
   const showNavControls = hasMultiplePages;
   const showPageSizeSelector = hasPageSizeOptions;
 
+  // Single-item pagination mode: when pageSize === 1, show "Item N of M" instead of range summary
+  // This avoids redundant "Showing 1–1 of M" + "Page N of M" for single-item pages
+  const isSingleItemMode = pageSize === 1;
+
   // Generate unique accessible label for this pagination region
   const paginationLabel = label ? `${label} pagination` : "Pagination";
   const prevLabel = `${label ? label + ' ' : ''}previous page`;
@@ -150,14 +154,28 @@ const Pagination = ({
         </div>
       )}
 
-      {/* Single live region: range summary that announces all pagination changes */}
-      <p
-        className="pagination-summary"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        Showing <strong>{startItem}</strong>–<strong>{endItem}</strong> of <strong>{totalItems}</strong>
-      </p>
+      {/* Single-item pagination: show "Item N of M" instead of "Showing N–N of M" */}
+      {isSingleItemMode && hasMultiplePages && (
+        <p
+          className="pagination-item-indicator"
+          data-testid="pagination-item-indicator"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          Item <strong>{currentPage}</strong> of <strong>{totalItems}</strong>
+        </p>
+      )}
+
+      {/* Standard range summary: only show when NOT in single-item mode with multiple pages */}
+      {!isSingleItemMode || !hasMultiplePages ? (
+        <p
+          className="pagination-summary"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          Showing <strong>{startItem}</strong>–<strong>{endItem}</strong> of <strong>{totalItems}</strong>
+        </p>
+      ) : null}
     </nav>
   );
 };
