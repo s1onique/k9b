@@ -37,26 +37,53 @@ const sampleIncidentReport: IncidentReportPayload = {
   evidenceSummary: null,
   facts: [
     {
-      statement: "Cluster cluster-a health rating is Degraded.",
-      sourceArtifactRefs: [{ label: "Assessment", path: "/artifacts/assessment-cluster-a.json" }],
+      claimType: "observed",
+      statement: "Warning events observed: 5",
+      sourceArtifactRefs: [{ label: "Drilldown", path: "/artifacts/drilldown-cluster-a.json" }],
       confidence: "high",
     },
     {
-      statement: "Warning events observed: 5",
+      claimType: "observed",
+      statement: "Non-running pods observed: 2",
       sourceArtifactRefs: [{ label: "Drilldown", path: "/artifacts/drilldown-cluster-a.json" }],
+      confidence: "high",
+    },
+  ],
+  derived: [
+    {
+      claimType: "derived",
+      statement: "Cluster cluster-a health rating is Degraded.",
+      sourceFields: ["health_rating"],
+      sourceArtifactRefs: [{ label: "Assessment", path: "/artifacts/assessment-cluster-a.json" }],
       confidence: "high",
     },
   ],
   inferences: [
     {
+      claimType: "hypothesis",
       statement: "High control-plane CPU may be causing latency.",
       basis: ["control-plane", "metrics", "review-enrichment"],
       confidence: "medium",
       sourceArtifactRefs: [{ label: "Review Enrichment", path: "/artifacts/review-enrichment.json" }],
     },
   ],
+  recommendations: [
+    {
+      claimType: "recommendation",
+      statement: "Collect kubelet logs from affected nodes",
+      safetyLevel: "medium",
+      sourceArtifactRefs: [{ label: "Assessment", path: "/artifacts/assessment-cluster-a.json" }],
+    },
+    {
+      claimType: "recommendation",
+      statement: "Review control-plane component status",
+      safetyLevel: "low",
+      sourceArtifactRefs: [{ label: "Assessment", path: "/artifacts/assessment-cluster-a.json" }],
+    },
+  ],
   unknowns: [
     {
+      claimType: "unknown",
       statement: "Missing evidence: logs from edge nodes",
       whyMissing: "Not collected in this run",
       sourceArtifactRefs: [],
@@ -143,6 +170,276 @@ const largeOperatorWorklist: OperatorWorklistPayload = {
 };
 
 // ============================================================================
+// Phase 2: Canonical Incident Report Surface Tests
+// ============================================================================
+
+describe("Phase 2: Canonical Section Headings", () => {
+  test("Canonical headings: Observed evidence section renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByText("Observed evidence")).toBeInTheDocument();
+  });
+
+  test("Canonical headings: Deterministic conclusions section renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByText("Deterministic conclusions")).toBeInTheDocument();
+  });
+
+  test("Canonical headings: Hypotheses section renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByText("Hypotheses")).toBeInTheDocument();
+  });
+
+  test("Canonical headings: Unknowns / not proven yet section renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByText("Unknowns / not proven yet")).toBeInTheDocument();
+  });
+
+  test("Canonical headings: Recommended next actions section renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByText("Recommended next actions")).toBeInTheDocument();
+  });
+});
+
+describe("Phase 2: Derived Claims Section", () => {
+  test("Derived claims render in deterministic conclusions section", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByTestId("incident-derived")).toBeInTheDocument();
+    expect(screen.getByText("Cluster cluster-a health rating is Degraded.")).toBeInTheDocument();
+  });
+
+  test("Derived claims show source fields", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByText(/from: health_rating/i)).toBeInTheDocument();
+  });
+
+  test("Derived claims show confidence", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getAllByText(/confidence: high/i).length).toBeGreaterThan(0);
+  });
+
+  test("Empty derived section does not render", () => {
+    const reportWithoutDerived: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      derived: [],
+    };
+    render(<IncidentReportCard incidentReport={reportWithoutDerived} />);
+    expect(screen.queryByTestId("incident-derived")).not.toBeInTheDocument();
+  });
+});
+
+describe("Phase 2: Structured Recommendations", () => {
+  test("Structured recommendations render with safety level badges", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
+    expect(screen.getByText("safety: medium")).toBeInTheDocument();
+    expect(screen.getByText("safety: low")).toBeInTheDocument();
+  });
+
+  test("Structured recommendations preferred over legacy recommendedActions", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    // Should show structured recommendations, not legacy
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
+    expect(screen.queryByTestId("incident-recommended-actions")).not.toBeInTheDocument();
+  });
+
+  test("Legacy recommendedActions shown when no structured recommendations", () => {
+    const reportWithLegacyOnly: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      recommendations: [],
+    };
+    render(<IncidentReportCard incidentReport={reportWithLegacyOnly} />);
+    expect(screen.getByTestId("incident-recommended-actions")).toBeInTheDocument();
+    expect(screen.getByText("Recommended next actions")).toBeInTheDocument();
+  });
+
+  test("Empty recommendations section does not render", () => {
+    const reportWithoutRecs: IncidentReportPayload = {
+      ...sampleIncidentReport,
+      recommendations: [],
+      recommendedActions: [],
+    };
+    render(<IncidentReportCard incidentReport={reportWithoutRecs} />);
+    expect(screen.queryByTestId("incident-recommendations")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("incident-recommended-actions")).not.toBeInTheDocument();
+  });
+});
+
+describe("Phase 2: Visible Claim Type Labels", () => {
+  test("Claim type labels: observed label renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    // Multiple facts may have observed label - use getAllByTestId
+    expect(screen.getAllByTestId("claim-type-observed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("observed").length).toBeGreaterThan(0);
+  });
+
+  test("Claim type labels: derived label renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByTestId("claim-type-derived")).toBeInTheDocument();
+    expect(screen.getByText("derived")).toBeInTheDocument();
+  });
+
+  test("Claim type labels: hypothesis label renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByTestId("claim-type-hypothesis")).toBeInTheDocument();
+    expect(screen.getByText("hypothesis")).toBeInTheDocument();
+  });
+
+  test("Claim type labels: recommendation label renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    // Multiple recommendations may have recommendation label - use getAllByTestId
+    expect(screen.getAllByTestId("claim-type-recommendation").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("recommendation").length).toBeGreaterThan(0);
+  });
+
+  test("Claim type labels: unknown label renders", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    expect(screen.getByTestId("claim-type-unknown")).toBeInTheDocument();
+    expect(screen.getByText("unknown")).toBeInTheDocument();
+  });
+});
+
+describe("Phase 2: Narrative Quality", () => {
+  test("No 'root cause' language in observed evidence", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    const observedSection = screen.getByTestId("incident-facts");
+    const text = observedSection.textContent || "";
+    expect(text.toLowerCase()).not.toContain("root cause");
+    expect(text.toLowerCase()).not.toContain("caused by");
+  });
+
+  test("No 'root cause' language in deterministic conclusions", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    const derivedSection = screen.getByTestId("incident-derived");
+    const text = derivedSection.textContent || "";
+    expect(text.toLowerCase()).not.toContain("root cause");
+    expect(text.toLowerCase()).not.toContain("caused by");
+  });
+
+  test("Recommendations are action-oriented", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    // Structured recommendations should be action statements
+    expect(screen.getByText("Collect kubelet logs from affected nodes")).toBeInTheDocument();
+    expect(screen.getByText("Review control-plane component status")).toBeInTheDocument();
+  });
+
+  test("Unknowns include whyMissing explanation", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    // whyMissing is rendered inline, check for partial text match
+    expect(screen.getByText(/why missing: Not collected in this run/i)).toBeInTheDocument();
+  });
+
+  test("Hypotheses include basis for causal language", () => {
+    render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
+    // The hypothesis about CPU causing latency should have basis
+    expect(screen.getByText(/basis: /i)).toBeInTheDocument();
+    // basis may contain control-plane - check in hypothesis section
+    const inferenceSection = screen.getByTestId("incident-inferences");
+    expect(inferenceSection.textContent).toContain("control-plane");
+  });
+});
+
+describe("Phase 2: hasContent Edge Cases", () => {
+  test("derived-only incident report renders 'Deterministic conclusions' section", () => {
+    const derivedOnlyReport: IncidentReportPayload = {
+      title: "Derived only test",
+      status: "healthy",
+      affectedScope: null,
+      impact: null,
+      evidenceSummary: null,
+      facts: [],
+      derived: [
+        {
+          claimType: "derived",
+          statement: "Cluster cluster-b health rating is Healthy.",
+          sourceFields: ["health_rating"],
+          sourceArtifactRefs: [{ label: "Assessment", path: "/artifacts/assessment-cluster-b.json" }],
+          confidence: "high",
+        },
+      ],
+      inferences: [],
+      recommendations: [],
+      unknowns: [],
+      staleEvidenceWarnings: [],
+      confidence: "high",
+      freshness: null,
+      recommendedActions: [],
+      sourceArtifactRefs: [],
+    };
+
+    render(<IncidentReportCard incidentReport={derivedOnlyReport} />);
+
+    // Should render the derived section, not "No incident data available"
+    expect(screen.getByText("Deterministic conclusions")).toBeInTheDocument();
+    expect(screen.getByText("Cluster cluster-b health rating is Healthy.")).toBeInTheDocument();
+    // Should NOT show empty state
+    expect(screen.queryByText("No incident data available.")).not.toBeInTheDocument();
+  });
+
+  test("structured-recommendations-only incident report renders 'Recommended next actions'", () => {
+    const recsOnlyReport: IncidentReportPayload = {
+      title: "Recommendations only test",
+      status: "healthy",
+      affectedScope: null,
+      impact: null,
+      evidenceSummary: null,
+      facts: [],
+      derived: [],
+      inferences: [],
+      recommendations: [
+        {
+          claimType: "recommendation",
+          statement: "Check node health metrics",
+          safetyLevel: "low",
+          sourceArtifactRefs: [],
+        },
+      ],
+      unknowns: [],
+      staleEvidenceWarnings: [],
+      confidence: "medium",
+      freshness: null,
+      recommendedActions: [],
+      sourceArtifactRefs: [],
+    };
+
+    render(<IncidentReportCard incidentReport={recsOnlyReport} />);
+
+    // Should render the recommendations section, not "No incident data available"
+    expect(screen.getByText("Recommended next actions")).toBeInTheDocument();
+    expect(screen.getByText("Check node health metrics")).toBeInTheDocument();
+    // Should NOT show empty state
+    expect(screen.queryByText("No incident data available.")).not.toBeInTheDocument();
+  });
+
+  test("legacy-recommended-actions-only report still works with consistent heading", () => {
+    const legacyOnlyReport: IncidentReportPayload = {
+      title: "Legacy only test",
+      status: "healthy",
+      affectedScope: null,
+      impact: null,
+      evidenceSummary: null,
+      facts: [],
+      derived: [],
+      inferences: [],
+      recommendations: [],
+      unknowns: [],
+      staleEvidenceWarnings: [],
+      confidence: "low",
+      freshness: null,
+      recommendedActions: ["Check node status"],
+      sourceArtifactRefs: [],
+    };
+
+    render(<IncidentReportCard incidentReport={legacyOnlyReport} />);
+
+    // Legacy fallback should now also use "Recommended next actions"
+    expect(screen.getByText("Recommended next actions")).toBeInTheDocument();
+    expect(screen.getByText("Check node status")).toBeInTheDocument();
+    // Should NOT show empty state
+    expect(screen.queryByText("No incident data available.")).not.toBeInTheDocument();
+  });
+});
+
+// ============================================================================
 // Incident Report Claim Taxonomy Tests (Epic: Incident Report Content Quality)
 // ============================================================================
 
@@ -154,7 +451,7 @@ describe("IncidentReportCard Claim Taxonomy", () => {
 
     // Facts section should exist
     expect(screen.getByTestId("incident-facts")).toBeInTheDocument();
-    expect(screen.getByText("Facts")).toBeInTheDocument();
+    expect(screen.getByText("Observed evidence")).toBeInTheDocument();
 
     // Each fact should have claimType field
     const facts = document.querySelectorAll(".incident-fact-item");
@@ -166,7 +463,7 @@ describe("IncidentReportCard Claim Taxonomy", () => {
 
     // Inferences section should exist
     expect(screen.getByTestId("incident-inferences")).toBeInTheDocument();
-    expect(screen.getByText("Inferences")).toBeInTheDocument();
+    expect(screen.getByText("Hypotheses")).toBeInTheDocument();
 
     // Each inference should have basis displayed
     const inferenceBasis = document.querySelectorAll(".inference-basis");
@@ -178,7 +475,7 @@ describe("IncidentReportCard Claim Taxonomy", () => {
 
     // Unknowns section should exist
     expect(screen.getByTestId("incident-unknowns")).toBeInTheDocument();
-    expect(screen.getByText("Unknowns")).toBeInTheDocument();
+    expect(screen.getByText("Unknowns / not proven yet")).toBeInTheDocument();
 
     // Each unknown should have whyMissing explanation
     const unknownReasons = document.querySelectorAll(".unknown-reason");
@@ -188,9 +485,9 @@ describe("IncidentReportCard Claim Taxonomy", () => {
   test("Claim taxonomy: recommendation claims are separated from facts", () => {
     render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
 
-    // Recommended actions section should exist
-    expect(screen.getByTestId("incident-recommended-actions")).toBeInTheDocument();
-    expect(screen.getByText("Recommended Actions")).toBeInTheDocument();
+    // Structured recommendations section should exist (preferred over legacy)
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
+    expect(screen.getByText("Recommended next actions")).toBeInTheDocument();
 
     // Recommendations should be text descriptions, not mixed with facts
     const recommendedActions = document.querySelectorAll(".incident-action-item");
@@ -203,6 +500,9 @@ describe("IncidentReportCard Claim Taxonomy", () => {
     // Facts section
     expect(screen.getByTestId("incident-facts")).toBeInTheDocument();
 
+    // Derived section
+    expect(screen.getByTestId("incident-derived")).toBeInTheDocument();
+
     // Inferences section
     expect(screen.getByTestId("incident-inferences")).toBeInTheDocument();
 
@@ -212,8 +512,8 @@ describe("IncidentReportCard Claim Taxonomy", () => {
     // Stale warnings section
     expect(screen.getByTestId("incident-stale-warnings")).toBeInTheDocument();
 
-    // Recommended actions section
-    expect(screen.getByTestId("incident-recommended-actions")).toBeInTheDocument();
+    // Structured recommendations section (preferred over legacy)
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
   });
 
   test("Claim taxonomy: observed claims have evidence badges", () => {
@@ -256,7 +556,9 @@ describe("IncidentReportCard Claim Taxonomy", () => {
       impact: null,
       evidenceSummary: null,
       facts: [], // empty
+      derived: [], // empty
       inferences: [], // empty
+      recommendations: [], // empty
       unknowns: [], // empty
       staleEvidenceWarnings: [],
       confidence: "high",
@@ -301,17 +603,17 @@ describe("IncidentReportCard", () => {
 
     // Facts section
     expect(screen.getByTestId("incident-facts")).toBeInTheDocument();
-    expect(screen.getByText("Facts")).toBeInTheDocument();
+    expect(screen.getByText("Observed evidence")).toBeInTheDocument();
     expect(screen.getByText("Cluster cluster-a health rating is Degraded.")).toBeInTheDocument();
 
     // Inferences section
     expect(screen.getByTestId("incident-inferences")).toBeInTheDocument();
-    expect(screen.getByText("Inferences")).toBeInTheDocument();
+    expect(screen.getByText("Hypotheses")).toBeInTheDocument();
     expect(screen.getByText("High control-plane CPU may be causing latency.")).toBeInTheDocument();
 
     // Unknowns section
     expect(screen.getByTestId("incident-unknowns")).toBeInTheDocument();
-    expect(screen.getByText("Unknowns")).toBeInTheDocument();
+    expect(screen.getByText("Unknowns / not proven yet")).toBeInTheDocument();
     expect(screen.getByText("Missing evidence: logs from edge nodes")).toBeInTheDocument();
   });
 
@@ -327,7 +629,8 @@ describe("IncidentReportCard", () => {
   test("4. Recommended actions render as text descriptions", () => {
     render(<IncidentReportCard incidentReport={sampleIncidentReport} />);
 
-    expect(screen.getByTestId("incident-recommended-actions")).toBeInTheDocument();
+    // Structured recommendations section (preferred over legacy)
+    expect(screen.getByTestId("incident-recommendations")).toBeInTheDocument();
     expect(screen.getByText("Collect kubelet logs from affected nodes")).toBeInTheDocument();
     expect(screen.getByText("Review control-plane component status")).toBeInTheDocument();
   });
@@ -350,14 +653,18 @@ describe("IncidentReportCard", () => {
       evidenceSummary: null,
       facts: [
         {
+          claimType: "observed",
           statement: "Test fact with empty refs",
           sourceArtifactRefs: [], // Empty array
           confidence: "high",
         },
       ],
+      derived: [],
       inferences: [],
+      recommendations: [],
       unknowns: [
         {
+          claimType: "unknown",
           statement: "Test unknown with empty refs",
           whyMissing: null,
           sourceArtifactRefs: [], // Empty array

@@ -4,12 +4,12 @@
  * Phase 2: Canonical Incident Report Surface
  *
  * Renders the incident report as a first-class selected-run UI surface.
- * Visual design follows the review bar:
- * - Facts (deterministic/evidence-backed)
- * - Inferences (provider-assisted, explicitly labeled)
- * - Unknowns (missing evidence, acknowledged gaps)
- * - Stale evidence warnings
- * - Recommended actions as descriptions
+ * Visual design follows the canonical claim taxonomy:
+ * - Observed evidence (facts with source artifacts)
+ * - Deterministic conclusions (derived from evidence fields)
+ * - Hypotheses (plausible causes with explicit basis)
+ * - Unknowns / not proven yet (acknowledged gaps with whyMissing)
+ * - Recommended next actions (structured recommendations with safety level)
  *
  * Rules enforced:
  * - Facts, inferences, and unknowns are visually distinct.
@@ -17,6 +17,8 @@
  * - Provider-assisted inference must not look like deterministic fact.
  * - Null sourceArtifactRefs do not render broken artifact links.
  * - Empty states are honest: "No incident report is available for this run."
+ * - Claim type labels are visible for each item.
+ * - Structured recommendations preferred over legacy recommendedActions.
  */
 
 import type { IncidentReportPayload, ArtifactLinkRef } from "../../types";
@@ -59,8 +61,25 @@ const ArtifactLinkItem = ({ artifactRef }: { artifactRef: ArtifactLinkRef }) => 
   );
 };
 
-/** Section for facts - deterministic/evidence-backed statements */
-const FactsSection = ({ facts }: { facts: IncidentReportPayload["facts"] }) => {
+/** Visible claim type label badge */
+const ClaimTypeLabel = ({ claimType }: { claimType: string }) => {
+  const labels: Record<string, string> = {
+    observed: "observed",
+    derived: "derived",
+    hypothesis: "hypothesis",
+    recommendation: "recommendation",
+    unknown: "unknown",
+  };
+  const label = labels[claimType] || claimType;
+  return (
+    <span className={`claim-type-label claim-type-${claimType}`} data-testid={`claim-type-${claimType}`}>
+      {label}
+    </span>
+  );
+};
+
+/** Section for observed evidence - deterministic/evidence-backed statements */
+const ObservedEvidenceSection = ({ facts }: { facts: IncidentReportPayload["facts"] }) => {
   if (facts.length === 0) {
     return null;
   }
@@ -68,11 +87,12 @@ const FactsSection = ({ facts }: { facts: IncidentReportPayload["facts"] }) => {
     <div className="incident-section incident-facts" data-testid="incident-facts">
       <h4 className="incident-section-title">
         <span className="incident-section-icon fact-icon" aria-hidden="true">◆</span>
-        Facts
+        Observed evidence
       </h4>
       <ul className="incident-list">
         {facts.map((fact, idx) => (
           <li key={idx} className="incident-item incident-fact-item">
+            <ClaimTypeLabel claimType="observed" />
             <span className="incident-statement">{fact.statement}</span>
             <span className="incident-confidence muted tiny">confidence: {fact.confidence}</span>
             {fact.sourceArtifactRefs.length > 0 && (
@@ -89,8 +109,44 @@ const FactsSection = ({ facts }: { facts: IncidentReportPayload["facts"] }) => {
   );
 };
 
-/** Section for inferences - provider-assisted, explicitly labeled */
-const InferencesSection = ({ inferences }: { inferences: IncidentReportPayload["inferences"] }) => {
+/** Section for derived claims - deterministic conclusions from evidence fields */
+const DeterministicConclusionsSection = ({ derived }: { derived: IncidentReportPayload["derived"] }) => {
+  if (derived.length === 0) {
+    return null;
+  }
+  return (
+    <div className="incident-section incident-derived" data-testid="incident-derived">
+      <h4 className="incident-section-title derived-title">
+        <span className="incident-section-icon derived-icon" aria-hidden="true">◈</span>
+        Deterministic conclusions
+      </h4>
+      <ul className="incident-list">
+        {derived.map((item, idx) => (
+          <li key={idx} className="incident-item incident-derived-item">
+            <ClaimTypeLabel claimType="derived" />
+            <span className="incident-statement">{item.statement}</span>
+            {item.sourceFields.length > 0 && (
+              <div className="derived-source-fields muted tiny">
+                from: {item.sourceFields.join(", ")}
+              </div>
+            )}
+            <span className="incident-confidence muted tiny">confidence: {item.confidence}</span>
+            {item.sourceArtifactRefs.length > 0 && (
+              <div className="incident-artifacts">
+                {item.sourceArtifactRefs.map((artifactRef) => (
+                  <ArtifactLinkItem key={artifactRef.path} artifactRef={artifactRef} />
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/** Section for hypotheses - plausible causes requiring confirmation */
+const HypothesesSection = ({ inferences }: { inferences: IncidentReportPayload["inferences"] }) => {
   if (inferences.length === 0) {
     return null;
   }
@@ -98,11 +154,12 @@ const InferencesSection = ({ inferences }: { inferences: IncidentReportPayload["
     <div className="incident-section incident-inferences" data-testid="incident-inferences">
       <h4 className="incident-section-title inference-title">
         <span className="incident-section-icon inference-icon" aria-hidden="true">◇</span>
-        Inferences
+        Hypotheses
       </h4>
       <ul className="incident-list">
         {inferences.map((inference, idx) => (
           <li key={idx} className="incident-item incident-inference-item">
+            <ClaimTypeLabel claimType="hypothesis" />
             <span className="incident-statement">{inference.statement}</span>
             <div className="inference-basis muted tiny">
               basis: {inference.basis.join(", ")}
@@ -135,11 +192,12 @@ const UnknownsSection = ({ unknowns }: { unknowns: IncidentReportPayload["unknow
     <div className="incident-section incident-unknowns" data-testid="incident-unknowns">
       <h4 className="incident-section-title unknown-title">
         <span className="incident-section-icon unknown-icon" aria-hidden="true">?</span>
-        Unknowns
+        Unknowns / not proven yet
       </h4>
       <ul className="incident-list">
         {unknowns.map((unknown, idx) => (
           <li key={idx} className="incident-item incident-unknown-item">
+            <ClaimTypeLabel claimType="unknown" />
             <span className="incident-statement">{unknown.statement}</span>
             {unknown.whyMissing && (
               <div className="unknown-reason muted tiny">
@@ -177,16 +235,57 @@ const StaleWarnings = ({ warnings }: { warnings: string[] }) => {
   );
 };
 
-/** Recommended actions as descriptions (not links/IDs) */
-const RecommendedActions = ({ actions }: { actions: string[] }) => {
-  if (actions.length === 0) {
+/** Structured recommendations with safety level badges - preferred over legacy recommendedActions */
+const StructuredRecommendations = ({ recommendations }: { recommendations: IncidentReportPayload["recommendations"] }) => {
+  if (recommendations.length === 0) {
+    return null;
+  }
+  return (
+    <div className="incident-recommendations" data-testid="incident-recommendations">
+      <h4 className="incident-section-title recommendation-title">
+        <span className="incident-section-icon recommendation-icon" aria-hidden="true">→</span>
+        Recommended next actions
+      </h4>
+      <ul className="incident-action-list">
+        {recommendations.map((rec, idx) => (
+          <li key={idx} className="incident-action-item incident-recommendation-item">
+            <ClaimTypeLabel claimType="recommendation" />
+            <span className="incident-statement">{rec.statement}</span>
+            {rec.safetyLevel && (
+              <span className={`safety-level-badge safety-${rec.safetyLevel}`}>
+                safety: {rec.safetyLevel}
+              </span>
+            )}
+            {rec.sourceArtifactRefs.length > 0 && (
+              <div className="incident-artifacts">
+                {rec.sourceArtifactRefs.map((artifactRef) => (
+                  <ArtifactLinkItem key={artifactRef.path} artifactRef={artifactRef} />
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/** Legacy recommended actions fallback - shown only when no structured recommendations available */
+const LegacyRecommendedActions = ({
+  actions,
+  hasStructuredRecommendations,
+}: {
+  actions: string[];
+  hasStructuredRecommendations: boolean;
+}) => {
+  if (actions.length === 0 || hasStructuredRecommendations) {
     return null;
   }
   return (
     <div className="incident-recommended-actions" data-testid="incident-recommended-actions">
       <h4 className="incident-section-title">
         <span className="incident-section-icon action-icon" aria-hidden="true">→</span>
-        Recommended Actions
+        Recommended next actions
       </h4>
       <ul className="incident-action-list">
         {actions.map((action, idx) => (
@@ -219,8 +318,10 @@ export const IncidentReportCard = ({ incidentReport }: IncidentReportCardProps) 
 
   const hasContent =
     incidentReport.facts.length > 0 ||
+    incidentReport.derived.length > 0 ||
     incidentReport.inferences.length > 0 ||
     incidentReport.unknowns.length > 0 ||
+    incidentReport.recommendations.length > 0 ||
     incidentReport.staleEvidenceWarnings.length > 0 ||
     incidentReport.recommendedActions.length > 0;
 
@@ -255,13 +356,18 @@ export const IncidentReportCard = ({ incidentReport }: IncidentReportCardProps) 
       {/* Stale evidence warnings - prominent */}
       <StaleWarnings warnings={incidentReport.staleEvidenceWarnings} />
 
-      {/* Main content sections */}
+      {/* Main content sections - canonical claim taxonomy order */}
       {hasContent ? (
         <div className="incident-content">
-          <FactsSection facts={incidentReport.facts} />
-          <InferencesSection inferences={incidentReport.inferences} />
+          <ObservedEvidenceSection facts={incidentReport.facts} />
+          <DeterministicConclusionsSection derived={incidentReport.derived} />
+          <HypothesesSection inferences={incidentReport.inferences} />
           <UnknownsSection unknowns={incidentReport.unknowns} />
-          <RecommendedActions actions={incidentReport.recommendedActions} />
+          <StructuredRecommendations recommendations={incidentReport.recommendations} />
+          <LegacyRecommendedActions
+            actions={incidentReport.recommendedActions}
+            hasStructuredRecommendations={incidentReport.recommendations.length > 0}
+          />
         </div>
       ) : (
         <p className="muted tiny">No incident data available.</p>

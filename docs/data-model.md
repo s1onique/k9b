@@ -767,19 +767,29 @@ export type IncidentReportUnknownPayload = {
 - No operator worklist ranking or pagination changes
 - No breaking schema changes (additive payload fields only)
 
-### Phase 1 Status
+### Phase 2 Status
 
 **Implemented:**
-- `ClaimType = Literal["observed", "derived", "hypothesis", "recommendation", "unknown"]`
-- Canonical `facts`, `derived`, `inferences`, `recommendations`, `unknowns` fields in `IncidentReportPayload`
-- Health rating classified as `derived` claim (moved from `observed`)
-- `recommendedActions: list[str]` retained as legacy display compatibility
-- Backend tests for all claim type invariants
+- Canonical section headings: "Observed evidence", "Deterministic conclusions", "Hypotheses", "Unknowns / not proven yet", "Recommended next actions"
+- `DeterministicConclusionsSection` component for `derived` claims with source fields display
+- `StructuredRecommendations` component with safety level badges (preferred over legacy `recommendedActions`)
+- `LegacyRecommendedActions` fallback when no structured recommendations available
+- Visible claim type labels (`ClaimTypeLabel` component) for each item: observed, derived, hypothesis, recommendation, unknown
+- Frontend tests for derived claims, structured recommendations, visible claim labels, narrative quality
+- No "root cause" language in observed/derived sections enforced by tests
 
-**Deferred:**
-- Visible frontend claimType badges (visual distinction)
-- Narrative compression and operator-grade wording
+**Frontend TypeScript Changes:**
+- `IncidentReportCard.tsx`: New components `ClaimTypeLabel`, `ObservedEvidenceSection`, `DeterministicConclusionsSection`, `HypothesesSection`, `StructuredRecommendations`, `LegacyRecommendedActions`
+- Updated section headings to canonical names
+- Claim type labels rendered via `data-testid` attributes for testability
 
-### Epic status: CLOSED (Phase 1)
+**Test Coverage:**
+- Phase 2: Canonical Section Headings tests
+- Phase 2: Derived Claims Section tests
+- Phase 2: Structured Recommendations tests
+- Phase 2: Visible Claim Type Labels tests
+- Phase 2: Narrative Quality tests
 
-Phase 1 claim taxonomy foundation complete. Next: Phase 2 narrative compression + visible claim semantics.
+### Epic status: CLOSED (Phase 2)
+
+Phase 2 narrative compression and visible claim semantics complete. All acceptance criteria met.
