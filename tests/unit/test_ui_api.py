@@ -1088,3 +1088,285 @@ class RunsListTests(unittest.TestCase):
             assert run["reviewDownloadPath"] is not None  # type narrowing
             self.assertIn("run-with-artifact", run["reviewDownloadPath"])
             self.assertIn("next_check_usefulness_review.json", run["reviewDownloadPath"])
+
+    def test_build_runs_list_default_limit_100(self) -> None:
+        """Test that default limit is 100 and batch eligibility is computed for returned runs."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 150 runs with distinct timestamps
+            # Each run gets timestamp on a different day spanning Jan-May
+            month_days = [31, 28, 31, 30, 31]  # Jan-May
+            for i in range(150):
+                day_counter = i
+                for month_idx, days_in_month in enumerate(month_days):
+                    if day_counter < days_in_month:
+                        month = month_idx + 1
+                        day = day_counter + 1
+                        break
+                    day_counter -= days_in_month
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-{month:02d}-{day:02d}T00:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with default limit
+            result, timings = build_runs_list(runs_dir, _timings=True)
+
+            # Should return only 100 runs (the default limit)
+            self.assertEqual(len(result["runs"]), 100)
+
+            # totalCount should be ALL discovered runs (150), not just returned
+            self.assertEqual(result["totalCount"], 150)
+
+            # returnedCount should be the number actually returned
+            self.assertEqual(result["returnedCount"], 100)
+
+            # hasMore should be True because totalCount > returnedCount
+            self.assertTrue(result["hasMore"])
+
+            # First run should be the most recent (run-149)
+            self.assertEqual(result["runs"][0]["runId"], "run-149")
+
+            # Last returned run should be run-050 (index 50 in 0-149)
+            self.assertEqual(result["runs"][-1]["runId"], "run-050")
+
+            # All returned runs should have batchEligibility="computed"
+            # because they are within the returned window
+            for run in result["runs"]:
+                self.assertEqual(run["batchEligibility"], "computed")
+
+            # Timing should reflect correct counts
+            self.assertEqual(timings.get("rows_considered"), 150)
+            self.assertEqual(timings.get("rows_returned"), 100)
+            self.assertEqual(timings.get("batch_eligibility_runs_computed"), 100)
+
+    def test_build_runs_list_limit_all(self) -> None:
+        """Test that limit=None returns all runs."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 150 runs
+            for i in range(150):
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-01-{(i % 28) + 1:02d}T{(i % 24):02d}:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with limit=None
+            result = cast(RunsListPayload, build_runs_list(runs_dir, limit=None))
+
+            # Should return all 150 runs
+            self.assertEqual(result["totalCount"], 150)
+            self.assertEqual(len(result["runs"]), 150)
+
+    def test_build_runs_list_batch_eligibility_deferred_outside_window(self) -> None:
+        """Test that batchEligibility is 'computed' for runs within the returned window.
+
+        The optimization is that runs OUTSIDE the returned window don't get batch eligibility
+        computed, but runs WITHIN the returned window DO get it computed.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 150 runs with distinct timestamps
+            for i in range(150):
+                day = 27 - (i // 10)
+                hour = 23 - (i % 24)
+                month = 2 if i >= 100 else 1
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-{month:02d}-{day:02d}T{hour:02d}:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with default limit and timings
+            result, timings = build_runs_list(runs_dir, _timings=True)
+
+            # Runs within the returned window (first 100) should have batchEligibility="computed"
+            for run in result["runs"]:
+                self.assertEqual(run["batchEligibility"], "computed")
+
+            # Timing should show 100 runs had batch eligibility computed
+            self.assertEqual(timings.get("batch_eligibility_runs_computed"), 100)
+
+            # rows_considered should be 150 (all runs discovered)
+            self.assertEqual(timings.get("rows_considered"), 150)
+
+    def test_build_runs_list_include_expensive_computes_all(self) -> None:
+        """Test that include_expensive=True computes batch eligibility for all runs."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 10 runs
+            for i in range(10):
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-01-{(i % 28) + 1:02d}T{(i % 24):02d}:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with include_expensive=True
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
+
+            # All runs should have batchEligibility="computed"
+            for run in result["runs"]:
+                self.assertEqual(run["batchEligibility"], "computed")
+
+    def test_build_runs_list_limit_explicit(self) -> None:
+        """Test that explicit limit works correctly."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 50 runs with monotonically increasing timestamps
+            # Each run gets timestamp on a different day spanning Jan-Mar
+            month_days = [31, 28, 31]  # Jan-Mar
+            for i in range(50):
+                day_counter = i
+                for month_idx, days_in_month in enumerate(month_days):
+                    if day_counter < days_in_month:
+                        month = month_idx + 1
+                        day = day_counter + 1
+                        break
+                    day_counter -= days_in_month
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-{month:02d}-{day:02d}T00:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with limit=10
+            result = cast(RunsListPayload, build_runs_list(runs_dir, limit=10))
+
+            # Should return only 10 runs
+            self.assertEqual(len(result["runs"]), 10)
+
+            # totalCount should be ALL discovered runs (50), not just returned
+            self.assertEqual(result["totalCount"], 50)
+
+            # First run should be the most recent (run-049)
+            self.assertEqual(result["runs"][0]["runId"], "run-049")
+            self.assertEqual(result["runs"][-1]["runId"], "run-040")
+
+    def test_build_runs_list_timings_include_rows_metrics(self) -> None:
+        """Test that timing metrics include rows_considered and rows_returned."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 50 runs
+            for i in range(50):
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-01-{(i % 28) + 1:02d}T{(i % 24):02d}:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with default limit (100) and timings
+            result, timings = build_runs_list(runs_dir, _timings=True)
+
+            # Should have 50 runs considered but only 50 returned (less than limit)
+            self.assertEqual(timings.get("rows_considered"), 50)
+            self.assertEqual(timings.get("rows_returned"), 50)
+
+    def test_build_runs_list_timings_batch_eligibility_computed_count(self) -> None:
+        """Test that batch_eligibility_runs_computed timing is set correctly."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create 50 runs
+            for i in range(50):
+                review_content = {
+                    "run_id": f"run-{i:03d}",
+                    "run_label": f"Run {i}",
+                    "timestamp": f"2026-01-{(i % 28) + 1:02d}T{(i % 24):02d}:00:00Z",
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"run-{i:03d}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build the runs list with default limit (100 - but only 50 runs exist)
+            result, timings = build_runs_list(runs_dir, _timings=True)
+
+            # Should have computed batch eligibility for all 50 runs
+            self.assertEqual(timings.get("batch_eligibility_runs_computed"), 50)
+
+    def test_build_runs_list_latest_run_first(self) -> None:
+        """Test that the latest run appears first regardless of limit."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create runs with different timestamps
+            runs = [
+                ("old-run", "2025-01-01T00:00:00Z"),
+                ("middle-run", "2026-01-15T12:00:00Z"),
+                ("newest-run", "2026-02-01T00:00:00Z"),
+            ]
+
+            for run_id, timestamp in runs:
+                review_content = {
+                    "run_id": run_id,
+                    "run_label": run_id,
+                    "timestamp": timestamp,
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"{run_id}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build with limit=2
+            result = cast(RunsListPayload, build_runs_list(runs_dir, limit=2))
+
+            # First run should be the newest
+            self.assertEqual(result["runs"][0]["runId"], "newest-run")
+            self.assertEqual(result["runs"][1]["runId"], "middle-run")

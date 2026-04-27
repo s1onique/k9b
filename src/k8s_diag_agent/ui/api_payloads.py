@@ -1060,6 +1060,9 @@ class RunsListEntry(TypedDict):
     reviewStatus: str
     reviewDownloadPath: str | None
     # Batch execution support for Recent runs
+    # When batchEligibility is "unknown", batchExecutable/batchEligibleCount are not computed
+    # (deferred for performance on initial load)
+    batchEligibility: Literal["computed", "unknown"]
     batchExecutable: bool
     batchEligibleCount: int
 
@@ -1068,7 +1071,9 @@ class RunsListPayload(TypedDict):
     """Payload for the runs list response."""
 
     runs: list[RunsListEntry]
-    totalCount: int
+    totalCount: int  # Total discovered runs (not just returned)
+    returnedCount: int  # Number of runs in returned list
+    hasMore: bool  # True if there are more runs beyond returned list
 
 
 class RunsListTimings(TypedDict, total=False):
@@ -1118,7 +1123,10 @@ class RunsListTimings(TypedDict, total=False):
     per_row_fs_checks_ms: float  # Should be ~0 if precomputed properly
     row_assembly_ms: float
     rows_built: int
+    rows_considered: int  # Total runs discovered before limit
+    rows_returned: int  # Runs actually returned after limit
     sort_ms: float
+    batch_eligibility_runs_computed: int  # How many runs had batch eligibility computed
     # Per-row filesystem call counters (prove no per-row FS work)
     path_exists_calls: int
     stat_calls: int

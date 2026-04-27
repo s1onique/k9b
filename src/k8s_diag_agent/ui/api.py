@@ -16,6 +16,7 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import ijson
 
@@ -581,6 +582,8 @@ def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] |
 def build_runs_list(
     runs_dir: Path,
     *,
+    limit: int | None = 100,
+    include_expensive: bool = False,
     _timings: bool = False,
 ) -> RunsListPayload | tuple[RunsListPayload, RunsListTimings]:
     """Build a list of available runs with their review coverage status.
@@ -594,8 +597,16 @@ def build_runs_list(
 
     Runs are discovered from review artifacts in the reviews/ directory.
 
+    Performance optimization:
+    - By default (limit=100), only computes batch eligibility for the returned window.
+    - Set include_expensive=True to compute batch eligibility for all runs.
+    - Set limit=None to return all runs without batch eligibility computation.
+
     Args:
         runs_dir: Path to the runs directory
+        limit: Maximum number of runs to return (default 100). None for all runs.
+        include_expensive: If True, compute batch eligibility for all runs (expensive).
+            If False (default), only compute for returned window.
         _timings: If True, return tuple of (payload, timings) with detailed metrics
 
     Returns:
@@ -769,10 +780,49 @@ def build_runs_list(
     timings["execution_count_derivation_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
     timings["execution_count_derivation_matches"] = execution_count_matches
 
-    # Stage 3: Build the runs list sorted by timestamp (most recent first)
+    # Stage 3: Sort and window selection (BEFORE expensive batch eligibility scan)
     row_assembly_start = time_module.perf_counter()
 
-    # Sub-stage 3a: Pre-scan diagnostic-packs directory to avoid O(runs * dirs) existence checks
+    # Sort all entries by timestamp descending (most recent first)
+    sort_start = time_module.perf_counter()
+    sorted_entries = sorted(
+        run_entries.values(),
+        key=lambda e: cast(datetime, e["parsed_time"]),
+        reverse=True
+    )
+    timings["sort_ms"] = (time_module.perf_counter() - sort_start) * 1000
+
+    # Track total runs considered vs returned
+    rows_considered = len(sorted_entries)
+    timings["rows_considered"] = rows_considered
+
+    # Determine window run_ids - these are the runs we'll actually return
+    # - If limit is set: return only the first `limit` runs
+    # - If limit=None: return all runs
+    window_run_ids: set[str]
+    if limit is not None:
+        window_run_ids = {cast(str, entry["run_id"]) for entry in sorted_entries[:limit]}
+        rows_to_return = min(limit, len(sorted_entries))
+    else:
+        window_run_ids = set(run_entries.keys())
+        rows_to_return = len(sorted_entries)
+
+    timings["rows_returned"] = rows_to_return
+
+    # Determine which runs need batch eligibility computation
+    # - If include_expensive=True: compute for ALL runs
+    # - If limit is set: compute only for the first `limit` runs (after sorting)
+    # - If limit=None: compute for NO runs (all get batchEligibility="unknown")
+    if include_expensive:
+        batch_eligibility_run_ids: set[str] = set(run_entries.keys())
+    elif limit is not None:
+        # Only compute batch eligibility for runs in the returned window
+        batch_eligibility_run_ids = window_run_ids
+    else:
+        # limit=None means return all runs without batch eligibility
+        batch_eligibility_run_ids = set()
+
+    # Sub-stage 3a: Pre-scan diagnostic-packs directory for review download paths
     # Map run_id -> whether review artifact exists
     review_artifact_exists: dict[str, bool] = {}
     review_artifact_scan_start = time_module.perf_counter()
@@ -785,15 +835,15 @@ def build_runs_list(
                 review_artifact_exists[run_id] = review_path.exists()
     timings["review_artifact_prescan_ms"] = (time_module.perf_counter() - review_artifact_scan_start) * 1000
 
-    # Sub-stage 3b: Pre-scan external-analysis directory for batch eligibility
-    # This eliminates O(runs * files) per-row filesystem access
+    # Sub-stage 3b: Only scan batch eligibility for runs in window_run_ids
+    # This is the key optimization: skip files for runs outside the returned window
     batch_eligibility_prescan_start = time_module.perf_counter()
 
     # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
     # e.g., "run-2024-01-15" should match before "run-2024"
-    sorted_run_ids_3b = sorted(run_entries.keys(), key=len, reverse=True)
+    sorted_window_run_ids = sorted(window_run_ids, key=len, reverse=True)
 
-    # Sub-stage: next-check-plan glob
+    # Sub-stage: next-check-plan glob (filtered to window run_ids)
     batch_plan_glob_start = time_module.perf_counter()
     plan_files: list[Path] = []
     if external_analysis_dir.is_dir():
@@ -801,23 +851,25 @@ def build_runs_list(
     timings["batch_plan_glob_ms"] = (time_module.perf_counter() - batch_plan_glob_start) * 1000
     timings["batch_plan_files_found"] = len(plan_files)
 
-    # Sub-stage: next-check-plan parse and matching
+    # Sub-stage: next-check-plan parse and matching (filtered to window run_ids)
     batch_plan_parse_start = time_module.perf_counter()
-    all_plan_data: dict[str, dict[str, object]] = {}
+    plan_data: dict[str, dict[str, object]] = {}
     for plan_path in plan_files:
         filename = plan_path.stem
-        for run_id in sorted_run_ids_3b:
+        # Check if this file belongs to a run in our window
+        for run_id in sorted_window_run_ids:
             if filename.startswith(f"{run_id}-next-check-plan"):
                 try:
                     raw = json.loads(plan_path.read_text(encoding="utf-8"))
                     if raw.get("purpose") == "next-check-planning":
-                        all_plan_data[run_id] = raw
+                        plan_data[run_id] = raw
                         break
                 except Exception:
                     continue
+            # If run_id is not in window_run_ids, skip without parsing
     timings["batch_plan_parse_ms"] = (time_module.perf_counter() - batch_plan_parse_start) * 1000
 
-    # Sub-stage: execution artifact glob
+    # Sub-stage: execution artifact glob (filtered to window run_ids)
     batch_exec_glob_start = time_module.perf_counter()
     exec_files: list[Path] = []
     if external_analysis_dir.is_dir():
@@ -825,12 +877,13 @@ def build_runs_list(
     timings["batch_exec_glob_ms"] = (time_module.perf_counter() - batch_exec_glob_start) * 1000
     timings["batch_exec_files_found"] = len(exec_files)
 
-    # Sub-stage: execution artifact parse and matching
+    # Sub-stage: execution artifact parse and matching (filtered to window run_ids)
     batch_exec_parse_start = time_module.perf_counter()
-    all_execution_indices: dict[str, set[int]] = {run_id: set() for run_id in run_entries}
+    execution_indices: dict[str, set[int]] = {run_id: set() for run_id in window_run_ids}
     for exec_path in exec_files:
         filename = exec_path.stem
-        for run_id in sorted_run_ids_3b:
+        # Check if this file belongs to a run in our window
+        for run_id in sorted_window_run_ids:
             if filename.startswith(f"{run_id}-next-check-execution"):
                 try:
                     raw = json.loads(exec_path.read_text(encoding="utf-8"))
@@ -838,18 +891,18 @@ def build_runs_list(
                         exec_payload: dict[str, object] = raw.get("payload", {})  # type: ignore[assignment]
                         candidate_index = exec_payload.get("candidateIndex")
                         if isinstance(candidate_index, int):
-                            all_execution_indices[run_id].add(candidate_index)
+                            execution_indices[run_id].add(candidate_index)
                 except Exception:
                     continue
+            # If run_id is not in window_run_ids, skip without parsing
     timings["batch_exec_parse_ms"] = (time_module.perf_counter() - batch_exec_parse_start) * 1000
 
-    # Matching and cache construction are included in parse stages above (they're interleaved)
-    timings["batch_run_id_matching_ms"] = 0.0  # Included in parse stages
-    timings["batch_cache_construction_ms"] = 0.0  # Included in parse stages
-
+    timings["batch_run_id_matching_ms"] = 0.0
+    timings["batch_cache_construction_ms"] = 0.0
     timings["batch_eligibility_prescan_ms"] = (time_module.perf_counter() - batch_eligibility_prescan_start) * 1000
 
-    # Sub-stage 3c: Build rows (now uses pre-scanned data)
+    # Only build rows for runs in the returned window (key optimization)
+    # This avoids processing runs outside the window that won't be returned
     runs_list: list[RunsListEntry] = []
     review_download_paths_found = 0
     batch_eligible_runs = 0
@@ -862,7 +915,12 @@ def build_runs_list(
     timestamp_normalization_row_ms_total = 0.0
     label_normalization_row_ms_total = 0.0
 
-    for run_id, entry in run_entries.items():
+    # Only iterate over entries in the returned window
+    entries_to_build = sorted_entries[:rows_to_return] if limit is not None else sorted_entries
+
+    for entry in entries_to_build:
+        run_id = entry["run_id"]
+
         # Sub-stage: review_status computation (simple, fast)
         row_start = time_module.perf_counter()
         execution_count = cast(int, entry.get("execution_count", 0))
@@ -880,20 +938,30 @@ def build_runs_list(
         review_download_path: str | None = None
         if review_status in ("unreviewed", "partially-reviewed"):
             # Use pre-computed map instead of Path.exists() per run
-            if review_artifact_exists.get(run_id, False):
-                run_scoped_path = diagnostic_packs_dir / run_id / "next_check_usefulness_review.json"
+            run_id_str = cast(str, run_id)
+            if review_artifact_exists.get(run_id_str, False):
+                run_scoped_path = diagnostic_packs_dir / run_id_str / "next_check_usefulness_review.json"
                 review_download_path = str(run_scoped_path.relative_to(runs_dir))
                 review_download_paths_found += 1
             # DO NOT fallback to /latest/ - historical runs must have run-specific artifacts
             # If only /latest/ exists today, historical rows should NOT show misleading download links
         review_download_path_row_ms_total += (time_module.perf_counter() - row_start) * 1000
 
-        # Sub-stage: batch eligibility computation (uses pre-scanned data - no FS)
+        # Sub-stage: batch eligibility computation (conditional)
         row_start = time_module.perf_counter()
-        # Compute batch eligibility using pre-scanned data (no per-row filesystem access)
-        batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(run_id, all_plan_data, all_execution_indices)
-        if batch_executable:
-            batch_eligible_runs += 1
+        if run_id in batch_eligibility_run_ids:
+            # Compute batch eligibility using pre-scanned data (no per-row filesystem access)
+            batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(
+                run_id, plan_data, execution_indices
+            )
+            batch_eligibility = "computed"
+            if batch_executable:
+                batch_eligible_runs += 1
+        else:
+            # Deferred: batch eligibility not computed for this run
+            batch_executable = False
+            batch_eligible_count = 0
+            batch_eligibility = "unknown"
         batch_eligibility_row_ms_total += (time_module.perf_counter() - row_start) * 1000
 
         # Sub-stage: artifact_lookup (simple dict access - already done above)
@@ -920,6 +988,7 @@ def build_runs_list(
                 reviewedCount=reviewed_count,
                 reviewStatus=review_status,
                 reviewDownloadPath=review_download_path,
+                batchEligibility=cast(Literal["computed", "unknown"], batch_eligibility),
                 batchExecutable=batch_executable,
                 batchEligibleCount=batch_eligible_count,
             )
@@ -938,13 +1007,11 @@ def build_runs_list(
     timings["review_download_paths_found"] = review_download_paths_found
     timings["row_assembly_ms"] = (time_module.perf_counter() - row_assembly_start) * 1000
     timings["rows_built"] = len(runs_list)
+    # Note: rows_returned already set above
     # Note: review_artifact_prescan_ms and batch_eligibility_prescan_ms are already set
 
-    # Stage 4: Sort by timestamp descending (most recent first)
-    sort_start = time_module.perf_counter()
-    runs_list.sort(key=lambda r: r["timestamp"], reverse=True)
-    timings["sort_ms"] = (time_module.perf_counter() - sort_start) * 1000
     timings["batch_eligible_runs"] = batch_eligible_runs
+    timings["batch_eligibility_runs_computed"] = len(batch_eligibility_run_ids)
 
     # Initialize counters (proves no per-row FS work is happening)
     timings["path_exists_calls"] = 0
@@ -954,9 +1021,16 @@ def build_runs_list(
     timings["per_run_glob_calls"] = 0
     timings["per_run_directory_list_calls"] = 0
 
+    # Build payload with correct counts
+    total_discovered = len(run_entries)
+    returned_count = len(runs_list)
+    has_more = total_discovered > returned_count
+
     payload = RunsListPayload(
         runs=runs_list,
-        totalCount=len(runs_list),
+        totalCount=total_discovered,
+        returnedCount=returned_count,
+        hasMore=has_more,
     )
 
     if _timings:
