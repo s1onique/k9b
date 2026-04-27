@@ -66,6 +66,10 @@ from .api_diagnostic_pack import (  # noqa: F401 - re-exported for backward comp
     _serialize_diagnostic_pack,
     _serialize_diagnostic_pack_review,
 )
+from .api_incident_report import (
+    _build_incident_report_payload,
+    _build_operator_worklist_payload,
+)
 
 # Import LLM serializers from extracted module.
 # Re-export for backward compatibility: callers importing from api.py continue to work.
@@ -123,6 +127,10 @@ from .api_payloads import (  # noqa: F401 - re-exported for backward compatibili
     FleetPayload,
     FreshnessPayload,
     HypothesisEntry,
+    IncidentReportFactPayload,
+    IncidentReportInferencePayload,
+    IncidentReportPayload,
+    IncidentReportUnknownPayload,
     LLMActivityPayload,
     LLMPolicyPayload,
     LLMStatsPayload,
@@ -137,6 +145,8 @@ from .api_payloads import (  # noqa: F401 - re-exported for backward compatibili
     NextCheckQueueItemPayload,
     NotificationEntry,
     NotificationsPayload,
+    OperatorWorklistItemPayload,
+    OperatorWorklistPayload,
     PlannerAvailabilityPayload,
     ProblemSummary,
     ProposalEntry,
@@ -180,6 +190,9 @@ def build_run_payload(
     *,
     promotions: Sequence[dict[str, object]] | None = None,
 ) -> RunPayload:
+    freshness = _build_freshness_payload(
+        context.run.timestamp, context.run.scheduler_interval_seconds
+    )
     return {
         "runId": context.run.run_id,
         "label": context.run.run_label,
@@ -205,9 +218,7 @@ def build_run_payload(
             context.run.review_enrichment_status
         ),
         "providerExecution": _serialize_provider_execution(context.run.provider_execution),
-        "freshness": _build_freshness_payload(
-            context.run.timestamp, context.run.scheduler_interval_seconds
-        ),
+        "freshness": freshness,
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
         "nextCheckQueue": _serialize_next_check_queue(
             context.run.next_check_queue,
@@ -231,6 +242,8 @@ def build_run_payload(
         ),
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
+        "incidentReport": _build_incident_report_payload(context, freshness),
+        "operatorWorklist": _build_operator_worklist_payload(context),
     }
 
 

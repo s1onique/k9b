@@ -82,6 +82,12 @@ __all__ = [
     "RecommendedActionPayload",
     "AssessmentSummaryPayload",
     "ClusterDetailPayload",
+    "IncidentReportFactPayload",
+    "IncidentReportInferencePayload",
+    "IncidentReportUnknownPayload",
+    "IncidentReportPayload",
+    "OperatorWorklistItemPayload",
+    "OperatorWorklistPayload",
     "RunPayload",
     "RunsListEntry",
     "RunsListPayload",
@@ -866,6 +872,86 @@ class ClusterDetailPayload(TypedDict):
     topProblem: ProblemSummary
 
 
+class IncidentReportFactPayload(TypedDict, total=False):
+    """A deterministic, evidence-backed fact in the incident report."""
+
+    statement: str
+    sourceArtifactRefs: list[ArtifactLink]
+    confidence: str
+
+
+class IncidentReportInferencePayload(TypedDict, total=False):
+    """A reasoned inference in the incident report, explicitly labeled."""
+
+    statement: str
+    basis: list[str]
+    confidence: str
+    sourceArtifactRefs: list[ArtifactLink]
+
+
+class IncidentReportUnknownPayload(TypedDict, total=False):
+    """An explicitly acknowledged unknown or missing-evidence item."""
+
+    statement: str
+    whyMissing: str | None
+    sourceArtifactRefs: list[ArtifactLink]
+
+
+class IncidentReportPayload(TypedDict, total=False):
+    """Canonical incident report projection for a selected health run.
+
+    Derived from existing artifacts. Not a new immutable source of truth.
+    """
+
+    title: str
+    status: str
+    affectedScope: str | None
+    impact: str | None
+    evidenceSummary: str | None
+    facts: list[IncidentReportFactPayload]
+    inferences: list[IncidentReportInferencePayload]
+    unknowns: list[IncidentReportUnknownPayload]
+    staleEvidenceWarnings: list[str]
+    confidence: str | None
+    freshness: FreshnessPayload | None
+    recommendedActions: list[str]
+    sourceArtifactRefs: list[ArtifactLink]
+
+
+class OperatorWorklistItemPayload(TypedDict, total=False):
+    """A single ranked, actionable item in the operator worklist."""
+
+    id: str
+    rank: int
+    workstream: str | None
+    title: str
+    description: str | None
+    command: str | None
+    targetCluster: str | None
+    targetContext: str | None
+    reason: str | None
+    expectedEvidence: str | None
+    safetyNote: str | None
+    approvalState: str | None
+    executionState: str | None
+    feedbackState: str | None
+    sourceArtifactRefs: list[ArtifactLink]
+
+
+class OperatorWorklistPayload(TypedDict, total=False):
+    """Ranked operator worklist projection for a selected health run.
+
+    Derived from deterministic next checks, planner candidates, and execution history.
+    Not a new immutable source of truth.
+    """
+
+    items: list[OperatorWorklistItemPayload]
+    totalItems: int
+    completedItems: int
+    pendingItems: int
+    blockedItems: int
+
+
 class RunPayload(TypedDict):
     """Payload for the top-level run/UI index response."""
 
@@ -898,6 +984,8 @@ class RunPayload(TypedDict):
     diagnosticPack: DiagnosticPackPayload | None
     alertmanagerCompact: AlertmanagerCompactPayload | None
     alertmanagerSources: AlertmanagerSourcesPayload | None
+    incidentReport: IncidentReportPayload | None
+    operatorWorklist: OperatorWorklistPayload | None
 
 
 class RunsListEntry(TypedDict):

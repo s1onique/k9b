@@ -227,6 +227,50 @@ The Alertmanager source management involves four distinct artifact types with di
   - Auto-applying proposals; only operators should run `check-proposal` and accept a patch.
   - Changing policy, baseline, or safety config without filing/approving a proposal and evaluating it via fixtures or tests.
 
+## Incident Report and Operator Worklist projection (new)
+
+### Purpose
+
+The `IncidentReportPayload` and `OperatorWorklistPayload` are **derived read-only projections** computed from the existing artifact tree for a selected health run. They are not new immutable artifacts and do not introduce a new persistence layer. The backend builds them on demand inside `build_run_payload` by composing:
+
+- fleet status and per-cluster assessments (`latest_assessment`)
+- drilldown findings (`latest_findings`)
+- deterministic next checks (`deterministic_next_checks`)
+- next-check queue state (`next_check_queue`)
+- execution history (`next_check_execution_history`)
+- freshness metadata (`freshness`)
+- optional provider-assisted review enrichment (`review_enrichment`)
+
+### Ownership
+
+- **Payload contracts:** `src/k8s_diag_agent/ui/api_payloads.py` owns `IncidentReportPayload`, `IncidentReportFactPayload`, `IncidentReportInferencePayload`, `IncidentReportUnknownPayload`, `OperatorWorklistPayload`, `OperatorWorklistItemPayload`.
+- **Builder logic:** `src/k8s_diag_agent/ui/api_incident_report.py` owns `_build_incident_report_payload` and `_build_operator_worklist_payload`.
+- **Composition root:** `src/k8s_diag_agent/ui/api.py` threads the projections into `build_run_payload`.
+
+### Derived-vs-source-of-truth boundary
+
+- The incident report and worklist are **derived projections**, not source-of-truth artifacts.
+- All facts, inferences, unknowns, and worklist items trace back to existing durable artifacts (`assessments`, `drilldowns`, `reviews`, `external-analysis`, `next-check-plan`).
+- The UI/API must not write these projections back to the artifact tree.
+
+### Truthfulness rules enforced by the builders
+
+1. **Facts are deterministic/evidence-backed only.** Assessment health ratings, trigger reasons, warning-event counts, and non-running-pod counts are classified as facts.
+2. **Inferences are explicitly labeled as inferences.** Assessment hypotheses and provider-assisted review-enrichment summaries are placed in `inferences[]` with a `basis` field.
+3. **Unknowns/missing evidence are explicit.** Any `missing_evidence` from the assessment becomes an `IncidentReportUnknownPayload` with a `whyMissing` explanation.
+4. **Stale evidence is flagged when supported.** If the run `freshness` status is `delayed` or `stale`, a `staleEvidenceWarnings` entry is generated.
+5. **Provider-assisted content is never classified as deterministic fact.** Review enrichment always lands in `inferences[]`, never in `facts[]`.
+6. **Source artifact refs are preserved where available.** Every fact, inference, and unknown includes `sourceArtifactRefs` linking back to the originating artifact. If provenance is unavailable, the field is empty/`unknown` rather than fabricated.
+7. **Worklist items expose executable metadata.** Each item includes `command`, `targetCluster`, `targetContext`, `reason`, `expectedEvidence`, `safetyNote`, `approvalState`, `executionState`, `feedbackState`, and `sourceArtifactRefs`.
+
+### Non-goals (this slice)
+
+- These projections are **backend/API only** in this slice. Frontend type updates are deferred unless required for tests/build.
+- No new immutable artifact type is introduced.
+- No new execution engine or LLM/provider plumbing is opened.
+- No mutation of existing artifacts.
+- No real-time streaming or push updates.
+
 ## Extension seams for maintainers
 
 1. **Adding a new health signal:** update `build_health_assessment` to emit the new `Signal`, `Finding`, or `Hypothesis`, extend the `Assessment` schema if new fields appear, add fixture coverage referencing the signals, and document the new reasoning in this file.
@@ -234,6 +278,7 @@ The Alertmanager source management involves four distinct artifact types with di
 3. **Adding a provider-assisted analysis path:** register the adapter via `external_analysis.adapter.register_external_analysis_adapter`, wire it up in `external_analysis.config`, and document the new provider in `docs/data-model.md`. Confirm that every invocation writes an `ExternalAnalysisArtifact` and update relevant security guidance if it introduces new credential handling.
 4. **Adding a review input:** if the review needs a new slice (e.g., a new quality metric), update `review_feedback.build_health_review`, record the new data inside `runs/health/reviews`, and update any UI/back-end code that reads the review artifact so the schema stays consistent.
 5. **Adding a proposal type:** extend `generate_proposals_from_review`, add the new target to the allowed set in `health/adaptation.py`, write tests for `render_proposal_patch`/`check-proposal`, and update `docs/schemas/health-proposal-schema.md` if the payload grows.
+6. **Enriching the incident report or worklist:** update `_build_incident_report_payload` or `_build_operator_worklist_payload` in `api_incident_report.py`. Because these are derived projections, the change only affects the API response and does not require a migration.
 
 Each extension that affects a durable artifact also requires updating the relevant schema in `docs/schemas/` plus any fixtures/evals that assert the artifact shape or logic (e.g., `tests/fixtures/...`, evals that replay proposals, etc.).
 
@@ -276,6 +321,7 @@ The barrel re-exports carry `# noqa: F401` to suppress unused-import warnings an
 | `api_llm.py` | `_serialize_llm_stats`, `_serialize_llm_activity`, `_serialize_llm_policy` | Domain-focused extraction |
 | `api_next_check_plan.py` | `_serialize_next_check_plan`, `_serialize_next_check_candidate`, `_serialize_execution_history`, `_serialize_orphaned_approval`, `_serialize_plan_candidates_for_cluster` | Domain-focused extraction |
 | `api_next_check_queue.py` | `_serialize_next_check_queue`, `_serialize_planner_availability`, `_serialize_queue_explanation`, `_serialize_queue_cluster_state`, `_serialize_queue_candidate_accounting` | Domain-focused extraction |
+| `api_incident_report.py` | `_build_incident_report_payload`, `_build_operator_worklist_payload` | Domain-focused extraction |
 | `api_provider_execution.py` | `_serialize_provider_execution`, `_serialize_provider_execution_branch` | Domain-focused extraction |
 | `api_review_enrichment.py` | `_serialize_review_enrichment`, `_serialize_review_enrichment_status` | Domain-focused extraction |
 
