@@ -62,7 +62,7 @@ const Pagination = ({
   const showPageSizeSelector = hasPageSizeOptions;
 
   // Single-item pagination mode: when pageSize === 1, show "Item N of M" instead of range summary
-  // This avoids redundant "Showing 1–1 of M" + "Page N of M" for single-item pages
+  // and replace "Page N of M" in controls row with "Item N of M"
   const isSingleItemMode = pageSize === 1;
 
   // Generate unique accessible label for this pagination region
@@ -112,9 +112,21 @@ const Pagination = ({
             <span className="pagination-btn-label">Previous</span>
           </button>
 
-          <span className="pagination-page-indicator">
-            Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
-          </span>
+          {/* Single-item mode: show "Item N of M" in controls row instead of "Page N of M" */}
+          {isSingleItemMode ? (
+            <span 
+              className="pagination-item-indicator pagination-item-indicator--inline"
+              data-testid="pagination-item-indicator"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              Item <strong>{currentPage}</strong> of <strong>{totalItems}</strong>
+            </span>
+          ) : (
+            <span className="pagination-page-indicator">
+              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+            </span>
+          )}
 
           <button
             type="button"
@@ -152,18 +164,6 @@ const Pagination = ({
             ))}
           </select>
         </div>
-      )}
-
-      {/* Single-item pagination: show "Item N of M" instead of "Showing N–N of M" */}
-      {isSingleItemMode && hasMultiplePages && (
-        <p
-          className="pagination-item-indicator"
-          data-testid="pagination-item-indicator"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          Item <strong>{currentPage}</strong> of <strong>{totalItems}</strong>
-        </p>
       )}
 
       {/* Standard range summary: only show when NOT in single-item mode with multiple pages */}

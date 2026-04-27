@@ -30,6 +30,7 @@ import { useState, useMemo } from "react";
 import type { OperatorWorklistPayload, OperatorWorklistItemPayload, ArtifactLinkRef } from "../../types";
 import { artifactUrl } from "../../utils";
 import Pagination from "../Pagination";
+import { CommandText } from "../CommandText";
 
 // ============================================================================
 // Constants
@@ -90,9 +91,7 @@ const WorklistItemRow = ({ item }: { item: OperatorWorklistItemPayload }) => {
       {/* Command section - critical for truthfulness */}
       <div className="worklist-command-section">
         {item.command ? (
-          <code className="worklist-command" data-testid={`worklist-command-${item.rank}`}>
-            {item.command}
-          </code>
+          <CommandText command={item.command} testId={`worklist-command-${item.rank}`} />
         ) : (
           <span className="worklist-no-command muted tiny" data-testid={`worklist-no-command-${item.rank}`}>
             No executable command yet.

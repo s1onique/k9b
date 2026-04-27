@@ -129,6 +129,16 @@
   border-radius: 0.35rem;
 }
 
+/* CommandText wrapper within worklist command section */
+.worklist-command-section .command-text-wrapper {
+  width: 100%;
+}
+
+/* Ensure the truncated text fills the section width */
+.worklist-command-section .command-text-trigger {
+  width: 100%;
+}
+
 .worklist-command {
   display: block;
   font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;

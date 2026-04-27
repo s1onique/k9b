@@ -411,7 +411,7 @@ describe("Pagination Component", () => {
   });
 
   describe("Single-item pagination (pageSize=1)", () => {
-    it("shows 'Item 1 of 8' when pageSize=1 and multiple pages exist", () => {
+    it("shows 'Item 1 of 8' in controls row when pageSize=1 and multiple pages exist", () => {
       const props = createProps({ 
         totalItems: 8,
         totalPages: 8,
@@ -427,6 +427,66 @@ describe("Pagination Component", () => {
       
       // Should NOT show "Showing 1–1 of 8" range summary
       expect(screen.queryByText(/showing/i)).not.toBeInTheDocument();
+    });
+
+    it("shows 'Item 5 of 12' in controls row (not 'Page 5 of 12')", () => {
+      const props = createProps({ 
+        totalItems: 12,
+        totalPages: 12,
+        currentPage: 5,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should show pagination-item-indicator with correct text content
+      const indicator = screen.getByTestId("pagination-item-indicator");
+      expect(indicator).toBeInTheDocument();
+      expect(indicator.textContent).toBe("Item 5 of 12");
+      
+      // Should NOT show pagination-page-indicator
+      const pageIndicator = document.querySelector('.pagination-page-indicator');
+      expect(pageIndicator).toBeNull();
+    });
+
+    it("does NOT render separate lower 'Item N of M' summary in single-item mode", () => {
+      const props = createProps({ 
+        totalItems: 8,
+        totalPages: 8,
+        currentPage: 1,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should show pagination-item-indicator (inline in controls row)
+      const indicator = screen.getByTestId("pagination-item-indicator");
+      expect(indicator).toBeInTheDocument();
+      
+      // The inline indicator should be inside pagination-controls
+      const controls = document.querySelector('.pagination-controls');
+      expect(controls?.contains(indicator)).toBe(true);
+      
+      // Should NOT show range summary
+      const paginationSummary = document.querySelector('.pagination-summary');
+      expect(paginationSummary).toBeNull();
+    });
+
+    it("does NOT render 'Page N of M' in single-item mode", () => {
+      const props = createProps({ 
+        totalItems: 10,
+        totalPages: 10,
+        currentPage: 3,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      // Should NOT show pagination-page-indicator
+      const pageIndicator = document.querySelector('.pagination-page-indicator');
+      expect(pageIndicator).toBeNull();
+      
+      // Should show pagination-item-indicator instead
+      const indicator = screen.getByTestId("pagination-item-indicator");
+      expect(indicator).toBeInTheDocument();
+      expect(indicator.textContent).toBe("Item 3 of 10");
     });
 
     it("shows 'Item 3 of 8' when page changes to page 3", () => {
@@ -458,6 +518,13 @@ describe("Pagination Component", () => {
       
       // Should NOT show pagination-item-indicator
       expect(screen.queryByTestId("pagination-item-indicator")).not.toBeInTheDocument();
+      
+      // Should show page indicator with "Page N of M"
+      const pageIndicator = document.querySelector('.pagination-page-indicator');
+      expect(pageIndicator).not.toBeNull();
+      expect(pageIndicator?.textContent).toContain("Page");
+      expect(pageIndicator?.textContent).toContain("1");
+      expect(pageIndicator?.textContent).toContain("4");
     });
 
     it("does NOT show redundant 'Showing N–N of M' when pageSize=1 with multiple pages", () => {
@@ -495,6 +562,20 @@ describe("Pagination Component", () => {
       
       // Should show range summary for consistency
       expect(screen.getByText(/showing/i)).toBeInTheDocument();
+    });
+
+    it("pagination-item-indicator is styled as inline in controls row", () => {
+      const props = createProps({ 
+        totalItems: 8,
+        totalPages: 8,
+        currentPage: 1,
+        pageSize: 1,
+      });
+      render(<Pagination {...props} />);
+      
+      const indicator = screen.getByTestId("pagination-item-indicator");
+      expect(indicator).toHaveClass("pagination-item-indicator");
+      expect(indicator).toHaveClass("pagination-item-indicator--inline");
     });
   });
 });

@@ -728,9 +728,9 @@ describe("OperatorWorklistCard", () => {
   test("5. Operator worklist renders command when present", () => {
     render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
 
-    // First item has a command
+    // First item has a command - now via CommandText component
     expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
-    expect(screen.getByTestId("worklist-command-1")).toBeInTheDocument();
+    expect(screen.getByTestId("command-text-worklist-command-1")).toBeInTheDocument();
     expect(screen.getByText("kubectl logs -n kube-system -l k8s-app=kubelet --context cluster-a")).toBeInTheDocument();
   });
 
@@ -929,19 +929,18 @@ describe("OperatorWorklistCard Pagination", () => {
   });
 
   // Test 3: Page count text renders correctly for one-item pagination
-  test("3. Page count text renders correctly, e.g. 'Showing 1–1 of 10'", () => {
+  test("3. Page count text renders correctly, e.g. 'Item 1 of 10'", () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
-    // Should show the pagination summary with exact format from shared Pagination
-    expect(screen.getByText(/showing/i)).toBeInTheDocument();
-    // Verify pagination summary contains the expected range values
-    const paginationSummary = document.querySelector('.pagination-summary');
-    expect(paginationSummary).not.toBeNull();
-    // With page size 1, the shared Pagination renders "Showing 1–1 of 10"
-    const summaryText = paginationSummary?.textContent || "";
-    expect(summaryText).toContain("1");
-    expect(summaryText).toContain("1"); // same value appears twice: "1–1"
-    expect(summaryText).toContain("10");
+    // Should show the pagination item indicator in single-item mode
+    expect(screen.getByTestId("pagination-item-indicator")).toBeInTheDocument();
+    // Verify item indicator contains the expected values
+    const itemIndicator = document.querySelector('.pagination-item-indicator');
+    expect(itemIndicator).not.toBeNull();
+    const indicatorText = itemIndicator?.textContent || "";
+    expect(indicatorText).toContain("Item");
+    expect(indicatorText).toContain("1");
+    expect(indicatorText).toContain("10");
   });
 
   // Test 4: Next moves to next page and shows backend rank #2
@@ -960,11 +959,11 @@ describe("OperatorWorklistCard Pagination", () => {
     // Item 1 should NOT be present
     expect(screen.queryByTestId("worklist-item-1")).not.toBeInTheDocument();
 
-    // Page count should update - verify by checking page indicator element
-    const pageIndicator = document.querySelector('.pagination-page-indicator');
-    expect(pageIndicator).not.toBeNull();
-    expect(pageIndicator?.textContent).toContain("2");
-    expect(pageIndicator?.textContent).toContain("2");
+    // Page count should update - verify by checking item indicator element
+    const itemIndicator = document.querySelector('.pagination-item-indicator');
+    expect(itemIndicator).not.toBeNull();
+    expect(itemIndicator?.textContent).toContain("Item");
+    expect(itemIndicator?.textContent).toContain("2");
   });
 
   // Test 5: Previous returns to first page showing backend rank #1 only
@@ -1055,8 +1054,8 @@ describe("OperatorWorklistCard Pagination", () => {
   test("10. Pagination does not break existing worklist functionality (command rendering)", () => {
     render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
 
-    // First item should have a command
-    expect(screen.getByTestId("worklist-command-1")).toBeInTheDocument();
+    // First item should have a command - now via CommandText component
+    expect(screen.getByTestId("command-text-worklist-command-1")).toBeInTheDocument();
     expect(screen.getByText("kubectl test 1")).toBeInTheDocument();
   });
 

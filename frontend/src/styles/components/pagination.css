@@ -77,6 +77,26 @@
   padding: 0 0.5rem;
 }
 
+/* Single-item pagination indicator - used both inline in controls row and as summary */
+.pagination-item-indicator {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, rgba(248, 250, 252, 0.8));
+  margin: 0;
+  text-align: center;
+}
+
+.pagination-item-indicator strong {
+  color: var(--color-text-primary, #f8fafc);
+  font-weight: 700;
+}
+
+/* Inline variant used in controls row - matches page-indicator sizing */
+.pagination-item-indicator--inline {
+  min-width: 120px;
+  padding: 0 0.5rem;
+}
+
 /* Page size selector - grouped, aligned with nav controls */
 .pagination-size-selector {
   display: flex;
