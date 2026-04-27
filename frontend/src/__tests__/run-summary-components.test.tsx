@@ -86,7 +86,7 @@ describe("RunHeader", () => {
     expect(screen.getByText(/12:00 UTC/)).toBeInTheDocument();
   });
 
-  test("renders as single-line header with correct semantic structure", () => {
+  test("renders as two-row compact header with correct semantic structure", () => {
     render(
       <RunHeader
         label="health-run-20260427T145704Z"
@@ -96,7 +96,6 @@ describe("RunHeader", () => {
     );
 
     // Find the h2 by role and assert its closest header has the correct class
-    // Note: nested <header> should not be tested as "banner" landmark
     const title = screen.getByRole("heading", {
       level: 2,
       name: "health-run-20260427T145704Z",
@@ -104,13 +103,21 @@ describe("RunHeader", () => {
     const header = title.closest("header");
     expect(header).toHaveClass("run-summary-header");
 
-    // Should contain the run summary identity group
-    const identityGroup = header?.querySelector(".run-summary-identity");
-    expect(identityGroup).toBeInTheDocument();
+    // Should contain the run summary header row
+    const headerRow = header?.querySelector(".run-summary-header-row");
+    expect(headerRow).toBeInTheDocument();
 
-    // Kickers and title should be within the identity group
+    // Should contain the run summary meta group
+    const metaGroup = header?.querySelector(".run-summary-meta");
+    expect(metaGroup).toBeInTheDocument();
+
+    // Kicker should be in the header row
     expect(screen.getByText("Run summary")).toBeInTheDocument();
+
+    // Collector and timestamp should be in the meta group
     expect(screen.getByText("Collector 0.0.0")).toBeInTheDocument();
+    const timeElement = header?.querySelector("time");
+    expect(timeElement).toBeInTheDocument();
   });
 
   test("uses <time> element for timestamp accessibility", () => {

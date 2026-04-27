@@ -1,11 +1,12 @@
 /**
  * RunHeader.tsx
  *
- * Displays the run header as a single horizontal identity line.
- * Compressed from stacked layout: kicker, run id, collector version, timestamp.
+ * Displays the run header as a compact two-row card header.
+ * Aligns with peer card header rhythm: kicker, title, metadata.
  *
  * Target structure:
- * RUN SUMMARY  health-run-20260427T145704Z  COLLECTOR 0.0.0                  Apr 27, 2026 14:59 UTC
+ * Top row:    RUN SUMMARY                           Collector 0.0.0 · Apr 27, 2026 16:20 UTC
+ * Second row: health-run-20260427T161756Z
  */
 
 import { formatTimestamp } from "../../utils";
@@ -26,14 +27,18 @@ export const RunHeader = ({
 }: RunHeaderProps) => {
   return (
     <header className="run-summary-header">
-      <div className="run-summary-identity">
+      <div className="run-summary-header-row">
         <span className="run-summary-kicker">Run summary</span>
-        <h2 className="run-summary-title">{label}</h2>
-        <span className="run-summary-collector">Collector {collectorVersion}</span>
+        <div className="run-summary-meta">
+          <span className="run-summary-collector">Collector {collectorVersion}</span>
+          <span aria-hidden="true">·</span>
+          <time className="run-summary-time" dateTime={timestamp}>
+            {formatTimestamp(timestamp)}
+          </time>
+        </div>
       </div>
-      <time className="run-summary-time" dateTime={timestamp}>
-        {formatTimestamp(timestamp)}
-      </time>
+
+      <h2 className="run-summary-title">{label}</h2>
     </header>
   );
 };
