@@ -851,3 +851,37 @@
 [data-theme="solarized-light"] .telemetry-recency {
   color: var(--color-text-muted, #839496);
 }
+
+/* ==========================================================================
+   Phase 2: Canonical Incident Surface Layout
+   Incident report + Operator worklist below the 2-column grid
+   ========================================================================== */
+
+/**
+ * Incident surfaces container - full-width section below the 2-column grid.
+ * Renders incident report and operator worklist as the primary surfaces.
+ */
+.run-overview-incident-surfaces {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+@media (min-width: 900px) {
+  .run-overview-incident-surfaces {
+    /* Stack on mobile, side-by-side on wider screens */
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .run-overview-incident-surfaces .incident-report-card {
+    flex: 1 1 55%;
+    max-width: 55%;
+  }
+
+  .run-overview-incident-surfaces .operator-worklist-card {
+    flex: 1 1 45%;
+    max-width: 45%;
+  }
+}

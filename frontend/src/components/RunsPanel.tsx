@@ -344,7 +344,7 @@ export const RunSummaryPanel = ({
         timestamp={run.timestamp}
       />
       {/* Tabbed interface for run summary content */}
-      <RunSummaryTabs
+        <RunSummaryTabs
         activeTab={activeTab}
         onTabChange={handleTabChange}
         runSummaryStats={runSummaryStats}
@@ -373,6 +373,8 @@ export const RunSummaryPanel = ({
         onReviewNextChecks={handleReviewNextChecks}
         onFocusClusterForNextChecks={onFocusClusterForNextChecks}
         artifacts={run.artifacts}
+        incidentReport={run.incidentReport}
+        operatorWorklist={run.operatorWorklist}
       />
       {/* PastRunNotice remains outside tabs - freshness/past-run context is always visible */}
       <PastRunNotice

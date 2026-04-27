@@ -19,13 +19,21 @@
  * - Artifacts tab: full artifact list
  */
 
-import type { LLMProviderBreakdown, NextCheckStatusVariant, RunArtifact } from "../../types";
+import type {
+  IncidentReportPayload,
+  LLMProviderBreakdown,
+  NextCheckStatusVariant,
+  OperatorWorklistPayload,
+  RunArtifact,
+} from "../../types";
 import { RunKpiStrip } from "./RunKpiStrip";
 import {
   TelemetryStatsRow,
   TelemetryLatencyRow,
   TelemetryProvidersRow,
 } from "./LlmTelemetryCard";
+import { IncidentReportCard } from "./IncidentReportCard";
+import { OperatorWorklistCard } from "./OperatorWorklistCard";
 
 // ============================================================================
 // Props
@@ -57,6 +65,12 @@ export interface RunOverviewDashboardProps {
 
   // Artifacts preview content
   artifacts: RunArtifact[];
+
+  // Phase 2: Canonical incident surface
+  /** Incident report projection for the selected run */
+  incidentReport?: IncidentReportPayload | null;
+  /** Operator worklist projection for the selected run */
+  operatorWorklist?: OperatorWorklistPayload | null;
 
   // Tab change callback for CTAs
   onTabChange: (tab: "next-checks" | "telemetry" | "artifacts") => void;
@@ -379,6 +393,8 @@ export const RunOverviewDashboard = ({
   discoveryClusters,
   onFocusClusterForNextChecks,
   artifacts,
+  incidentReport,
+  operatorWorklist,
   onTabChange,
 }: RunOverviewDashboardProps) => {
   return (
@@ -416,6 +432,16 @@ export const RunOverviewDashboard = ({
           artifacts={artifacts}
           onViewArtifacts={() => onTabChange("artifacts")}
         />
+      </div>
+
+      {/* Phase 2: Canonical incident surface - below the 2-column grid */}
+      {/* These are the primary surfaces for incident story + operator action list */}
+      <div className="run-overview-incident-surfaces" data-testid="run-overview-incident-surfaces">
+        {/* Incident report: Facts, Inferences, Unknowns, Stale evidence */}
+        <IncidentReportCard incidentReport={incidentReport} />
+
+        {/* Operator worklist: Ranked action items with commands */}
+        <OperatorWorklistCard operatorWorklist={operatorWorklist} />
       </div>
     </div>
   );

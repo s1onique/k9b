@@ -14,8 +14,10 @@
  */
 
 import type {
+  IncidentReportPayload,
   NextCheckPlanCandidate,
   NextCheckStatusVariant,
+  OperatorWorklistPayload,
   RunArtifact,
 } from "../../types";
 import { artifactUrl } from "../../utils";
@@ -69,6 +71,11 @@ export interface RunSummaryTabsProps {
   onFocusClusterForNextChecks: (clusterLabel: string) => void;
   // Artifacts tab content
   artifacts: RunArtifact[];
+  // Phase 2: Canonical incident surface projections
+  /** Incident report projection for the selected run */
+  incidentReport?: IncidentReportPayload | null;
+  /** Operator worklist projection for the selected run */
+  operatorWorklist?: OperatorWorklistPayload | null;
 }
 
 export const RunSummaryTabs = ({
@@ -95,6 +102,8 @@ export const RunSummaryTabs = ({
   onReviewNextChecks,
   onFocusClusterForNextChecks,
   artifacts,
+  incidentReport,
+  operatorWorklist,
 }: RunSummaryTabsProps) => {
   // Stable IDs for each tab and panel
   const TAB_IDS: Record<RunSummaryTabId, string> = {
@@ -162,6 +171,8 @@ export const RunSummaryTabs = ({
               onFocusClusterForNextChecks={onFocusClusterForNextChecks}
               artifacts={artifacts}
               onTabChange={onTabChange}
+              incidentReport={incidentReport}
+              operatorWorklist={operatorWorklist}
             />
           )}
         </div>

@@ -106,6 +106,9 @@ export type RunPayload = {
   diagnosticPack?: DiagnosticPack | null;
   alertmanagerCompact?: AlertmanagerCompact | null;
   alertmanagerSources?: AlertmanagerSources | null;
+  // Phase 2: Canonical incident surface projections
+  incidentReport?: IncidentReportPayload | null;
+  operatorWorklist?: OperatorWorklistPayload | null;
 };
 export type RunStats = {
   lastRunDurationSeconds: number | null;
@@ -843,4 +846,80 @@ export type AlertmanagerSourceActionResponse = {
   action: "promote" | "disable";
   artifactPath: string;
   reason?: string | null;
+};
+
+// ============================================================================
+// Incident Report and Operator Worklist (Phase 2 - Canonical Incident Surface)
+// ============================================================================
+
+export type ArtifactLinkRef = {
+  label: string;
+  path: string;
+};
+
+export type IncidentReportFactPayload = {
+  statement: string;
+  sourceArtifactRefs: ArtifactLinkRef[];
+  confidence: string;
+};
+
+export type IncidentReportInferencePayload = {
+  statement: string;
+  basis: string[];
+  confidence: string;
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+
+export type IncidentReportUnknownPayload = {
+  statement: string;
+  whyMissing: string | null;
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+
+export type IncidentReportPayload = {
+  title: string;
+  status: string;
+  affectedScope: string | null;
+  impact: string | null;
+  evidenceSummary: string | null;
+  facts: IncidentReportFactPayload[];
+  inferences: IncidentReportInferencePayload[];
+  unknowns: IncidentReportUnknownPayload[];
+  staleEvidenceWarnings: string[];
+  confidence: string | null;
+  freshness: FreshnessPayload | null;
+  recommendedActions: string[];
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+
+export type OperatorWorklistItemPayload = {
+  id: string;
+  rank: number;
+  workstream: string | null;
+  title: string;
+  description: string | null;
+  command: string | null;
+  targetCluster: string | null;
+  targetContext: string | null;
+  reason: string | null;
+  expectedEvidence: string | null;
+  safetyNote: string | null;
+  approvalState: string | null;
+  executionState: string | null;
+  feedbackState: string | null;
+  sourceArtifactRefs: ArtifactLinkRef[];
+};
+
+export type OperatorWorklistPayload = {
+  items: OperatorWorklistItemPayload[];
+  totalItems: number;
+  completedItems: number;
+  pendingItems: number;
+  blockedItems: number;
+};
+
+export type FreshnessPayload = {
+  ageSeconds: number | null;
+  expectedIntervalSeconds: number | null;
+  status: string | null;
 };

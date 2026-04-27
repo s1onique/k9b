@@ -1,0 +1,280 @@
+/**
+ * Incident Report Card Styles
+ *
+ * Phase 2: Canonical Incident Surface
+ *
+ * CSS ownership:
+ * - .incident-report-card → Card container
+ * - .incident-section → Section containers (facts, inferences, unknowns)
+ * - .incident-section-title → Section header with icon
+ * - .incident-item → Individual item in a section
+ * - .incident-stale-warnings → Stale evidence warning container
+ * - .incident-stale-warning → Individual stale warning
+ * - .incident-facts → Facts section styling
+ * - .incident-inferences → Inferences section (provider-assisted)
+ * - .incident-unknowns → Unknowns section
+ * - .inference-badge → "provider-assisted" badge
+ * - .incident-artifact-link → Artifact link styling
+ *
+ * Theme: Inherits from .run-overview-card base, adds semantic variations.
+ */
+
+/* Card container */
+.incident-report-card {
+  /* Inherits .run-overview-card base styling */
+}
+
+/* Status row */
+.incident-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.incident-status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.incident-status-degraded {
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
+  color: var(--color-state-warning-text, #fde047);
+  border: 1px solid var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
+}
+
+.incident-status-healthy {
+  background: var(--color-state-success-bg, rgba(34, 197, 94, 0.15));
+  color: var(--color-state-success-text, #86efac);
+  border: 1px solid var(--color-state-success-border, rgba(34, 197, 94, 0.35));
+}
+
+.incident-confidence-badge {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+/* Section containers */
+.incident-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+}
+
+.incident-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.incident-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.incident-section-icon {
+  font-size: 0.65rem;
+  width: 1rem;
+  text-align: center;
+}
+
+/* Facts section - deterministic/evidence-backed */
+.incident-facts .incident-section-title {
+  color: var(--color-accent-primary, #38bdf8);
+}
+
+.incident-facts .incident-section-icon {
+  color: #22d3ee;
+}
+
+/* Inferences section - provider-assisted, must not look like facts */
+.incident-inferences {
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.3));
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+  border-left: 3px solid var(--color-accent-secondary, rgba(168, 85, 247, 0.5));
+}
+
+.incident-inferences .incident-section-title {
+  color: var(--color-accent-secondary, #a855f7);
+}
+
+.incident-inferences .incident-section-icon {
+  color: #c084fc;
+}
+
+.inference-badge {
+  margin-left: auto;
+  font-size: 0.55rem;
+  padding: 0.1rem 0.35rem;
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+  border-radius: 0.25rem;
+  text-transform: lowercase;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.inference-basis {
+  font-style: italic;
+}
+
+/* Unknowns section */
+.incident-unknowns .incident-section-title {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+.incident-unknowns .incident-section-icon {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.6));
+}
+
+.unknown-reason {
+  font-style: italic;
+}
+
+/* List items */
+.incident-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.incident-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.incident-statement {
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #f8fafc);
+  line-height: 1.4;
+}
+
+/* Artifacts section */
+.incident-artifacts,
+.incident-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+
+.incident-source-label {
+  font-size: 0.65rem;
+}
+
+/* Stale evidence warnings */
+.incident-stale-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
+  border: 1px solid var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
+  border-radius: 0.4rem;
+}
+
+.incident-stale-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.stale-warning-icon {
+  color: var(--color-state-warning-text, #fde047);
+  font-size: 0.75rem;
+}
+
+.stale-warning-text {
+  color: var(--color-state-warning-text, #fde047);
+}
+
+/* Recommended actions */
+.incident-recommended-actions {
+  border-top: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  padding-top: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.incident-action-list {
+  list-style: disc;
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.incident-action-item {
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #f8fafc);
+}
+
+/* Solarized Light theme overrides */
+[data-theme="solarized-light"] .incident-status-degraded {
+  background: rgba(181, 137, 0, 0.15);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.45);
+}
+
+[data-theme="solarized-light"] .incident-status-healthy {
+  background: rgba(33, 132, 62, 0.15);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.45);
+}
+
+[data-theme="solarized-light"] .incident-facts .incident-section-title {
+  color: var(--color-accent-primary, #268bd2);
+}
+
+[data-theme="solarized-light"] .incident-inferences {
+  background: rgba(108, 113, 196, 0.1);
+  border-left-color: rgba(108, 113, 196, 0.5);
+}
+
+[data-theme="solarized-light"] .incident-inferences .incident-section-title {
+  color: #6c71c4;
+}
+
+[data-theme="solarized-light"] .inference-badge {
+  background: rgba(108, 113, 196, 0.2);
+  color: #6c71c4;
+}
+
+[data-theme="solarized-light"] .incident-unknowns .incident-section-title {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .incident-stale-warnings {
+  background: rgba(181, 137, 0, 0.15);
+  border-color: rgba(181, 137, 0, 0.45);
+}
+
+[data-theme="solarized-light"] .stale-warning-text {
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .incident-statement {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .incident-action-item {
+  color: var(--color-text-primary, #002b36);
+}

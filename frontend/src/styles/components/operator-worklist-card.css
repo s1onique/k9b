@@ -1,0 +1,359 @@
+/**
+ * Operator Worklist Card Styles
+ *
+ * Phase 2: Canonical Operator Worklist Surface
+ *
+ * CSS ownership:
+ * - .operator-worklist-card → Card container
+ * - .worklist-summary → Summary stats row
+ * - .worklist-stat → Individual stat in summary
+ * - .worklist-items → Worklist items container
+ * - .worklist-item → Individual worklist item
+ * - .worklist-item-header → Header with rank + workstream + title
+ * - .worklist-command-section → Command display area
+ * - .worklist-command → Executable command code block
+ * - .worklist-no-command → "No executable command yet" state
+ * - .worklist-state-row → State indicators container
+ * - .worklist-state → Individual state badge
+ *
+ * Theme: Inherits from .run-overview-card base, adds worklist-specific variations.
+ */
+
+/* Card container */
+.operator-worklist-card {
+  /* Inherits .run-overview-card base styling */
+}
+
+/* Summary stats row */
+.worklist-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.4));
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+}
+
+.worklist-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #e2e8f0);
+}
+
+.worklist-stat strong {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #f8fafc);
+}
+
+.worklist-stat-completed strong {
+  color: var(--color-state-success-text, #86efac);
+}
+
+.worklist-stat-pending strong {
+  color: var(--color-accent-primary, #bae6fd);
+}
+
+.worklist-stat-blocked strong {
+  color: var(--color-state-warning-text, #fde047);
+}
+
+/* Worklist items container */
+.worklist-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Individual worklist item */
+.worklist-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.4));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.5rem;
+  transition: border-color 0.15s ease;
+}
+
+.worklist-item:hover {
+  border-color: var(--color-border-default, rgba(148, 163, 184, 0.3));
+}
+
+/* Item header: rank + workstream + title */
+.worklist-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.worklist-rank {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-accent-primary, #bae6fd);
+  min-width: 2rem;
+}
+
+.worklist-workstream-badge {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  background: var(--color-accent-secondary, rgba(168, 85, 247, 0.2));
+  color: var(--color-accent-secondary, #c084fc);
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.worklist-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f8fafc);
+  flex: 1;
+  min-width: 0;
+}
+
+/* Command section - critical for truthfulness */
+.worklist-command-section {
+  padding: 0.35rem 0.5rem;
+  background: var(--color-bg-page, rgba(15, 23, 42, 0.6));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.2));
+  border-radius: 0.35rem;
+}
+
+.worklist-command {
+  display: block;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.75rem;
+  color: var(--color-text-primary, #f8fafc);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.worklist-no-command {
+  display: block;
+  font-style: italic;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+/* Target, reason, evidence, safety rows */
+.worklist-target,
+.worklist-reason,
+.worklist-evidence,
+.worklist-safety {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.worklist-target-label,
+.worklist-reason-label,
+.worklist-evidence-label,
+.worklist-safety-label {
+  font-weight: 500;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  min-width: 5rem;
+}
+
+.worklist-target-value,
+.worklist-reason-value,
+.worklist-evidence-value,
+.worklist-safety-value {
+  color: var(--color-text-secondary, #e2e8f0);
+  flex: 1;
+}
+
+/* State indicators */
+.worklist-state-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.worklist-state {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0.25rem;
+  border: 1px solid;
+}
+
+/* Approval states */
+.worklist-state-approval-required {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--color-state-warning-text, #fde047);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.worklist-state-approved {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-state-success-text, #86efac);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.worklist-state-not-required {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+/* Execution states */
+.worklist-state-executed-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-state-success-text, #86efac);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.worklist-state-executed-failed {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--color-state-danger-text, #fecaca);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.worklist-state-unexecuted {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+/* Feedback states */
+.worklist-state-useful {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-state-success-text, #86efac);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.worklist-state-partial {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--color-state-warning-text, #fde047);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.worklist-state-noisy,
+.worklist-state-empty {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--color-state-danger-text, #fecaca);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+/* Artifact links */
+.worklist-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.1));
+}
+
+.worklist-artifact-link {
+  font-size: 0.7rem;
+}
+
+/* Solarized Light theme overrides */
+[data-theme="solarized-light"] .worklist-summary {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .worklist-stat {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .worklist-stat strong {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .worklist-stat-completed strong {
+  color: #2aa198;
+}
+
+[data-theme="solarized-light"] .worklist-stat-blocked strong {
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .worklist-item {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .worklist-item:hover {
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .worklist-rank {
+  color: var(--color-accent-primary, #268bd2);
+}
+
+[data-theme="solarized-light"] .worklist-workstream-badge {
+  background: rgba(108, 113, 196, 0.2);
+  color: #6c71c4;
+}
+
+[data-theme="solarized-light"] .worklist-title {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .worklist-command-section {
+  background: rgba(238, 232, 213, 0.9);
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .worklist-command {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .worklist-target-label,
+[data-theme="solarized-light"] .worklist-reason-label,
+[data-theme="solarized-light"] .worklist-evidence-label,
+[data-theme="solarized-light"] .worklist-safety-label {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .worklist-target-value,
+[data-theme="solarized-light"] .worklist-reason-value,
+[data-theme="solarized-light"] .worklist-evidence-value,
+[data-theme="solarized-light"] .worklist-safety-value {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .worklist-state-approval-required {
+  background: rgba(181, 137, 0, 0.15);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.45);
+}
+
+[data-theme="solarized-light"] .worklist-state-approved,
+[data-theme="solarized-light"] .worklist-state-executed-success,
+[data-theme="solarized-light"] .worklist-state-useful {
+  background: rgba(33, 132, 62, 0.15);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.45);
+}
+
+[data-theme="solarized-light"] .worklist-state-executed-failed,
+[data-theme="solarized-light"] .worklist-state-noisy,
+[data-theme="solarized-light"] .worklist-state-empty {
+  background: rgba(220, 50, 47, 0.15);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.45);
+}
+
+[data-theme="solarized-light"] .worklist-state-partial {
+  background: rgba(181, 137, 0, 0.15);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.45);
+}

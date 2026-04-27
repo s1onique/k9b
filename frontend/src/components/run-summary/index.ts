@@ -25,3 +25,10 @@ export type { RunSummaryTabsProps, RunSummaryTabId } from "./RunSummaryTabs";
 
 export { RunOverviewDashboard } from "./RunOverviewDashboard";
 export type { RunOverviewDashboardProps } from "./RunOverviewDashboard";
+
+// Phase 2: Canonical Incident Surface
+export { IncidentReportCard } from "./IncidentReportCard";
+export type { IncidentReportCardProps } from "./IncidentReportCard";
+
+export { OperatorWorklistCard } from "./OperatorWorklistCard";
+export type { OperatorWorklistCardProps } from "./OperatorWorklistCard";
