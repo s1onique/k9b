@@ -110,36 +110,36 @@ const AdvisoryExecutiveSummary = ({
           {providerLabel ? `Provider ${providerLabel}` : "Provider unspecified"}
         </span>
       </div>
-      <div className="advisory-summary-metrics">
-        <div className="advisory-summary-metric">
-          <span className="advisory-metric-value">{clusterCount}</span>
-          <span className="advisory-metric-label">Cluster{clusterCount !== 1 ? "s" : ""}</span>
+      <div className="provider-metrics">
+        <div className="provider-metric provider-metric--clusters">
+          <span className="provider-metric__value">{clusterCount}</span>
+          <span className="provider-metric__label">Cluster{clusterCount !== 1 ? "s" : ""}</span>
         </div>
-        <div className="advisory-summary-metric">
-          <span className="advisory-metric-value">{concernCount}</span>
-          <span className="advisory-metric-label">Concern{concernCount !== 1 ? "s" : ""}</span>
+        <div className="provider-metric provider-metric--concerns">
+          <span className="provider-metric__value">{concernCount}</span>
+          <span className="provider-metric__label">Concern{concernCount !== 1 ? "s" : ""}</span>
         </div>
-        <div className="advisory-summary-metric">
-          <span className="advisory-metric-value">{nextCheckCount}</span>
-          <span className="advisory-metric-label">Check{nextCheckCount !== 1 ? "s" : ""}</span>
+        <div className="provider-metric provider-metric--checks">
+          <span className="provider-metric__value">{nextCheckCount}</span>
+          <span className="provider-metric__label">Check{nextCheckCount !== 1 ? "s" : ""}</span>
         </div>
         {gapCount > 0 && (
-          <div className="advisory-summary-metric advisory-summary-metric--warning">
-            <span className="advisory-metric-value">{gapCount}</span>
-            <span className="advisory-metric-label">Gap{gapCount !== 1 ? "s" : ""}</span>
+          <div className="provider-metric provider-metric--gaps">
+            <span className="provider-metric__value">{gapCount}</span>
+            <span className="provider-metric__label">Gap{gapCount !== 1 ? "s" : ""}</span>
           </div>
         )}
       </div>
       {concernTags.length > 0 && (
-        <div className="advisory-summary-tags">
+        <div className="advisory-chip-row">
           {concernTags.map((tag) => (
-            <span key={tag} className="advisory-tag">{tag}</span>
+            <span key={tag} className="advisory-chip advisory-chip--concern">{tag}</span>
           ))}
         </div>
       )}
       {hasFocusNotes && (
-        <div className="advisory-summary-hint">
-          <span className="advisory-hint-badge">Focus note</span>
+        <div className="advisory-chip-row">
+          <span className="advisory-chip advisory-chip--focus">Focus note</span>
         </div>
       )}
     </div>

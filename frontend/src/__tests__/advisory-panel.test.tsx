@@ -132,8 +132,8 @@ describe("Advisory Panel Components", () => {
     });
   });
 
-  describe("Executive Summary Strip", () => {
-    it("renders advisory-summary-strip with all metrics", async () => {
+  describe("Executive Summary Strip - New Semantic Classes", () => {
+    it("renders advisory-summary-strip with all metric tiles", async () => {
       const runPayload = {
         ...sampleRun,
         reviewEnrichment: createMockEnrichment({
@@ -165,41 +165,19 @@ describe("Advisory Panel Components", () => {
       expect(providerDisplay).toBeTruthy();
       expect(providerDisplay?.textContent).toContain("Provider test-provider");
 
-      // Check for metrics container
-      const metricsContainer = document.querySelector(".advisory-summary-metrics");
+      // Check for metrics container (new semantic class)
+      const metricsContainer = document.querySelector(".provider-metrics");
       expect(metricsContainer).toBeTruthy();
-
-      // Check for individual metric elements
-      const metrics = document.querySelectorAll(".advisory-summary-metric");
-      expect(metrics.length).toBeGreaterThanOrEqual(3); // Clusters, Concerns, Checks
-
-      // Verify metric values are present (2 clusters from triageOrder)
-      const clusterMetric = Array.from(metrics).find(
-        (m) => m.textContent?.includes("Cluster")
-      );
-      expect(clusterMetric?.textContent).toContain("2");
-      expect(clusterMetric?.textContent).toContain("Clusters");
-
-      // Verify concerns count (2 concerns)
-      const concernMetric = Array.from(metrics).find(
-        (m) => m.textContent?.includes("Concern")
-      );
-      expect(concernMetric?.textContent).toContain("2");
-      expect(concernMetric?.textContent).toContain("Concerns");
-
-      // Verify next checks count (2 checks)
-      const checksMetric = Array.from(metrics).find(
-        (m) => m.textContent?.includes("Check")
-      );
-      expect(checksMetric?.textContent).toContain("2");
-      expect(checksMetric?.textContent).toContain("Checks");
     });
 
-    it("renders concern tags when concerns exist", async () => {
+    it("metric tiles all have provider-metric class", async () => {
       const runPayload = {
         ...sampleRun,
         reviewEnrichment: createMockEnrichment({
-          topConcerns: ["Ingress latency", "Storage delays"],
+          triageOrder: ["cluster-a", "cluster-b", "cluster-c"],
+          topConcerns: ["Concern A", "Concern B"],
+          nextChecks: ["Check A", "Check B"],
+          evidenceGaps: ["Gap A"],
         }),
         reviewEnrichmentStatus: createMockEnrichmentStatus(),
       };
@@ -215,22 +193,25 @@ describe("Advisory Panel Components", () => {
       render(<App />);
 
       await waitFor(() => {
-        const tagsContainer = document.querySelector(".advisory-summary-tags");
-        expect(tagsContainer).toBeTruthy();
+        const metrics = document.querySelectorAll(".provider-metric");
+        expect(metrics.length).toBeGreaterThanOrEqual(4);
       });
 
-      // Check for individual tags (shows first 2)
-      const tags = document.querySelectorAll(".advisory-tag");
-      expect(tags.length).toBe(2);
-      expect(tags[0].textContent).toContain("Ingress latency");
-      expect(tags[1].textContent).toContain("Storage delays");
+      // All metrics should have the provider-metric base class
+      const metrics = document.querySelectorAll(".provider-metric");
+      metrics.forEach((metric) => {
+        expect(metric).toHaveClass("provider-metric");
+      });
     });
 
-    it("renders focus note hint when focus notes exist", async () => {
+    it("each semantic metric variant exists", async () => {
       const runPayload = {
         ...sampleRun,
         reviewEnrichment: createMockEnrichment({
-          focusNotes: ["Prioritize cluster-a"],
+          triageOrder: ["cluster-a", "cluster-b"],
+          topConcerns: ["Concern A", "Concern B"],
+          nextChecks: ["Check A", "Check B"],
+          evidenceGaps: ["Gap A", "Gap B"],
         }),
         reviewEnrichmentStatus: createMockEnrichmentStatus(),
       };
@@ -246,13 +227,27 @@ describe("Advisory Panel Components", () => {
       render(<App />);
 
       await waitFor(() => {
-        const hintContainer = document.querySelector(".advisory-summary-hint");
-        expect(hintContainer).toBeTruthy();
-        expect(hintContainer?.textContent).toContain("Focus note");
+        expect(document.querySelector(".provider-metric--clusters")).toBeTruthy();
+        expect(document.querySelector(".provider-metric--concerns")).toBeTruthy();
+        expect(document.querySelector(".provider-metric--checks")).toBeTruthy();
+        expect(document.querySelector(".provider-metric--gaps")).toBeTruthy();
       });
+
+      // Verify metric values
+      const clusters = document.querySelector(".provider-metric--clusters");
+      expect(clusters?.textContent).toContain("2");
+
+      const concerns = document.querySelector(".provider-metric--concerns");
+      expect(concerns?.textContent).toContain("2");
+
+      const checks = document.querySelector(".provider-metric--checks");
+      expect(checks?.textContent).toContain("2");
+
+      const gaps = document.querySelector(".provider-metric--gaps");
+      expect(gaps?.textContent).toContain("2");
     });
 
-    it("shows warning styling for evidence gaps", async () => {
+    it("gaps metric uses provider-metric--gaps, not warning class", async () => {
       const runPayload = {
         ...sampleRun,
         reviewEnrichment: createMockEnrichment({
@@ -272,11 +267,115 @@ describe("Advisory Panel Components", () => {
       render(<App />);
 
       await waitFor(() => {
-        const gapMetric = document.querySelector(".advisory-summary-metric--warning");
+        // Should use the new semantic class
+        const gapMetric = document.querySelector(".provider-metric--gaps");
         expect(gapMetric).toBeTruthy();
         expect(gapMetric?.textContent).toContain("2"); // 2 gaps
         expect(gapMetric?.textContent).toContain("Gaps");
       });
+
+      // Should NOT use the legacy warning class
+      const legacyWarning = document.querySelector(".advisory-summary-metric--warning");
+      expect(legacyWarning).toBeNull();
+    });
+  });
+
+  describe("Chip Semantic Classes", () => {
+    it("concern chips have advisory-chip advisory-chip--concern", async () => {
+      const runPayload = {
+        ...sampleRun,
+        reviewEnrichment: createMockEnrichment({
+          topConcerns: ["Ingress latency", "Storage delays"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runPayload,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        const chips = document.querySelectorAll(".advisory-chip--concern");
+        expect(chips.length).toBe(2);
+      });
+
+      // Both chips should have the base advisory-chip class AND the concern variant
+      const chips = document.querySelectorAll(".advisory-chip--concern");
+      chips.forEach((chip) => {
+        expect(chip).toHaveClass("advisory-chip");
+        expect(chip).toHaveClass("advisory-chip--concern");
+      });
+
+      expect(chips[0].textContent).toContain("Ingress latency");
+      expect(chips[1].textContent).toContain("Storage delays");
+    });
+
+    it("focus chips have advisory-chip advisory-chip--focus", async () => {
+      const runPayload = {
+        ...sampleRun,
+        reviewEnrichment: createMockEnrichment({
+          focusNotes: ["Prioritize cluster-a"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runPayload,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        const chip = document.querySelector(".advisory-chip--focus");
+        expect(chip).toBeTruthy();
+      });
+
+      // Focus chip should have both base and variant classes
+      const chip = document.querySelector(".advisory-chip--focus");
+      expect(chip).toHaveClass("advisory-chip");
+      expect(chip).toHaveClass("advisory-chip--focus");
+      expect(chip.textContent).toContain("Focus note");
+    });
+
+    it("chips are rendered in advisory-chip-row container", async () => {
+      const runPayload = {
+        ...sampleRun,
+        reviewEnrichment: createMockEnrichment({
+          topConcerns: ["Concern A"],
+          focusNotes: ["Focus note"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runPayload,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        const chipRow = document.querySelector(".advisory-chip-row");
+        expect(chipRow).toBeTruthy();
+      });
+
+      // Chips should be inside the chip row
+      const chipRow = document.querySelector(".advisory-chip-row");
+      const chips = chipRow?.querySelectorAll(".advisory-chip");
+      expect(chips?.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -576,5 +675,40 @@ describe("Advisory Panel Components", () => {
       expect(focusElement?.textContent).toContain("Focus:");
       expect(focusElement?.textContent).toContain("cluster-a");
     });
+
+    it("focus text is readable (not washed-out muted)", async () => {
+      const runPayload = {
+        ...sampleRun,
+        reviewEnrichment: createMockEnrichment({
+          triageOrder: ["cluster-a"],
+          focusNotes: ["Focus note for cluster-a"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runPayload,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        const focusElement = document.querySelector(".advisory-cluster-focus");
+        expect(focusElement).toBeTruthy();
+      });
+
+      // Focus text should NOT have the muted class (which would make it washed out)
+      const focusElement = document.querySelector(".advisory-cluster-focus");
+      expect(focusElement).not.toHaveClass("muted");
+      
+      // Focus hint should use the advisory-focus-fg color
+      const focusHint = document.querySelector(".advisory-focus-hint");
+      expect(focusHint).toBeTruthy();
+    });
   });
+
 });

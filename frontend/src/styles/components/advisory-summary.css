@@ -1,6 +1,8 @@
 /* ==========================================================================
    Advisory Summary + Cluster Cards
    Advisory panel top: summary strip, cluster overview, collapsible summary.
+   
+   Uses semantic advisory tokens from themes.css for consistent coloring.
    ========================================================================== */
 
 /* ==========================================================================
@@ -19,7 +21,161 @@
    - [data-theme="solarized-light"] .advisory-summary-collapsible .review-enrichment-summary
    ========================================================================== */
 
-/* Executive summary strip - compact scan-friendly overview */
+/* ==========================================================================
+   SHARED ADVISORY CHIP GEOMETRY
+   All chips (concern tags, focus notes) share identical geometry.
+   Variants differ only by color tokens.
+   ========================================================================== */
+
+.advisory-chip {
+  min-height: 28px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* Concern chip - uses info color palette */
+.advisory-chip--concern {
+  color: var(--advisory-info-fg);
+  background: var(--advisory-info-bg);
+  border-color: var(--advisory-info-border);
+}
+
+/* Focus note chip - uses purple/focus color palette */
+.advisory-chip--focus {
+  color: var(--advisory-focus-fg);
+  background: var(--advisory-focus-bg);
+  border-color: var(--advisory-focus-border);
+}
+
+/* Chip row container */
+.advisory-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ==========================================================================
+   SHARED METRIC TILE GEOMETRY
+   All metric tiles (clusters, concerns, checks, gaps) share identical geometry.
+   Variants differ only by color tokens.
+   ========================================================================== */
+
+.provider-metrics {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.provider-metric {
+  min-width: 68px;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.provider-metric__value {
+  font-size: 1.55rem;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.provider-metric__label {
+  font-size: 0.68rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* Metric tile variants */
+.provider-metric--clusters {
+  color: var(--advisory-info-fg);
+  background: var(--advisory-info-bg);
+  border-color: var(--advisory-info-border);
+}
+
+.provider-metric--concerns {
+  color: var(--advisory-warning-fg);
+  background: var(--advisory-warning-bg);
+  border-color: var(--advisory-warning-border);
+}
+
+.provider-metric--checks {
+  color: var(--advisory-info-fg);
+  background: var(--advisory-info-bg);
+  border-color: var(--advisory-info-border);
+}
+
+.provider-metric--gaps {
+  color: var(--advisory-danger-fg);
+  background: var(--advisory-danger-bg);
+  border-color: var(--advisory-danger-border);
+}
+
+/* Legacy metric classes - provide as aliases for backward compatibility */
+.advisory-summary-metric {
+  min-width: 68px;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.advisory-summary-metric--clusters {
+  color: var(--advisory-info-fg);
+  background: var(--advisory-info-bg);
+  border-color: var(--advisory-info-border);
+}
+
+/* 
+ * LEGACY ONLY - gaps now use provider-metric--gaps.
+ * This class is kept for backward compatibility but is not the current contract.
+ */
+.advisory-summary-metric--warning {
+  color: var(--advisory-danger-fg);
+  background: var(--advisory-danger-bg);
+  border-color: var(--advisory-danger-border);
+}
+
+.advisory-metric-value {
+  font-size: 1.55rem;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.advisory-metric-label {
+  font-size: 0.68rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   EXECUTIVE SUMMARY STRIP
+   Compact scan-friendly overview.
+   ========================================================================== */
+
 .advisory-summary-strip {
   display: flex;
   flex-wrap: wrap;
@@ -28,47 +184,15 @@
   margin-bottom: 1rem;
   background: rgba(15, 23, 42, 0.6);
   border-radius: 0.75rem;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  border: 1px solid var(--advisory-panel-border);
   align-items: center;
 }
 
 .advisory-summary-metrics {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
-}
-
-.advisory-summary-metric {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-  min-width: 50px;
-}
-
-.advisory-summary-metric--warning {
-  background: rgba(251, 191, 36, 0.08);
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(251, 191, 36, 0.2);
-}
-
-.advisory-metric-value {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: rgba(248, 250, 252, 0.95);
-  line-height: 1;
-}
-
-.advisory-summary-metric--warning .advisory-metric-value {
-  color: #fbbf24;
-}
-
-.advisory-metric-label {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(148, 163, 184, 0.7);
+  align-items: stretch;
 }
 
 .advisory-summary-tags {
@@ -79,13 +203,19 @@
 }
 
 .advisory-tag {
-  display: inline-flex;
-  padding: 0.2rem 0.5rem;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  /* Uses shared chip geometry for concern tags */
+  min-height: 28px;
+  padding: 5px 12px;
   border-radius: 999px;
-  font-size: 0.7rem;
-  color: #93c5fd;
+  border: 1px solid var(--advisory-info-border);
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  font-weight: 650;
+  white-space: nowrap;
+  color: var(--advisory-info-fg);
+  background: var(--advisory-info-bg);
 }
 
 .advisory-summary-provider {
@@ -107,13 +237,19 @@
 }
 
 .advisory-hint-badge {
-  display: inline-flex;
-  padding: 0.2rem 0.5rem;
-  background: rgba(168, 85, 247, 0.15);
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  /* Uses shared chip geometry for focus hint badge */
+  min-height: 28px;
+  padding: 5px 12px;
   border-radius: 999px;
-  font-size: 0.65rem;
-  color: #d8b4fe;
+  border: 1px solid var(--advisory-focus-border);
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  font-weight: 650;
+  white-space: nowrap;
+  color: var(--advisory-focus-fg);
+  background: var(--advisory-focus-bg);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -158,7 +294,11 @@
   line-height: 1.5;
 }
 
-/* Cluster overview cards grid */
+/* ==========================================================================
+   CLUSTER OVERVIEW CARDS
+   Consistent card layout with readable focus text.
+   ========================================================================== */
+
 .advisory-cluster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -216,17 +356,17 @@
   line-height: 1.3;
 }
 
+/* Focus text - readable purple, NOT washed-out muted */
 .advisory-cluster-focus {
   margin: 0;
-  font-size: 0.7rem;
-  color: rgba(148, 163, 184, 0.6);
+  font-size: 0.75rem;
   line-height: 1.3;
-  font-style: italic;
+  color: var(--advisory-focus-fg);
+  font-style: normal;
 }
 
 .advisory-focus-hint {
-  color: #d8b4fe;
-  font-style: normal;
+  color: var(--advisory-focus-fg);
   font-weight: 500;
 }
 
@@ -241,8 +381,10 @@
 }
 
 [data-theme="solarized-light"] .advisory-summary-metric--warning {
-  background: rgba(181, 137, 0, 0.1);
-  border-color: rgba(181, 137, 0, 0.25);
+  /* Override for Solarized Light - danger red */
+  background: rgba(220, 50, 47, 0.1);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
 }
 
 [data-theme="solarized-light"] .advisory-metric-value {
@@ -250,7 +392,7 @@
 }
 
 [data-theme="solarized-light"] .advisory-summary-metric--warning .advisory-metric-value {
-  color: #b58900;
+  color: #dc322f;
 }
 
 [data-theme="solarized-light"] .advisory-metric-label {
@@ -281,16 +423,8 @@
   color: #586e75;
 }
 
-[data-theme="solarized-light"] .advisory-tag {
-  background: rgba(38, 139, 195, 0.1);
-  border-color: rgba(38, 139, 195, 0.3);
-  color: #0060a8;
-}
-
-[data-theme="solarized-light"] .advisory-hint-badge {
-  background: rgba(108, 113, 196, 0.1);
-  border-color: rgba(108, 113, 196, 0.3);
-  color: #5b5b8a;
+[data-theme="solarized-light"] .advisory-cluster-focus {
+  color: var(--advisory-focus-fg);
 }
 
 /* Collapsible summary in light theme */
@@ -301,4 +435,22 @@
 [data-theme="solarized-light"] .advisory-summary-collapsible .review-enrichment-summary {
   background: rgba(238, 232, 213, 0.4);
   color: #073642;
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT OVERRIDES FOR NEW SEMANTIC CLASSES
+   Only overrides that differ from var() token values are needed here.
+   Chip/metric variants inherit Solarized-adapted tokens from themes.css.
+   
+   @contrast Note: advisory-* tokens in themes.css use Solarized palette colors
+   that satisfy WCAG normal-text (>4.5:1) and chip (>3:1) contrast requirements.
+   ========================================================================== */
+
+/* Provider metric value/label override for readable text on light bg */
+[data-theme="solarized-light"] .provider-metric__value {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .provider-metric__label {
+  color: #586e75;
 }

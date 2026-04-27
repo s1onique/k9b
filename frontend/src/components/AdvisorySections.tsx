@@ -102,7 +102,7 @@ export const AdvisoryFocusNotesSection: React.FC<{ notes: string[] }> = ({ notes
       <p className="advisory-lower-section-label advisory-focus-notes-label">Focus guidance</p>
       <ul className="advisory-focus-notes-list">
         {notes.map((note) => (
-          <li key={note} className="advisory-focus-note-row muted">
+          <li key={note} className="advisory-focus-note-row">
             {note}
           </li>
         ))}

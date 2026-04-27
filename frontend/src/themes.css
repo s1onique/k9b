@@ -164,6 +164,30 @@
   /* Card/panel selection tokens */
   --color-card-selected-bg: rgba(56, 189, 248, 0.12);
   --color-card-selected-border: rgba(56, 189, 248, 0.3);
+  
+  /* Advisory panel semantic tokens - ok/info/warning/danger/focus states */
+  --advisory-ok-fg: #2f6f4e;
+  --advisory-ok-bg: rgba(34, 197, 94, 0.12);
+  --advisory-ok-border: rgba(34, 197, 94, 0.35);
+  
+  --advisory-info-fg: #268bd2;
+  --advisory-info-bg: rgba(59, 130, 246, 0.12);
+  --advisory-info-border: rgba(59, 130, 246, 0.35);
+  
+  --advisory-warning-fg: #8a5a00;
+  --advisory-warning-bg: rgba(251, 191, 36, 0.12);
+  --advisory-warning-border: rgba(251, 191, 36, 0.35);
+  
+  --advisory-danger-fg: #9f2d20;
+  --advisory-danger-bg: rgba(248, 113, 113, 0.12);
+  --advisory-danger-border: rgba(248, 113, 113, 0.35);
+  
+  --advisory-focus-fg: #6c5a9a;
+  --advisory-focus-bg: rgba(168, 85, 247, 0.12);
+  --advisory-focus-border: rgba(168, 85, 247, 0.35);
+  
+  --advisory-muted-fg: #586e75;
+  --advisory-panel-border: rgba(88, 110, 117, 0.24);
 }
 
 /* ============================================================
@@ -319,4 +343,28 @@
   /* Card/panel selection tokens */
   --color-card-selected-bg: rgba(38, 139, 210, 0.1);
   --color-card-selected-border: rgba(38, 139, 210, 0.35);
+  
+  /* Advisory panel semantic tokens - Solarized Light adaptations */
+  --advisory-ok-fg: #2f6f4e;
+  --advisory-ok-bg: rgba(133, 153, 0, 0.12);
+  --advisory-ok-border: rgba(133, 153, 0, 0.35);
+  
+  --advisory-info-fg: #0060a8;
+  --advisory-info-bg: rgba(38, 139, 210, 0.1);
+  --advisory-info-border: rgba(38, 139, 210, 0.35);
+  
+  --advisory-warning-fg: #8a5a00;
+  --advisory-warning-bg: rgba(181, 137, 0, 0.1);
+  --advisory-warning-border: rgba(181, 137, 0, 0.35);
+  
+  --advisory-danger-fg: #9f2d20;
+  --advisory-danger-bg: rgba(220, 50, 47, 0.1);
+  --advisory-danger-border: rgba(220, 50, 47, 0.35);
+  
+  --advisory-focus-fg: #5b5b8a;
+  --advisory-focus-bg: rgba(108, 113, 196, 0.1);
+  --advisory-focus-border: rgba(108, 113, 196, 0.35);
+  
+  --advisory-muted-fg: #586e75;
+  --advisory-panel-border: rgba(88, 110, 117, 0.24);
 }
