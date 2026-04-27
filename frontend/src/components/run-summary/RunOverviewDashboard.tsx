@@ -19,8 +19,13 @@
  * - Artifacts tab: full artifact list
  */
 
-import type { NextCheckStatusVariant, RunArtifact } from "../../types";
+import type { LLMProviderBreakdown, NextCheckStatusVariant, RunArtifact } from "../../types";
 import { RunKpiStrip } from "./RunKpiStrip";
+import {
+  TelemetryStatsRow,
+  TelemetryLatencyRow,
+  TelemetryProvidersRow,
+} from "./LlmTelemetryCard";
 
 // ============================================================================
 // Props
@@ -34,6 +39,8 @@ export interface RunOverviewDashboardProps {
   // Telemetry preview content
   runLlmStatsLine: React.ReactNode;
   providerBreakdown: string | null;
+  /** Structured telemetry data for LlmTelemetryPreviewCard (optional for backward compatibility) */
+  telemetryData?: LlmTelemetryPreviewData;
 
   // Next checks preview content
   runPlan: {
@@ -176,18 +183,106 @@ const NextChecksPreviewCard = ({
   );
 };
 
-// Compact LLM telemetry preview section
+// ============================================================================
+// LLM Telemetry Preview Card
+// ============================================================================
+
+/**
+ * Structured LLM telemetry data for the preview card.
+ * This allows the card to render structured layout instead of dense inline strings.
+ */
+export interface LlmTelemetryPreviewData {
+  totalCalls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  lastCallRecency: string | null;
+  p50LatencyMs: number | null;
+  p95LatencyMs: number | null;
+  p99LatencyMs: number | null;
+  providers: LLMProviderBreakdown[];
+}
+
 interface LlmTelemetryPreviewCardProps {
-  llmStatsLine: React.ReactNode;
-  providerBreakdown: string | null;
+  /** Structured telemetry data (preferred) */
+  telemetryData?: LlmTelemetryPreviewData | null;
+  /** Fallback: pre-rendered stats line (for backward compatibility) */
+  llmStatsLine?: React.ReactNode;
+  /** Fallback: pre-rendered provider breakdown string */
+  providerBreakdown?: string | null;
   onViewTelemetry: () => void;
 }
 
+/**
+ * Compact LLM telemetry preview card.
+ * Renders structured layout with:
+ * - Header: icon, title, compact recency
+ * - Calls row: Calls / OK / Failed as grouped stat chips
+ * - Latency row: P50 / P95 / P99 as grouped latency cells
+ * - Providers row: provider chips that wrap cleanly
+ */
 const LlmTelemetryPreviewCard = ({
+  telemetryData,
   llmStatsLine,
   providerBreakdown,
   onViewTelemetry,
 }: LlmTelemetryPreviewCardProps) => {
+  // Render structured layout when telemetry data is available
+  if (telemetryData) {
+    const {
+      totalCalls,
+      successfulCalls,
+      failedCalls,
+      lastCallRecency,
+      p50LatencyMs,
+      p95LatencyMs,
+      p99LatencyMs,
+      providers,
+    } = telemetryData;
+
+    return (
+      <div className="run-overview-card llm-telemetry-preview-card" data-testid="llm-telemetry-preview-card">
+        {/* Header: icon + title + recency */}
+        <div className="preview-card-header">
+          <span className="preview-card-icon" aria-hidden="true">◈</span>
+          <h3>LLM telemetry</h3>
+          {lastCallRecency && (
+            <span className="telemetry-recency muted tiny">Last {lastCallRecency}</span>
+          )}
+        </div>
+
+        {/* Calls row: Calls / OK / Failed as stat chips */}
+        <TelemetryStatsRow
+          totalCalls={totalCalls}
+          successfulCalls={successfulCalls}
+          failedCalls={failedCalls}
+        />
+
+        {/* Latency row: P50 / P95 / P99 as latency cells */}
+        <TelemetryLatencyRow
+          p50LatencyMs={p50LatencyMs}
+          p95LatencyMs={p95LatencyMs}
+          p99LatencyMs={p99LatencyMs}
+        />
+
+        {/* Providers row: provider chips that wrap cleanly */}
+        {providers.length > 0 && (
+          <TelemetryProvidersRow providers={providers} />
+        )}
+
+        {/* Footer CTA */}
+        <button
+          type="button"
+          className="run-summary-cta-secondary"
+          onClick={onViewTelemetry}
+          data-testid="view-telemetry-cta"
+        >
+          View telemetry →
+        </button>
+      </div>
+    );
+  }
+
+  // Fallback: render pre-rendered content (backward compatibility)
   return (
     <div className="run-overview-card llm-telemetry-preview-card" data-testid="llm-telemetry-preview-card">
       <div className="preview-card-header">
@@ -276,6 +371,7 @@ export const RunOverviewDashboard = ({
   runStatsSummary,
   runLlmStatsLine,
   providerBreakdown,
+  telemetryData,
   runPlan,
   planStatusText,
   planCandidateCountLabel,
@@ -301,6 +397,7 @@ export const RunOverviewDashboard = ({
 
         {/* Row 1, Col 2: LLM telemetry - compact right-column peer card */}
         <LlmTelemetryPreviewCard
+          telemetryData={telemetryData}
           llmStatsLine={runLlmStatsLine}
           providerBreakdown={providerBreakdown}
           onViewTelemetry={() => onTabChange("telemetry")}

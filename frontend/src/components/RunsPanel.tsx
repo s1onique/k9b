@@ -12,6 +12,7 @@
  */
 
 import type { NextCheckPlanCandidate, NextCheckStatusVariant, RunPayload, RunsListEntry } from "../types";
+import type { LlmTelemetryPreviewData } from "./run-summary/RunOverviewDashboard";
 import { artifactUrl, formatTimestamp, relativeRecency, statusClass } from "../utils";
 import { useState } from "react";
 import {
@@ -278,6 +279,8 @@ export type RunSummaryPanelProps = {
   runLlmStatsLine: React.ReactNode;
   historicalLlmStatsLine: React.ReactNode | null;
   providerBreakdown: string | null;
+  // Structured telemetry data for LlmTelemetryPreviewCard
+  telemetryData: LlmTelemetryPreviewData;
   // Plan-related derived values
   runPlan: RunPayload["nextCheckPlan"];
   runPlanCandidates: NextCheckPlanCandidate[];
@@ -303,6 +306,7 @@ export const RunSummaryPanel = ({
   runLlmStatsLine,
   historicalLlmStatsLine,
   providerBreakdown,
+  telemetryData,
   runPlan,
   runPlanCandidates,
   planSummaryText,
@@ -348,6 +352,7 @@ export const RunSummaryPanel = ({
         runLlmStatsLine={runLlmStatsLine}
         historicalLlmStatsLine={historicalLlmStatsLine}
         providerBreakdown={providerBreakdown}
+        telemetryData={telemetryData}
         runPlan={runPlan ? {
           summary: runPlan.summary,
           artifactPath: runPlan.artifactPath,

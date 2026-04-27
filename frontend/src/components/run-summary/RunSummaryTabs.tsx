@@ -21,7 +21,7 @@ import type {
 import { artifactUrl } from "../../utils";
 import { LlmTelemetryCard } from "./LlmTelemetryCard";
 import { NextChecksSummaryCard } from "./NextChecksSummaryCard";
-import { RunOverviewDashboard } from "./RunOverviewDashboard";
+import { RunOverviewDashboard, type LlmTelemetryPreviewData } from "./RunOverviewDashboard";
 
 // Tab definitions
 export type RunSummaryTabId = "overview" | "next-checks" | "telemetry" | "artifacts";
@@ -45,6 +45,8 @@ export interface RunSummaryTabsProps {
   runLlmStatsLine: React.ReactNode;
   historicalLlmStatsLine: React.ReactNode | null;
   providerBreakdown: string | null;
+  /** Structured telemetry data for LlmTelemetryPreviewCard */
+  telemetryData: LlmTelemetryPreviewData;
   // Next checks tab content
   runPlan: {
     summary: string | null;
@@ -77,6 +79,7 @@ export const RunSummaryTabs = ({
   runLlmStatsLine,
   historicalLlmStatsLine,
   providerBreakdown,
+  telemetryData,
   runPlan,
   runPlanCandidates,
   planSummaryText,
@@ -150,6 +153,7 @@ export const RunSummaryTabs = ({
               runStatsSummary={runStatsSummary}
               runLlmStatsLine={runLlmStatsLine}
               providerBreakdown={providerBreakdown}
+              telemetryData={telemetryData}
               runPlan={runPlan}
               planStatusText={planStatusText}
               planCandidateCountLabel={planCandidateCountLabel}

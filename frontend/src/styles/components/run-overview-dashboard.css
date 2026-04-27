@@ -613,3 +613,241 @@
 [data-theme="solarized-light"] .run-summary-cta-secondary:focus {
   outline-color: var(--color-interactive-focus, #268bd2);
 }
+
+/* ==========================================================================
+   LLM Telemetry Preview Card - Stat Chips
+   Compact metric cells for calls/OK/Failed display
+   ========================================================================== */
+
+/**
+ * Stats row container - horizontal flex layout for stat chips
+ */
+.telemetry-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+/**
+ * Stat chip - compact label/value pair
+ * Used for Calls, OK, Failed counts
+ */
+.stat-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.4rem;
+  min-width: 60px;
+  flex: 1;
+  max-width: 100px;
+}
+
+.stat-chip-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  line-height: 1;
+}
+
+.stat-chip-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f8fafc);
+  line-height: 1.2;
+}
+
+/**
+ * Stat chip variants
+ * Neutral: default styling for zero or positive counts
+ * Danger: attention/danger styling for failed counts > 0
+ */
+.stat-chip--neutral {
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border-color: var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+}
+
+.stat-chip--danger {
+  background: var(--color-state-danger-bg, rgba(248, 113, 113, 0.15));
+  border-color: var(--color-state-danger-border, rgba(248, 113, 113, 0.35));
+}
+
+.stat-chip--danger .stat-chip-value {
+  color: var(--color-state-danger-text, #fecaca);
+}
+
+/* ==========================================================================
+   LLM Telemetry Preview Card - Latency Cells
+   Compact display for P50/P95/P99 latency values
+   ========================================================================== */
+
+/**
+ * Latency row container - horizontal flex layout for latency cells
+ */
+.telemetry-latency-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+/**
+ * Latency cell - label/value pair for percentile latencies
+ */
+.latency-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.35rem;
+  min-width: 55px;
+  flex: 1;
+  max-width: 80px;
+}
+
+.latency-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  line-height: 1;
+}
+
+.latency-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #e2e8f0);
+  line-height: 1.2;
+}
+
+/* ==========================================================================
+   LLM Telemetry Preview Card - Provider Chips
+   Inline chips for provider names that wrap cleanly
+   ========================================================================== */
+
+/**
+ * Providers row container - flexible wrap for provider chips
+ */
+.telemetry-providers-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+/**
+ * Provider chip - inline chip showing provider name, call count, and failed count
+ * Wraps cleanly within the card
+ */
+.provider-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.provider-chip-name {
+  font-weight: 500;
+  color: var(--color-text-secondary, #e2e8f0);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.provider-chip-count {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+.provider-chip-failed {
+  color: var(--color-state-danger-text, #fecaca);
+  font-size: 0.65rem;
+}
+
+/**
+ * Header recency indicator
+ */
+.telemetry-recency {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides for LLM Telemetry Components
+   ========================================================================== */
+
+[data-theme="solarized-light"] .telemetry-stats-row {
+  /* Inherits from parent card background */
+}
+
+[data-theme="solarized-light"] .stat-chip {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .stat-chip-label {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .stat-chip-value {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .stat-chip--neutral {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .stat-chip--danger {
+  background: rgba(220, 50, 47, 0.15);
+  border-color: rgba(220, 50, 47, 0.4);
+}
+
+[data-theme="solarized-light"] .stat-chip--danger .stat-chip-value {
+  color: var(--color-state-danger-text, #dc322f);
+}
+
+[data-theme="solarized-light"] .latency-cell {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .latency-label {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .latency-value {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .provider-chip {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .provider-chip-name {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .provider-chip-count {
+  color: var(--color-text-muted, #839496);
+}
+
+[data-theme="solarized-light"] .provider-chip-failed {
+  color: var(--color-state-danger-text, #dc322f);
+}
+
+[data-theme="solarized-light"] .telemetry-recency {
+  color: var(--color-text-muted, #839496);
+}

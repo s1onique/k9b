@@ -11,7 +11,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { NextCheckStatusVariant } from "../types";
 
-import { RunOverviewDashboard } from "../components/run-summary/RunOverviewDashboard";
+import { RunOverviewDashboard, type LlmTelemetryPreviewData } from "../components/run-summary/RunOverviewDashboard";
 
 // ============================================================================
 // Test fixtures
@@ -492,5 +492,98 @@ describe("RunOverviewDashboard", () => {
 
     // Icon should contain warning character
     expect(attentionIcon?.textContent).toContain("⚠");
+  });
+});
+
+// ============================================================================
+// LLM Telemetry Structured Layout Integration Tests
+// ============================================================================
+
+describe("LLM Telemetry Preview Card - Structured Layout", () => {
+  test("22. Structured telemetry path renders Calls/OK/Failed chips, compact latency, and provider chips", () => {
+    // LlmTelemetryPreviewData is exported from RunOverviewDashboard
+    // This test verifies the structured layout renders when telemetryData is provided
+    
+    const telemetryData: LlmTelemetryPreviewData = {
+      totalCalls: 5,
+      successfulCalls: 4,
+      failedCalls: 1,
+      lastCallRecency: "6 minutes ago",
+      p50LatencyMs: 15302,
+      p95LatencyMs: 40719,
+      p99LatencyMs: 40719,
+      providers: [
+        { provider: "k8sgpt", calls: 3, failedCalls: 0 },
+        { provider: "default", calls: 2, failedCalls: 1 },
+      ],
+    };
+
+    render(
+      <RunOverviewDashboard
+        {...defaultProps}
+        telemetryData={telemetryData}
+      />
+    );
+
+    // Structured layout should render
+    expect(screen.getByText("LLM telemetry")).toBeInTheDocument();
+
+    // Calls/OK/Failed should render as separate stat chips with labels
+    expect(screen.getByText("Calls")).toBeInTheDocument();
+    expect(screen.getByText("OK")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+
+    // Verify stat chip values exist in the telemetry stats row
+    const statsRow = screen.getByTestId("llm-telemetry-stats");
+    expect(statsRow.textContent).toContain("5"); // totalCalls = 5
+    expect(statsRow.textContent).toContain("4"); // successfulCalls = 4
+    expect(statsRow.textContent).toContain("1"); // failedCalls = 1
+
+    // Compact latency values should render: >= 1000ms displays as seconds
+    // 15302ms -> 15.3s, 40719ms -> 40.7s
+    expect(screen.getByText("15.3s")).toBeInTheDocument(); // P50 = 15302ms
+    // P95 and P99 both equal 40.7s, so use queryAllByText
+    const latency40_7s = screen.queryAllByText("40.7s");
+    expect(latency40_7s.length).toBeGreaterThanOrEqual(2); // P95 = P99 = 40719ms = 40.7s
+
+    // Provider chips should render with provider names
+    expect(screen.getByText("k8sgpt")).toBeInTheDocument();
+    expect(screen.getByText("default")).toBeInTheDocument();
+
+    // Recency should render in header
+    expect(screen.getByText("Last 6 minutes ago")).toBeInTheDocument();
+
+    // Fallback blob (llm-stats) should NOT be present when telemetryData is provided
+    expect(screen.queryByTestId("llm-stats")).not.toBeInTheDocument();
+
+    // CTA should call onTabChange with telemetry via getByRole (accessibility-first)
+    const cta = screen.getByRole("button", { name: /view telemetry/i });
+    expect(cta).toBeInTheDocument();
+    cta.click();
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("telemetry");
+  });
+
+  test("23. Fallback path renders old stats line for backward compatibility", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Old stats line should render in fallback mode
+    expect(screen.getByTestId("llm-stats")).toBeInTheDocument();
+    expect(screen.getByText(/Calls: 3/)).toBeInTheDocument();
+  });
+
+  test("24. Provider breakdown renders in fallback mode", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    // Provider breakdown should render
+    expect(screen.getByText(/Providers: k8sgpt 2/)).toBeInTheDocument();
+  });
+
+  test("25. View telemetry CTA calls onTabChange with telemetry", () => {
+    render(<RunOverviewDashboard {...defaultProps} />);
+
+    const viewTelemetryCta = screen.getByTestId("view-telemetry-cta");
+    viewTelemetryCta.click();
+
+    expect(defaultProps.onTabChange).toHaveBeenCalledWith("telemetry");
   });
 });

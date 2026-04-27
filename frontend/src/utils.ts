@@ -62,6 +62,9 @@ export const truncateText = (value: string, length = 160) => {
 
 /**
  * Format latency value for display.
+ * Rules:
+ * - null/undefined/non-finite → "—"
+ * - always displays in milliseconds (e.g., "153ms")
  */
 export const formatLatency = (value: number | null | undefined) => {
   if (value == null || !Number.isFinite(value)) {

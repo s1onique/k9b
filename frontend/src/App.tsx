@@ -73,6 +73,7 @@ import {
   statusClass,
   truncateText,
 } from "./utils";
+import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -1803,6 +1804,18 @@ const App = () => {
     .map((entry) => `${entry.provider} ${entry.calls} (${entry.failedCalls} failed)`)
     .join(" · ");
 
+  // Create structured telemetry data for LlmTelemetryPreviewCard
+  const telemetryData: LlmTelemetryPreviewData = {
+    totalCalls: run.llmStats.totalCalls,
+    successfulCalls: run.llmStats.successfulCalls,
+    failedCalls: run.llmStats.failedCalls,
+    lastCallRecency: run.llmStats.lastCallTimestamp ? relativeRecency(run.llmStats.lastCallTimestamp) : null,
+    p50LatencyMs: run.llmStats.p50LatencyMs,
+    p95LatencyMs: run.llmStats.p95LatencyMs,
+    p99LatencyMs: run.llmStats.p99LatencyMs,
+    providers: run.llmStats.providerBreakdown,
+  };
+
   return (
     <div className="app-shell">
       <header className="panel hero compact">
@@ -1931,6 +1944,7 @@ const App = () => {
         runLlmStatsLine={runLlmStatsLine}
         historicalLlmStatsLine={historicalLlmStatsLine}
         providerBreakdown={providerBreakdown}
+        telemetryData={telemetryData}
         runPlan={runPlan}
         runPlanCandidates={runPlanCandidates}
         planSummaryText={planSummaryText}
