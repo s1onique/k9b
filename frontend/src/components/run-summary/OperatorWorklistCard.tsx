@@ -13,6 +13,12 @@
  * - Approval/execution/feedback state
  * - Source artifact links
  *
+ * Pagination:
+ * - Default page size: 3 items
+ * - Pagination controls hidden when item count <= page size
+ * - Preserves backend item rank (e.g., #1, #2, #3...) not local page index
+ * - Shows "Showing X–Y of Z" text
+ *
  * Rules enforced:
  * - Null command must not render as an empty code block.
  * - Show "No executable command yet" for null commands.
@@ -20,8 +26,16 @@
  * - Empty states are honest: "No operator worklist items are available for this run."
  */
 
+import { useState, useMemo } from "react";
 import type { OperatorWorklistPayload, OperatorWorklistItemPayload, ArtifactLinkRef } from "../../types";
 import { artifactUrl } from "../../utils";
+import Pagination from "../Pagination";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const DEFAULT_PAGE_SIZE = 3;
 
 // ============================================================================
 // Props
@@ -192,6 +206,9 @@ const WorklistSummary = ({
 // ============================================================================
 
 export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardProps) => {
+  // Pagination state - local to this component
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Empty state: honest message when no worklist is available
   if (!operatorWorklist) {
     return (
@@ -205,7 +222,29 @@ export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardP
     );
   }
 
-  const hasItems = operatorWorklist.items.length > 0;
+  const totalItems = operatorWorklist.items.length;
+  const hasItems = totalItems > 0;
+
+  // Calculate pagination values
+  const totalPages = Math.ceil(totalItems / DEFAULT_PAGE_SIZE);
+
+  // Derive safe current page from state - clamp without state update
+  // This avoids post-render state updates that cause act() warnings
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), Math.max(1, totalPages));
+
+  const showPagination = hasItems && totalItems > DEFAULT_PAGE_SIZE;
+
+  // Get current page items using safeCurrentPage
+  const paginatedItems = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * DEFAULT_PAGE_SIZE;
+    return operatorWorklist.items.slice(startIndex, startIndex + DEFAULT_PAGE_SIZE);
+  }, [operatorWorklist.items, safeCurrentPage]);
+
+  // Page change handler - clamps before setting state
+  const handlePageChange = (page: number) => {
+    const clampedPage = Math.min(Math.max(1, page), Math.max(1, totalPages));
+    setCurrentPage(clampedPage);
+  };
 
   return (
     <div className="run-overview-card operator-worklist-card" data-testid="operator-worklist-card">
@@ -227,11 +266,25 @@ export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardP
 
       {/* Worklist items */}
       {hasItems ? (
-        <ul className="worklist-items">
-          {operatorWorklist.items.map((item) => (
-            <WorklistItemRow key={item.id} item={item} />
-          ))}
-        </ul>
+        <>
+          <ul className="worklist-items">
+            {paginatedItems.map((item) => (
+              <WorklistItemRow key={item.id} item={item} />
+            ))}
+          </ul>
+
+          {/* Pagination controls */}
+          {showPagination && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={DEFAULT_PAGE_SIZE}
+              onPageChange={handlePageChange}
+              label="Worklist"
+            />
+          )}
+        </>
       ) : (
         <p className="muted tiny">No operator worklist items are available for this run.</p>
       )}

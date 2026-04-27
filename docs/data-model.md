@@ -282,6 +282,95 @@ The `IncidentReportPayload` and `OperatorWorklistPayload` are **derived read-onl
 
 Each extension that affects a durable artifact also requires updating the relevant schema in `docs/schemas/` plus any fixtures/evals that assert the artifact shape or logic (e.g., `tests/fixtures/...`, evals that replay proposals, etc.).
 
+### Incident report and operator worklist fixture harness
+
+The `tests/fixtures/incident_report_fixtures.py` module provides deterministic golden
+fixtures for regression testing the incident report and operator worklist projections.
+These fixtures protect against regressions in truthfulness and quality contracts.
+
+#### Purpose
+
+- Provide replayable, deterministic run-state fixtures for regression testing
+- Protect against provider-assisted content leaking into facts
+- Protect against stale evidence being silently hidden
+- Protect against fabricated "unknown" artifact paths
+- Protect against null commands being converted to fake runnable strings
+
+#### Hard gates enforced by tests
+
+1. **Provider-assisted content never in facts** – review enrichment summary must appear in
+   `inferences[]` with `basis: ["review-enrichment"]`, never in `facts[]`
+2. **Unknowns/missing evidence must be explicit** – `missing_evidence` from assessment
+   surfaces as `IncidentReportUnknownPayload` with `whyMissing`
+3. **Stale evidence must create stale warnings** – when freshness status is `delayed` or
+   `stale`, `staleEvidenceWarnings[]` must be non-empty
+4. **No fake artifact paths** – `sourceArtifactRefs[].path` must be real or empty, never
+   `"unknown"`
+5. **Null command for deterministic items** – deterministic next checks keep `command: null`
+   because they carry a `method` name, not an executable string
+6. **Queue items expose all required metadata** – queue items with `commandPreview` must
+   expose `command`, `targetCluster`, `targetContext`, `reason`, `expectedEvidence`,
+   `safetyNote`, `approvalState`, `executionState`, `feedbackState`, and `sourceArtifactRefs`
+
+#### Available fixture builders
+
+| Builder | Scenario | Key invariant tested |
+|---------|----------|---------------------|
+| `_fixture_healthy_no_incident()` | No degraded clusters, no enrichment | Honest empty state; no invented concern |
+| `_fixture_degraded_single_cluster()` | Degraded + drilldown + missing evidence | Facts, unknowns, actions, real refs |
+| `_fixture_stale_provider_enriched_degraded()` | Stale freshness + review enrichment | Stale warning + enrichment in inferences only |
+| `_fixture_deterministic_only_no_command()` | Deterministic checks only | `command` stays null |
+| `_fixture_queue_with_command()` | Queue item with command | All metadata fields present |
+
+#### How to add a new fixture
+
+1. Choose the pattern that matches your scenario
+2. Call the builder function to get a `dict[str, object]` UI index
+3. Pass to `build_ui_context()` from `k8s_diag_agent.ui.model`
+4. Call `_build_incident_report_payload` or `_build_operator_worklist_payload`
+5. Assert the expected output shape and invariant
+
+#### Example
+
+```python
+from tests.fixtures.incident_report_fixtures import (
+    _fixture_stale_provider_enriched_degraded,
+    _fixture_deterministic_only_no_command,
+    _freshness,
+)
+from k8s_diag_agent.ui.model import build_ui_context
+from k8s_diag_agent.ui.api_incident_report import (
+    _build_incident_report_payload,
+    _build_operator_worklist_payload,
+)
+
+# Test stale provider-enriched degraded run
+index = _fixture_stale_provider_enriched_degraded()
+context = build_ui_context(index)
+report = _build_incident_report_payload(context, _freshness("stale"))
+assert report["staleEvidenceWarnings"]
+# Provider content is inference, not fact
+enrichment_in_inferences = any(
+    "enrichment" in str(i.get("basis", [])) for i in report["inferences"]
+)
+assert enrichment_in_inferences
+
+# Test deterministic items keep command null
+index = _fixture_deterministic_only_no_command()
+context = build_ui_context(index)
+worklist = _build_operator_worklist_payload(context)
+assert worklist is not None
+for item in worklist["items"]:
+    assert item["command"] is None  # no fake runnable command
+```
+
+#### Test file
+
+All fixture-based tests live in `tests/unit/test_api_incident_report.py`. Tests use the
+golden fixtures and assert the hard gates above. New tests should follow the same pattern:
+use a fixture builder, pass through `build_ui_context`, call the target builder, then
+assert the specific invariant.
+
 ## Evolution guidance
 
 1. **Artifact-first remains the source of truth.** Any new persistence layer or index must be derived from `runs/health` and able to rebuild state deterministically.

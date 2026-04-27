@@ -875,12 +875,12 @@
     align-items: flex-start;
   }
 
-  .run-overview-incident-surfaces .incident-report-card {
+  .run-overview-incident-surfaces .operator-worklist-card {
     flex: 1 1 55%;
     max-width: 55%;
   }
 
-  .run-overview-incident-surfaces .operator-worklist-card {
+  .run-overview-incident-surfaces .incident-report-card {
     flex: 1 1 45%;
     max-width: 45%;
   }

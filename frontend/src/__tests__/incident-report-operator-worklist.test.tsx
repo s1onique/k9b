@@ -14,10 +14,13 @@
  * 7. Empty sourceArtifactRefs do not render broken artifact links.
  * 8. Empty incident report/worklist states render honestly.
  * 9. Selected-run binding: switching runs updates incident report and worklist.
+ * 10. Dashboard renders worklist before incident report.
+ * 11. Pagination works correctly (page size 3, previous/next, disabled states).
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import type { IncidentReportPayload, OperatorWorklistPayload } from "../types";
 import { IncidentReportCard } from "../components/run-summary/IncidentReportCard";
 import { OperatorWorklistCard } from "../components/run-summary/OperatorWorklistCard";
@@ -116,6 +119,26 @@ const sampleOperatorWorklist: OperatorWorklistPayload = {
   totalItems: 2,
   completedItems: 0,
   pendingItems: 2,
+  blockedItems: 0,
+};
+
+/** Large worklist fixture for pagination tests (10 items) */
+const largeOperatorWorklist: OperatorWorklistPayload = {
+  items: [
+    { id: "item-1", rank: 1, workstream: "incident", title: "Item 1", description: "", command: "kubectl test 1", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-2", rank: 2, workstream: "evidence", title: "Item 2", description: "", command: "kubectl test 2", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-3", rank: 3, workstream: "incident", title: "Item 3", description: "", command: "kubectl test 3", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-4", rank: 4, workstream: "evidence", title: "Item 4", description: "", command: "kubectl test 4", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-5", rank: 5, workstream: "incident", title: "Item 5", description: "", command: "kubectl test 5", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-6", rank: 6, workstream: "evidence", title: "Item 6", description: "", command: "kubectl test 6", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-7", rank: 7, workstream: "incident", title: "Item 7", description: "", command: "kubectl test 7", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-8", rank: 8, workstream: "evidence", title: "Item 8", description: "", command: "kubectl test 8", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-9", rank: 9, workstream: "incident", title: "Item 9", description: "", command: "kubectl test 9", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-10", rank: 10, workstream: "evidence", title: "Item 10", description: "", command: null, targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+  ],
+  totalItems: 10,
+  completedItems: 0,
+  pendingItems: 10,
   blockedItems: 0,
 };
 
@@ -404,11 +427,213 @@ describe("OperatorWorklistCard", () => {
 });
 
 // ============================================================================
+// OperatorWorklistCard Pagination Tests
+// ============================================================================
+
+describe("OperatorWorklistCard Pagination", () => {
+  // Test 1: Dashboard renders Operator worklist before Incident report
+  test("1. RunOverviewDashboard renders worklist before incident report in incident surfaces", async () => {
+    const { RunOverviewDashboard } = await import("../components/run-summary/RunOverviewDashboard");
+
+    render(
+      <RunOverviewDashboard
+        runSummaryStats={[{ label: "Clusters", value: 3 }]}
+        runStatsSummary="Last 32s"
+        runLlmStatsLine={<span>Calls: 3</span>}
+        providerBreakdown={null}
+        runPlan={null}
+        planStatusText={null}
+        planCandidateCountLabel="0"
+        discoveryVariantCounts={{ safe: 0, approval: 0, approved: 0, duplicate: 0, stale: 0 }}
+        discoveryClusters={[]}
+        onFocusClusterForNextChecks={vi.fn()}
+        artifacts={[]}
+        incidentReport={sampleIncidentReport}
+        operatorWorklist={sampleOperatorWorklist}
+        onTabChange={vi.fn()}
+      />
+    );
+
+    // Get the incident surfaces container
+    const surfaces = screen.getByTestId("run-overview-incident-surfaces");
+    const children = surfaces.children;
+
+    // First child should be operator worklist card
+    expect(children[0]).toHaveAttribute("data-testid", "operator-worklist-card");
+    // Second child should be incident report card
+    expect(children[1]).toHaveAttribute("data-testid", "incident-report-card");
+  });
+
+  // Test 2: Operator worklist renders only first page by default
+  test("2. Operator worklist renders only first page by default when item count exceeds page size", () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // Should show only first 3 items (page size = 3)
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-item-3")).toBeInTheDocument();
+
+    // Items 4-10 should NOT be present
+    expect(screen.queryByTestId("worklist-item-4")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("worklist-item-10")).not.toBeInTheDocument();
+  });
+
+  // Test 3: Page count text renders
+  test("3. Page count text renders correctly, e.g. 'Showing 1–3 of 10'", () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // Should show the pagination summary
+    expect(screen.getByText(/showing/i)).toBeInTheDocument();
+    // Verify pagination summary contains the expected range values
+    const paginationSummary = document.querySelector('.pagination-summary');
+    expect(paginationSummary).not.toBeNull();
+    expect(paginationSummary?.textContent).toContain("1");
+    expect(paginationSummary?.textContent).toContain("3");
+    expect(paginationSummary?.textContent).toContain("10");
+  });
+
+  // Test 4: Next moves to next page and shows ranks #4-#6
+  test("4. Next button moves to next page and shows backend ranks #4–#6", async () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // Click Next button wrapped in act to handle state updates
+    const nextButton = screen.getByRole("button", { name: /worklist next page/i });
+    await act(async () => {
+      await userEvent.click(nextButton);
+    });
+
+    // Now should show items 4-6
+    expect(screen.getByTestId("worklist-item-4")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-item-5")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-item-6")).toBeInTheDocument();
+
+    // Items 1-3 should NOT be present
+    expect(screen.queryByTestId("worklist-item-1")).not.toBeInTheDocument();
+
+    // Page count should update - verify by checking page indicator element
+    const pageIndicator = document.querySelector('.pagination-page-indicator');
+    expect(pageIndicator).not.toBeNull();
+    expect(pageIndicator?.textContent).toContain("2");
+    expect(pageIndicator?.textContent).toContain("4");
+  });
+
+  // Test 5: Previous returns to first page (#1-#3)
+  test("5. Previous button returns to first page showing backend ranks #1–#3", async () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // Navigate to page 2 first
+    const nextButton = screen.getByRole("button", { name: /worklist next page/i });
+    await act(async () => {
+      await userEvent.click(nextButton);
+    });
+
+    // Click Previous button
+    const prevButton = screen.getByRole("button", { name: /worklist previous page/i });
+    await act(async () => {
+      await userEvent.click(prevButton);
+    });
+
+    // Now should show items 1-3 again
+    expect(screen.getByTestId("worklist-item-1")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-item-2")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-item-3")).toBeInTheDocument();
+
+    // Item 4 should NOT be present
+    expect(screen.queryByTestId("worklist-item-4")).not.toBeInTheDocument();
+  });
+
+  // Test 6: Previous is disabled on first page
+  test("6. Previous button is disabled on the first page", () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    const prevButton = screen.getByRole("button", { name: /worklist previous page/i });
+    expect(prevButton).toBeDisabled();
+  });
+
+  // Test 7: Next is disabled on last page
+  test("7. Next button is disabled on the last page", async () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // Navigate to last page (page 4 of 4, showing items 10 only)
+    // Page 1: 1-3, Page 2: 4-6, Page 3: 7-9, Page 4: 10
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+
+    const nextButton = screen.getByRole("button", { name: /worklist next page/i });
+    expect(nextButton).toBeDisabled();
+  });
+
+  // Test 8: Pagination controls are hidden when item count <= 3
+  test("8. Pagination controls are hidden when item count <= 3", () => {
+    render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+
+    // Should NOT have any navigation buttons (only 2 items, less than page size of 3)
+    expect(screen.queryByRole("button", { name: /previous/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /next/i })).not.toBeInTheDocument();
+  });
+
+  // Test 9: Null command behavior still works on paginated pages
+  test("9. Null command still shows 'No executable command yet' on paginated pages", async () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // Item 10 has null command - it should appear on page 4
+    // Navigate to last page
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /worklist next page/i }));
+    });
+
+    // Item 10 should show "No executable command yet"
+    expect(screen.getByTestId("worklist-item-10")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-no-command-10")).toBeInTheDocument();
+    expect(screen.getByText("No executable command yet.")).toBeInTheDocument();
+  });
+
+  // Test 10: Existing tests for command rendering, empty states, source links, and state badges still pass
+  test("10. Pagination does not break existing worklist functionality (command rendering)", () => {
+    render(<OperatorWorklistCard operatorWorklist={largeOperatorWorklist} />);
+
+    // First item should have a command
+    expect(screen.getByTestId("worklist-command-1")).toBeInTheDocument();
+    expect(screen.getByText("kubectl test 1")).toBeInTheDocument();
+  });
+
+  test("10b. Pagination does not break existing worklist functionality (state badges)", () => {
+    render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+
+    // State badges should still render
+    expect(screen.getByText("not-required")).toBeInTheDocument();
+    expect(screen.getByText("unexecuted")).toBeInTheDocument();
+  });
+
+  test("10c. Pagination does not break existing worklist functionality (source links)", () => {
+    render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+
+    // Source links should render
+    const artifactLinks = document.querySelectorAll(".worklist-artifact-link");
+    expect(artifactLinks.length).toBeGreaterThan(0);
+    expect(screen.getByText("Assessment")).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
 // Integration: Dashboard Surface Rendering
 // ============================================================================
 
 describe("RunOverviewDashboard with Incident Surfaces", () => {
-  // Import dynamically to test integration
+  // Test 15: RunOverviewDashboard renders incident surfaces section
   test("15. RunOverviewDashboard renders incident surfaces section", async () => {
     const { RunOverviewDashboard } = await import("../components/run-summary/RunOverviewDashboard");
 
