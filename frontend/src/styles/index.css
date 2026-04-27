@@ -97,6 +97,7 @@
 @import url('./components/incident-report-card.css');
 @import url('./components/operator-worklist-card.css');
 @import url('./components/command-text.css');
+@import url('./components/expandable-text.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');

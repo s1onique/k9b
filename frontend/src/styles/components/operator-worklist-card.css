@@ -92,7 +92,8 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .worklist-rank {
@@ -100,6 +101,7 @@
   font-weight: 700;
   color: var(--color-accent-primary, #bae6fd);
   min-width: 2rem;
+  flex-shrink: 0;
 }
 
 .worklist-workstream-badge {
@@ -111,14 +113,26 @@
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
+/* ExpandableText wrapper for title - critical for truncation */
+.worklist-title-expandable {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Legacy direct title class (if used without ExpandableText) */
 .worklist-title {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--color-text-primary, #f8fafc);
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Command section - critical for truthfulness */

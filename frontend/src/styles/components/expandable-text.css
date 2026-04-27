@@ -1,0 +1,210 @@
+/**
+ * ExpandableText Component Styles
+ *
+ * Provides truncation for long text (titles, labels, commands) with an accessible popup.
+ * 
+ * CSS ownership:
+ * - .expandable-text-wrapper → Container for trigger and popup (uses span for inline use)
+ * - .expandable-text-label → Optional label before the truncated text
+ * - .expandable-text-trigger → Button that triggers the popup
+ * - .expandable-text-truncated → Truncated text (one line with ellipsis)
+ * - .expandable-text-code → Monospace/code styling for command text
+ * - .expandable-text-popup → Popup dialog with full text
+ * - .expandable-text-popup-header → Header with label and close button
+ * - .expandable-text-popup-label → Label text in popup header
+ * - .expandable-text-popup-close → Close button in popup
+ * - .expandable-text-popup-content → Full text in popup (wrapping)
+ */
+
+/* Wrapper for expandable text component - uses inline-block for inline use */
+.expandable-text-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Optional label before the truncated text */
+.expandable-text-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #e2e8f0);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Trigger button - looks like regular inline text but is interactive */
+.expandable-text-trigger {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+}
+
+.expandable-text-trigger:focus-visible {
+  outline: 2px solid var(--color-interactive-focus, #38bdf8);
+  outline-offset: 2px;
+  border-radius: 0.2rem;
+}
+
+/* Truncated text - exactly one line with ellipsis */
+.expandable-text-truncated {
+  display: block;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f8fafc);
+  /* Truncation styles */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Critical for truncation in flex/grid contexts */
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.4;
+}
+
+/* Monospace/code styling variant */
+.expandable-text-code {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+/* Popup dialog - positioned absolutely over content */
+.expandable-text-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  min-width: 300px;
+  max-width: 90vw;
+  margin-top: 0.5rem;
+  padding: 0;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.95));
+  border: 1px solid var(--color-border-default, rgba(148, 163, 184, 0.5));
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.expandable-text-popup:focus {
+  outline: none;
+}
+
+/* Popup header */
+.expandable-text-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-page, rgba(15, 23, 42, 0.8));
+  border-bottom: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.2));
+}
+
+.expandable-text-popup-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #e2e8f0);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Close button */
+.expandable-text-popup-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: transparent;
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.3));
+  border-radius: 0.25rem;
+  color: var(--color-text-secondary, #e2e8f0);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.expandable-text-popup-close:hover {
+  background: var(--color-interactive-hover, rgba(71, 85, 105, 0.6));
+  border-color: var(--color-border-default, rgba(148, 163, 184, 0.5));
+  color: var(--color-text-primary, #f8fafc);
+}
+
+.expandable-text-popup-close:focus-visible {
+  outline: 2px solid var(--color-interactive-focus, #38bdf8);
+  outline-offset: 2px;
+}
+
+/* Popup content - full text that can wrap */
+.expandable-text-popup-content {
+  display: block;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #f8fafc);
+  padding: 0.75rem;
+  margin: 0;
+  /* Allow wrapping - this is the key difference from truncated text */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  max-height: 60vh;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+/* Monospace code variant in popup */
+.expandable-text-code.expandable-text-popup-content,
+.expandable-text-popup-content.expandable-text-code {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.8rem;
+}
+
+/* Solarized Light theme overrides */
+[data-theme="solarized-light"] .expandable-text-truncated {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .expandable-text-label {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .expandable-text-popup {
+  background: rgba(238, 232, 213, 0.98);
+  border-color: rgba(147, 161, 161, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="solarized-light"] .expandable-text-popup-header {
+  background: rgba(238, 232, 213, 0.9);
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .expandable-text-popup-label {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .expandable-text-popup-close {
+  color: var(--color-text-secondary, #586e75);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .expandable-text-popup-close:hover {
+  background: rgba(147, 161, 161, 0.2);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .expandable-text-popup-content {
+  color: var(--color-text-primary, #002b36);
+}

@@ -31,6 +31,7 @@ import type { OperatorWorklistPayload, OperatorWorklistItemPayload, ArtifactLink
 import { artifactUrl } from "../../utils";
 import Pagination from "../Pagination";
 import { CommandText } from "../CommandText";
+import { ExpandableText } from "../ExpandableText";
 
 // ============================================================================
 // Constants
@@ -79,13 +80,18 @@ const ArtifactLinkItem = ({ artifactRef }: { artifactRef: ArtifactLinkRef }) => 
 const WorklistItemRow = ({ item }: { item: OperatorWorklistItemPayload }) => {
   return (
     <li className="worklist-item" data-testid={`worklist-item-${item.rank}`}>
-      {/* Rank + workstream header */}
+      {/* Rank + workstream header - title uses ExpandableText for truncation */}
       <div className="worklist-item-header">
         <span className="worklist-rank" data-testid={`worklist-rank-${item.rank}`}>#{item.rank}</span>
         {item.workstream && (
           <span className="worklist-workstream worklist-workstream-badge">{item.workstream}</span>
         )}
-        <span className="worklist-title">{item.title}</span>
+        <ExpandableText
+          text={item.title}
+          testId={`worklist-title-${item.rank}`}
+          className="worklist-title-expandable"
+          popupLabel="Full check text"
+        />
       </div>
 
       {/* Command section - critical for truthfulness */}

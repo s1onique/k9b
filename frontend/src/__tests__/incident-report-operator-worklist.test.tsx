@@ -724,8 +724,121 @@ describe("IncidentReportCard", () => {
 // ============================================================================
 
 describe("OperatorWorklistCard", () => {
+  // Long kubectl title for truncation tests
+  const longKubectlTitle = "kubectl describe pod -n recommender-service recommender-service-7df47f487-dqghg --context admin@rees46-k8s";
+
   // Test 5: Operator worklist renders command when present
-  test("5. Operator worklist renders command when present", () => {
+  // Test 5a: Title uses ExpandableText for truncation
+  test("5a. Worklist title uses ExpandableText component for truncation", () => {
+    render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+
+    // Title should use ExpandableText component
+    expect(screen.getByTestId("expandable-text-worklist-title-1")).toBeInTheDocument();
+  });
+
+  // Test 5b: Title text is rendered within ExpandableText
+  test("5b. Worklist title text is visible in truncated form", () => {
+    render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
+
+    // The title text should be visible
+    expect(screen.getByText("Collect kubelet logs from affected nodes")).toBeInTheDocument();
+  });
+
+  // Test 5c: Title truncation - long kubectl-like title wraps to one line with popup
+  test("5c. Long kubectl-like title truncates to one line and opens popup on click", async () => {
+    const worklistWithLongTitle: OperatorWorklistPayload = {
+      items: [
+        {
+          id: "long-title-item",
+          rank: 1,
+          workstream: "incident",
+          title: "kubectl describe pod -n recommender-service recommender-service-7df47f487-dqghg --context admin@rees46-k8s",
+          description: "Long title test",
+          command: null, // No command - title is NOT a command
+          targetCluster: "cluster-a",
+          targetContext: "prod",
+          reason: "Testing truncation",
+          expectedEvidence: null,
+          safetyNote: null,
+          approvalState: null,
+          executionState: null,
+          feedbackState: null,
+          sourceArtifactRefs: [],
+        },
+      ],
+      totalItems: 1,
+      completedItems: 0,
+      pendingItems: 1,
+      blockedItems: 0,
+    };
+
+    render(<OperatorWorklistCard operatorWorklist={worklistWithLongTitle} />);
+
+    // Title trigger should exist
+    const titleTrigger = screen.getByTestId("expandable-text-worklist-title-1");
+    expect(titleTrigger).toBeInTheDocument();
+
+    // The truncated text should be visible
+    expect(screen.getByTestId("expandable-text-worklist-title-1-truncated")).toBeInTheDocument();
+
+    // Popup should NOT be open initially
+    expect(screen.queryByTestId("expandable-text-worklist-title-1-popup")).not.toBeInTheDocument();
+
+    // Click the trigger to open popup
+    await act(async () => {
+      await userEvent.click(titleTrigger);
+    });
+
+    // Popup should now be open
+    expect(screen.getByTestId("expandable-text-worklist-title-1-popup")).toBeInTheDocument();
+
+    // Popup should contain the full kubectl text in popup content
+    expect(screen.getByTestId("expandable-text-worklist-title-1-popup-content")).toHaveTextContent(longKubectlTitle);
+
+    // Popup label should be "Full check text" (generic, not "Full command")
+    expect(screen.getByText("Full check text")).toBeInTheDocument();
+  });
+
+  // Test 5d: "No executable command yet" still appears when command is null
+  test("5d. 'No executable command yet' still appears when item.command is null", () => {
+    const worklistWithLongTitleAndNoCommand: OperatorWorklistPayload = {
+      items: [
+        {
+          id: "long-title-no-command",
+          rank: 1,
+          workstream: "incident",
+          title: "kubectl describe pod -n recommender-service recommender-service-7df47f487-dqghg --context admin@rees46-k8s",
+          description: "Long title, no command",
+          command: null, // Explicitly null
+          targetCluster: "cluster-a",
+          targetContext: "prod",
+          reason: null,
+          expectedEvidence: null,
+          safetyNote: null,
+          approvalState: null,
+          executionState: null,
+          feedbackState: null,
+          sourceArtifactRefs: [],
+        },
+      ],
+      totalItems: 1,
+      completedItems: 0,
+      pendingItems: 1,
+      blockedItems: 0,
+    };
+
+    render(<OperatorWorklistCard operatorWorklist={worklistWithLongTitleAndNoCommand} />);
+
+    // Title should still use ExpandableText
+    expect(screen.getByTestId("expandable-text-worklist-title-1")).toBeInTheDocument();
+
+    // "No executable command yet" should still appear
+    expect(screen.getByTestId("worklist-no-command-1")).toBeInTheDocument();
+    expect(screen.getByText("No executable command yet.")).toBeInTheDocument();
+  });
+
+  // Test 5: Operator worklist renders command when present
+  test("5e. Operator worklist renders command when present", () => {
     render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
 
     // First item has a command - now via CommandText component
