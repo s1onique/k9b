@@ -344,7 +344,7 @@ export const RunSummaryPanel = ({
         timestamp={run.timestamp}
       />
       {/* Tabbed interface for run summary content */}
-        <RunSummaryTabs
+      <RunSummaryTabs
         activeTab={activeTab}
         onTabChange={handleTabChange}
         runSummaryStats={runSummaryStats}
