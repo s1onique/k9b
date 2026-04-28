@@ -1085,6 +1085,14 @@ class RunsListTimings(TypedDict, total=False):
     execution_artifacts_scanned: int
     execution_count_derivation_ms: float
     execution_count_derivation_matches: int
+    # Stage 2b execution file metrics (window-driven lookup optimization)
+    execution_lookup_strategy: str  # "window_glob" | "global_scan"
+    execution_run_prefixes_queried: int
+    execution_files_found_total: int
+    execution_files_considered: int
+    execution_files_parsed: int
+    execution_files_skipped_outside_window: int
+    execution_lookup_ms: float
     # Stage 1 sub-stages (breakdown of reviews_glob_ms)
     reviews_glob_only_ms: float
     reviews_files_found: int

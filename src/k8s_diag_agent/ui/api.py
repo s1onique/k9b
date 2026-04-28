@@ -718,67 +718,8 @@ def build_runs_list(
     timings["reviews_glob_ms"] = (time_module.perf_counter() - reviews_scan_start) * 1000
     timings["reviews_parsed"] = reviews_parsed
 
-    # Stage 2: Count executions and reviewed executions from external-analysis
-    execution_scan_start = time_module.perf_counter()
+    # Define external_analysis_dir for use in later stages
     external_analysis_dir = run_health_dir / "external-analysis"
-    execution_artifacts_scanned = 0
-    execution_count_matches = 0
-
-    # Sub-stage: execution glob (just find files)
-    execution_glob_only_start = time_module.perf_counter()
-    exec_artifact_files: list[Path] = []
-    if external_analysis_dir.is_dir():
-        # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
-        # e.g., "run-2024-01-15" should match before "run-2024"
-        sorted_run_ids = sorted(run_entries.keys(), key=len, reverse=True)
-
-        # Find all execution artifacts
-        exec_artifact_files = list(external_analysis_dir.glob("*-next-check-execution*.json"))
-    timings["execution_glob_only_ms"] = (time_module.perf_counter() - execution_glob_only_start) * 1000
-
-    # Sub-stage: execution parse (read and parse JSON)
-    execution_parse_start = time_module.perf_counter()
-    for artifact_path in exec_artifact_files:
-        execution_artifacts_scanned += 1
-        try:
-            raw = json.loads(artifact_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-
-        # Check if this is an execution artifact
-        purpose = raw.get("purpose")
-        if purpose != "next-check-execution":
-            continue
-
-        # Extract run_id from filename using prefix matching (O(N) instead of O(N*M))
-        # Format: {run_id}-next-check-execution-*.json
-        filename = artifact_path.name
-        matched_run_id = None
-        for run_id in sorted_run_ids:
-            if filename.startswith(run_id):
-                matched_run_id = run_id
-                break
-
-        if matched_run_id is None:
-            continue
-
-        execution_count_matches += 1
-
-        # Increment execution count
-        current_exec_count = run_entries[matched_run_id].get("execution_count", 0)
-        run_entries[matched_run_id]["execution_count"] = cast(int, current_exec_count) + 1
-
-        # Check if this execution has usefulness feedback
-        usefulness = raw.get("usefulness_class")
-        if usefulness and isinstance(usefulness, str) and usefulness.strip():
-            current_reviewed_count = run_entries[matched_run_id].get("reviewed_count", 0)
-            run_entries[matched_run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
-
-    timings["execution_parse_ms"] = (time_module.perf_counter() - execution_parse_start) * 1000
-    timings["execution_artifacts_glob_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
-    timings["execution_artifacts_scanned"] = execution_artifacts_scanned
-    timings["execution_count_derivation_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
-    timings["execution_count_derivation_matches"] = execution_count_matches
 
     # Stage 3: Sort and window selection (BEFORE expensive batch eligibility scan)
     row_assembly_start = time_module.perf_counter()
@@ -806,6 +747,71 @@ def build_runs_list(
     else:
         window_run_ids = set(run_entries.keys())
         rows_to_return = len(sorted_entries)
+
+    # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
+    # e.g., "run-2024-01-15" should match before "run-2024"
+    # This is used for both Stage 2b (execution count) and Stage 3b (batch eligibility)
+    sorted_window_run_ids = sorted(window_run_ids, key=len, reverse=True)
+
+    # Stage 2b: Derive execution counts ONLY for runs in window_run_ids
+    # This is the key optimization: use window-driven lookup instead of global scan
+    execution_scan_start = time_module.perf_counter()
+
+    # Sub-stage: window-driven execution file lookup (avoids global glob)
+    # For each run_id in window, find execution files using prefix match
+    execution_parsed = 0
+    execution_count_matches = 0
+
+    window_exec_files: list[tuple[Path, str]] = []  # (path, matched_run_id)
+
+    execution_lookup_start = time_module.perf_counter()
+
+    # Window-driven lookup: query only window run prefixes
+    timings["execution_lookup_strategy"] = "window_glob"
+    timings["execution_run_prefixes_queried"] = len(window_run_ids)
+
+    for run_id in sorted_window_run_ids:
+        # Use window-run prefix to find only relevant files
+        pattern = f"{run_id}-next-check-execution*.json"
+        for exec_path in external_analysis_dir.glob(pattern):
+            window_exec_files.append((exec_path, run_id))
+
+    timings["execution_files_found_total"] = len(window_exec_files)
+    timings["execution_files_considered"] = len(window_exec_files)
+    timings["execution_files_skipped_outside_window"] = 0  # Window mode doesn't consider non-window files
+
+    timings["execution_lookup_ms"] = (time_module.perf_counter() - execution_lookup_start) * 1000
+
+    # Sub-stage: parse only window_exec_files to derive execution counts
+    execution_parse_start = time_module.perf_counter()
+    for exec_path, run_id in window_exec_files:
+        execution_parsed += 1
+        try:
+            raw = json.loads(exec_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        # Check if this is an execution artifact
+        purpose = raw.get("purpose")
+        if purpose != "next-check-execution":
+            continue
+
+        execution_count_matches += 1
+
+        # Increment execution count for this run
+        current_exec_count = run_entries[run_id].get("execution_count", 0)
+        run_entries[run_id]["execution_count"] = cast(int, current_exec_count) + 1
+
+        # Check if this execution has usefulness feedback (means it was reviewed)
+        usefulness = raw.get("usefulness_class")
+        if usefulness and isinstance(usefulness, str) and usefulness.strip():
+            current_reviewed_count = run_entries[run_id].get("reviewed_count", 0)
+            run_entries[run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
+
+    timings["execution_parse_ms"] = (time_module.perf_counter() - execution_parse_start) * 1000
+    timings["execution_files_parsed"] = execution_parsed
+    timings["execution_count_derivation_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
+    timings["execution_count_derivation_matches"] = execution_count_matches
 
     timings["rows_returned"] = rows_to_return
 
@@ -839,11 +845,8 @@ def build_runs_list(
     # This is the key optimization: skip files for runs outside the returned window
     batch_eligibility_prescan_start = time_module.perf_counter()
 
-    # Pre-sort run_ids by length (longest first) to handle prefixed run_ids correctly
-    # e.g., "run-2024-01-15" should match before "run-2024"
-    sorted_window_run_ids = sorted(window_run_ids, key=len, reverse=True)
-
     # Sub-stage: next-check-plan glob (filtered to window run_ids)
+    # Note: sorted_window_run_ids is already defined above (used for Stage 2b)
     batch_plan_glob_start = time_module.perf_counter()
     plan_files: list[Path] = []
     if external_analysis_dir.is_dir():
