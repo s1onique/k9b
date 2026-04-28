@@ -107,11 +107,11 @@ class TestBuildPromptSections(unittest.TestCase):
 
     def test_mixed_types(self) -> None:
         """Test mixed PromptSection and tuple input."""
-        sections = [
+        sections: list[object] = [
             PromptSection(name="existing", text="existing text"),
             ("new_section", "new content"),
         ]
-        result = build_prompt_sections(sections)
+        result = build_prompt_sections(sections)  # type: ignore[arg-type]
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].name, "existing")
         self.assertEqual(result[1].name, "new_section")

@@ -106,7 +106,7 @@ class HealthAssessmentValidatorEdgeCasesTest(unittest.TestCase):
     def test_rejects_non_mapping_input(self) -> None:
         for invalid in (None, "string", [], 42):  # type: ignore[var-annotated]
             with self.assertRaises(ArtifactValidationError) as ctx:
-                HealthAssessmentValidator.validate(invalid)
+                HealthAssessmentValidator.validate(invalid)  # type: ignore[arg-type]
             self.assertIn("must be a mapping", str(ctx.exception))
 
     def test_rejects_wrong_types_for_string_fields(self) -> None:
@@ -192,7 +192,7 @@ class DrilldownArtifactValidatorEdgeCasesTest(unittest.TestCase):
     def test_rejects_non_mapping_input(self) -> None:
         for invalid in (None, "string", [], 42):  # type: ignore[var-annotated]
             with self.assertRaises(ArtifactValidationError) as ctx:
-                DrilldownArtifactValidator.validate(invalid)
+                DrilldownArtifactValidator.validate(invalid)  # type: ignore[arg-type]
             self.assertIn("must be a mapping", str(ctx.exception))
 
     def test_rejects_missing_required_timestamp(self) -> None:
@@ -283,7 +283,7 @@ class HealthProposalValidatorEdgeCasesTest(unittest.TestCase):
     def test_rejects_non_mapping_input(self) -> None:
         for invalid in (None, "string", [], 42):  # type: ignore[var-annotated]
             with self.assertRaises(ArtifactValidationError) as ctx:
-                HealthProposalValidator.validate(invalid)
+                HealthProposalValidator.validate(invalid)  # type: ignore[arg-type]
             self.assertIn("Proposal must be a mapping", str(ctx.exception))
 
     def test_rejects_promotion_payload_not_mapping(self) -> None:
@@ -437,7 +437,7 @@ class ComparisonDecisionValidatorEdgeCasesTest(unittest.TestCase):
     def test_rejects_non_mapping_input(self) -> None:
         for invalid in (None, "string", [], 42):  # type: ignore[var-annotated]
             with self.assertRaises(ArtifactValidationError) as ctx:
-                ComparisonDecisionValidator.validate(invalid)
+                ComparisonDecisionValidator.validate(invalid)  # type: ignore[arg-type]
             self.assertIn("Comparison decision must be a mapping", str(ctx.exception))
 
     def test_rejects_policy_eligible_not_boolean(self) -> None:

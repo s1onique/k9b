@@ -152,7 +152,7 @@ class TestSummaryBuilderBehavior(unittest.TestCase):
         # For non-Mapping input, the function will fail at attribute access
         # This is acceptable behavior - the contract expects Mapping input
         with self.assertRaises((TypeError, AttributeError)):
-            _build_deterministic_next_check_summary_view(None)
+            _build_deterministic_next_check_summary_view(None)  # type: ignore[arg-type]
 
 
 class TestClusterBuilderBehavior(unittest.TestCase):

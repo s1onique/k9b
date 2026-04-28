@@ -196,6 +196,15 @@ export const useRunData = ({
     };
   }, [refresh]);
 
+  // Primary effect: fetch run data when selectedRunId changes.
+  // This unconditional effect ensures refresh() is called whenever
+  // selectedRunId changes, including when it transitions from/to null.
+  // The refresh() function is already memoized with selectedRunId as
+  // a dependency, so it captures the correct run ID at call time.
+  useEffect(() => {
+    refresh();
+  }, [selectedRunId, refresh]);
+
   const handleAutoRefreshChange = useCallback(
     (value: string) => {
       if (value === "off") {

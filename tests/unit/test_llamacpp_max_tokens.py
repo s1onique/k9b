@@ -76,7 +76,7 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
-        provider.assess("prompt", _dummy_payload(), validate_schema=False)
+        provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
         self.assertNotIn("max_tokens", session.last_payload)
 
     def test_assess_with_max_tokens(self) -> None:
@@ -91,7 +91,7 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
-        provider.assess("prompt", _dummy_payload(), max_tokens=768, validate_schema=False)
+        provider.assess("prompt", _dummy_payload(), max_tokens=768, validate_schema=False)  # type: ignore[arg-type]
         self.assertIn("max_tokens", session.last_payload)
         self.assertEqual(session.last_payload["max_tokens"], 768)
 
@@ -107,7 +107,7 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
-        provider.assess("prompt", _dummy_payload(), max_tokens=DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, validate_schema=False)
+        provider.assess("prompt", _dummy_payload(), max_tokens=DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, validate_schema=False)  # type: ignore[arg-type]
         self.assertEqual(session.last_payload["max_tokens"], DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
         self.assertEqual(session.last_payload["max_tokens"], 768)
 
@@ -123,7 +123,7 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
-        provider.assess("prompt", _dummy_payload(), max_tokens=DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT, validate_schema=False)
+        provider.assess("prompt", _dummy_payload(), max_tokens=DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT, validate_schema=False)  # type: ignore[arg-type]
         self.assertEqual(session.last_payload["max_tokens"], DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
         self.assertEqual(session.last_payload["max_tokens"], 1200)
 

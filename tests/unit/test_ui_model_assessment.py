@@ -208,7 +208,7 @@ class TestAssessmentFindingViewDataclassBehavior(unittest.TestCase):
     def test_assessment_finding_view_frozen(self) -> None:
         """AssessmentFindingView should be frozen."""
         with self.assertRaises(Exception):  # dataclasses.FrozenInstanceError
-            self.finding.description = "modified"
+            self.finding.description = "modified"  # type: ignore[misc]
 
     finding = AssessmentFindingView(
         description="test",

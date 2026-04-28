@@ -519,7 +519,7 @@ class TestSchedulerConfigLogIntegration(unittest.TestCase):
                 captured_metadata.update(kwargs)
 
         scheduler = self._make_scheduler(config)
-        scheduler._log_event = capture_log
+        scheduler._log_event = capture_log  # type: ignore[method-assign]
         scheduler.run()
 
         self.assertIn("event", captured_metadata)
@@ -545,7 +545,7 @@ class TestSchedulerConfigLogIntegration(unittest.TestCase):
                 captured_metadata.update(kwargs)
 
         scheduler = self._make_scheduler(config)
-        scheduler._log_event = capture_log
+        scheduler._log_event = capture_log  # type: ignore[method-assign]
         scheduler.run()
 
         # Check all string values don't contain secrets
@@ -584,7 +584,7 @@ class TestSchedulerConfigLogIntegration(unittest.TestCase):
             logged_messages.append((severity, message, kwargs))
 
         scheduler = self._make_scheduler(config=None)  # No config set
-        scheduler._log_event = mock_log_fn
+        scheduler._log_event = mock_log_fn  # type: ignore[method-assign]
 
         # Should not raise, just skip logging
         scheduler._log_effective_scheduler_config()

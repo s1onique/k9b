@@ -70,7 +70,7 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
-        provider.assess("prompt", _dummy_payload(), validate_schema=False)
+        provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
         self.assertNotIn("response_format", session.last_payload)
 
     def test_build_payload_with_response_format_json_true(self) -> None:
@@ -86,7 +86,7 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
             session_factory=lambda: cast(requests.Session, session),
         )
         provider.assess(
-            "prompt", _dummy_payload(), validate_schema=False, response_format_json=True
+            "prompt", _dummy_payload(), validate_schema=False, response_format_json=True  # type: ignore[arg-type]
         )
         self.assertIn("response_format", session.last_payload)
         self.assertEqual(
@@ -106,7 +106,7 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
             session_factory=lambda: cast(requests.Session, session),
         )
         provider.assess(
-            "prompt", _dummy_payload(), validate_schema=False, response_format_json=False
+            "prompt", _dummy_payload(), validate_schema=False, response_format_json=False  # type: ignore[arg-type]
         )
         self.assertNotIn("response_format", session.last_payload)
 
@@ -124,7 +124,7 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
         )
         provider.assess(
             "prompt",
-            _dummy_payload(),
+            _dummy_payload(),  # type: ignore[arg-type]
             validate_schema=False,
             max_tokens=768,
             response_format_json=True,

@@ -104,8 +104,8 @@ class LogPromptDiagnosticsTest(unittest.TestCase):
             prompt_chars=900,
             prompt_tokens_estimate=225,
             prompt_section_count=5,
-            prompt_sections=[],
-            top_prompt_sections=[],
+            prompt_sections=(),
+            top_prompt_sections=(),
         )
 
         result = log_prompt_diagnostics(diagnostics)
@@ -130,8 +130,8 @@ class LogPromptDiagnosticsTest(unittest.TestCase):
             prompt_chars=1900,
             prompt_tokens_estimate=475,
             prompt_section_count=8,
-            prompt_sections=[],
-            top_prompt_sections=[],
+            prompt_sections=(),
+            top_prompt_sections=(),
             elapsed_ms=1500,
             failure_class="llm_client_read_timeout",
         )
@@ -279,10 +279,10 @@ class FailureMetadataFieldHelperTest(unittest.TestCase):
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         metadata = {"failure_class": "llm_response_parse_error_length_capped", "exception_type": "LLMResponseParseError"}
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
         self.assertEqual(result, "llm_response_parse_error_length_capped")
 
-        result = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")
+        result = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")  # type: ignore[arg-type]
         self.assertEqual(result, "LLMResponseParseError")
 
     def test_helper_extracts_from_nested_prompt_diagnostics(self) -> None:
@@ -295,10 +295,10 @@ class FailureMetadataFieldHelperTest(unittest.TestCase):
                 "exception_type": "requests.Timeout",
             }
         }
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
         self.assertEqual(result, "llm_client_read_timeout")
 
-        result = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")
+        result = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")  # type: ignore[arg-type]
         self.assertEqual(result, "requests.Timeout")
 
     def test_helper_prefers_top_level_over_nested(self) -> None:
@@ -311,7 +311,7 @@ class FailureMetadataFieldHelperTest(unittest.TestCase):
                 "failure_class": "nested_class",
             }
         }
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
         self.assertEqual(result, "top_level_class")
 
     def test_helper_returns_none_when_missing(self) -> None:
@@ -319,7 +319,7 @@ class FailureMetadataFieldHelperTest(unittest.TestCase):
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         metadata = {"other_field": "value"}
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
         self.assertIsNone(result)
 
     def test_helper_returns_none_for_empty_metadata(self) -> None:

@@ -136,6 +136,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
         # Status should be FAILED for LLMResponseParseError
         self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
         self.assertIsNotNone(artifact.failure_metadata)
+        assert artifact.failure_metadata is not None  # type narrowing for mypy
 
         # Assert top-level failure metadata fields
         self.assertEqual(artifact.failure_metadata["failure_class"], "llm_response_parse_error_length_capped")
@@ -233,6 +234,7 @@ class TestSchemaValidationValueErrorProductionPath(unittest.TestCase):
         self.assertEqual(artifact.status, ExternalAnalysisStatus.SKIPPED)
         self.assertIsNotNone(artifact.failure_metadata)
         self.assertIsNotNone(artifact.skip_reason)
+        assert artifact.failure_metadata is not None  # type narrowing for mypy
 
         # Assert failure metadata fields are set
         self.assertEqual(artifact.failure_metadata["failure_class"], "llm_response_schema_validation_error")

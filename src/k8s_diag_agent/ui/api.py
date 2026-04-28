@@ -16,7 +16,7 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, overload
 
 import ijson
 
@@ -577,6 +577,26 @@ def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] |
             return extracted
     except Exception:
         return None
+
+
+@overload
+def build_runs_list(
+    runs_dir: Path,
+    *,
+    limit: int | None = 100,
+    include_expensive: bool = False,
+    _timings: Literal[False] = False,
+) -> RunsListPayload: ...
+
+
+@overload
+def build_runs_list(
+    runs_dir: Path,
+    *,
+    limit: int | None = 100,
+    include_expensive: bool = False,
+    _timings: Literal[True] = True,
+) -> tuple[RunsListPayload, RunsListTimings]: ...
 
 
 def build_runs_list(

@@ -94,7 +94,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..identity.artifact import new_artifact_id
 
@@ -237,7 +237,7 @@ def _parse_review_artifact(path: Path) -> dict[str, Any] | None:
     Returns None if the file cannot be parsed or is not a review artifact.
     """
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     except (json.JSONDecodeError, OSError):
         return None
 

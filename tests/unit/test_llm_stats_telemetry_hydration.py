@@ -121,16 +121,16 @@ class LLMStatsTelemetryHydrationTests(unittest.TestCase):
             self.assertIsNotNone(stats["p99LatencyMs"], "p99 should not be None when successful calls have durations")
 
             # Verify percentiles are reasonable values
-            self.assertGreater(stats["p50LatencyMs"], 0)
-            self.assertGreater(stats["p95LatencyMs"], 0)
-            self.assertGreater(stats["p99LatencyMs"], 0)
+            self.assertGreater(stats["p50LatencyMs"], 0)  # type: ignore[misc]
+            self.assertGreater(stats["p95LatencyMs"], 0)  # type: ignore[misc]
+            self.assertGreater(stats["p99LatencyMs"], 0)  # type: ignore[misc]
 
             # Verify ordering: p50 <= p95 <= p99
-            self.assertLessEqual(stats["p50LatencyMs"], stats["p95LatencyMs"])
-            self.assertLessEqual(stats["p95LatencyMs"], stats["p99LatencyMs"])
+            self.assertLessEqual(stats["p50LatencyMs"], stats["p95LatencyMs"])  # type: ignore[call-overload]
+            self.assertLessEqual(stats["p95LatencyMs"], stats["p99LatencyMs"])  # type: ignore[call-overload]
 
             # Verify provider breakdown is correct
-            self.assertEqual(len(stats["providerBreakdown"]), 4)
+            self.assertEqual(len(stats["providerBreakdown"]), 4)  # type: ignore[arg-type]
             provider_names = {entry["provider"] for entry in stats["providerBreakdown"]}
             self.assertEqual(provider_names, {"llamacpp", "llm-autodrilldown", "next-check-planner", "k8sgpt"})
 
@@ -316,7 +316,7 @@ class LLMStatsTelemetryHydrationTests(unittest.TestCase):
             # Percentiles should only use successful call durations [100, 200]
             # p50 should be between 100 and 200
             self.assertIsNotNone(stats["p50LatencyMs"])
-            self.assertGreater(stats["p50LatencyMs"], 0)
+            self.assertGreater(stats["p50LatencyMs"], 0)  # type: ignore[misc]
 
     def test_build_llm_stats_accepts_durationms_camelcase_variant(self) -> None:
         """Test artifact compatibility with camelCase durationMs field."""
