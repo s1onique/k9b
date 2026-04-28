@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
@@ -108,7 +109,7 @@ def _load_alertmanager_review_artifacts(
 
 
 def _merge_alertmanager_review_into_history_entry(
-    entry: dict[str, object], review: dict[str, object] | None
+    entry: Mapping[str, object], review: Mapping[str, object] | None
 ) -> dict[str, object]:
     """Merge Alertmanager review data into an execution history entry.
 
@@ -123,7 +124,7 @@ def _merge_alertmanager_review_into_history_entry(
         Entry dict with alertmanager review fields merged in
     """
     if review is None:
-        return entry
+        return dict(entry)
 
     # Create merged entry
     merged = dict(entry)

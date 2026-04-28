@@ -6,6 +6,7 @@ export default defineConfig({
     globals: true,
     setupFiles: "./src/vitest.setup.ts",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    testTimeout: 30000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

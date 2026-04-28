@@ -12,6 +12,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -41,10 +42,10 @@ class TestAlertmanagerRelevanceEndpointValidation(unittest.TestCase):
         self,
         run_id: str,
         index: int,
-        alertmanager_provenance: dict | None = None,
+        alertmanager_provenance: Mapping[str, object] | None = None,
     ) -> Path:
         """Create a mock execution artifact with optional Alertmanager provenance."""
-        artifact_data = {
+        artifact_data: dict[str, object] = {
             "purpose": "next-check-execution",
             "run_id": run_id,
             "cluster_label": "cluster-a",
@@ -145,10 +146,10 @@ class TestAlertmanagerReviewArtifactCreation(unittest.TestCase):
         self,
         run_id: str,
         index: int,
-        alertmanager_provenance: dict | None = None,
+        alertmanager_provenance: Mapping[str, object] | None = None,
     ) -> Path:
         """Create a mock execution artifact."""
-        artifact_data = {
+        artifact_data: dict[str, object] = {
             "purpose": "next-check-execution",
             "run_id": run_id,
             "cluster_label": "cluster-a",
@@ -581,10 +582,10 @@ class TestAlertmanagerReviewReloadVisibility(unittest.TestCase):
         self,
         run_id: str,
         index: int,
-        alertmanager_provenance: dict | None = None,
+        alertmanager_provenance: Mapping[str, object] | None = None,
     ) -> Path:
         """Create a mock execution artifact."""
-        artifact_data = {
+        artifact_data: dict[str, object] = {
             "purpose": "next-check-execution",
             "run_id": run_id,
             "cluster_label": "cluster-a",

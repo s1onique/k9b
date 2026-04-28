@@ -17,6 +17,7 @@ Truthfulness rules enforced by the builders:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import cast
 
 from .api_payloads import (
@@ -36,7 +37,7 @@ from .model import UIIndexContext
 
 def _build_incident_report_payload(
     context: UIIndexContext,
-    freshness: FreshnessPayload | None,
+    freshness: Mapping[str, object] | None,
 ) -> IncidentReportPayload | None:
     """Derive an incident report from the existing UI context.
 
@@ -222,7 +223,7 @@ def _build_incident_report_payload(
         "unknowns": unknowns,
         "staleEvidenceWarnings": stale_warnings,
         "confidence": "high" if (facts or derived) else "low",
-        "freshness": freshness,
+        "freshness": cast(FreshnessPayload | None, freshness),
         "recommendedActions": recommended_actions,
         "sourceArtifactRefs": deduped_refs,
     }

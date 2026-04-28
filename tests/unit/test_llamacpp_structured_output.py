@@ -279,7 +279,7 @@ class TestExtractResponseDiagnostics(unittest.TestCase):
 
     def test_empty_choices_handled_gracefully(self) -> None:
         """Test that empty choices doesn't raise."""
-        data = {"choices": []}
+        data: dict[str, object] = {"choices": []}
         diags = LlamaCppProvider._extract_response_diagnostics(data)
         self.assertEqual(diags, {})
 

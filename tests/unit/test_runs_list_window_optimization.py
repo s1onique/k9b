@@ -483,7 +483,7 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
 
             # Full path should have performed execution derivation
             self.assertEqual(full_timings.get("execution_lookup_strategy"), "window_glob")
-            self.assertEqual(full_timings.get("execution_files_parsed"), 1000)  # 100 runs * 10 files
+            self.assertEqual(full_timings.get("execution_files_parsed"), 1000)
 
             # Fast path execution_lookup_ms should be much smaller
             fast_lookup_ms = fast_timings.get("execution_lookup_ms", 0)

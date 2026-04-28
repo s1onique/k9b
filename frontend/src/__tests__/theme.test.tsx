@@ -73,10 +73,11 @@ describe("Theme System", () => {
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
     // Check review status badges exist and have semantic classes
-    const fullyReviewedBadges = screen.getAllByText("fully-reviewed");
+    // Use querySelector to find elements with both text AND the correct class
+    const fullyReviewedBadges = document.querySelectorAll(".status-pill-fully-reviewed");
     expect(fullyReviewedBadges.length).toBeGreaterThan(0);
 
-    const unreviewedBadges = screen.getAllByText("unreviewed");
+    const unreviewedBadges = document.querySelectorAll(".status-pill-unreviewed");
     expect(unreviewedBadges.length).toBeGreaterThan(0);
 
     // Verify the badges have the correct status-pill class
@@ -198,7 +199,7 @@ describe("Theme System", () => {
     expect(healthyPills.length).toBeGreaterThan(0);
 
     // Verify review badges are present
-    const fullyReviewedBadges = screen.getAllByText("fully-reviewed");
+    const fullyReviewedBadges = screen.getAllByText("Fully reviewed");
     expect(fullyReviewedBadges.length).toBeGreaterThan(0);
 
     // Verify theme attribute is still correct

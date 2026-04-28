@@ -118,7 +118,7 @@ class TestExplicitTimeoutOverride(unittest.TestCase):
         )
         # Trigger assess to capture the timeout
         try:
-            provider.assess("prompt", _dummy_payload())  # type: ignore
+            provider.assess("prompt", _dummy_payload())
         except Exception:
             pass  # We only care about the call arguments
         self.assertEqual(session.calls[0][3], 60)  # timeout arg
@@ -220,7 +220,7 @@ class TestTimeoutErrorMessageIncludesValue(unittest.TestCase):
             session_factory=lambda: cast(requests.Session, session),
         )
         with self.assertRaises(RuntimeError) as ctx:
-            provider.assess("prompt", _dummy_payload())  # type: ignore
+            provider.assess("prompt", _dummy_payload())
         message = str(ctx.exception)
         self.assertIn("timeout=120s", message)
 
@@ -238,7 +238,7 @@ class TestTimeoutErrorMessageIncludesValue(unittest.TestCase):
             session_factory=lambda: cast(requests.Session, session),
         )
         with self.assertRaises(RuntimeError) as ctx:
-            provider.assess("prompt", _dummy_payload())  # type: ignore
+            provider.assess("prompt", _dummy_payload())
         message = str(ctx.exception)
         self.assertIn("timeout=90s", message)
 

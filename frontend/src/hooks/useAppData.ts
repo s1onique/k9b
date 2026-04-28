@@ -329,9 +329,9 @@ export const useAppData = ({
         alertmanagerRelevanceSummary: summary,
       });
       // Refresh to get updated data
-      await refreshAppData();
+      await refreshRuns();
     },
-    [refreshAppData]
+    [refreshRuns]
   );
 
   // Handle toggle proposal expansion

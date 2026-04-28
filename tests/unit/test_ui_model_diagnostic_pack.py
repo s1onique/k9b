@@ -112,7 +112,7 @@ class TestDiagnosticPackReviewViewDataclassBehavior(unittest.TestCase):
             artifact_path=None,
         )
         with self.assertRaises(Exception):  # dataclasses.FrozenInstanceError
-            view.timestamp = "modified"  # type: ignore[misc]
+            view.timestamp = "modified"
 
     def test_diagnostic_pack_review_view_with_provider_review(self) -> None:
         """DiagnosticPackReviewView should accept provider_review mapping."""
@@ -177,7 +177,7 @@ class TestDiagnosticPackViewDataclassBehavior(unittest.TestCase):
             review_input_14b_path=None,
         )
         with self.assertRaises(Exception):  # dataclasses.FrozenInstanceError
-            view.path = "/modified"  # type: ignore[misc]
+            view.path = "/modified"
 
 
 class TestBuildDiagnosticPackReviewViewBehavior(unittest.TestCase):

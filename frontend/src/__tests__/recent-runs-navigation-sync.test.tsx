@@ -411,11 +411,11 @@ describe("Recent Runs Navigation Synchronization", () => {
         expect(runRows.length).toBe(5);
       });
 
-      // ASSERTION 2: All visible rows should be unreviewed
+      // ASSERTION 2: All visible rows should be unreviewed (displayed as "Awaiting review")
       const runRows = document.querySelectorAll(".run-row");
       for (const row of runRows) {
         const statusCell = row.querySelector("td:nth-child(2)");
-        expect(statusCell?.textContent).toContain("unreviewed");
+        expect(statusCell?.textContent).toContain("Awaiting review");
       }
 
       // ASSERTION 3: Filter summary should show correct counts

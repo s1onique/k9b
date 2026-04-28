@@ -19,6 +19,7 @@ import urllib.request
 from datetime import UTC, datetime
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisPurpose,
@@ -71,14 +72,14 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
         self,
         run_id: str,
         index: int,
-        alertmanager_provenance: dict | None = None,
+        alertmanager_provenance: dict[str, Any] | None = None,
     ) -> tuple[Path, str]:
         """Create a mock execution artifact.
 
         Returns tuple of (artifact_path, relative_path) where relative_path is
         relative to runs_dir (for use in API calls).
         """
-        artifact_data = {
+        artifact_data: dict[str, object] = {
             "purpose": "next-check-execution",
             "run_id": run_id,
             "cluster_label": "cluster-a",
@@ -393,7 +394,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             review = reviews.get(source_artifact)
 
             # Create entry with source_artifact as the key (what execution history uses)
-            execution_entry = {
+            execution_entry: dict[str, Any] = {
                 "artifactPath": source_artifact,  # Use source_artifact as key
                 "timestamp": "2026-04-26T14:00:00Z",
                 "status": "success",

@@ -12,7 +12,7 @@ Coverage goals (per epic):
 from __future__ import annotations
 
 import unittest
-from typing import cast
+from typing import Any, cast
 
 from k8s_diag_agent.ui.api import build_run_payload
 from k8s_diag_agent.ui.api_incident_report import (
@@ -1046,7 +1046,7 @@ class ContentQualityNegativeTests(unittest.TestCase):
         from tests.fixtures.incident_report_quality import check_incident_report_quality
 
         # Create a report with unknown lacking whyMissing
-        report = {
+        report: dict[str, Any] = {
             "facts": [],
             "derived": [],
             "inferences": [],
@@ -1135,7 +1135,7 @@ class ContentQualityReportStructureTests(unittest.TestCase):
         )
 
 
-def _sample_freshness(status: str) -> dict[str, object]:
+def _sample_freshness(status: str) -> dict[str, Any]:
     return {
         "ageSeconds": 600,
         "expectedIntervalSeconds": 300,

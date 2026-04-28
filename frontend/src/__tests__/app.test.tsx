@@ -344,15 +344,40 @@ describe("App", () => {
   });
 
   test("deterministic panel surfaces run-derived checks", async () => {
-    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    // Store the original setInterval spy from beforeEach
+    const originalSetIntervalSpy = setIntervalSpy;
+    let intervalCallback: (() => void) | null = null;
+    
+    // Override setInterval to capture the callback for immediate triggering
+    vi.stubGlobal("setInterval", (callback: () => void) => {
+      intervalCallback = callback;
+      return 123;
+    });
+    
+    const fetchMock = createFetchMock(defaultPayloads);
+    vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
     expect(heading).toBeInTheDocument();
-    // Updated wording: "candidate check to review and promote"
-    expect(screen.getByText(/candidate check.*to review and promote/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Review cluster detail/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View assessment artifact/i })).toBeInTheDocument();
+    
+    // Call the stored interval callback immediately to trigger auto-refresh
+    if (intervalCallback) {
+      await act(async () => {
+        intervalCallback!();
+      });
+    }
+    
+    // Wait for the loading state to disappear
+    await waitFor(() => {
+      const loadingElements = screen.queryAllByText(/Loading selected run/i);
+      expect(loadingElements.length).toBe(0);
+    }, { timeout: 5000 });
+    
+    // Now the deterministic content should be visible
+    expect(await screen.findByText(/candidate check.*to review and promote/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Review cluster detail/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /View assessment artifact/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
     const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
     expect(driftNodes.length).toBeGreaterThan(0);
@@ -360,6 +385,9 @@ describe("App", () => {
     // (sampleFleet has cluster-a as Degraded, so drift bucket should be collapsed)
     const driftDetails = driftNodes[0].closest("details");
     expect(driftDetails).not.toHaveAttribute("open");
+    
+    // Restore the original setInterval spy so other tests are not affected
+    vi.stubGlobal("setInterval", originalSetIntervalSpy);
   });
 
   test("drift bucket is collapsed during active degraded runs", async () => {

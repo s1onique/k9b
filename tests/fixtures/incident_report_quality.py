@@ -23,6 +23,7 @@ These rules prevent report content from becoming:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, TypedDict
 
 # ============================================================================
@@ -174,7 +175,7 @@ def _check_unknowns_have_why_missing(
 
 
 def _check_recommendations_separated_from_findings(
-    report: dict[str, Any],
+    report: Mapping[str, Any],
 ) -> QualityRuleResult:
     """Rule: recommendations are under 'Recommended next actions', NOT mixed with findings.
     
@@ -219,7 +220,7 @@ def _check_recommendations_separated_from_findings(
 
 
 def _check_section_headings_concise(
-    report: dict[str, Any],
+    report: Mapping[str, Any],
 ) -> QualityRuleResult:
     """Rule: section headings remain concise (under 50 characters)."""
     headings = [
@@ -244,7 +245,7 @@ def _check_section_headings_concise(
 
 
 def _check_claim_statements_reasonably_short(
-    report: dict[str, Any],
+    report: Mapping[str, Any],
 ) -> QualityRuleResult:
     """Rule: claim statements are reasonably short (under 200 characters).
     
@@ -278,7 +279,7 @@ def _check_claim_statements_reasonably_short(
 
 
 def _check_no_filler_phrases(
-    report: dict[str, Any],
+    report: Mapping[str, Any],
 ) -> QualityRuleResult:
     """Rule: no generic filler phrases in claim statements.
     
@@ -316,7 +317,7 @@ def _check_no_filler_phrases(
 
 
 def _check_report_has_full_degraded_shape(
-    report: dict[str, Any],
+    report: Mapping[str, Any],
     require_complete_degraded_shape: bool = True,
 ) -> QualityRuleResult:
     """Rule: report answers what is observed, derived, hypothesized, unknown, recommended.
@@ -365,13 +366,13 @@ def _check_report_has_full_degraded_shape(
 
 
 def check_incident_report_quality(
-    report: dict[str, Any],
+    report: Mapping[str, Any],
     require_complete_degraded_shape: bool = True,
 ) -> ContentQualityReport:
     """Run all quality checks on an incident report payload.
     
     Args:
-        report: IncidentReportPayload as dict
+        report: IncidentReportPayload as dict or mapping
         require_complete_degraded_shape: If True (default), all five sections must be present.
             Set to False for healthy/partial reports.
         

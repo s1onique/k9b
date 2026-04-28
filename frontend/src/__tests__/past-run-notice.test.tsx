@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { formatAgeDuration } from "../App";
 import type { RunPayload, RunsListPayload } from "../types";
-import { createStorageMock, sampleFleet, sampleProposals, sampleNotifications, sampleClusterDetail } from "./fixtures";
+import { createStorageMock, createFetchMock, sampleFleet, sampleProposals, sampleNotifications, sampleClusterDetail } from "./fixtures";
 import { SELECTED_RUN_STORAGE_KEY } from "../App";
 
 const minsAgo = (minutes: number) => dayjs().subtract(minutes, "minute").toISOString();
@@ -81,11 +81,8 @@ const createRun = (ageMinutes: number): RunPayload => ({
   plannerAvailability: null,
 });
 
-// Mock fetch for controlled test responses
-const createFetchMock = (
-  runsList: RunsListPayload,
-  run: RunPayload
-) => {
+// Helper to render app with proper act() wrapping
+const renderApp = async (runsList: RunsListPayload, run: RunPayload) => {
   const payloads: Record<string, unknown> = {
     "/api/runs": runsList,
     "/api/run": run,
@@ -94,26 +91,7 @@ const createFetchMock = (
     "/api/notifications": sampleNotifications,
     "/api/cluster-detail": sampleClusterDetail,
   };
-  
-  return vi.fn((input: RequestInfo) => {
-    const url = typeof input === "string" ? input : input.url;
-    const base = url.split("?")[0];
-    const payload = payloads[url] ?? payloads[base];
-    if (!payload) {
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
-  });
-};
-
-// Helper to render app with proper act() wrapping
-const renderApp = async (runsList: RunsListPayload, run: RunPayload) => {
-  vi.stubGlobal("fetch", createFetchMock(runsList, run));
+  vi.stubGlobal("fetch", createFetchMock(payloads));
   await act(async () => {
     render(<App />);
   });
@@ -141,6 +119,13 @@ describe("formatAgeDuration", () => {
 });
 
 describe("Past-run notice UI", () => {
+  // Suite-local timeout: 15s for async run-data loading
+
+  beforeEach(() => {
+    vi.stubGlobal("setInterval", vi.fn(() => 123));
+    vi.stubGlobal("clearInterval", vi.fn());
+  });
+
   test("1. past selected + fresh -> shows past-run notice, not latest warning", async () => {
     // Past run (run-1) is selected, latest is run-2
     const pastRunId = "run-1";
@@ -232,11 +217,14 @@ describe("Past-run notice UI", () => {
     // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
     
-    // Wait for Run summary to load (indicates run data has loaded)
-    await screen.findByRole("heading", { name: /Run summary/i });
+    // Wait for run data to load - use the shared helper approach
+    await waitFor(() => {
+      // When run data loads, the "Loading selected run" placeholder should be gone
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    }, { timeout: 15000 });
     
     // Assert neither notice is visible
     expect(screen.queryByText(/This is a past run/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
   });
-});
+}, 15000);

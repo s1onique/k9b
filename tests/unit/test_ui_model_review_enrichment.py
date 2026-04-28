@@ -112,7 +112,7 @@ class TestReviewEnrichmentStatusViewDataclassBehavior(unittest.TestCase):
             adapter_available=None,
         )
         with self.assertRaises(Exception):  # dataclasses.FrozenInstanceError
-            view.status = "modified"  # type: ignore[misc]
+            view.status = "modified"
 
 
 class TestReviewEnrichmentViewDataclassBehavior(unittest.TestCase):
@@ -159,7 +159,7 @@ class TestReviewEnrichmentViewDataclassBehavior(unittest.TestCase):
             skip_reason=None,
         )
         with self.assertRaises(Exception):  # dataclasses.FrozenInstanceError
-            view.status = "modified"  # type: ignore[misc]
+            view.status = "modified"
 
     def test_review_enrichment_view_with_alertmanager_references(self) -> None:
         """ReviewEnrichmentView should contain alertmanager evidence references."""

@@ -89,7 +89,7 @@ describe("Advisory Panel Components", () => {
       });
 
       // Check for the header structure - now uses shared section-head pattern
-      const headerSection = document.querySelector(".review-enrichment");
+      const headerSection = document.getElementById("review-enrichment");
       expect(headerSection).toBeTruthy();
 
       // Verify section-head exists (shared header pattern)
@@ -536,7 +536,7 @@ describe("Advisory Panel Components", () => {
         expect(screen.getAllByText("Provider advisory")[0]).toBeInTheDocument();
       });
 
-      const reviewEnrichment = document.querySelector(".review-enrichment");
+      const reviewEnrichment = document.getElementById("review-enrichment");
       expect(reviewEnrichment).toBeTruthy();
 
       // Get all direct children of the review-enrichment section body

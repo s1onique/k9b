@@ -67,6 +67,8 @@ def test_import_run_payload_from_api_payloads() -> None:
         "diagnosticPack": None,
         "alertmanagerCompact": None,
         "alertmanagerSources": None,
+        "incidentReport": None,
+        "operatorWorklist": None,
     }
     assert payload["runId"] == "test-run"
 
@@ -79,6 +81,9 @@ def test_import_runs_list_payload_from_api_payloads() -> None:
     payload: RunsListPayload = {
         "runs": [],
         "totalCount": 0,
+        "executionCountsComplete": True,
+        "hasMore": False,
+        "returnedCount": 0,
     }
     assert payload["totalCount"] == 0
 

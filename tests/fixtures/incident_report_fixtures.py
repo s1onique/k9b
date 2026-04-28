@@ -111,7 +111,7 @@ from typing import Any, TypeAlias, cast
 JsonObject: TypeAlias = dict[str, Any]
 
 
-def _freshness(status: str) -> dict[str, object]:
+def _freshness(status: str) -> dict[str, Any]:
     """Return a freshness payload with the given status."""
     return {
         "ageSeconds": 600,

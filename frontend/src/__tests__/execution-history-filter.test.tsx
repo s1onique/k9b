@@ -330,6 +330,7 @@ import App from "../App";
 import {
   createFetchMock,
   createStorageMock,
+  getExecutionHistoryPanelWithRunData,
   makeRunWithOverrides,
   sampleFleet,
   sampleProposals,
@@ -366,44 +367,39 @@ afterEach(() => {
 });
 
 describe("ExecutionHistoryPanel UI tests", () => {
-  const getExecutionHistoryPanel = async () => {
-    const heading = await screen.findByText(/Check execution review/i);
-    const section = heading.closest("section");
-    if (!section) {
-      throw new Error("Execution history panel not found");
-    }
-    return within(section);
-  };
+  // Suite-local timeout: 15s for async run-data loading
+  // (passed as 3rd arg to describe, not vi.setConfig)
 
   describe("renders with history data", () => {
     it("renders the execution history panel with entries", async () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      // Use shared helper to wait for run data to load
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Should show the section heading
       expect(panel.getByText(/Check execution review/i)).toBeInTheDocument();
       
-      // Should show filter dropdowns
-      expect(panel.getByLabelText(/Outcome/i)).toBeInTheDocument();
-      expect(panel.getByLabelText(/Reviewed/i)).toBeInTheDocument();
+      // Should show filter dropdowns - wait for loaded content
+      await panel.findByRole("combobox", { name: /Outcome/i });
+      await panel.findByRole("combobox", { name: /Reviewed/i });
     });
 
     it("renders execution history cards when entries exist", async () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       
-      await screen.findByText(/Check execution review/i);
+      // Use shared helper to wait for run data to load
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
-      // Should show execution cards (text may appear in summary strip and/or grid cards)
+      // Should show execution cards - wait for content to appear
       await waitFor(() => {
         const matches = screen.queryAllByText(/Check pod status/i);
         expect(matches.length).toBeGreaterThan(0);
       });
       
       // Should show at least one status badge with "success" in the panel
-      const panel = await getExecutionHistoryPanel();
       const successBadges = panel.getAllByText("success");
       expect(successBadges.length).toBeGreaterThan(0);
     });
@@ -412,13 +408,14 @@ describe("ExecutionHistoryPanel UI tests", () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      // Use shared helper to wait for run data to load
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Find the outcome filter dropdown
-      const outcomeSelect = panel.getByLabelText(/Outcome/i);
+      const outcomeSelect = await panel.findByRole("combobox", { name: /Outcome/i });
       
-      // Should show counts in the options
-      const options = within(outcomeSelect).getAllByRole("option");
+      // Should show counts in the options - get options from within the select
+      const options = await within(outcomeSelect).findAllByRole("option");
       // Verify "All outcomes" option exists with total count
       const allOption = options.find(opt => opt.textContent?.includes("All outcomes"));
       expect(allOption).toBeDefined();
@@ -431,10 +428,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Find and change the outcome filter
-      const outcomeSelect = panel.getByLabelText(/Outcome/i);
+      const outcomeSelect = await panel.findByRole("combobox", { name: /Outcome/i });
       await user.selectOptions(outcomeSelect, "success");
       
       // The filter should be applied (fewer cards should show)
@@ -450,10 +447,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Find and change the usefulness filter
-      const usefulnessSelect = panel.getByLabelText(/Reviewed/i);
+      const usefulnessSelect = await panel.findByRole("combobox", { name: /Reviewed/i });
       await user.selectOptions(usefulnessSelect, "useful");
       
       // Should show only useful entries (text may appear in summary strip and/or grid cards)
@@ -468,10 +465,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Change the outcome filter
-      const outcomeSelect = panel.getByLabelText(/Outcome/i);
+      const outcomeSelect = await panel.findByRole("combobox", { name: /Outcome/i });
       await user.selectOptions(outcomeSelect, "success");
       
       // Verify localStorage was updated
@@ -490,14 +487,14 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Apply outcome filter
-      const outcomeSelect = panel.getByLabelText(/Outcome/i);
+      const outcomeSelect = await panel.findByRole("combobox", { name: /Outcome/i });
       await user.selectOptions(outcomeSelect, "failure");
       
       // Apply usefulness filter
-      const usefulnessSelect = panel.getByLabelText(/Reviewed/i);
+      const usefulnessSelect = await panel.findByRole("combobox", { name: /Reviewed/i });
       await user.selectOptions(usefulnessSelect, "partial");
       
       // Should show only entries matching BOTH filters
@@ -517,7 +514,7 @@ describe("ExecutionHistoryPanel UI tests", () => {
       vi.stubGlobal("fetch", createFetchMock(emptyPayloads));
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Should show the "no execution history" message
       await waitFor(() => {
@@ -532,14 +529,14 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Apply a filter that matches nothing
-      const outcomeSelect = panel.getByLabelText(/Outcome/i);
+      const outcomeSelect = await panel.findByRole("combobox", { name: /Outcome/i });
       await user.selectOptions(outcomeSelect, "timeout");
       
       // Apply usefulness filter for something that won't match
-      const usefulnessSelect = panel.getByLabelText(/Reviewed/i);
+      const usefulnessSelect = await panel.findByRole("combobox", { name: /Reviewed/i });
       await user.selectOptions(usefulnessSelect, "useful");
       
       // Should show the "no entries match" message
@@ -557,10 +554,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Apply a filter
-      const usefulnessSelect = panel.getByLabelText(/Reviewed/i);
+      const usefulnessSelect = await panel.findByRole("combobox", { name: /Reviewed/i });
       await user.selectOptions(usefulnessSelect, "unreviewed");
       
       // Should show "Showing X of Y" count
@@ -574,7 +571,7 @@ describe("ExecutionHistoryPanel UI tests", () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       
-      await getExecutionHistoryPanel();
+      await getExecutionHistoryPanelWithRunData(screen);
       
       // With all filters at default, should not show the "Showing X of Y" message
       await waitFor(() => {
@@ -588,20 +585,20 @@ describe("ExecutionHistoryPanel UI tests", () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Should show cluster filter since we have 2 different clusters
-      expect(panel.getByLabelText(/Cluster/i)).toBeInTheDocument();
+      await panel.findByRole("combobox", { name: /Cluster/i });
     });
 
     it("shows command filter when multiple command families exist", async () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Should show command filter since we have 3 different families
-      expect(panel.getByLabelText(/Command/i)).toBeInTheDocument();
+      await panel.findByRole("combobox", { name: /Command/i });
     });
 
     it("filters by cluster when selected", async () => {
@@ -609,10 +606,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Find and use the cluster filter
-      const clusterSelect = panel.getByLabelText(/Cluster/i);
+      const clusterSelect = await panel.findByRole("combobox", { name: /Cluster/i });
       await user.selectOptions(clusterSelect, "prod-cluster-1");
       
       // Should filter to show only prod-cluster-1 entries (3 entries)
@@ -626,10 +623,10 @@ describe("ExecutionHistoryPanel UI tests", () => {
       const user = userEvent.setup();
       render(<App />);
       
-      const panel = await getExecutionHistoryPanel();
+      const panel = await getExecutionHistoryPanelWithRunData(screen);
       
       // Find and use the command filter
-      const commandSelect = panel.getByLabelText(/Command/i);
+      const commandSelect = await panel.findByRole("combobox", { name: /Command/i });
       await user.selectOptions(commandSelect, "kubectl-describe");
       
       // Should filter to show only kubectl-describe entries (1 entry)
@@ -638,4 +635,4 @@ describe("ExecutionHistoryPanel UI tests", () => {
       });
     });
   });
-});
+}, 15000);
