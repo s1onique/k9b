@@ -1,6 +1,10 @@
 /**
  * useAppData hook - manages fleet, proposals, notifications, and cluster-detail fetch + state.
  *
+ * Progressive loading strategy:
+ *   - CRITICAL: fleet, proposals - fetched on initial load for app shell render
+ *   - NON-CRITICAL: notifications - deferred to avoid blocking first paint
+ *
  * Owns:
  *   - Fleet, proposals, cluster detail data fetching and state
  *   - Selected cluster label for detail view
@@ -36,7 +40,6 @@ import type {
   FleetPayload,
   NotificationsPayload,
   ProposalsPayload,
-  UsefulnessFeedbackRequest,
 } from "../types";
 import {
   fetchClusterDetail,
@@ -102,6 +105,25 @@ export interface UseAppDataReturn {
   ) => Promise<void>;
 }
 
+/**
+ * Debug logging helper - gated by ?debugUi query parameter.
+ * Logs bootstrap phases to help diagnose startup performance issues.
+ */
+const DEBUG_UI_ENABLED = () => {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has("debugUi");
+};
+
+const debugLog = (phase: string, data?: Record<string, unknown>) => {
+  if (DEBUG_UI_ENABLED()) {
+    console.debug(`[useAppData:debug] ${phase}`, {
+      timestamp: new Date().toISOString(),
+      ...data,
+    });
+  }
+};
+
 export const useAppData = ({
   selectedRunId,
   lastRefresh,
@@ -119,55 +141,104 @@ export const useAppData = ({
   const [notifications, setNotifications] = useState<NotificationsPayload | null>(null);
   const [promotionStatus, setPromotionStatusState] = useState<Record<string, PromotionStatus>>({});
 
-  // Ref to track if a refresh is in progress to prevent duplicate fetches
+  // Refs to track if a refresh is in progress to prevent duplicate fetches
   const refreshInProgress = useRef(false);
+  // Track initial mount for deferred notifications
+  const isMounted = useRef(false);
 
   // Derive status options from proposals
   const statusOptions = useMemo(() => {
-    const entries = proposals?.statusSummary.map((entry) => entry.status) ?? [];
+    const entries = proposals?.statusSummary?.map((entry) => entry.status) ?? [];
     return ["all", ...Array.from(new Set(entries))];
   }, [proposals]);
 
-  // Main refresh function - fetches fleet, proposals, and notifications
+  /**
+   * Fetch notifications - non-critical, deferred on initial load.
+   * This runs separately to avoid blocking the app shell.
+   */
+  const fetchNotificationsDeferred = useCallback(async () => {
+    debugLog("notifications-start", { selectedRunId });
+    try {
+      const notificationsPayload = await fetchNotifications();
+      setNotifications(notificationsPayload);
+      debugLog("notifications-done", {
+        selectedRunId,
+        notificationCount: notificationsPayload.notifications.length,
+      });
+    } catch (err) {
+      debugLog("notifications-error", {
+        selectedRunId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Notifications errors are non-fatal - don't block the app
+    }
+  }, [selectedRunId]);
+
+  /**
+   * Fetch critical app data (fleet + proposals) in parallel.
+   * This is the blocking initial load - fleet and proposals must load for shell render.
+   */
   const refreshAppData = useCallback(async () => {
     if (refreshInProgress.current) {
       return;
     }
     refreshInProgress.current = true;
     let active = true;
+
+    debugLog("bootstrap-critical-start", {
+      selectedRunId,
+      selectedRunIdIsNull: selectedRunId === null,
+    });
+
     try {
       setError(null);
-      // Fetch fleet, proposals, and notifications in parallel
-      const [fleetPayload, proposalsPayload, notificationsPayload] = await Promise.all([
+
+      // Fetch CRITICAL data: fleet and proposals in parallel
+      // These are required for the app shell to render.
+      // NOTE: refreshRuns() and refreshRunData() are NOT called here.
+      // Each data domain owns its own lifecycle:
+      //   - useRunSelection -> /api/runs (triggers on mount and visibility change)
+      //   - useRunData -> /api/run for selected/latest only (triggers on selectedRunId change)
+      //   - useAppData -> fleet/proposals and deferred notifications
+      const [fleetPayload, proposalsPayload] = await Promise.all([
         fetchFleet(),
         fetchProposals(),
-        fetchNotifications(),
       ]);
-      // Trigger hook-based refresh for runs list and run data
-      refreshRuns();
-      refreshRunData();
+
       if (active) {
         setFleet(fleetPayload);
-        setNotifications(notificationsPayload);
+        setProposals(proposalsPayload);
+
+        // Set default cluster if not already selected
         if (!selectedClusterLabel) {
           const fallbackLabel = fleetPayload.clusters[0]?.label ?? null;
           if (fallbackLabel) {
             setSelectedClusterLabel(fallbackLabel);
           }
         }
+
+        debugLog("bootstrap-critical-done", {
+          selectedRunId,
+          fleetClusters: fleetPayload.clusters.length,
+          proposalCount: proposalsPayload.proposals.length,
+        });
       }
-      if (active) {
-        setProposals(proposalsPayload);
-      }
+
+      // Fetch NON-CRITICAL data: notifications (deferred, doesn't block)
+      fetchNotificationsDeferred();
     } catch (err) {
       if (active) {
         setError(err instanceof Error ? err.message : String(err));
+        debugLog("bootstrap-critical-error", {
+          selectedRunId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     } finally {
       refreshInProgress.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClusterLabel, refreshRuns, refreshRunData]);
+  }, [selectedRunId, fetchNotificationsDeferred]);
 
   // Build promotion key helper
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
@@ -295,8 +366,9 @@ export const useAppData = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRunId]);
 
-  // Initial fetch on mount
+  // Initial fetch on mount - mark as mounted and fetch critical data
   useEffect(() => {
+    isMounted.current = true;
     refreshAppData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

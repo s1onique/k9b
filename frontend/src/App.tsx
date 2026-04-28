@@ -1642,7 +1642,9 @@ const App = () => {
     }
   };
 
-  if (!run || !fleet || !proposals) {
+  // Progressive loading: only wait for CRITICAL data (fleet + proposals).
+  // Run detail is non-critical - shell renders immediately, run panels show local loading.
+  if (!fleet || !proposals) {
     return (
       <div className="app-shell loading">
         <div>
@@ -1658,30 +1660,41 @@ const App = () => {
   // the async run-detail fetch completes. runsList is always populated before this
   // point (we are past the loading guard) and is updated on every refresh cycle.
   const selectedRunListEntry = runsList.find((r) => r.runId === selectedRunId) ?? null;
-  const headerRunId = selectedRunListEntry?.runId ?? run.runId;
-  const headerRunLabel = selectedRunListEntry?.runLabel ?? run.label;
-  const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run.timestamp;
-  const runRecency = relativeRecency(headerRunTimestamp);
-  const latestRunRecency = latestRunId ? relativeRecency(runsList.find(r => r.runId === latestRunId)?.timestamp ?? run.timestamp) : runRecency;
+  const headerRunId = selectedRunListEntry?.runId ?? run?.runId ?? "—";
+  const headerRunLabel = selectedRunListEntry?.runLabel ?? run?.label ?? "—";
+  const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run?.timestamp ?? "";
+  const runRecency = headerRunTimestamp ? relativeRecency(headerRunTimestamp) : "—";
+  const latestRunTimestamp = latestRunId 
+    ? runsList.find(r => r.runId === latestRunId)?.timestamp ?? headerRunTimestamp 
+    : headerRunTimestamp;
+  const latestRunRecency = latestRunTimestamp ? relativeRecency(latestRunTimestamp) : "—";
   const runFresh = !isStaleTimestamp(headerRunTimestamp);
   const runAgeMinutes = Math.floor(dayjs().diff(headerRunTimestamp, "minute"));
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
   const hasDegradedClusters = degradedCount > 0;
-  const headerStats = [
+  // Only compute run-specific stats when run data is available
+  const headerStats = run ? [
     { label: "Last", value: formatDuration(run.runStats.lastRunDurationSeconds) },
     { label: "Runs", value: String(run.runStats.totalRuns) },
     { label: "P50", value: formatDuration(run.runStats.p50RunDurationSeconds) },
     { label: "P95", value: formatDuration(run.runStats.p95RunDurationSeconds) },
     { label: "P99", value: formatDuration(run.runStats.p99RunDurationSeconds) },
-  ];
+  ] : [];
   const runStatsSummary = headerStats.map((stat) => `${stat.label} ${stat.value}`).join(" · ");
-  const runSummaryStats = [
+  // Use fleet cluster count instead of run.clusterCount when run is null
+  const runSummaryStats = run ? [
     { label: "Clusters", value: run.clusterCount },
     { label: "Degraded", value: degradedCount },
     { label: "Proposals", value: run.proposalCount },
     { label: "Notifications", value: run.notificationCount },
     { label: "Drilldowns", value: run.drilldownCount },
+  ] : [
+    { label: "Clusters", value: fleet.clusters.length },
+    { label: "Degraded", value: degradedCount },
+    { label: "Proposals", value: "—" },
+    { label: "Notifications", value: "—" },
+    { label: "Drilldowns", value: "—" },
   ];
   const selectedCluster = fleet.clusters.find((cluster) => cluster.label === selectedClusterLabel) ?? null;
   const clusterRecency = selectedCluster?.latestRunTimestamp
@@ -1710,10 +1723,10 @@ const App = () => {
     ? formatTimestamp(selectedCluster.latestRunTimestamp)
     : "Awaiting run";
   const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
-  const runPlan = run.nextCheckPlan;
+  const runPlan = run?.nextCheckPlan;
   const orphanedApprovals = runPlan?.orphanedApprovals ?? [];
   const planArtifactLink = runPlan?.artifactPath ? artifactUrl(runPlan.artifactPath) : null;
-  const plannerAvailability = run.plannerAvailability ?? null;
+  const plannerAvailability = run?.plannerAvailability ?? null;
   const plannerReason = plannerAvailability?.reason;
   const plannerHint = plannerAvailability?.hint;
   const plannerArtifactPath = plannerAvailability?.artifactPath ?? runPlan?.artifactPath ?? null;
@@ -1756,7 +1769,7 @@ const App = () => {
     )
   );
 
-  const deterministicChecks = run.deterministicNextChecks;
+  const deterministicChecks = run?.deterministicNextChecks;
   const deterministicClusters = deterministicChecks?.clusters ?? [];
   const hasDeterministicNextChecks = deterministicClusters.length > 0;
   const deterministicSummary = hasDeterministicNextChecks
@@ -1796,16 +1809,16 @@ const App = () => {
     scrollToSection("execution-history");
   };
 
-  const runLlmStatsLine = renderLlmStatsLine(run.llmStats);
-  const historicalLlmStatsLine = run.historicalLlmStats
+  const runLlmStatsLine = run ? renderLlmStatsLine(run.llmStats) : null;
+  const historicalLlmStatsLine = run?.historicalLlmStats
     ? renderLlmStatsLine(run.historicalLlmStats, "llm-stats-line-historical")
     : null;
-  const providerBreakdown = run.llmStats.providerBreakdown
+  const providerBreakdown = run?.llmStats.providerBreakdown
     .map((entry) => `${entry.provider} ${entry.calls} (${entry.failedCalls} failed)`)
-    .join(" · ");
+    .join(" · ") ?? null;
 
   // Create structured telemetry data for LlmTelemetryPreviewCard
-  const telemetryData: LlmTelemetryPreviewData = {
+  const telemetryData: LlmTelemetryPreviewData | null = run ? {
     totalCalls: run.llmStats.totalCalls,
     successfulCalls: run.llmStats.successfulCalls,
     failedCalls: run.llmStats.failedCalls,
@@ -1814,7 +1827,7 @@ const App = () => {
     p95LatencyMs: run.llmStats.p95LatencyMs,
     p99LatencyMs: run.llmStats.p99LatencyMs,
     providers: run.llmStats.providerBreakdown,
-  };
+  } : null;
 
   return (
     <div className="app-shell">
@@ -1896,7 +1909,7 @@ const App = () => {
         <a className="cockpit-nav__item" href="#review-enrichment">Provider advisory</a>
         <a className="cockpit-nav__item" href="#provider-execution">Provider branches</a>
         <a className="cockpit-nav__item" href="#diagnostic-pack-download">Diagnostic package</a>
-        {run.diagnosticPackReview && (
+        {run?.diagnosticPackReview && (
           <a className="cockpit-nav__item" href="#diagnostic-pack-review">Diagnostic pack review</a>
         )}
         <a className="cockpit-nav__item" href="#deterministic-next-checks">Deterministic checks</a>
@@ -1934,30 +1947,39 @@ const App = () => {
         onShowSelectedRun={handleShowSelectedRun}
         onFocusClusterForNextChecks={focusClusterForNextChecks}
       />
-      <RunSummaryPanel
-        run={run}
-        isSelectedRunLatest={isSelectedRunLatest}
-        selectedClusterLabel={selectedClusterLabel}
-        onFocusClusterForNextChecks={focusClusterForNextChecks}
-        runSummaryStats={runSummaryStats}
-        runStatsSummary={runStatsSummary}
-        runLlmStatsLine={runLlmStatsLine}
-        historicalLlmStatsLine={historicalLlmStatsLine}
-        providerBreakdown={providerBreakdown}
-        telemetryData={telemetryData}
-        runPlan={runPlan}
-        runPlanCandidates={runPlanCandidates}
-        planSummaryText={planSummaryText}
-        planStatusText={planStatusText}
-        plannerReasonText={plannerReasonText}
-        plannerHint={plannerHint}
-        plannerNextActionHint={plannerNextActionHint}
-        plannerArtifactUrl={plannerArtifactUrl}
-        planCandidateCountLabel={planCandidateCountLabel}
-        discoveryVariantOrder={discoveryVariantOrder}
-        discoveryVariantCounts={discoveryVariantCounts}
-        discoveryClusters={discoveryClusters}
-      />
+      {run ? (
+        <RunSummaryPanel
+          run={run}
+          isSelectedRunLatest={isSelectedRunLatest}
+          selectedClusterLabel={selectedClusterLabel}
+          onFocusClusterForNextChecks={focusClusterForNextChecks}
+          runSummaryStats={runSummaryStats}
+          runStatsSummary={runStatsSummary}
+          runLlmStatsLine={runLlmStatsLine}
+          historicalLlmStatsLine={historicalLlmStatsLine}
+          providerBreakdown={providerBreakdown}
+          telemetryData={telemetryData}
+          runPlan={runPlan}
+          runPlanCandidates={runPlanCandidates}
+          planSummaryText={planSummaryText}
+          planStatusText={planStatusText}
+          plannerReasonText={plannerReasonText}
+          plannerHint={plannerHint}
+          plannerNextActionHint={plannerNextActionHint}
+          plannerArtifactUrl={plannerArtifactUrl}
+          planCandidateCountLabel={planCandidateCountLabel}
+          discoveryVariantOrder={discoveryVariantOrder}
+          discoveryVariantCounts={discoveryVariantCounts}
+          discoveryClusters={discoveryClusters}
+        />
+      ) : (
+        <section className="panel" id="run-detail">
+          <div className="section-head">
+            <h2>Run summary</h2>
+            <p className="muted">Loading selected run…</p>
+          </div>
+        </section>
+      )}
       {/* Workflow Lane: Diagnose Now */}
       <div className="workflow-lane-header">
         <div className="workflow-lane-label">
@@ -1966,18 +1988,44 @@ const App = () => {
         </div>
         <p className="workflow-lane-description muted small">{WORKFLOW_LANES.diagnose.description}</p>
       </div>
-      <ReviewEnrichmentPanel
-        reviewEnrichment={run.reviewEnrichment}
-        reviewEnrichmentStatus={run.reviewEnrichmentStatus}
-        nextCheckPlan={run.nextCheckPlan}
-        onNavigateToQueue={() => scrollToSection("next-check-queue")}
-        onFocusQueueReview={() => setQueueFocusMode("review")}
-      />
-      <ProviderExecutionPanel execution={run.providerExecution} />
-      <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
-      <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
-      <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} clusterLabel={selectedClusterLabel} />
-      {run.alertmanagerSources && (
+      {run ? (
+        <ReviewEnrichmentPanel
+          reviewEnrichment={run.reviewEnrichment}
+          reviewEnrichmentStatus={run.reviewEnrichmentStatus}
+          nextCheckPlan={run.nextCheckPlan}
+          onNavigateToQueue={() => scrollToSection("next-check-queue")}
+          onFocusQueueReview={() => setQueueFocusMode("review")}
+        />
+      ) : (
+        <section className="panel" id="review-enrichment">
+          <p className="muted">Provider advisory — Loading selected run…</p>
+        </section>
+      )}
+      {run ? (
+        <ProviderExecutionPanel execution={run.providerExecution} />
+      ) : (
+        <section className="panel" id="provider-execution">
+          <p className="muted">Provider branches — Loading selected run…</p>
+        </section>
+      )}
+      {run ? (
+        <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
+      ) : (
+        <section className="panel" id="diagnostic-pack-download">
+          <p className="muted">Diagnostic package — Loading selected run…</p>
+        </section>
+      )}
+      {run?.diagnosticPackReview && (
+        <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
+      )}
+      {run ? (
+        <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} clusterLabel={selectedClusterLabel} />
+      ) : (
+        <section className="panel" id="alertmanager-snapshot">
+          <p className="muted">Alertmanager snapshot — Loading selected run…</p>
+        </section>
+      )}
+      {run?.alertmanagerSources && (
         <AlertmanagerSourcesPanel
           sources={run.alertmanagerSources}
           runId={run.runId}
@@ -1985,20 +2033,29 @@ const App = () => {
           onRefresh={refresh}
         />
       )}
-    <DeterministicNextChecksPanel
-      deterministicChecks={deterministicChecks}
-      deterministicSummary={deterministicSummary}
-      hookPromotionStatus={hookPromotionStatus}
-      incidentExpandedClusters={incidentExpandedClusters}
-      onPromoteCheck={handlePromoteDeterministicCheck}
-      onToggleIncidentExpansion={toggleIncidentExpansion}
-      onFocusClusterForNextChecks={focusClusterForNextChecks}
-      onSetQueueStatusFilter={setQueueStatusFilter}
-      onSetQueueClusterFilter={setQueueClusterFilter}
-      onScrollToSection={scrollToSection}
-      artifactUrl={artifactUrl}
-      hasDegradedClusters={hasDegradedClusters}
-    />
+    {run ? (
+      <DeterministicNextChecksPanel
+        deterministicChecks={deterministicChecks}
+        deterministicSummary={deterministicSummary}
+        hookPromotionStatus={hookPromotionStatus}
+        incidentExpandedClusters={incidentExpandedClusters}
+        onPromoteCheck={handlePromoteDeterministicCheck}
+        onToggleIncidentExpansion={toggleIncidentExpansion}
+        onFocusClusterForNextChecks={focusClusterForNextChecks}
+        onSetQueueStatusFilter={setQueueStatusFilter}
+        onSetQueueClusterFilter={setQueueClusterFilter}
+        onScrollToSection={scrollToSection}
+        artifactUrl={artifactUrl}
+        hasDegradedClusters={hasDegradedClusters}
+      />
+    ) : (
+      <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
+        <div className="section-head">
+          <h2>Deterministic checks</h2>
+          <p className="muted">Loading selected run…</p>
+        </div>
+      </section>
+    )}
     {/* Workflow Lane: Work Next Checks */}
     <div className="workflow-lane-header">
       <div className="workflow-lane-label">
@@ -2007,71 +2064,89 @@ const App = () => {
       </div>
       <p className="workflow-lane-description muted small">{WORKFLOW_LANES.work.description}</p>
     </div>
-    <ExecutionHistoryPanel
-      history={executionHistory}
-      runId={run.runId}
-      runLabel={run.label}
-      queueCandidateCount={runQueue.length}
-      highlightedKey={executionHistoryHighlightKey}
-      onSubmitFeedback={handleUsefulnessFeedback}
-      onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
-      filter={executionHistoryFilter}
-      onFilterChange={setExecutionHistoryFilter}
-      runQueue={runQueue}
-      onHighlightQueueCard={highlightQueueCard}
-    />
-    <QueuePanel
-      queueClusterFilter={queueClusterFilter}
-      queueStatusFilter={queueStatusFilter}
-      queueCommandFamilyFilter={queueCommandFamilyFilter}
-      queuePriorityFilter={queuePriorityFilter}
-      queueWorkstreamFilter={queueWorkstreamFilter}
-      queueSearch={queueSearch}
-      queueSortOption={queueSortOption}
-      queueFocusMode={queueFocusMode}
-      setQueueClusterFilter={setQueueClusterFilter}
-      setQueueStatusFilter={setQueueStatusFilter}
-      setQueueCommandFamilyFilter={setQueueCommandFamilyFilter}
-      setQueuePriorityFilter={setQueuePriorityFilter}
-      setQueueWorkstreamFilter={setQueueWorkstreamFilter}
-      setQueueSearch={setQueueSearch}
-      setQueueSortOption={setQueueSortOption}
-      setQueueFocusMode={setQueueFocusMode}
-      queueClusterOptions={queueClusterOptions}
-      queueCommandFamilyOptions={queueCommandFamilyOptions}
-      queuePriorityOptions={queuePriorityOptions}
-      queueWorkstreamOptions={queueWorkstreamOptions}
-      runQueue={runQueue}
-      sortedQueue={sortedQueue}
-      queueGroups={queueGroups}
-      queueExplanation={queueExplanation}
-      expandedQueueItems={expandedQueueItems}
-      toggleQueueDetails={toggleQueueDetails}
-      queueHighlightKey={queueHighlightKey}
-      executionResults={executionResults}
-      approvalResults={approvalResults}
-      executingCandidate={executingCandidate}
-      approvingCandidate={approvingCandidate}
-      onToggleQueueFocusPreset={toggleQueueFocusPreset}
-      onResetQueueFilters={resetQueueFilters}
-      onResetQueueView={resetQueueView}
-      onBackToQueue={handleBackToQueue}
-      onManualExecution={handleManualExecution}
-      onApproveCandidate={handleApproveCandidate}
-      onQueueClusterJump={handleQueueClusterJump}
-      onQueueExecutionJump={handleQueueExecutionJump}
-      buildCandidateKey={buildCandidateKey}
-      findExecutionHistoryEntry={findExecutionHistoryEntry}
-      isManualExecutionAllowed={isManualExecutionAllowed}
-      getNotRunnableExplanation={getNotRunnableExplanation}
-      getAlertmanagerProvenanceSubtext={getAlertmanagerProvenanceSubtext}
-      formatAlertmanagerProvenance={formatAlertmanagerProvenance}
-      getFeedbackAdaptationProvenanceSubtext={getFeedbackAdaptationProvenanceSubtext}
-      formatFeedbackAdaptationProvenance={formatFeedbackAdaptationProvenance}
-      getAlertmanagerPromotionSubtext={getAlertmanagerPromotionSubtext}
-      formatAlertmanagerPromotion={formatAlertmanagerPromotion}
-      onRefresh={refresh}
-    />
+    {run ? (
+      <ExecutionHistoryPanel
+        history={executionHistory}
+        runId={run.runId}
+        runLabel={run.label}
+        queueCandidateCount={runQueue.length}
+        highlightedKey={executionHistoryHighlightKey}
+        onSubmitFeedback={handleUsefulnessFeedback}
+        onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
+        filter={executionHistoryFilter}
+        onFilterChange={setExecutionHistoryFilter}
+        runQueue={runQueue}
+        onHighlightQueueCard={highlightQueueCard}
+      />
+    ) : (
+      <section className="panel execution-history-panel" id="execution-history">
+        <div className="section-head">
+          <h2>Execution review</h2>
+          <p className="muted">Loading selected run…</p>
+        </div>
+      </section>
+    )}
+    {run ? (
+      <QueuePanel
+        queueClusterFilter={queueClusterFilter}
+        queueStatusFilter={queueStatusFilter}
+        queueCommandFamilyFilter={queueCommandFamilyFilter}
+        queuePriorityFilter={queuePriorityFilter}
+        queueWorkstreamFilter={queueWorkstreamFilter}
+        queueSearch={queueSearch}
+        queueSortOption={queueSortOption}
+        queueFocusMode={queueFocusMode}
+        setQueueClusterFilter={setQueueClusterFilter}
+        setQueueStatusFilter={setQueueStatusFilter}
+        setQueueCommandFamilyFilter={setQueueCommandFamilyFilter}
+        setQueuePriorityFilter={setQueuePriorityFilter}
+        setQueueWorkstreamFilter={setQueueWorkstreamFilter}
+        setQueueSearch={setQueueSearch}
+        setQueueSortOption={setQueueSortOption}
+        setQueueFocusMode={setQueueFocusMode}
+        queueClusterOptions={queueClusterOptions}
+        queueCommandFamilyOptions={queueCommandFamilyOptions}
+        queuePriorityOptions={queuePriorityOptions}
+        queueWorkstreamOptions={queueWorkstreamOptions}
+        runQueue={runQueue}
+        sortedQueue={sortedQueue}
+        queueGroups={queueGroups}
+        queueExplanation={queueExplanation}
+        expandedQueueItems={expandedQueueItems}
+        toggleQueueDetails={toggleQueueDetails}
+        queueHighlightKey={queueHighlightKey}
+        executionResults={executionResults}
+        approvalResults={approvalResults}
+        executingCandidate={executingCandidate}
+        approvingCandidate={approvingCandidate}
+        onToggleQueueFocusPreset={toggleQueueFocusPreset}
+        onResetQueueFilters={resetQueueFilters}
+        onResetQueueView={resetQueueView}
+        onBackToQueue={handleBackToQueue}
+        onManualExecution={handleManualExecution}
+        onApproveCandidate={handleApproveCandidate}
+        onQueueClusterJump={handleQueueClusterJump}
+        onQueueExecutionJump={handleQueueExecutionJump}
+        buildCandidateKey={buildCandidateKey}
+        findExecutionHistoryEntry={findExecutionHistoryEntry}
+        isManualExecutionAllowed={isManualExecutionAllowed}
+        getNotRunnableExplanation={getNotRunnableExplanation}
+        getAlertmanagerProvenanceSubtext={getAlertmanagerProvenanceSubtext}
+        formatAlertmanagerProvenance={formatAlertmanagerProvenance}
+        getFeedbackAdaptationProvenanceSubtext={getFeedbackAdaptationProvenanceSubtext}
+        formatFeedbackAdaptationProvenance={formatFeedbackAdaptationProvenance}
+        getAlertmanagerPromotionSubtext={getAlertmanagerPromotionSubtext}
+        formatAlertmanagerPromotion={formatAlertmanagerPromotion}
+        onRefresh={refresh}
+      />
+    ) : (
+      <section className="panel next-check-queue-panel" id="next-check-queue">
+        <div className="section-head">
+          <h2>Work list</h2>
+          <p className="muted">Loading selected run…</p>
+        </div>
+      </section>
+    )}
       <section className="panel" id="fleet">
         <div className="section-head">
           <div>
@@ -2266,8 +2341,26 @@ const App = () => {
         </div>
         <NotificationHistoryTable />
       </section>
-      <LLMPolicyPanel policy={run.llmPolicy} />
-      <LLMActivityPanel activity={run.llmActivity} />
+      {run ? (
+        <LLMPolicyPanel policy={run.llmPolicy} />
+      ) : (
+        <section className="panel llm-policy-panel" id="llm-policy">
+          <div className="section-head">
+            <h2>LLM policy</h2>
+            <p className="muted">Loading selected run…</p>
+          </div>
+        </section>
+      )}
+      {run ? (
+        <LLMActivityPanel activity={run.llmActivity} />
+      ) : (
+        <section className="panel llm-activity-panel" id="llm-activity">
+          <div className="section-head">
+            <h2>LLM activity</h2>
+            <p className="muted">Loading selected run…</p>
+          </div>
+        </section>
+      )}
     </div>
   );
 };

@@ -266,13 +266,32 @@ export const RecentRunsPanel = ({
 };
 
 // ---------------------------------------------------------------------------
+// RunDetailLoadingPlaceholder
+// ---------------------------------------------------------------------------
+
+/** 
+ * Loading placeholder for run-dependent panels when run data is not yet available.
+ * Shows a simple 'Loading selected run…' message instead of crashing on null run.
+ */
+export const RunDetailLoadingPlaceholder = ({ title }: { title: string }) => {
+  const sanitizedTitle = title.toLowerCase().replace(/\//g, '-');
+  return (
+    <section className={`panel ${sanitizedTitle}`} id={sanitizedTitle}>
+      <div className="run-detail-loading">
+        <p className="muted">{title} — Loading selected run…</p>
+      </div>
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // StatusBadge component - renders truthful display status
 // ---------------------------------------------------------------------------
 
 /**
  * Renders the appropriate status badge for a run based on display status.
- * Uses display status (which may be "unknown" when counts are incomplete)
- * rather than raw reviewStatus to avoid misleading "No executions" for
+ * Uses display status (which may be 'unknown' when counts are incomplete)
+ * rather than raw reviewStatus to avoid misleading 'No executions' for
  * fast-path payloads where counts weren't loaded.
  */
 const StatusBadge = ({ displayStatus }: { displayStatus: RunsDisplayStatus }) => {
@@ -311,7 +330,8 @@ const isStaleTimestamp = (timestamp: string | null | undefined): boolean => {
 };
 
 export type RunSummaryPanelProps = {
-  run: RunPayload;
+  run: RunPayload | null;
+  isLoading?: boolean;
   isSelectedRunLatest: boolean;
   selectedClusterLabel: string | null;
   onFocusClusterForNextChecks: (clusterLabel?: string | null) => void;
@@ -340,6 +360,7 @@ export type RunSummaryPanelProps = {
 
 export const RunSummaryPanel = ({
   run,
+  isLoading = false,
   isSelectedRunLatest,
   selectedClusterLabel,
   onFocusClusterForNextChecks,
@@ -362,6 +383,17 @@ export const RunSummaryPanel = ({
   discoveryVariantCounts,
   discoveryClusters,
 }: RunSummaryPanelProps) => {
+  // Handle loading state - show placeholder when run data is not yet available
+  if (!run) {
+    return (
+      <section className="panel run-summary" id="run-detail">
+        <div className="run-summary-loading">
+          <p className="muted">Loading selected run…</p>
+        </div>
+      </section>
+    );
+  }
+
   const runFresh = !isStaleTimestamp(run.timestamp);
 
   // Active tab state - managed locally within the panel

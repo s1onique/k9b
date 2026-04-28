@@ -1110,6 +1110,47 @@ export const getQueuePanel = async (
 };
 
 /**
+ * Helper to wait for run data to load and get queue panel scope.
+ * This ensures the actual queue content is visible (not just the loading placeholder).
+ * Use this instead of getQueuePanel() when testing run-owned queue content.
+ * @param screen - The screen object from @testing-library/react
+ * @param timeout - Timeout in ms (default 15000)
+ * @returns a within-scoped query function bound to the queue panel element
+ */
+export const getQueuePanelWithRunData = async (
+  screen: import("@testing-library/react").Screen,
+  timeout: number = 15000,
+): Promise<ReturnType<typeof within>> => {
+  // Wait for "All workstreams" option to appear - this indicates run data has loaded
+  // and the queue panel with workstream filter is rendered
+  await screen.findByText("All workstreams", {}, { timeout });
+  // Now get the queue panel scope
+  return getQueuePanel(screen);
+};
+
+/**
+ * Helper to wait for run data to load and get execution history panel scope.
+ * This ensures the actual execution history content is visible (not just the loading placeholder).
+ * Waits for the "Check execution review" heading which appears when run data is loaded.
+ * @param screen - The screen object from @testing-library/react
+ * @param timeout - Timeout in ms (default 15000)
+ * @returns a within-scoped query function bound to the execution history section
+ */
+export const getExecutionHistoryPanelWithRunData = async (
+  screen: import("@testing-library/react").Screen,
+  timeout: number = 15000,
+): Promise<ReturnType<typeof within>> => {
+  // Wait for the heading "Check execution review" which appears when run data is loaded
+  // (the placeholder shows "Execution review" which is different)
+  const heading = await screen.findByText(/Check execution review/i, {}, { timeout });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error("Execution history panel not found");
+  }
+  return within(section);
+};
+
+/**
  * Shared builder for run-123 shape in panel-selection-binding tests.
  * Accepts optional overrides to customize the run payload.
  * Pass { reviewEnrichment: undefined, reviewEnrichmentStatus: undefined } to simulate

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import dayjs from "dayjs";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { formatAgeDuration } from "../App";
@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 // Helper to create a runs list with controlled timestamps
-const createRunsList = (runs: Array<{ runId: string; ageMinutes: number; isLatest?: boolean }>): RunsListPayload => ({
+const createRunsList = (runs: Array<{ runId: string; ageMinutes: number }>): RunsListPayload => ({
   runs: runs.map((r, idx) => ({
     runId: r.runId,
     runLabel: `Run ${idx + 1}`,
@@ -36,7 +36,7 @@ const createRunsList = (runs: Array<{ runId: string; ageMinutes: number; isLates
 
 // Helper to create a run payload with a specific timestamp
 const createRun = (ageMinutes: number): RunPayload => ({
-  ...sampleFleet, // Use a minimal structure
+  ...sampleFleet,
   runId: "test-run",
   label: "Test run",
   timestamp: minsAgo(ageMinutes),
@@ -85,63 +85,38 @@ const createRun = (ageMinutes: number): RunPayload => ({
 const createFetchMock = (
   runsList: RunsListPayload,
   run: RunPayload
-) =>
-  vi.fn((input: RequestInfo) => {
+) => {
+  const payloads: Record<string, unknown> = {
+    "/api/runs": runsList,
+    "/api/run": run,
+    "/api/fleet": sampleFleet,
+    "/api/proposals": sampleProposals,
+    "/api/notifications": sampleNotifications,
+    "/api/cluster-detail": sampleClusterDetail,
+  };
+  
+  return vi.fn((input: RequestInfo) => {
     const url = typeof input === "string" ? input : input.url;
-    if (url.includes("/api/runs")) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(runsList),
-      });
+    const base = url.split("?")[0];
+    const payload = payloads[url] ?? payloads[base];
+    if (!payload) {
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     }
-    if (url.includes("/api/run")) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(run),
-      });
-    }
-    if (url.includes("/api/fleet")) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(sampleFleet),
-      });
-    }
-    if (url.includes("/api/proposals")) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(sampleProposals),
-      });
-    }
-    if (url.includes("/api/notifications")) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(sampleNotifications),
-      });
-    }
-    if (url.includes("/api/cluster-detail")) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(sampleClusterDetail),
-      });
-    }
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => Promise.resolve(payload),
+    });
   });
+};
 
-const renderApp = (runsList: RunsListPayload, run: RunPayload) => {
+// Helper to render app with proper act() wrapping
+const renderApp = async (runsList: RunsListPayload, run: RunPayload) => {
   vi.stubGlobal("fetch", createFetchMock(runsList, run));
-  render(<App />);
+  await act(async () => {
+    render(<App />);
+  });
 };
 
 describe("formatAgeDuration", () => {
@@ -166,86 +141,102 @@ describe("formatAgeDuration", () => {
 });
 
 describe("Past-run notice UI", () => {
-  test("1. past run selected and fresh -> shows past-run notice", async () => {
-    // A run that's 5 minutes old (fresh) but is NOT the latest
+  test("1. past selected + fresh -> shows past-run notice, not latest warning", async () => {
+    // Past run (run-1) is selected, latest is run-2
     const pastRunId = "run-1";
-    const latestRunId = "run-2";
     const runsList = createRunsList([
-      { runId: latestRunId, ageMinutes: 3 }, // Latest - fresh
-      { runId: pastRunId, ageMinutes: 5 }, // Past - fresh
+      { runId: "run-2", ageMinutes: 3 }, // Latest
+      { runId: pastRunId, ageMinutes: 5 }, // Past
     ]);
-    const run = createRun(5); // Selected run is 5 minutes old
+    const run = createRun(5);
 
-    // Pre-select the past run so App knows to show past-run notice
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, pastRunId);
-
-    renderApp(runsList, run);
+    await renderApp(runsList, run);
+    
+    // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
-
-    // Should show past-run notice (amber/yellow)
-    expect(screen.queryByText(/This is a past run collected/i)).toBeInTheDocument();
-    // Should NOT show latest-run warning
-    expect(screen.queryByText(/Latest run is.*minutes old/i)).not.toBeInTheDocument();
+    
+    // Wait for run detail to load and show past-run notice
+    await waitFor(() => {
+      expect(screen.queryByText(/This is a past run/)).toBeInTheDocument();
+    }, { timeout: 10000 });
+    
+    // Assert past-run notice is visible
+    expect(screen.getByText(/This is a past run/)).toBeInTheDocument();
+    // Assert latest warning is NOT visible
+    expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
   });
 
-  test("2. past run selected and stale -> shows past-run notice, not latest-run warning", async () => {
-    // A run that's 60 minutes old (stale) and is NOT the latest
+  test("2. past selected + stale -> shows past-run notice, not latest warning", async () => {
+    // Past run (run-1) is selected, it's 60 min old (stale)
     const pastRunId = "run-1";
-    const latestRunId = "run-2";
     const runsList = createRunsList([
-      { runId: latestRunId, ageMinutes: 30 }, // Latest - stale
+      { runId: "run-2", ageMinutes: 30 }, // Latest - stale
       { runId: pastRunId, ageMinutes: 60 }, // Past - stale
     ]);
-    const run = createRun(60); // Selected run is 60 minutes old
+    const run = createRun(60);
 
-    // Pre-select the past run so App knows to show past-run notice
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, pastRunId);
-
-    renderApp(runsList, run);
+    await renderApp(runsList, run);
+    
+    // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
-
-    // Should show past-run notice (amber/yellow)
-    expect(screen.queryByText(/This is a past run collected/i)).toBeInTheDocument();
-    // Should NOT show latest-run warning
-    expect(screen.queryByText(/Latest run is.*minutes old/i)).not.toBeInTheDocument();
+    
+    // Wait for run detail to load
+    await waitFor(() => {
+      expect(screen.queryByText(/This is a past run/)).toBeInTheDocument();
+    }, { timeout: 10000 });
+    
+    // Assert past-run notice is visible
+    expect(screen.getByText(/This is a past run/)).toBeInTheDocument();
+    // Assert latest warning is NOT visible
+    expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
   });
 
-  test("3. latest run selected and stale -> shows latest-run warning", async () => {
-    // A run that's 60 minutes old (stale) and IS the latest
+  test("3. latest selected + stale -> shows latest warning, not past notice", async () => {
+    // Only one run, it's the latest, and it's 60 min old (stale)
     const latestRunId = "run-1";
     const runsList = createRunsList([
       { runId: latestRunId, ageMinutes: 60 }, // Latest - stale
     ]);
-    const run = createRun(60); // Selected run is 60 minutes old
+    const run = createRun(60);
 
-    // Pre-select the latest run
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, latestRunId);
-
-    renderApp(runsList, run);
+    await renderApp(runsList, run);
+    
+    // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
-
-    // Should show latest-run warning (red)
-    expect(screen.queryByText(/Latest run is.*minutes old/i)).toBeInTheDocument();
-    // Should NOT show past-run notice
-    expect(screen.queryByText(/This is a past run collected/i)).not.toBeInTheDocument();
+    
+    // Wait for run detail to load and show latest warning
+    await waitFor(() => {
+      expect(screen.queryByText(/Latest run is.*old/i)).toBeInTheDocument();
+    }, { timeout: 10000 });
+    
+    // Assert latest warning is visible
+    expect(screen.getByText(/Latest run is.*old/i)).toBeInTheDocument();
+    // Assert past-run notice is NOT visible
+    expect(screen.queryByText(/This is a past run/)).not.toBeInTheDocument();
   });
 
-  test("4. latest run selected and fresh -> no notice", async () => {
-    // A run that's 5 minutes old (fresh) and IS the latest
+  test("4. latest selected + fresh -> shows neither notice", async () => {
+    // Only one run, it's the latest, and it's 5 min old (fresh)
     const latestRunId = "run-1";
     const runsList = createRunsList([
       { runId: latestRunId, ageMinutes: 5 }, // Latest - fresh
     ]);
-    const run = createRun(5); // Selected run is 5 minutes old
+    const run = createRun(5);
 
-    // Pre-select the latest run
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, latestRunId);
-
-    renderApp(runsList, run);
+    await renderApp(runsList, run);
+    
+    // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
-
-    // Should NOT show any age notice
-    expect(screen.queryByText(/This is a past run collected/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Latest run is.*minutes old/i)).not.toBeInTheDocument();
+    
+    // Wait for Run summary to load (indicates run data has loaded)
+    await screen.findByRole("heading", { name: /Run summary/i });
+    
+    // Assert neither notice is visible
+    expect(screen.queryByText(/This is a past run/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
   });
 });
