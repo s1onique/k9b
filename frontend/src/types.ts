@@ -809,6 +809,8 @@ export type RunsListEntry = {
 export type RunsListPayload = {
   runs: RunsListEntry[];
   totalCount: number;
+  /** When false, executionCount/reviewedCount are incomplete/unknown (fast path with include_expensive=false) */
+  executionCountsComplete: boolean;
 };
 
 // Batch execution types

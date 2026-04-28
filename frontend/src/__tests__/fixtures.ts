@@ -66,6 +66,7 @@ export const sampleRunsList: RunsListPayload = {
     },
   ],
   totalCount: 4,
+  executionCountsComplete: true,
 };
 
 export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [

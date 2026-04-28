@@ -12,6 +12,7 @@
  */
 
 import type { NextCheckPlanCandidate, NextCheckStatusVariant, RunPayload, RunsListEntry } from "../types";
+import { getRunsDisplayStatus, type RunsDisplayStatus } from "../hooks/useRunSelection";
 import type { LlmTelemetryPreviewData } from "./run-summary/RunOverviewDashboard";
 import { artifactUrl, formatTimestamp, relativeRecency, statusClass } from "../utils";
 import { useState } from "react";
@@ -44,6 +45,7 @@ import dayjs from "dayjs";
 
 export type RecentRunsPanelProps = {
   runsList: RunsListEntry[];
+  executionCountsComplete: boolean;
   selectedRunId: string | null;
   runsFilter: RunsReviewFilter;
   runsFilterCounts: Record<RunsReviewFilter, number>;
@@ -69,6 +71,7 @@ export type RecentRunsPanelProps = {
 
 export const RecentRunsPanel = ({
   runsList,
+  executionCountsComplete,
   selectedRunId,
   runsFilter,
   runsFilterCounts,
@@ -168,9 +171,9 @@ export const RecentRunsPanel = ({
                       </div>
                     </td>
                     <td>
-                      <span className={statusClass(runEntry.reviewStatus)}>
-                        {runEntry.reviewStatus}
-                      </span>
+                      <StatusBadge 
+                        displayStatus={getRunsDisplayStatus(runEntry.reviewStatus, executionCountsComplete)}
+                      />
                     </td>
                     <td>
                       {runEntry.reviewDownloadPath ? (
@@ -200,21 +203,26 @@ export const RecentRunsPanel = ({
                       )}
                     </td>
                     <td>
-                      {runEntry.reviewStatus === "no-executions" ? (
-                        <button
-                          type="button"
-                          className="row-action row-action--primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onBatchExecution(runEntry.runId);
-                          }}
-                          disabled={executingBatchRunId === runEntry.runId}
-                        >
-                          {executingBatchRunId === runEntry.runId ? "Running…" : "Execute"}
-                        </button>
-                      ) : (
-                        <span className="run-action-empty" aria-label="No action available">—</span>
-                      )}
+                      {(() => {
+                        const displayStatus = getRunsDisplayStatus(runEntry.reviewStatus, executionCountsComplete);
+                        // Show Execute button only for "no-executions" with complete counts
+                        if (displayStatus === "no-executions") {
+                          return (
+                            <button
+                              type="button"
+                              className="row-action row-action--primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onBatchExecution(runEntry.runId);
+                              }}
+                              disabled={executingBatchRunId === runEntry.runId}
+                            >
+                              {executingBatchRunId === runEntry.runId ? "Running…" : "Execute"}
+                            </button>
+                          );
+                        }
+                        return <span className="run-action-empty" aria-label="No action available">—</span>;
+                      })()}
                       {batchExecutionError[runEntry.runId] && (
                         <p className="runs-execution-error">
                           {batchExecutionError[runEntry.runId]}
@@ -254,6 +262,40 @@ export const RecentRunsPanel = ({
         </div>
       )}
     </section>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// StatusBadge component - renders truthful display status
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders the appropriate status badge for a run based on display status.
+ * Uses display status (which may be "unknown" when counts are incomplete)
+ * rather than raw reviewStatus to avoid misleading "No executions" for
+ * fast-path payloads where counts weren't loaded.
+ */
+const StatusBadge = ({ displayStatus }: { displayStatus: RunsDisplayStatus }) => {
+  const label = {
+    "no-executions": "No executions",
+    "unreviewed": "Awaiting review",
+    "partially-reviewed": "Partially reviewed",
+    "fully-reviewed": "Fully reviewed",
+    "unknown": "Execution status not loaded",
+  }[displayStatus];
+
+  const variant = {
+    "no-executions": "no-executions",
+    "unreviewed": "unreviewed",
+    "partially-reviewed": "partially-reviewed",
+    "fully-reviewed": "fully-reviewed",
+    "unknown": "unknown",
+  }[displayStatus];
+
+  return (
+    <span className={statusClass(variant)}>
+      {label}
+    </span>
   );
 };
 

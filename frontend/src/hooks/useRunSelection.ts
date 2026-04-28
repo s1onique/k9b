@@ -69,29 +69,37 @@ const MAX_RUNS_PAGE_SIZE = 20;
 export const RUNS_PAGE_SIZE_OPTIONS = [5, 10, 20] as const;
 
 // Compute filter counts from runs list
+// When executionCountsComplete is false, we cannot trust reviewStatus='no-executions'
+// because it may reflect missing data rather than true absence of executions.
 export const computeRunsFilterCounts = (
-  runs: RunsListEntry[]
+  runs: RunsListEntry[],
+  executionCountsComplete: boolean = true
 ): Record<RunsReviewFilter, number> => {
   const counts: Record<RunsReviewFilter, number> = {
     all: runs.length,
-    "no-executions": 0,
-    "awaiting-review": 0,
-    "partially-reviewed": 0,
-    "fully-reviewed": 0,
-    "needs-attention": 0,
+    'no-executions': 0,
+    'awaiting-review': 0,
+    'partially-reviewed': 0,
+    'fully-reviewed': 0,
+    'needs-attention': 0,
   };
 
   runs.forEach((run) => {
-    if (run.reviewStatus === "no-executions") {
-      counts["no-executions"]++;
-    } else if (run.reviewStatus === "unreviewed") {
-      counts["awaiting-review"]++;
-      counts["needs-attention"]++;
-    } else if (run.reviewStatus === "partially-reviewed") {
-      counts["partially-reviewed"]++;
-      counts["needs-attention"]++;
-    } else if (run.reviewStatus === "fully-reviewed") {
-      counts["fully-reviewed"]++;
+    if (run.reviewStatus === 'no-executions') {
+      // Only count as no-executions when we trust the count (counts complete)
+      if (executionCountsComplete) {
+        counts['no-executions']++;
+      }
+      // When counts are incomplete, we can't make a filter claim about no-executions
+      // The run is visible in the table but not counted in any filter bucket
+    } else if (run.reviewStatus === 'unreviewed') {
+      counts['awaiting-review']++;
+      counts['needs-attention']++;
+    } else if (run.reviewStatus === 'partially-reviewed') {
+      counts['partially-reviewed']++;
+      counts['needs-attention']++;
+    } else if (run.reviewStatus === 'fully-reviewed') {
+      counts['fully-reviewed']++;
     }
   });
 
@@ -191,8 +199,32 @@ const persistAutoRefreshInterval = (value: string) => {
   window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
 };
 
+/**
+ * Determines the display status for a run in the Recent Runs table.
+ * When executionCountsComplete is false, we cannot trust executionCount=0
+ * to mean "no executions" - it may mean the count wasn't loaded.
+ * Only masks the ambiguous "no-executions" case; preserves known review statuses.
+ */
+export type RunsDisplayStatus = "no-executions" | "unreviewed" | "partially-reviewed" | "fully-reviewed" | "unknown";
+
+// Review status types from RunsListEntry - typed alias for clarity
+export type RunsReviewStatus = RunsListEntry["reviewStatus"];
+
+export const getRunsDisplayStatus = (
+  reviewStatus: RunsReviewStatus,
+  executionCountsComplete: boolean,
+): RunsDisplayStatus => {
+  // When counts are incomplete, only "no-executions" is ambiguous
+  // Other statuses (unreviewed, partially-reviewed, fully-reviewed) are already known from review artifacts
+  if (!executionCountsComplete && reviewStatus === "no-executions") {
+    return "unknown";
+  }
+  return reviewStatus;
+};
+
 export interface UseRunSelectionReturn {
   runs: RunsListEntry[];
+  executionCountsComplete: boolean;
   selectedRunId: string | null;
   selectRun: (runId: string) => void;
   isLoading: boolean;
@@ -228,6 +260,7 @@ export interface UseRunSelectionReturn {
 
 export const useRunSelection = (): UseRunSelectionReturn => {
   const [runs, setRuns] = useState<RunsListEntry[]>([]);
+  const [executionCountsComplete, setExecutionCountsComplete] = useState<boolean>(true);
   const [selectedRunId, setSelectedRunIdState] = useState<string | null>(readStoredSelectedRunId);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -321,8 +354,8 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     });
   }, [runs, runsFilter]);
 
-  // Compute filter counts
-  const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runs), [runs]);
+  // Compute filter counts - pass executionCountsComplete to exclude untrustworthy counts
+  const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runs, executionCountsComplete), [runs, executionCountsComplete]);
 
   // Compute the page number for a given runId within the filtered list
   const computePageForRunId = useCallback((runId: string | null): number => {
@@ -393,6 +426,7 @@ export const useRunSelection = (): UseRunSelectionReturn => {
           (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
         setRuns(sortedRuns);
+        setExecutionCountsComplete(payload.executionCountsComplete ?? true);
         setLastFetch(Date.now());
       }
     } catch (err) {
@@ -490,6 +524,7 @@ export const useRunSelection = (): UseRunSelectionReturn => {
 
   return {
     runs,
+    executionCountsComplete,
     selectedRunId,
     selectRun,
     isLoading,

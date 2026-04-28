@@ -280,6 +280,29 @@
 }
 
 /* ==========================================================================
+   Status pill variants (for RunsDisplayStatus badges)
+   ========================================================================== */
+
+/* Unknown / loading state - neutral gray */
+.status-pill-unknown {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+/* Solarized Light override for unknown status */
+[data-theme='solarized-light'] .status-pill-unknown {
+  color: #657b83;
+  background: rgba(147, 161, 161, 0.15);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+/* ==========================================================================
    Execution error display (runs table context)
    ========================================================================== */
 .runs-execution-error {
