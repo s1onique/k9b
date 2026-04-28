@@ -1035,6 +1035,70 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
     });
   });
 
+// ============================================================
+// Deterministic endpoint queue helper for refresh regression tests
+// ============================================================
+
+/**
+ * Creates a fetch mock that returns queued responses for specific endpoints.
+ * Use this for testing refresh scenarios where the same endpoint needs to return
+ * different data at different times.
+ *
+ * @param queues - Record of endpoint to array of responses. Each call to that endpoint
+ *                consumes the next item in the queue. When queue is exhausted, falls back
+ *                to defaults if provided.
+ * @param defaults - Fallback payloads for unqueued endpoints
+ *
+ * Example:
+ *   createFetchQueueMock({
+ *     "/api/runs": [initialRunsList, newerRunsList],
+ *   }, {
+ *     "/api/run": sampleRun,
+ *     "/api/fleet": sampleFleet,
+ *   })
+ */
+export const createFetchQueueMock = (
+  queues: Record<string, unknown[]>,
+  defaults: Record<string, unknown> = {}
+) => {
+  const callCounts: Record<string, number> = {};
+
+  return vi.fn((input: RequestInfo) => {
+    const url = typeof input === "string" ? input : input.url;
+    const base = url.split("?")[0];
+
+    // Check if this endpoint has a queue
+    if (base in queues) {
+      callCounts[base] = (callCounts[base] ?? 0) + 1;
+      const queue = queues[base];
+      const callIndex = callCounts[base] - 1;
+
+      // Use the corresponding queue item, or fall back to last item if queue exhausted
+      const responseIndex = Math.min(callIndex, queue.length - 1);
+      const payload = queue[responseIndex];
+
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    }
+
+    // Check defaults
+    const payload = defaults[url] ?? defaults[base];
+    if (!payload) {
+      return Promise.reject(new Error(`Unexpected fetch ${url}`));
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => Promise.resolve(payload),
+    });
+  });
+};
+
 /**
  * Centralized workflow-critical text strings used in UI assertions.
  * These are fragile to copy changes and should be centralized.
