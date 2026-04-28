@@ -14,11 +14,28 @@
  *   - refresh: () => Promise<void> - manually trigger a refresh
  *   - autoRefreshInterval: number | null - current auto-refresh interval in seconds
  *   - handleAutoRefreshChange: (value: string) => void - handler for auto-refresh select
+ *   - requestedRunId: string | null - the run ID that was last requested (for debug/stale response guard)
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { fetchRun } from "../api";
 import type { RunPayload } from "../types";
+
+// ============================================================================
+// Debug logging (gated by ?debugUi query parameter)
+// ============================================================================
+
+const DEBUG_UI_ENABLED = () => {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has("debugUi");
+};
+
+const debugLog = (...args: Parameters<typeof console.log>) => {
+  if (DEBUG_UI_ENABLED()) {
+    console.log("[useRunData:debug]", ...args);
+  }
+};
 
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
@@ -68,6 +85,8 @@ export interface UseRunDataReturn {
   refresh: () => Promise<void>;
   autoRefreshInterval: number | null;
   handleAutoRefreshChange: (value: string) => void;
+  /** The run ID that was last requested (for debugging and stale-response guard) */
+  requestedRunId: string | null;
 }
 
 export const useRunData = ({
@@ -78,34 +97,73 @@ export const useRunData = ({
   const [isError, setIsError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(() => dayjs());
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(readStoredAutoRefreshInterval);
+  const [requestedRunId, setRequestedRunId] = useState<string | null>(null);
 
-  // Ref to track if a refresh is in progress to prevent duplicate fetches
-  const refreshInProgress = useRef(false);
+  // Monotonic request sequence counter for stale-response guard.
+  // This replaces the old single-flight lock (refreshInProgress) because that
+  // pattern prevented a newer selected-run fetch from starting when an older
+  // fetch was still in flight.
+  //
+  // Race scenario this fixes:
+  // T0 latest fetch starts, requestSeq = 1
+  // T1 user selects run-past, past fetch starts, requestSeq = 2
+  // T2 latest fetch resolves, sees requestSeq changed to 2, ignores response
+  // T3 past fetch resolves, requestSeq still 2, accepts response
+  // Result: UI correctly shows past run (not split-brain)
+  const requestSeqRef = useRef(0);
 
   const refresh = useCallback(async () => {
-    // Prevent overlapping refresh requests
-    if (refreshInProgress.current) {
-      return;
-    }
-    refreshInProgress.current = true;
+    // Capture the current sequence number for this fetch
+    const requestSeq = ++requestSeqRef.current;
+    const currentRequestedRunId = selectedRunId;
+    setRequestedRunId(currentRequestedRunId);
+
+    debugLog("fetch started", {
+      requestSeq,
+      selectedRunId: currentRequestedRunId,
+      timestamp: new Date().toISOString(),
+    });
+
     let active = true;
     try {
       setIsLoading(true);
       setIsError(null);
       const runPayload = await fetchRun(selectedRunId ?? undefined);
+
+      // Guard against stale out-of-order responses:
+      // If a newer fetch has started since this one began (requestSeq changed),
+      // ignore this response to prevent overwriting newer data with stale data.
+      if (requestSeq !== requestSeqRef.current) {
+        debugLog("stale response ignored", {
+          requestSeq,
+          currentSeq: requestSeqRef.current,
+          requestedWhenFetchStarted: currentRequestedRunId,
+          returnedRunId: runPayload.runId,
+        });
+        return;
+      }
+
+      debugLog("fetch completed", {
+        requestSeq,
+        requestedRunId: currentRequestedRunId,
+        returnedRunId: runPayload.runId,
+        accepted: true,
+      });
+
       if (active) {
         setRun(runPayload);
       }
       setLastRefresh(dayjs());
     } catch (err) {
-      if (active) {
+      // Only set error if this is still the latest request
+      if (requestSeq === requestSeqRef.current && active) {
         setIsError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      if (active) {
+      // Only clear loading if this is still the latest request
+      if (requestSeq === requestSeqRef.current && active) {
         setIsLoading(false);
       }
-      refreshInProgress.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRunId]);
@@ -162,5 +220,6 @@ export const useRunData = ({
     refresh,
     autoRefreshInterval,
     handleAutoRefreshChange,
+    requestedRunId,
   };
 };
