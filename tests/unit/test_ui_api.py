@@ -775,8 +775,8 @@ class RunsListTests(unittest.TestCase):
             exec_path = external_analysis_dir / "run-unreviewed-next-check-execution-001.json"
             exec_path.write_text(json.dumps(execution_content), encoding="utf-8")
 
-            # Build the runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir))
+            # Build the runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -818,8 +818,8 @@ class RunsListTests(unittest.TestCase):
             exec_path = external_analysis_dir / "run-reviewed-next-check-execution-001.json"
             exec_path.write_text(json.dumps(execution_content), encoding="utf-8")
 
-            # Build the runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir))
+            # Build the runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -869,8 +869,8 @@ class RunsListTests(unittest.TestCase):
             exec2_path = external_analysis_dir / "run-partial-next-check-execution-002.json"
             exec2_path.write_text(json.dumps(exec2_content), encoding="utf-8")
 
-            # Build the runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir))
+            # Build the runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -953,8 +953,8 @@ class RunsListTests(unittest.TestCase):
                 json.dumps(exec2_content), encoding="utf-8"
             )
 
-            # Build the runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir))
+            # Build the runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
 
             self.assertEqual(result["totalCount"], 2)
             
@@ -1022,8 +1022,8 @@ class RunsListTests(unittest.TestCase):
                 json.dumps(latest_content), encoding="utf-8"
             )
 
-            # Build the runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir))
+            # Build the runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]
@@ -1077,8 +1077,8 @@ class RunsListTests(unittest.TestCase):
                 json.dumps(execution_content), encoding="utf-8"
             )
 
-            # Build the runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir))
+            # Build the runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
 
             self.assertEqual(result["totalCount"], 1)
             run = result["runs"][0]

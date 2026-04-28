@@ -766,50 +766,67 @@ def build_runs_list(
 
     execution_lookup_start = time_module.perf_counter()
 
-    # Window-driven lookup: query only window run prefixes
-    timings["execution_lookup_strategy"] = "window_glob"
-    timings["execution_run_prefixes_queried"] = len(window_run_ids)
+    # FAST PATH: When include_expensive=False, skip execution count derivation entirely.
+    # This is the critical optimization for the initial UI load where we just need
+    # the runs list without expensive per-run filesystem operations.
+    if include_expensive:
+        # Full path: derive execution counts by looking up execution artifacts
+        timings["execution_lookup_strategy"] = "window_glob"
+        timings["execution_run_prefixes_queried"] = len(window_run_ids)
 
-    for run_id in sorted_window_run_ids:
-        # Use window-run prefix to find only relevant files
-        pattern = f"{run_id}-next-check-execution*.json"
-        for exec_path in external_analysis_dir.glob(pattern):
-            window_exec_files.append((exec_path, run_id))
+        # Early bail-out: if external-analysis dir doesn't exist or is empty, skip entirely
+        if external_analysis_dir.is_dir():
+            for run_id in sorted_window_run_ids:
+                # Use window-run prefix to find only relevant files
+                pattern = f"{run_id}-next-check-execution*.json"
+                for exec_path in external_analysis_dir.glob(pattern):
+                    window_exec_files.append((exec_path, run_id))
 
-    timings["execution_files_found_total"] = len(window_exec_files)
-    timings["execution_files_considered"] = len(window_exec_files)
-    timings["execution_files_skipped_outside_window"] = 0  # Window mode doesn't consider non-window files
+        timings["execution_files_found_total"] = len(window_exec_files)
+        timings["execution_files_considered"] = len(window_exec_files)
+        timings["execution_files_skipped_outside_window"] = 0  # Window mode doesn't consider non-window files
+
+        # Sub-stage: parse only window_exec_files to derive execution counts
+        execution_parse_start = time_module.perf_counter()
+        for exec_path, run_id in window_exec_files:
+            execution_parsed += 1
+            try:
+                raw = json.loads(exec_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            # Check if this is an execution artifact
+            purpose = raw.get("purpose")
+            if purpose != "next-check-execution":
+                continue
+
+            execution_count_matches += 1
+
+            # Increment execution count for this run
+            current_exec_count = run_entries[run_id].get("execution_count", 0)
+            run_entries[run_id]["execution_count"] = cast(int, current_exec_count) + 1
+
+            # Check if this execution has usefulness feedback (means it was reviewed)
+            usefulness = raw.get("usefulness_class")
+            if usefulness and isinstance(usefulness, str) and usefulness.strip():
+                current_reviewed_count = run_entries[run_id].get("reviewed_count", 0)
+                run_entries[run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
+
+        timings["execution_parse_ms"] = (time_module.perf_counter() - execution_parse_start) * 1000
+        timings["execution_files_parsed"] = execution_parsed
+    else:
+        # FAST PATH: Skip execution count derivation entirely
+        # Set execution counts to 0 (unknown) - they can be derived on-demand if needed
+        timings["execution_lookup_strategy"] = "skipped_fast_path"
+        timings["execution_run_prefixes_queried"] = 0
+        timings["execution_files_found_total"] = 0
+        timings["execution_files_considered"] = 0
+        timings["execution_files_skipped_outside_window"] = 0
+        timings["execution_parse_ms"] = 0.0
+        timings["execution_files_parsed"] = 0
+        # execution_count and reviewed_count remain 0 (initialized in Stage 1)
 
     timings["execution_lookup_ms"] = (time_module.perf_counter() - execution_lookup_start) * 1000
-
-    # Sub-stage: parse only window_exec_files to derive execution counts
-    execution_parse_start = time_module.perf_counter()
-    for exec_path, run_id in window_exec_files:
-        execution_parsed += 1
-        try:
-            raw = json.loads(exec_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-
-        # Check if this is an execution artifact
-        purpose = raw.get("purpose")
-        if purpose != "next-check-execution":
-            continue
-
-        execution_count_matches += 1
-
-        # Increment execution count for this run
-        current_exec_count = run_entries[run_id].get("execution_count", 0)
-        run_entries[run_id]["execution_count"] = cast(int, current_exec_count) + 1
-
-        # Check if this execution has usefulness feedback (means it was reviewed)
-        usefulness = raw.get("usefulness_class")
-        if usefulness and isinstance(usefulness, str) and usefulness.strip():
-            current_reviewed_count = run_entries[run_id].get("reviewed_count", 0)
-            run_entries[run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
-
-    timings["execution_parse_ms"] = (time_module.perf_counter() - execution_parse_start) * 1000
-    timings["execution_files_parsed"] = execution_parsed
     timings["execution_count_derivation_ms"] = (time_module.perf_counter() - execution_scan_start) * 1000
     timings["execution_count_derivation_matches"] = execution_count_matches
 
@@ -1034,6 +1051,10 @@ def build_runs_list(
         totalCount=total_discovered,
         returnedCount=returned_count,
         hasMore=has_more,
+        # Flag indicating whether execution counts are complete.
+        # When False (fast path), counts are 0 because expensive derivation was skipped.
+        # UI should render "Execution status not loaded" instead of "No executions" when False.
+        executionCountsComplete=include_expensive,
     )
 
     if _timings:

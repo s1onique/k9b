@@ -1074,6 +1074,11 @@ class RunsListPayload(TypedDict):
     totalCount: int  # Total discovered runs (not just returned)
     returnedCount: int  # Number of runs in returned list
     hasMore: bool  # True if there are more runs beyond returned list
+    # Indicates whether execution counts (executionCount, reviewedCount) are complete.
+    # When False (fast path), counts may be 0/unknown because expensive artifact
+    # derivation was skipped. UI should render "Execution status not loaded" instead
+    # of "No executions" when this flag is False.
+    executionCountsComplete: bool
 
 
 class RunsListTimings(TypedDict, total=False):

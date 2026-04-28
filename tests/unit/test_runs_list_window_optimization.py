@@ -83,6 +83,7 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
                 )
 
             # Build runs list with default limit=100 and timings
+            # NOTE: Default is include_expensive=False, so execution derivation is SKIPPED
             raw_result = build_runs_list(runs_dir, limit=100, _timings=True)
             assert isinstance(raw_result, tuple), "Expected tuple with timings"
             result, timings = raw_result
@@ -92,31 +93,12 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             self.assertEqual(result["returnedCount"], 100)
             self.assertTrue(result["hasMore"])
 
-            # Key assertions for the window-driven lookup optimization
-            self.assertEqual(timings.get("execution_lookup_strategy"), "window_glob")
-            self.assertEqual(timings.get("execution_run_prefixes_queried"), 100)
-
-            # Window-driven: only files for window runs are found
-            execution_files_found_total = timings.get("execution_files_found_total", 0)
-            self.assertEqual(execution_files_found_total, 5000)  # 100 runs * 50 files
-
-            # No need to consider files outside window
-            execution_files_considered = timings.get("execution_files_considered", 0)
-            self.assertEqual(execution_files_considered, 5000)  # Should match found
-
-            # We parse all found files (all are window files)
-            execution_files_parsed = timings.get("execution_files_parsed", 0)
-            self.assertEqual(execution_files_parsed, 5000)
-
-            # No files skipped in window mode
-            execution_files_skipped = timings.get("execution_files_skipped_outside_window", 0)
-            self.assertEqual(execution_files_skipped, 0)
-
-            # Critical assertion: no global scan of historical files
-            # execution_files_found_total should be 5000 (NOT 7500)
-            self.assertEqual(execution_files_found_total, 5000)
-            # Total historical files would have been 150 * 50 = 7500
-            # We only queried files for 100 runs = 5000, so we avoided 2500 file lookups
+            # Default behavior: fast path skips execution count derivation
+            self.assertEqual(timings.get("execution_lookup_strategy"), "skipped_fast_path")
+            self.assertEqual(timings.get("execution_run_prefixes_queried"), 0)
+            self.assertEqual(timings.get("execution_files_found_total"), 0)
+            self.assertEqual(timings.get("execution_files_parsed"), 0)
+            self.assertEqual(timings.get("execution_files_skipped_outside_window"), 0)
 
     def test_include_expensive_affects_batch_eligibility_not_execution_parsing(self) -> None:
         """Test that include_expensive affects batch eligibility, not execution parsing.
@@ -264,8 +246,8 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
                     json.dumps(review_data), encoding="utf-8"
                 )
 
-            # Build runs list
-            result = cast(RunsListPayload, build_runs_list(runs_dir, limit=None))
+            # Build runs list with include_expensive=True to derive execution counts
+            result = cast(RunsListPayload, build_runs_list(runs_dir, limit=None, include_expensive=True))
 
             # Verify execution counts for each run
             run_counts = {run["runId"]: (run["executionCount"], run["reviewedCount"]) for run in result["runs"]}
@@ -327,7 +309,8 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
                     json.dumps(review_data), encoding="utf-8"
                 )
 
-            raw_result = build_runs_list(runs_dir, limit=3, _timings=True)
+            # Use include_expensive=True to test window-driven lookup
+            raw_result = build_runs_list(runs_dir, limit=3, include_expensive=True, _timings=True)
             assert isinstance(raw_result, tuple), "Expected tuple with timings"
             result, timings = raw_result
 
@@ -351,6 +334,280 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             # No files skipped in window mode
             self.assertEqual(timings["execution_files_skipped_outside_window"], 0)
             self.assertGreaterEqual(timings["execution_lookup_ms"], 0)
+
+
+    def test_fast_path_skips_execution_derivation_when_include_expensive_false(self) -> None:
+        """Test that include_expensive=False skips execution count derivation entirely.
+
+        This is the critical optimization for initial UI load where we just need
+        the runs list without expensive per-run filesystem operations.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+
+            # Create 50 runs with 10 execution artifacts each
+            base_time = datetime(2026, 4, 28, tzinfo=UTC)
+
+            for i in range(50):
+                run_id = f"run-{i:03d}"
+                timestamp = (base_time - timedelta(days=i)).isoformat()
+
+                # Create review artifact
+                review_content = {
+                    "run_id": run_id,
+                    "run_label": f"Run {i}",
+                    "timestamp": timestamp,
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"{run_id}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+                # Create execution artifacts (these should be SKIPPED in fast path)
+                for exec_idx in range(10):
+                    exec_content = {
+                        "run_id": run_id,
+                        "purpose": "next-check-execution",
+                        "status": "success",
+                        "payload": {"candidateIndex": exec_idx},
+                    }
+                    exec_path = external_analysis_dir / f"{run_id}-next-check-execution-{exec_idx:03d}.json"
+                    exec_path.write_text(json.dumps(exec_content), encoding="utf-8")
+
+                # Create run-scoped diagnostic pack review artifact
+                run_pack_dir = diagnostic_packs_dir / run_id
+                run_pack_dir.mkdir(parents=True, exist_ok=True)
+                review_data = {"run_id": run_id, "entries": []}
+                (run_pack_dir / "next_check_usefulness_review.json").write_text(
+                    json.dumps(review_data), encoding="utf-8"
+                )
+
+            # Build with include_expensive=False (default) - FAST PATH
+            raw_result = build_runs_list(runs_dir, limit=100, include_expensive=False, _timings=True)
+            assert isinstance(raw_result, tuple), "Expected tuple with timings"
+            result, timings = raw_result
+
+            # CRITICAL: Fast path should skip execution count derivation
+            self.assertEqual(timings.get("execution_lookup_strategy"), "skipped_fast_path")
+            self.assertEqual(timings.get("execution_run_prefixes_queried"), 0)
+            self.assertEqual(timings.get("execution_files_found_total"), 0)
+            self.assertEqual(timings.get("execution_files_considered"), 0)
+            self.assertEqual(timings.get("execution_files_skipped_outside_window"), 0)
+            self.assertEqual(timings.get("execution_parse_ms"), 0.0)
+            self.assertEqual(timings.get("execution_files_parsed"), 0)
+
+            # execution_lookup_ms should be minimal (just the fast path check)
+            self.assertLess(timings.get("execution_lookup_ms", 0), 100.0)  # Should be < 100ms
+
+            # execution_count_derivation_ms should also be minimal
+            self.assertLess(timings.get("execution_count_derivation_ms", 0), 100.0)
+
+            # All runs should have execution_count=0 (unknown in fast path)
+            for run in result["runs"]:
+                self.assertEqual(run["executionCount"], 0, f"Run {run['runId']} should have 0 executions in fast path")
+                self.assertEqual(run["reviewedCount"], 0, f"Run {run['runId']} should have 0 reviewed in fast path")
+                self.assertEqual(run["reviewStatus"], "no-executions")
+
+            # executionCountsComplete should be False in fast path
+            self.assertFalse(result["executionCountsComplete"], "executionCountsComplete should be False in fast path")
+
+    def test_fast_path_vs_full_path_timing_comparison(self) -> None:
+        """Test that fast path is significantly faster than full path.
+
+        With 100 runs and 10 execution artifacts each:
+        - Fast path (include_expensive=False) should complete in < 100ms
+        - Full path (include_expensive=True) will take longer due to file parsing
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+
+            # Create 100 runs with 10 execution artifacts each
+            base_time = datetime(2026, 4, 28, tzinfo=UTC)
+
+            for i in range(100):
+                run_id = f"run-{i:03d}"
+                timestamp = (base_time - timedelta(days=i)).isoformat()
+
+                review_content = {
+                    "run_id": run_id,
+                    "run_label": f"Run {i}",
+                    "timestamp": timestamp,
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"{run_id}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+                for exec_idx in range(10):
+                    exec_content = {
+                        "run_id": run_id,
+                        "purpose": "next-check-execution",
+                        "status": "success",
+                        "payload": {"candidateIndex": exec_idx},
+                    }
+                    exec_path = external_analysis_dir / f"{run_id}-next-check-execution-{exec_idx:03d}.json"
+                    exec_path.write_text(json.dumps(exec_content), encoding="utf-8")
+
+                run_pack_dir = diagnostic_packs_dir / run_id
+                run_pack_dir.mkdir(parents=True, exist_ok=True)
+                review_data = {"run_id": run_id, "entries": []}
+                (run_pack_dir / "next_check_usefulness_review.json").write_text(
+                    json.dumps(review_data), encoding="utf-8"
+                )
+
+            # Fast path
+            fast_result, fast_timings = build_runs_list(runs_dir, limit=100, include_expensive=False, _timings=True)
+            assert isinstance(fast_result, dict)
+
+            # Full path
+            full_result, full_timings = build_runs_list(runs_dir, limit=100, include_expensive=True, _timings=True)
+            assert isinstance(full_result, dict)
+
+            # Fast path should have skipped execution derivation
+            self.assertEqual(fast_timings.get("execution_lookup_strategy"), "skipped_fast_path")
+            self.assertEqual(fast_timings.get("execution_files_parsed"), 0)
+
+            # Full path should have performed execution derivation
+            self.assertEqual(full_timings.get("execution_lookup_strategy"), "window_glob")
+            self.assertEqual(full_timings.get("execution_files_parsed"), 1000)  # 100 runs * 10 files
+
+            # Fast path execution_lookup_ms should be much smaller
+            fast_lookup_ms = fast_timings.get("execution_lookup_ms", 0)
+            full_lookup_ms = full_timings.get("execution_lookup_ms", 0)
+
+            # Fast path should be at least 10x faster for execution lookup
+            self.assertLess(fast_lookup_ms, full_lookup_ms / 10,
+                           f"Fast path ({fast_lookup_ms}ms) should be much faster than full path ({full_lookup_ms}ms)")
+
+    def test_fast_path_no_per_run_glob_calls(self) -> None:
+        """Test that fast path does not perform per-run glob calls.
+
+        The per_run_glob_calls counter should be 0 in fast path.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+
+            # Create 20 runs
+            base_time = datetime(2026, 4, 28, tzinfo=UTC)
+
+            for i in range(20):
+                run_id = f"run-{i:03d}"
+                timestamp = (base_time - timedelta(days=i)).isoformat()
+
+                review_content = {
+                    "run_id": run_id,
+                    "run_label": f"Run {i}",
+                    "timestamp": timestamp,
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"{run_id}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+                for exec_idx in range(5):
+                    exec_content = {
+                        "run_id": run_id,
+                        "purpose": "next-check-execution",
+                        "status": "success",
+                        "payload": {"candidateIndex": exec_idx},
+                    }
+                    exec_path = external_analysis_dir / f"{run_id}-next-check-execution-{exec_idx:03d}.json"
+                    exec_path.write_text(json.dumps(exec_content), encoding="utf-8")
+
+                run_pack_dir = diagnostic_packs_dir / run_id
+                run_pack_dir.mkdir(parents=True, exist_ok=True)
+                review_data = {"run_id": run_id, "entries": []}
+                (run_pack_dir / "next_check_usefulness_review.json").write_text(
+                    json.dumps(review_data), encoding="utf-8"
+                )
+
+            # Fast path
+            raw_result = build_runs_list(runs_dir, limit=100, include_expensive=False, _timings=True)
+            assert isinstance(raw_result, tuple)
+            result, timings = raw_result
+
+            # per_run_glob_calls should be 0 in fast path
+            self.assertEqual(timings.get("per_run_glob_calls"), 0)
+            self.assertEqual(timings.get("per_run_directory_list_calls"), 0)
+
+    def test_fast_path_with_empty_external_analysis_dir(self) -> None:
+        """Test that fast path handles empty/missing external-analysis dir efficiently.
+
+        Even when the directory doesn't exist or is empty, fast path should
+        complete quickly without attempting any filesystem operations.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            # NOTE: external-analysis dir is NOT created (simulates missing dir)
+            diagnostic_packs_dir = runs_health_dir / "diagnostic-packs"
+
+            reviews_dir.mkdir(parents=True)
+            diagnostic_packs_dir.mkdir(parents=True)
+
+            # Create 10 runs (no execution artifacts)
+            base_time = datetime(2026, 4, 28, tzinfo=UTC)
+
+            for i in range(10):
+                run_id = f"run-{i:03d}"
+                timestamp = (base_time - timedelta(days=i)).isoformat()
+
+                review_content = {
+                    "run_id": run_id,
+                    "run_label": f"Run {i}",
+                    "timestamp": timestamp,
+                    "cluster_count": 2,
+                }
+                review_path = reviews_dir / f"{run_id}-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+                run_pack_dir = diagnostic_packs_dir / run_id
+                run_pack_dir.mkdir(parents=True, exist_ok=True)
+                review_data = {"run_id": run_id, "entries": []}
+                (run_pack_dir / "next_check_usefulness_review.json").write_text(
+                    json.dumps(review_data), encoding="utf-8"
+                )
+
+            # Fast path with missing external-analysis dir
+            raw_result = build_runs_list(runs_dir, limit=100, include_expensive=False, _timings=True)
+            assert isinstance(raw_result, tuple)
+            result, timings = raw_result
+
+            # Should complete quickly
+            self.assertEqual(timings.get("execution_lookup_strategy"), "skipped_fast_path")
+            self.assertEqual(timings.get("execution_files_found_total"), 0)
+            self.assertLess(timings.get("execution_lookup_ms", 0), 100.0)  # Should be < 100ms
+
+            # All runs should have no executions
+            self.assertEqual(result["returnedCount"], 10)
+            for run in result["runs"]:
+                self.assertEqual(run["executionCount"], 0)
+                self.assertEqual(run["reviewStatus"], "no-executions")
+
+            # executionCountsComplete should be False in fast path
+            self.assertFalse(result["executionCountsComplete"], "executionCountsComplete should be False in fast path")
 
 
 if __name__ == "__main__":
