@@ -3502,10 +3502,14 @@ describe("Cockpit refresh regression", () => {
 
   test.skip("manual refresh surfaces newer latest run in Recent Runs", async () => {
     // QUARANTINE: Manual refresh regression skipped due to fake-timer conflict.
-    // Equivalent coverage: auto-refresh-polling.test.tsx
-    //   → test "enabling auto-refresh fetches new data and updates UI with run-124 as latest"
-    //     (uses fake timers to simulate timer-triggered refresh; same data-path as manual refresh)
-    // This test file (app.test.tsx) uses real timers, so fake-timer approach cannot be mixed here.
+    // Equivalent coverage at lower layer:
+    //   - hooks/__tests__/useRunSelection-refresh.test.tsx:
+    //     → test "refreshRuns() manually triggers /api/runs fetch (newer latest run surfaced)"
+    //       Proves manual refresh invokes same pipeline as polling.
+    //   - auto-refresh-polling.test.tsx:
+    //     → test "enabling auto-refresh fetches new data and updates UI with run-124 as latest"
+    //       End-to-end proof of polling surfacing newer latest.
+    // This test file (app.test.tsx) uses real timers, so fake-timer approach cannot be mixed.
   });
 
 });
