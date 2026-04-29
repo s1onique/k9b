@@ -149,12 +149,15 @@ describe("Panel selection binding - Empty state wording", () => {
     const deterministicPanel = document.getElementById("deterministic-next-checks");
     expect(deterministicPanel).toBeInTheDocument();
 
-    // Should show empty state for run-123
+    // Should show empty state for run-123 - wait for data first
     await waitFor(() => {
-      expect(within(deterministicPanel!).getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
-      // Verify the updated copy points to the Work list
-      expect(within(deterministicPanel!).getByText(/Use the Work list below for the full queue of planner candidates/i)).toBeInTheDocument();
+      expect(screen.getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
     });
+    
+    // Now get the within-scoped panel after data has loaded
+    const scopedPanel = within(deterministicPanel!);
+    // Verify the updated copy points to the Work list
+    expect(scopedPanel.getByText(/Use the Work list below for the full queue of planner candidates/i)).toBeInTheDocument();
 
     // Click on run-122
     const run122Row = document.querySelector('.run-row[data-run-id="run-122"]');
@@ -164,10 +167,12 @@ describe("Panel selection binding - Empty state wording", () => {
       await user.click(run122Row!);
     });
 
-    // Should still show 'for this run' wording and Work list reference
+    // Should still show 'for this run' wording and Work list reference - wait for data
     await waitFor(() => {
-      expect(within(deterministicPanel!).getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
-      expect(within(deterministicPanel!).getByText(/Use the Work list below for the full queue of planner candidates/i)).toBeInTheDocument();
+      expect(screen.getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
     });
+    // Re-query panel since DOM may have changed
+    const updatedDeterministicPanel = document.getElementById("deterministic-next-checks");
+    expect(within(updatedDeterministicPanel!).getByText(/Use the Work list below for the full queue of planner candidates/i)).toBeInTheDocument();
   });
 });

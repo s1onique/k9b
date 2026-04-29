@@ -1197,9 +1197,8 @@ const App = () => {
 
   // Phase 3: Derive header freshness from RunControl model instead of local state
   // model.runs.lastLoadedAtMs is updated by the reducer when runs list loads
-  const lastRefresh = model.runs.lastLoadedAtMs
-    ? dayjs(model.runs.lastLoadedAtMs)
-    : dayjs();
+  const lastRefreshMs = model.runs.lastLoadedAtMs ?? null;
+  const lastRefresh = lastRefreshMs ? dayjs(lastRefreshMs) : dayjs();
 
   // App data state - extracted to useAppData hook
   const {
@@ -1219,7 +1218,7 @@ const App = () => {
     error,
   } = useAppData({
     selectedRunId,
-    lastRefresh,
+    lastRefreshMs,
     refreshRuns,
   });
 

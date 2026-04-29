@@ -330,16 +330,19 @@ export function updateRunControl(
       }
 
       if (selectedStillInList) {
-        // Phase 5: Only refetch if payload is missing or stale (belongs to different run)
-        const needsRefetch = !model.selectedRun.payload || 
-          model.selectedRun.payload.runId !== selectedRunId;
-
-        let effects: RunControlEffect[] = [];
-
-        if (needsRefetch) {
+        // Phase 5: Reason-aware refetch policy
+        // Only skip refetch when we are in a passive poll AND already have the correct payload.
+        // Boot/manual always refetch to ensure fresh data; poll refetches only when stale.
+        const isPassivePoll = model.runs.lastRefreshReason === "poll";
+        const payloadMatches =
+          isPassivePoll &&
+          model.selectedRun.status === "loaded" &&
+          model.selectedRun.payload?.runId === selectedRunId;
+        
+        if (!payloadMatches) {
           const { model: m1, requestSeq } = allocateRequestSeq(model);
           const newSelectedRun: RunControlModel["selectedRun"] = {
-            ...model.selectedRun,
+            ...m1.selectedRun,
             status: "loading",
             requestSeq,
             requestedRunId: selectedRunId,
@@ -367,6 +370,7 @@ export function updateRunControl(
               latestKnownAtMs: msg.receivedAtMs,
             },
           };
+          let effects: RunControlEffect[] = [];
           effects = emitFetchRun(effects, requestSeq, selectedRunId);
           effects = emitScheduleSlowRunTimer(
             effects,
@@ -398,7 +402,7 @@ export function updateRunControl(
             latestKnownAtMs: msg.receivedAtMs,
           },
         };
-        return { model: newModel, effects };
+        return { model: newModel, effects: [] };
       }
 
       // Case 3: Selection exists but no longer in list and latest exists -> fallback

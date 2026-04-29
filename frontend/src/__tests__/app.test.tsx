@@ -763,6 +763,16 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
+    // Wait for data to load first
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
+
+    // Wait for queue items to appear
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
+
     const heading = await screen.findByRole("heading", { name: /Work list/i });
     const queuePanel = heading.closest(".next-check-queue-panel");
     expect(queuePanel).not.toBeNull();

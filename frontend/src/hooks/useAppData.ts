@@ -53,7 +53,7 @@ import {
 
 export interface UseAppDataParams {
   selectedRunId: string | null;
-  lastRefresh: import("dayjs").Dayjs;
+  lastRefreshMs: number | null;
   refreshRuns: () => Promise<void>;
   refreshRunData: () => Promise<void>;
 }
@@ -126,7 +126,7 @@ const debugLog = (phase: string, data?: Record<string, unknown>) => {
 
 export const useAppData = ({
   selectedRunId,
-  lastRefresh,
+  lastRefreshMs,
   refreshRuns,
   refreshRunData,
 }: UseAppDataParams): UseAppDataReturn => {
@@ -386,7 +386,7 @@ export const useAppData = ({
     };
   }, [refreshAppData]);
 
-  // Cluster detail fetch effect - triggered when selectedClusterLabel or lastRefresh changes
+  // Cluster detail fetch effect - triggered when selectedClusterLabel or lastRefreshMs changes
   useEffect(() => {
     if (!selectedClusterLabel) {
       setClusterDetail(null);
@@ -414,7 +414,7 @@ export const useAppData = ({
     return () => {
       active = false;
     };
-  }, [selectedClusterLabel, lastRefresh]);
+  }, [selectedClusterLabel, lastRefreshMs]);
 
   // Setter for promotion status
   const setPromotionStatus = (key: string, status: PromotionStatus) => {

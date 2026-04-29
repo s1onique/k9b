@@ -138,9 +138,10 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(runCalls.length).toBeGreaterThan(0);
     });
 
-    // Should show empty state for run-122 (no deterministic checks)
+    // Should show empty state for run-122 (no deterministic checks) - re-query panel
+    const updatedDeterministicPanel = document.getElementById("deterministic-next-checks");
     await waitFor(() => {
-      expect(within(deterministicPanel!).getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
+      expect(within(updatedDeterministicPanel!).getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
     });
   });
 
@@ -213,27 +214,29 @@ describe("Panel selection binding - Per-run panels", () => {
 
     // --- STRENGTHENED: Assert run-122 specific content AFTER switching ---
     // Run-122 llmPolicy.autoDrilldown: enabled=false, provider=stub, usedThisRun=0, success/failed/skipped=0/0/0
+    // Re-query panel since DOM may have changed
+    const updatedLlmPolicyPanel = document.getElementById("llm-policy");
 
     // Check disabled status pill
     await waitFor(() => {
-      expect(within(llmPolicyPanel!).getByText(/Auto drilldown disabled/i)).toBeInTheDocument();
+      expect(within(updatedLlmPolicyPanel!).getByText(/Auto drilldown disabled/i)).toBeInTheDocument();
     });
 
     // Check provider changed to stub (rendered as separate elements)
     await waitFor(() => {
-      expect(within(llmPolicyPanel!).getByText(/^Provider$/i)).toBeInTheDocument();
+      expect(within(updatedLlmPolicyPanel!).getByText(/^Provider$/i)).toBeInTheDocument();
       // The value is rendered as <strong>stub</strong>
-      expect(within(llmPolicyPanel!).getByText(/^stub$/)).toBeInTheDocument();
+      expect(within(updatedLlmPolicyPanel!).getByText(/^stub$/)).toBeInTheDocument();
     });
 
     // Check success/failed/skipped changed to 0/0/0
     await waitFor(() => {
-      expect(within(llmPolicyPanel!).getByText(/0 \/ 0 \/ 0/i)).toBeInTheDocument();
+      expect(within(updatedLlmPolicyPanel!).getByText(/0 \/ 0 \/ 0/i)).toBeInTheDocument();
     });
 
     // Panel should still be visible
     await waitFor(() => {
-      expect(within(llmPolicyPanel!).getByText(/used this run/i)).toBeInTheDocument();
+      expect(within(updatedLlmPolicyPanel!).getByText(/used this run/i)).toBeInTheDocument();
     });
   });
 
@@ -257,9 +260,9 @@ describe("Panel selection binding - Per-run panels", () => {
     const llmActivityPanel = document.getElementById("llm-activity");
     expect(llmActivityPanel).toBeInTheDocument();
 
-    // Should show run-123 LLM activity entry
+    // Should show run-123 LLM activity entry - wait for data first
     await waitFor(() => {
-      expect(within(llmActivityPanel!).getByText(/Run 123 LLM activity/i)).toBeInTheDocument();
+      expect(screen.getByText(/Run 123 LLM activity/i)).toBeInTheDocument();
     });
 
     // Click on run-122
@@ -281,9 +284,9 @@ describe("Panel selection binding - Per-run panels", () => {
       expect(runCalls.length).toBeGreaterThan(0);
     });
 
-    // Should now show run-122 LLM activity entry
+    // Should now show run-122 LLM activity entry - wait for data first
     await waitFor(() => {
-      expect(within(llmActivityPanel!).getByText(/Run 122 LLM activity/i)).toBeInTheDocument();
+      expect(screen.getByText(/Run 122 LLM activity/i)).toBeInTheDocument();
     });
   });
 });

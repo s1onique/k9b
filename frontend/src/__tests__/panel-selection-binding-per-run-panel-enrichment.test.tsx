@@ -213,16 +213,18 @@ describe("Panel selection binding - Per-run panels", () => {
     // Run-122 autoDrilldown: eligible=1, attempted=0, succeeded=0, failed=0, skipped=1, unattempted=0
     // Run-122 reviewEnrichment: eligible=1, attempted=1, succeeded=0, failed=1, skipped=0
     // Unique differentiators for run-122: skipped 1 and failed 1
+    // Re-query panel since DOM may have changed
+    const updatedProviderPanel = document.getElementById("provider-execution");
     await waitFor(() => {
       // Check skipped=1 for autoDrilldown (unique to run-122 vs run-123 which has skipped 0)
-      expect(within(providerPanel!).getByText(/skipped 1/i)).toBeInTheDocument();
+      expect(within(updatedProviderPanel!).getByText(/skipped 1/i)).toBeInTheDocument();
       // Check failed=1 for reviewEnrichment (unique to run-122 vs run-123 which has failed 0)
-      expect(within(providerPanel!).getByText(/failed 1/i)).toBeInTheDocument();
+      expect(within(updatedProviderPanel!).getByText(/failed 1/i)).toBeInTheDocument();
     });
 
     // Panel should still be visible
     await waitFor(() => {
-      expect(within(providerPanel!).getByText(/Auto drilldown/i)).toBeInTheDocument();
+      expect(within(updatedProviderPanel!).getByText(/Auto drilldown/i)).toBeInTheDocument();
     });
   });
 });
