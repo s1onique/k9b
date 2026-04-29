@@ -1,15 +1,32 @@
 /**
- * useRunSelection hook - manages runs list fetching, pagination, and filtering.
+ * useRunSelection hook — manages runs list UI (fetching, pagination, filtering).
  *
- * PHASE 3: This hook no longer owns selectedRunId.
- * selectedRunId ownership is now with useRunControl (sole source of truth).
- * This hook only manages list/pagination concerns.
+ * PHASE 3/4: This hook is list UI only. It does NOT own selected-run data.
+ *
+ * selectedRunId ownership:
+ *   - RunControl owns selectedRunId as the source of truth for selected-run causality.
+ *   - useRunSelection receives selectedRunId as an INPUT (from RunControl).
+ *   - selectedRunId is used for:
+ *     - Highlighting the selected run in the list
+ *     - "Show Selected" / handleShowSelectedRun button
+ *     - Following mode: auto-navigate to the page containing the selected run
+ *     - Detached mode: when isRunsListFollowingSelection is false, the user has
+ *       manually navigated away from the selected run's page
+ *
+ * NOTE: This hook fetches /api/runs for list UI purposes (visible list filtering/pagination).
+ * During the migration, useRunControl also fetches /api/runs for runs list ownership.
+ * Future consolidation can merge these once the UI list state is migrated to RunControl.
  *
  * Inputs:
- *   - selectedRunId: string | null - selected run from useRunControl (REQUIRED)
+ *   - selectedRunId: string | null - selected run from useRunControl (REQUIRED INPUT)
+ *     Used for: highlighting, "show selected" button, following/detached navigation
  *
  * Returns:
- *   - runs: RunsListEntry[] - the list of runs
+ *   - runs: RunsListEntry[] - the list of runs (fetched for list UI)
+ *   - executionCountsComplete: boolean - whether execution counts are complete
+ *     NOTE: When false, "no-executions" filter may be unreliable (counts may be stale/incomplete).
+ *     The backend may not have finished computing execution counts for recent runs.
+ *   - selectedRunId: string | null - echo of the input, for convenience
  *   - isLoading: boolean - whether a fetch is in progress
  *   - error: string | null - error message if fetch failed
  *   - refreshRuns: () => Promise<void> - manually trigger a refresh
@@ -23,7 +40,9 @@
  *   - setRunsPageSize: (size: number) => void
  *   - runsPage: number - current page number (1-indexed)
  *   - setRunsPage: (page: number) => void
- *   - isRunsListFollowingSelection: boolean - whether auto-following selection
+ *   - isRunsListFollowingSelection: boolean - following vs detached mode
+ *     - true (following): auto-navigate to page containing selectedRunId after runs list loads
+ *     - false (detached): user has manually navigated away from selected run's page
  *   - setIsRunsListFollowingSelection: (following: boolean) => void
  *   - filteredRunsList: RunsListEntry[] - runs filtered by runsFilter
  *   - runsFilterCounts: Record<RunsReviewFilter, number> - counts per filter
@@ -34,8 +53,8 @@
  *   - handleRunsPageSizeChange: (size: number) => void
  *   - handleRunsPageChange: (page: number) => void
  *   - computePageForRunId: (runId: string | null) => number
- *   - navigateToPageContainingRun: (runId: string | null) => void
- *   - handleShowSelectedRun: () => void
+ *   - navigateToPageContainingRun: (runId: string | null) => void - enables following mode
+ *   - handleShowSelectedRun: () => void - navigate to and highlight the selected run
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchRunsList } from "../api";

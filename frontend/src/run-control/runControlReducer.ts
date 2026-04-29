@@ -319,7 +319,7 @@ export function updateRunControl(
         return { model: newModel, effects };
       }
 
-      // Case 2: Selection exists and still in list -> preserve, no refetch
+      // Case 2: Selection exists and still in list -> preserve AND fetch detail
       const selectedStillInList =
         selectedRunId !== null &&
         msg.payload.runs.some((r) => r.runId === selectedRunId);
@@ -330,10 +330,20 @@ export function updateRunControl(
       }
 
       if (selectedStillInList) {
+        const { model: m1, requestSeq } = allocateRequestSeq(model);
+        const newSelectedRun: RunControlModel["selectedRun"] = {
+          ...model.selectedRun,
+          status: "loading",
+          requestSeq,
+          requestedRunId: selectedRunId,
+          startedAtMs: msg.receivedAtMs,
+          error: null,
+          payload: null,
+        };
         const newModel: RunControlModel = {
-          ...model,
+          ...m1,
           runs: {
-            ...model.runs,
+            ...m1.runs,
             status: "loaded",
             items: msg.payload.runs,
             error: null,
@@ -343,13 +353,22 @@ export function updateRunControl(
             ...model.selection,
             latestRunId,
           },
+          selectedRun: newSelectedRun,
           freshness: {
             ...model.freshness,
             hasNewerLatest,
             latestKnownAtMs: msg.receivedAtMs,
           },
         };
-        return { model: newModel, effects: [] };
+        let effects: RunControlEffect[] = [];
+        effects = emitFetchRun(effects, requestSeq, selectedRunId);
+        effects = emitScheduleSlowRunTimer(
+          effects,
+          requestSeq,
+          selectedRunId,
+          model.selectedRun.slowAfterMs
+        );
+        return { model: newModel, effects };
       }
 
       // Case 3: Selection exists but no longer in list and latest exists -> fallback

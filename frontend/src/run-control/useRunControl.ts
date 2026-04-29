@@ -290,8 +290,11 @@ export function useRunControl(
       switch (effect.type) {
         case "fetchRuns": {
           const { requestSeq } = effect;
-          // RunControlEffect carries includeExpensive=false;
-          // current fetchRunsList API does not expose this option yet.
+          // NOTE: /api/runs is also fetched by useRunSelection for Recent Runs list UI.
+          // This is intentional during the migration:
+          // - RunControl owns latest/selection/run-detail causality.
+          // - useRunSelection owns visible list filtering/pagination.
+          // Future consolidation can merge these once the UI list state is migrated.
           fetchRunsList()
             .then((payload: RunsListPayload) => {
               dispatch({

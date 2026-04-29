@@ -1,4 +1,16 @@
 /**
+ * @deprecated useRunData is deprecated. Use RunControl (useRunControl hook) instead.
+ *
+ * RunControl owns:
+ * - selectedRunId as source of truth
+ * - run payload fetching with request coalescing
+ * - slow-run detection and UI states
+ * - runs list ownership for latest/selection causality
+ *
+ * This hook will be removed in a future phase.
+ *
+ * -----
+ *
  * useRunData hook - manages run payload fetching, polling, and auto-refresh.
  *
  * Owns: fetching the current run payload, polling interval, auto-refresh state.

@@ -1190,7 +1190,6 @@ const App = () => {
     computePageForRunId,
     navigateToPageContainingRun,
     handleShowSelectedRun,
-    handleRunSelection,
   } = useRunSelection({ selectedRunId });
 
   // Run payload from RunControl (now the authoritative source)
@@ -1304,6 +1303,11 @@ const App = () => {
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
 
+  // Run selection causal chain:
+  // - runControlSelectRun triggers RunControl to fetch /api/run for the selected run.
+  // - navigateToPageContainingRun keeps the Recent Runs list page in sync with the selected run.
+  // Keep these actions together: RunControl owns selected-run data; useRunSelection owns list navigation.
+  //
   // Phase 3: Wire RecentRunsPanel's onRunSelection to use RunControl
   // This ensures the causal chain goes through RunControl: selection -> fetch -> payload
   const handleRunSelectionViaRunControl = useCallback((runId: string) => {
