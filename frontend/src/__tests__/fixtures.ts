@@ -1021,11 +1021,27 @@ export const createStorageMock = () => {
  */
 export const createFetchMock = (payloads: Record<string, unknown>) =>
   vi.fn((input: RequestInfo) => {
-    const url = typeof input === "string" ? input : input.url;
-    const base = url.split("?")[0];
-    const payload = payloads[url] ?? payloads[base];
+    // Extract URL string robustly from various input types
+    const rawUrl =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    // Parse URL to extract path and search params
+    const parsedUrl = new URL(rawUrl, "http://localhost");
+    const pathWithSearch = `${parsedUrl.pathname}${parsedUrl.search}`;
+    const pathOnly = parsedUrl.pathname;
+
+    // Look up payload: exact match first, then fallback to base path
+    const payload =
+      payloads[pathWithSearch] ??
+      payloads[rawUrl] ??
+      payloads[pathOnly];
+
     if (!payload) {
-      return Promise.reject(new Error(`Unexpected fetch ${url}`));
+      return Promise.reject(new Error(`Unexpected fetch ${rawUrl}`));
     }
     return Promise.resolve({
       ok: true,

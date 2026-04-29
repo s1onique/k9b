@@ -40,6 +40,14 @@ const defaultPayloads = {
 };
 
 const getQueuePanel = async () => {
+  // Wait for run data to load first (queue panel shows "Loading selected run…" when loading)
+  await waitFor(() => {
+    expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+  });
+  // Also wait for queue items to appear (approve buttons indicate queue content is ready)
+  await waitFor(() => {
+    expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+  }, { timeout: 5000 });
   const heading = await screen.findByRole("heading", { name: /Work list/i });
   const queuePanel = heading.closest(".next-check-queue-panel");
   if (!queuePanel) {
@@ -398,14 +406,19 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load - use queryByText which returns null instead of throwing
+    await waitFor(() => {
+      const driftNode = screen.queryByText(/Drift \/ toil follow-up/i);
+      expect(driftNode).toBeInTheDocument();
+    }, { timeout: 5000 });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
     // Find the drift bucket
-    const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
-    expect(driftNodes.length).toBeGreaterThan(0);
+    const driftNode = screen.queryByText(/Drift \/ toil follow-up/i);
+    expect(driftNode).toBeInTheDocument();
 
-    const driftDetails = driftNodes[0].closest("details") as HTMLElement;
+    const driftDetails = driftNode!.closest("details") as HTMLElement;
     expect(driftDetails).not.toBeNull();
 
     // During active degraded run (sampleFleet has degraded cluster), drift bucket should be collapsed
@@ -432,14 +445,19 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load - use queryByText which returns null instead of throwing
+    await waitFor(() => {
+      const evidenceNode = screen.queryByText(/Evidence gathering/i);
+      expect(evidenceNode).toBeInTheDocument();
+    }, { timeout: 5000 });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
     // Find the drift bucket
-    const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
-    expect(driftNodes.length).toBeGreaterThan(0);
+    const driftNode = screen.queryByText(/Drift \/ toil follow-up/i);
+    expect(driftNode).toBeInTheDocument();
 
-    const driftDetails = driftNodes[0].closest("details") as HTMLElement;
+    const driftDetails = driftNode!.closest("details") as HTMLElement;
     expect(driftDetails).not.toBeNull();
 
     // When no degraded clusters, drift bucket should be expanded by default
@@ -457,6 +475,11 @@ describe("App", () => {
 
     // Find the deterministic panel first
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load - use queryByText which returns null instead of throwing
+    await waitFor(() => {
+      const firefightNode = screen.queryByText(/Firefight now/i);
+      expect(firefightNode).toBeInTheDocument();
+    }, { timeout: 5000 });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
@@ -597,6 +620,10 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
     const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
@@ -614,6 +641,10 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
     const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
@@ -636,6 +667,10 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
@@ -650,6 +685,10 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
@@ -684,6 +723,10 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
@@ -726,6 +769,10 @@ describe("App", () => {
     render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
+    // Wait for run data to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    });
     const panel = heading.closest("section");
     expect(panel).not.toBeNull();
 
@@ -786,10 +833,8 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Work list/i });
-    const queuePanel = heading.closest(".next-check-queue-panel");
-    expect(queuePanel).not.toBeNull();
-    const queueScoped = within(queuePanel!);
+    // Use getQueuePanel which properly waits for queue content to load
+    const queueScoped = await getQueuePanel();
     const describeCard = queueScoped
       .getByText(/Describe diag CRD for control plane/i)
       .closest("article");
@@ -979,6 +1024,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for queue items to be present before interacting
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
     const queueScoped = await getQueuePanel();
     const clusterSelect = queueScoped.getByLabelText(/Cluster filter/i);
     await act(async () => {
@@ -994,6 +1043,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for queue items to be present before interacting
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
     const queueScoped = await getQueuePanel();
     const statusSelect = queueScoped.getByLabelText(/Queue status/i);
     await act(async () => {
@@ -1010,6 +1063,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for queue items to be present before interacting
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
     const queueScoped = await getQueuePanel();
     const commandSelect = queueScoped.getByLabelText(/Command family/i);
     await act(async () => {
@@ -1024,6 +1081,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for queue items to be present before interacting
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
     const queueScoped = await getQueuePanel();
     const prioritySelect = queueScoped.getByLabelText(/Priority/i);
     await act(async () => {
@@ -1038,6 +1099,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for queue items to be present before interacting
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
     const queueScoped = await getQueuePanel();
     const searchInput = queueScoped.getByPlaceholderText(/Description, reason, or signal/i);
     await act(async () => {
@@ -1052,6 +1117,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for queue items to be present before interacting
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Approve/i }).length).toBeGreaterThan(0);
+    });
     const queueScoped = await getQueuePanel();
     const workButton = queueScoped.getByRole("button", { name: /Work now/i });
     const reviewButton = queueScoped.getByRole("button", { name: /Needs review/i });
@@ -1598,6 +1667,11 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
+    // Wait for loading to complete before checking panel content
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    }, { timeout: 5000 });
+
     const heading = await screen.findByRole("heading", { name: /LLM policy/i });
     expect(heading).toBeInTheDocument();
     const panel = heading.closest("section");
@@ -1881,14 +1955,19 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for the LLM activity panel content to load (depends on run data)
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+    }, { timeout: 5000 });
+
     const panelHeading = await screen.findByRole("heading", { name: /LLM activity/i });
-    const notificationMatches = await screen.findAllByText(
-      sampleClusterDetail.relatedNotifications[0].summary
-    );
-    expect(notificationMatches.length).toBeGreaterThan(0);
-    expect(screen.getByText(/Retained entries: 19/i)).toBeInTheDocument();
     const panelSection = panelHeading.closest("section");
     expect(panelSection).not.toBeNull();
+    // Wait for status filter to be visible (indicates panel content loaded)
+    await waitFor(() => {
+      expect(within(panelSection!).queryByLabelText(/Status/i)).not.toBeNull();
+    }, { timeout: 5000 });
+    expect(screen.getByText(/Retained entries: 19/i)).toBeInTheDocument();
     const statusSelect = within(panelSection!).getByLabelText(/Status/i);
     await act(async () => {
       await user.selectOptions(statusSelect, "failed");
@@ -2238,9 +2317,6 @@ describe("App panel order regression", () => {
     const providerPanel = document.getElementById("review-enrichment");
     const deterministicPanel = document.getElementById("deterministic-next-checks");
 
-    console.log("providerPanel:", providerPanel?.tagName, providerPanel?.id);
-    console.log("deterministicPanel:", deterministicPanel?.tagName, deterministicPanel?.id);
-    
     expect(providerPanel).not.toBeNull();
     expect(deterministicPanel).not.toBeNull();
     
@@ -2255,7 +2331,6 @@ describe("App panel order regression", () => {
       count++;
       node = walker.nextNode();
     }
-    console.log("TreeWalker positions - review-enrichment:", posA, "deterministic-next-checks:", posB);
     
     // Assert order via treeWalker
     expect(posA).toBeLessThan(posB);

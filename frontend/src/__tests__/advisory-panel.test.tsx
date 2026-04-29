@@ -83,18 +83,18 @@ describe("Advisory Panel Components", () => {
       vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
-      // Wait for the component to render
-      await waitFor(() => {
-        expect(screen.getAllByText("Provider advisory")[0]).toBeInTheDocument();
-      });
+      // Wait for the "Provider advisory" heading to appear
+      // This heading only appears in the actual ReviewEnrichmentPanel, not in the loading placeholder
+      const heading = await screen.findByRole("heading", { name: /Provider advisory/i }, { timeout: 5000 });
+      expect(heading).toBeInTheDocument();
 
       // Check for the header structure - now uses shared section-head pattern
       const headerSection = document.getElementById("review-enrichment");
       expect(headerSection).toBeTruthy();
 
-      // Verify section-head exists (shared header pattern)
-      const header = headerSection?.querySelector(".section-head");
-      expect(header).toBeTruthy();
+      // Verify section-head exists (shared header pattern) - it's a sibling of the heading
+      const header = heading.parentElement;
+      expect(header).toHaveClass("section-head");
 
       // Verify title is present (eyebrow removed during header normalization)
       expect(header?.textContent).toContain("Provider advisory");
@@ -532,9 +532,10 @@ describe("Advisory Panel Components", () => {
       vi.stubGlobal("fetch", createFetchMock(payloads));
       render(<App />);
 
+      // Wait for the actual panel content to load, not the loading placeholder
       await waitFor(() => {
-        expect(screen.getAllByText("Provider advisory")[0]).toBeInTheDocument();
-      });
+        expect(document.querySelector(".review-enrichment-body")).toBeInTheDocument();
+      }, { timeout: 5000 });
 
       const reviewEnrichment = document.getElementById("review-enrichment");
       expect(reviewEnrichment).toBeTruthy();
