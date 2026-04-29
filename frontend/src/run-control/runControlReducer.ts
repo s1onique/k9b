@@ -330,20 +330,58 @@ export function updateRunControl(
       }
 
       if (selectedStillInList) {
-        const { model: m1, requestSeq } = allocateRequestSeq(model);
-        const newSelectedRun: RunControlModel["selectedRun"] = {
-          ...model.selectedRun,
-          status: "loading",
-          requestSeq,
-          requestedRunId: selectedRunId,
-          startedAtMs: msg.receivedAtMs,
-          error: null,
-          payload: null,
-        };
+        // Phase 5: Only refetch if payload is missing or stale (belongs to different run)
+        const needsRefetch = !model.selectedRun.payload || 
+          model.selectedRun.payload.runId !== selectedRunId;
+
+        let effects: RunControlEffect[] = [];
+
+        if (needsRefetch) {
+          const { model: m1, requestSeq } = allocateRequestSeq(model);
+          const newSelectedRun: RunControlModel["selectedRun"] = {
+            ...model.selectedRun,
+            status: "loading",
+            requestSeq,
+            requestedRunId: selectedRunId,
+            startedAtMs: msg.receivedAtMs,
+            error: null,
+            payload: null,
+          };
+          const newModel: RunControlModel = {
+            ...m1,
+            runs: {
+              ...m1.runs,
+              status: "loaded",
+              items: msg.payload.runs,
+              error: null,
+              lastLoadedAtMs: msg.receivedAtMs,
+            },
+            selection: {
+              ...model.selection,
+              latestRunId,
+            },
+            selectedRun: newSelectedRun,
+            freshness: {
+              ...model.freshness,
+              hasNewerLatest,
+              latestKnownAtMs: msg.receivedAtMs,
+            },
+          };
+          effects = emitFetchRun(effects, requestSeq, selectedRunId);
+          effects = emitScheduleSlowRunTimer(
+            effects,
+            requestSeq,
+            selectedRunId,
+            model.selectedRun.slowAfterMs
+          );
+          return { model: newModel, effects };
+        }
+
+        // No refetch needed - preserve runs state only, keep existing selected run payload
         const newModel: RunControlModel = {
-          ...m1,
+          ...model,
           runs: {
-            ...m1.runs,
+            ...model.runs,
             status: "loaded",
             items: msg.payload.runs,
             error: null,
@@ -353,21 +391,13 @@ export function updateRunControl(
             ...model.selection,
             latestRunId,
           },
-          selectedRun: newSelectedRun,
+          // selectedRun state unchanged - no refetch needed
           freshness: {
             ...model.freshness,
             hasNewerLatest,
             latestKnownAtMs: msg.receivedAtMs,
           },
         };
-        let effects: RunControlEffect[] = [];
-        effects = emitFetchRun(effects, requestSeq, selectedRunId);
-        effects = emitScheduleSlowRunTimer(
-          effects,
-          requestSeq,
-          selectedRunId,
-          model.selectedRun.slowAfterMs
-        );
         return { model: newModel, effects };
       }
 

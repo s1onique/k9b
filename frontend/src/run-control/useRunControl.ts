@@ -176,8 +176,14 @@ export interface UseRunControlResult {
   /** Trigger a poll tick. */
   poll: () => void;
 
-  /** Retry fetching the selected run. */
+  /** Retry fetching the selected run (alias for non-error refresh paths). */
   retrySelectedRun: () => void;
+
+  /**
+   * Refresh the selected run (alias for retrySelectedRun).
+   * Named for explicit operator-triggered refresh without error semantics.
+   */
+  refreshSelectedRun: () => void;
 
   // Derived values (convenience selectors)
   /** The currently selected run ID. */
@@ -458,6 +464,9 @@ export function useRunControl(
     dispatch({ type: "RetrySelectedRunClicked", nowMs: Date.now() });
   }, [dispatch]);
 
+  // Alias: refreshSelectedRun for non-error refresh paths
+  const refreshSelectedRun = retrySelectedRun;
+
   // --------------------------------------------------------------------------
   // Auto-boot
   // --------------------------------------------------------------------------
@@ -516,6 +525,7 @@ export function useRunControl(
     manualRefresh,
     poll,
     retrySelectedRun,
+    refreshSelectedRun,
     selectedRunId,
     latestRunId,
     selectedRun,
