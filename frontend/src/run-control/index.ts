@@ -2,6 +2,7 @@
  * run-control/index.ts — Elm-ish Run Control Plane public exports.
  *
  * Phase 1: Types, reducer, selectors, initializer.
+ * Phase 2: Interpreter hook (useRunControl).
  */
 
 // Types
@@ -57,3 +58,10 @@ export {
   getHeaderRunId,
   getRunOwnedPanelState,
 } from "./runControlReducer";
+
+// Interpreter hook
+export {
+  useRunControl,
+  type UseRunControlOptions,
+  type UseRunControlResult,
+} from "./useRunControl";
