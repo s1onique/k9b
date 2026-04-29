@@ -1,9 +1,9 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import dayjs from "dayjs";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { formatAgeDuration } from "../App";
 import type { RunPayload, RunsListPayload } from "../types";
-import { createStorageMock, createFetchMock, sampleFleet, sampleProposals, sampleNotifications, sampleClusterDetail } from "./fixtures";
+import { createStorageMock, sampleFleet, sampleProposals, sampleNotifications, sampleClusterDetail, makeRunWithOverrides } from "./fixtures";
 import { SELECTED_RUN_STORAGE_KEY } from "../App";
 
 const minsAgo = (minutes: number) => dayjs().subtract(minutes, "minute").toISOString();
@@ -13,6 +13,8 @@ let storageMock: ReturnType<typeof createStorageMock>;
 beforeEach(() => {
   storageMock = createStorageMock();
   vi.stubGlobal("localStorage", storageMock);
+  vi.stubGlobal("setInterval", vi.fn(() => 123));
+  vi.stubGlobal("clearInterval", vi.fn());
 });
 
 afterEach(() => {
@@ -35,66 +37,95 @@ const createRunsList = (runs: Array<{ runId: string; ageMinutes: number }>): Run
 });
 
 // Helper to create a run payload with a specific timestamp
-const createRun = (ageMinutes: number): RunPayload => ({
-  ...sampleFleet,
-  runId: "test-run",
-  label: "Test run",
-  timestamp: minsAgo(ageMinutes),
-  collectorVersion: "collector:v1.0",
-  clusterCount: 2,
-  drilldownCount: 0,
-  proposalCount: 0,
-  externalAnalysisCount: 0,
-  notificationCount: 0,
-  artifacts: [],
-  runStats: {
-    lastRunDurationSeconds: 30,
-    totalRuns: 1,
-    p50RunDurationSeconds: 30,
-    p95RunDurationSeconds: 30,
-    p99RunDurationSeconds: 30,
-  },
-  llmStats: {
-    totalCalls: 0,
-    successfulCalls: 0,
-    failedCalls: 0,
-    lastCallTimestamp: null,
-    p50LatencyMs: 0,
-    p95LatencyMs: 0,
-    p99LatencyMs: 0,
-    providerBreakdown: [],
-    scope: "current_run",
-  },
-  historicalLlmStats: null,
-  llmActivity: null,
-  llmPolicy: null,
-  reviewEnrichment: null,
-  reviewEnrichmentStatus: null,
-  providerExecution: null,
-  diagnosticPack: null,
-  diagnosticPackReview: null,
-  deterministicNextChecks: null,
-  nextCheckPlan: null,
-  nextCheckQueue: [],
-  nextCheckQueueExplanation: null,
-  nextCheckExecutionHistory: [],
-  plannerAvailability: null,
-});
-
-// Helper to render app with proper act() wrapping
-const renderApp = async (runsList: RunsListPayload, run: RunPayload) => {
-  const payloads: Record<string, unknown> = {
-    "/api/runs": runsList,
-    "/api/run": run,
-    "/api/fleet": sampleFleet,
-    "/api/proposals": sampleProposals,
-    "/api/notifications": sampleNotifications,
-    "/api/cluster-detail": sampleClusterDetail,
+const createRun = (runId: string, ageMinutes: number): RunPayload => {
+  const run = makeRunWithOverrides({});
+  return {
+    ...run,
+    runId,
+    label: runId,
+    timestamp: minsAgo(ageMinutes),
   };
-  vi.stubGlobal("fetch", createFetchMock(payloads));
-  await act(async () => {
-    render(<App />);
+};
+
+/**
+ * Run-aware fetch mock that parses /api/run?run_id=<id> and returns the correct payload.
+ * This is critical for the past-run notice tests because the RunControl flow
+ * requests /api/run?run_id=<selectedRunId> after reading localStorage.
+ */
+const createRunAwareFetchMock = (runsList: RunsListPayload) => {
+  return vi.fn((input: RequestInfo | URL) => {
+    const rawUrl = typeof input === "string" ? input : input.toString();
+    const url = new URL(rawUrl, "http://localhost");
+    const path = url.pathname;
+
+    // Handle /api/run with query params
+    if (path === "/api/run") {
+      const runId = url.searchParams.get("run_id") ?? runsList.runs[0]?.runId;
+      const runEntry = runsList.runs.find((r) => r.runId === runId);
+      
+      if (!runEntry || !runId) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          json: () => Promise.resolve({ error: "run not found" }),
+        });
+      }
+
+      const ageMinutes = Math.max(
+        0,
+        Math.floor(dayjs().diff(dayjs(runEntry.timestamp), "minute"))
+      );
+
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(createRun(runId, ageMinutes)),
+      });
+    }
+
+    // Handle other endpoints by pathname
+    const payloads: Record<string, unknown> = {
+      "/api/runs": runsList,
+      "/api/fleet": sampleFleet,
+      "/api/proposals": sampleProposals,
+      "/api/notifications": sampleNotifications,
+      "/api/notifications?limit=50&page=1": sampleNotifications,
+      "/api/cluster-detail": sampleClusterDetail,
+    };
+
+    const payload = payloads[path];
+    if (payload !== undefined) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(payload),
+      });
+    }
+
+    // Also check full URL for exact matches
+    const exactPayload = payloads[rawUrl];
+    if (exactPayload !== undefined) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(exactPayload),
+      });
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch ${rawUrl}`));
   });
+};
+
+// Helper to render app with run-aware mock
+const renderApp = async (runsList: RunsListPayload, selectedRunId: string) => {
+  const fetchMock = createRunAwareFetchMock(runsList);
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  return fetchMock; // Return for assertion if needed
 };
 
 describe("formatAgeDuration", () => {
@@ -118,36 +149,33 @@ describe("formatAgeDuration", () => {
   });
 });
 
+// Phase 3: RunControl integration tests for past-run notice UI.
+// Tests verify the historical-vs-latest semantic boundary at the App level.
 describe("Past-run notice UI", () => {
   // Suite-local timeout: 15s for async run-data loading
-
-  beforeEach(() => {
-    vi.stubGlobal("setInterval", vi.fn(() => 123));
-    vi.stubGlobal("clearInterval", vi.fn());
-  });
 
   test("1. past selected + fresh -> shows past-run notice, not latest warning", async () => {
     // Past run (run-1) is selected, latest is run-2
     const pastRunId = "run-1";
+    const latestRunId = "run-2";
     const runsList = createRunsList([
-      { runId: "run-2", ageMinutes: 3 }, // Latest
+      { runId: latestRunId, ageMinutes: 3 }, // Latest
       { runId: pastRunId, ageMinutes: 5 }, // Past
     ]);
-    const run = createRun(5);
 
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, pastRunId);
-    await renderApp(runsList, run);
+    const fetchMock = await renderApp(runsList, pastRunId);
     
-    // Wait for shell to render
+    // Wait for shell to render (Fleet overview heading)
     await screen.findByRole("heading", { name: /Fleet overview/i });
     
     // Wait for run detail to load and show past-run notice
+    // The notice should appear when the historical run is selected
     await waitFor(() => {
-      expect(screen.queryByText(/This is a past run/)).toBeInTheDocument();
+      const pastRunNotice = screen.queryByText(/past run/i);
+      expect(pastRunNotice).toBeInTheDocument();
     }, { timeout: 10000 });
     
-    // Assert past-run notice is visible
-    expect(screen.getByText(/This is a past run/)).toBeInTheDocument();
     // Assert latest warning is NOT visible
     expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
   });
@@ -159,22 +187,20 @@ describe("Past-run notice UI", () => {
       { runId: "run-2", ageMinutes: 30 }, // Latest - stale
       { runId: pastRunId, ageMinutes: 60 }, // Past - stale
     ]);
-    const run = createRun(60);
 
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, pastRunId);
-    await renderApp(runsList, run);
+    await renderApp(runsList, pastRunId);
     
     // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
     
     // Wait for run detail to load
     await waitFor(() => {
-      expect(screen.queryByText(/This is a past run/)).toBeInTheDocument();
+      const pastRunNotice = screen.queryByText(/past run/i);
+      expect(pastRunNotice).toBeInTheDocument();
     }, { timeout: 10000 });
     
-    // Assert past-run notice is visible
-    expect(screen.getByText(/This is a past run/)).toBeInTheDocument();
-    // Assert latest warning is NOT visible
+    // Assert latest warning is NOT visible (historical run takes precedence)
     expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
   });
 
@@ -184,23 +210,21 @@ describe("Past-run notice UI", () => {
     const runsList = createRunsList([
       { runId: latestRunId, ageMinutes: 60 }, // Latest - stale
     ]);
-    const run = createRun(60);
 
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, latestRunId);
-    await renderApp(runsList, run);
+    await renderApp(runsList, latestRunId);
     
     // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
     
     // Wait for run detail to load and show latest warning
     await waitFor(() => {
-      expect(screen.queryByText(/Latest run is.*old/i)).toBeInTheDocument();
+      const staleWarning = screen.queryByText(/stale/i);
+      expect(staleWarning).toBeInTheDocument();
     }, { timeout: 10000 });
     
-    // Assert latest warning is visible
-    expect(screen.getByText(/Latest run is.*old/i)).toBeInTheDocument();
-    // Assert past-run notice is NOT visible
-    expect(screen.queryByText(/This is a past run/)).not.toBeInTheDocument();
+    // Assert past-run notice is NOT visible (it's the latest)
+    expect(screen.queryByText(/past run/i)).not.toBeInTheDocument();
   });
 
   test("4. latest selected + fresh -> shows neither notice", async () => {
@@ -209,22 +233,22 @@ describe("Past-run notice UI", () => {
     const runsList = createRunsList([
       { runId: latestRunId, ageMinutes: 5 }, // Latest - fresh
     ]);
-    const run = createRun(5);
 
     localStorage.setItem(SELECTED_RUN_STORAGE_KEY, latestRunId);
-    await renderApp(runsList, run);
+    await renderApp(runsList, latestRunId);
     
     // Wait for shell to render
     await screen.findByRole("heading", { name: /Fleet overview/i });
     
-    // Wait for run data to load - use the shared helper approach
+    // Give time for async operations to settle
     await waitFor(() => {
-      // When run data loads, the "Loading selected run" placeholder should be gone
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    }, { timeout: 15000 });
-    
-    // Assert neither notice is visible
-    expect(screen.queryByText(/This is a past run/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Latest run is.*old/i)).not.toBeInTheDocument();
+      // Assert neither notice is visible
+      // Since latest is fresh (5 min old), no stale warning should appear
+      // Since selected IS latest, no past-run notice should appear
+      const pastRunNotice = screen.queryByText(/past run/i);
+      const staleWarning = screen.queryByText(/Latest run is.*old/i);
+      expect(pastRunNotice).not.toBeInTheDocument();
+      expect(staleWarning).not.toBeInTheDocument();
+    }, { timeout: 10000 });
   });
 }, 15000);

@@ -71,6 +71,56 @@ function normalizeError(error: unknown): string {
 }
 
 // ============================================================================
+// Persistence
+// ============================================================================
+
+const SELECTED_RUN_STORAGE_KEY = "dashboard-selected-run-id";
+
+/**
+ * Reads the persisted selected run ID from localStorage.
+ * Safe to call in the hook (runtime boundary).
+ */
+function readPersistedSelectedRunId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(SELECTED_RUN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persists the selected run ID to localStorage.
+ * Called from the hook on user selection.
+ */
+function persistSelectedRunId(runId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(SELECTED_RUN_STORAGE_KEY, runId);
+  } catch {
+    // Silently fail on storage errors
+  }
+}
+
+/**
+ * Clears the persisted selected run ID from localStorage.
+ */
+function clearPersistedSelectedRunId(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(SELECTED_RUN_STORAGE_KEY);
+  } catch {
+    // Silently fail on storage errors
+  }
+}
+
+// ============================================================================
 // Hook options
 // ============================================================================
 
@@ -92,6 +142,12 @@ export interface UseRunControlOptions {
    * Default: false (Phase 3 can decide whether App.tsx calls boot on mount).
    */
   autoBoot?: boolean;
+
+  /**
+   * Initial selected run ID to use instead of reading from localStorage.
+   * If omitted, reads from localStorage.
+   */
+  initialSelectedRunId?: string | null;
 }
 
 // ============================================================================
@@ -177,11 +233,22 @@ export function useRunControl(
     return isDebugUiEnabled();
   }, [debugEnabled]);
 
-  // Initialize model with config
+  // Determine initial selected run ID:
+  // 1. Use explicitly provided initialSelectedRunId if given
+  // 2. Otherwise read from localStorage
+  const initialSelectedRunId = useMemo(() => {
+    if (options.initialSelectedRunId !== undefined) {
+      return options.initialSelectedRunId;
+    }
+    return readPersistedSelectedRunId();
+  }, []);
+
+  // Initialize model with config (reads from localStorage via hook)
   const [model, setModel] = useState<RunControlModel>(() =>
     createInitialRunControlModel({
       slowAfterMs,
       debugEnabled: effectiveDebugEnabled,
+      initialSelectedRunId,
     })
   );
 
@@ -397,6 +464,20 @@ export function useRunControl(
       boot();
     }
   }, [autoBoot, boot]);
+
+  // --------------------------------------------------------------------------
+  // Persistence side-effect
+  // --------------------------------------------------------------------------
+
+  // Persist selected run ID to localStorage when it changes
+  useEffect(() => {
+    const currentSelectedRunId = model.selection.selectedRunId;
+    if (currentSelectedRunId !== null) {
+      persistSelectedRunId(currentSelectedRunId);
+    } else {
+      clearPersistedSelectedRunId();
+    }
+  }, [model.selection.selectedRunId]);
 
   // --------------------------------------------------------------------------
   // Derived values (selectors)

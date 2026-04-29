@@ -356,7 +356,79 @@ export type RunSummaryPanelProps = {
   discoveryVariantOrder: NextCheckStatusVariant[];
   discoveryVariantCounts: Record<NextCheckStatusVariant, number>;
   discoveryClusters: string[];
+  // Phase 3: RunControl-derived state for progressive loading UI
+  /** Panel state for the selected run display: loading, slow, failed, loaded */
+  runOwnedPanelState?: "no-selection" | "loading" | "slow" | "failed" | "loaded";
+  /** Error message if selected run fetch failed */
+  selectedRunError?: string | null;
+  /** Retry callback for failed state */
+  onRetrySelectedRun?: () => void;
+  /** The selected run ID for display in slow/failed states */
+  selectedRunId?: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// RunSummarySlowState
+// ---------------------------------------------------------------------------
+
+/**
+ * Phase 3: Slow-state UI for run-owned panels.
+ * Shown when the selected run is taking a long time to load.
+ */
+const RunSummarySlowState = ({ selectedRunId }: { selectedRunId: string | null }) => (
+  <section className="panel run-summary" id="run-detail">
+    <div className="run-summary-loading run-summary-loading--slow">
+      <p className="muted">
+        Still loading selected run
+        {selectedRunId ? ` (ID: ${selectedRunId})…` : "…"}
+      </p>
+      <p className="muted small">Backend may still be working.</p>
+    </div>
+  </section>
+);
+
+// ---------------------------------------------------------------------------
+// RunSummaryFailedState
+// ---------------------------------------------------------------------------
+
+/**
+ * Phase 3: Failed-state UI for run-owned panels.
+ * Shown when the selected run fetch has failed.
+ */
+const RunSummaryFailedState = ({ 
+  selectedRunId, 
+  error, 
+  onRetry 
+}: { 
+  selectedRunId: string | null;
+  error: string | null;
+  onRetry: () => void;
+}) => (
+  <section className="panel run-summary" id="run-detail">
+    <div className="run-summary-loading run-summary-loading--failed">
+      <p className="muted">
+        Failed to load selected run
+        {selectedRunId ? ` (ID: ${selectedRunId})` : ""}
+      </p>
+      {error && (
+        <p className="muted small error-text">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        className="row-action row-action--primary"
+        onClick={onRetry}
+      >
+        Retry
+      </button>
+    </div>
+  </section>
+);
+
+// ---------------------------------------------------------------------------
+// RunSummaryPanel
+// ---------------------------------------------------------------------------
 
 export const RunSummaryPanel = ({
   run,
@@ -382,7 +454,28 @@ export const RunSummaryPanel = ({
   discoveryVariantOrder,
   discoveryVariantCounts,
   discoveryClusters,
+  // Phase 3: RunControl-derived state
+  runOwnedPanelState,
+  selectedRunError,
+  onRetrySelectedRun,
+  selectedRunId,
 }: RunSummaryPanelProps) => {
+  // Phase 3: Handle progressive loading states from RunControl
+  // These states take precedence over the "no run" state
+  if (runOwnedPanelState === "slow") {
+    return <RunSummarySlowState selectedRunId={selectedRunId ?? null} />;
+  }
+
+  if (runOwnedPanelState === "failed") {
+    return (
+      <RunSummaryFailedState
+        selectedRunId={selectedRunId ?? null}
+        error={selectedRunError ?? null}
+        onRetry={onRetrySelectedRun ?? (() => {})}
+      />
+    );
+  }
+
   // Handle loading state - show placeholder when run data is not yet available
   if (!run) {
     return (

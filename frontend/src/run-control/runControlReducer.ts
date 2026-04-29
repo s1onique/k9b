@@ -5,9 +5,12 @@
  *
  * Design constraints:
  * - No Date.now() inside reducer or selectors.
- * - No fetch, setTimeout, setInterval, localStorage, window access, or console logging.
+ * - No fetch, setTimeout, setInterval, window access, or console logging.
  * - All time enters via message fields: nowMs, receivedAtMs, failedAtMs.
  * - Effects are data only.
+ * 
+ * Persistence note: localStorage access is handled in useRunControl hook,
+ * not in this reducer. The reducer receives initialSelectedRunId via config.
  */
 
 import type { RunPayload } from "../types";
@@ -34,6 +37,9 @@ export function createInitialRunControlModel(
   const slowAfterMs = config?.slowAfterMs ?? 10_000;
   const debugEnabled = config?.debugEnabled ?? false;
 
+  // Phase 3: Use initialSelectedRunId from config (passed by hook after reading localStorage)
+  const initialSelectedRunId = config?.initialSelectedRunId ?? null;
+
   return {
     nextRequestSeq: 1,
     runs: {
@@ -45,9 +51,11 @@ export function createInitialRunControlModel(
       lastRefreshReason: null,
     },
     selection: {
-      selectedRunId: null,
+      // Initialize with persisted selection if available
+      selectedRunId: initialSelectedRunId,
       latestRunId: null,
-      selectedReason: null,
+      // selectedReason will be set properly when runs are loaded
+      selectedReason: initialSelectedRunId ? "boot" : null,
     },
     selectedRun: {
       status: "idle",

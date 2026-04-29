@@ -314,4 +314,6 @@ export type RunControlEffect =
 export interface CreateInitialModelConfig {
   slowAfterMs?: number;
   debugEnabled?: boolean;
+  /** Initial selected run ID (e.g., from localStorage). Read by hook, passed to reducer. */
+  initialSelectedRunId?: string | null;
 }

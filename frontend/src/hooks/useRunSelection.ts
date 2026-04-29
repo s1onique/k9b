@@ -1,20 +1,22 @@
 /**
- * useRunSelection hook - manages runs list fetching, selection, pagination, and filtering.
+ * useRunSelection hook - manages runs list fetching, pagination, and filtering.
  *
- * Owns: fetching the runs list, selecting a run, navigating to latest, pagination, filtering.
+ * PHASE 3: This hook no longer owns selectedRunId.
+ * selectedRunId ownership is now with useRunControl (sole source of truth).
+ * This hook only manages list/pagination concerns.
  *
- * Inputs: (none - all state is internal)
+ * Inputs:
+ *   - selectedRunId: string | null - selected run from useRunControl (REQUIRED)
  *
  * Returns:
  *   - runs: RunsListEntry[] - the list of runs
- *   - selectedRunId: string | null - the currently selected run ID
- *   - selectRun: (runId: string) => void - select a run by ID
  *   - isLoading: boolean - whether a fetch is in progress
  *   - error: string | null - error message if fetch failed
  *   - refreshRuns: () => Promise<void> - manually trigger a refresh
  *   - latestRunId: string | null - the most recent run ID
  *   - isLatest: boolean - whether the selected run is the latest
  *   - autoRefreshInterval: number | null - the auto-refresh interval used for runs list polling
+ *   - handleAutoRefreshChange: (value: string) => void
  *   - runsFilter: RunsReviewFilter - current filter for runs list
  *   - setRunsFilter: (filter: RunsReviewFilter) => void
  *   - runsPageSize: number - number of runs per page
@@ -31,19 +33,18 @@
  *   - handleRunsFilterChange: (filter: RunsReviewFilter) => void
  *   - handleRunsPageSizeChange: (size: number) => void
  *   - handleRunsPageChange: (page: number) => void
+ *   - computePageForRunId: (runId: string | null) => number
+ *   - navigateToPageContainingRun: (runId: string | null) => void
  *   - handleShowSelectedRun: () => void
- *   - handleRunSelection: (runId: string) => void
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchRunsList } from "../api";
 import type { RunsListEntry, RunsListPayload } from "../types";
 
-export const SELECTED_RUN_STORAGE_KEY = "dashboard-selected-run-id";
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
 
 // Review status filter types for recent runs panel
-// Uses reviewStatus from backend: "no-executions", "unreviewed", "partially-reviewed", "fully-reviewed"
 export type RunsReviewFilter = "all" | "no-executions" | "awaiting-review" | "partially-reviewed" | "fully-reviewed" | "needs-attention";
 
 export const RUNS_REVIEW_FILTER_OPTIONS: { label: string; value: RunsReviewFilter }[] = [
@@ -69,8 +70,6 @@ const MAX_RUNS_PAGE_SIZE = 20;
 export const RUNS_PAGE_SIZE_OPTIONS = [5, 10, 20] as const;
 
 // Compute filter counts from runs list
-// When executionCountsComplete is false, we cannot trust reviewStatus='no-executions'
-// because it may reflect missing data rather than true absence of executions.
 export const computeRunsFilterCounts = (
   runs: RunsListEntry[],
   executionCountsComplete: boolean = true
@@ -86,12 +85,9 @@ export const computeRunsFilterCounts = (
 
   runs.forEach((run) => {
     if (run.reviewStatus === 'no-executions') {
-      // Only count as no-executions when we trust the count (counts complete)
       if (executionCountsComplete) {
         counts['no-executions']++;
       }
-      // When counts are incomplete, we can't make a filter claim about no-executions
-      // The run is visible in the table but not counted in any filter bucket
     } else if (run.reviewStatus === 'unreviewed') {
       counts['awaiting-review']++;
       counts['needs-attention']++;
@@ -127,9 +123,6 @@ const persistRunsReviewFilter = (value: RunsReviewFilter) => {
   window.localStorage.setItem(RUNS_REVIEW_FILTER_STORAGE_KEY, value);
 };
 
-const isRunsPageSizeValue = (value: unknown): value is typeof RUNS_PAGE_SIZE_OPTIONS[number] =>
-  typeof value === "number" && RUNS_PAGE_SIZE_OPTIONS.includes(value as typeof RUNS_PAGE_SIZE_OPTIONS[number]);
-
 const readStoredRunsPageSize = (): number => {
   if (typeof window === "undefined") {
     return DEFAULT_RUNS_PAGE_SIZE;
@@ -150,28 +143,6 @@ const persistRunsPageSize = (value: number) => {
     return;
   }
   window.localStorage.setItem(RUNS_PAGE_SIZE_STORAGE_KEY, String(value));
-};
-
-const readStoredSelectedRunId = (): string | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const stored = window.localStorage.getItem(SELECTED_RUN_STORAGE_KEY);
-  if (!stored) {
-    return null;
-  }
-  return stored;
-};
-
-const persistSelectedRunId = (runId: string | null) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  if (runId) {
-    window.localStorage.setItem(SELECTED_RUN_STORAGE_KEY, runId);
-  } else {
-    window.localStorage.removeItem(SELECTED_RUN_STORAGE_KEY);
-  }
 };
 
 const readStoredAutoRefreshInterval = (): number | null => {
@@ -201,21 +172,15 @@ const persistAutoRefreshInterval = (value: string) => {
 
 /**
  * Determines the display status for a run in the Recent Runs table.
- * When executionCountsComplete is false, we cannot trust executionCount=0
- * to mean "no executions" - it may mean the count wasn't loaded.
- * Only masks the ambiguous "no-executions" case; preserves known review statuses.
  */
 export type RunsDisplayStatus = "no-executions" | "unreviewed" | "partially-reviewed" | "fully-reviewed" | "unknown";
 
-// Review status types from RunsListEntry - typed alias for clarity
 export type RunsReviewStatus = RunsListEntry["reviewStatus"];
 
 export const getRunsDisplayStatus = (
   reviewStatus: RunsReviewStatus,
   executionCountsComplete: boolean,
 ): RunsDisplayStatus => {
-  // When counts are incomplete, only "no-executions" is ambiguous
-  // Other statuses (unreviewed, partially-reviewed, fully-reviewed) are already known from review artifacts
   if (!executionCountsComplete && reviewStatus === "no-executions") {
     return "unknown";
   }
@@ -226,16 +191,13 @@ export interface UseRunSelectionReturn {
   runs: RunsListEntry[];
   executionCountsComplete: boolean;
   selectedRunId: string | null;
-  selectRun: (runId: string) => void;
   isLoading: boolean;
   error: string | null;
   refreshRuns: () => Promise<void>;
   latestRunId: string | null;
   isLatest: boolean;
-  jumpToLatest: () => void;
   autoRefreshInterval: number | null;
   handleAutoRefreshChange: (value: string) => void;
-  // Pagination and filter state
   runsFilter: RunsReviewFilter;
   setRunsFilter: (filter: RunsReviewFilter) => void;
   runsPageSize: number;
@@ -255,47 +217,30 @@ export interface UseRunSelectionReturn {
   computePageForRunId: (runId: string | null) => number;
   navigateToPageContainingRun: (runId: string | null) => void;
   handleShowSelectedRun: () => void;
-  handleRunSelection: (runId: string) => void;
 }
 
-export const useRunSelection = (): UseRunSelectionReturn => {
+export interface UseRunSelectionOptions {
+  /**
+   * Selected run ID from useRunControl.
+   * PHASE 3: useRunSelection no longer owns selectedRunId - useRunControl is the sole owner.
+   * Default: null (no selection)
+   */
+  selectedRunId?: string | null;
+}
+
+export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSelectionReturn => {
+  // PHASE 3: selectedRunId is controlled via props from useRunControl
+  const { selectedRunId = null } = options;
+
   const [runs, setRuns] = useState<RunsListEntry[]>([]);
   const [executionCountsComplete, setExecutionCountsComplete] = useState<boolean>(true);
-  const [selectedRunId, setSelectedRunIdState] = useState<string | null>(readStoredSelectedRunId);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastFetch, setLastFetch] = useState<number>(0);
 
-  // Auto-refresh interval state for runs list polling
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(readStoredAutoRefreshInterval);
-
-  // Pagination and filter state for runs list
   const [runsFilter, setRunsFilter] = useState<RunsReviewFilter>(readStoredRunsReviewFilter);
   const [runsPageSize, setRunsPageSize] = useState<number>(readStoredRunsPageSize);
   const [runsPage, setRunsPage] = useState(1);
-
-  /**
-   * Follow/detached mode for Recent runs pagination.
-   *
-   * When `isRunsListFollowingSelection === true`:
-   *   - The table auto-navigates to show the selected run after refresh.
-   *   - Selecting a run, clicking ← Latest, or clicking "Show selected run"
-   *     keeps follow mode active.
-   *
-   * When `isRunsListFollowingSelection === false` (detached):
-   *   - Manual page navigation preserves the current browsing position.
-   *   - Refresh does NOT jump to the selected run's page.
-   *   - The operator can browse historical pages while another run is selected.
-   *
-   * Transitions to follow mode:
-   *   - User selects a run from the table
-   *   - User clicks ← Latest
-   *   - User clicks "Show selected run"
-   *
-   * Transitions to detached mode:
-   *   - User manually changes the page
-   *   - User manually changes page size
-   */
   const [isRunsListFollowingSelection, setIsRunsListFollowingSelection] = useState(true);
 
   const handleAutoRefreshChange = useCallback((value: string) => {
@@ -308,28 +253,24 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     }
   }, []);
 
-  // Reset to page 1 when filter changes
   const handleRunsFilterChange = useCallback((filter: RunsReviewFilter) => {
     setRunsFilter(filter);
     setRunsPage(1);
     persistRunsReviewFilter(filter);
   }, []);
 
-  // Handle page size change - transitions to detached mode
   const handleRunsPageSizeChange = useCallback((newSize: number) => {
     setRunsPageSize(newSize);
-    setRunsPage(1); // Reset to first page when page size changes
-    setIsRunsListFollowingSelection(false); // Detach: manual page size change
+    setRunsPage(1);
+    setIsRunsListFollowingSelection(false);
     persistRunsPageSize(newSize);
   }, []);
 
-  // Handle manual page change - transitions to detached mode
   const handleRunsPageChange = useCallback((page: number) => {
     setRunsPage(page);
-    setIsRunsListFollowingSelection(false); // Detach: manual navigation
+    setIsRunsListFollowingSelection(false);
   }, []);
 
-  // Filter runs based on selected filter
   const filteredRunsList = useMemo(() => {
     if (runsFilter === "all") {
       return runs;
@@ -354,10 +295,8 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     });
   }, [runs, runsFilter]);
 
-  // Compute filter counts - pass executionCountsComplete to exclude untrustworthy counts
   const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runs, executionCountsComplete), [runs, executionCountsComplete]);
 
-  // Compute the page number for a given runId within the filtered list
   const computePageForRunId = useCallback((runId: string | null): number => {
     if (!runId) return 1;
     const index = filteredRunsList.findIndex((r) => r.runId === runId);
@@ -365,19 +304,18 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     return Math.floor(index / runsPageSize) + 1;
   }, [filteredRunsList, runsPageSize]);
 
-  // Navigate to the page containing the given runId
   const navigateToPageContainingRun = useCallback((runId: string | null) => {
+    // Enable following mode so that subsequent run selection changes also navigate
+    setIsRunsListFollowingSelection(true);
     const page = computePageForRunId(runId);
     setRunsPage(page);
   }, [computePageForRunId]);
 
-  // Navigate to the page containing the selected run and switch to follow mode
   const handleShowSelectedRun = useCallback(() => {
-    setIsRunsListFollowingSelection(true); // Re-engage follow mode
+    setIsRunsListFollowingSelection(true);
     navigateToPageContainingRun(selectedRunId);
   }, [selectedRunId, navigateToPageContainingRun]);
 
-  // Computed paginated runs list
   const paginatedRunsList = useMemo(() => {
     const start = (runsPage - 1) * runsPageSize;
     const end = start + runsPageSize;
@@ -386,32 +324,25 @@ export const useRunSelection = (): UseRunSelectionReturn => {
 
   const totalRunsPages = Math.ceil(filteredRunsList.length / runsPageSize);
 
-  // Derived boolean: true when the selected run is visible on the current page.
-  // Used to suppress the detached notice when the operator can already see the selected run.
   const isSelectedRunVisibleOnCurrentRunsPage = useMemo(() => {
     if (!selectedRunId) return false;
     return paginatedRunsList.some((r) => r.runId === selectedRunId);
   }, [paginatedRunsList, selectedRunId]);
 
-  // Ref to track if a refresh is in progress to prevent duplicate fetches
   const refreshInProgress = useRef(false);
 
-  // Derive the latest run ID from the runs list
-  // Use the first run in the list (assuming it's sorted newest first by the backend)
   const latestRunId = useMemo(() => {
     return runs.length > 0 ? runs[0].runId : null;
   }, [runs]);
 
-  // Determine if the selected run is the latest
   const isLatest = useMemo(() => {
     if (!selectedRunId || !latestRunId) {
-      return true; // Default to true if no selection or no runs
+      return true;
     }
     return selectedRunId === latestRunId;
   }, [selectedRunId, latestRunId]);
 
   const refreshRuns = useCallback(async () => {
-    // Prevent overlapping refresh requests
     if (refreshInProgress.current) {
       return;
     }
@@ -421,13 +352,11 @@ export const useRunSelection = (): UseRunSelectionReturn => {
       setError(null);
       const payload: RunsListPayload = await fetchRunsList();
       if (active) {
-        // Sort runs by timestamp descending (newest first)
         const sortedRuns = [...payload.runs].sort(
           (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
         setRuns(sortedRuns);
         setExecutionCountsComplete(payload.executionCountsComplete ?? true);
-        setLastFetch(Date.now());
       }
     } catch (err) {
       if (active) {
@@ -438,7 +367,6 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     }
   }, []);
 
-  // Initial fetch when component mounts
   useEffect(() => {
     setIsLoading(true);
     refreshRuns().finally(() => {
@@ -446,31 +374,6 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     });
   }, [refreshRuns]);
 
-  // Auto-select the latest run if no run is selected
-  useEffect(() => {
-    if (!selectedRunId && latestRunId) {
-      setSelectedRunIdState(latestRunId);
-    }
-  }, [selectedRunId, latestRunId]);
-
-  // Guard: If the selected run is no longer in the runs list (stale localStorage),
-  // fall back to the latest run. This handles cases where:
-  // - Historical runs were deleted
-  // - localStorage references a run_id that no longer exists
-  // - The selected run was invalidated server-side
-  useEffect(() => {
-    if (!selectedRunId || runs.length === 0) {
-      return;
-    }
-    const runExists = runs.some((r) => r.runId === selectedRunId);
-    if (!runExists && latestRunId) {
-      // Selected run is stale - fall back to latest
-      setSelectedRunIdState(latestRunId);
-    }
-  }, [selectedRunId, runs, latestRunId]);
-
-  // Auto-refresh polling for runs list - polls the runs list endpoint
-  // to surface new runs without requiring a full browser reload.
   useEffect(() => {
     if (!autoRefreshInterval) return;
     const timerId = setInterval(() => {
@@ -479,63 +382,27 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     return () => clearInterval(timerId);
   }, [autoRefreshInterval, refreshRuns]);
 
-  const selectRun = useCallback(
-    (runId: string) => {
-      persistSelectedRunId(runId);
-      setSelectedRunIdState(runId);
-    },
-    []
-  );
-
-  const jumpToLatest = useCallback(() => {
-    if (latestRunId) {
-      persistSelectedRunId(latestRunId);
-      setSelectedRunIdState(latestRunId);
-      // Also navigate to page 1 (where latest run is in default newest-first ordering)
-      setRunsPage(1);
-    }
-  }, [latestRunId]);
-
-  // Navigate to the page containing the selected run when it changes
-  // This ensures the table shows the row for the selected run
-  const handleRunSelection = useCallback((runId: string) => {
-    persistSelectedRunId(runId);
-    setSelectedRunIdState(runId);
-    // Navigate to the page containing the selected run
-    navigateToPageContainingRun(runId);
-  }, [navigateToPageContainingRun]);
-
   // Effect: After runs list refresh, navigate to the page containing the selected run.
-  // This ensures the selected row remains visible after manual refresh or auto-refresh.
-  // If the selected run is filtered out, selection state is preserved but the row won't be visible.
-  // Only auto-navigates when in follow mode (isRunsListFollowingSelection === true).
   useEffect(() => {
     if (!selectedRunId) return;
     if (!isRunsListFollowingSelection) return;
-    // Check if selected run exists in the filtered list
     const runInFilteredList = filteredRunsList.find((r) => r.runId === selectedRunId);
     if (runInFilteredList) {
-      // Selected run is in filtered dataset - navigate to its page to keep it visible
       navigateToPageContainingRun(selectedRunId);
     }
-    // If not in filtered list, we intentionally do NOT change runsPage here.
-    // The selection state remains intact (for the header/detail view).
   }, [selectedRunId, filteredRunsList, navigateToPageContainingRun, isRunsListFollowingSelection]);
 
   return {
     runs,
     executionCountsComplete,
     selectedRunId,
-    selectRun,
     isLoading,
     error,
     refreshRuns,
     latestRunId,
     isLatest,
-    jumpToLatest,
     autoRefreshInterval,
     handleAutoRefreshChange,
-    // Pagination and filter state
     runsFilter,
     setRunsFilter,
     runsPageSize,
@@ -555,6 +422,5 @@ export const useRunSelection = (): UseRunSelectionReturn => {
     computePageForRunId,
     navigateToPageContainingRun,
     handleShowSelectedRun,
-    handleRunSelection,
   };
 };

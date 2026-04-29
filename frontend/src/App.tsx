@@ -10,10 +10,10 @@ import {
   submitUsefulnessFeedback,
 } from "./api";
 import { useAppData } from "./hooks/useAppData";
-import { useRunData } from "./hooks/useRunData";
 import { useRunSelection } from "./hooks/useRunSelection";
 import { useUIState } from "./hooks/useUIState";
 import { useQueueState } from "./hooks/useQueueState";
+import { useRunControl } from "./run-control";
 import type {
   AlertmanagerProvenance,
   ArtifactLink,
@@ -1140,17 +1140,34 @@ export const ProposalList = ({
 };
 
 const App = () => {
+  // Phase 3: Run Control Plane - source of truth for selected-run causal chain
+  // Single useRunControl call provides all selected-run state and actions
+  const {
+    selectedRunId,
+    latestRunId,
+    selectedRun,
+    selectedRunStatus,
+    selectedRunError,
+    runOwnedPanelState,
+    showLatestJump,
+    clickLatest,
+    manualRefresh,
+    poll,
+    retrySelectedRun,
+    model,
+    selectRun: runControlSelectRun,
+  } = useRunControl({
+    autoBoot: true,
+    slowAfterMs: 10_000,
+  });
+
   // Run selection state - extracted to useRunSelection hook
-  // MUST be called BEFORE useRunData because useRunData needs selectedRunId
+  // Pagination and filter state (NOT selection - that's now owned by RunControl)
   const {
     runs: runsList,
-    selectedRunId,
-    selectRun: setSelectedRunId,
     isLoading: runsListLoading,
     error: runsListError,
     refreshRuns,
-    latestRunId,
-    isLatest: isSelectedRunLatest,
     autoRefreshInterval,
     handleAutoRefreshChange,
     // Pagination and filter state
@@ -1174,19 +1191,16 @@ const App = () => {
     navigateToPageContainingRun,
     handleShowSelectedRun,
     handleRunSelection,
-    jumpToLatest,
-  } = useRunSelection();
+  } = useRunSelection({ selectedRunId });
 
-  // Run data state - extracted to useRunData hook
-  const {
-    run,
-    isLoading: runDataLoading,
-    isError: runDataError,
-    lastRefresh,
-    refresh: refreshRunData,
-  } = useRunData({
-    selectedRunId,
-  });
+  // Run payload from RunControl (now the authoritative source)
+  const run = selectedRun;
+
+  // Phase 3: Derive header freshness from RunControl model instead of local state
+  // model.runs.lastLoadedAtMs is updated by the reducer when runs list loads
+  const lastRefresh = model.runs.lastLoadedAtMs
+    ? dayjs(model.runs.lastLoadedAtMs)
+    : dayjs();
 
   // App data state - extracted to useAppData hook
   const {
@@ -1208,12 +1222,15 @@ const App = () => {
     selectedRunId,
     lastRefresh,
     refreshRuns,
-    refreshRunData,
   });
 
-  // Derive combined loading and error state
-  const isLoading = runDataLoading || runsListLoading;
-  const isError = runDataError || error;
+  // Derive combined loading and error state (using RunControl for selected run state)
+  // isLoading is no longer tied to run detail fetch - fleet/proposals are the critical path
+  const isLoading = runsListLoading;
+  const isError = error;
+  
+  // isSelectedRunLatest derived from RunControl's selectedRunId vs latestRunId
+  const isSelectedRunLatest = selectedRunId !== null && selectedRunId === latestRunId;
 
   // UI state - extracted to useUIState hook
   const {
@@ -1287,6 +1304,15 @@ const App = () => {
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
 
+  // Phase 3: Wire RecentRunsPanel's onRunSelection to use RunControl
+  // This ensures the causal chain goes through RunControl: selection -> fetch -> payload
+  const handleRunSelectionViaRunControl = useCallback((runId: string) => {
+    // Select run in RunControl (fetches run payload, updates header)
+    runControlSelectRun(runId);
+    // Navigate to the page containing the selected run so it becomes visible in the list
+    navigateToPageContainingRun(runId);
+  }, [runControlSelectRun, navigateToPageContainingRun]);
+
   // Handle batch execution for a run - refreshes runs list and selected run via hooks
   const handleBatchExecution = useCallback(async (runId: string) => {
     setExecutingBatchRunId(runId);
@@ -1299,11 +1325,12 @@ const App = () => {
       // Explicitly send dryRun: false for actual execution
       // The backend defaults to False, but being explicit improves clarity and debugging
       await runBatchExecution({ runId, dryRun: false });
-      // Refresh runs list and run data through hooks after successful execution
+      // Refresh runs list after successful execution
       await refreshRuns();
-      // If the selected run is the one we just executed, refresh its data too
+      // If the executed run is currently selected, refresh its data through RunControl
+      // This ensures the execution history / next-check state is up to date
       if (selectedRunId === runId) {
-        await refreshRunData();
+        retrySelectedRun();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Batch execution failed";
@@ -1314,7 +1341,7 @@ const App = () => {
     } finally {
       setExecutingBatchRunId((current) => (current === runId ? null : current));
     }
-  }, [selectedRunId, refreshRuns, refreshRunData]);
+  }, [selectedRunId, refreshRuns, retrySelectedRun]);
 
   // Derive selectedClusterLabel from hook (with local clusterDetailExpanded handling)
   const selectedClusterLabel = hookSelectedClusterLabel;
@@ -1859,7 +1886,7 @@ const App = () => {
                 <button
                   type="button"
                   className="link tiny"
-                  onClick={jumpToLatest}
+                  onClick={clickLatest}
                   title="Jump back to the latest run"
                 >
                   ← Latest
@@ -1942,7 +1969,7 @@ const App = () => {
         onRunsFilterChange={handleRunsFilterChange}
         onRunsPageChange={handleRunsPageChange}
         onRunsPageSizeChange={handleRunsPageSizeChange}
-        onRunSelection={handleRunSelection}
+        onRunSelection={handleRunSelectionViaRunControl}
         onBatchExecution={handleBatchExecution}
         onShowSelectedRun={handleShowSelectedRun}
         onFocusClusterForNextChecks={focusClusterForNextChecks}
@@ -1971,14 +1998,52 @@ const App = () => {
           discoveryVariantOrder={discoveryVariantOrder}
           discoveryVariantCounts={discoveryVariantCounts}
           discoveryClusters={discoveryClusters}
+          // Phase 3: Wire RunControl-derived state for progressive loading UI
+          runOwnedPanelState={runOwnedPanelState}
+          selectedRunError={selectedRunError}
+          onRetrySelectedRun={retrySelectedRun}
+          selectedRunId={selectedRunId}
         />
       ) : (
-        <section className="panel" id="run-detail">
-          <div className="section-head">
-            <h2>Run summary</h2>
-            <p className="muted">Loading selected run…</p>
-          </div>
-        </section>
+        // Phase 3: When no run payload yet, check for slow/failed states from RunControl
+        runOwnedPanelState === "slow" || runOwnedPanelState === "failed" ? (
+          <RunSummaryPanel
+            run={null}
+            isSelectedRunLatest={isSelectedRunLatest}
+            selectedClusterLabel={selectedClusterLabel}
+            onFocusClusterForNextChecks={focusClusterForNextChecks}
+            runSummaryStats={runSummaryStats}
+            runStatsSummary={runStatsSummary}
+            runLlmStatsLine={runLlmStatsLine}
+            historicalLlmStatsLine={historicalLlmStatsLine}
+            providerBreakdown={providerBreakdown}
+            telemetryData={telemetryData}
+            runPlan={null}
+            runPlanCandidates={[]}
+            planSummaryText=""
+            planStatusText={null}
+            plannerReasonText=""
+            plannerHint={null}
+            plannerNextActionHint={null}
+            plannerArtifactUrl={null}
+            planCandidateCountLabel=""
+            discoveryVariantOrder={discoveryVariantOrder}
+            discoveryVariantCounts={discoveryVariantCounts}
+            discoveryClusters={[]}
+            // Phase 3: Wire RunControl-derived state for progressive loading UI
+            runOwnedPanelState={runOwnedPanelState}
+            selectedRunError={selectedRunError}
+            onRetrySelectedRun={retrySelectedRun}
+            selectedRunId={selectedRunId}
+          />
+        ) : (
+          <section className="panel" id="run-detail">
+            <div className="section-head">
+              <h2>Run summary</h2>
+              <p className="muted">Loading selected run…</p>
+            </div>
+          </section>
+        )
       )}
       {/* Workflow Lane: Diagnose Now */}
       <div className="workflow-lane-header">
