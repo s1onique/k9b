@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import json
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
 
 from k8s_diag_agent.ui.api import build_runs_list
 

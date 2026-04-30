@@ -67,6 +67,7 @@ from .ui_serialization import (
     _serialize_notification_history,
     _serialize_proposal,
     _serialize_proposal_status_summary,
+    _stringify_notification_value,
 )
 from .ui_shared import _relative_path
 
@@ -240,6 +241,9 @@ def write_health_ui_index(
     # Build recent_runs_summary for fast /api/runs default path
     # This is the key optimization: avoid scanning all review files on each request
     index["recent_runs_summary"] = _build_recent_runs_summary(output_dir / "reviews")
+    # Build notification_index for fast /api/notifications default path
+    # This is the key optimization: avoid scanning all notification files on each request
+    index["notification_index"] = _build_notification_index(notifications, output_dir)
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -616,3 +620,82 @@ def _parse_run_start(run_id: str) -> datetime | None:
     except ValueError:
         return None
     return parsed.replace(tzinfo=UTC)
+
+
+# Maximum number of notification summaries to store in the index
+# This bounds index size while providing fast default list access
+_NOTIFICATION_INDEX_LIMIT = 500
+
+
+def _build_notification_index(
+    notifications: Sequence[NotificationRecord],
+    output_dir: Path,
+) -> dict[str, object]:
+    """Build a compact notification index for fast /api/notifications default path.
+
+    This is the key optimization to avoid scanning all notification files on cold startup.
+    Each entry contains only the fields needed for the initial notification list:
+    - kind, summary, timestamp, runId, clusterLabel
+    - artifactPath for provenance pointer to full artifact
+
+    The index is bounded to latest 500 notifications to keep index size manageable.
+
+    Args:
+        notifications: Sequence of (NotificationArtifact, Path) tuples
+        output_dir: Path to the health directory for relative path computation
+
+    Returns:
+        Dict with 'notifications' list, 'total_count', 'generated_at', 'version'
+    """
+    if not notifications:
+        return {
+            "notifications": [],
+            "total_count": 0,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "version": 1,
+        }
+
+    # Sort by timestamp descending (newest first)
+    sorted_notifications = sorted(
+        notifications,
+        key=lambda item: item[0].timestamp,
+        reverse=True,
+    )
+
+    total_count = len(sorted_notifications)
+
+    # Build notification entries with list-view fields
+    entries: list[dict[str, object]] = []
+    for artifact, path in sorted_notifications:
+        # Build minimal detail entries for the list view
+        detail_entries = [
+            {"label": str(key), "value": _stringify_notification_value(value)}
+            for key, value in sorted(artifact.details.items())
+        ]
+
+        entry: dict[str, object] = {
+            "kind": artifact.kind,
+            "summary": artifact.summary,
+            "timestamp": artifact.timestamp,
+            "runId": artifact.run_id,
+            "clusterLabel": artifact.cluster_label,
+            "context": artifact.context,
+            "details": detail_entries,
+            "artifactPath": _relative_path(output_dir, path),
+        }
+
+        # Thread artifact_id for provenance/debugging surfaces (optional)
+        if artifact.artifact_id:
+            entry["artifact_id"] = artifact.artifact_id
+
+        entries.append(entry)
+
+    # Bound entries to limit
+    bounded_entries = entries[:_NOTIFICATION_INDEX_LIMIT]
+
+    return {
+        "notifications": bounded_entries,
+        "total_count": total_count,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "version": 1,
+    }
