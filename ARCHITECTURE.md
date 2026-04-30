@@ -86,6 +86,58 @@ tests/                  Python and TypeScript tests
 | `components/ProviderExecutionComponents.tsx` | Provider execution display | Branch data (eligible/attempted/ok/failed/skipped) |
 | `components/DiagnosticPackReviewList.tsx` | Diagnostic pack review list | Compact entry preview with overflow |
 
+## Elm-ish Run Control Plane
+
+k9b uses an Elm-inspired pattern for selected-run frontend state, without adopting Elm itself. The goal is to make asynchronous run selection explicit and testable.
+
+### Pattern Mapping
+
+| Elm Concept | k9b Implementation | Description |
+|-------------|-------------------|-------------|
+| **Model** | `RunControlModel` | Single source of truth for runs list state, selected run id, latest run id, selected-run load state, slow/error state, and freshness. |
+| **Msg** | `RunControlMsg` | All events that can change run-control state: `Boot`, `RunsLoaded`, `RunSelected`, `RunLoaded`, `PollTick`, `RunSlowThresholdReached`, `LatestClicked`, `ManualRefreshClicked`, `RetrySelectedRunClicked`, `SelectionCleared`, `DebugModeDetected`. |
+| **Update** | `updateRunControl(model, msg)` | Pure reducer in `frontend/src/run-control/runControlReducer.ts` returning `{ model: RunControlModel; effects: RunControlEffect[] }`. No I/O inside reducer. |
+| **Effects/Commands** | `RunControlEffect` | Data-only descriptions: `fetchRuns`, `fetchRun`, `scheduleSlowRunTimer`, `cancelSlowRunTimer`, `abortRunFetch`, `debugLog`. React hooks interpret these effects. |
+| **View** | React components | Render from model/selectors. Run-owned panels must wait for loaded-content sentinels in tests, not placeholder headings. |
+
+### Why This Architecture
+
+This architecture was introduced after progressive loading allowed the shell to render while run-owned panels could remain stuck in placeholder states. The explicit state machine makes async ownership visible: whether `fetchRun` was emitted, whether `RunLoaded` was accepted or rejected, and which model state caused a panel to render loading/slow/error/loaded.
+
+### Stale Response Guard
+
+The stale guard must remain strict: `requestSeq` and `runId` must both match for `RunLoaded` and `RunFailed` messages to be accepted. A response is rejected if either:
+- The `requestSeq` does not match the current pending request sequence, or
+- The `runId` does not match the `requestedRunId` in the model
+
+This prevents race conditions where an older response arrives after a newer one.
+
+### Boot Sequence
+
+Poll/manual refresh must not be required for initial selected-run content. The authoritative boot path is:
+1. `Boot` → emits `fetchRuns` with reason `"boot"`
+2. `RunsLoaded` → if no previous selection, auto-selects latest and emits `fetchRun` plus slow timer
+3. `RunLoaded` → with matching `requestSeq` and `runId`, marks run as loaded
+
+The slow timer (default 10s) transitions `selectedRun.status` from `"loading"` to `"slow"` if the run has not loaded by then.
+
+### Non-goals
+
+- **Not a global Redux/Zustand replacement.** RunControl is scoped to runs list and selected-run state only.
+- **Not a rewrite of all frontend state.** Other hooks (`useAppData`, `useUIState`, `useQueueState`) remain unchanged.
+- **Not a backend performance fix.** Does not address slow `/api/runs` or `/api/run` responses.
+- **Not permission for poll/interval workarounds.** UI tests must not trigger auto-refresh/polling to make boot content appear. Run-owned panels must use loaded-content sentinels.
+
+### Testing Notes
+
+- **Reducer tests** in `frontend/src/run-control/__tests__/runControlReducer.test.ts` cover request sequencing and stale-response guards.
+- **Timer tests** must scope fake timers per test file and restore real timers afterward using `vi.useFakeTimers()` / `vi.useRealTimers()`.
+- **UI tests** should use stable panel containers plus loaded-content sentinels, not global "Loading selected run" disappearance.
+
+### References
+
+- [Elm Architecture: Model / View / Update](https://guide.elm-lang.org/architecture/)
+- [Elm Commands and Subscriptions](https://guide.elm-lang.org/effects/)
 ## Backend Module Map
 
 | Module | Owns |
