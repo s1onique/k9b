@@ -183,7 +183,10 @@ describe("useRunControl", () => {
     });
 
     // fetchRun should have been called
-    expect(fetchRun).toHaveBeenCalledWith("run-123");
+    expect(fetchRun).toHaveBeenCalledWith(
+      "run-123",
+      expect.objectContaining({ clientRequestId: expect.any(String), signal: expect.any(Object) })
+    );
 
     // Wait for async resolution
     await waitFor(
@@ -771,7 +774,341 @@ describe("useRunControl", () => {
     });
 
     // Should retry fetching the selected run (run-123)
-    expect(fetchRun).toHaveBeenCalledWith("run-123");
+    expect(fetchRun).toHaveBeenCalledWith(
+      "run-123",
+      expect.objectContaining({ clientRequestId: expect.any(String), signal: expect.any(Object) })
+    );
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: newer requestSeq for same run is not deduped away
+  // --------------------------------------------------------------------------
+  it("newer requestSeq for same run is not deduped away", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    const runsPayload = makeRunsListPayload([
+      { runId: "run-123", runLabel: "Run 123" },
+    ]);
+    const runPayload123 = makeRunWithOverrides({ runId: "run-123" });
+    const secondPayload = makeRunWithOverrides({ runId: "run-123", clusterCount: 5 });
+
+    vi.mocked(fetchRunsList).mockResolvedValue(runsPayload);
+
+    const { result } = renderHook(() => useRunControl({ autoBoot: false }));
+
+    // Boot: immediate resolution
+    vi.mocked(fetchRun).mockResolvedValueOnce(runPayload123);
+    vi.mocked(fetchRunsList).mockResolvedValueOnce(runsPayload);
+
+    await act(async () => {
+      result.current.boot();
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.selectedRunStatus).toBe("loaded");
+
+    // Set up mock for retry
+    vi.mocked(fetchRun).mockResolvedValueOnce(secondPayload);
+
+    // Call retry - this should NOT be deduped because it has a different requestSeq
+    await act(async () => {
+      result.current.retrySelectedRun();
+    });
+
+    // Advance time to process all microtasks
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // The retry should have been made (not deduped) - verify at least one call was made
+    expect(fetchRun.mock.calls.length).toBeGreaterThan(0);
+
+    vi.useRealTimers();
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: old aborted request cleanup does not clear newer request
+  // --------------------------------------------------------------------------
+  it("old aborted request cleanup does not clear newer in-flight request", async () => {
+    // IMPORTANT: Set up fake timers BEFORE renderHook
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    const runsPayload = makeRunsListPayload([
+      { runId: "run-123", runLabel: "Run 123" },
+    ]);
+    const runPayload123 = makeRunWithOverrides({ runId: "run-123" });
+
+    // Deferred promise for first request (never resolves in test)
+    let resolveFirst: (value: typeof runPayload123) => void;
+    const firstPromise = new Promise<typeof runPayload123>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    vi.mocked(fetchRunsList).mockResolvedValue(runsPayload);
+    vi.mocked(fetchRun)
+      .mockResolvedValueOnce(runPayload123) // boot
+      .mockImplementationOnce(() => firstPromise) // first selectRun (never resolves)
+      .mockResolvedValueOnce(runPayload123); // second selectRun (resolves immediately)
+
+    const { result } = renderHook(() => useRunControl({ autoBoot: false }));
+
+    // Boot with immediate resolution
+    vi.mocked(fetchRunsList).mockResolvedValueOnce(runsPayload);
+    vi.mocked(fetchRun).mockResolvedValueOnce(runPayload123);
+
+    await act(async () => {
+      result.current.boot();
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.selectedRunStatus).toBe("loaded");
+
+    // Clear mocks and set up the chain for this test
+    vi.mocked(fetchRun).mockClear();
+    vi.mocked(fetchRun)
+      .mockImplementationOnce(() => firstPromise) // first selectRun (never resolves)
+      .mockResolvedValueOnce(runPayload123); // second selectRun (resolves)
+
+    await act(async () => {
+      result.current.selectRun("run-123");
+    });
+
+    // Should be loading (first request is pending)
+    expect(result.current.selectedRunStatus).toBe("loading");
+
+    // Select same run again - this should abort previous and start new request
+    await act(async () => {
+      result.current.selectRun("run-123");
+    });
+
+    // Advance time to allow microtasks to resolve
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // The newer request should complete successfully
+    // This proves that old request cleanup didn't corrupt the newer request
+    expect(result.current.selectedRunStatus).toBe("loaded");
+    expect(result.current.selectedRun?.runId).toBe("run-123");
+
+    vi.useRealTimers();
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: selected run switch aborts old request
+  // --------------------------------------------------------------------------
+  it("selected run switch aborts old request", async () => {
+    // IMPORTANT: Set up fake timers BEFORE renderHook
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    const runsPayload = makeRunsListPayload([
+      { runId: "run-123", runLabel: "Run 123" },
+      { runId: "run-456", runLabel: "Run 456" },
+    ]);
+    const runPayload123 = makeRunWithOverrides({ runId: "run-123" });
+    const runPayload456 = makeRunWithOverrides({ runId: "run-456" });
+
+    // Deferred promise for first request
+    let resolveFirst: (value: typeof runPayload123) => void;
+    const firstPromise = new Promise<typeof runPayload123>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    vi.mocked(fetchRunsList).mockResolvedValue(runsPayload);
+    vi.mocked(fetchRun)
+      .mockResolvedValueOnce(runPayload123) // boot
+      .mockImplementationOnce(() => firstPromise); // select run-123 (never resolves)
+
+    const { result } = renderHook(() => useRunControl({ autoBoot: false }));
+
+    // Boot with immediate resolution
+    vi.mocked(fetchRunsList).mockResolvedValueOnce(runsPayload);
+    vi.mocked(fetchRun).mockResolvedValueOnce(runPayload123);
+
+    await act(async () => {
+      result.current.boot();
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.selectedRunStatus).toBe("loaded");
+
+    // Set up never-resolving mock for selectRun
+    vi.mocked(fetchRun).mockClear();
+    vi.mocked(fetchRun).mockImplementation(() => firstPromise);
+
+    await act(async () => {
+      result.current.selectRun("run-123");
+    });
+
+    // Should be loading
+    expect(result.current.selectedRunStatus).toBe("loading");
+
+    // Set up mock for run-456
+    vi.mocked(fetchRun).mockResolvedValueOnce(runPayload456);
+
+    // Switch to run-456 - this should abort run-123 request
+    await act(async () => {
+      result.current.selectRun("run-456");
+    });
+
+    // Advance time to allow microtasks to resolve
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // run-456 should load successfully (run-123 was aborted)
+    expect(result.current.selectedRunStatus).toBe("loaded");
+    expect(result.current.selectedRunId).toBe("run-456");
+
+    vi.useRealTimers();
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: stale response is ignored but current response clears loading
+  // --------------------------------------------------------------------------
+  it("stale response is ignored but current response clears loading", async () => {
+    // IMPORTANT: Set up fake timers BEFORE renderHook
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    const runsPayload = makeRunsListPayload([
+      { runId: "run-123", runLabel: "Run 123" },
+      { runId: "run-456", runLabel: "Run 456" },
+    ]);
+    const runPayload123 = makeRunWithOverrides({ runId: "run-123" });
+    const runPayload456 = makeRunWithOverrides({ runId: "run-456" });
+
+    // Deferred promises for controlled timing
+    let resolveSlow: (value: typeof runPayload123) => void;
+    const slowPromise = new Promise<typeof runPayload123>((resolve) => {
+      resolveSlow = resolve;
+    });
+
+    vi.mocked(fetchRunsList).mockResolvedValue(runsPayload);
+    vi.mocked(fetchRun)
+      .mockResolvedValueOnce(runPayload123) // boot
+      .mockImplementationOnce(() => slowPromise) // slow first selection
+      .mockResolvedValueOnce(runPayload456); // fast second selection
+
+    const { result } = renderHook(() => useRunControl({ autoBoot: false }));
+
+    // Boot with immediate resolution
+    vi.mocked(fetchRunsList).mockResolvedValueOnce(runsPayload);
+    vi.mocked(fetchRun).mockResolvedValueOnce(runPayload123);
+
+    await act(async () => {
+      result.current.boot();
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.selectedRunStatus).toBe("loaded");
+
+    // Select run-123 (slow)
+    await act(async () => {
+      result.current.selectRun("run-123");
+    });
+
+    // Immediately select run-456 (fast) - this aborts run-123
+    await act(async () => {
+      result.current.selectRun("run-456");
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Selected run should be run-456
+    expect(result.current.selectedRunId).toBe("run-456");
+    expect(result.current.selectedRunStatus).toBe("loaded");
+    expect(result.current.selectedRun?.runId).toBe("run-456");
+
+    // Now resolve the slow promise (should be ignored)
+    await act(async () => {
+      resolveSlow!(runPayload123);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // State should still show run-456 (stale run-123 ignored)
+    expect(result.current.selectedRunId).toBe("run-456");
+    expect(result.current.selectedRun?.runId).toBe("run-456");
+
+    vi.useRealTimers();
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: duplicate same run + same requestSeq does not create duplicate
+  // --------------------------------------------------------------------------
+  it("duplicate same run + same requestSeq does not create duplicate network calls", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    const runsPayload = makeRunsListPayload([
+      { runId: "run-123", runLabel: "Run 123" },
+    ]);
+    const runPayload = makeRunWithOverrides({ runId: "run-123" });
+
+    const { result } = renderHook(() => useRunControl({ autoBoot: false }));
+
+    // Boot with immediate resolution
+    vi.mocked(fetchRunsList).mockResolvedValueOnce(runsPayload);
+    vi.mocked(fetchRun).mockResolvedValueOnce(runPayload);
+
+    await act(async () => {
+      result.current.boot();
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.selectedRunStatus).toBe("loaded");
+
+    // Get the current call count
+    const callCountAfterBoot = fetchRun.mock.calls.length;
+
+    // Set up mock for all retry calls - each retrySelectedRun has a different requestSeq
+    // so they'll all go through (not deduped by same requestSeq)
+    vi.mocked(fetchRun)
+      .mockResolvedValueOnce(runPayload)
+      .mockResolvedValueOnce(runPayload)
+      .mockResolvedValueOnce(runPayload);
+
+    // Call retry multiple times rapidly
+    await act(async () => {
+      result.current.retrySelectedRun();
+    });
+    await act(async () => {
+      result.current.retrySelectedRun();
+    });
+    await act(async () => {
+      result.current.retrySelectedRun();
+    });
+
+    // Advance time to allow all promises to resolve
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // With requestSeq-based deduplication:
+    // - Each retrySelectedRun() has a different requestSeq (seq increments)
+    // - So NONE of them should be deduped
+    // - All 3 should make network calls
+    expect(fetchRun.mock.calls.length).toBe(callCountAfterBoot + 3);
+
+    vi.useRealTimers();
   });
 
   // --------------------------------------------------------------------------

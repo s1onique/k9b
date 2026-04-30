@@ -30,17 +30,40 @@ import type {
 
 type NextCheckExecutionError = Error & { blockingReason?: string | null };
 
-const fetchJson = async <T>(path: string): Promise<T> => {
-  const response = await fetch(path, { cache: "no-store" });
+interface FetchJsonOptions {
+  headers?: Record<string, string>;
+}
+
+const fetchJson = async <T>(
+  path: string,
+  options?: FetchJsonOptions,
+  extraInit?: RequestInit
+): Promise<T> => {
+  const init: RequestInit = { cache: "no-store", ...extraInit };
+  if (options?.headers) {
+    init.headers = { ...options.headers, ...extraInit?.headers as Record<string, string> };
+  }
+  const response = await fetch(path, init);
   if (!response.ok) {
     throw new Error(`Failed to fetch ${path}: ${response.statusText}`);
   }
   return response.json();
 };
 
-export const fetchRun = (runId?: string): Promise<RunPayload> => {
+export const fetchRun = (
+  runId?: string,
+  options?: { clientRequestId?: string; signal?: AbortSignal }
+): Promise<RunPayload> => {
   const suffix = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
-  return fetchJson<RunPayload>(`/api/run${suffix}`);
+  const headers: Record<string, string> = {};
+  if (options?.clientRequestId) {
+    headers["X-K9B-Client-Request-Id"] = options.clientRequestId;
+  }
+  const init: RequestInit = { cache: "no-store" };
+  if (options?.signal) {
+    init.signal = options.signal;
+  }
+  return fetchJson<RunPayload>(`/api/run${suffix}`, { headers }, init);
 };
 export const fetchFleet = (): Promise<FleetPayload> => fetchJson<FleetPayload>("/api/fleet");
 export const fetchProposals = (): Promise<ProposalsPayload> => fetchJson<ProposalsPayload>("/api/proposals");

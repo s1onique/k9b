@@ -273,13 +273,30 @@ export function useRunControl(
   // This keeps the state updater pure: it only updates model, effects go to queue
   const pendingEffectsRef = useRef<RunControlEffect[]>([]);
 
-  // Cleanup timers on unmount
+  // Refs for /api/run request management (Phase 5: AbortController + deduplication)
+  // AbortController for cancelling stale in-flight requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Track in-flight runId and requestSeq for deduplication
+  const inFlightRunIdRef = useRef<string | null>(null);
+  const inFlightRequestSeqRef = useRef<number | null>(null);
+  // Map from clientRequestId to abort controller for correlation
+  const clientRequestIdToAbortRef = useRef<Map<string, AbortController>>(new Map());
+
+  // Cleanup timers and abort controllers on unmount
   useEffect(() => {
     return () => {
       slowTimersRef.current.forEach((timerId) => {
         clearTimeout(timerId);
       });
       slowTimersRef.current.clear();
+      // Abort any in-flight request on unmount
+      if (abortControllerRef.current !== null) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      inFlightRunIdRef.current = null;
+      inFlightRequestSeqRef.current = null;
+      clientRequestIdToAbortRef.current.clear();
     };
   }, []);
 
@@ -323,8 +340,89 @@ export function useRunControl(
 
         case "fetchRun": {
           const { requestSeq, runId } = effect;
-          fetchRun(runId)
+
+          // Phase 5: Deduplication - skip only if BOTH runId AND requestSeq match
+          // This ensures a newer requestSeq for the same run is never dropped
+          if (
+            inFlightRunIdRef.current === runId &&
+            inFlightRequestSeqRef.current === requestSeq
+          ) {
+            if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+              console.info("[run-control]", "fetchRun:duplicate-skipped", {
+                requestSeq,
+                runId,
+                inFlightRequestSeq: inFlightRequestSeqRef.current,
+              });
+            }
+            break;
+          }
+
+          // Phase 5: Abort any previous in-flight request
+          // (regardless of whether it's same runId - newer requestSeq takes precedence)
+          if (abortControllerRef.current !== null) {
+            abortControllerRef.current.abort();
+            if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+              console.info("[run-control]", "fetchRun:aborted-previous", {
+                requestSeq,
+                runId,
+                previousInFlightRunId: inFlightRunIdRef.current,
+                previousInFlightRequestSeq: inFlightRequestSeqRef.current,
+              });
+            }
+          }
+
+          // Create new AbortController for this request
+          const abortController = new AbortController();
+          abortControllerRef.current = abortController;
+          inFlightRunIdRef.current = runId;
+          inFlightRequestSeqRef.current = requestSeq;
+
+          // Generate clientRequestId for correlation
+          const clientRequestId = `rc-${requestSeq}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          clientRequestIdToAbortRef.current.set(clientRequestId, abortController);
+
+          if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+            console.info("[run-control]", "fetchRun:started", {
+              requestSeq,
+              runId,
+              clientRequestId,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          fetchRun(runId, { clientRequestId, signal: abortController.signal })
             .then((payload: RunPayload) => {
+              // Phase 5: Verify this response is still the current request
+              // Guard cleanup by request identity - only clear if still current
+              const isStale =
+                inFlightRequestSeqRef.current !== requestSeq ||
+                inFlightRunIdRef.current !== runId;
+
+              if (isStale) {
+                if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                  console.info("[run-control]", "fetchRun:stale-response-ignored", {
+                    requestSeq,
+                    runId,
+                    returnedRunId: payload.runId,
+                    currentRequestSeq: inFlightRequestSeqRef.current,
+                    currentRunId: inFlightRunIdRef.current,
+                  });
+                }
+                // Don't clear refs - they belong to the current request
+                clientRequestIdToAbortRef.current.delete(clientRequestId);
+                return;
+              }
+
+              if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                console.info("[run-control]", "fetchRun:accepted", {
+                  requestSeq,
+                  runId,
+                  clientRequestId,
+                  returnedRunId: payload.runId,
+                  acceptedAt: new Date().toISOString(),
+                });
+              }
+
               dispatch({
                 type: "RunLoaded",
                 requestSeq,
@@ -332,15 +430,84 @@ export function useRunControl(
                 payload,
                 receivedAtMs: Date.now(),
               });
+
+              // Clean up - only if still the current request
+              if (
+                inFlightRequestSeqRef.current === requestSeq &&
+                inFlightRunIdRef.current === runId
+              ) {
+                inFlightRunIdRef.current = null;
+                inFlightRequestSeqRef.current = null;
+                abortControllerRef.current = null;
+              }
+              clientRequestIdToAbortRef.current.delete(clientRequestId);
             })
             .catch((error: unknown) => {
-              dispatch({
-                type: "RunFailed",
-                requestSeq,
-                runId,
-                error: normalizeError(error),
-                failedAtMs: Date.now(),
-              });
+              // Broad AbortError detection: DOMException AbortError or Error with name === "AbortError"
+              const isAbortError =
+                (error instanceof DOMException && error.name === "AbortError") ||
+                (error instanceof Error && error.name === "AbortError");
+
+              if (isAbortError) {
+                // Guard cleanup: only clear refs if this request is still the current one
+                // This prevents old aborted requests from clearing the active controller for newer requests
+                if (
+                  inFlightRequestSeqRef.current === requestSeq &&
+                  inFlightRunIdRef.current === runId
+                ) {
+                  if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                    console.info("[run-control]", "fetchRun:aborted-current", {
+                      requestSeq,
+                      runId,
+                      clientRequestId,
+                    });
+                  }
+                  // This was the current request - clean up
+                  inFlightRunIdRef.current = null;
+                  inFlightRequestSeqRef.current = null;
+                  abortControllerRef.current = null;
+                } else {
+                  if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                    console.info("[run-control]", "fetchRun:aborted-stale", {
+                      requestSeq,
+                      runId,
+                      clientRequestId,
+                      currentRequestSeq: inFlightRequestSeqRef.current,
+                      currentRunId: inFlightRunIdRef.current,
+                    });
+                  }
+                  // This was a stale request - don't clear current request's refs
+                }
+                clientRequestIdToAbortRef.current.delete(clientRequestId);
+                return;
+              }
+
+              if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                console.info("[run-control]", "fetchRun:failed", {
+                  requestSeq,
+                  runId,
+                  clientRequestId,
+                  error: normalizeError(error),
+                });
+              }
+
+              // Guard cleanup: only clear if this is still the current request
+              if (
+                inFlightRequestSeqRef.current === requestSeq &&
+                inFlightRunIdRef.current === runId
+              ) {
+                dispatch({
+                  type: "RunFailed",
+                  requestSeq,
+                  runId,
+                  error: normalizeError(error),
+                  failedAtMs: Date.now(),
+                });
+                inFlightRunIdRef.current = null;
+                inFlightRequestSeqRef.current = null;
+                abortControllerRef.current = null;
+              }
+              clientRequestIdToAbortRef.current.delete(clientRequestId);
             });
           break;
         }

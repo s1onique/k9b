@@ -187,6 +187,38 @@ describe("fetchRun", () => {
       expect.any(Object)
     );
   });
+
+  test("sends X-K9B-Client-Request-Id header when clientRequestId is provided", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/run": mockResponse(SUCCESS_PAYLOADS["/api/run"]),
+      })
+    );
+    await fetchRun(undefined, { clientRequestId: "rc-1-1234567890-abc123" });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/run",
+      expect.objectContaining({
+        headers: { "X-K9B-Client-Request-Id": "rc-1-1234567890-abc123" },
+      })
+    );
+  });
+
+  test("sends X-K9B-Client-Request-Id header with runId", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/run?run_id=run-789": mockResponse({ runId: "run-789" }),
+      })
+    );
+    await fetchRun("run-789", { clientRequestId: "rc-2-9876543210-xyz789" });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/run?run_id=run-789",
+      expect.objectContaining({
+        headers: { "X-K9B-Client-Request-Id": "rc-2-9876543210-xyz789" },
+      })
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

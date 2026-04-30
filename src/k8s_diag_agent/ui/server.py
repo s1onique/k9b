@@ -255,6 +255,7 @@ def _log_request_access(
     is_static_asset: bool = False,
     request_id: str = "",
     route_return_ms: float = 0.0,
+    client_request_id: str = "",
 ) -> None:
     """Log structured HTTP access event with latency telemetry.
 
@@ -270,6 +271,7 @@ def _log_request_access(
         is_static_asset: Whether this is a static asset request
         request_id: Correlation ID for linking access log to route timing logs
         route_return_ms: Time from request start to route handler returning (before send)
+        client_request_id: Client-generated request ID from X-K9B-Client-Request-Id header
     """
     # Determine severity based on status code and latency
     if status_code >= 500:
@@ -303,6 +305,8 @@ def _log_request_access(
     # Add correlation fields if available
     if request_id:
         metadata["request_id"] = request_id
+    if client_request_id:
+        metadata["client_request_id"] = client_request_id
     if route_return_ms > 0:
         metadata["route_return_ms"] = round(route_return_ms, 2)
         # Compute network/flush overhead for debugging
@@ -635,7 +639,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.runs_dir = runs_dir
         self.static_dir = static_dir
         self._health_root = _compute_health_root(runs_dir)
-        # Access logging state
+        # Access logging state - initialized in __init__ for safety,
+        # but RESET per-request in do_GET/do_POST to measure actual request time
+        # (not connection/handler lifetime which includes keep-alive idle time)
         self._start_time: float = 0.0
         self._request_method: str = ""
         self._request_path: str = ""
@@ -648,6 +654,22 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Time when route handler returned (before send)
         self._route_return_ms: float = 0.0
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        # CRITICAL: Reset timing state here to ensure fresh state per connection
+        # This handles the case where the same handler instance processes multiple
+        # requests on a keep-alive connection
+        self._reset_request_state()
+    
+    def _reset_request_state(self) -> None:
+        """Reset all per-request state to measure actual request processing time.
+        
+        This must be called at the start of each do_GET/do_POST to ensure
+        duration_ms reflects request processing, not connection idle time.
+        """
+        self._start_time = time.perf_counter()
+        self._request_id = ""
+        self._route_return_ms = 0.0
+        self._response_bytes = 0
+        self._status_code = 200
 
     def _get_client_ip(self) -> str:
         """Extract client IP from request."""
@@ -675,14 +697,16 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         return ""
 
     def do_GET(self) -> None:
+        # CRITICAL: Reset timing state FIRST to measure actual request processing time
+        # This fixes the bug where duration_ms included connection/handler lifetime
+        # instead of just the request processing time
+        self._reset_request_state()
+        
         route, _, query = self.path.partition("?")
         self._request_method = "GET"
         self._request_path = route
         self._request_query = query
         self._is_static = not route.startswith("/api/") and route != "/artifact"
-        self._start_time = time.perf_counter()
-        self._status_code = 200
-        self._response_bytes = 0
 
         try:
             if route.startswith("/api/"):
@@ -702,14 +726,16 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._log_access_completion()
 
     def do_POST(self) -> None:
+        # CRITICAL: Reset timing state FIRST to measure actual request processing time
+        # This fixes the bug where duration_ms included connection/handler lifetime
+        # instead of just the request processing time
+        self._reset_request_state()
+        
         route, _, _ = self.path.partition("?")
         self._request_method = "POST"
         self._request_path = route
         self._request_query = ""
         self._is_static = False
-        self._start_time = time.perf_counter()
-        self._status_code = 200
-        self._response_bytes = 0
 
         try:
             # Delegate next-check mutation handlers to server_next_checks module
@@ -772,6 +798,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         duration_ms = (time.perf_counter() - self._start_time) * 1000
 
+        # Read client_request_id from request headers
+        client_request_id = self.headers.get("X-K9B-Client-Request-Id", "")
+
         _log_request_access(
             method=self._request_method,
             path=self._request_path,
@@ -784,6 +813,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             is_static_asset=self._is_static,
             request_id=self._request_id,
             route_return_ms=self._route_return_ms,
+            client_request_id=client_request_id,
         )
 
     def log_message(self, format: str, *args: object) -> None:

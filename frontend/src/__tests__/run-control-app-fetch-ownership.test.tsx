@@ -174,12 +174,17 @@ describe("run-control-app-fetch-ownership", () => {
     // Guard test: selected-run detail fetch happens exactly once during boot
     // This assertion will FAIL if the bug exists (persisted selection not fetched)
     await waitFor(() => {
-      expect(mockFetchRun).toHaveBeenCalledWith(PERSISTED_RUN_ID);
+      expect(mockFetchRun).toHaveBeenCalledWith(
+        PERSISTED_RUN_ID,
+        expect.objectContaining({ clientRequestId: expect.any(String) })
+      );
     });
 
     // Verify exactly one fetch for the persisted run (no duplicates)
     expect(
-      mockFetchRun.mock.calls.filter(([runId]) => runId === PERSISTED_RUN_ID)
+      mockFetchRun.mock.calls.filter(
+        ([runId, opts]) => runId === PERSISTED_RUN_ID && opts?.clientRequestId
+      )
     ).toHaveLength(1);
   });
 
@@ -208,12 +213,17 @@ describe("run-control-app-fetch-ownership", () => {
     // Guard test: selected-run detail fetch happens exactly once during boot
     // This assertion will FAIL if the bug exists (persisted selection not fetched)
     await waitFor(() => {
-      expect(mockFetchRun).toHaveBeenCalledWith(PERSISTED_RUN_ID);
+      expect(mockFetchRun).toHaveBeenCalledWith(
+        PERSISTED_RUN_ID,
+        expect.objectContaining({ clientRequestId: expect.any(String) })
+      );
     });
 
     // Verify exactly one fetch for the persisted run (no duplicates)
     expect(
-      mockFetchRun.mock.calls.filter(([runId]) => runId === PERSISTED_RUN_ID)
+      mockFetchRun.mock.calls.filter(
+        ([runId, opts]) => runId === PERSISTED_RUN_ID && opts?.clientRequestId
+      )
     ).toHaveLength(1);
   });
 });

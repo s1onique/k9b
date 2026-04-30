@@ -64,7 +64,6 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         query: The query string
     """
     # Import here to avoid circular import at module level
-    from ..external_analysis.deterministic_next_check_promotion import collect_promoted_queue_entries
     from ..structured_logging import emit_structured_log
     from .api import build_cluster_detail_payload, build_fleet_payload, build_proposals_payload, build_run_payload
     from .notifications import query_notifications
@@ -453,6 +452,9 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         # Full request lifecycle instrumentation
         request_received = time.perf_counter()
         request_id = f"{id(handler)}-{int(request_received * 1000000)}"
+        
+        # Read client-generated request correlation ID from request headers
+        client_request_id = handler.headers.get("X-K9B-Client-Request-Id", "")
 
         timings: dict[str, float] = {}
         timings["request_received_ms"] = 0.0  # First timing point
@@ -490,6 +492,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                         "run_id": context.run.run_id,
                         "run_label": context.run.run_label,
                         "request_id": request_id,
+                        "client_request_id": client_request_id,
                         "cache_hit": True,
                         "single_flight_acquire": "waiter",
                         "single_flight_result": "waited",
@@ -598,59 +601,16 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             promotions = list(cast(list[dict[str, object]], raw_promotions)) if isinstance(raw_promotions, list) else []
             promotions_source = "index"
         else:
-            # Fallback to run-scoped file-based loading with measured timing
-            # CRITICAL: Set explicit fallback reason so telemetry is not empty
+            # CRITICAL: Do NOT probe external-analysis when index is missing/mismatched
+            # Even bounded iterdir() costs 1.5-2.7s on large directories, which blocks /api/run
+            # Return empty promotions with explicit reason so operator can regenerate index
             if promotions_fallback_reason is None:
                 promotions_fallback_reason = "missing_promotions_index"
             
-            # OPTIMIZATION: Skip expensive glob when index is missing and external-analysis is large
-            # If index is missing, there's no lightweight way to know which files are promotions
-            # So we must either glob (slow) or return empty (fast but incorrect)
-            # Prefer fast failure with explicit reason so operator can regenerate index
-            external_analysis_dir = handler._health_root / "external-analysis"
-            if external_analysis_dir.exists():
-                # Check if directory is "large" (>100 files suggests we'd rather skip than glob)
-                # Only do fast check, not full glob
-                try:
-                    # Bounded directory size check - stop as soon as count > 100
-                    # This avoids materializing the full directory listing for large dirs
-                    file_count = 0
-                    if external_analysis_dir.is_dir():
-                        for _ in external_analysis_dir.iterdir():
-                            file_count += 1
-                            if file_count > 100:
-                                break
-                    if file_count > 100:
-                        # Skip fallback glob for large directories to avoid 1-4s penalty
-                        # Return empty promotions with explicit reason
-                        promotions = []
-                        promotions_fallback_reason = "skipped_large_directory"
-                        promotions_source = "skipped_missing_index"
-                        timings["promoted_glob_ms"] = 0.0
-                        timings["promotion_glob_count"] = 0
-                        # NOTE: promotions_fallback_reason is emitted in structured log below
-                    else:
-                        # Directory is small enough to glob safely
-                        fallback_glob_start = time.perf_counter()
-                        promotion_files = list(external_analysis_dir.glob(f"{context.run.run_id}-next-check-promotion-*.json"))
-                        timings["promoted_glob_ms"] = (time.perf_counter() - fallback_glob_start) * 1000
-                        timings["promotion_glob_count"] = len(promotion_files)
-                        promotions = collect_promoted_queue_entries(handler._health_root, context.run.run_id)
-                        promotions_source = "file_scan"
-                except OSError:
-                    # Cannot check directory - skip fallback to be safe
-                    promotions = []
-                    promotions_fallback_reason = "directory_access_error"
-                    promotions_source = "skipped_missing_index"
-                    timings["promoted_glob_ms"] = 0.0
-                    timings["promotion_glob_count"] = 0
-            else:
-                # Directory doesn't exist - no promotions possible
-                promotions = []
-                promotions_fallback_reason = "missing_external_analysis_dir"
-                promotions_source = "skipped_missing_index"
-                timings["promoted_glob_ms"] = 0.0
-                timings["promotion_glob_count"] = 0
+            promotions = []
+            promotions_source = "skipped_missing_index"
+            timings["promoted_glob_ms"] = 0.0
+            timings["promotion_glob_count"] = 0
 
         timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
         timings["promotions_count"] = len(promotions)
