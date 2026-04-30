@@ -592,9 +592,9 @@ describe("Advisory Lower Sections", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 15));
 
-      // Panel itself still exists
-      const panel = document.querySelector(".review-enrichment");
-      expect(panel).toBeTruthy();
+      // Panel shell itself still exists (the section container with id)
+      const panel = document.querySelector("[id='review-enrichment']");
+      expect(panel).not.toBeNull();
 
       // None of the lower section elements render
       expect(document.querySelector(".advisory-concerns-section")).toBeNull();
