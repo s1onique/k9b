@@ -93,11 +93,10 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             self.assertEqual(result["returnedCount"], 100)
             self.assertTrue(result["hasMore"])
 
-            # Default behavior: fast path skips execution count derivation
-            self.assertEqual(timings.get("execution_lookup_strategy"), "skipped_fast_path")
-            self.assertEqual(timings.get("execution_run_prefixes_queried"), 0)
-            self.assertEqual(timings.get("execution_files_found_total"), 0)
-            self.assertEqual(timings.get("execution_files_parsed"), 0)
+            # Default behavior: super fast path skips execution count derivation entirely
+            # Super fast path uses path_strategy instead of execution_lookup_strategy
+            self.assertTrue(timings.get("path_strategy") in ("index_super_fast_path", "review_streaming_super_fast_path"))
+            self.assertIsNone(timings.get("execution_lookup_strategy"))
             self.assertEqual(timings.get("execution_files_skipped_outside_window"), 0)
 
     def test_include_expensive_affects_batch_eligibility_not_execution_parsing(self) -> None:
@@ -394,13 +393,10 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             assert isinstance(raw_result, tuple), "Expected tuple with timings"
             result, timings = raw_result
 
-            # CRITICAL: Fast path should skip execution count derivation
-            self.assertEqual(timings.get("execution_lookup_strategy"), "skipped_fast_path")
-            self.assertEqual(timings.get("execution_run_prefixes_queried"), 0)
-            self.assertEqual(timings.get("execution_files_found_total"), 0)
-            self.assertEqual(timings.get("execution_files_considered"), 0)
-            self.assertEqual(timings.get("execution_files_skipped_outside_window"), 0)
-            self.assertEqual(timings.get("execution_parse_ms"), 0.0)
+            # CRITICAL: Super fast path should skip execution count derivation entirely
+            # Super fast path uses path_strategy instead of execution_lookup_strategy
+            self.assertTrue(timings.get("path_strategy") in ("index_super_fast_path", "review_streaming_super_fast_path"))
+            self.assertIsNone(timings.get("execution_lookup_strategy"))
             self.assertEqual(timings.get("execution_files_parsed"), 0)
 
             # execution_lookup_ms should be minimal (just the fast path check)
@@ -477,8 +473,9 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             full_result, full_timings = build_runs_list(runs_dir, limit=100, include_expensive=True, _timings=True)
             assert isinstance(full_result, dict)
 
-            # Fast path should have skipped execution derivation
-            self.assertEqual(fast_timings.get("execution_lookup_strategy"), "skipped_fast_path")
+            # Fast path should have skipped execution derivation (uses super fast path)
+            self.assertTrue(fast_timings.get("path_strategy") in ("index_super_fast_path", "review_streaming_super_fast_path"))
+            self.assertIsNone(fast_timings.get("execution_lookup_strategy"))
             self.assertEqual(fast_timings.get("execution_files_parsed"), 0)
 
             # Full path should have performed execution derivation
@@ -547,6 +544,9 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             assert isinstance(raw_result, tuple)
             result, timings = raw_result
 
+            # Super fast path should have path_strategy set
+            self.assertTrue(timings.get("path_strategy") in ("index_super_fast_path", "review_streaming_super_fast_path"))
+
             # per_run_glob_calls should be 0 in fast path
             self.assertEqual(timings.get("per_run_glob_calls"), 0)
             self.assertEqual(timings.get("per_run_directory_list_calls"), 0)
@@ -595,9 +595,9 @@ class RunsListWindowOptimizationTests(unittest.TestCase):
             assert isinstance(raw_result, tuple)
             result, timings = raw_result
 
-            # Should complete quickly
-            self.assertEqual(timings.get("execution_lookup_strategy"), "skipped_fast_path")
-            self.assertEqual(timings.get("execution_files_found_total"), 0)
+            # Should complete quickly - super fast path uses path_strategy
+            self.assertTrue(timings.get("path_strategy") in ("index_super_fast_path", "review_streaming_super_fast_path"))
+            self.assertIsNone(timings.get("execution_lookup_strategy"))
             self.assertLess(timings.get("execution_lookup_ms", 0), 100.0)  # Should be < 100ms
 
             # All runs should have no executions

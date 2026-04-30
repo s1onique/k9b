@@ -237,6 +237,9 @@ def write_health_ui_index(
         "deterministic_next_checks": deterministic_next_checks,
     }
     index["run_stats"] = _build_run_stats(output_dir / "reviews")
+    # Build recent_runs_summary for fast /api/runs default path
+    # This is the key optimization: avoid scanning all review files on each request
+    index["recent_runs_summary"] = _build_recent_runs_summary(output_dir / "reviews")
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -540,6 +543,68 @@ def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
         if existing is None or finish > existing:
             timestamps[run_id] = finish
     return timestamps
+
+
+def _build_recent_runs_summary(reviews_dir: Path, max_runs: int = 500) -> dict[str, object]:
+    """Build a compact summary of recent runs for fast /api/runs default path.
+
+    This is the key optimization to avoid scanning all review files on each request.
+    Each entry contains only the fields needed for initial Recent Runs list:
+    - run_id, run_label, timestamp, cluster_count
+
+    Expensive fields (execution_count, reviewed_count, batch eligibility) are
+    NOT included - they must be derived on-demand or for explicit include_expensive paths.
+
+    Args:
+        reviews_dir: Path to the reviews directory
+        max_runs: Maximum number of run summaries to store (default 500 for most UIs)
+
+    Returns:
+        Dict with 'runs' list and 'total_count' (total discovered across all runs)
+    """
+    if not reviews_dir.is_dir():
+        return {"runs": [], "total_count": 0, "generated_at": datetime.now(UTC).isoformat()}
+
+    # Collect all run summaries
+    run_summaries: list[dict[str, object]] = []
+    for path in reviews_dir.glob("*-review.json"):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        run_id = raw.get("run_id")
+        timestamp = raw.get("timestamp")
+        if not isinstance(run_id, str) or not isinstance(timestamp, str):
+            continue
+
+        # Only include minimal fields needed for initial load
+        run_summaries.append({
+            "run_id": run_id,
+            "run_label": raw.get("run_label", run_id) if isinstance(raw.get("run_label"), str) else run_id,
+            "timestamp": timestamp,
+            "cluster_count": raw.get("cluster_count", 0) if isinstance(raw.get("cluster_count"), int) else 0,
+        })
+
+    # Sort by timestamp descending (newest first)
+    # Parse timestamps for sorting
+    def get_sort_key(entry: dict[str, object]) -> datetime:
+        ts = entry.get("timestamp", "")
+        parsed = parse_iso_to_utc(ts)
+        return parsed if parsed else datetime.min.replace(tzinfo=UTC)
+
+    run_summaries.sort(key=get_sort_key, reverse=True)
+
+    # Store only the most recent runs (bounded for index size)
+    total_count = len(run_summaries)
+    recent_runs = run_summaries[:max_runs]
+
+    return {
+        "runs": recent_runs,
+        "total_count": total_count,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "version": 1,  # Schema version for future compatibility
+    }
 
 
 def _parse_run_start(run_id: str) -> datetime | None:

@@ -1153,3 +1153,6 @@ class RunsListTimings(TypedDict, total=False):
     run_scoped_review_path_checks: int
     per_run_glob_calls: int
     per_run_directory_list_calls: int
+    # Super fast path optimization markers
+    path_strategy: str  # "super_fast_path" when super fast path is used
+    total_duration_ms: float  # Total elapsed time

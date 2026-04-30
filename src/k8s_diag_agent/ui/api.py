@@ -579,6 +579,309 @@ def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] |
         return None
 
 
+def _build_runs_list_from_index(
+    runs_dir: Path,
+    runs_from_index: list[dict[str, object]],
+    recent_summary: dict[str, object],
+    limit: int | None,
+    timings: RunsListTimings,
+    start_time: float,
+) -> RunsListPayload:
+    """Build runs list from ui-index.json's recent_runs_summary.
+
+    This is the fastest path - no filesystem scanning needed as data
+    is pre-compiled during index generation.
+
+    Args:
+        runs_dir: Path to the runs directory
+        runs_from_index: List of run summaries from index
+        recent_summary: The full recent_runs_summary dict from index
+        limit: Maximum number of runs to return
+        timings: Timings dict (modified in place)
+        start_time: Start time from perf_counter
+
+    Returns:
+        RunsListPayload (caller wraps with timings if needed)
+    """
+    import time as time_module
+    from typing import cast
+
+    # Get total count from index (may be larger than runs_from_index if truncated)
+    total_count = cast(int, recent_summary.get("total_count", len(runs_from_index)))
+
+    # Apply limit if specified
+    runs_to_return = runs_from_index
+    if limit is not None:
+        runs_to_return = runs_from_index[:limit]
+
+    # Build runs list with deferred batch eligibility
+    runs_list: list[RunsListEntry] = []
+    for entry in runs_to_return:
+        run_id = cast(str, entry.get("run_id", ""))
+        run_label = cast(str, entry.get("run_label", run_id))
+        timestamp = cast(str, entry.get("timestamp", ""))
+        cluster_count = cast(int, entry.get("cluster_count", 0))
+
+        # Super fast path: execution count and review status are deferred
+        # They require scanning execution artifacts which we skip here
+        runs_list.append(
+            RunsListEntry(
+                runId=run_id,
+                runLabel=run_label,
+                timestamp=timestamp,
+                clusterCount=cluster_count,
+                triaged=False,  # Deferred - requires execution scan
+                executionCount=0,  # Deferred - requires execution scan
+                reviewedCount=0,  # Deferred - requires execution scan
+                reviewStatus="unknown",  # Deferred - requires execution scan
+                reviewDownloadPath=None,  # Deferred - requires prescan
+                batchEligibility="unknown",  # Deferred - requires expensive scan
+                batchExecutable=False,
+                batchEligibleCount=0,
+            )
+        )
+
+    # Index path: skip batch eligibility computation entirely
+    timings["batch_plan_files_found"] = 0
+    timings["batch_exec_files_found"] = 0
+    timings["batch_eligibility_prescan_ms"] = 0.0
+
+    timings["row_assembly_ms"] = (time_module.perf_counter() - start_time) * 1000
+    timings["rows_built"] = len(runs_list)
+    timings["rows_considered"] = len(runs_from_index)
+    timings["rows_returned"] = len(runs_list)
+
+    # Build payload
+    returned_count = len(runs_list)
+    has_more = total_count > returned_count
+
+    payload = RunsListPayload(
+        runs=runs_list,
+        totalCount=total_count,
+        returnedCount=returned_count,
+        hasMore=has_more,
+        executionCountsComplete=False,  # Deferred in super fast path
+    )
+
+    timings["total_duration_ms"] = (time_module.perf_counter() - start_time) * 1000
+
+    return payload
+
+
+def _build_runs_list_review_streaming(
+    runs_dir: Path,
+    limit: int | None,
+    timings: RunsListTimings,
+    start_time: float,
+) -> RunsListPayload:
+    """Fallback path that scans review files directly.
+
+    Used when ui-index.json is absent, malformed, or lacks recent_runs_summary.
+
+    Args:
+        runs_dir: Path to the runs directory
+        limit: Maximum number of runs to return
+        timings: Timings dict (modified in place)
+        start_time: Start time from perf_counter
+
+    Returns:
+        RunsListPayload (caller wraps with timings if needed)
+    """
+    import time as time_module
+    from datetime import UTC, datetime
+    from typing import cast
+
+    run_health_dir = runs_dir / "health"
+    reviews_dir = run_health_dir / "reviews"
+
+    # Scan review files
+    reviews_scan_start = time_module.perf_counter()
+    run_entries: dict[str, dict[str, object]] = {}
+    reviews_parsed = 0
+
+    if reviews_dir.is_dir():
+        review_files = list(reviews_dir.glob("*-review.json"))
+    else:
+        review_files = []
+
+    timings["reviews_glob_ms"] = (time_module.perf_counter() - reviews_scan_start) * 1000
+    timings["reviews_files_found"] = len(review_files)
+
+    # Parse review files
+    reviews_parse_start = time_module.perf_counter()
+    for review_path in review_files:
+        run_label: str | None = None
+        cluster_count = 0
+
+        # Try ijson streaming fast-path first
+        extracted = _extract_review_metadata_streaming(review_path)
+        if extracted is not None:
+            run_id = cast(str, extracted.get("run_id"))
+            timestamp = cast(str, extracted.get("timestamp"))
+            run_label = cast(str | None, extracted.get("run_label"))
+            cluster_count = cast(int, extracted.get("cluster_count", 0) or 0)
+        else:
+            # Fall back to full JSON parse
+            try:
+                raw = json.loads(review_path.read_text(encoding="utf-8"))
+                run_id = raw.get("run_id")
+                timestamp = raw.get("timestamp")
+                run_label = raw.get("run_label")
+                cluster_count = raw.get("cluster_count", 0) or 0
+            except Exception:
+                continue
+
+        if not isinstance(run_id, str) or not isinstance(timestamp, str):
+            continue
+
+        parsed_time = parse_iso_to_utc(timestamp)
+        if parsed_time is None:
+            parsed_time = datetime.now(UTC)
+
+        run_entries[run_id] = {
+            "run_id": run_id,
+            "run_label": str(run_label) if run_label else run_id,
+            "timestamp": timestamp,
+            "cluster_count": cluster_count if isinstance(cluster_count, int) else 0,
+            "parsed_time": parsed_time,
+            "execution_count": 0,
+            "reviewed_count": 0,
+        }
+        reviews_parsed += 1
+
+    timings["reviews_parse_ms"] = (time_module.perf_counter() - reviews_parse_start) * 1000
+    timings["reviews_parsed"] = reviews_parsed
+
+    # Sort all entries by timestamp descending
+    sorted_entries = sorted(
+        run_entries.values(),
+        key=lambda e: cast(datetime, e["parsed_time"]),
+        reverse=True
+    )
+    timings["sort_ms"] = (time_module.perf_counter() - start_time) * 1000
+    timings["rows_considered"] = len(sorted_entries)
+
+    # Window selection
+    rows_to_return = min(limit, len(sorted_entries)) if limit is not None else len(sorted_entries)
+    timings["rows_returned"] = rows_to_return
+
+    # SUPER FAST PATH: Skip batch eligibility computation entirely
+    timings["batch_plan_files_found"] = 0
+    timings["batch_exec_files_found"] = 0
+    timings["batch_eligibility_prescan_ms"] = 0.0
+    timings["execution_files_parsed"] = 0
+    timings["execution_files_skipped_outside_window"] = 0
+    timings["per_run_glob_calls"] = 0
+    timings["per_run_directory_list_calls"] = 0
+
+    # Build runs list
+    runs_list: list[RunsListEntry] = []
+    entries_to_build = sorted_entries[:rows_to_return] if limit is not None else sorted_entries
+
+    for entry in entries_to_build:
+        execution_count = cast(int, entry.get("execution_count", 0))
+        reviewed_count = cast(int, entry.get("reviewed_count", 0))
+        review_status = _derive_review_status(execution_count, reviewed_count)
+        triaged = execution_count > 0 and reviewed_count > 0
+
+        runs_list.append(
+            RunsListEntry(
+                runId=cast(str, entry["run_id"]),
+                runLabel=cast(str, entry["run_label"]),
+                timestamp=cast(str, entry["timestamp"]),
+                clusterCount=cast(int, entry["cluster_count"]),
+                triaged=triaged,
+                executionCount=execution_count,
+                reviewedCount=reviewed_count,
+                reviewStatus=review_status,
+                reviewDownloadPath=None,
+                batchEligibility="unknown",
+                batchExecutable=False,
+                batchEligibleCount=0,
+            )
+        )
+
+    timings["row_assembly_ms"] = (time_module.perf_counter() - start_time) * 1000
+    timings["rows_built"] = len(runs_list)
+
+    # Build payload
+    total_discovered = len(run_entries)
+    returned_count = len(runs_list)
+    has_more = total_discovered > returned_count
+
+    payload = RunsListPayload(
+        runs=runs_list,
+        totalCount=total_discovered,
+        returnedCount=returned_count,
+        hasMore=has_more,
+        executionCountsComplete=False,
+    )
+
+    timings["total_duration_ms"] = (time_module.perf_counter() - start_time) * 1000
+
+    return payload
+
+
+def _build_runs_list_super_fast(
+    runs_dir: Path,
+    *,
+    limit: int | None = 100,
+    _timings: bool = False,
+) -> RunsListPayload | tuple[RunsListPayload, RunsListTimings]:
+    """Super fast path for initial UI load.
+
+    First tries to read runs from ui-index.json's recent_runs_summary.
+    Falls back to review file scanning if index is unavailable or malformed.
+
+    This is the key optimization to avoid scanning all review files on each request.
+    Batch eligibility and execution count derivation are ALWAYS skipped here.
+
+    Args:
+        runs_dir: Path to the runs directory
+        limit: Maximum number of runs to return (default 100)
+        _timings: If True, return tuple of (payload, timings)
+
+    Returns:
+        RunsListPayload, or tuple of (RunsListPayload, RunsListTimings) if _timings=True
+    """
+    import time as time_module
+
+    timings: RunsListTimings = {}
+    start_time = time_module.perf_counter()
+    run_health_dir = runs_dir / "health"
+
+    # Try index-backed path first (fastest path)
+    ui_index_path = run_health_dir / "ui-index.json"
+    if ui_index_path.is_file():
+        try:
+            raw_index = json.loads(ui_index_path.read_text(encoding="utf-8"))
+            recent_summary = raw_index.get("recent_runs_summary")
+            # Check for valid recent_runs_summary with required fields
+            # An empty index (runs=[], total_count=0) is a valid result, not fallback
+            if isinstance(recent_summary, dict):
+                runs_from_index = recent_summary.get("runs")
+                total_count = recent_summary.get("total_count")
+                if isinstance(runs_from_index, list) and isinstance(total_count, int):
+                    timings["path_strategy"] = "index_super_fast_path"
+                    timings["reviews_parsed"] = 0
+                    timings["reviews_files_found"] = 0
+                    payload = _build_runs_list_from_index(
+                        runs_dir, runs_from_index, recent_summary, limit, timings, start_time
+                    )
+                    if _timings:
+                        return payload, timings
+                    return payload
+        except Exception:
+            pass
+
+    # Fall back to review file streaming (when index is absent/malformed)
+    timings["path_strategy"] = "review_streaming_super_fast_path"
+    payload = _build_runs_list_review_streaming(runs_dir, limit, timings, start_time)
+    if _timings:
+        return payload, timings
+    return payload
+
+
 @overload
 def build_runs_list(
     runs_dir: Path,
@@ -642,6 +945,16 @@ def build_runs_list(
     from typing import cast
 
     timings: RunsListTimings = {}
+
+    # === SUPER FAST PATH: No expensive operations needed ===
+    # When include_expensive=False AND include_status=False (default for initial UI load),
+    # we don't need:
+    # - Batch eligibility computation
+    # - Execution count derivation
+    # - Plan/execution file scanning
+    # Just return a minimal list from review files with batch eligibility deferred.
+    if not include_expensive and not include_status:
+        return _build_runs_list_super_fast(runs_dir, limit=limit, _timings=_timings)
 
     # Stage 1: Collect runs from review artifacts
     reviews_scan_start = time_module.perf_counter()

@@ -1090,7 +1090,12 @@ class RunsListTests(unittest.TestCase):
             self.assertIn("next_check_usefulness_review.json", run["reviewDownloadPath"])
 
     def test_build_runs_list_default_limit_100(self) -> None:
-        """Test that default limit is 100 and batch eligibility is computed for returned runs."""
+        """Test that default limit is 100 and batch eligibility is DEFERRED (super fast path).
+
+        The default behavior (include_expensive=False) uses super fast path which skips
+        batch eligibility computation. Use include_expensive=True when batch
+        eligibility is needed.
+        """
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runs_dir = Path(tmpdir)
@@ -1118,7 +1123,7 @@ class RunsListTests(unittest.TestCase):
                 review_path = reviews_dir / f"run-{i:03d}-review.json"
                 review_path.write_text(json.dumps(review_content), encoding="utf-8")
 
-            # Build the runs list with default limit
+            # Build the runs list with default limit and timings (super fast path)
             result, timings = build_runs_list(runs_dir, _timings=True)
 
             # Should return only 100 runs (the default limit)
@@ -1139,15 +1144,19 @@ class RunsListTests(unittest.TestCase):
             # Last returned run should be run-050 (index 50 in 0-149)
             self.assertEqual(result["runs"][-1]["runId"], "run-050")
 
-            # All returned runs should have batchEligibility="computed"
-            # because they are within the returned window
+            # Super fast path: batchEligibility should be "unknown" (deferred)
             for run in result["runs"]:
-                self.assertEqual(run["batchEligibility"], "computed")
+                self.assertEqual(run["batchEligibility"], "unknown")
 
-            # Timing should reflect correct counts
+            # Timing should reflect super fast path behavior:
+            # - rows_considered is all runs (150)
+            # - batch_eligibility_runs_computed is 0 (skipped in super fast path)
+            # - batch_plan_files_found is 0 (skipped in super fast path)
             self.assertEqual(timings.get("rows_considered"), 150)
             self.assertEqual(timings.get("rows_returned"), 100)
-            self.assertEqual(timings.get("batch_eligibility_runs_computed"), 100)
+            self.assertEqual(timings.get("batch_eligibility_runs_computed", 0), 0)
+            self.assertEqual(timings.get("batch_plan_files_found", -1), 0)
+            self.assertEqual(timings.get("batch_exec_files_found", -1), 0)
 
     def test_build_runs_list_limit_all(self) -> None:
         """Test that limit=None returns all runs."""
@@ -1177,10 +1186,11 @@ class RunsListTests(unittest.TestCase):
             self.assertEqual(len(result["runs"]), 150)
 
     def test_build_runs_list_batch_eligibility_deferred_outside_window(self) -> None:
-        """Test that batchEligibility is 'computed' for runs within the returned window.
+        """Test that batchEligibility is 'unknown' by default (super fast path).
 
-        The optimization is that runs OUTSIDE the returned window don't get batch eligibility
-        computed, but runs WITHIN the returned window DO get it computed.
+        The default behavior (include_expensive=False) uses super fast path which skips
+        batch eligibility computation. Use include_expensive=True when batch eligibility
+        is needed for specific rows.
         """
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1203,15 +1213,18 @@ class RunsListTests(unittest.TestCase):
                 review_path = reviews_dir / f"run-{i:03d}-review.json"
                 review_path.write_text(json.dumps(review_content), encoding="utf-8")
 
-            # Build the runs list with default limit and timings
+            # Build the runs list with default limit and timings (super fast path)
             result, timings = build_runs_list(runs_dir, _timings=True)
 
-            # Runs within the returned window (first 100) should have batchEligibility="computed"
+            # Super fast path: batchEligibility should be "unknown" (deferred)
             for run in result["runs"]:
-                self.assertEqual(run["batchEligibility"], "computed")
+                self.assertEqual(run["batchEligibility"], "unknown")
 
-            # Timing should show 100 runs had batch eligibility computed
-            self.assertEqual(timings.get("batch_eligibility_runs_computed"), 100)
+            # Timing should show 0 runs had batch eligibility computed (super fast path skips it)
+            self.assertEqual(timings.get("batch_eligibility_runs_computed", 0), 0)
+            # Super fast path should not glob plan/exec files
+            self.assertEqual(timings.get("batch_plan_files_found", -1), 0)
+            self.assertEqual(timings.get("batch_exec_files_found", -1), 0)
 
             # rows_considered should be 150 (all runs discovered)
             self.assertEqual(timings.get("rows_considered"), 150)
@@ -1333,10 +1346,11 @@ class RunsListTests(unittest.TestCase):
                 review_path.write_text(json.dumps(review_content), encoding="utf-8")
 
             # Build the runs list with default limit (100 - but only 50 runs exist)
+            # Default is include_expensive=False, so super fast path is used
             result, timings = build_runs_list(runs_dir, _timings=True)
 
-            # Should have computed batch eligibility for all 50 runs
-            self.assertEqual(timings.get("batch_eligibility_runs_computed"), 50)
+            # Super fast path: should have computed batch eligibility for 0 runs
+            self.assertEqual(timings.get("batch_eligibility_runs_computed", 0), 0)
 
     def test_build_runs_list_latest_run_first(self) -> None:
         """Test that the latest run appears first regardless of limit."""
@@ -1489,8 +1503,11 @@ class RunsListTests(unittest.TestCase):
             review_path.write_text(json.dumps(review_content), encoding="utf-8")
 
             # Build with default parameters and timings
+            # Default is include_expensive=False AND include_status=False, so super fast path is used
             result, timings = build_runs_list(runs_dir, _timings=True)
 
-            # Default should have status_lookup_strategy as skipped_fast_path
-            self.assertEqual(timings.get("status_lookup_strategy"), "skipped_fast_path")
-            self.assertEqual(timings.get("status_run_prefixes_queried"), 0)
+            # Super fast path should have path_strategy set
+            self.assertTrue(timings.get("path_strategy") in ("index_super_fast_path", "review_streaming_super_fast_path"))
+            # Super fast path should skip status derivation entirely (no timing key exists)
+            self.assertIsNone(timings.get("status_lookup_strategy"))
+            self.assertEqual(timings.get("batch_eligibility_runs_computed", 0), 0)
