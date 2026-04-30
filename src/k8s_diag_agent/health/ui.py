@@ -7,7 +7,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
@@ -244,6 +244,11 @@ def write_health_ui_index(
     # Build notification_index for fast /api/notifications default path
     # This is the key optimization: avoid scanning all notification files on each request
     index["notification_index"] = _build_notification_index(notifications, output_dir)
+    # Build promotions_index for fast /api/run promotions loading
+    # This is the key optimization: avoid globbing all external-analysis files on each request
+    index["promotions_index"] = _build_promotions_index(
+        output_dir / "external-analysis", run_id
+    )
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -696,6 +701,92 @@ def _build_notification_index(
     return {
         "notifications": bounded_entries,
         "total_count": total_count,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "version": 1,
+    }
+
+
+# Maximum number of promotion entries to store in the index
+# Most runs have very few promotions, so this is generous
+_PROMOTIONS_INDEX_LIMIT = 100
+
+
+def _build_promotions_index(
+    external_analysis_dir: Path,
+    run_id: str,
+) -> dict[str, object]:
+    """Build a compact promotions index for fast /api/run promotions loading.
+
+    This is the key optimization to avoid globbing all external-analysis files
+    on each /api/run request. The index stores promotion entries for the current
+    run only, with enough data to reconstruct queue entries without re-reading
+    promotion artifacts.
+
+    IMPORTANT: The index is run-scoped to prevent cross-run data leakage.
+    When /api/run requests a historical run, it must validate that the index's
+    run_id matches the requested run_id, otherwise fall back to file-based loading.
+
+    Args:
+        external_analysis_dir: Path to the external-analysis directory
+        run_id: The current run ID to filter promotions for
+
+    Returns:
+        Dict with 'run_id', 'promotions' list, 'total_count', 'generated_at', 'version'
+    """
+    if not external_analysis_dir.is_dir():
+        return {
+            "run_id": run_id,
+            "promotions": [],
+            "total_count": 0,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "version": 1,
+        }
+
+    # Scan for promotion artifacts for this run only
+    promotion_entries: list[dict[str, object]] = []
+    for artifact_path in external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json"):
+        try:
+            raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        # Extract payload for queue entry reconstruction
+        payload = raw.get("payload")
+        if not isinstance(payload, Mapping):
+            continue
+
+        # Build minimal queue entry from promotion payload
+        entry: dict[str, object] = {
+            "candidateId": payload.get("candidateId"),
+            "candidateIndex": payload.get("promotionIndex", 0),
+            "description": payload.get("description", "Deterministic next check"),
+            "targetCluster": payload.get("clusterLabel", ""),
+            "targetContext": payload.get("targetContext"),
+            "sourceReason": (
+                payload.get("whyNow") or payload.get("topProblem") or "Deterministic next check"
+            ),
+            "workstream": payload.get("workstream"),
+            "urgency": payload.get("urgency"),
+            "priorityScore": payload.get("priorityScore"),
+            "sourceType": "deterministic",
+            "approvalState": "approval-required",
+            "executionState": "unexecuted",
+            "queueStatus": "approval-needed",
+            "artifactPath": _relative_path(external_analysis_dir.parent, artifact_path),
+        }
+
+        promotion_entries.append(entry)
+
+    # Sort by promotion index (consistent ordering)
+    promotion_entries.sort(key=lambda x: cast(int, x.get("candidateIndex") or 0))
+
+    # Bound entries to limit
+    bounded_entries = promotion_entries[:_PROMOTIONS_INDEX_LIMIT]
+
+    return {
+        "run_id": run_id,  # CRITICAL: run-scoped to prevent cross-run data leakage
+        "promotions": bounded_entries,
+        "total_count": len(promotion_entries),
         "generated_at": datetime.now(UTC).isoformat(),
         "version": 1,
     }

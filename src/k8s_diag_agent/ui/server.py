@@ -253,6 +253,8 @@ def _log_request_access(
     client_ip: str,
     run_label: str = "",
     is_static_asset: bool = False,
+    request_id: str = "",
+    route_return_ms: float = 0.0,
 ) -> None:
     """Log structured HTTP access event with latency telemetry.
 
@@ -266,6 +268,8 @@ def _log_request_access(
         client_ip: Client IP address
         run_label: Run label when known, else empty string
         is_static_asset: Whether this is a static asset request
+        request_id: Correlation ID for linking access log to route timing logs
+        route_return_ms: Time from request start to route handler returning (before send)
     """
     # Determine severity based on status code and latency
     if status_code >= 500:
@@ -285,22 +289,34 @@ def _log_request_access(
     if query:
         message += f"?{query}"
 
+    metadata = {
+        "method": method,
+        "path": path,
+        "query": query,
+        "status_code": status_code,
+        "duration_ms": round(duration_ms, 2),
+        "response_bytes": response_bytes,
+        "client_ip": client_ip,
+        "run_label": run_label,
+    }
+
+    # Add correlation fields if available
+    if request_id:
+        metadata["request_id"] = request_id
+    if route_return_ms > 0:
+        metadata["route_return_ms"] = round(route_return_ms, 2)
+        # Compute network/flush overhead for debugging
+        send_overhead = duration_ms - route_return_ms
+        if send_overhead > 0:
+            metadata["send_overhead_ms"] = round(send_overhead, 2)
+
     emit_structured_log(
         component="ui-access",
         message=message,
         severity=severity,
         run_label=run_label,
         run_id="",
-        metadata={
-            "method": method,
-            "path": path,
-            "query": query,
-            "status_code": status_code,
-            "duration_ms": round(duration_ms, 2),
-            "response_bytes": response_bytes,
-            "client_ip": client_ip,
-            "run_label": run_label,
-        },
+        metadata=metadata,
     )
 
 
@@ -627,6 +643,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self._is_static: bool = False
         self._response_bytes: int = 0
         self._status_code: int = 200
+        # Correlation ID for linking access log to route timing logs
+        self._request_id: str = ""
+        # Time when route handler returned (before send)
+        self._route_return_ms: float = 0.0
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
 
     def _get_client_ip(self) -> str:
@@ -731,6 +751,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         else:
             self._log_access_completion()
 
+    def set_request_timing(self, request_id: str, route_return_ms: float) -> None:
+        """Set correlation and timing info for access log from server_reads.
+
+        Called by server_reads.py after building the route payload but before
+        sending the response. This allows the access log to include correlation
+        IDs and route timing alongside the actual request duration.
+
+        Args:
+            request_id: Correlation ID for linking access log to route timing logs
+            route_return_ms: Time from request start to route handler returning (before send)
+        """
+        self._request_id = request_id
+        self._route_return_ms = route_return_ms
+
     def _log_access_completion(self) -> None:
         """Log access completion with latency and status."""
         if self._start_time == 0.0:
@@ -748,6 +782,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             client_ip=self._get_client_ip(),
             run_label=self._get_run_label() if self._request_path.startswith("/api/") else "",
             is_static_asset=self._is_static,
+            request_id=self._request_id,
+            route_return_ms=self._route_return_ms,
         )
 
     def log_message(self, format: str, *args: object) -> None:

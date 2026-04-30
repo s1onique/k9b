@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -499,6 +500,8 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                     },
                 )
                 timings["response_creation_ms"] = (time.perf_counter() - response_start) * 1000
+                # Set timing info for access log correlation
+                handler.set_request_timing(request_id, timings.get("cache_lookup_ms", 0))
                 handler._send_json(result)
                 return
 
@@ -544,8 +547,11 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                     "single_flight_result": "cache_hit",
                     "cache_key": str(run_cache_key)[:100],
                     "payload_bytes": len(json.dumps(cached_payload, ensure_ascii=False).encode("utf-8")),
+                    "route_return_ms": round(total_duration, 2),
                 },
             )
+            # Set timing info for access log correlation
+            handler.set_request_timing(request_id, total_duration)
             handler._send_json(cached_payload)
             return
 
@@ -554,20 +560,61 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         # NOTE: context is already loaded via handler._load_context() before this block
         timings["context_load_ms"] = (time.perf_counter() - context_load_start) * 1000
 
-        # Promotions load phase
+        # Promotions load phase - OPTIMIZED to use index instead of file glob
         promotions_load_start = time.perf_counter()
-        promoted_glob_start = time.perf_counter()
-        external_analysis_dir = handler._health_root / "external-analysis"
-        promotion_glob_count = 0
-        if external_analysis_dir.exists():
-            promotion_files = list(external_analysis_dir.glob("*-next-check-promotion-*.json"))
-            promotion_glob_count = len(promotion_files)
-        timings["promoted_glob_ms"] = (time.perf_counter() - promoted_glob_start) * 1000
-        timings["promotion_glob_count"] = promotion_glob_count
+        timings["promoted_glob_ms"] = 0.0  # No longer doing glob
+        timings["promotion_glob_count"] = 0  # No longer doing glob
 
-        promotions = collect_promoted_queue_entries(handler._health_root, context.run.run_id)
+        # Load promotions from ui-index.json with run_id validation
+        promotions_index: Mapping[str, object] | None = None
+        promotions_source = "file_scan"
+        promotions_index_run_id: str | None = None
+        promotions_fallback_reason: str | None = None
+
+        try:
+            index = _load_ui_index_file(handler._health_root)
+            raw_promotions_index = index.get("promotions_index")
+            if isinstance(raw_promotions_index, Mapping):
+                # Validate shape - must have run_id field for run-scoped correctness
+                if "run_id" not in raw_promotions_index:
+                    promotions_fallback_reason = "missing_run_id_field"
+                else:
+                    promotions_index = raw_promotions_index
+                    promotions_index_run_id = str(raw_promotions_index.get("run_id") or "")
+                    # CRITICAL: Validate run_id matches selected run to prevent cross-run data leakage
+                    if promotions_index_run_id != context.run.run_id:
+                        promotions_fallback_reason = f"run_id_mismatch:{promotions_index_run_id}!={context.run.run_id}"
+                        promotions_index = None
+                    elif not isinstance(raw_promotions_index.get("promotions"), list):
+                        promotions_fallback_reason = "invalid_promotions_shape"
+                        promotions_index = None
+        except Exception as exc:
+            promotions_fallback_reason = f"index_load_error:{exc}"
+            promotions_index = None
+
+        if promotions_index is not None:
+            # Use index-backed promotions (instant)
+            raw_promotions = promotions_index.get("promotions", [])
+            promotions = list(cast(list[dict[str, object]], raw_promotions)) if isinstance(raw_promotions, list) else []
+            promotions_source = "index"
+        else:
+            # Fallback to run-scoped file-based loading with measured timing
+            fallback_glob_start = time.perf_counter()
+            external_analysis_dir = handler._health_root / "external-analysis"
+            promotion_files: list[Path] = []
+            if external_analysis_dir.exists():
+                promotion_files = list(external_analysis_dir.glob(f"{context.run.run_id}-next-check-promotion-*.json"))
+            timings["promoted_glob_ms"] = (time.perf_counter() - fallback_glob_start) * 1000
+            timings["promotion_glob_count"] = len(promotion_files)
+            promotions = collect_promoted_queue_entries(handler._health_root, context.run.run_id)
+            promotions_source = "file_scan"
+
         timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
         timings["promotions_count"] = len(promotions)
+        timings["promotions_source"] = promotions_source  # type: ignore[assignment]
+        timings["promotions_index_run_id"] = promotions_index_run_id or ""  # type: ignore[assignment]
+        if promotions_fallback_reason:
+            timings["promotions_fallback_reason"] = promotions_fallback_reason  # type: ignore[assignment]
 
         # Payload build phase
         payload_build_start = time.perf_counter()
@@ -641,6 +688,9 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                 "notification_scan_ms": round(timings.get("notification_scan_ms", 0), 2),
                 "notification_records_used": timings.get("notification_records_used", 0),
                 "promotions_count": timings.get("promotions_count", 0),
+                "promotions_source": promotions_source,
+                "promotions_index_run_id": promotions_index_run_id or "",
+                "promotions_fallback_reason": promotions_fallback_reason or "",
                 "cache_hit": False,
                 "single_flight_acquire": "builder",
                 "single_flight_result": "built",
@@ -650,6 +700,8 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             },
         )
 
+        # Set timing info for access log correlation before sending response
+        handler.set_request_timing(request_id, timings.get("route_return_ms", 0))
         handler._send_json(run_payload)
         return
 

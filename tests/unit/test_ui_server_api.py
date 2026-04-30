@@ -122,6 +122,58 @@ class RunApiServerTests(unittest.TestCase):
                 external_analysis_settings=settings,
             )
 
+    def _write_index_with_notifications(
+        self,
+        artifact: ExternalAnalysisArtifact,
+        notifications: list[NotificationArtifact],
+        *,
+        extra_external_analysis: tuple[ExternalAnalysisArtifact, ...] | None = None,
+    ) -> None:
+        """Write ui-index.json with the given notifications pre-populated.
+        
+        This is used by tests that need to verify the notification_index
+        optimization in /api/notifications endpoint.
+        
+        Args:
+            artifact: The main external analysis artifact
+            notifications: List of notification artifacts to include in notification_index
+            extra_external_analysis: Optional extra artifacts to include
+        """
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+        settings = ExternalAnalysisSettings(
+            review_enrichment=ReviewEnrichmentPolicy(
+                enabled=True,
+                provider=artifact.provider or "reviewer",
+            )
+        )
+        external_analysis = (artifact, *(extra_external_analysis or ()))
+        
+        # Convert NotificationArtifact to NotificationRecord (tuple with path)
+        notification_records: list[tuple[NotificationArtifact, Path]] = [
+            (notif, self.notifications_dir / f"{notif.run_id}-notification.json")
+            for notif in notifications
+        ]
+        
+        # Mock to avoid datetime issues
+        with mock.patch(
+            "k8s_diag_agent.health.ui._collect_historical_external_analysis_entries",
+            return_value=[],
+        ):
+            write_health_ui_index(
+                self.health_dir,
+                run_id=artifact.run_id,
+                run_label=artifact.run_label or artifact.run_id,
+                collector_version="tests",
+                records=(),
+                assessments=(),
+                drilldowns=(),
+                proposals=(),
+                external_analysis=external_analysis,
+                notifications=tuple(notification_records),
+                external_analysis_settings=settings,
+                available_adapters=(),
+            )
+
     def _write_plan_artifact(self, payload: Mapping[str, object], name: str) -> Path:
         path = self.health_dir / "external-analysis" / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -885,10 +937,20 @@ class RunApiServerTests(unittest.TestCase):
 
     def test_notifications_endpoint_enforces_limit(self) -> None:
         artifact = self._build_artifact(run_id="limit-run", status=ExternalAnalysisStatus.SUCCESS)
-        self._write_index(artifact)
         base_time = datetime(2026, 4, 7, 13, 0, 0, tzinfo=UTC)
         total_items = 55
+        # Create all notifications BEFORE writing index so index includes them
+        created_notifications: list[NotificationArtifact] = []
         for idx in range(total_items):
+            notification_artifact = NotificationArtifact(
+                kind="info",
+                summary=f"Entry {idx}",
+                details={},
+                run_id=f"run-{idx}",
+                cluster_label="cluster-limit",
+                context=None,
+                timestamp=(base_time + timedelta(seconds=idx)).strftime("%Y%m%dT%H%M%S"),
+            )
             self._create_notification(
                 kind="info",
                 cluster_label="cluster-limit",
@@ -896,6 +958,9 @@ class RunApiServerTests(unittest.TestCase):
                 run_id=f"run-{idx}",
                 timestamp=(base_time + timedelta(seconds=idx)).strftime("%Y%m%dT%H%M%S"),
             )
+            created_notifications.append(notification_artifact)
+        # Write index AFTER creating notifications so notification_index is populated
+        self._write_index_with_notifications(artifact, created_notifications)
         server, thread = self._start_server()
         try:
             payload = self._fetch_notifications_payload(server)
