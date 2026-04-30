@@ -152,7 +152,10 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                     break
 
             self.assertIsNotNone(timing_log, "Should have a timing log entry")
-            metadata = cast(dict[str, object], timing_log.get("metadata", {}))
+            assert timing_log is not None
+            timing_metadata = timing_log.get("metadata")
+            assert timing_metadata is not None
+            metadata = cast(dict[str, object], timing_metadata)
 
             # Key assertion: notification scan strategy should be "skipped_default"
             self.assertEqual(
@@ -198,7 +201,10 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                     break
 
             self.assertIsNotNone(timing_log, "Should have a timing log entry")
-            metadata = cast(dict[str, object], timing_log.get("metadata", {}))
+            assert timing_log is not None
+            timing_metadata = timing_log.get("metadata")
+            assert timing_metadata is not None
+            metadata = cast(dict[str, object], timing_metadata)
 
             # Required timing fields per spec
             required_fields = [
@@ -261,7 +267,10 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                     break
 
             self.assertIsNotNone(cache_hit_log, "Should have a cache hit log entry")
-            metadata = cast(dict[str, object], cache_hit_log.get("metadata", {}))
+            assert cache_hit_log is not None
+            cache_metadata = cache_hit_log.get("metadata")
+            assert cache_metadata is not None
+            metadata = cast(dict[str, object], cache_metadata)
 
             # Cache hit should be true
             self.assertTrue(

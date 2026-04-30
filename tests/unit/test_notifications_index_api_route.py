@@ -64,13 +64,15 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             cluster_label="cluster-a",
             timestamp=timestamp.strftime("%Y%m%dT%H%M%S"),
         )
-        return write_notification_artifact(self.notifications_dir, artifact)
+        result = write_notification_artifact(self.notifications_dir, artifact)
+        assert isinstance(result, Path)
+        return result
 
     def _write_ui_index_with_notifications(self, notifications: list[tuple[NotificationArtifact, Path]]) -> Path:
         """Write ui-index.json with notification_index."""
         run_id = "index-test-run"
         self._write_minimal_review(run_id)
-        return write_health_ui_index(
+        result = write_health_ui_index(
             self.health_dir,
             run_id=run_id,
             run_label="index-test-run",
@@ -81,6 +83,8 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             proposals=[],
             notifications=notifications,
         )
+        assert isinstance(result, Path)
+        return result
 
     def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
         handler = functools.partial(
@@ -163,8 +167,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
                     break
 
             self.assertIsNotNone(index_log, "Expected index path log not found")
-            self.assertEqual(index_log["metadata"]["notification_files_fully_parsed"], 0)
-            self.assertEqual(index_log["metadata"]["path_strategy"], "index_notifications_path")
+            assert index_log is not None
+            metadata = cast(dict[str, object], index_log["metadata"])
+            self.assertEqual(metadata["notification_files_fully_parsed"], 0)
+            self.assertEqual(metadata["path_strategy"], "index_notifications_path")
 
         finally:
             self._shutdown_server(server, thread)
@@ -200,7 +206,8 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(response["limit"], 3)
             self.assertEqual(response["total"], 10)
             self.assertEqual(response["total_pages"], 4)
-            self.assertEqual(len(response["notifications"]), 3)
+            notifications = cast(list[object], response["notifications"])
+            self.assertEqual(len(notifications), 3)
             # Index is newest-first. With 10 items [0-9]:
             # Page 1: [9, 8, 7], Page 2: [6, 5, 4], Page 3: [3, 2, 1], Page 4: [0]
             summaries = [n["summary"] for n in response["notifications"]]
@@ -222,7 +229,8 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(response["fallback_reason"], "missing_index")
             self.assertIn("notification_files_fully_parsed", response)
             # File scan will have parsed at least 1 file
-            self.assertGreater(response["notification_files_fully_parsed"], 0)
+            fully_parsed = cast(int, response["notification_files_fully_parsed"])
+            self.assertGreater(fully_parsed, 0)
 
         finally:
             self._shutdown_server(server, thread)
@@ -261,7 +269,8 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertIsNone(response["fallback_reason"])
             self.assertEqual(response["notification_files_fully_parsed"], 0)
             self.assertEqual(response["total"], 0)
-            self.assertEqual(len(response["notifications"]), 0)
+            notifications = cast(list[object], response["notifications"])
+            self.assertEqual(len(notifications), 0)
 
         finally:
             self._shutdown_server(server, thread)
@@ -284,7 +293,12 @@ class NotificationsIndexRouteTests(unittest.TestCase):
 
             self.assertEqual(response["path_strategy"], "notification_file_fallback_path")
             self.assertIsNotNone(response["fallback_reason"])
-            self.assertIn("kind", response["fallback_reason"])
+            fallback_reason = cast(str, response["fallback_reason"])
+            self.assertIn("kind", fallback_reason)
 
         finally:
             self._shutdown_server(server, thread)
+
+
+if __name__ == "__main__":
+    unittest.main()

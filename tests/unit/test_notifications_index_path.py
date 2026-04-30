@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.health.notifications import NotificationArtifact, write_notification_artifact
 
@@ -52,7 +53,9 @@ class NotificationIndexPathTests(unittest.TestCase):
             context=context,
             timestamp=timestamp.strftime("%Y%m%dT%H%M%S"),
         )
-        return write_notification_artifact(self.notifications_dir, artifact)
+        result = write_notification_artifact(self.notifications_dir, artifact)
+        assert isinstance(result, Path)
+        return result
 
     def _write_minimal_review(self, run_id: str, run_label: str = "test-run") -> Path:
         """Write a minimal review artifact so ui-index can be written."""
@@ -80,7 +83,7 @@ class NotificationIndexPathTests(unittest.TestCase):
         self._write_minimal_review(run_id)
 
         # Write ui-index
-        return write_health_ui_index(
+        result = write_health_ui_index(
             self.health_dir,
             run_id=run_id,
             run_label="index-run",
@@ -91,6 +94,8 @@ class NotificationIndexPathTests(unittest.TestCase):
             proposals=[],
             notifications=notifications,
         )
+        assert isinstance(result, Path)
+        return result
 
     def test_default_api_notifications_uses_index_when_present(self) -> None:
         """Default /api/notifications should read from notification_index when available.
@@ -132,7 +137,7 @@ class NotificationIndexPathTests(unittest.TestCase):
         self.assertIn("notification_index", index)
 
         # Check that notification_index has the expected structure
-        notif_index = index["notification_index"]
+        notif_index = cast(dict[str, object], index["notification_index"])
         self.assertIn("notifications", notif_index)
         self.assertIn("total_count", notif_index)
         self.assertEqual(notif_index["total_count"], 3)
@@ -311,7 +316,9 @@ class NotificationFallbackTests(unittest.TestCase):
             context=None,
             timestamp=timestamp.strftime("%Y%m%dT%H%M%S"),
         )
-        return write_notification_artifact(self.notifications_dir, artifact)
+        result = write_notification_artifact(self.notifications_dir, artifact)
+        assert isinstance(result, Path)
+        return result
 
     def _write_minimal_review(self, run_id: str) -> Path:
         review_data = {
@@ -335,7 +342,7 @@ class NotificationFallbackTests(unittest.TestCase):
         self._write_minimal_review(run_id)
 
         # Write ui-index with empty notifications
-        return write_health_ui_index(
+        result = write_health_ui_index(
             self.health_dir,
             run_id=run_id,
             run_label="no-notif-index-run",
@@ -346,6 +353,8 @@ class NotificationFallbackTests(unittest.TestCase):
             proposals=[],
             notifications=[],  # Empty notifications
         )
+        assert isinstance(result, Path)
+        return result
 
     def test_missing_ui_index_falls_back_to_file_scan(self) -> None:
         """When ui-index.json is missing, query_notifications should use file scan."""
