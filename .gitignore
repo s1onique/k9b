@@ -92,3 +92,4 @@ podman/
 runs/verification/
 tests/tmp-health/
 .verify_lock/
+.kilocode/package-lock.json
