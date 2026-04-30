@@ -230,13 +230,37 @@ describe("fetchProposals", () => {
 // ---------------------------------------------------------------------------
 
 describe("fetchRunsList", () => {
-  test("calls /api/runs and returns payload", async () => {
+  test("calls /api/runs (fast path) and returns payload", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({ "/api/runs": mockResponse(SUCCESS_PAYLOADS["/api/runs"]) })
     );
     const result = await fetchRunsList();
     expect(result).toEqual({ runs: [] });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/runs",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  test("REGRESSION: does not call /api/runs?include_status=true", async () => {
+    // This test ensures the backend fast path is used.
+    // Backend fast path (include_expensive=false) skips execution count derivation,
+    // providing sub-second response times for initial Recent Runs display.
+    const fetchMock = vi.fn(() => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchRunsList();
+    // Assert no call was made to the slow path
+    const calls = vi.mocked(globalThis.fetch).mock.calls;
+    for (const [url] of calls) {
+      const urlStr = typeof url === "string" ? url : String(url);
+      expect(urlStr).not.toContain("include_status=true");
+    }
+    // Must call the fast path
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/runs",
+      expect.any(Object)
+    );
   });
 });
 
