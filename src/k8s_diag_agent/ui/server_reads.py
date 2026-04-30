@@ -599,15 +599,58 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             promotions_source = "index"
         else:
             # Fallback to run-scoped file-based loading with measured timing
-            fallback_glob_start = time.perf_counter()
+            # CRITICAL: Set explicit fallback reason so telemetry is not empty
+            if promotions_fallback_reason is None:
+                promotions_fallback_reason = "missing_promotions_index"
+            
+            # OPTIMIZATION: Skip expensive glob when index is missing and external-analysis is large
+            # If index is missing, there's no lightweight way to know which files are promotions
+            # So we must either glob (slow) or return empty (fast but incorrect)
+            # Prefer fast failure with explicit reason so operator can regenerate index
             external_analysis_dir = handler._health_root / "external-analysis"
-            promotion_files: list[Path] = []
             if external_analysis_dir.exists():
-                promotion_files = list(external_analysis_dir.glob(f"{context.run.run_id}-next-check-promotion-*.json"))
-            timings["promoted_glob_ms"] = (time.perf_counter() - fallback_glob_start) * 1000
-            timings["promotion_glob_count"] = len(promotion_files)
-            promotions = collect_promoted_queue_entries(handler._health_root, context.run.run_id)
-            promotions_source = "file_scan"
+                # Check if directory is "large" (>100 files suggests we'd rather skip than glob)
+                # Only do fast check, not full glob
+                try:
+                    # Bounded directory size check - stop as soon as count > 100
+                    # This avoids materializing the full directory listing for large dirs
+                    file_count = 0
+                    if external_analysis_dir.is_dir():
+                        for _ in external_analysis_dir.iterdir():
+                            file_count += 1
+                            if file_count > 100:
+                                break
+                    if file_count > 100:
+                        # Skip fallback glob for large directories to avoid 1-4s penalty
+                        # Return empty promotions with explicit reason
+                        promotions = []
+                        promotions_fallback_reason = "skipped_large_directory"
+                        promotions_source = "skipped_missing_index"
+                        timings["promoted_glob_ms"] = 0.0
+                        timings["promotion_glob_count"] = 0
+                        # NOTE: promotions_fallback_reason is emitted in structured log below
+                    else:
+                        # Directory is small enough to glob safely
+                        fallback_glob_start = time.perf_counter()
+                        promotion_files = list(external_analysis_dir.glob(f"{context.run.run_id}-next-check-promotion-*.json"))
+                        timings["promoted_glob_ms"] = (time.perf_counter() - fallback_glob_start) * 1000
+                        timings["promotion_glob_count"] = len(promotion_files)
+                        promotions = collect_promoted_queue_entries(handler._health_root, context.run.run_id)
+                        promotions_source = "file_scan"
+                except OSError:
+                    # Cannot check directory - skip fallback to be safe
+                    promotions = []
+                    promotions_fallback_reason = "directory_access_error"
+                    promotions_source = "skipped_missing_index"
+                    timings["promoted_glob_ms"] = 0.0
+                    timings["promotion_glob_count"] = 0
+            else:
+                # Directory doesn't exist - no promotions possible
+                promotions = []
+                promotions_fallback_reason = "missing_external_analysis_dir"
+                promotions_source = "skipped_missing_index"
+                timings["promoted_glob_ms"] = 0.0
+                timings["promotion_glob_count"] = 0
 
         timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
         timings["promotions_count"] = len(promotions)

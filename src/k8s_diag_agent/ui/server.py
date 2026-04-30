@@ -1446,13 +1446,38 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         return parsed if parsed else 1
 
     def _send_json(self, body: object, code: int = 200) -> None:
+        send_start = time.perf_counter()
         payload = json.dumps(body, ensure_ascii=False)
+        encode_done = time.perf_counter()
         encoded = payload.encode("utf-8")
+        body_write_done = time.perf_counter()
         self.send_response(code)
+        send_headers_done = time.perf_counter()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
+        flush_done = time.perf_counter()
         self.wfile.write(encoded)
+        write_done = time.perf_counter()
+        
+        # Log detailed send timing for debugging
+        emit_structured_log(
+            component="ui-send",
+            message="HTTP response sent",
+            run_id="",
+            run_label="",
+            severity="DEBUG",
+            metadata={
+                "path": self._request_path,
+                "payload_bytes": len(encoded),
+                "json_dumps_ms": round((encode_done - send_start) * 1000, 3),
+                "encode_ms": round((body_write_done - encode_done) * 1000, 3),
+                "send_response_ms": round((send_headers_done - body_write_done) * 1000, 3),
+                "send_headers_ms": round((flush_done - send_headers_done) * 1000, 3),
+                "wfile_write_ms": round((write_done - flush_done) * 1000, 3),
+                "total_send_ms": round((write_done - send_start) * 1000, 3),
+            },
+        )
 
     def _send_file(self, path: Path) -> None:
         try:
