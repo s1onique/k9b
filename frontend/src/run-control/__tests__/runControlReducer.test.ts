@@ -1256,3 +1256,247 @@ describe("selectors", () => {
       ).toBe(true);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Latest semantics regression tests
+  // Based on observed screenshot:
+  // - health-run-20260430T044852Z is newer and visible in Recent Runs.
+  // - health-run-20260430T043929Z is selected and marked LATEST.
+  // - That is semantically impossible if latestRunId is derived from authoritative runs list.
+  // ---------------------------------------------------------------------------
+  describe("Latest semantics invariant: LATEST means newest from authoritative runs list", () => {
+    /**
+     * Test case a: Given runs ordered newest-first with B selected:
+     * - header badge says PAST RUN
+     * - ← Latest button is visible
+     * - latest hint refers to A
+     * - row B is selected/highlighted
+     * - row A is not selected
+     */
+    test("a. selected older run shows PAST RUN, ← Latest visible", () => {
+      const model = createInitialRunControlModel();
+      // A = newer (index 0), B = older (index 1)
+      const payload = makeRunsListPayload([
+        { runId: "run-newest-A", runLabel: "A (newest)" },
+        { runId: "run-older-B", runLabel: "B (older)" },
+      ]);
+      const nowMs = 1000;
+
+      // Boot -> Load runs -> select older B
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // User selects the older run B
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-older-B",
+        nowMs: nowMs + 200,
+      });
+
+      // Load B's detail
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-older-B",
+        payload: makeRunPayload("run-older-B"),
+        receivedAtMs: nowMs + 300,
+      });
+
+      // Latest semantics invariants:
+      // 1. latestRunId should be the newest run (A)
+      expect(m4.selection.latestRunId).toBe("run-newest-A");
+      // 2. selectedRunId should be B (the user's selection)
+      expect(m4.selection.selectedRunId).toBe("run-older-B");
+      // 3. selected is NOT the latest
+      expect(m4.selection.selectedRunId).not.toBe(m4.selection.latestRunId);
+      // 4. shouldShowLatestJump should be true
+      expect(shouldShowLatestJump(m4)).toBe(true);
+    });
+
+    /**
+     * Test case b: Given same runs with A selected (newest):
+     * - header badge says LATEST
+     * - ← Latest button is absent or disabled
+     */
+    test("b. selected newest run shows LATEST, ← Latest absent", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-newest-A", runLabel: "A (newest)" },
+        { runId: "run-older-B", runLabel: "B (older)" },
+      ]);
+      const nowMs = 1000;
+
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // User selects the newest run A (same as latest)
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-newest-A",
+        nowMs: nowMs + 200,
+      });
+
+      // Load A's detail
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-newest-A",
+        payload: makeRunPayload("run-newest-A"),
+        receivedAtMs: nowMs + 300,
+      });
+
+      // Latest semantics invariants:
+      // 1. latestRunId should be A
+      expect(m4.selection.latestRunId).toBe("run-newest-A");
+      // 2. selectedRunId should be A (user's selection = latest)
+      expect(m4.selection.selectedRunId).toBe("run-newest-A");
+      // 3. selected IS the latest
+      expect(m4.selection.selectedRunId).toBe(m4.selection.latestRunId);
+      // 4. shouldShowLatestJump should be false (no newer latest to jump to)
+      expect(shouldShowLatestJump(m4)).toBe(false);
+    });
+
+    /**
+     * Test case c: Given selectedRunId = B, click ← Latest:
+     * - selectedRunId becomes A
+     * - header immediately says LATEST
+     * - row A becomes selected/highlighted
+     */
+    test("c. click ← Latest switches to newest run and shows LATEST", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-newest-A", runLabel: "A (newest)" },
+        { runId: "run-older-B", runLabel: "B (older)" },
+      ]);
+      const nowMs = 1000;
+
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // User selects older B
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-older-B",
+        nowMs: nowMs + 200,
+      });
+
+      // Load B's detail
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-older-B",
+        payload: makeRunPayload("run-older-B"),
+        receivedAtMs: nowMs + 300,
+      });
+
+      // Before clicking ← Latest
+      expect(m4.selection.selectedRunId).toBe("run-older-B");
+      expect(m4.selection.selectedRunId).not.toBe(m4.selection.latestRunId);
+
+      // Click ← Latest
+      const { model: m5 } = updateRunControl(m4, {
+        type: "LatestClicked",
+        nowMs: nowMs + 400,
+      });
+
+      // After clicking ← Latest:
+      // 1. selectedRunId should become the latest (A)
+      expect(m5.selection.selectedRunId).toBe("run-newest-A");
+      // 2. selectedRunId should now equal latestRunId
+      expect(m5.selection.selectedRunId).toBe(m5.selection.latestRunId);
+      // 3. shouldShowLatestJump should be false
+      expect(shouldShowLatestJump(m5)).toBe(false);
+      // 4. selectedReason should be "latest-click"
+      expect(m5.selection.selectedReason).toBe("latest-click");
+    });
+
+    /**
+     * Test case d: Stale async response regression:
+     * - start with selected B
+     * - switch to A
+     * - resolve B detail/status response after A
+     * - assert header still says A/LATEST
+     * - assert B does not overwrite selected/latest header state
+     */
+    test("d. stale B response does not overwrite A selection state", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-newest-A", runLabel: "A (newest)" },
+        { runId: "run-older-B", runLabel: "B (older)" },
+      ]);
+      const nowMs = 1000;
+
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // User selects older B -> allocates seq=3
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-older-B",
+        nowMs: nowMs + 200,
+      });
+      const seqForB = 3;
+
+      // Now user switches to A -> allocates seq=5
+      const { model: m4, effects: effectsAfterA } = updateRunControl(m3, {
+        type: "RunSelected",
+        runId: "run-newest-A",
+        nowMs: nowMs + 300,
+      });
+      const seqForA = (effectsAfterA.find((e) => e.type === "fetchRun") as { requestSeq: number }).requestSeq;
+
+      // m4 should have A selected but status is loading (we're fetching A)
+      expect(m4.selection.selectedRunId).toBe("run-newest-A");
+      expect(m4.selectedRun.status).toBe("loading");
+
+      // Load A's detail first (correct sequence)
+      const { model: m5 } = updateRunControl(m4, {
+        type: "RunLoaded",
+        requestSeq: seqForA,
+        runId: "run-newest-A",
+        payload: makeRunPayload("run-newest-A"),
+        receivedAtMs: nowMs + 400,
+      });
+
+      // State should show A as selected and loaded
+      expect(m5.selection.selectedRunId).toBe("run-newest-A");
+      expect(m5.selectedRun.status).toBe("loaded");
+
+      // LATE stale response for B (seq=3 arrives after A is loaded with seq=5)
+      // This should be IGNORED due to stale guard
+      const { model: m6 } = updateRunControl(m5, {
+        type: "RunLoaded",
+        requestSeq: seqForB, // stale - seq=3 is old
+        runId: "run-older-B",
+        payload: makeRunPayload("run-older-B"),
+        receivedAtMs: nowMs + 500,
+      });
+
+      // State should STILL show A as selected (B's stale response was ignored)
+      expect(m6.selection.selectedRunId).toBe("run-newest-A");
+      expect(m6.selectedRun.status).toBe("loaded");
+      expect(m6.selectedRun.payload?.runId).toBe("run-newest-A");
+      // latestRunId should still be A
+      expect(m6.selection.latestRunId).toBe("run-newest-A");
+    });
+  });
