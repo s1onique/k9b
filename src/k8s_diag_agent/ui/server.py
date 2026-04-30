@@ -1481,6 +1481,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         encode_done = time.perf_counter()
         encoded = payload.encode("utf-8")
         body_write_done = time.perf_counter()
+        
+        # Set response bytes for access logging BEFORE sending
+        self._response_bytes = len(encoded)
+        
         self.send_response(code)
         send_headers_done = time.perf_counter()
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1488,6 +1492,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         flush_done = time.perf_counter()
         self.wfile.write(encoded)
+        self.wfile.flush()
         write_done = time.perf_counter()
         
         # Log detailed send timing for debugging
