@@ -141,6 +141,11 @@ def query_notifications(
         "limit": limit_value,
         "page": page_value,
         "total_pages": total_pages,
+        # Include counters for route-level telemetry
+        "notification_files_considered": counters["notification_files_considered"],
+        "notification_files_fully_parsed": counters["notification_files_fully_parsed"],
+        "notification_records_matched": counters["notification_records_matched"],
+        "notification_records_returned": counters["notification_records_returned"],
     }
     
     # Emit structured log with timing breakdown

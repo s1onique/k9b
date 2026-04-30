@@ -201,9 +201,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(response["total"], 10)
             self.assertEqual(response["total_pages"], 4)
             self.assertEqual(len(response["notifications"]), 3)
-            # Should return notifications 7, 8, 9 (newest first, skip 7)
+            # Index is newest-first. With 10 items [0-9]:
+            # Page 1: [9, 8, 7], Page 2: [6, 5, 4], Page 3: [3, 2, 1], Page 4: [0]
             summaries = [n["summary"] for n in response["notifications"]]
-            self.assertEqual(summaries, ["Notification 9", "Notification 8", "Notification 7"])
+            self.assertEqual(summaries, ["Notification 6", "Notification 5", "Notification 4"])
 
         finally:
             self._shutdown_server(server, thread)

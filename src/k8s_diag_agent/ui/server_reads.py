@@ -17,12 +17,37 @@ import json
 import logging
 import math
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
 logger = logging.getLogger(__name__)
+
+
+def _load_ui_index_file(health_root: Path) -> dict[str, object]:
+    """Load ui-index.json from health root directory.
+
+    This is a local helper to avoid importing load_ui_index from ui.model,
+    which would create a circular import back into ui.server_reads.
+
+    Args:
+        health_root: Path to the health directory containing ui-index.json
+
+    Returns:
+        The parsed ui-index.json contents as a dict
+
+    Raises:
+        FileNotFoundError: If ui-index.json doesn't exist
+        json.JSONDecodeError: If the file contains invalid JSON
+    """
+    index_path = health_root / "ui-index.json"
+    raw = json.loads(index_path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        return cast(dict[str, object], raw)
+    # If not a dict (edge case), return empty dict
+    return {}
 
 
 def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
@@ -158,8 +183,6 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     if route == "/api/notifications":
         from urllib.parse import parse_qs
 
-        from ..health.ui import load_ui_index
-
         params = parse_qs(query)
         notifications_dir = handler.runs_dir / "health" / "notifications"
 
@@ -259,7 +282,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             ui_index_path = handler.runs_dir / "health" / "ui-index.json"
             if ui_index_path.exists():
                 try:
-                    index = load_ui_index(handler.runs_dir / "health")
+                    index = _load_ui_index_file(handler.runs_dir / "health")
                     notif_index = index.get("notification_index")
                     if notif_index is not None:
                         # Use index path - no file parsing needed
