@@ -1255,7 +1255,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
         timings["index_read_ms"] = (time.perf_counter() - total_start) * 1000
-        
+
         # Check cache
         cache_key = str(self.runs_dir)
         with _runs_list_cache_lock:
@@ -1277,26 +1277,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                         },
                     )
                     return cached_payload
-        
-        # Stage 1: Read review artifacts
-        reviews_scan_start = time.perf_counter()
-        reviews_dir = health_root / "reviews"
-        review_count = 0
-        if reviews_dir.exists():
-            review_count = len(list(reviews_dir.glob("*-review.json")))
-        timings["reviews_scan_ms"] = (time.perf_counter() - reviews_scan_start) * 1000
-        timings["review_files_count"] = review_count
-        
-        # Stage 2: Scan external-analysis for execution artifacts
-        external_analysis_scan_start = time.perf_counter()
-        external_analysis_dir = health_root / "external-analysis"
-        execution_count = 0
-        if external_analysis_dir.exists():
-            execution_count = len(list(external_analysis_dir.glob("*-next-check-execution*.json")))
-        timings["external_analysis_scan_ms"] = (time.perf_counter() - external_analysis_scan_start) * 1000
-        timings["execution_files_scanned"] = execution_count
-        
-        # Stage 3: Build the runs list payload with inner timings
+
+        # Build the runs list payload with inner timings
+        # build_runs_list() now handles all scanning including index-backed path
         payload_build_start = time.perf_counter()
         payload: dict[str, object]
         try:
