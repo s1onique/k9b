@@ -1170,3 +1170,89 @@ describe("selectors", () => {
     expect(getRunOwnedPanelState(loadedModel)).toBe("loaded");
   });
 });
+
+  // Focused test for boot auto-select lifecycle
+  // Proves RunControl correctly handles Boot → RunsLoaded → RunLoaded without needing RunSelected
+  describe("Boot auto-select lifecycle", () => {
+    test("16b. RunsLoaded auto-selects latest when no previous selection (boot case)", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+        { runId: "run-456", runLabel: "Run 456" },
+      ]);
+      const nowMs = 1000;
+      const runPayload = makeRunPayload("run-123");
+
+      // Step 1: Boot allocates seq=1 and emits fetchRuns
+      const { model: m1, effects: bootEffects } = updateRunControl(model, {
+        type: "Boot",
+        nowMs,
+      });
+      const fetchRunsEffect = bootEffects.find((e) => e.type === "fetchRuns");
+      expect(fetchRunsEffect).toBeDefined();
+      expect(fetchRunsEffect?.requestSeq).toBe(1);
+
+      // Step 2: RunsLoaded with requestSeq=1 triggers auto-selection
+      // The reducer should allocate seq=2 and emit fetchRun for run-123
+      const { model: m2, effects: runsLoadedEffects } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // Verify auto-selection occurred
+      expect(m2.selection.selectedRunId).toBe("run-123");
+      expect(m2.selection.selectedReason).toBe("boot");
+
+      // The fetchRun effect should use seq=2 (allocated during RunsLoaded Case 1)
+      const fetchRunEffect = runsLoadedEffects.find((e) => e.type === "fetchRun");
+      expect(fetchRunEffect).toBeDefined();
+      expect(fetchRunEffect?.requestSeq).toBe(2); // THIS IS THE KEY ASSERTION
+      expect(fetchRunEffect?.runId).toBe("run-123");
+
+      // selectedRun.requestSeq should also be 2
+      expect(m2.selectedRun.requestSeq).toBe(2);
+      expect(m2.selectedRun.requestedRunId).toBe("run-123");
+      expect(m2.selectedRun.status).toBe("loading");
+    });
+
+    test("16c. RunLoaded accepted with correct requestSeq from boot auto-select", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+      const runPayload = makeRunPayload("run-123");
+
+      // Boot → RunsLoaded
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2, effects } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // Extract the requestSeq from the fetchRun effect (proves correct allocation)
+      const fetchRunEffect = effects.find((e) => e.type === "fetchRun");
+      expect(fetchRunEffect).toBeDefined();
+      const expectedSeq = fetchRunEffect!.requestSeq;
+
+      // Dispatch RunLoaded with the exact requestSeq from the effect
+      const result = updateRunControl(m2, {
+        type: "RunLoaded",
+        requestSeq: expectedSeq, // Use the allocated seq, NOT hardcoded 3
+        runId: "run-123",
+        payload: runPayload,
+        receivedAtMs: nowMs + 300,
+      });
+
+      // This should succeed - no stale guard rejection
+      expect(result.model.selectedRun.status).toBe("loaded");
+      expect(result.model.selectedRun.payload).toBe(runPayload);
+      expect(
+        result.effects.some((e) => e.type === "cancelSlowRunTimer")
+      ).toBe(true);
+    });
+  });

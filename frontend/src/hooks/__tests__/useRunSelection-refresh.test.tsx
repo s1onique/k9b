@@ -4,9 +4,9 @@
  * Tests that both manual refresh and auto-refresh polling invoke the same
  * refreshRuns() pipeline, which calls fetchRunsList() internally.
  *
- * Uses vi.useFakeTimers() at module level - isolated from app.test.tsx which
- * uses real timers. This is the ONLY correct way to test setInterval behavior
- * created during React mount.
+ * IMPORTANT: Timer ownership is SCOPED within this file.
+ * - beforeEach: enables fake timers for tests that need them
+ * - afterEach: always restores real timers to prevent cross-file pollution
  *
  * Acceptance criteria:
  * - refreshRuns() is called on mount (initial fetch)
@@ -20,9 +20,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { useRunSelection } from "../useRunSelection";
 import { createStorageMock } from "../../__tests__/fixtures";
 import type { RunsListPayload } from "../../types";
-
-// Enable fake timers for all tests in this file
-vi.useFakeTimers({ shouldAdvanceTime: true });
 
 describe("useRunSelection refresh behavior", () => {
   // Build initial runs list (run-123 is latest)
@@ -47,6 +44,7 @@ describe("useRunSelection refresh behavior", () => {
   };
 
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.clearAllTimers();
     vi.clearAllMocks();
     const storageMock = createStorageMock();
@@ -54,8 +52,10 @@ describe("useRunSelection refresh behavior", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllTimers();
+    vi.unstubAllGlobals();
   });
 
   test("initial mount calls fetchRunsList() (initial fetch)", async () => {

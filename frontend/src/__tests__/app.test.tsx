@@ -56,6 +56,23 @@ const getQueuePanel = async () => {
   return within(queuePanel);
 };
 
+const getLoadedDeterministicPanel = async (sentinel: RegExp = /candidate check.*to review and promote/i) => {
+  // Wait for panel heading to appear (proves panel shell exists)
+  await waitFor(() => {
+    const panel = document.getElementById("deterministic-next-checks");
+    expect(panel).toBeInTheDocument();
+    expect(within(panel!).getByRole("heading", { name: /Deterministic checks/i })).toBeInTheDocument();
+  }, { timeout: 5000 });
+
+  // Then wait for loaded-content sentinel (proves run-owned panel, not placeholder)
+  await waitFor(() => {
+    const panel = document.getElementById("deterministic-next-checks")!;
+    expect(within(panel).getByText(sentinel)).toBeInTheDocument();
+  }, { timeout: 5000 });
+
+  return document.getElementById("deterministic-next-checks")!;
+};
+
 const NOTIFICATION_BASE_TIME = Date.UTC(2026, 3, 7, 0, 0, 0);
 const PLANNER_HINT_TEXT =
   "Cluster Detail next checks may still reflect deterministic assessments or review content even when the planner artifact is absent.";
@@ -354,50 +371,22 @@ describe("App", () => {
   });
 
   test("deterministic panel surfaces run-derived checks", async () => {
-    // Store the original setInterval spy from beforeEach
-    const originalSetIntervalSpy = setIntervalSpy;
-    let intervalCallback: (() => void) | null = null;
-    
-    // Override setInterval to capture the callback for immediate triggering
-    vi.stubGlobal("setInterval", (callback: () => void) => {
-      intervalCallback = callback;
-      return 123;
-    });
-    
-    const fetchMock = createFetchMock(defaultPayloads);
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    expect(heading).toBeInTheDocument();
-    
-    // Call the stored interval callback immediately to trigger auto-refresh
-    if (intervalCallback) {
-      await act(async () => {
-        intervalCallback!();
-      });
-    }
-    
-    // Wait for the loading state to disappear
-    await waitFor(() => {
-      const loadingElements = screen.queryAllByText(/Loading selected run/i);
-      expect(loadingElements.length).toBe(0);
-    }, { timeout: 5000 });
-    
-    // Now the deterministic content should be visible
-    expect(await screen.findByText(/candidate check.*to review and promote/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Review cluster detail/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: /View assessment artifact/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
-    const driftNodes = screen.getAllByText(/Drift \/ toil follow-up/i);
+    const panel = await getLoadedDeterministicPanel();
+
+    const scoped = within(panel);
+    expect(scoped.getByText(/candidate check.*to review and promote/i)).toBeInTheDocument();
+    expect(scoped.getAllByRole("button", { name: /Review cluster detail/i }).length).toBeGreaterThan(0);
+    expect(scoped.getAllByRole("link", { name: /View assessment artifact/i }).length).toBeGreaterThan(0);
+    expect(scoped.getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
+    const driftNodes = scoped.getAllByText(/Drift \/ toil follow-up/i);
     expect(driftNodes.length).toBeGreaterThan(0);
     // Drift bucket is closed by default when degraded clusters exist
     // (sampleFleet has cluster-a as Degraded, so drift bucket should be collapsed)
     const driftDetails = driftNodes[0].closest("details");
     expect(driftDetails).not.toHaveAttribute("open");
-    
-    // Restore the original setInterval spy so other tests are not affected
-    vi.stubGlobal("setInterval", originalSetIntervalSpy);
   });
 
   test("drift bucket is collapsed during active degraded runs", async () => {
@@ -405,20 +394,10 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load - use queryByText which returns null instead of throwing
-    await waitFor(() => {
-      const driftNode = screen.queryByText(/Drift \/ toil follow-up/i);
-      expect(driftNode).toBeInTheDocument();
-    }, { timeout: 5000 });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    const panel = await getLoadedDeterministicPanel();
 
-    // Find the drift bucket
-    const driftNode = screen.queryByText(/Drift \/ toil follow-up/i);
-    expect(driftNode).toBeInTheDocument();
-
-    const driftDetails = driftNode!.closest("details") as HTMLElement;
+    // Find the drift bucket within the panel
+    const driftDetails = panel.querySelector("details.deterministic-group--drift") as HTMLElement;
     expect(driftDetails).not.toBeNull();
 
     // During active degraded run (sampleFleet has degraded cluster), drift bucket should be collapsed
@@ -426,7 +405,7 @@ describe("App", () => {
 
     // Verify drift items still exist in the DOM (not removed)
     // "Compare baseline release parity" is a drift workstream check from fixtures
-    expect(panel!.textContent).toContain("Compare baseline release parity");
+    expect(panel.textContent).toContain("Compare baseline release parity");
   });
 
   test("drift bucket is expanded by default when no degraded clusters exist", async () => {
@@ -444,20 +423,11 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load - use queryByText which returns null instead of throwing
-    await waitFor(() => {
-      const evidenceNode = screen.queryByText(/Evidence gathering/i);
-      expect(evidenceNode).toBeInTheDocument();
-    }, { timeout: 5000 });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    // Use default sentinel - "Evidence gathering" may not be visible in the panel
+    const panel = await getLoadedDeterministicPanel();
 
     // Find the drift bucket
-    const driftNode = screen.queryByText(/Drift \/ toil follow-up/i);
-    expect(driftNode).toBeInTheDocument();
-
-    const driftDetails = driftNode!.closest("details") as HTMLElement;
+    const driftDetails = panel.querySelector("details.deterministic-group--drift") as HTMLElement;
     expect(driftDetails).not.toBeNull();
 
     // When no degraded clusters, drift bucket should be expanded by default
@@ -473,18 +443,10 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    // Find the deterministic panel first
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load - use queryByText which returns null instead of throwing
-    await waitFor(() => {
-      const firefightNode = screen.queryByText(/Firefight now/i);
-      expect(firefightNode).toBeInTheDocument();
-    }, { timeout: 5000 });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    const panel = await getLoadedDeterministicPanel();
 
     // Find the drift bucket within the panel
-    const driftDetails = panel!.querySelector("details.deterministic-group--drift") as HTMLElement;
+    const driftDetails = panel.querySelector("details.deterministic-group--drift") as HTMLElement;
     expect(driftDetails).not.toBeNull();
 
     // Initially should be collapsed (degraded cluster exists)
@@ -619,14 +581,8 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
-    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const panel = await getLoadedDeterministicPanel();
+    const incidentLabel = within(panel).getAllByText(/Firefight now/i)[0];
     const incidentSection = incidentLabel.closest("section");
     expect(incidentSection).not.toBeNull();
     const incidentItems = within(incidentSection!).getAllByRole("listitem");
@@ -640,14 +596,8 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
-    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const panel = await getLoadedDeterministicPanel();
+    const incidentLabel = within(panel).getAllByText(/Firefight now/i)[0];
     const incidentSection = incidentLabel.closest("section");
     expect(incidentSection).not.toBeNull();
     const showButton = within(incidentSection!).getByRole("button", {
@@ -666,35 +616,23 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    const panel = await getLoadedDeterministicPanel();
 
     // All three workstream headings must be present
-    expect(within(panel!).getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
-    expect(within(panel!).getAllByText(/Evidence gathering/i).length).toBeGreaterThan(0);
-    expect(within(panel!).getAllByText(/Drift \/ toil follow-up/i).length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText(/Firefight now/i).length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText(/Evidence gathering/i).length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText(/Drift \/ toil follow-up/i).length).toBeGreaterThan(0);
   });
 
   test("workstream bucket counts are shown per bucket", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    const panel = await getLoadedDeterministicPanel();
 
     // Find each workstream bucket section and verify the count label appears within it
     // Incident bucket - section with class "deterministic-group" (first one)
-    const incidentSection = panel!.querySelector("section.deterministic-group");
+    const incidentSection = panel.querySelector("section.deterministic-group");
     expect(incidentSection).not.toBeNull();
     const incidentHeadDiv = incidentSection!.querySelector(".deterministic-group-head");
     expect(incidentHeadDiv).not.toBeNull();
@@ -702,7 +640,7 @@ describe("App", () => {
     expect(incidentHeadDiv!.textContent).toMatch(/\d+ check/);
 
     // Evidence bucket - section with class "deterministic-group" (second one)
-    const evidenceSection = panel!.querySelectorAll("section.deterministic-group")[1];
+    const evidenceSection = panel.querySelectorAll("section.deterministic-group")[1];
     expect(evidenceSection).not.toBeNull();
     const evidenceHeadDiv = evidenceSection.querySelector(".deterministic-group-head");
     expect(evidenceHeadDiv).not.toBeNull();
@@ -710,7 +648,7 @@ describe("App", () => {
     expect(evidenceHeadDiv!.textContent).toMatch(/\d+ check/);
 
     // Drift bucket - details element with class "deterministic-group--drift"
-    const driftDetails = panel!.querySelector("details.deterministic-group--drift");
+    const driftDetails = panel.querySelector("details.deterministic-group--drift");
     expect(driftDetails).not.toBeNull();
     const driftHeadDiv = driftDetails!.querySelector(".deterministic-group-head");
     expect(driftHeadDiv).not.toBeNull();
@@ -722,30 +660,24 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    const panel = await getLoadedDeterministicPanel();
 
     // Find the incident bucket and verify incident checks appear there
-    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const incidentLabel = within(panel).getAllByText(/Firefight now/i)[0];
     const incidentSection = incidentLabel.closest("section");
     expect(incidentSection).not.toBeNull();
     // "Capture tcpdump" is an incident workstream check from fixtures
     expect(within(incidentSection!).getByText(/Capture tcpdump/i)).toBeInTheDocument();
 
     // Find the evidence bucket and verify evidence check appears there
-    const evidenceLabel = within(panel!).getAllByText(/Evidence gathering/i)[0];
+    const evidenceLabel = within(panel).getAllByText(/Evidence gathering/i)[0];
     const evidenceSection = evidenceLabel.closest("section");
     expect(evidenceSection).not.toBeNull();
     // "Collect kubelet metrics from nodes" is an evidence workstream check from fixtures
     expect(within(evidenceSection!).getByText(/Collect kubelet metrics from nodes/i)).toBeInTheDocument();
 
     // Find the drift bucket (it's a <details> element)
-    const driftLabel = within(panel!).getAllByText(/Drift \/ toil follow-up/i)[0];
+    const driftLabel = within(panel).getAllByText(/Drift \/ toil follow-up/i)[0];
     const driftSection = driftLabel.closest("details");
     expect(driftSection).not.toBeNull();
     // "Compare baseline release parity" is a drift workstream check from fixtures
@@ -768,23 +700,18 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(payloads));
     render(<App />);
 
-    const heading = await screen.findByRole("heading", { name: /Deterministic checks/i });
-    // Wait for run data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
-    });
-    const panel = heading.closest("section");
-    expect(panel).not.toBeNull();
+    // Use default sentinel - all workstream labels appear when panel is loaded
+    const panel = await getLoadedDeterministicPanel();
 
     // Incident bucket should have checks
-    const incidentLabel = within(panel!).getAllByText(/Firefight now/i)[0];
+    const incidentLabel = within(panel).getAllByText(/Firefight now/i)[0];
     const incidentSection = incidentLabel.closest("section");
     expect(incidentSection).not.toBeNull();
     const incidentItems = within(incidentSection!).getAllByRole("listitem");
     expect(incidentItems.length).toBeGreaterThan(0);
 
     // Evidence bucket should show empty state
-    const evidenceLabel = within(panel!).getAllByText(/Evidence gathering/i)[0];
+    const evidenceLabel = within(panel).getAllByText(/Evidence gathering/i)[0];
     const evidenceSection = evidenceLabel.closest("section");
     expect(evidenceSection).not.toBeNull();
     expect(within(evidenceSection!).getByText(UI_STRINGS.emptyState.noEvidenceGatheringChecks, { exact: false })).toBeInTheDocument();
@@ -1667,16 +1594,18 @@ describe("App", () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     render(<App />);
 
-    // Wait for loading to complete before checking panel content
+    // Use stable panel id and wait for loaded panel content (not placeholder heading)
     await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+      const panel = document.getElementById("llm-policy");
+      expect(panel).toBeInTheDocument();
+      expect(within(panel!).getByText(/Provider/i)).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    const heading = await screen.findByRole("heading", { name: /LLM policy/i });
-    expect(heading).toBeInTheDocument();
-    const panel = heading.closest("section");
+    const panel = document.getElementById("llm-policy");
     expect(panel).not.toBeNull();
+
     const scoped = within(panel!);
+    expect(scoped.getByRole("heading", { name: /LLM policy/i })).toBeInTheDocument();
     expect(scoped.getByText(/Provider/i)).toBeInTheDocument();
     expect(scoped.getByText(/Budget status/i)).toBeInTheDocument();
     expect(scoped.getByText(/Within budget/i)).toBeInTheDocument();
@@ -1955,24 +1884,19 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    // Wait for the LLM activity panel content to load (depends on run data)
+    // Wait for LLM activity panel content to load using stable panel id
     await waitFor(() => {
-      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
+      const panel = document.getElementById("llm-activity");
+      expect(panel).toBeInTheDocument();
+      expect(within(panel!).getByText(/Retained entries: 19/i)).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    const panelHeading = await screen.findByRole("heading", { name: /LLM activity/i });
-    const panelSection = panelHeading.closest("section");
-    expect(panelSection).not.toBeNull();
-    // Wait for status filter to be visible (indicates panel content loaded)
-    await waitFor(() => {
-      expect(within(panelSection!).queryByLabelText(/Status/i)).not.toBeNull();
-    }, { timeout: 5000 });
-    expect(screen.getByText(/Retained entries: 19/i)).toBeInTheDocument();
-    const statusSelect = within(panelSection!).getByLabelText(/Status/i);
+    const panel = document.getElementById("llm-activity")!;
+    const statusSelect = within(panel).getByLabelText(/Status/i);
     await act(async () => {
       await user.selectOptions(statusSelect, "failed");
     });
-    expect(await within(panelSection!).findByText(/timeout/i)).toBeInTheDocument();
+    expect(await within(panel).findByText(/timeout/i)).toBeInTheDocument();
   });
 
   test("renders notification history table and pagination summary", async () => {

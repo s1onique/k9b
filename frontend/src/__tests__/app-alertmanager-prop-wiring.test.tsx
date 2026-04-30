@@ -173,6 +173,10 @@ describe("App - Alertmanager relevance prop wiring", () => {
       expect(screen.queryByText(/Loading operator data/i)).not.toBeInTheDocument();
     }, { timeout: 5000 });
 
+    // Wait for execution history panel to render
+    const execPanel = await screen.findByText(/Check execution review/i);
+    expect(execPanel).toBeInTheDocument();
+
     // Should see the feedback control
     expect(screen.getByText(/Rate Alertmanager relevance/i)).toBeInTheDocument();
   });
