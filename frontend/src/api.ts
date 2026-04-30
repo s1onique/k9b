@@ -200,7 +200,8 @@ export const submitUsefulnessFeedback = async (
 
 export type RunsListPayload = import("./types").RunsListPayload;
 
-export const fetchRunsList = (): Promise<RunsListPayload> => fetchJson<RunsListPayload>("/api/runs");
+export const fetchRunsList = (): Promise<RunsListPayload> =>
+  fetchJson<RunsListPayload>("/api/runs?include_expensive=true");
 
 // Batch execution API
 export type BatchExecutionRequest = import("./types").BatchExecutionRequest;
