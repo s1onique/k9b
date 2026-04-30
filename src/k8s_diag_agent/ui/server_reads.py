@@ -221,9 +221,8 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                     handler._send_json(notifications_payload)
                     return
 
-        notification_count = 0
         if notifications_dir.exists():
-            notification_count = len(list(notifications_dir.glob("*.json")))
+            _ = len(list(notifications_dir.glob("*.json")))
 
         try:
             payload = query_notifications(
@@ -260,12 +259,35 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         return
 
     if route == "/api/run":
+        # Full request lifecycle instrumentation
+        request_received = time.perf_counter()
+        request_id = f"{id(handler)}-{int(request_received * 1000000)}"
+
+        timings: dict[str, float] = {}
+        timings["request_received_ms"] = 0.0  # First timing point
+
         provisional_key = f"/api/run:{context.run.run_id}"
+
+        # Single-flight acquire timing
+        sf_acquire_start = time.perf_counter()
         should_build, sf_result, sf_wait_start = _single_flight_acquire(provisional_key)
+        timings["single_flight_acquire_ms"] = (time.perf_counter() - sf_acquire_start) * 1000
 
         if not should_build and sf_result is not None:
+            sf_wait_ms = 0.0
+            result = None
+            sf_wait_duration = time.perf_counter()
             result, wait_ms = _single_flight_wait(sf_result, sf_wait_start)
+            sf_wait_ms = (time.perf_counter() - sf_wait_duration) * 1000
+            timings["single_flight_wait_ms"] = sf_wait_ms
             if result is not None:
+                # Cache lookup timing
+                cache_lookup_end = time.perf_counter()
+                timings["cache_lookup_ms"] = (cache_lookup_end - request_received) * 1000
+                # Response creation timing
+                response_start = time.perf_counter()
+                timings["response_creation_ms"] = 0.0
+
                 emit_structured_log(
                     component="ui-run-payload",
                     message="/api/run payload served from single-flight waiter",
@@ -276,34 +298,42 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                         "path": "/api/run",
                         "run_id": context.run.run_id,
                         "run_label": context.run.run_label,
+                        "request_id": request_id,
                         "cache_hit": True,
                         "single_flight_acquire": "waiter",
                         "single_flight_result": "waited",
                         "single_flight_key": provisional_key[:100],
-                        "single_flight_wait_ms": round(wait_ms, 2),
+                        "single_flight_wait_ms": round(sf_wait_ms, 2),
+                        "cache_lookup_ms": round(timings.get("cache_lookup_ms", 0), 2),
+                        "response_creation_ms": round(timings.get("response_creation_ms", 0), 2),
                     },
                 )
+                timings["response_creation_ms"] = (time.perf_counter() - response_start) * 1000
                 handler._send_json(result)
                 return
 
-        timings: dict[str, float] = {}
-        total_start = time.perf_counter()
-
+        # Build path - instrument all phases
         ui_index_mtime = 0.0
+        ui_index_read_start = time.perf_counter()
         ui_index_path = handler.runs_dir / "health" / "ui-index.json"
         if ui_index_path.exists():
             ui_index_mtime = ui_index_path.stat().st_mtime
-        timings["ui_index_read_ms"] = (time.perf_counter() - total_start) * 1000
+        timings["ui_index_read_ms"] = (time.perf_counter() - ui_index_read_start) * 1000
 
         run_cache_key = (context.run.run_id, ui_index_mtime)
 
+        # Cache lookup phase
+        cache_lookup_start = time.perf_counter()
         with _run_payload_cache_lock:
             cached_run_payload = _run_payload_cache.get(run_cache_key)
+        timings["cache_lookup_ms"] = (time.perf_counter() - cache_lookup_start) * 1000
 
         if cached_run_payload is not None:
             cached_payload, _ = cached_run_payload
             _single_flight_release(provisional_key, cached_payload, success=True, result_type="cached")
-            total_duration = (time.perf_counter() - total_start) * 1000
+            total_duration = (time.perf_counter() - request_received) * 1000
+            timings["total_duration_ms"] = total_duration
+
             emit_structured_log(
                 component="ui-run-payload",
                 message="/api/run payload served from cache",
@@ -314,19 +344,27 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                     "path": "/api/run",
                     "run_id": context.run.run_id,
                     "run_label": context.run.run_label,
+                    "request_id": request_id,
                     "total_duration_ms": round(total_duration, 2),
                     "cache_hit": True,
+                    "single_flight_acquire_ms": round(timings.get("single_flight_acquire_ms", 0), 2),
+                    "ui_index_read_ms": round(timings.get("ui_index_read_ms", 0), 2),
+                    "cache_lookup_ms": round(timings.get("cache_lookup_ms", 0), 2),
                     "single_flight_acquire": "builder",
                     "single_flight_result": "cache_hit",
                     "cache_key": str(run_cache_key)[:100],
+                    "payload_bytes": len(json.dumps(cached_payload, ensure_ascii=False).encode("utf-8")),
                 },
             )
             handler._send_json(cached_payload)
             return
 
+        # Context load phase
         context_load_start = time.perf_counter()
+        # NOTE: context is already loaded via handler._load_context() before this block
         timings["context_load_ms"] = (time.perf_counter() - context_load_start) * 1000
 
+        # Promotions load phase
         promotions_load_start = time.perf_counter()
         promoted_glob_start = time.perf_counter()
         external_analysis_dir = handler._health_root / "external-analysis"
@@ -341,26 +379,34 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
         timings["promotions_count"] = len(promotions)
 
+        # Payload build phase
         payload_build_start = time.perf_counter()
         run_payload = build_run_payload(context, promotions=promotions)
         timings["payload_build_ms"] = (time.perf_counter() - payload_build_start) * 1000
 
+        # JSON serialization phase
         serialize_start = time.perf_counter()
-        _ = json.dumps(run_payload, ensure_ascii=False)
+        serialized = json.dumps(run_payload, ensure_ascii=False)
         timings["serialize_ms"] = (time.perf_counter() - serialize_start) * 1000
+        timings["payload_bytes"] = len(serialized.encode("utf-8"))
 
+        # External analysis count (fast glob only, no load)
         external_analysis_dir = handler._health_root / "external-analysis"
         external_analysis_count = 0
         if external_analysis_dir.exists():
             external_analysis_count = len(list(external_analysis_dir.glob(f"{context.run.run_id}-*.json")))
         timings["external_analysis_files_scanned"] = external_analysis_count
 
-        notifications_dir = handler.runs_dir / "health" / "notifications"
-        notification_count = 0
-        if notifications_dir.exists():
-            notification_count = len(list(notifications_dir.glob("*.json")))
-        timings["notification_files_scanned"] = notification_count
+        # OPTIMIZATION: Skip notification file scan for initial selected-run detail
+        # Notification data is loaded via context from ui-index.json, not from individual files
+        # The glob scan of 20141 files was purely for telemetry observability
+        # Only scan if explicitly needed (e.g., /api/run?include_notifications=true)
+        notification_scan_strategy = "skipped_default"
+        timings["notification_files_scanned"] = 0
+        timings["notification_scan_ms"] = 0.0
+        timings["notification_records_used"] = 0
 
+        # Cache the built payload
         with _run_payload_cache_lock:
             if len(_run_payload_cache) >= 10:
                 cache_keys = list(_run_payload_cache.keys())
@@ -370,8 +416,12 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
         _single_flight_release(provisional_key, run_payload, success=True, result_type="built")
 
-        total_duration = (time.perf_counter() - total_start) * 1000
+        # Response creation phase
+        response_creation_start = time.perf_counter()
+        total_duration = (time.perf_counter() - request_received) * 1000
         timings["total_duration_ms"] = total_duration
+        timings["response_creation_ms"] = (time.perf_counter() - response_creation_start) * 1000
+        timings["route_return_ms"] = (time.perf_counter() - request_received) * 1000
 
         emit_structured_log(
             component="ui-run-payload",
@@ -383,22 +433,30 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                 "path": "/api/run",
                 "run_id": context.run.run_id,
                 "run_label": context.run.run_label,
+                "request_id": request_id,
                 "total_duration_ms": round(timings.get("total_duration_ms", 0), 2),
-                "context_load_ms": round(timings.get("context_load_ms", 0), 2),
+                "single_flight_acquire_ms": round(timings.get("single_flight_acquire_ms", 0), 2),
                 "ui_index_read_ms": round(timings.get("ui_index_read_ms", 0), 2),
+                "cache_lookup_ms": round(timings.get("cache_lookup_ms", 0), 2),
+                "context_load_ms": round(timings.get("context_load_ms", 0), 2),
                 "promotions_load_ms": round(timings.get("promotions_load_ms", 0), 2),
                 "promoted_glob_ms": round(timings.get("promoted_glob_ms", 0), 2),
                 "promotion_glob_count": timings.get("promotion_glob_count", 0),
                 "payload_build_ms": round(timings.get("payload_build_ms", 0), 2),
                 "serialize_ms": round(timings.get("serialize_ms", 0), 2),
+                "payload_bytes": timings.get("payload_bytes", 0),
                 "external_analysis_files_scanned": timings.get("external_analysis_files_scanned", 0),
+                "notification_scan_strategy": notification_scan_strategy,
                 "notification_files_scanned": timings.get("notification_files_scanned", 0),
+                "notification_scan_ms": round(timings.get("notification_scan_ms", 0), 2),
+                "notification_records_used": timings.get("notification_records_used", 0),
                 "promotions_count": timings.get("promotions_count", 0),
                 "cache_hit": False,
                 "single_flight_acquire": "builder",
                 "single_flight_result": "built",
                 "cache_key": str(run_cache_key)[:100],
                 "single_flight_key": provisional_key[:100],
+                "route_return_ms": round(timings.get("route_return_ms", 0), 2),
             },
         )
 
