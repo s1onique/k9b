@@ -1084,6 +1084,12 @@ class RunsListPayload(TypedDict):
 class RunsListTimings(TypedDict, total=False):
     """Timing metrics from build_runs_list()."""
 
+    # Stage 1a: include_status metrics (bounded status/review/execution projection)
+    status_lookup_strategy: str  # "skipped_fast_path" | "window_glob"
+    status_run_prefixes_queried: int
+    status_files_found: int
+    status_lookup_ms: float
+    # Stage 1: reviews discovery
     reviews_glob_ms: float
     reviews_parsed: int
     execution_artifacts_glob_ms: float

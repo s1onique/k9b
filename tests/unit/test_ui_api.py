@@ -1370,3 +1370,127 @@ class RunsListTests(unittest.TestCase):
             # First run should be the newest
             self.assertEqual(result["runs"][0]["runId"], "newest-run")
             self.assertEqual(result["runs"][1]["runId"], "middle-run")
+
+    def test_build_runs_list_execution_counts_complete_default_false(self) -> None:
+        """Test that executionCountsComplete is False by default (fast path)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create a review artifact
+            review_content = {
+                "run_id": "test-run",
+                "run_label": "Test Run",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "test-run-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build with default parameters (no include_status, no include_expensive)
+            result = cast(RunsListPayload, build_runs_list(runs_dir))
+
+            # Default should have executionCountsComplete=False (fast path)
+            self.assertFalse(result.get("executionCountsComplete"))
+
+    def test_build_runs_list_execution_counts_complete_include_status_true(self) -> None:
+        """Test that executionCountsComplete is True when include_status=True."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create a review artifact
+            review_content = {
+                "run_id": "test-run",
+                "run_label": "Test Run",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "test-run-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build with include_status=True
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_status=True))
+
+            # include_status=True should set executionCountsComplete=True
+            self.assertTrue(result.get("executionCountsComplete"))
+
+    def test_build_runs_list_execution_counts_complete_include_expensive_true(self) -> None:
+        """Test that executionCountsComplete is True when include_expensive=True."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create a review artifact
+            review_content = {
+                "run_id": "test-run",
+                "run_label": "Test Run",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "test-run-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build with include_expensive=True
+            result = cast(RunsListPayload, build_runs_list(runs_dir, include_expensive=True))
+
+            # include_expensive=True should set executionCountsComplete=True
+            self.assertTrue(result.get("executionCountsComplete"))
+
+    def test_build_runs_list_include_status_produces_status_timings(self) -> None:
+        """Test that include_status=True produces status_lookup_strategy timing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            external_analysis_dir = runs_health_dir / "external-analysis"
+            reviews_dir.mkdir(parents=True)
+            external_analysis_dir.mkdir(parents=True)
+
+            # Create a review artifact
+            review_content = {
+                "run_id": "test-run",
+                "run_label": "Test Run",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "test-run-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build with include_status=True and timings
+            result, timings = build_runs_list(runs_dir, include_status=True, _timings=True)
+
+            # Should have status_lookup_strategy set to window_glob
+            self.assertEqual(timings.get("status_lookup_strategy"), "window_glob")
+            self.assertGreater(timings.get("status_run_prefixes_queried", 0), 0)
+
+    def test_build_runs_list_default_skips_status_timings(self) -> None:
+        """Test that default (no include_status) produces skipped_fast_path strategy."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir)
+            runs_health_dir = runs_dir / "health"
+            reviews_dir = runs_health_dir / "reviews"
+            reviews_dir.mkdir(parents=True)
+
+            # Create a review artifact
+            review_content = {
+                "run_id": "test-run",
+                "run_label": "Test Run",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "cluster_count": 2,
+            }
+            review_path = reviews_dir / "test-run-review.json"
+            review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+            # Build with default parameters and timings
+            result, timings = build_runs_list(runs_dir, _timings=True)
+
+            # Default should have status_lookup_strategy as skipped_fast_path
+            self.assertEqual(timings.get("status_lookup_strategy"), "skipped_fast_path")
+            self.assertEqual(timings.get("status_run_prefixes_queried"), 0)

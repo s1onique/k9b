@@ -54,10 +54,11 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     )
 
     if route == "/api/runs":
-        # Parse query parameters for limit and include_expensive
+        # Parse query parameters for limit, include_status, and include_expensive
         from urllib.parse import parse_qs
         params = parse_qs(query)
         limit_param = params.get("limit", [None])[0]
+        include_status_param = params.get("include_status", ["false"])[0]
         include_expensive_param = params.get("include_expensive", ["false"])[0]
 
         # Parse limit: "all" means None (return all), otherwise parse as int
@@ -71,11 +72,12 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         else:
             limit_value = 100  # Default
 
+        include_status = str(include_status_param).lower() == "true"
         include_expensive = str(include_expensive_param).lower() == "true"
 
         # CRITICAL: Acquire single-flight FIRST, then compute cache key inside critical section
-        # Include limit and include_expensive in cache key for proper cache isolation
-        provisional_key = f"/api/runs:{handler.runs_dir}:limit={limit_value}:expensive={include_expensive}"
+        # Include limit, include_status, and include_expensive in cache key for proper cache isolation
+        provisional_key = f"/api/runs:{handler.runs_dir}:limit={limit_value}:status={include_status}:expensive={include_expensive}"
         should_build, sf_result, sf_wait_start = _single_flight_acquire(provisional_key)
 
         if not should_build and sf_result is not None:
@@ -94,6 +96,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                         "single_flight_key": provisional_key[:100],
                         "single_flight_wait_ms": round(wait_ms, 2),
                         "limit": limit_value,
+                        "include_status": include_status,
                         "include_expensive": include_expensive,
                     },
                 )
@@ -116,7 +119,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             except OSError:
                 pass
 
-        runs_cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit_value}:expensive={include_expensive}"
+        runs_cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit_value}:status={include_status}:expensive={include_expensive}"
 
         with _runs_list_cache_lock:
             cached = _runs_list_cache.get(runs_cache_key)
@@ -137,13 +140,14 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                             "single_flight_result": "cache_hit",
                             "cache_key": runs_cache_key[:100],
                             "limit": limit_value,
+                            "include_status": include_status,
                             "include_expensive": include_expensive,
                         },
                     )
                     handler._send_json(cached_payload)
                     return
 
-        runs_payload = build_runs_list_payload(handler, limit=limit_value, include_expensive=include_expensive)
+        runs_payload = build_runs_list_payload(handler, limit=limit_value, include_status=include_status, include_expensive=include_expensive)
 
         _single_flight_release(provisional_key, runs_payload, success=True, result_type="built")
 
@@ -423,6 +427,7 @@ def build_runs_list_payload(
     handler: HealthUIRequestHandler,
     *,
     limit: int | None = 100,
+    include_status: bool = False,
     include_expensive: bool = False,
 ) -> dict[str, object]:
     """Build the list of available runs with their triage state.
@@ -438,7 +443,10 @@ def build_runs_list_payload(
     Args:
         handler: The HealthUIRequestHandler instance
         limit: Maximum number of runs to return (default 100). None for all runs.
+        include_status: If True, compute status/review/execution projection for returned
+            window. This is a bounded, cheaper operation than include_expensive.
         include_expensive: If True, compute batch eligibility for all runs (expensive).
+            Note: include_expensive=True implies include_status=True.
 
     Returns:
         The runs list payload dict
@@ -468,8 +476,9 @@ def build_runs_list_payload(
             pass
     timings["index_read_ms"] = (time.perf_counter() - total_start) * 1000
 
-    # Include limit and include_expensive in cache key for proper cache isolation
-    cache_key = f"{handler.runs_dir}:limit={limit}:expensive={include_expensive}"
+    # Include cache_mtime for filesystem freshness. Without it, a new run or execution
+    # artifact would cause stale cache hits for the same parameter combination.
+    cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit}:status={include_status}:expensive={include_expensive}"
 
     from .server import _runs_list_cache, _runs_list_cache_lock
     with _runs_list_cache_lock:
@@ -516,6 +525,7 @@ def build_runs_list_payload(
         result = build_runs_list(
             handler.runs_dir,
             limit=limit,
+            include_status=include_status,
             include_expensive=include_expensive,
             _timings=True,
         )

@@ -584,16 +584,17 @@ def build_runs_list(
     runs_dir: Path,
     *,
     limit: int | None = 100,
+    include_status: bool = False,
     include_expensive: bool = False,
     _timings: Literal[False] = False,
 ) -> RunsListPayload: ...
-
 
 @overload
 def build_runs_list(
     runs_dir: Path,
     *,
     limit: int | None = 100,
+    include_status: bool = False,
     include_expensive: bool = False,
     _timings: Literal[True] = True,
 ) -> tuple[RunsListPayload, RunsListTimings]: ...
@@ -603,6 +604,7 @@ def build_runs_list(
     runs_dir: Path,
     *,
     limit: int | None = 100,
+    include_status: bool = False,
     include_expensive: bool = False,
     _timings: bool = False,
 ) -> RunsListPayload | tuple[RunsListPayload, RunsListTimings]:
@@ -625,8 +627,11 @@ def build_runs_list(
     Args:
         runs_dir: Path to the runs directory
         limit: Maximum number of runs to return (default 100). None for all runs.
+        include_status: If True, compute status/review/execution projection for returned
+            window. This is a bounded, cheaper operation than include_expensive.
         include_expensive: If True, compute batch eligibility for all runs (expensive).
             If False (default), only compute for returned window.
+            Note: include_expensive=True implies include_status=True.
         _timings: If True, return tuple of (payload, timings) with detailed metrics
 
     Returns:
@@ -741,6 +746,11 @@ def build_runs_list(
     # Define external_analysis_dir for use in later stages
     external_analysis_dir = run_health_dir / "external-analysis"
 
+    # Immutability: include_expensive implies include_status
+    # This ensures backward compatibility while providing the bounded projection
+    if include_expensive and not include_status:
+        include_status = True
+
     # Stage 3: Sort and window selection (BEFORE expensive batch eligibility scan)
     row_assembly_start = time_module.perf_counter()
 
@@ -786,11 +796,14 @@ def build_runs_list(
 
     execution_lookup_start = time_module.perf_counter()
 
-    # FAST PATH: When include_expensive=False, skip execution count derivation entirely.
+    # FAST PATH: When include_status=False, skip execution count derivation entirely.
     # This is the critical optimization for the initial UI load where we just need
     # the runs list without expensive per-run filesystem operations.
-    if include_expensive:
+    # Note: include_expensive implies include_status (handled above).
+    if include_status:
         # Full path: derive execution counts by looking up execution artifacts
+        timings["status_lookup_strategy"] = "window_glob"
+        timings["status_run_prefixes_queried"] = len(window_run_ids)
         timings["execution_lookup_strategy"] = "window_glob"
         timings["execution_run_prefixes_queried"] = len(window_run_ids)
 
@@ -802,6 +815,7 @@ def build_runs_list(
                 for exec_path in external_analysis_dir.glob(pattern):
                     window_exec_files.append((exec_path, run_id))
 
+        timings["status_files_found"] = len(window_exec_files)
         timings["execution_files_found_total"] = len(window_exec_files)
         timings["execution_files_considered"] = len(window_exec_files)
         timings["execution_files_skipped_outside_window"] = 0  # Window mode doesn't consider non-window files
@@ -832,11 +846,15 @@ def build_runs_list(
                 current_reviewed_count = run_entries[run_id].get("reviewed_count", 0)
                 run_entries[run_id]["reviewed_count"] = cast(int, current_reviewed_count) + 1
 
+        timings["status_lookup_ms"] = (time_module.perf_counter() - execution_lookup_start) * 1000
         timings["execution_parse_ms"] = (time_module.perf_counter() - execution_parse_start) * 1000
         timings["execution_files_parsed"] = execution_parsed
     else:
         # FAST PATH: Skip execution count derivation entirely
         # Set execution counts to 0 (unknown) - they can be derived on-demand if needed
+        timings["status_lookup_strategy"] = "skipped_fast_path"
+        timings["status_run_prefixes_queried"] = 0
+        timings["status_files_found"] = 0
         timings["execution_lookup_strategy"] = "skipped_fast_path"
         timings["execution_run_prefixes_queried"] = 0
         timings["execution_files_found_total"] = 0
@@ -844,6 +862,7 @@ def build_runs_list(
         timings["execution_files_skipped_outside_window"] = 0
         timings["execution_parse_ms"] = 0.0
         timings["execution_files_parsed"] = 0
+        timings["status_lookup_ms"] = 0.0
         # execution_count and reviewed_count remain 0 (initialized in Stage 1)
 
     timings["execution_lookup_ms"] = (time_module.perf_counter() - execution_lookup_start) * 1000
@@ -1071,10 +1090,11 @@ def build_runs_list(
         totalCount=total_discovered,
         returnedCount=returned_count,
         hasMore=has_more,
-        # Flag indicating whether execution counts are complete.
-        # When False (fast path), counts are 0 because expensive derivation was skipped.
+        # Flag indicating whether execution counts are complete for the returned runs.
+        # When include_status=True or include_expensive=True, counts are computed for the
+        # returned window. When False (fast path), counts are 0 because derivation was skipped.
         # UI should render "Execution status not loaded" instead of "No executions" when False.
-        executionCountsComplete=include_expensive,
+        executionCountsComplete=include_expensive or include_status,
     )
 
     if _timings:
