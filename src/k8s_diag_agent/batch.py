@@ -29,6 +29,7 @@ from .external_analysis.manual_next_check import (
     ManualNextCheckError,
     execute_manual_next_check,
 )
+from .security.path_validation import SecurityError, validate_run_id
 from .structured_logging import emit_structured_log
 
 COMPONENT_NAME = "batch-next-check-runner"
@@ -144,12 +145,20 @@ def load_existing_execution_indices(run_health_dir: Path, run_id: str) -> set[in
     Returns:
         Set of candidate indices that have already been executed
     """
+    # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty result
+        return set()
+
     execution_indices: set[int] = set()
     external_dir = run_health_dir / "external-analysis"
     if not external_dir.exists():
         return execution_indices
 
-    for artifact_path in external_dir.glob(f"{run_id}-next-check-execution-*.json"):
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    for artifact_path in external_dir.glob(f"{validated_run_id}-next-check-execution-*.json"):
         try:
             artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
             # Check if this is a next-check-execution artifact

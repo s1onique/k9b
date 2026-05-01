@@ -427,3 +427,93 @@ class TestIntegrationNextCheckPlanLookup:
             mock_collect.assert_called_once()
             args = mock_collect.call_args[0]
             assert args[1] == "valid-run"
+
+
+class TestLoadExistingExecutionIndices:
+    """Tests for batch.py load_existing_execution_indices() security hardening.
+
+    These tests verify that the load_existing_execution_indices function
+    properly validates run_id before using it in glob patterns.
+    """
+
+    def test_valid_run_id_finds_artifacts(self, tmp_path: Path) -> None:
+        """Valid run_id should find execution artifacts."""
+        from k8s_diag_agent.batch import load_existing_execution_indices
+
+        # Create external-analysis directory with artifacts
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create execution artifacts
+        (ea_dir / "run-test-next-check-execution-001.json").write_text(
+            '{"purpose": "next-check-execution", "payload": {"candidateIndex": 0}}',
+            encoding="utf-8",
+        )
+        (ea_dir / "run-test-next-check-execution-002.json").write_text(
+            '{"purpose": "next-check-execution", "payload": {"candidateIndex": 1}}',
+            encoding="utf-8",
+        )
+
+        # Valid run_id should find artifacts
+        indices = load_existing_execution_indices(tmp_path, "run-test")
+        assert indices == {0, 1}
+
+    def test_invalid_run_id_returns_empty_set(self, tmp_path: Path) -> None:
+        """Invalid run_id should return empty set, not raise."""
+        from k8s_diag_agent.batch import load_existing_execution_indices
+
+        # Create directory to ensure path exists
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Invalid run_id with path traversal should return empty set
+        indices = load_existing_execution_indices(tmp_path, "../etc")
+        assert indices == set()
+
+    def test_glob_metachar_run_id_returns_empty_set(self, tmp_path: Path) -> None:
+        """Glob metacharacters in run_id should return empty set."""
+        from k8s_diag_agent.batch import load_existing_execution_indices
+
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Glob metacharacter should be rejected
+        indices = load_existing_execution_indices(tmp_path, "run*")
+        assert indices == set()
+
+    def test_prefix_collision_prevented(self, tmp_path: Path) -> None:
+        """Verify run_id prefix collision is prevented.
+
+        run_id="run-test" should NOT match "run-test-extra" artifacts.
+        """
+        from k8s_diag_agent.batch import load_existing_execution_indices
+
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifact with exact prefix
+        (ea_dir / "run-test-next-check-execution-001.json").write_text(
+            '{"purpose": "next-check-execution", "payload": {"candidateIndex": 0}}',
+            encoding="utf-8",
+        )
+        # Create artifact with extended prefix (should NOT match)
+        (ea_dir / "run-test-extra-next-check-execution-001.json").write_text(
+            '{"purpose": "next-check-execution", "payload": {"candidateIndex": 99}}',
+            encoding="utf-8",
+        )
+
+        # Only exact prefix should match
+        indices = load_existing_execution_indices(tmp_path, "run-test")
+        assert indices == {0}
+        # 99 should NOT be present (prefix collision prevented by separator check in glob)
+
+    def test_traversal_run_id_returns_empty_set(self, tmp_path: Path) -> None:
+        """Path traversal in run_id returns empty set."""
+        from k8s_diag_agent.batch import load_existing_execution_indices
+
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Traversal patterns should be rejected
+        indices = load_existing_execution_indices(tmp_path, "foo/../../../etc")
+        assert indices == set()

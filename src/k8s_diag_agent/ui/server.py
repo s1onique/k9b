@@ -173,24 +173,24 @@ def _single_flight_release(key: str, result: object, success: bool = True, resul
         result_type: Type of result - "built" (freshly built), "cached" (served from cache), "error" (build failed)
     """
     import time as time_module
-    
+
     with _single_flight_lock:
         if key in _single_flight_events:
             event, result_holder = _single_flight_events[key]
             result_holder[0] = result  # Store result in the holder
-            
+
             # Give waiters a moment to read the result before cleaning up
             # This prevents the race where a waiter checks right after we set result but before it reads
             # We keep the entry in the dict with a sentinel marker to indicate "ready"
             result_holder.append("_READY_")  # Marker to indicate result is ready
-            
+
             # Brief delay to allow waiters to pick up the result (max 50ms)
             # This is a tradeoff - we trade a small delay for correctness
             time_module.sleep(0.005)  # 5ms to let waiters wake up and read
-            
+
             # Now delete to allow retries after waiters have had a chance
             del _single_flight_events[key]
-            
+
             # Emit structured log for release
             emit_structured_log(
                 component="single-flight",
@@ -204,7 +204,7 @@ def _single_flight_release(key: str, result: object, success: bool = True, resul
                     "result_type": result_type,
                 },
             )
-            
+
             # Log release for debugging
             logger.debug(
                 f"Single-flight released for key: {key[:50]}...",
@@ -660,10 +660,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # This handles the case where the same handler instance processes multiple
         # requests on a keep-alive connection
         self._reset_request_state()
-    
+
     def _reset_request_state(self) -> None:
         """Reset all per-request state to measure actual request processing time.
-        
+
         This must be called at the start of each do_GET/do_POST to ensure
         duration_ms reflects request processing, not connection idle time.
         """
@@ -703,7 +703,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # This fixes the bug where duration_ms included connection/handler lifetime
         # instead of just the request processing time
         self._reset_request_state()
-        
+
         route, _, query = self.path.partition("?")
         self._request_method = "GET"
         self._request_path = route
@@ -732,7 +732,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # This fixes the bug where duration_ms included connection/handler lifetime
         # instead of just the request processing time
         self._reset_request_state()
-        
+
         route, _, _ = self.path.partition("?")
         self._request_method = "POST"
         self._request_path = route
@@ -877,8 +877,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
         """
+        # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
+        from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return empty result
+            return None, None, None
+
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
+
         # First try the promoted entries (deterministic checks)
-        promotions = collect_promoted_queue_entries(self._health_root, run_id)
+        promotions = collect_promoted_queue_entries(self._health_root, validated_run_id)
         if promotions:
             entry, idx = self._resolve_plan_candidate(
                 promotions,
@@ -891,8 +903,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Scan all external-analysis artifacts for planner artifacts
         external_analysis_dir = self._health_root / "external-analysis"
         if external_analysis_dir.exists():
-            # Find all next-check-plan artifacts for this run
-            for artifact_file in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+            # SECURITY: run_id validated by validate_run_id() before glob construction
+            for artifact_file in external_analysis_dir.glob(glob_pattern):
                 try:
                     artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                     # Check if this is a planning artifact
@@ -930,8 +942,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
         """
+        # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
+        from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return empty result
+            return None, None, None
+
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
+
         # First try the promoted entries (deterministic checks) from health_root
-        promotions = collect_promoted_queue_entries(health_root, run_id)
+        promotions = collect_promoted_queue_entries(health_root, validated_run_id)
         if promotions:
             entry, idx = self._resolve_plan_candidate(
                 promotions,
@@ -944,8 +968,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Scan all external-analysis artifacts for planner artifacts in health_root
         external_analysis_dir = health_root / "external-analysis"
         if external_analysis_dir.exists():
-            # Find all next-check-plan artifacts for this run
-            for artifact_file in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+            # SECURITY: run_id validated by validate_run_id() before glob construction
+            for artifact_file in external_analysis_dir.glob(glob_pattern):
                 try:
                     artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                     # Check if this is a planning artifact
@@ -1435,15 +1459,15 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         A run is considered "triaged" if at least one next-check execution artifact
         has the usefulness_class field set (operator has reviewed it).
-        
+
         Uses caching keyed by the health directory mtime to avoid rescanning
         the reviews/ and external-analysis/ directories on every request.
         """
         from .api import build_runs_list
-        
+
         timings: dict[str, float] = {}
         total_start = time.perf_counter()
-        
+
         # Get the mtime of the health root to use as cache key
         health_root = self.runs_dir / "health"
         cache_mtime = 0.0
@@ -1453,12 +1477,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 reviews_dir = health_root / "reviews"
                 external_analysis_dir = health_root / "external-analysis"
                 diagnostic_packs_dir = health_root / "diagnostic-packs"
-                
+
                 mtimes = []
                 for d in [reviews_dir, external_analysis_dir, diagnostic_packs_dir]:
                     if d.exists():
                         mtimes.append(d.stat().st_mtime)
-                
+
                 if mtimes:
                     cache_mtime = max(mtimes)
             except OSError:
@@ -1519,12 +1543,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             )
             payload = {"runs": [], "error": str(exc)}
         timings["payload_build_ms"] = (time.perf_counter() - payload_build_start) * 1000
-        
+
         # Stage 4: Serialize to JSON (for timing measurement)
         serialize_start = time.perf_counter()
         _ = json.dumps(payload, ensure_ascii=False)  # Measure only, result not used
         timings["serialize_ms"] = (time.perf_counter() - serialize_start) * 1000
-        
+
         # Cache the built payload
         with _runs_list_cache_lock:
             # Evict old entries if cache is full
@@ -1532,10 +1556,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 oldest_key = next(iter(_runs_list_cache))
                 del _runs_list_cache[oldest_key]
             _runs_list_cache[cache_key] = (cast(dict[str, Any], payload), cache_mtime)
-        
+
         total_duration = (time.perf_counter() - total_start) * 1000
         timings["total_duration_ms"] = total_duration
-        
+
         # Emit structured timing log with all inner timings from build_runs_list()
         emit_structured_log(
             component="ui-runs-list",
@@ -1602,7 +1626,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 "per_run_directory_list_calls": timings.get("per_run_directory_list_calls", 0),
             },
         )
-        
+
         return payload
 
     def _parse_limit(self, value: str | None) -> int | None:
@@ -1624,10 +1648,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         encode_done = time.perf_counter()
         encoded = payload.encode("utf-8")
         body_write_done = time.perf_counter()
-        
+
         # Set response bytes for access logging BEFORE sending
         self._response_bytes = len(encoded)
-        
+
         self.send_response(code)
         send_headers_done = time.perf_counter()
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1643,11 +1667,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
         self.wfile.flush()
         write_done = time.perf_counter()
-        
+
         # Tell BaseHTTPRequestHandler to close connection after this response
         # This is the definitive way to prevent keep-alive with HTTP/1.1
         self.close_connection = True
-        
+
         # Log detailed send timing for debugging
         emit_structured_log(
             component="ui-send",
