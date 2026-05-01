@@ -517,3 +517,104 @@ class TestLoadExistingExecutionIndices:
         # Traversal patterns should be rejected
         indices = load_existing_execution_indices(tmp_path, "foo/../../../etc")
         assert indices == set()
+
+
+class TestHealthSummaryAssessmentGlob:
+    """Tests for health/summary.py _build_cluster_summaries() security hardening.
+
+    These tests verify that the assessment artifact glob pattern in _build_cluster_summaries
+    properly validates run_id before using it in glob patterns.
+    """
+
+    def test_valid_run_id_finds_assessment_artifacts(self, tmp_path: Path) -> None:
+        """Valid run_id should find assessment artifacts."""
+        from k8s_diag_agent.health.summary import _build_cluster_summaries
+
+        # Create assessments directory with artifacts
+        assessments_dir = tmp_path / "assessments"
+        assessments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create assessment artifacts
+        (assessments_dir / "run-test-cluster-alpha-assessment.json").write_text(
+            '{"findings": [{"description": "alpha finding"}]}',
+            encoding="utf-8",
+        )
+        (assessments_dir / "run-test-cluster-beta-assessment.json").write_text(
+            '{"findings": [{"description": "beta finding"}]}',
+            encoding="utf-8",
+        )
+
+        # Valid run_id should find artifacts
+        summaries = _build_cluster_summaries(assessments_dir, "run-test", {})
+        assert len(summaries) == 2
+        labels = {s.label for s in summaries}
+        assert "cluster-alpha" in labels
+        assert "cluster-beta" in labels
+
+    def test_traversal_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Path traversal in run_id should return empty list (safe fallback)."""
+        from k8s_diag_agent.health.summary import _build_cluster_summaries
+
+        assessments_dir = tmp_path / "assessments"
+        assessments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifact that could be matched by traversal
+        (assessments_dir / "run-test-cluster-alpha-assessment.json").write_text(
+            '{"findings": [{"description": "test"}]}',
+            encoding="utf-8",
+        )
+
+        # Traversal patterns should be rejected and return empty list
+        summaries = _build_cluster_summaries(assessments_dir, "../etc", {})
+        assert summaries == []
+
+    def test_glob_metachar_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Glob metacharacters in run_id should return empty list."""
+        from k8s_diag_agent.health.summary import _build_cluster_summaries
+
+        assessments_dir = tmp_path / "assessments"
+        assessments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifact
+        (assessments_dir / "run-test-cluster-alpha-assessment.json").write_text(
+            '{"findings": [{"description": "test"}]}',
+            encoding="utf-8",
+        )
+
+        # Glob metacharacter should be rejected
+        summaries = _build_cluster_summaries(assessments_dir, "run*", {})
+        assert summaries == []
+
+    def test_validation_prevents_injection(self, tmp_path: Path) -> None:
+        """Verify that invalid run_id patterns are rejected, preventing injection."""
+        from k8s_diag_agent.health.summary import _build_cluster_summaries
+
+        assessments_dir = tmp_path / "assessments"
+        assessments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifact that could be exploited with path traversal
+        (assessments_dir / "run-test-cluster-alpha-assessment.json").write_text(
+            '{"findings": [{"description": "test"}]}',
+            encoding="utf-8",
+        )
+
+        # Attempting path traversal should return empty list, not search parent dirs
+        summaries = _build_cluster_summaries(assessments_dir, "run/../../etc", {})
+        assert summaries == []
+
+    def test_double_dots_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Double dots in run_id should return empty list."""
+        from k8s_diag_agent.health.summary import _build_cluster_summaries
+
+        assessments_dir = tmp_path / "assessments"
+        assessments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifact
+        (assessments_dir / "valid-run-cluster-alpha-assessment.json").write_text(
+            '{"findings": [{"description": "test"}]}',
+            encoding="utf-8",
+        )
+
+        # Double dots should be rejected
+        summaries = _build_cluster_summaries(assessments_dir, "foo..bar", {})
+        assert summaries == []

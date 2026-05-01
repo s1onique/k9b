@@ -54,9 +54,11 @@ This audit covers glob interpolation usages in `src/k8s_diag_agent/` to identify
 | `ui/server_read_support.py` | 703 | `external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")` | MEDIUM | ✅ FIXED - Phase 2 (second half) |
 | `ui/server_read_support.py` | 776 | `external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")` | MEDIUM | ✅ FIXED - Phase 2 (second half) |
 | `ui/server_read_support.py` | 932 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | ✅ FIXED - Phase 2 (second half) |
+| `health/summary.py` | 319 | `assessments_dir.glob(f"{run_id}-*-assessment.json")` | MEDIUM | ✅ FIXED - Phase 2 slice |
 | `ui/notifications.py` | 477 | `notifications_dir.glob("*.json")` | LOW | Constant pattern |
-| `health/summary.py` | TBD | `assessments_dir.glob(f"{run_id}-*-assessment.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
-| `health/ui.py` | TBD | `external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `health/ui.py` | 758 | `external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json")` | MEDIUM | Phase 2 backlog |
+| `ui/server_reads.py` | 654 | `external_analysis_dir.glob(f"{context.run.run_id}-*.json")` | MEDIUM | Phase 2 backlog |
+| `health/ui_diagnostic_pack.py` | 123 | `glob_pattern = f"diagnostic-pack-{run_id}-*.zip"` | MEDIUM | Phase 2 backlog |
 
 ### Constant Patterns (No Action Needed)
 
@@ -114,8 +116,13 @@ These use run_id that was already validated elsewhere:
   - `_find_next_check_plan()` (line 776) - fallback path only
   - `_build_execution_history()` (line 932) - fallback path only
   - `_build_llm_stats_for_run()` (line 1128) - fallback path only
-- [ ] `health/summary.py` - Add validate_run_id() for assessment lookups
+- [x] `health/summary.py` - _build_cluster_summaries(): ✅ FIXED - Phase 2 slice complete
+  - Assessment glob now uses validate_run_id() + safe_run_artifact_glob()
+  - Returns empty list on SecurityError (safe fallback)
+  - Tests added: TestHealthSummaryAssessmentGlob (5 tests)
 - [ ] `health/ui.py` - Add validate_run_id() for promotion lookups
+- [ ] `ui/server_reads.py` - Add validate_run_id() for artifact count lookups
+- [ ] `health/ui_diagnostic_pack.py` - Add validate_run_id() for diagnostic pack lookups
 
 ## Verification
 

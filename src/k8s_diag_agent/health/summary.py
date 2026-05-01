@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ..security import sanitize_payload
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal, ProposalLifecycleStatus
 from .proposal_lifecycle_events import derive_current_proposal_status
 from .utils import normalize_ref
@@ -310,13 +311,28 @@ def _load_history(history_path: Path) -> dict[str, Any]:
     return {}
 
 
+# Constant suffix for assessment artifact glob pattern.
+# REVIEWED: Fixed pattern, no user-controlled interpolation after run_id prefix.
+_ASSESSMENT_SUFFIX = "-*-assessment.json"
+
+
 def _build_cluster_summaries(
     assessments_dir: Path, run_id: str, history: Mapping[str, Any]
 ) -> list[ClusterSummary]:
     summaries: list[ClusterSummary] = []
     if not assessments_dir.is_dir():
         return summaries
-    for path in sorted(assessments_dir.glob(f"{run_id}-*-assessment.json")):
+
+    # Validate run_id before glob construction to prevent traversal/injection
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Return empty summaries on invalid run_id (safe fallback)
+        return summaries
+
+    # Use safe_run_artifact_glob for validated glob pattern construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, _ASSESSMENT_SUFFIX)
+    for path in sorted(assessments_dir.glob(glob_pattern)):
         label = _label_from_assessment_path(run_id, path)
         data = _load_json(path)
         findings = data.get("findings") if isinstance(data, Mapping) else []
