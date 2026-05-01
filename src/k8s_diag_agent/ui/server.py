@@ -1241,7 +1241,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         next_check_queue = _phase("next_check_queue_build_ms", lambda: _build_queue_from_plan(next_check_plan))
 
         # Phase 12: Build next_check_execution_history (uses shared index)
-        execution_history = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id, artifact_index))
+        execution_history, exec_telemetry = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id, artifact_index))
 
         # Phase 13: Build llm_stats from external-analysis artifacts for this run (uses shared index)
         llm_stats = _phase("llm_stats_build_ms", lambda: _build_llm_stats_for_run(external_analysis_dir, run_id, artifact_index))
@@ -1700,7 +1700,7 @@ def _persist_batch_execution_history_to_ui_index(runs_dir: Path, run_id: str) ->
         return
 
     # Use _build_execution_history to get properly-shaped entries with all fields
-    fresh_history = _build_execution_history(external_dir, run_id)
+    fresh_history, _ = _build_execution_history(external_dir, run_id)
 
     if not fresh_history:
         return

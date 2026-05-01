@@ -471,8 +471,12 @@ class RunArtifactIndex:
     review_enrichment: tuple[dict[str, object], ...] = field(default_factory=tuple)
     next_check_plan: tuple[dict[str, object], ...] = field(default_factory=tuple)
     next_check_execution: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    # Alertmanager review artifacts: mapping source_artifact -> latest review
+    # (derived from NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW purpose artifacts)
+    alertmanager_reviews_by_source: dict[str, dict[str, object]] = field(default_factory=dict)
     # Telemetry
     artifacts_considered: int = 0
+    alertmanager_reviews_indexed: int = 0
     source: str = "file_scan"  # "file_scan" | "index"
 
 
@@ -488,6 +492,7 @@ def _build_run_artifact_index(
     Telemetry is preserved:
     - source="file_scan" when scanned from disk
     - artifacts_considered: count of all run artifacts scanned
+    - alertmanager_reviews_indexed: count of Alertmanager review artifacts indexed
     - artifacts by purpose for efficient lookup
 
     Args:
@@ -497,10 +502,14 @@ def _build_run_artifact_index(
     Returns:
         RunArtifactIndex with classified artifacts and telemetry
     """
+    from ..external_analysis.artifact import ExternalAnalysisPurpose
+
     artifacts: list[dict[str, object]] = []
     review_enrichment: list[dict[str, object]] = []
     next_check_plan: list[dict[str, object]] = []
     next_check_execution: list[dict[str, object]] = []
+    # Alertmanager review artifacts: mapping source_artifact -> latest review
+    alertmanager_reviews_by_source: dict[str, dict[str, object]] = {}
 
     if not external_analysis_dir.exists():
         return RunArtifactIndex(run_id=run_id, artifacts_considered=0, source="file_scan")
@@ -532,6 +541,17 @@ def _build_run_artifact_index(
                 next_check_plan.append(artifact_data)
             elif purpose == "next-check-execution":
                 next_check_execution.append(artifact_data)
+            # Index Alertmanager review artifacts by source_artifact (latest per source)
+            # Accept both formal purpose constant and legacy literal for backward compatibility
+            formal_purpose = ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW.value
+            if purpose == formal_purpose or purpose == "next-check-execution-alertmanager-review":
+                source_artifact = artifact_data.get("source_artifact")
+                if isinstance(source_artifact, str):
+                    # Get review timestamp for determining "latest"
+                    reviewed_at = artifact_data.get("reviewed_at", "")
+                    existing = alertmanager_reviews_by_source.get(source_artifact)
+                    if existing is None or reviewed_at > existing.get("reviewed_at", ""):
+                        alertmanager_reviews_by_source[source_artifact] = artifact_data
             # Other artifact types are kept in artifacts list but not indexed by purpose
 
         except Exception:
@@ -543,7 +563,9 @@ def _build_run_artifact_index(
         review_enrichment=tuple(review_enrichment),
         next_check_plan=tuple(next_check_plan),
         next_check_execution=tuple(next_check_execution),
+        alertmanager_reviews_by_source=alertmanager_reviews_by_source,
         artifacts_considered=len(artifacts),
+        alertmanager_reviews_indexed=len(alertmanager_reviews_by_source),
         source="file_scan",
     )
 
@@ -740,7 +762,7 @@ def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, obj
 
 def _build_execution_history(
     external_analysis_dir: Path, run_id: str, artifact_index: RunArtifactIndex | None = None
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], dict[str, object]]:
     """Build next-check execution history from execution artifacts.
 
     Uses artifact_index if provided for O(1) lookup, otherwise falls back
@@ -759,20 +781,44 @@ def _build_execution_history(
         artifact_index: Pre-built index for O(1) lookup (optional)
 
     Returns:
-        List of execution history entry dicts, sorted by timestamp descending
+        Tuple of (history entries, telemetry dict) sorted by timestamp descending
     """
     history: list[dict[str, object]] = []
+    telemetry: dict[str, object] = {
+        "execution_history_source": "unknown",
+        "alertmanager_review_source": "unknown",
+        "alertmanager_reviews_indexed": 0,
+        "execution_entries_returned": 0,
+    }
 
-    # Pre-load Alertmanager review artifacts for merging into entries
-    reviews_by_source = _load_alertmanager_review_artifacts(external_analysis_dir, run_id)
+    # Determine Alertmanager review source:
+    # - If artifact_index provided and has reviews, use index (no glob needed)
+    # - Otherwise, fall back to file scan (backward compatibility)
+    if artifact_index is not None and artifact_index.alertmanager_reviews_by_source:
+        reviews_by_source = artifact_index.alertmanager_reviews_by_source
+        telemetry["alertmanager_review_source"] = "artifact_index"
+        telemetry["alertmanager_reviews_indexed"] = len(reviews_by_source)
+    elif artifact_index is not None:
+        # Index exists but no reviews indexed
+        reviews_by_source = {}
+        telemetry["alertmanager_review_source"] = "artifact_index"
+        telemetry["alertmanager_reviews_indexed"] = 0
+    else:
+        # No index - fall back to file scan
+        reviews_by_source = _load_alertmanager_review_artifacts(external_analysis_dir, run_id)
+        telemetry["alertmanager_review_source"] = "file_scan"
+        telemetry["alertmanager_reviews_indexed"] = len(reviews_by_source)
 
     # Use index for O(1) lookup if available
     if artifact_index is not None:
         execution_artifacts = artifact_index.next_check_execution
+        telemetry["execution_history_source"] = "artifact_index"
     else:
+        telemetry["execution_history_source"] = "file_scan"
         # Fall back to directory scan for backward compatibility
         if not external_analysis_dir.exists():
-            return history
+            telemetry["execution_entries_returned"] = 0
+            return history, telemetry
         execution_artifacts = []
         # Pre-sort files by length (longest first) to handle prefixed run_ids correctly
         all_files = sorted(external_analysis_dir.glob("*-next-check-execution*.json"), key=lambda p: len(p.name), reverse=True)
@@ -841,8 +887,9 @@ def _build_execution_history(
 
     # Sort by timestamp descending (most recent first) using ISO timestamp comparison
     history.sort(key=lambda x: cast(str, x.get("timestamp") or ""), reverse=True)
+    telemetry["execution_entries_returned"] = len(history[:5])
 
-    return history[:5]  # Limit to 5 most recent
+    return history[:5], telemetry  # Limit to 5 most recent
 
 
 def _parse_positive_int(value: object | None) -> int | None:

@@ -171,11 +171,14 @@ class RunArtifactIndexTests(unittest.TestCase):
         index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
 
         # Build history with index - should use O(1) lookup
-        history = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+        # Returns tuple of (history, telemetry)
+        history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id, index)
 
         self.assertEqual(len(history), 1)
         assert history is not None
         self.assertEqual(history[0]["candidateId"], "c1")
+        # Verify telemetry reflects index usage
+        self.assertEqual(telemetry["execution_history_source"], "artifact_index")
 
     def test_build_llm_stats_uses_index(self) -> None:
         """Test that _build_llm_stats_for_run uses artifact_index for O(1) lookup."""
@@ -221,7 +224,7 @@ class RunArtifactIndexTests(unittest.TestCase):
         # All lookups should return None or empty, not raise
         enrichment = _find_review_enrichment(self.external_analysis_dir, self.run_id, index)
         plan = _find_next_check_plan(self.external_analysis_dir, self.run_id, index)
-        history = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+        history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id, index)
         stats = _build_llm_stats_for_run(self.external_analysis_dir, self.run_id, index)
 
         self.assertIsNone(enrichment)
@@ -291,7 +294,7 @@ class RunArtifactIndexTests(unittest.TestCase):
         # Verify consumer results also have artifactPath
         enrichment = _find_review_enrichment(self.external_analysis_dir, self.run_id, index)
         plan = _find_next_check_plan(self.external_analysis_dir, self.run_id, index)
-        history = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+        history, _ = _build_execution_history(self.external_analysis_dir, self.run_id, index)
 
         assert enrichment is not None
         assert plan is not None
@@ -334,7 +337,7 @@ class RunArtifactIndexTests(unittest.TestCase):
         self.assertEqual(index.next_check_execution[0].get("run_id"), "run-2024")
 
         # Verify history only includes the correct run's artifacts
-        history = _build_execution_history(self.external_analysis_dir, "run-2024", index)
+        history, _ = _build_execution_history(self.external_analysis_dir, "run-2024", index)
         self.assertEqual(len(history), 1)
         assert history is not None
         self.assertEqual(history[0].get("candidateId"), "c2")
@@ -431,6 +434,271 @@ class RunArtifactIndexTests(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result["status"], "success")
+
+    def test_alertmanager_review_indexed_in_artifact_index(self) -> None:
+        """Test that Alertmanager review artifacts are indexed by source_artifact."""
+        # Write execution artifact (source artifact)
+        exec_artifact_path = f"{self.run_id}-next-check-execution-001.json"
+        self.external_analysis_dir.joinpath(exec_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "run_id": self.run_id,
+                "timestamp": "2024-01-15T10:00:00Z",
+                "payload": {"candidateId": "c1"},
+            }),
+            encoding="utf-8",
+        )
+
+        # Write Alertmanager review artifact (derived from execution)
+        # Purpose matches NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW
+        review_artifact_path = f"{self.run_id}-next-check-execution-alertmanager-review-001.json"
+        self.external_analysis_dir.joinpath(review_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution-alertmanager-review",
+                "status": "success",
+                "run_id": self.run_id,
+                "source_artifact": f"external-analysis/{exec_artifact_path}",
+                "alertmanager_relevance": "relevant",
+                "alertmanager_relevance_summary": "Alert is actionable",
+                "reviewed_at": "2024-01-15T10:30:00Z",
+                "payload": {},
+            }),
+            encoding="utf-8",
+        )
+
+        # Build index
+        index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        # Verify Alertmanager reviews are indexed
+        self.assertEqual(len(index.alertmanager_reviews_by_source), 1)
+        self.assertIn(f"external-analysis/{exec_artifact_path}", index.alertmanager_reviews_by_source)
+        self.assertEqual(index.alertmanager_reviews_indexed, 1)
+
+        # Verify the indexed review has correct data
+        review = index.alertmanager_reviews_by_source[f"external-analysis/{exec_artifact_path}"]
+        self.assertEqual(review["alertmanager_relevance"], "relevant")
+        self.assertEqual(review["alertmanager_relevance_summary"], "Alert is actionable")
+
+    def test_alertmanager_review_merge_works_from_index(self) -> None:
+        """Test that Alertmanager review merge works from indexed review artifacts."""
+        # Write execution artifact (source artifact)
+        exec_artifact_path = f"{self.run_id}-next-check-execution-001.json"
+        self.external_analysis_dir.joinpath(exec_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "run_id": self.run_id,
+                "timestamp": "2024-01-15T10:00:00Z",
+                "payload": {"candidateId": "c1"},
+            }),
+            encoding="utf-8",
+        )
+
+        # Write Alertmanager review artifact
+        review_artifact_path = f"{self.run_id}-next-check-execution-alertmanager-review-001.json"
+        self.external_analysis_dir.joinpath(review_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution-alertmanager-review",
+                "status": "success",
+                "run_id": self.run_id,
+                "source_artifact": f"external-analysis/{exec_artifact_path}",
+                "alertmanager_relevance": "relevant",
+                "alertmanager_relevance_summary": "Alert is actionable",
+                "reviewed_at": "2024-01-15T10:30:00Z",
+                "payload": {},
+            }),
+            encoding="utf-8",
+        )
+
+        # Build index
+        index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        # Build history with index - should use indexed Alertmanager reviews
+        history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+
+        self.assertEqual(len(history), 1)
+        # Verify Alertmanager review data was merged into history entry
+        entry = history[0]
+        self.assertEqual(entry.get("alertmanagerRelevance"), "relevant")
+        self.assertEqual(entry.get("alertmanagerRelevanceSummary"), "Alert is actionable")
+        self.assertEqual(entry.get("alertmanagerReviewedAt"), "2024-01-15T10:30:00Z")
+        # Verify telemetry
+        self.assertEqual(telemetry["alertmanager_review_source"], "artifact_index")
+        self.assertEqual(telemetry["alertmanager_reviews_indexed"], 1)
+
+    def test_alertmanager_review_provenance_preserved(self) -> None:
+        """Test that Alertmanager review artifact_path is preserved for provenance."""
+        # Write execution artifact (source artifact)
+        exec_artifact_path = f"{self.run_id}-next-check-execution-001.json"
+        self.external_analysis_dir.joinpath(exec_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "run_id": self.run_id,
+                "timestamp": "2024-01-15T10:00:00Z",
+                "payload": {"candidateId": "c1"},
+            }),
+            encoding="utf-8",
+        )
+
+        # Write Alertmanager review artifact
+        review_artifact_path = f"{self.run_id}-next-check-execution-alertmanager-review-001.json"
+        self.external_analysis_dir.joinpath(review_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution-alertmanager-review",
+                "status": "success",
+                "run_id": self.run_id,
+                "source_artifact": f"external-analysis/{exec_artifact_path}",
+                "alertmanager_relevance": "relevant",
+                "reviewed_at": "2024-01-15T10:30:00Z",
+                "payload": {},
+            }),
+            encoding="utf-8",
+        )
+
+        # Build index
+        index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        # Build history
+        history, _ = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+
+        self.assertEqual(len(history), 1)
+        entry = history[0]
+        # Verify review artifact path is preserved in merged entry
+        review_path = entry.get("alertmanagerReviewArtifactPath")
+        self.assertIsNotNone(review_path)
+        self.assertIn(review_artifact_path, review_path)
+
+    def test_alertmanager_review_missing_non_fatal(self) -> None:
+        """Test that missing Alertmanager review artifacts remain non-fatal."""
+        # Write execution artifact but NO Alertmanager review
+        exec_artifact_path = f"{self.run_id}-next-check-execution-001.json"
+        self.external_analysis_dir.joinpath(exec_artifact_path).write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "run_id": self.run_id,
+                "timestamp": "2024-01-15T10:00:00Z",
+                "payload": {"candidateId": "c1"},
+            }),
+            encoding="utf-8",
+        )
+
+        # Build index - should have no Alertmanager reviews
+        index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        self.assertEqual(len(index.alertmanager_reviews_by_source), 0)
+        self.assertEqual(index.alertmanager_reviews_indexed, 0)
+
+        # Build history - should complete without error, just no review merged
+        history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+
+        self.assertEqual(len(history), 1)
+        # Entry should exist but have no Alertmanager review fields
+        entry = history[0]
+        self.assertIsNone(entry.get("alertmanagerRelevance"))
+        # Telemetry should reflect empty reviews
+        self.assertEqual(telemetry["alertmanager_reviews_indexed"], 0)
+
+    def test_build_execution_history_with_index_does_not_glob(self) -> None:
+        """Test that _build_execution_history with artifact_index does NOT call glob.
+
+        This verifies the P1 optimization: when artifact_index is provided,
+        _build_execution_history should NOT call _load_alertmanager_review_artifacts
+        (which itself calls glob).
+        """
+        # Write execution artifact
+        self.external_analysis_dir.joinpath(f"{self.run_id}-next-check-execution-001.json").write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "run_id": self.run_id,
+                "timestamp": "2024-01-15T10:00:00Z",
+                "payload": {"candidateId": "c1"},
+            }),
+            encoding="utf-8",
+        )
+
+        # Build index (this is the allowed single scan)
+        index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        # Track glob calls during _build_execution_history with index
+        glob_calls = []
+
+        def track_glob(*args: object, **kwargs: object) -> list[object]:
+            glob_calls.append(args)
+            return []
+
+        with mock.patch.object(Path, "glob", side_effect=track_glob):
+            # Build history WITH index - should NOT call glob
+            history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id, index)
+
+        # Verify no glob was called (index path has no disk I/O)
+        self.assertEqual(len(glob_calls), 0, f"Unexpected glob calls with artifact_index: {glob_calls}")
+        # Verify telemetry reflects index usage
+        self.assertEqual(telemetry["alertmanager_review_source"], "artifact_index")
+        self.assertEqual(telemetry["execution_history_source"], "artifact_index")
+
+    def test_build_execution_history_without_index_falls_back_to_glob(self) -> None:
+        """Test that _build_execution_history without artifact_index falls back to glob.
+
+        This verifies backward compatibility: when no index is provided,
+        the function should still work by scanning the directory.
+        """
+        # Write execution artifact
+        exec_artifact_path = f"{self.run_id}-next-check-execution-001.json"
+        exec_file = self.external_analysis_dir.joinpath(exec_artifact_path)
+        exec_file.write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "run_id": self.run_id,
+                "timestamp": "2024-01-15T10:00:00Z",
+                "payload": {"candidateId": "c1"},
+            }),
+            encoding="utf-8",
+        )
+
+        # Write Alertmanager review artifact (for fallback scan to find)
+        review_artifact_path = f"{self.run_id}-next-check-execution-alertmanager-review-001.json"
+        review_file = self.external_analysis_dir.joinpath(review_artifact_path)
+        review_file.write_text(
+            json.dumps({
+                "purpose": "next-check-execution-alertmanager-review",
+                "status": "success",
+                "run_id": self.run_id,
+                "source_artifact": f"external-analysis/{exec_artifact_path}",
+                "alertmanager_relevance": "relevant",
+                "reviewed_at": "2024-01-15T10:30:00Z",
+                "payload": {},
+            }),
+            encoding="utf-8",
+        )
+
+        # Track glob calls during _build_execution_history WITHOUT index
+        # But also let the actual glob work so we can verify fallback works
+        glob_calls = []
+
+        original_glob = Path.glob
+
+        def track_glob(self_path: Path, pattern: str) -> list[Path]:
+            result = original_glob(self_path, pattern)
+            glob_calls.append((str(self_path), pattern))
+            return result
+
+        with mock.patch.object(Path, "glob", track_glob):
+            # Build history WITHOUT index - should call glob for fallback
+            history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id, None)
+
+        # Verify glob was called (fallback path requires disk I/O)
+        self.assertGreater(len(glob_calls), 0, "Fallback path should call glob")
+        # Verify telemetry reflects file_scan usage
+        self.assertEqual(telemetry["alertmanager_review_source"], "file_scan")
+        self.assertEqual(telemetry["execution_history_source"], "file_scan")
+        # Verify history still works correctly
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].get("candidateId"), "c1")
 
 
 class ExternalAnalysisSingleScanTests(unittest.TestCase):
@@ -549,7 +817,7 @@ class ExternalAnalysisSingleScanTests(unittest.TestCase):
         # All lookups should work from the shared index without additional scanning
         enrichment = _find_review_enrichment(external_dir, run_id, index)
         plan = _find_next_check_plan(external_dir, run_id, index)
-        history = _build_execution_history(external_dir, run_id, index)
+        history, _ = _build_execution_history(external_dir, run_id, index)
         stats = _build_llm_stats_for_run(external_dir, run_id, index)
 
         self.assertIsNotNone(enrichment)

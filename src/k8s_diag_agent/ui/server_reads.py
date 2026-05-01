@@ -1060,7 +1060,7 @@ def load_context_for_run(
 
     next_check_queue = _build_queue_from_plan(next_check_plan)
 
-    execution_history = _build_execution_history(external_analysis_dir, run_id)
+    execution_history, _ = _build_execution_history(external_analysis_dir, run_id)
 
     llm_stats = _build_llm_stats_for_run(external_analysis_dir, run_id)
 
