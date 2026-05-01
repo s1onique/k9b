@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, cast
 
 from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
-from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from ..external_analysis.config import (
     AutoDrilldownPolicy,
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 from .ui_deterministic_next_checks import (

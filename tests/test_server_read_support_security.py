@@ -9,9 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from k8s_diag_agent.ui.server_read_support import (
+    _build_clusters_and_drilldown_availability,
     _build_drilldown_availability_from_review,
     _build_execution_history,
     _build_llm_stats_for_run,
@@ -22,7 +21,6 @@ from k8s_diag_agent.ui.server_read_support import (
     _load_alertmanager_review_artifacts,
     _load_proposals_for_run,
     _scan_external_analysis,
-    _build_clusters_and_drilldown_availability,
 )
 
 

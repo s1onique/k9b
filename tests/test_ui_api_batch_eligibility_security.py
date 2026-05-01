@@ -10,8 +10,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from k8s_diag_agent.ui.api import (
     _compute_batch_eligibility,
     _compute_batch_eligibility_from_cache,

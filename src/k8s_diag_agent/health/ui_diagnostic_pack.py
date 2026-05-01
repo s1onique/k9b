@@ -27,6 +27,7 @@ from ..external_analysis.alertmanager_source_actions import (
 )
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from ..external_analysis.utils import artifact_matches_run
+from ..security.path_validation import SecurityError, validate_run_id
 from .ui_shared import _relative_path
 
 if TYPE_CHECKING:
@@ -120,7 +121,17 @@ def _serialize_diagnostic_pack(
     packs_dir = root_dir / "diagnostic-packs"
     if not packs_dir.is_dir():
         return None
-    glob_pattern = f"diagnostic-pack-{run_id}-*.zip"
+
+    # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Safe fallback: return None instead of searching with invalid run_id
+        return None
+
+    # Use validated run_id in glob pattern (validated above)
+    # Pattern: diagnostic-pack-{validated_run_id}-*.zip
+    glob_pattern = f"diagnostic-pack-{validated_run_id}-*.zip"  # REVIEWED: safe
     latest_path: Path | None = None
     latest_time: datetime | None = None
     for candidate in packs_dir.glob(glob_pattern):

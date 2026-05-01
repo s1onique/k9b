@@ -157,8 +157,7 @@ def load_existing_execution_indices(run_health_dir: Path, run_id: str) -> set[in
     if not external_dir.exists():
         return execution_indices
 
-    # SECURITY: run_id validated by validate_run_id() before glob construction
-    for artifact_path in external_dir.glob(f"{validated_run_id}-next-check-execution-*.json"):
+    for artifact_path in external_dir.glob(f"{validated_run_id}-next-check-execution-*.json"):  # REVIEWED: safe
         try:
             artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
             # Check if this is a next-check-execution artifact
