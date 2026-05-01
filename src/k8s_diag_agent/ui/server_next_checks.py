@@ -780,8 +780,17 @@ def find_candidate_in_all_plan_artifacts(
         Tuple of (candidate_entry, resolved_index, plan_path) if found.
     """
     from ..external_analysis.deterministic_next_check_promotion import collect_promoted_queue_entries
+    from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 
-    promotions = collect_promoted_queue_entries(health_root, run_id)
+    # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty result
+        return None, None, None
+
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
+    promotions = collect_promoted_queue_entries(health_root, validated_run_id)
     if promotions:
         entry, idx = resolve_plan_candidate(
             promotions,
@@ -793,7 +802,7 @@ def find_candidate_in_all_plan_artifacts(
 
     external_analysis_dir = health_root / "external-analysis"
     if external_analysis_dir.exists():
-        for artifact_file in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+        for artifact_file in external_analysis_dir.glob(glob_pattern):
             try:
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                 purpose = artifact_data.get("purpose")
