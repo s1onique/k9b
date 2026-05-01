@@ -24,6 +24,9 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
+# SECURITY: Import validation helpers for path/glob security hardening
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -648,10 +651,17 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         timings["payload_bytes"] = len(serialized.encode("utf-8"))
 
         # External analysis count (fast glob only, no load)
+        # SECURITY: run_id validated by validate_run_id() before glob construction
         external_analysis_dir = handler._health_root / "external-analysis"
         external_analysis_count = 0
         if external_analysis_dir.exists():
-            external_analysis_count = len(list(external_analysis_dir.glob(f"{context.run.run_id}-*.json")))
+            try:
+                validated_run_id = validate_run_id(context.run.run_id)
+                glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+                external_analysis_count = len(list(external_analysis_dir.glob(glob_pattern)))
+            except SecurityError:
+                # Safe fallback: return 0 on invalid run_id
+                external_analysis_count = 0
         timings["external_analysis_files_scanned"] = external_analysis_count
 
         # OPTIMIZATION: Skip notification file scan for initial selected-run detail

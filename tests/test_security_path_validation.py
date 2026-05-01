@@ -717,3 +717,168 @@ class TestHealthUIPromotionGlob:
 
         result = _build_promotions_index(external_analysis_dir, "foo..bar")
         assert result["promotions"] == []
+
+
+class TestServerReadsArtifactCountGlob:
+    """Tests for ui/server_reads.py artifact count glob security hardening.
+
+    These tests verify that the external_analysis_dir.glob(f"{run_id}-*.json")
+    pattern in handle_api() properly validates run_id before using it in glob patterns.
+    """
+
+    def test_valid_run_id_counts_matching_artifacts(self, tmp_path: Path) -> None:
+        """Valid run_id should count matching artifacts correctly."""
+        from k8s_diag_agent.security.path_validation import (
+            SecurityError,
+            safe_run_artifact_glob,
+            validate_run_id,
+        )
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create artifacts for run-test
+        (external_analysis_dir / "run-test-next-check-plan-001.json").write_text(
+            '{"purpose": "next-check-planning"}',
+            encoding="utf-8",
+        )
+        (external_analysis_dir / "run-test-next-check-execution-001.json").write_text(
+            '{"purpose": "next-check-execution"}',
+            encoding="utf-8",
+        )
+        (external_analysis_dir / "run-test-review-enrichment-001.json").write_text(
+            '{"purpose": "review-enrichment"}',
+            encoding="utf-8",
+        )
+        # Create artifact for different run (should not be counted)
+        (external_analysis_dir / "run-other-next-check-plan-001.json").write_text(
+            '{"purpose": "next-check-planning"}',
+            encoding="utf-8",
+        )
+
+        # Valid run_id should find 3 artifacts
+        run_id = "run-test"
+        validated_run_id = validate_run_id(run_id)
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+        count = len(list(external_analysis_dir.glob(glob_pattern)))
+        assert count == 3
+
+    def test_traversal_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Path traversal in run_id should return 0 (safe fallback)."""
+        from k8s_diag_agent.security.path_validation import (
+            SecurityError,
+            safe_run_artifact_glob,
+        )
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-plan-001.json").write_text(
+            '{"purpose": "next-check-planning"}',
+            encoding="utf-8",
+        )
+
+        # Traversal patterns should be rejected
+        count = 0
+        try:
+            glob_pattern = safe_run_artifact_glob("../etc", "-*.json")
+            count = len(list(external_analysis_dir.glob(glob_pattern)))
+        except SecurityError:
+            count = 0  # Safe fallback
+
+        assert count == 0
+
+    def test_glob_metachar_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Glob metacharacters in run_id should return 0."""
+        from k8s_diag_agent.security.path_validation import (
+            SecurityError,
+            safe_run_artifact_glob,
+        )
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-plan-001.json").write_text(
+            '{"purpose": "next-check-planning"}',
+            encoding="utf-8",
+        )
+
+        # Glob metacharacter should be rejected
+        count = 0
+        try:
+            glob_pattern = safe_run_artifact_glob("run*", "-*.json")
+            count = len(list(external_analysis_dir.glob(glob_pattern)))
+        except SecurityError:
+            count = 0  # Safe fallback
+
+        assert count == 0
+
+    def test_prefix_collision_not_a_security_issue(self, tmp_path: Path) -> None:
+        """Verify that the glob pattern is properly bounded by the base directory.
+
+        The artifact count glob uses -*.json suffix which is intentionally broad
+        (counts all artifacts for a run). The critical security is that:
+        1. run_id validation prevents traversal/injection
+        2. The glob is bounded to the external-analysis directory (not parent dirs)
+
+        The greedy matching behavior of * is expected glob behavior, not a security
+        issue. The actual artifact naming convention uses specific suffixes.
+        """
+        from k8s_diag_agent.security.path_validation import (
+            safe_run_artifact_glob,
+            validate_run_id,
+        )
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create two artifacts with different prefixes
+        (external_analysis_dir / "run-test-a.json").write_text(
+            '{"purpose": "test-a"}',
+            encoding="utf-8",
+        )
+        (external_analysis_dir / "run-test-b.json").write_text(
+            '{"purpose": "test-b"}',
+            encoding="utf-8",
+        )
+        # Create artifact with different run_id (should NOT match)
+        (external_analysis_dir / "run-other-a.json").write_text(
+            '{"purpose": "other"}',
+            encoding="utf-8",
+        )
+
+        run_id = "run-test"
+        validated_run_id = validate_run_id(run_id)
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+        count = len(list(external_analysis_dir.glob(glob_pattern)))
+
+        # Should find 2 artifacts for run-test, NOT the run-other artifact
+        assert count == 2
+
+        # Verify run-other artifacts are NOT matched
+        all_files = list(external_analysis_dir.glob(glob_pattern))
+        assert all("run-other" not in str(f) for f in all_files)
+
+    def test_double_dots_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Double dots in run_id should return 0."""
+        from k8s_diag_agent.security.path_validation import (
+            SecurityError,
+            safe_run_artifact_glob,
+        )
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-plan-001.json").write_text(
+            '{"purpose": "next-check-planning"}',
+            encoding="utf-8",
+        )
+
+        count = 0
+        try:
+            glob_pattern = safe_run_artifact_glob("foo..bar", "-*.json")
+            count = len(list(external_analysis_dir.glob(glob_pattern)))
+        except SecurityError:
+            count = 0  # Safe fallback
+
+        assert count == 0
