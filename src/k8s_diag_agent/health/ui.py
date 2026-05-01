@@ -221,13 +221,16 @@ def write_health_ui_index(
         "alertmanager_compact": alertmanager_compact_entry,
         "alertmanager_sources": alertmanager_sources_entry,
     }
+    # Build proposal_status_summary ONCE for reuse in both index and review artifact
+    # This avoids repeated scanning of proposals/ directory on each /api/run request
+    proposal_status_summary = _serialize_proposal_status_summary(proposals_data)
     index = {
         "run": run_entry,
         "fleet_status": _serialize_fleet_status(clusters),
         "clusters": clusters,
         "drilldowns": drilldown_entries,
         "latest_drilldown": latest_drilldown,
-        "proposal_status_summary": _serialize_proposal_status_summary(proposals_data),
+        "proposal_status_summary": proposal_status_summary,
         "proposals": proposals_data,
         "drilldown_availability": drilldown_availability,
         "notification_history": notification_history,
@@ -237,6 +240,9 @@ def write_health_ui_index(
         "next_check_plan": plan_entry,
         "deterministic_next_checks": deterministic_next_checks,
     }
+    # Add proposal_status_summary to review artifact for fast selected-run loading
+    # This enables _load_context_for_run() to skip proposals/ directory scan
+    index["_review_proposal_status_summary"] = proposal_status_summary
     index["run_stats"] = _build_run_stats(output_dir / "reviews")
     # Build recent_runs_summary for fast /api/runs default path
     # This is the key optimization: avoid scanning all review files on each request
@@ -252,6 +258,11 @@ def write_health_ui_index(
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+
+    # Also write proposal_status_summary to review artifact for fast past-run loading
+    # This avoids _load_context_for_run() scanning proposals/ directory on each request
+    _write_proposal_status_summary_to_review(output_dir, run_id, proposal_status_summary)
+
     return index_path
 
 
@@ -790,3 +801,41 @@ def _build_promotions_index(
         "generated_at": datetime.now(UTC).isoformat(),
         "version": 1,
     }
+
+
+def _write_proposal_status_summary_to_review(
+    output_dir: Path,
+    run_id: str,
+    proposal_status_summary: dict[str, object],
+) -> None:
+    """Write proposal_status_summary to review artifact for fast past-run loading.
+
+    This is the key optimization to avoid _load_context_for_run() scanning
+    the proposals/ directory on each /api/run request for historical runs.
+
+    Args:
+        output_dir: Path to the health directory (runs/health/)
+        run_id: The run ID to update the review artifact for
+        proposal_status_summary: The pre-computed proposal status summary dict
+    """
+    reviews_dir = output_dir / "reviews"
+    review_path = reviews_dir / f"{run_id}-review.json"
+
+    if not review_path.exists():
+        return
+
+    try:
+        review_data = json.loads(review_path.read_text(encoding="utf-8"))
+        if not isinstance(review_data, dict):
+            return
+
+        # Add proposal_status_summary to review artifact
+        # Use underscore prefix to mark as internal indexing metadata
+        review_data["_proposal_status_summary"] = proposal_status_summary
+
+        # Write back preserving original formatting (compact write)
+        review_path.write_text(json.dumps(review_data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        # Non-fatal: if we can't write the summary, past runs will still work
+        # by falling back to the directory scan path
+        pass

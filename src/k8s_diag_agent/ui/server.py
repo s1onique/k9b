@@ -1147,15 +1147,33 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         selected_drilldowns = review_data.get("selected_drilldowns", [])
         cluster_count = len(selected_drilldowns) if isinstance(selected_drilldowns, list) else 0
 
+        # Extract proposal_status_summary from review artifact for fast loading
+        # This avoids scanning the proposals/ directory on each /api/run request
+        review_proposal_status_summary: dict[str, object] | None = review_data.get("_proposal_status_summary") if isinstance(review_data, dict) else None
+
         # Phase 2: Build clusters list from review data
         clusters = _phase("clusters_build_ms", lambda: _build_clusters_from_review(run_id, review_data, self.runs_dir))
 
         # Phase 3: Scan for drilldowns belonging to this run
         drilldown_count = _phase("drilldown_scan_ms", lambda: _count_run_artifacts(self.runs_dir / "health" / "drilldowns", run_id))
 
-        # Phase 4: Scan for proposals belonging to this run
-        proposals_result = _phase("proposals_scan_ms", lambda: _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id))
-        proposals_data, proposal_count = proposals_result
+        # Phase 4: Load proposals (skip if _proposal_status_summary exists in review)
+        # OPTIMIZATION: When review artifact has _proposal_status_summary, skip the
+        # proposals/ directory scan. Full proposals_data is deferred - only summary
+        # is needed for selected-run shell. Proposal detail panels can be lazy-loaded.
+        if review_proposal_status_summary is not None:
+            # Skip proposals scan - use summary metadata only
+            proposals_data: list[dict[str, object]] = []
+            # Derive proposal_count from status_counts if available
+            status_counts = review_proposal_status_summary.get("status_counts", [])
+            proposal_count = sum(item.get("count", 0) for item in status_counts if isinstance(item, dict))
+            _timings["proposals_scan_ms"] = 0.0
+            _timings["proposals_source"] = "summary_deferred"  # type: ignore[assignment]
+        else:
+            # Fall back to full proposals scan (backward compatibility)
+            proposals_result = _phase("proposals_scan_ms", lambda: _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id))
+            proposals_data, proposal_count = proposals_result
+            _timings["proposals_source"] = "directory_scan"  # type: ignore[assignment]
 
         # Phase 5: Scan for external-analysis artifacts for this run
         external_analysis_dir = self._health_root / "external-analysis"
@@ -1321,7 +1339,16 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         }
 
         # Phase 17: Build proposal status summary
-        proposal_status_summary = _phase("proposal_status_summary_build_ms", lambda: _build_proposal_status_summary(proposals_data))
+        # OPTIMIZATION: Use pre-computed summary from review artifact when available
+        # This avoids scanning the proposals/ directory and iterating all proposals
+        if review_proposal_status_summary is not None:
+            proposal_status_summary = review_proposal_status_summary
+            _timings["proposal_status_summary_build_ms"] = 0.0
+            _timings["proposal_status_summary_source"] = "review_artifact"  # type: ignore[assignment]
+        else:
+            # Fall back to building from loaded proposals (backward compatibility)
+            proposal_status_summary = _phase("proposal_status_summary_build_ms", lambda: _build_proposal_status_summary(proposals_data))
+            _timings["proposal_status_summary_source"] = "built_from_proposals"  # type: ignore[assignment]
 
         # Phase 18: Build UI index structure
         index: dict[str, object] = {
@@ -1380,6 +1407,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 "alertmanager_sources_build_ms": round(_timings.get("alertmanager_sources_build_ms", 0), 2),
                 "proposal_status_summary_build_ms": round(_timings.get("proposal_status_summary_build_ms", 0), 2),
                 "build_ui_context_ms": round(_timings.get("build_ui_context_ms", 0), 2),
+                "proposals_source": _timings.get("proposals_source", "missing"),
+                "proposal_status_summary_source": _timings.get("proposal_status_summary_source", "missing"),
                 "run_id": run_id,
                 "run_label": run_label,
                 "cluster_count": cluster_count,

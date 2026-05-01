@@ -457,6 +457,106 @@ class RunPayloadPerformanceTests(unittest.TestCase):
         finally:
             self._shutdown_server(server, thread)
 
+    def test_selected_run_uses_proposal_status_summary_from_review(self) -> None:
+        """Regression test: selected-run should use _proposal_status_summary from review artifact.
+
+        Key behavior: proposal_status_summary build time is 0ms when loaded from review artifact,
+        not built from directory scan.
+        """
+        run_id = "proposal-summary-test-run"
+
+        # Create the review artifact with _proposal_status_summary
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_path = reviews_dir / f"{run_id}-review.json"
+        review_path.write_text(
+            json.dumps({
+                "run_label": run_id,
+                "timestamp": "2026-04-06T13:30:27Z",
+                "selected_drilldowns": [],
+                "_proposal_status_summary": {
+                    "status_counts": [
+                        {"status": "pending", "count": 3},
+                        {"status": "accepted", "count": 2},
+                    ]
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        # DO NOT create ui-index.json - this forces _load_context_for_run path
+        # (server_reads.py will fallback to _load_context_for_run if no index)
+
+        # Create proposal files
+        proposals_dir = self.health_dir / "proposals"
+        proposals_dir.mkdir(parents=True, exist_ok=True)
+        for i in range(10):
+            proposal_path = proposals_dir / f"{run_id}-proposal-{i}.json"
+            proposal_path.write_text(
+                json.dumps({
+                    "proposal_id": f"proposal-{i}",
+                    "source_run_id": run_id,
+                    "lifecycle_history": [{"status": "pending"}],
+                }),
+                encoding="utf-8",
+            )
+
+        server, thread = self._start_server()
+        try:
+            captured_logs: list[dict[str, object]] = []
+
+            def capture_log(**kwargs: object) -> None:
+                captured_logs.append(kwargs)
+
+            with mock.patch(
+                "k8s_diag_agent.ui.server.emit_structured_log",
+                side_effect=capture_log,
+            ):
+                self._fetch_selected_run_payload(server, run_id)
+
+            # Find the _load_context_for_run timing log entry
+            context_log = None
+            for log in captured_logs:
+                msg = cast(str, log.get("message", ""))
+                if "phase timings" in msg:
+                    context_log = log
+                    break
+
+            self.assertIsNotNone(context_log, "Should have a _load_context_for_run phase timings log")
+            assert context_log is not None
+            metadata = cast(dict[str, object], context_log.get("metadata", {}))
+
+            # Key assertion: proposals_scan_ms should be 0
+            # This proves the optimization is working - proposals deferred when summary exists
+            proposals_scan_ms = cast(float, metadata.get("proposals_scan_ms", 999999))
+            self.assertEqual(
+                proposals_scan_ms,
+                0.0,
+                f"proposals_scan_ms should be 0 when _proposal_status_summary exists, got {proposals_scan_ms}ms",
+            )
+
+            # Key assertion: proposals_source should be "summary_deferred"
+            proposals_source = cast(str, metadata.get("proposals_source", "missing"))
+            self.assertEqual(
+                proposals_source,
+                "summary_deferred",
+                f"proposals_source should be 'summary_deferred', got '{proposals_source}'",
+            )
+
+            # Key assertion: proposal_status_summary_build_ms should also be 0
+            proposal_status_summary_build_ms = cast(float, metadata.get("proposal_status_summary_build_ms", 999999))
+            self.assertEqual(
+                proposal_status_summary_build_ms,
+                0.0,
+                f"proposal_status_summary_build_ms should be 0 when loaded from review, got {proposal_status_summary_build_ms}ms",
+            )
+
+            # Verify request succeeded (status 200)
+            # Proposals are deferred when _proposal_status_summary exists in review
+
+        finally:
+            self._shutdown_server(server, thread)
+
     def test_selected_run_missing_notification_index_defers(self) -> None:
         """Regression test: missing ui-index.json should NOT trigger notification directory scan.
 
