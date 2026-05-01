@@ -112,7 +112,18 @@ def _load_alertmanager_review_artifacts(
             if existing is None or reviewed_at > existing.get("reviewed_at", ""):
                 reviews_by_source[source_artifact] = review_data
 
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Skipped malformed Alertmanager review artifact: %s",
+                review_file.name,
+                extra={
+                    "run_id": run_id,
+                    "artifact_kind": "alertmanager-review",
+                    "scan_name": "_load_alertmanager_review_artifacts",
+                    "error": str(exc),
+                },
+                exc_info=True,
+            )
             continue
 
     return reviews_by_source
@@ -335,7 +346,18 @@ def _build_clusters_and_drilldown_availability(
                         "artifact": str(df.relative_to(runs_dir)),
                         "timestamp": df_data.get("timestamp"),
                     }
-            except Exception:
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(
+                    "Skipped malformed drilldown artifact: %s",
+                    df.name,
+                    extra={
+                        "run_id": run_id,
+                        "artifact_kind": "drilldown",
+                        "scan_name": "_build_clusters_and_drilldown_availability",
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
                 continue
 
     for drilldown in selected_drilldowns:
@@ -456,7 +478,18 @@ def _load_proposals_for_run(
             proposal_data = json.loads(proposal_file.read_text(encoding="utf-8"))
             if isinstance(proposal_data, dict):
                 proposals.append(proposal_data)
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Skipped malformed proposal artifact: %s",
+                proposal_file.name,
+                extra={
+                    "run_id": run_id,
+                    "artifact_kind": "proposal",
+                    "scan_name": "_load_proposals_for_run",
+                    "error": str(exc),
+                },
+                exc_info=True,
+            )
             continue
 
     return proposals, len(proposals)
@@ -507,7 +540,18 @@ def _scan_external_analysis(
                 "error_summary": artifact_data.get("error_summary"),
                 "skip_reason": artifact_data.get("skip_reason"),
             })
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Skipped malformed external-analysis artifact: %s",
+                artifact_file.name,
+                extra={
+                    "run_id": run_id,
+                    "artifact_kind": "external-analysis",
+                    "scan_name": "_scan_external_analysis",
+                    "error": str(exc),
+                },
+                exc_info=True,
+            )
             continue
 
     status_counts = [{"status": status, "count": count} for status, count in sorted(counts.items())]
@@ -545,7 +589,18 @@ def _load_notifications_for_run(
                 "details": notif_data.get("details", []),
                 "artifact_path": str(notif_file.relative_to(notifications_dir.parent)),
             })
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Skipped malformed notification artifact: %s",
+                notif_file.name,
+                extra={
+                    "run_id": run_id,
+                    "artifact_kind": "notification",
+                    "scan_name": "_load_notifications_for_run",
+                    "error": str(exc),
+                },
+                exc_info=True,
+            )
             continue
 
     return notifications, len(notifications)

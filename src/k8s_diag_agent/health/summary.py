@@ -304,7 +304,7 @@ def _load_history(history_path: Path) -> dict[str, Any]:
         return {}
     try:
         raw = json.loads(history_path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {}
     if isinstance(raw, Mapping):
         return dict(raw)

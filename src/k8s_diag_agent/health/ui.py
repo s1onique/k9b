@@ -332,7 +332,7 @@ def _serialize_review_enrichment(
                 continue
             try:
                 candidate = ExternalAnalysisArtifact.from_dict(raw)
-            except Exception:
+            except (ValueError, KeyError, TypeError):
                 continue
             if candidate.run_id != run_id:
                 continue
