@@ -37,6 +37,19 @@ import {
 } from "./index";
 
 // ============================================================================
+// Hook Instance Tracking
+// ============================================================================
+
+/**
+ * Generates a stable hook instance ID for debugging.
+ * This helps detect if multiple useRunControl instances are active.
+ */
+let hookInstanceCounter = 0;
+const getHookInstanceId = (): number => {
+  return ++hookInstanceCounter;
+};
+
+// ============================================================================
 // Debug gating
 // ============================================================================
 
@@ -200,6 +213,10 @@ export interface UseRunControlResult {
   runOwnedPanelState: "no-selection" | "loading" | "slow" | "failed" | "loaded";
   /** Whether to show the "jump to latest" prompt. */
   showLatestJump: boolean;
+
+  // Debug info
+  /** Unique instance ID for this hook (for debugging duplicate controller detection). */
+  instanceId: number;
 }
 
 // ============================================================================
@@ -230,6 +247,9 @@ export function useRunControl(
   options: UseRunControlOptions = {}
 ): UseRunControlResult {
   const { slowAfterMs = 10_000, debugEnabled, autoBoot = false } = options;
+
+  // Generate unique instance ID for debugging
+  const instanceId = useMemo(() => getHookInstanceId(), []);
 
   // Derive debug flag: explicit option overrides ?debugUi detection
   const effectiveDebugEnabled = useMemo(() => {
@@ -272,6 +292,10 @@ export function useRunControl(
   // Ref to queue pending effects (separated from state update)
   // This keeps the state updater pure: it only updates model, effects go to queue
   const pendingEffectsRef = useRef<RunControlEffect[]>([]);
+  // Phase 5: Guard against StrictMode double-effect execution
+  // When drainer is running, skip re-entry. This prevents the same queued effects
+  // from being executed multiple times if React StrictMode fires the useEffect twice.
+  const isDrainingRef = useRef<boolean>(false);
 
   // Refs for /api/run request management (Phase 5: AbortController + deduplication)
   // AbortController for cancelling stale in-flight requests
@@ -281,6 +305,18 @@ export function useRunControl(
   const inFlightRequestSeqRef = useRef<number | null>(null);
   // Map from clientRequestId to abort controller for correlation
   const clientRequestIdToAbortRef = useRef<Map<string, AbortController>>(new Map());
+
+  // Lifecycle telemetry: log hook initialization
+  useEffect(() => {
+    if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+      console.info("[run-control]", "hook:initialized", {
+        instanceId,
+        initialSelectedRunId,
+        hasPersistedSelection: initialSelectedRunId !== null,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [instanceId, initialSelectedRunId, effectiveDebugEnabled]);
 
   // Cleanup timers and abort controllers on unmount
   useEffect(() => {
@@ -297,8 +333,15 @@ export function useRunControl(
       inFlightRunIdRef.current = null;
       inFlightRequestSeqRef.current = null;
       clientRequestIdToAbortRef.current.clear();
+
+      if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+        console.info("[run-control]", "hook:unmounting", {
+          instanceId,
+          timestamp: new Date().toISOString(),
+        });
+      }
     };
-  }, []);
+  }, [instanceId, effectiveDebugEnabled]);
 
   // --------------------------------------------------------------------------
   // Effect executor
@@ -318,8 +361,25 @@ export function useRunControl(
           // - RunControl owns latest/selection/run-detail causality.
           // - useRunSelection owns visible list filtering/pagination.
           // Future consolidation can merge these once the UI list state is migrated.
+          if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+            console.info("[run-control]", "effect:fetchRuns:emitted", {
+              instanceId,
+              requestSeq,
+              reason: effect.reason,
+              timestamp: new Date().toISOString(),
+            });
+          }
           fetchRunsList()
             .then((payload: RunsListPayload) => {
+              if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                console.info("[run-control]", "fetchRuns:response-received", {
+                  instanceId,
+                  requestSeq,
+                  runsCount: payload.runs.length,
+                  latestRunId: payload.runs[0]?.runId ?? null,
+                  timestamp: new Date().toISOString(),
+                });
+              }
               dispatch({
                 type: "RunsLoaded",
                 requestSeq,
@@ -328,6 +388,14 @@ export function useRunControl(
               });
             })
             .catch((error: unknown) => {
+              if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                console.info("[run-control]", "fetchRuns:failed", {
+                  instanceId,
+                  requestSeq,
+                  error: normalizeError(error),
+                  timestamp: new Date().toISOString(),
+                });
+              }
               dispatch({
                 type: "RunsFailed",
                 requestSeq,
@@ -341,6 +409,18 @@ export function useRunControl(
         case "fetchRun": {
           const { requestSeq, runId } = effect;
 
+          // Log effect emission for lifecycle tracking
+          if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+            console.info("[run-control]", "effect:fetchRun:emitted", {
+              instanceId,
+              requestSeq,
+              runId,
+              selectedRunId: modelRef.current.selection.selectedRunId,
+              selectedReason: modelRef.current.selection.selectedReason,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
           // Phase 5: Deduplication - skip only if BOTH runId AND requestSeq match
           // This ensures a newer requestSeq for the same run is never dropped
           if (
@@ -349,6 +429,7 @@ export function useRunControl(
           ) {
             if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
               console.info("[run-control]", "fetchRun:duplicate-skipped", {
+                instanceId,
                 requestSeq,
                 runId,
                 inFlightRequestSeq: inFlightRequestSeqRef.current,
@@ -363,6 +444,7 @@ export function useRunControl(
             abortControllerRef.current.abort();
             if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
               console.info("[run-control]", "fetchRun:aborted-previous", {
+                instanceId,
                 requestSeq,
                 runId,
                 previousInFlightRunId: inFlightRunIdRef.current,
@@ -383,6 +465,7 @@ export function useRunControl(
 
           if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
             console.info("[run-control]", "fetchRun:started", {
+              instanceId,
               requestSeq,
               runId,
               clientRequestId,
@@ -401,6 +484,7 @@ export function useRunControl(
               if (isStale) {
                 if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
                   console.info("[run-control]", "fetchRun:stale-response-ignored", {
+                    instanceId,
                     requestSeq,
                     runId,
                     returnedRunId: payload.runId,
@@ -413,13 +497,17 @@ export function useRunControl(
                 return;
               }
 
+              // Log acceptance with full context for acceptance verification
               if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
                 console.info("[run-control]", "fetchRun:accepted", {
+                  instanceId,
                   requestSeq,
                   runId,
                   clientRequestId,
                   returnedRunId: payload.runId,
                   acceptedAt: new Date().toISOString(),
+                  currentModelStatus: modelRef.current.selectedRun.status,
+                  currentSelectedRunId: modelRef.current.selection.selectedRunId,
                 });
               }
 
@@ -430,6 +518,18 @@ export function useRunControl(
                 payload,
                 receivedAtMs: Date.now(),
               });
+
+              // Log model state after RunLoaded
+              if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+                console.info("[run-control]", "model:RunLoaded-processed", {
+                  instanceId,
+                  requestSeq,
+                  runId,
+                  newStatus: modelRef.current.selectedRun.status,
+                  payloadRunId: payload.runId,
+                  timestamp: new Date().toISOString(),
+                });
+              }
 
               // Clean up - only if still the current request
               if (
@@ -457,6 +557,7 @@ export function useRunControl(
                 ) {
                   if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
                     console.info("[run-control]", "fetchRun:aborted-current", {
+                      instanceId,
                       requestSeq,
                       runId,
                       clientRequestId,
@@ -469,6 +570,7 @@ export function useRunControl(
                 } else {
                   if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
                     console.info("[run-control]", "fetchRun:aborted-stale", {
+                      instanceId,
                       requestSeq,
                       runId,
                       clientRequestId,
@@ -484,6 +586,7 @@ export function useRunControl(
 
               if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
                 console.info("[run-control]", "fetchRun:failed", {
+                  instanceId,
                   requestSeq,
                   runId,
                   clientRequestId,
@@ -514,6 +617,15 @@ export function useRunControl(
 
         case "scheduleSlowRunTimer": {
           const { requestSeq, runId, delayMs } = effect;
+          if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+            console.info("[run-control]", "effect:scheduleSlowRunTimer:emitted", {
+              instanceId,
+              requestSeq,
+              runId,
+              delayMs,
+              timestamp: new Date().toISOString(),
+            });
+          }
           // Clear any existing timer for this requestSeq
           const existingTimer = slowTimersRef.current.get(requestSeq);
           if (existingTimer !== undefined) {
@@ -534,6 +646,13 @@ export function useRunControl(
 
         case "cancelSlowRunTimer": {
           const { requestSeq } = effect;
+          if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+            console.info("[run-control]", "effect:cancelSlowRunTimer:emitted", {
+              instanceId,
+              requestSeq,
+              timestamp: new Date().toISOString(),
+            });
+          }
           const timerId = slowTimersRef.current.get(requestSeq);
           if (timerId !== undefined) {
             clearTimeout(timerId);
@@ -546,7 +665,7 @@ export function useRunControl(
           const { event, fields } = effect;
           // Only log if debug is enabled (either via option or model state)
           if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
-            console.info("[run-control]", event, fields);
+            console.info("[run-control]", event, { instanceId, ...fields });
           }
           break;
         }
@@ -559,7 +678,7 @@ export function useRunControl(
         }
       }
     },
-    [effectiveDebugEnabled] // dispatch is stable via ref
+    [effectiveDebugEnabled, instanceId] // dispatch is stable via ref
   );
 
   // --------------------------------------------------------------------------
@@ -570,11 +689,24 @@ export function useRunControl(
    * Drains pending effects after each model change.
    * This is the "interpret effects" step of Elm-ish architecture:
    * pure update -> commit model -> interpret effects
+   * 
+   * Phase 5: Uses isDrainingRef to guard against StrictMode double-effect execution.
+   * This prevents the same queued effects from being executed multiple times.
    */
   useEffect(() => {
-    const effects = pendingEffectsRef.current.splice(0);
-    for (const effect of effects) {
-      executeEffect(effect);
+    // Guard against re-entry (e.g., StrictMode double-effect)
+    if (isDrainingRef.current) {
+      return;
+    }
+    isDrainingRef.current = true;
+    
+    try {
+      const effects = pendingEffectsRef.current.splice(0);
+      for (const effect of effects) {
+        executeEffect(effect);
+      }
+    } finally {
+      isDrainingRef.current = false;
     }
   }, [model, executeEffect]);
 
@@ -596,40 +728,119 @@ export function useRunControl(
       const { model: newModel, effects } = updateRunControl(prevModel, msg);
       // Queue effects for interpretation AFTER state is committed
       pendingEffectsRef.current.push(...effects);
+
+      // Log dispatch for lifecycle tracking
+      if (modelRef.current.debug.enabled) {
+        console.info("[run-control]", "dispatch", {
+          instanceId,
+          msgType: msg.type,
+          modelDelta: {
+            runsStatus: `${prevModel.runs.status} -> ${newModel.runs.status}`,
+            selectedRunStatus: `${prevModel.selectedRun.status} -> ${newModel.selectedRun.status}`,
+            selectedRunId: `${prevModel.selection.selectedRunId} -> ${newModel.selection.selectedRunId}`,
+          },
+          effectsCount: effects.length,
+          effectTypes: effects.map(e => e.type),
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       return newModel;
     });
-  }, []);
+  }, [instanceId]);
 
   // --------------------------------------------------------------------------
   // Public commands
   // --------------------------------------------------------------------------
 
   const boot = useCallback(() => {
+    // Phase 5: Idempotency guard - protect against React StrictMode/dev double effects
+    // and any app-level duplicate boot calls. The reducer also guards this, but we
+    // guard here to avoid the dispatch entirely when already in progress.
+    const currentStatus = modelRef.current.runs.status;
+    if (currentStatus === "loading" || currentStatus === "loaded") {
+      if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+        console.info("[run-control]", "command:boot:ignored", {
+          instanceId,
+          runsStatus: currentStatus,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return;
+    }
+
+    if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+      console.info("[run-control]", "command:boot", {
+        instanceId,
+        currentSelectedRunId: modelRef.current.selection.selectedRunId,
+        currentLatestRunId: modelRef.current.selection.latestRunId,
+        timestamp: new Date().toISOString(),
+      });
+    }
     dispatch({ type: "Boot", nowMs: Date.now() });
-  }, [dispatch]);
+  }, [dispatch, instanceId, effectiveDebugEnabled]);
 
   const selectRun = useCallback(
     (runId: string) => {
+      if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+        console.info("[run-control]", "command:selectRun", {
+          instanceId,
+          runId,
+          previousSelectedRunId: modelRef.current.selection.selectedRunId,
+          timestamp: new Date().toISOString(),
+        });
+      }
       dispatch({ type: "RunSelected", runId, nowMs: Date.now() });
     },
-    [dispatch]
+    [dispatch, instanceId, effectiveDebugEnabled]
   );
 
   const clickLatest = useCallback(() => {
+    if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+      console.info("[run-control]", "command:clickLatest", {
+        instanceId,
+        currentLatestRunId: modelRef.current.selection.latestRunId,
+        previousSelectedRunId: modelRef.current.selection.selectedRunId,
+        timestamp: new Date().toISOString(),
+      });
+    }
     dispatch({ type: "LatestClicked", nowMs: Date.now() });
-  }, [dispatch]);
+  }, [dispatch, instanceId, effectiveDebugEnabled]);
 
   const manualRefresh = useCallback(() => {
+    if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+      console.info("[run-control]", "command:manualRefresh", {
+        instanceId,
+        timestamp: new Date().toISOString(),
+      });
+    }
     dispatch({ type: "ManualRefreshClicked", nowMs: Date.now() });
-  }, [dispatch]);
+  }, [dispatch, instanceId, effectiveDebugEnabled]);
 
   const poll = useCallback(() => {
+    if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+      console.info("[run-control]", "command:poll", {
+        instanceId,
+        currentSelectedRunId: modelRef.current.selection.selectedRunId,
+        currentSelectedRunStatus: modelRef.current.selectedRun.status,
+        timestamp: new Date().toISOString(),
+      });
+    }
     dispatch({ type: "PollTick", nowMs: Date.now() });
-  }, [dispatch]);
+  }, [dispatch, instanceId, effectiveDebugEnabled]);
 
   const retrySelectedRun = useCallback(() => {
+    if (effectiveDebugEnabled || modelRef.current.debug.enabled) {
+      console.info("[run-control]", "command:retrySelectedRun", {
+        instanceId,
+        currentSelectedRunId: modelRef.current.selection.selectedRunId,
+        requestedRunId: modelRef.current.selectedRun.requestedRunId,
+        currentStatus: modelRef.current.selectedRun.status,
+        timestamp: new Date().toISOString(),
+      });
+    }
     dispatch({ type: "RetrySelectedRunClicked", nowMs: Date.now() });
-  }, [dispatch]);
+  }, [dispatch, instanceId, effectiveDebugEnabled]);
 
   // Alias: refreshSelectedRun for non-error refresh paths
   const refreshSelectedRun = retrySelectedRun;
@@ -700,5 +911,6 @@ export function useRunControl(
     selectedRunError,
     runOwnedPanelState,
     showLatestJump,
+    instanceId,
   };
 }

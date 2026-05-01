@@ -135,8 +135,15 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             # Patch the structured logging to capture timing fields
             captured_logs: list[dict[str, object]] = []
 
-            def capture_log(**kwargs: object) -> None:
-                captured_logs.append(kwargs)
+            def capture_log(component: str = "", message: str = "", run_id: str = "", run_label: str = "", severity: str = "", metadata: object = None, **kwargs: object) -> None:
+                captured_logs.append({
+                    "component": component,
+                    "message": message,
+                    "run_id": run_id,
+                    "run_label": run_label,
+                    "severity": severity,
+                    "metadata": metadata,
+                })
 
             with mock.patch(
                 "k8s_diag_agent.structured_logging.emit_structured_log",
@@ -292,6 +299,206 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 metadata,
                 "Cache hit log should include payload_bytes",
             )
+
+        finally:
+            self._shutdown_server(server, thread)
+
+
+    def _fetch_selected_run_payload(
+        self, server: ThreadingHTTPServer, run_id: str
+    ) -> dict[str, object]:
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
+        url = f"http://{host}:{port}/api/run?run_id={run_id}"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            assert isinstance(payload, dict)
+            return cast(dict[str, object], payload)
+
+    def test_selected_run_does_not_call_load_notifications_for_run(self) -> None:
+        """Regression test: selected-run /api/run?run_id= should NOT call _load_notifications_for_run.
+
+        Previously, _load_context_for_run was scanning the full notifications directory
+        (6415ms bottleneck). The fix replaced it with ui-index notification_index lookup.
+        """
+        run_id = "selected-run-test"
+
+        # Create the review artifact that _load_context_for_run requires
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_path = reviews_dir / f"{run_id}-review.json"
+        review_path.write_text(
+            json.dumps({
+                "run_label": run_id,
+                "timestamp": "2026-04-06T13:30:27Z",
+                "selected_drilldowns": [],
+            }),
+            encoding="utf-8",
+        )
+
+        # Create a ui-index.json with notification_index
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+        ui_index_path = self.health_dir / "ui-index.json"
+        ui_index_path.write_text(
+            json.dumps({
+                "notification_index": {
+                    "notifications": [
+                        {"kind": "info", "runId": run_id, "summary": "Test notification"}
+                    ],
+                    "total_count": 1,
+                }
+            }),
+            encoding="utf-8",
+        )
+
+        # Create notification files to verify they're NOT scanned
+        for i in range(50):
+            notif_path = self.notifications_dir / f"notification-{i}.json"
+            notif_path.write_text(
+                json.dumps({"kind": "info", "summary": f"Notification {i}"}),
+                encoding="utf-8",
+            )
+
+        server, thread = self._start_server()
+        try:
+            captured_logs: list[dict[str, object]] = []
+
+            def capture_log(**kwargs: object) -> None:
+                captured_logs.append(kwargs)
+
+            with mock.patch(
+                "k8s_diag_agent.ui.server.emit_structured_log",
+                side_effect=capture_log,
+            ):
+                self._fetch_selected_run_payload(server, run_id)
+
+            # Find the _load_context_for_run timing log entry
+            context_log = None
+            for log in captured_logs:
+                msg = cast(str, log.get("message", ""))
+                if "phase timings" in msg:
+                    context_log = log
+                    break
+
+            self.assertIsNotNone(context_log, "Should have a _load_context_for_run phase timings log")
+            assert context_log is not None
+            metadata = cast(dict[str, object], context_log.get("metadata", {}))
+
+            # Key assertion: notifications_scan_ms should be near-zero (index lookup)
+            notifications_scan_ms = cast(float, metadata.get("notifications_scan_ms", 999999))
+            self.assertLess(
+                notifications_scan_ms,
+                100,  # Should be <100ms (index lookup, not directory scan)
+                f"notifications_scan_ms should be near-zero, got {notifications_scan_ms}ms",
+            )
+
+            # Key assertion: notifications_source should be "index" or "deferred"
+            notifications_source = cast(str, metadata.get("notifications_source", "missing"))
+            self.assertIn(
+                notifications_source,
+                ("index", "deferred"),
+                f"notifications_source should be 'index' or 'deferred', got '{notifications_source}'",
+            )
+
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_selected_run_uses_notification_index_when_present(self) -> None:
+        """Regression test: selected-run should use ui-index notification_index when available.
+
+        Key behavior: notification_count comes from index filtering, not directory scan.
+        """
+        run_id = "index-test-run"
+
+        # Create the review artifact
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_path = reviews_dir / f"{run_id}-review.json"
+        review_path.write_text(
+            json.dumps({
+                "run_label": run_id,
+                "timestamp": "2026-04-06T13:30:27Z",
+                "selected_drilldowns": [],
+            }),
+            encoding="utf-8",
+        )
+
+        # Create ui-index.json with notification_index containing 3 entries for this run
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+        ui_index_path = self.health_dir / "ui-index.json"
+        test_notifications = [
+            {"kind": "info", "runId": run_id, "summary": "Notification 1"},
+            {"kind": "warning", "runId": run_id, "summary": "Notification 2"},
+            {"kind": "error", "runId": run_id, "summary": "Notification 3"},
+        ]
+        ui_index_path.write_text(
+            json.dumps({
+                "notification_index": {
+                    "notifications": test_notifications,
+                    "total_count": 3,
+                }
+            }),
+            encoding="utf-8",
+        )
+
+        server, thread = self._start_server()
+        try:
+            # Fetch the payload - verify it loads without directory scan
+            payload = self._fetch_selected_run_payload(server, run_id)
+
+            # Verify the payload has notification_count from index (3 entries for this run)
+            self.assertIn("notificationCount", payload)
+            self.assertEqual(payload.get("notificationCount"), 3)
+
+            # Verify the request succeeded (status 200)
+            # The notification data is loaded from index, not scanned from disk
+
+        finally:
+            self._shutdown_server(server, thread)
+
+    def test_selected_run_missing_notification_index_defers(self) -> None:
+        """Regression test: missing ui-index.json should NOT trigger notification directory scan.
+
+        Key behavior: when index is missing, notification_history is empty (deferred),
+        not scanned from disk.
+        """
+        run_id = "defer-test-run"
+
+        # Create the review artifact
+        reviews_dir = self.health_dir / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_path = reviews_dir / f"{run_id}-review.json"
+        review_path.write_text(
+            json.dumps({
+                "run_label": run_id,
+                "timestamp": "2026-04-06T13:30:27Z",
+                "selected_drilldowns": [],
+            }),
+            encoding="utf-8",
+        )
+
+        # DO NOT create ui-index.json - test deferred path
+
+        # Create notification files to verify they're NOT scanned
+        for i in range(100):
+            notif_path = self.notifications_dir / f"notification-{i}.json"
+            notif_path.write_text(
+                json.dumps({"kind": "info", "summary": f"Notification {i}"}),
+                encoding="utf-8",
+            )
+
+        server, thread = self._start_server()
+        try:
+            # Fetch the payload - should return 0 notifications (deferred, no scan)
+            payload = self._fetch_selected_run_payload(server, run_id)
+
+            # notificationCount should be 0 (deferred, no directory scan)
+            self.assertIn("notificationCount", payload)
+            self.assertEqual(payload.get("notificationCount"), 0)
+
+            # Verify the request succeeded (status 200)
+            # The notification data is deferred, not scanned from disk
 
         finally:
             self._shutdown_server(server, thread)

@@ -346,6 +346,63 @@ class HTTPFramingTests(unittest.TestCase):
         finally:
             self._shutdown_server(server, thread)
 
+    def test_json_responses_include_connection_close(self) -> None:
+        """Test that _send_json adds Connection: close header and sets close_connection.
+        
+        This is a diagnostic fix for observed 30s+ delays with keep-alive connections.
+        The backend forces Connection: close to prevent proxy/Vite/podman keep-alive
+        socket reuse issues where the browser waits for a fresh socket.
+        """
+        # Write minimal index BEFORE starting server - /api/run requires it
+        run_id = "test-run-conn-close"
+        self._write_minimal_index(run_id)
+        
+        server, thread = self._start_server()
+        try:
+            host, port = server.server_address[:2]
+            host_str = host.decode("utf-8") if isinstance(host, bytes) else host
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5.0)
+            sock.connect((host_str, port))
+            
+            # Send HTTP/1.1 request
+            request = b"GET /api/run HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            sock.sendall(request)
+            
+            # Read response headers
+            response = b""
+            while True:
+                try:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    response += chunk
+                    # Check if we have complete headers
+                    header_end = response.find(b"\r\n\r\n")
+                    if header_end != -1:
+                        headers = response[:header_end].decode("utf-8", errors="replace")
+                        # We've got headers, connection will close after body
+                        # Connection: close means server won't keep-alive
+                        sock.close()
+                        
+                        # Verify Connection header is present
+                        self.assertIn("Connection: close", headers,
+                            "Response should include Connection: close header")
+                        
+                        # Verify Content-Length is also present (diagnostic uses both)
+                        self.assertIn("Content-Length:", headers,
+                            "Response should include Content-Length header")
+                        
+                        return
+                except TimeoutError:
+                    break
+            
+            self.fail("Should have received complete response headers with Connection: close")
+            
+        finally:
+            self._shutdown_server(server, thread)
+
 
 if __name__ == "__main__":
     unittest.main()

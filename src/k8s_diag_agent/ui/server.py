@@ -1104,8 +1104,18 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         Returns:
             UIIndexContext for the requested run, or None if not found.
         """
+        # Phase timing instrumentation for cold /api/run diagnosis
+        _timings: dict[str, float] = {}
+        _total_start = time.perf_counter()
 
-        # Check if the run exists by looking for its review artifact
+        def _phase(name: str, fn: object) -> object:
+            """Time a phase and return its result."""
+            _t0 = time.perf_counter()
+            result = fn()
+            _timings[name] = (time.perf_counter() - _t0) * 1000
+            return result
+
+        # Phase 1: Check if the run exists by looking for its review artifact
         reviews_dir = self.runs_dir / "health" / "reviews"
         review_artifact_path = reviews_dir / f"{run_id}-review.json"
 
@@ -1115,6 +1125,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 extra={"run_id": run_id, "path": str(review_artifact_path)},
             )
             return None
+
+        _timings["review_artifact_read_ms"] = (time.perf_counter() - _total_start) * 1000
 
         try:
             review_data = json.loads(review_artifact_path.read_text(encoding="utf-8"))
@@ -1133,34 +1145,69 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         selected_drilldowns = review_data.get("selected_drilldowns", [])
         cluster_count = len(selected_drilldowns) if isinstance(selected_drilldowns, list) else 0
 
-        # Build clusters list from review data
-        clusters = _build_clusters_from_review(run_id, review_data, self.runs_dir)
+        # Phase 2: Build clusters list from review data
+        clusters = _phase("clusters_build_ms", lambda: _build_clusters_from_review(run_id, review_data, self.runs_dir))
 
-        # Scan for drilldowns belonging to this run
-        drilldown_count = _count_run_artifacts(self.runs_dir / "health" / "drilldowns", run_id)
+        # Phase 3: Scan for drilldowns belonging to this run
+        drilldown_count = _phase("drilldown_scan_ms", lambda: _count_run_artifacts(self.runs_dir / "health" / "drilldowns", run_id))
 
-        # Scan for proposals belonging to this run
-        proposals_data, proposal_count = _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id)
+        # Phase 4: Scan for proposals belonging to this run
+        proposals_result = _phase("proposals_scan_ms", lambda: _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id))
+        proposals_data, proposal_count = proposals_result
 
-        # Scan for external-analysis artifacts for this run
+        # Phase 5: Scan for external-analysis artifacts for this run
         external_analysis_dir = self._health_root / "external-analysis"
-        external_analysis_data = _scan_external_analysis(external_analysis_dir, run_id)
+        external_analysis_data = _phase("external_analysis_scan_ms", lambda: _scan_external_analysis(external_analysis_dir, run_id))
         external_analysis_count = external_analysis_data.get("count", 0)
 
-        # Scan for notifications for this run
-        notification_history, notification_count = _load_notifications_for_run(
-            self.runs_dir / "health" / "notifications", run_id
-        )
+        # Phase 6: Load notifications for this run (index-backed, no directory scan)
+        # OPTIMIZATION: Past runs should not scan the full notifications directory.
+        # Use ui-index.json notification_index if available, otherwise defer.
+        notification_t0 = time.perf_counter()
+        notification_history: list[dict[str, object]] = []
+        notification_count = 0
+        notifications_source = "deferred"
+        notification_index_available = False
+        notification_history_complete = True  # Assume complete unless bounded
+        notification_records_used = 0
 
-        # Build drilldown availability from review clusters + drilldown artifacts
-        drilldown_availability = _build_drilldown_availability_from_review(
+        try:
+            # Import locally to avoid circular import
+            from .server_reads import _load_ui_index_file as _load_index
+
+            index = _load_index(self._health_root)
+            notif_index = index.get("notification_index")
+            if isinstance(notif_index, Mapping):
+                notification_index_available = True
+                all_notifs = notif_index.get("notifications", [])
+                if isinstance(all_notifs, list):
+                    # Filter by runId field if present (runId not run_id in index)
+                    run_id_field = "runId"  # notification_index uses runId
+                    filtered = [n for n in all_notifs if isinstance(n, Mapping) and n.get(run_id_field) == run_id]
+                    notification_records_used = len(filtered)
+                    notification_count = notification_records_used
+                    # Bound to latest 20 per run to keep payload small
+                    notification_history = cast(list[dict[str, object]], filtered[:20])
+                    # Mark as incomplete if we had more than 20 and truncated
+                    notification_history_complete = len(filtered) <= 20
+                    notifications_source = "index"
+        except Exception:
+            # Malformed index - defer notification loading
+            notifications_source = "deferred"
+
+        _timings["notifications_scan_ms"] = (time.perf_counter() - notification_t0) * 1000
+        _timings["notifications_source"] = notifications_source  # type: ignore[assignment]
+        _timings["notification_index_available"] = notification_index_available  # type: ignore[assignment]
+
+        # Phase 7: Build drilldown availability from review clusters + drilldown artifacts
+        drilldown_availability = _phase("drilldown_availability_build_ms", lambda: _build_drilldown_availability_from_review(
             review_data, self.runs_dir / "health" / "drilldowns", run_id
-        )
+        ))
 
-        # Find review enrichment artifact
-        review_enrichment = _find_review_enrichment(external_analysis_dir, run_id)
+        # Phase 8: Find review enrichment artifact
+        review_enrichment = _phase("review_enrichment_lookup_ms", lambda: _find_review_enrichment(external_analysis_dir, run_id))
 
-        # Build review_enrichment_status for past runs.
+        # Phase 9: Build review_enrichment_status for past runs.
         # For past runs, we derive status from the enrichment artifact and
         # the review artifact's config metadata, independent of current policy.
         has_enrichment_artifact = review_enrichment is not None
@@ -1178,28 +1225,28 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 if isinstance(candidate, dict):
                     run_config = candidate
 
-            review_enrichment_status = _build_review_enrichment_status_for_past_run(run_config)
+            review_enrichment_status = _phase("review_enrichment_status_build_ms", lambda: _build_review_enrichment_status_for_past_run(run_config))
 
-        # Find next-check plan artifact
-        next_check_plan = _find_next_check_plan(external_analysis_dir, run_id)
+        # Phase 10: Find next-check plan artifact
+        next_check_plan = _phase("next_check_plan_lookup_ms", lambda: _find_next_check_plan(external_analysis_dir, run_id))
 
-        # Build next_check_queue from plan if exists
-        next_check_queue = _build_queue_from_plan(next_check_plan)
+        # Phase 11: Build next_check_queue from plan if exists
+        next_check_queue = _phase("next_check_queue_build_ms", lambda: _build_queue_from_plan(next_check_plan))
 
-        # Build next_check_execution_history
-        execution_history = _build_execution_history(external_analysis_dir, run_id)
+        # Phase 12: Build next_check_execution_history
+        execution_history = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id))
 
-        # Build llm_stats from external-analysis artifacts for this run
-        llm_stats = _build_llm_stats_for_run(external_analysis_dir, run_id)
+        # Phase 13: Build llm_stats from external-analysis artifacts for this run
+        llm_stats = _phase("llm_stats_build_ms", lambda: _build_llm_stats_for_run(external_analysis_dir, run_id))
 
-        # Load Alertmanager compact artifact if available
+        # Phase 14: Load Alertmanager compact artifact if available
         # Alertmanager artifacts are written at health_root, not external-analysis/
         alertmanager_compact_entry = None
         compact_path = self._health_root / f"{run_id}-alertmanager-compact.json"
         if compact_path.exists():
             try:
                 import json as _json
-                compact_raw = _json.loads(compact_path.read_text(encoding="utf-8"))
+                compact_raw = _phase("alertmanager_compact_read_ms", lambda: _json.loads(compact_path.read_text(encoding="utf-8")))
                 alertmanager_compact_entry = {
                     "status": compact_raw.get("status"),
                     "alert_count": compact_raw.get("alert_count", 0),
@@ -1215,9 +1262,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     "by_cluster": compact_raw.get("by_cluster", []),
                 }
             except Exception:
+                _timings["alertmanager_compact_read_ms"] = 0.0
                 pass  # Compact not available - non-fatal
+        else:
+            _timings["alertmanager_compact_read_ms"] = 0.0
 
-        # Load Alertmanager sources inventory if available
+        # Phase 15: Load Alertmanager sources inventory if available
         # Uses _serialize_alertmanager_sources from health/ui.py to apply operator overrides
         # Alertmanager artifacts are written at health_root, not external-analysis/
         alertmanager_sources_entry = None
@@ -1226,11 +1276,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             # Import here to avoid circular import at module level
             from ..health.ui import _serialize_alertmanager_sources as _serialize_am_sources
             try:
-                alertmanager_sources_entry = _serialize_am_sources(self._health_root, run_id)
+                alertmanager_sources_entry = _phase("alertmanager_sources_build_ms", lambda: _serialize_am_sources(self._health_root, run_id))
             except Exception:
+                _timings["alertmanager_sources_build_ms"] = 0.0
                 pass  # Sources not available - non-fatal
+        else:
+            _timings["alertmanager_sources_build_ms"] = 0.0
 
-        # Build run entry with artifact-backed values
+        # Phase 16: Build run entry with artifact-backed values
         run_entry = {
             "run_id": run_id,
             "run_label": run_label,
@@ -1260,10 +1313,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "alertmanager_sources": alertmanager_sources_entry,
         }
 
-        # Build proposal status summary
-        proposal_status_summary = _build_proposal_status_summary(proposals_data)
+        # Phase 17: Build proposal status summary
+        proposal_status_summary = _phase("proposal_status_summary_build_ms", lambda: _build_proposal_status_summary(proposals_data))
 
-        # Build a minimal UI index structure with artifact-backed data
+        # Phase 18: Build UI index structure
         index: dict[str, object] = {
             "run": run_entry,
             "clusters": clusters,
@@ -1278,14 +1331,64 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "external_analysis": external_analysis_data,
         }
 
+        # Phase 19: Build UIIndexContext
+        _timings["build_ui_context_ms"] = (time.perf_counter() - _total_start) * 1000  # reset after build
+        _ctx_start = time.perf_counter()
         try:
-            return build_ui_context(index)
+            ctx = build_ui_context(index)
+            _timings["build_ui_context_ms"] = (time.perf_counter() - _ctx_start) * 1000
         except Exception as exc:
             logger.warning(
                 "Failed to build context for run",
                 extra={"run_id": run_id, "error": str(exc)},
             )
             return None
+
+        # Total context load timing
+        _timings["total_ms"] = (time.perf_counter() - _total_start) * 1000
+
+        # Emit structured timing log with all phases
+        emit_structured_log(
+            component="ui-run-context",
+            message="/api/run _load_context_for_run phase timings",
+            run_id=run_id,
+            run_label=run_label,
+            severity="INFO",
+            metadata={
+                "total_ms": round(_timings.get("total_ms", 0), 2),
+                "review_artifact_read_ms": round(_timings.get("review_artifact_read_ms", 0), 2),
+                "clusters_build_ms": round(_timings.get("clusters_build_ms", 0), 2),
+                "drilldown_scan_ms": round(_timings.get("drilldown_scan_ms", 0), 2),
+                "proposals_scan_ms": round(_timings.get("proposals_scan_ms", 0), 2),
+                "external_analysis_scan_ms": round(_timings.get("external_analysis_scan_ms", 0), 2),
+                "notifications_scan_ms": round(_timings.get("notifications_scan_ms", 0), 2),
+                "drilldown_availability_build_ms": round(_timings.get("drilldown_availability_build_ms", 0), 2),
+                "review_enrichment_lookup_ms": round(_timings.get("review_enrichment_lookup_ms", 0), 2),
+                "review_enrichment_status_build_ms": round(_timings.get("review_enrichment_status_build_ms", 0), 2),
+                "next_check_plan_lookup_ms": round(_timings.get("next_check_plan_lookup_ms", 0), 2),
+                "next_check_queue_build_ms": round(_timings.get("next_check_queue_build_ms", 0), 2),
+                "execution_history_build_ms": round(_timings.get("execution_history_build_ms", 0), 2),
+                "llm_stats_build_ms": round(_timings.get("llm_stats_build_ms", 0), 2),
+                "alertmanager_compact_read_ms": round(_timings.get("alertmanager_compact_read_ms", 0), 2),
+                "alertmanager_sources_build_ms": round(_timings.get("alertmanager_sources_build_ms", 0), 2),
+                "proposal_status_summary_build_ms": round(_timings.get("proposal_status_summary_build_ms", 0), 2),
+                "build_ui_context_ms": round(_timings.get("build_ui_context_ms", 0), 2),
+                "run_id": run_id,
+                "run_label": run_label,
+                "cluster_count": cluster_count,
+                "drilldown_count": drilldown_count,
+                "proposal_count": proposal_count,
+                "external_analysis_count": external_analysis_count,
+                "notification_count": notification_count,
+                # Notification loading telemetry
+                "notifications_source": notifications_source,
+                "notification_index_available": notification_index_available,
+                "notification_records_used": notification_records_used,
+                "notification_history_complete": notification_history_complete,
+            },
+        )
+
+        return ctx
 
     def _build_runs_list_payload(self) -> dict[str, object]:
         """Build the list of available runs with their triage state.
@@ -1489,11 +1592,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         send_headers_done = time.perf_counter()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
+        # DIAGNOSTIC: Force Connection: close to prevent keep-alive socket reuse delays
+        # This addresses observed 30s+ delays between backend ui-send completion and
+        # browser-visible response resolution. The issue is likely in proxy/Vite/podman
+        # keep-alive handling where the browser waits for a fresh socket.
+        self.send_header("Connection", "close")
         self.end_headers()
         flush_done = time.perf_counter()
         self.wfile.write(encoded)
         self.wfile.flush()
         write_done = time.perf_counter()
+        
+        # Tell BaseHTTPRequestHandler to close connection after this response
+        # This is the definitive way to prevent keep-alive with HTTP/1.1
+        self.close_connection = True
         
         # Log detailed send timing for debugging
         emit_structured_log(

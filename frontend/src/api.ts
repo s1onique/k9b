@@ -34,21 +34,141 @@ interface FetchJsonOptions {
   headers?: Record<string, string>;
 }
 
+/**
+ * Debug logging helper - gated by ?debugUi query parameter.
+ * Safe to call in tests (handles window undefined).
+ */
+const DEBUG_UI_ENABLED = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has("debugUi");
+};
+
+/**
+ * Phase timing instrumentation for fetch operations.
+ * Logs to console when ?debugUi is enabled.
+ * Applies to all API calls (not just fetchRun).
+ */
+interface FetchPhaseTiming {
+  path: string;
+  method?: string;
+  runId?: string;
+  clientRequestId?: string;
+  requestKind?: string;
+  phase: string;
+  elapsedMs: number;
+  status?: number;
+  aborted?: boolean;
+  contentLength?: string;
+  contentType?: string;
+  bodyTextLength?: number;
+}
+
+const logFetchPhase = (timing: FetchPhaseTiming): void => {
+  if (!DEBUG_UI_ENABLED()) return;
+  const prefix = "[api:http]";
+  const { path, method, runId, clientRequestId, requestKind, phase, elapsedMs, status, aborted, contentLength, contentType, bodyTextLength } = timing;
+  const parts: string[] = [];
+  parts.push(path);
+  if (method) parts.push(`method=${method}`);
+  if (runId) parts.push(`runId=${runId}`);
+  if (clientRequestId) parts.push(`clientRequestId=${clientRequestId}`);
+  if (requestKind) parts.push(`kind=${requestKind}`);
+  parts.push(phase);
+  parts.push(`elapsedMs=${elapsedMs.toFixed(1)}`);
+  if (status !== undefined) parts.push(`status=${status}`);
+  if (aborted !== undefined) parts.push(`aborted=${aborted}`);
+  if (contentLength) parts.push(`content-length=${contentLength}`);
+  if (contentType) parts.push(`content-type=${contentType}`);
+  if (bodyTextLength !== undefined) parts.push(`bodyTextLength=${bodyTextLength}`);
+  console.info(prefix, parts.join(" "));
+};
+
 const fetchJson = async <T>(
   path: string,
   options?: FetchJsonOptions,
   extraInit?: RequestInit
 ): Promise<T> => {
+  const headers = options?.headers || {};
+  const clientRequestId = headers["X-K9B-Client-Request-Id"];
+  // Extract runId from extended FetchRunInit interface
+  const runId = (extraInit as { __runId?: string } | undefined)?.__runId;
+  
   const init: RequestInit = { cache: "no-store", ...extraInit };
   if (options?.headers) {
     init.headers = { ...options.headers, ...extraInit?.headers as Record<string, string> };
   }
-  const response = await fetch(path, init);
+  // NOTE: We no longer set Connection: close here - that header is forbidden in fetch.
+  // Instead, we rely on the backend to set Connection: close in responses via _send_json().
+  
+  // Extract requestKind from extraInit (used by fetchRun to mark run-detail)
+  const requestKind = (extraInit as { __requestKind?: string } | undefined)?.__requestKind;
+  
+  const startTime = performance.now();
+  logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "start", elapsedMs: 0, status: undefined, aborted: undefined });
+  
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch (err) {
+    const elapsed = performance.now() - startTime;
+    logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "failed", elapsedMs: elapsed });
+    throw err;
+  }
+  
+  const headersTime = performance.now();
+  const elapsedHeaders = headersTime - startTime;
+  const contentLength = response.headers.get("Content-Length") || undefined;
+  const contentType = response.headers.get("Content-Type") || undefined;
+  logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "headers-received", elapsedMs: elapsedHeaders, status: response.status, aborted: false, contentLength, contentType });
+  
   if (!response.ok) {
+    const elapsed = performance.now() - startTime;
+    logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "non-ok-response", elapsedMs: elapsed, status: response.status, aborted: false });
     throw new Error(`Failed to fetch ${path}: ${response.statusText}`);
   }
-  return response.json();
+  
+  // Use response.text() + JSON.parse() to distinguish phases
+  // This helps identify whether the delay is in body download or JSON parsing
+  const textStartTime = performance.now();
+  logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "text-start", elapsedMs: textStartTime - startTime, status: response.status, aborted: false });
+  
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (err) {
+    const elapsed = performance.now() - startTime;
+    logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "text-failed", elapsedMs: elapsed, status: response.status, aborted: false });
+    throw new Error(`Failed to read response body: ${err}`);
+  }
+  
+  const textDoneTime = performance.now();
+  const bodyTextLength = text.length;
+  logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "text-done", elapsedMs: textDoneTime - startTime, status: response.status, aborted: false, bodyTextLength });
+  
+  const jsonStartTime = performance.now();
+  logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "json-parse-start", elapsedMs: jsonStartTime - startTime, status: response.status, aborted: false, bodyTextLength });
+  
+  let data: T;
+  try {
+    data = JSON.parse(text) as T;
+  } catch (err) {
+    const elapsed = performance.now() - startTime;
+    logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "json-parse-failed", elapsedMs: elapsed, status: response.status, aborted: false, bodyTextLength });
+    throw new Error(`Failed to parse JSON response: ${err}`);
+  }
+  
+  const doneTime = performance.now();
+  logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "done", elapsedMs: doneTime - startTime, status: response.status, aborted: false, bodyTextLength });
+  
+  return data;
 };
+
+// Extended RequestInit to carry runId and requestKind for debug logging
+interface FetchRunInit extends RequestInit {
+  __runId?: string;
+  __requestKind?: string;
+}
 
 export const fetchRun = (
   runId?: string,
@@ -59,10 +179,16 @@ export const fetchRun = (
   if (options?.clientRequestId) {
     headers["X-K9B-Client-Request-Id"] = options.clientRequestId;
   }
-  const init: RequestInit = { cache: "no-store" };
+  const init: FetchRunInit = { cache: "no-store" };
   if (options?.signal) {
     init.signal = options.signal;
   }
+  // Pass runId and requestKind through for debug logging
+  if (runId) {
+    init.__runId = runId;
+  }
+  // Mark this as run-detail for phase logging
+  init.__requestKind = "run-detail";
   return fetchJson<RunPayload>(`/api/run${suffix}`, { headers }, init);
 };
 export const fetchFleet = (): Promise<FleetPayload> => fetchJson<FleetPayload>("/api/fleet");

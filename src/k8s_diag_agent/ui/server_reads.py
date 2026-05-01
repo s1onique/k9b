@@ -456,6 +456,23 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         # Read client-generated request correlation ID from request headers
         client_request_id = handler.headers.get("X-K9B-Client-Request-Id", "")
 
+        # Emit request-start log at absolute top before any processing
+        emit_structured_log(
+            component="ui-run-payload",
+            message="/api/run request START",
+            run_id=context.run.run_id,
+            run_label=context.run.run_label,
+            severity="DEBUG",
+            metadata={
+                "path": "/api/run",
+                "run_id": context.run.run_id,
+                "run_label": context.run.run_label,
+                "request_id": request_id,
+                "client_request_id": client_request_id,
+                "monotonic_received_s": round(request_received, 6),
+            },
+        )
+
         timings: dict[str, float] = {}
         timings["request_received_ms"] = 0.0  # First timing point
 

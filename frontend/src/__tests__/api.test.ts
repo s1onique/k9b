@@ -199,7 +199,7 @@ describe("fetchRun", () => {
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
       "/api/run",
       expect.objectContaining({
-        headers: { "X-K9B-Client-Request-Id": "rc-1-1234567890-abc123" },
+        headers: expect.objectContaining({ "X-K9B-Client-Request-Id": "rc-1-1234567890-abc123" }),
       })
     );
   });
@@ -215,7 +215,7 @@ describe("fetchRun", () => {
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
       "/api/run?run_id=run-789",
       expect.objectContaining({
-        headers: { "X-K9B-Client-Request-Id": "rc-2-9876543210-xyz789" },
+        headers: expect.objectContaining({ "X-K9B-Client-Request-Id": "rc-2-9876543210-xyz789" }),
       })
     );
   });

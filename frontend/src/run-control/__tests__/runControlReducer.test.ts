@@ -512,7 +512,7 @@ describe("runControlReducer", () => {
   });
 
   describe("RunLoaded", () => {
-    test("13. accepted when requestSeq and runId match", () => {
+    test("13. accepted when requestSeq and runId match and status is loading", () => {
       const model = createInitialRunControlModel();
       const payload = makeRunsListPayload([
         { runId: "run-123", runLabel: "Run 123" },
@@ -549,6 +549,150 @@ describe("runControlReducer", () => {
       expect(
         result.effects.some((e) => e.type === "cancelSlowRunTimer")
       ).toBe(true);
+    });
+
+    test("13b. accepted when status is slow (transition from slow to loaded)", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+      const runPayload = makeRunPayload("run-123");
+
+      // Boot and load runs
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      // RunSelected allocates seq = 3
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-123",
+        nowMs: nowMs + 200,
+      });
+
+      // Simulate slow threshold reached
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunSlowThresholdReached",
+        requestSeq: 3,
+        runId: "run-123",
+      });
+
+      expect(m4.selectedRun.status).toBe("slow");
+
+      // RunLoaded while status is "slow" should transition to "loaded"
+      const result = updateRunControl(m4, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-123",
+        payload: runPayload,
+        receivedAtMs: nowMs + 300,
+      });
+
+      expect(result.model.selectedRun.status).toBe("loaded");
+      expect(result.model.selectedRun.payload).toBe(runPayload);
+      // Should emit cancelSlowRunTimer even when coming from "slow"
+      expect(
+        result.effects.some((e) => e.type === "cancelSlowRunTimer")
+      ).toBe(true);
+    });
+
+    test("13c. RunLoaded from slow emits cancelSlowRunTimer", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+      const runPayload = makeRunPayload("run-123");
+
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-123",
+        nowMs: nowMs + 200,
+      });
+
+      // Transition to slow
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunSlowThresholdReached",
+        requestSeq: 3,
+        runId: "run-123",
+      });
+
+      // RunLoaded from slow
+      const result = updateRunControl(m4, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-123",
+        payload: runPayload,
+        receivedAtMs: nowMs + 300,
+      });
+
+      const cancelEffect = result.effects.find((e) => e.type === "cancelSlowRunTimer");
+      expect(cancelEffect).toBeDefined();
+      expect((cancelEffect as { requestSeq: number }).requestSeq).toBe(3);
+    });
+
+    test("13d. ignored when status is loaded (already completed)", () => {
+      const model = createInitialRunControlModel();
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+      const runPayload = makeRunPayload("run-123");
+
+      const { model: m1 } = updateRunControl(model, { type: "Boot", nowMs });
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-123",
+        nowMs: nowMs + 200,
+      });
+
+      // First RunLoaded succeeds
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-123",
+        payload: runPayload,
+        receivedAtMs: nowMs + 300,
+      });
+
+      expect(m4.selectedRun.status).toBe("loaded");
+
+      // Second RunLoaded with same seq should be ignored (already loaded)
+      const result = updateRunControl(m4, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-123",
+        payload: runPayload,
+        receivedAtMs: nowMs + 400,
+      });
+
+      // Model unchanged
+      expect(result.model.selectedRun.status).toBe("loaded");
+      expect(result.model.selectedRun.payload).toBe(runPayload);
+      // No additional cancelSlowRunTimer
+      expect(
+        result.effects.filter((e) => e.type === "cancelSlowRunTimer")
+      ).toHaveLength(0);
     });
 
     test("14. ignored when requestSeq is stale", () => {
@@ -1498,5 +1642,174 @@ describe("selectors", () => {
       expect(m6.selectedRun.payload?.runId).toBe("run-newest-A");
       // latestRunId should still be A
       expect(m6.selection.latestRunId).toBe("run-newest-A");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 5: Idempotency regression tests
+  // Directly tests that duplicate RunsLoaded does not re-emit fetchRun
+  // when the selected run is already loading or loaded.
+  // ---------------------------------------------------------------------------
+  describe("Phase 5 Idempotency: RunsLoaded does not re-emit fetchRun for same run", () => {
+    test("RunsLoaded while selected run is loading for same runId does NOT emit fetchRun", () => {
+      // Setup: Build model where selected run is ALREADY loading
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+
+      // Boot -> Loads runs -> Selects run-123 -> Starts loading run-123
+      const { model: m1 } = updateRunControl(
+        createInitialRunControlModel(),
+        { type: "Boot", nowMs }
+      );
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-123",
+        nowMs: nowMs + 200,
+      });
+
+      // Verify: m3 has selectedRun.status = "loading" for run-123
+      expect(m3.selectedRun.status).toBe("loading");
+      expect(m3.selectedRun.requestedRunId).toBe("run-123");
+
+      // Now simulate a duplicate RunsLoaded (e.g., from duplicate /api/runs response)
+      // This should NOT emit another fetchRun
+      const result = updateRunControl(m3, {
+        type: "RunsLoaded",
+        requestSeq: 3, // new requestSeq for the duplicate response
+        payload,
+        receivedAtMs: nowMs + 300,
+      });
+
+      // NO fetchRun effect should be emitted (already loading)
+      const fetchRunEffect = result.effects.find((e) => e.type === "fetchRun");
+      expect(fetchRunEffect).toBeUndefined();
+
+      // selectedRun state should remain unchanged
+      expect(result.model.selectedRun.status).toBe("loading");
+      expect(result.model.selectedRun.requestedRunId).toBe("run-123");
+    });
+
+    test("RunsLoaded with poll reason when selected run is loaded does NOT emit fetchRun", () => {
+      // Setup: Build model where selected run is already LOADED
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+      const runPayload = makeRunPayload("run-123");
+
+      // Boot -> Loads runs -> Selects run-123 -> Loads run-123 detail
+      const { model: m1 } = updateRunControl(
+        createInitialRunControlModel(),
+        { type: "Boot", nowMs }
+      );
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+      const { model: m3 } = updateRunControl(m2, {
+        type: "RunSelected",
+        runId: "run-123",
+        nowMs: nowMs + 200,
+      });
+      const { model: m4 } = updateRunControl(m3, {
+        type: "RunLoaded",
+        requestSeq: 3,
+        runId: "run-123",
+        payload: runPayload,
+        receivedAtMs: nowMs + 300,
+      });
+
+      // Verify: m4 has selectedRun.status = "loaded" for run-123
+      expect(m4.selectedRun.status).toBe("loaded");
+      expect(m4.selectedRun.payload?.runId).toBe("run-123");
+
+      // Now simulate a PollTick followed by RunsLoaded
+      // The PollTick changes lastRefreshReason to "poll"
+      const { model: m5 } = updateRunControl(m4, {
+        type: "PollTick",
+        nowMs: nowMs + 400,
+      });
+
+      // Now RunsLoaded with poll reason should NOT emit fetchRun (already loaded)
+      const result = updateRunControl(m5, {
+        type: "RunsLoaded",
+        requestSeq: 5,
+        payload,
+        receivedAtMs: nowMs + 500,
+      });
+
+      // NO fetchRun effect should be emitted (already loaded, passive poll)
+      const fetchRunEffect = result.effects.find((e) => e.type === "fetchRun");
+      expect(fetchRunEffect).toBeUndefined();
+
+      // selectedRun state should remain unchanged
+      expect(result.model.selectedRun.status).toBe("loaded");
+      expect(result.model.selectedRun.payload?.runId).toBe("run-123");
+    });
+
+    test("Boot is ignored when runs.status is already loading", () => {
+      const model = createInitialRunControlModel();
+      const nowMs = 1000;
+
+      // First boot starts loading
+      const { model: m1 } = updateRunControl(model, {
+        type: "Boot",
+        nowMs,
+      });
+      expect(m1.runs.status).toBe("loading");
+
+      // Second boot should be ignored (idempotent)
+      const result = updateRunControl(m1, {
+        type: "Boot",
+        nowMs: nowMs + 100,
+      });
+
+      // Model should be unchanged
+      expect(result.model).toBe(m1);
+      expect(result.model.runs.status).toBe("loading");
+      // No new effects should be emitted
+      expect(result.effects).toHaveLength(0);
+    });
+
+    test("Boot is ignored when runs.status is already loaded", () => {
+      const payload = makeRunsListPayload([
+        { runId: "run-123", runLabel: "Run 123" },
+      ]);
+      const nowMs = 1000;
+
+      // Boot and load runs
+      const { model: m1 } = updateRunControl(
+        createInitialRunControlModel(),
+        { type: "Boot", nowMs }
+      );
+      const { model: m2 } = updateRunControl(m1, {
+        type: "RunsLoaded",
+        requestSeq: 1,
+        payload,
+        receivedAtMs: nowMs + 100,
+      });
+      expect(m2.runs.status).toBe("loaded");
+
+      // Second boot should be ignored
+      const result = updateRunControl(m2, {
+        type: "Boot",
+        nowMs: nowMs + 200,
+      });
+
+      // Model should be unchanged
+      expect(result.model).toBe(m2);
+      expect(result.model.runs.status).toBe("loaded");
+      // No new effects should be emitted
+      expect(result.effects).toHaveLength(0);
     });
   });

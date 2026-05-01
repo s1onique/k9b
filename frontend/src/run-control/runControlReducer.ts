@@ -208,6 +208,19 @@ export function updateRunControl(
     // Boot
     // -----------------------------------------------------------------------
     case "Boot": {
+      // Phase 5: Idempotency - ignore Boot when runs is already loading or loaded
+      // This prevents duplicate /api/runs storms from repeated boot() calls
+      // (e.g., React StrictMode double-effect, app-level duplicate calls)
+      if (model.runs.status === "loading" || model.runs.status === "loaded") {
+        const effects = model.debug.enabled
+          ? emitDebugLog([], "BootIgnoredAlreadyStarted", {
+              runsStatus: model.runs.status,
+              requestSeq: model.runs.requestSeq,
+            })
+          : [];
+        return { model, effects };
+      }
+
       const { model: m1, requestSeq } = allocateRequestSeq(model);
       const newModel: RunControlModel = {
         ...m1,
@@ -331,15 +344,20 @@ export function updateRunControl(
 
       if (selectedStillInList) {
         // Phase 5: Reason-aware refetch policy
-        // Only skip refetch when we are in a passive poll AND already have the correct payload.
+        // Only skip refetch when:
+        // 1. We are in a passive poll AND already have the correct payload.
+        // 2. The selected run is ALREADY loading (prevents duplicate fetchRun for same run).
         // Boot/manual always refetch to ensure fresh data; poll refetches only when stale.
         const isPassivePoll = model.runs.lastRefreshReason === "poll";
+        const alreadyLoadingThisRun =
+          model.selectedRun.status === "loading" &&
+          model.selectedRun.requestedRunId === selectedRunId;
         const payloadMatches =
           isPassivePoll &&
           model.selectedRun.status === "loaded" &&
           model.selectedRun.payload?.runId === selectedRunId;
         
-        if (!payloadMatches) {
+        if (!payloadMatches && !alreadyLoadingThisRun) {
           const { model: m1, requestSeq } = allocateRequestSeq(model);
           const newSelectedRun: RunControlModel["selectedRun"] = {
             ...m1.selectedRun,
@@ -637,16 +655,22 @@ export function updateRunControl(
     // RunLoaded
     // -----------------------------------------------------------------------
     case "RunLoaded": {
-      const { requestSeq, requestedRunId } = model.selectedRun;
+      const { requestSeq, requestedRunId, status } = model.selectedRun;
 
-      // Accept only if requestSeq and runId match
-      if (requestSeq !== msg.requestSeq || requestedRunId !== msg.runId) {
+      // Accept when:
+      // 1. requestSeq and runId match
+      // 2. status is "loading" OR "slow" (not already loaded/failed/idle)
+      const isStaleSeq = requestSeq !== msg.requestSeq || requestedRunId !== msg.runId;
+      const isWrongStatus = status !== "loading" && status !== "slow";
+
+      if (isStaleSeq || isWrongStatus) {
         const effects = model.debug.enabled
           ? emitDebugLog([], "RunLoaded:stale", {
               expectedSeq: requestSeq,
               gotSeq: msg.requestSeq,
               expectedRunId: requestedRunId,
               gotRunId: msg.runId,
+              expectedStatus: status,
             })
           : [];
         return { model, effects };
@@ -661,6 +685,9 @@ export function updateRunControl(
           error: null,
           lastLoadedRunId: msg.runId,
           lastLoadedAtMs: msg.receivedAtMs,
+          // Update requestSeq to accepted value for consistency
+          requestSeq: msg.requestSeq,
+          requestedRunId: msg.runId,
         },
       };
 
