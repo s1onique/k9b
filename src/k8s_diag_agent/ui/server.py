@@ -51,6 +51,7 @@ from .server_next_checks import (  # noqa: E402, F401
 
 # Re-export read-only helpers from server_read_support for backward compatibility
 from .server_read_support import (  # noqa: E402, F401
+    RunArtifactIndex,  # noqa: E402
     _build_clusters_from_review,
     _build_drilldown_availability_from_review,
     _build_execution_history,
@@ -58,6 +59,7 @@ from .server_read_support import (  # noqa: E402, F401
     _build_proposal_status_summary,
     _build_queue_from_plan,
     _build_review_enrichment_status_for_past_run,
+    _build_run_artifact_index,
     _count_run_artifacts,
     _find_next_check_plan,
     _find_review_enrichment,
@@ -1204,8 +1206,13 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             review_data, self.runs_dir / "health" / "drilldowns", run_id
         ))
 
-        # Phase 8: Find review enrichment artifact
-        review_enrichment = _phase("review_enrichment_lookup_ms", lambda: _find_review_enrichment(external_analysis_dir, run_id))
+        # Phase 8: Build per-run artifact index ONCE for reuse across multiple lookups
+        # This replaces repeated directory scans with a single bounded scan by run_id prefix
+        raw_artifact_index = _phase("artifact_index_build_ms", lambda: _build_run_artifact_index(external_analysis_dir, run_id))
+        artifact_index = cast("RunArtifactIndex | None", raw_artifact_index)
+
+        # Phase 9: Find review enrichment artifact (uses shared index)
+        review_enrichment = _phase("review_enrichment_lookup_ms", lambda: _find_review_enrichment(external_analysis_dir, run_id, artifact_index))
 
         # Phase 9: Build review_enrichment_status for past runs.
         # For past runs, we derive status from the enrichment artifact and
@@ -1227,17 +1234,17 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
             review_enrichment_status = _phase("review_enrichment_status_build_ms", lambda: _build_review_enrichment_status_for_past_run(run_config))
 
-        # Phase 10: Find next-check plan artifact
-        next_check_plan = _phase("next_check_plan_lookup_ms", lambda: _find_next_check_plan(external_analysis_dir, run_id))
+        # Phase 10: Find next-check plan artifact (uses shared index)
+        next_check_plan = _phase("next_check_plan_lookup_ms", lambda: _find_next_check_plan(external_analysis_dir, run_id, artifact_index))
 
         # Phase 11: Build next_check_queue from plan if exists
         next_check_queue = _phase("next_check_queue_build_ms", lambda: _build_queue_from_plan(next_check_plan))
 
-        # Phase 12: Build next_check_execution_history
-        execution_history = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id))
+        # Phase 12: Build next_check_execution_history (uses shared index)
+        execution_history = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id, artifact_index))
 
-        # Phase 13: Build llm_stats from external-analysis artifacts for this run
-        llm_stats = _phase("llm_stats_build_ms", lambda: _build_llm_stats_for_run(external_analysis_dir, run_id))
+        # Phase 13: Build llm_stats from external-analysis artifacts for this run (uses shared index)
+        llm_stats = _phase("llm_stats_build_ms", lambda: _build_llm_stats_for_run(external_analysis_dir, run_id, artifact_index))
 
         # Phase 14: Load Alertmanager compact artifact if available
         # Alertmanager artifacts are written at health_root, not external-analysis/

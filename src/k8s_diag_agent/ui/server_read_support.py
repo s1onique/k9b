@@ -13,6 +13,7 @@ import json
 import logging
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -457,91 +458,227 @@ def _build_drilldown_availability_from_review(
     }
 
 
-def _find_review_enrichment(
-    external_analysis_dir: Path, run_id: str
-) -> dict[str, object] | None:
-    """Find and parse review enrichment artifact for a run."""
-    if not external_analysis_dir.exists():
-        return None
+@dataclass(frozen=True)
+class RunArtifactIndex:
+    """Per-run artifact index for efficient reuse across multiple lookups.
 
-    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")):
+    This replaces multiple independent directory scans with a single scan,
+    then classifies and indexes artifacts by purpose for O(1) lookup.
+    """
+    run_id: str
+    artifacts: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    # Classification by purpose (extracted from artifact purpose field)
+    review_enrichment: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    next_check_plan: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    next_check_execution: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    # Telemetry
+    artifacts_considered: int = 0
+    source: str = "file_scan"  # "file_scan" | "index"
+
+
+def _build_run_artifact_index(
+    external_analysis_dir: Path, run_id: str
+) -> RunArtifactIndex:
+    """Build a per-run artifact index with single directory scan.
+
+    This function scans the external-analysis directory once for artifacts
+    belonging to a run, classifies them by purpose, and returns an index
+    that can be reused for lookups without additional disk I/O.
+
+    Telemetry is preserved:
+    - source="file_scan" when scanned from disk
+    - artifacts_considered: count of all run artifacts scanned
+    - artifacts by purpose for efficient lookup
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory
+        run_id: The run ID to filter by
+
+    Returns:
+        RunArtifactIndex with classified artifacts and telemetry
+    """
+    artifacts: list[dict[str, object]] = []
+    review_enrichment: list[dict[str, object]] = []
+    next_check_plan: list[dict[str, object]] = []
+    next_check_execution: list[dict[str, object]] = []
+
+    if not external_analysis_dir.exists():
+        return RunArtifactIndex(run_id=run_id, artifacts_considered=0, source="file_scan")
+
+    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+        filename = artifact_file.stem
+        
+        # CRITICAL: Enforce prefix boundary to prevent run_id collision
+        # e.g., run_id="run-2024" should NOT match "run-20240-..."
+        # Only match if run_id is followed by "-" or is the entire stem (exact match)
+        if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+            continue
+        
         try:
             artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
             if not isinstance(artifact_data, dict):
                 continue
 
-            purpose = artifact_data.get("purpose")
-            if purpose != "review-enrichment":
-                continue
+            # Preserve artifact path for provenance (k9b artifact-first design)
+            artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
 
-            payload = artifact_data.get("payload", {})
+            artifacts.append(artifact_data)
 
-            def _list_from(*keys: str) -> list[str]:
-                """Get a list from payload, checking multiple key variants."""
-                for key in keys:
-                    value = payload.get(key)
-                    if isinstance(value, list):
-                        return [str(item) for item in value]
-                return []
+            # Classify by purpose
+            purpose = str(artifact_data.get("purpose", ""))
+            if purpose == "review-enrichment":
+                review_enrichment.append(artifact_data)
+            elif purpose == "next-check-planning":
+                next_check_plan.append(artifact_data)
+            elif purpose == "next-check-execution":
+                next_check_execution.append(artifact_data)
+            # Other artifact types are kept in artifacts list but not indexed by purpose
 
-            return {
-                "status": artifact_data.get("status", "unknown"),
-                "provider": artifact_data.get("provider"),
-                "timestamp": artifact_data.get("timestamp"),
-                "summary": artifact_data.get("summary"),
-                # Check both camelCase (ui-index format) and snake_case (artifact format)
-                "triageOrder": _list_from("triageOrder", "triage_order"),
-                "topConcerns": _list_from("topConcerns", "top_concerns"),
-                "evidenceGaps": _list_from("evidenceGaps", "evidence_gaps"),
-                "nextChecks": _list_from("nextChecks", "next_checks"),
-                "focusNotes": _list_from("focusNotes", "focus_notes"),
-                "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
-                "errorSummary": artifact_data.get("error_summary"),
-                "skipReason": artifact_data.get("skip_reason"),
-            }
         except Exception:
             continue
 
-    return None
+    return RunArtifactIndex(
+        run_id=run_id,
+        artifacts=tuple(artifacts),
+        review_enrichment=tuple(review_enrichment),
+        next_check_plan=tuple(next_check_plan),
+        next_check_execution=tuple(next_check_execution),
+        artifacts_considered=len(artifacts),
+        source="file_scan",
+    )
+
+
+def _find_review_enrichment(
+    external_analysis_dir: Path, run_id: str, artifact_index: RunArtifactIndex | None = None
+) -> dict[str, object] | None:
+    """Find and parse review enrichment artifact for a run.
+
+    Uses artifact_index if provided for O(1) lookup, otherwise falls back
+    to scanning the directory (for backward compatibility).
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory (used if no index)
+        run_id: The run ID to filter by
+        artifact_index: Pre-built index for O(1) lookup (optional)
+
+    Returns:
+        Review enrichment data dict, or None if not found
+    """
+    # Use index for O(1) lookup if available
+    if artifact_index is not None:
+        artifacts = artifact_index.review_enrichment
+    else:
+        # Fall back to directory scan for backward compatibility
+        if not external_analysis_dir.exists():
+            return None
+        artifacts = []
+        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")):
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if isinstance(artifact_data, dict):
+                    purpose = artifact_data.get("purpose")
+                    if purpose == "review-enrichment":
+                        artifacts.append(artifact_data)
+            except Exception:
+                continue
+
+    if not artifacts:
+        return None
+
+    # Take the first (sorted) matching artifact
+    artifact_data = artifacts[0]
+
+    payload = artifact_data.get("payload", {})
+
+    def _list_from(*keys: str) -> list[str]:
+        """Get a list from payload, checking multiple key variants."""
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [str(item) for item in value]
+        return []
+
+    # Get artifact path - use artifact_path if available, otherwise construct from index
+    artifact_path = artifact_data.get("artifact_path")
+    if not artifact_path and artifact_index is None:
+        # Need to construct path from artifact data - not available without file scan
+        artifact_path = None
+
+    return {
+        "status": artifact_data.get("status", "unknown"),
+        "provider": artifact_data.get("provider"),
+        "timestamp": artifact_data.get("timestamp"),
+        "summary": artifact_data.get("summary"),
+        # Check both camelCase (ui-index format) and snake_case (artifact format)
+        "triageOrder": _list_from("triageOrder", "triage_order"),
+        "topConcerns": _list_from("topConcerns", "top_concerns"),
+        "evidenceGaps": _list_from("evidenceGaps", "evidence_gaps"),
+        "nextChecks": _list_from("nextChecks", "next_checks"),
+        "focusNotes": _list_from("focusNotes", "focus_notes"),
+        "artifactPath": artifact_path,
+        "errorSummary": artifact_data.get("error_summary"),
+        "skipReason": artifact_data.get("skip_reason"),
+    }
 
 
 def _find_next_check_plan(
-    external_analysis_dir: Path, run_id: str
+    external_analysis_dir: Path, run_id: str, artifact_index: RunArtifactIndex | None = None
 ) -> dict[str, object] | None:
-    """Find and parse next-check plan artifact for a run."""
-    if not external_analysis_dir.exists():
+    """Find and parse next-check plan artifact for a run.
+
+    Uses artifact_index if provided for O(1) lookup, otherwise falls back
+    to scanning the directory (for backward compatibility).
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory (used if no index)
+        run_id: The run ID to filter by
+        artifact_index: Pre-built index for O(1) lookup (optional)
+
+    Returns:
+        Next-check plan data dict, or None if not found
+    """
+    # Use index for O(1) lookup if available
+    if artifact_index is not None:
+        plan_artifacts = artifact_index.next_check_plan
+    else:
+        # Fall back to directory scan for backward compatibility
+        if not external_analysis_dir.exists():
+            return None
+        plan_artifacts = []
+        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")):
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if isinstance(artifact_data, dict):
+                    purpose = artifact_data.get("purpose")
+                    if purpose == "next-check-planning":
+                        plan_artifacts.append(artifact_data)
+            except Exception:
+                continue
+
+    if not plan_artifacts:
         return None
 
-    # Look for plan artifacts - they have purpose = "next-check-planning"
-    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")):
-        try:
-            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
-            if not isinstance(artifact_data, dict):
-                continue
+    # Take the first (sorted) matching artifact
+    artifact_data = plan_artifacts[0]
 
-            purpose = artifact_data.get("purpose")
-            if purpose != "next-check-planning":
-                continue
+    payload = artifact_data.get("payload", {})
+    candidates = payload.get("candidates", [])
 
-            payload = artifact_data.get("payload", {})
-            candidates = payload.get("candidates", [])
+    # Get artifact path
+    artifact_path = artifact_data.get("artifact_path")
 
-            return {
-                "status": artifact_data.get("status", "unknown"),
-                "summary": payload.get("summary"),
-                "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
-                "reviewPath": payload.get("reviewPath"),
-                "enrichmentArtifactPath": payload.get("enrichmentArtifactPath"),
-                "candidateCount": len(candidates) if isinstance(candidates, list) else 0,
-                "candidates": candidates,
-                "orphanedApprovals": [],
-                "outcomeCounts": [],
-                "orphanedApprovalCount": 0,
-            }
-        except Exception:
-            continue
-
-    return None
+    return {
+        "status": artifact_data.get("status", "unknown"),
+        "summary": payload.get("summary"),
+        "artifactPath": artifact_path,
+        "reviewPath": payload.get("reviewPath"),
+        "enrichmentArtifactPath": payload.get("enrichmentArtifactPath"),
+        "candidateCount": len(candidates) if isinstance(candidates, list) else 0,
+        "candidates": candidates,
+        "orphanedApprovals": [],
+        "outcomeCounts": [],
+        "orphanedApprovalCount": 0,
+    }
 
 
 def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, object]]:
@@ -602,9 +739,12 @@ def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, obj
 
 
 def _build_execution_history(
-    external_analysis_dir: Path, run_id: str
+    external_analysis_dir: Path, run_id: str, artifact_index: RunArtifactIndex | None = None
 ) -> list[dict[str, object]]:
     """Build next-check execution history from execution artifacts.
+
+    Uses artifact_index if provided for O(1) lookup, otherwise falls back
+    to scanning the directory (for backward compatibility).
 
     Uses prefix-based matching to handle any artifact naming pattern,
     matching any file starting with run_id and ending with '-next-check-execution'.
@@ -612,80 +752,92 @@ def _build_execution_history(
 
     After building execution entries, merges in Alertmanager review artifacts
     so the UI can display relevance judgments.
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory (used if no index)
+        run_id: The run ID to filter by
+        artifact_index: Pre-built index for O(1) lookup (optional)
+
+    Returns:
+        List of execution history entry dicts, sorted by timestamp descending
     """
     history: list[dict[str, object]] = []
-
-    if not external_analysis_dir.exists():
-        return history
 
     # Pre-load Alertmanager review artifacts for merging into entries
     reviews_by_source = _load_alertmanager_review_artifacts(external_analysis_dir, run_id)
 
-    # Pre-sort files by length (longest first) to handle prefixed run_ids correctly
-    # e.g., "run-2024-01-15" should match before "run-2024"
-    all_files = sorted(external_analysis_dir.glob("*-next-check-execution*.json"), key=lambda p: len(p.name), reverse=True)
+    # Use index for O(1) lookup if available
+    if artifact_index is not None:
+        execution_artifacts = artifact_index.next_check_execution
+    else:
+        # Fall back to directory scan for backward compatibility
+        if not external_analysis_dir.exists():
+            return history
+        execution_artifacts = []
+        # Pre-sort files by length (longest first) to handle prefixed run_ids correctly
+        all_files = sorted(external_analysis_dir.glob("*-next-check-execution*.json"), key=lambda p: len(p.name), reverse=True)
 
-    for artifact_file in all_files:
-        filename = artifact_file.stem  # filename without extension
-        # Verify run_id boundary: must be followed by hyphen (for child runs) or end of string
-        # Without this check, "run-2024" would match "run-20240-execution.json"
-        if not filename.startswith(run_id):
+        for artifact_file in all_files:
+            filename = artifact_file.stem
+            if not filename.startswith(run_id):
+                continue
+            if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+                continue
+
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if isinstance(artifact_data, dict):
+                    purpose = artifact_data.get("purpose")
+                    if purpose == "next-check-execution":
+                        # Add artifact_path for reference
+                        artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
+                        execution_artifacts.append(artifact_data)
+            except Exception:
+                continue
+
+    for artifact_data in execution_artifacts:
+        # Verify run_id matches in artifact data as additional safety check
+        # Only enforce if artifact has a run_id field (backward compatibility)
+        artifact_run_id = artifact_data.get("run_id")
+        if artifact_run_id is not None and artifact_run_id != run_id:
             continue
-        if len(filename) > len(run_id) and filename[len(run_id)] != "-":
-            continue
 
-        try:
-            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
-            if not isinstance(artifact_data, dict):
-                continue
+        payload = artifact_data.get("payload", {})
 
-            purpose = artifact_data.get("purpose")
-            if purpose != "next-check-execution":
-                continue
+        # Extract provenance fields from payload
+        candidate_id = _get_field_with_fallback(payload, "candidateId", "candidate_id")
+        candidate_index_raw = _get_field_with_default(payload, None, "candidateIndex", "candidate_index")
+        candidate_index: int | None = None
+        if candidate_index_raw is not None:
+            try:
+                candidate_index = int(str(candidate_index_raw))
+            except (ValueError, TypeError):
+                candidate_index = None
 
-            # Verify run_id matches in artifact data as additional safety check
-            # Only enforce if artifact has a run_id field (backward compatibility)
-            artifact_run_id = artifact_data.get("run_id")
-            if artifact_run_id is not None and artifact_run_id != run_id:
-                continue
+        entry: dict[str, object] = {
+            "timestamp": artifact_data.get("timestamp"),
+            "clusterLabel": _get_field_with_fallback(payload, "clusterLabel", "cluster_label"),
+            "candidateDescription": _get_field_with_fallback(payload, "candidateDescription", "candidate_description"),
+            "commandFamily": _get_field_with_fallback(payload, "commandFamily", "command_family"),
+            "status": artifact_data.get("status", "unknown"),
+            "durationMs": _get_field_with_default(artifact_data, 0, "duration_ms", "durationMs"),
+            "artifactPath": artifact_data.get("artifact_path"),
+            "timedOut": _get_field_with_default(artifact_data, False, "timed_out", "timedOut"),
+            "stdoutTruncated": _get_field_with_default(artifact_data, False, "stdout_truncated", "stdoutTruncated"),
+            "stderrTruncated": _get_field_with_default(artifact_data, False, "stderr_truncated", "stderrTruncated"),
+            "outputBytesCaptured": _get_field_with_default(artifact_data, 0, "output_bytes_captured", "outputBytesCaptured"),
+            "candidateId": candidate_id,
+            "candidateIndex": candidate_index,
+        }
 
-            payload = artifact_data.get("payload", {})
-
-            # Extract provenance fields from payload
-            candidate_id = _get_field_with_fallback(payload, "candidateId", "candidate_id")
-            candidate_index_raw = _get_field_with_default(payload, None, "candidateIndex", "candidate_index")
-            candidate_index: int | None = None
-            if candidate_index_raw is not None:
-                try:
-                    candidate_index = int(str(candidate_index_raw))
-                except (ValueError, TypeError):
-                    candidate_index = None
-
-            entry: dict[str, object] = {
-                "timestamp": artifact_data.get("timestamp"),
-                "clusterLabel": _get_field_with_fallback(payload, "clusterLabel", "cluster_label"),
-                "candidateDescription": _get_field_with_fallback(payload, "candidateDescription", "candidate_description"),
-                "commandFamily": _get_field_with_fallback(payload, "commandFamily", "command_family"),
-                "status": artifact_data.get("status", "unknown"),
-                "durationMs": _get_field_with_default(artifact_data, 0, "duration_ms", "durationMs"),
-                "artifactPath": str(artifact_file.relative_to(external_analysis_dir.parent)),
-                "timedOut": _get_field_with_default(artifact_data, False, "timed_out", "timedOut"),
-                "stdoutTruncated": _get_field_with_default(artifact_data, False, "stdout_truncated", "stdoutTruncated"),
-                "stderrTruncated": _get_field_with_default(artifact_data, False, "stderr_truncated", "stderrTruncated"),
-                "outputBytesCaptured": _get_field_with_default(artifact_data, 0, "output_bytes_captured", "outputBytesCaptured"),
-                "candidateId": candidate_id,
-                "candidateIndex": candidate_index,
-            }
-
-            # Merge Alertmanager review if exists for this source artifact
-            source_artifact = str(artifact_file.relative_to(external_analysis_dir.parent))
+        # Merge Alertmanager review if exists for this source artifact
+        source_artifact = artifact_data.get("artifact_path")
+        if source_artifact:
             review = reviews_by_source.get(source_artifact)
             if review is not None:
                 entry = _merge_alertmanager_review_into_history_entry(entry, review)
 
-            history.append(entry)
-        except Exception:
-            continue
+        history.append(entry)
 
     # Sort by timestamp descending (most recent first) using ISO timestamp comparison
     history.sort(key=lambda x: cast(str, x.get("timestamp") or ""), reverse=True)
@@ -716,9 +868,21 @@ def _parse_positive_int(value: object | None) -> int | None:
 
 
 def _build_llm_stats_for_run(
-    external_analysis_dir: Path, run_id: str
+    external_analysis_dir: Path, run_id: str, artifact_index: RunArtifactIndex | None = None
 ) -> dict[str, object]:
-    """Build LLM stats from external-analysis artifacts for a specific run."""
+    """Build LLM stats from external-analysis artifacts for a specific run.
+
+    Uses artifact_index if provided for O(1) lookup, otherwise falls back
+    to scanning the directory (for backward compatibility).
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory (used if no index)
+        run_id: The run ID to filter by
+        artifact_index: Pre-built index for O(1) lookup (optional)
+
+    Returns:
+        LLM stats data dict with call counts, latency percentiles, and provider breakdown
+    """
     total_calls = 0
     successful_calls = 0
     failed_calls = 0
@@ -727,7 +891,7 @@ def _build_llm_stats_for_run(
     # Collect positive durations only from successful calls for latency percentile computation
     successful_durations: list[int] = []
 
-    if not external_analysis_dir.exists():
+    if not external_analysis_dir.exists() and artifact_index is None:
         return {
             "totalCalls": 0,
             "successfulCalls": 0,
@@ -740,47 +904,53 @@ def _build_llm_stats_for_run(
             "scope": "current_run",
         }
 
-    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
-        try:
-            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
-            if not isinstance(artifact_data, dict):
+    # Use index for O(1) lookup if available
+    if artifact_index is not None:
+        artifacts = artifact_index.artifacts
+    else:
+        # Fall back to directory scan for backward compatibility
+        artifacts = []
+        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if isinstance(artifact_data, dict):
+                    artifacts.append(artifact_data)
+            except Exception:
                 continue
 
-            status = str(artifact_data.get("status", "")).lower()
-            if status not in ("success", "failed"):
-                continue
-
-            total_calls += 1
-            if status == "success":
-                successful_calls += 1
-                # Collect positive duration from successful calls for latency percentiles.
-                # Prefer snake_case field name, fall back to camelCase for compatibility.
-                # Only positive durations are included; zero/negative/missing yield None.
-                duration_ms = artifact_data.get("duration_ms")
-                duration = _parse_positive_int(duration_ms)
-                if duration is None:
-                    duration = _parse_positive_int(artifact_data.get("durationMs"))
-                if duration is not None:
-                    successful_durations.append(duration)
-            if status == "failed":
-                failed_calls += 1
-
-            # Track latest timestamp
-            timestamp = artifact_data.get("timestamp")
-            if timestamp:
-                if latest_timestamp is None or timestamp > latest_timestamp:
-                    latest_timestamp = timestamp
-
-            # Track provider breakdown
-            provider = str(artifact_data.get("tool_name") or artifact_data.get("provider") or "unknown")
-            if provider not in provider_counts:
-                provider_counts[provider] = {"calls": 0, "failedCalls": 0}
-            provider_counts[provider]["calls"] += 1
-            if status == "failed":
-                provider_counts[provider]["failedCalls"] += 1
-
-        except Exception:
+    for artifact_data in artifacts:
+        status = str(artifact_data.get("status", "")).lower()
+        if status not in ("success", "failed"):
             continue
+
+        total_calls += 1
+        if status == "success":
+            successful_calls += 1
+            # Collect positive duration from successful calls for latency percentiles.
+            # Prefer snake_case field name, fall back to camelCase for compatibility.
+            # Only positive durations are included; zero/negative/missing yield None.
+            duration_ms = artifact_data.get("duration_ms")
+            duration = _parse_positive_int(duration_ms)
+            if duration is None:
+                duration = _parse_positive_int(artifact_data.get("durationMs"))
+            if duration is not None:
+                successful_durations.append(duration)
+        if status == "failed":
+            failed_calls += 1
+
+        # Track latest timestamp
+        timestamp = artifact_data.get("timestamp")
+        if timestamp:
+            if latest_timestamp is None or timestamp > latest_timestamp:
+                latest_timestamp = timestamp
+
+        # Track provider breakdown
+        provider = str(artifact_data.get("tool_name") or artifact_data.get("provider") or "unknown")
+        if provider not in provider_counts:
+            provider_counts[provider] = {"calls": 0, "failedCalls": 0}
+        provider_counts[provider]["calls"] += 1
+        if status == "failed":
+            provider_counts[provider]["failedCalls"] += 1
 
     provider_breakdown = [
         {"provider": provider, "calls": data["calls"], "failedCalls": data["failedCalls"]}
