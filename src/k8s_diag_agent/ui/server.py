@@ -52,8 +52,8 @@ from .server_next_checks import (  # noqa: E402, F401
 # Re-export read-only helpers from server_read_support for backward compatibility
 from .server_read_support import (  # noqa: E402, F401
     RunArtifactIndex,  # noqa: E402
+    _build_clusters_and_drilldown_availability,
     _build_clusters_from_review,
-    _build_drilldown_availability_from_review,
     _build_execution_history,
     _build_llm_stats_for_run,
     _build_proposal_status_summary,
@@ -1151,8 +1151,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # This avoids scanning the proposals/ directory on each /api/run request
         review_proposal_status_summary: dict[str, object] | None = review_data.get("_proposal_status_summary") if isinstance(review_data, dict) else None
 
-        # Phase 2: Build clusters list from review data
-        clusters = _phase("clusters_build_ms", lambda: _build_clusters_from_review(run_id, review_data, self.runs_dir))
+        # Phase 2+7: Build clusters and drilldown availability in single pass
+        # OPTIMIZATION: Merged into one function that reads drilldown artifacts once
+        # instead of two separate calls that each did their own glob+parse operations
+        clusters_t0 = time.perf_counter()
+        clusters, drilldown_availability = _build_clusters_and_drilldown_availability(run_id, review_data, self.runs_dir)
+        clusters_elapsed = (time.perf_counter() - clusters_t0) * 1000
+        _timings["clusters_build_ms"] = round(clusters_elapsed, 2)
+        _timings["drilldown_availability_build_ms"] = round(clusters_elapsed, 2)  # Combined timing
 
         # Phase 3: Scan for drilldowns belonging to this run
         drilldown_count = _phase("drilldown_scan_ms", lambda: _count_run_artifacts(self.runs_dir / "health" / "drilldowns", run_id))
@@ -1219,12 +1225,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         _timings["notifications_source"] = notifications_source  # type: ignore[assignment]
         _timings["notification_index_available"] = notification_index_available  # type: ignore[assignment]
 
-        # Phase 7: Build drilldown availability from review clusters + drilldown artifacts
-        drilldown_availability = _phase("drilldown_availability_build_ms", lambda: _build_drilldown_availability_from_review(
-            review_data, self.runs_dir / "health" / "drilldowns", run_id
-        ))
-
         # Phase 8: Build per-run artifact index ONCE for reuse across multiple lookups
+        # NOTE: clusters and drilldown_availability were already built in Phase 2+7 above
         # This replaces repeated directory scans with a single bounded scan by run_id prefix
         raw_artifact_index = _phase("artifact_index_build_ms", lambda: _build_run_artifact_index(external_analysis_dir, run_id))
         artifact_index = cast("RunArtifactIndex | None", raw_artifact_index)

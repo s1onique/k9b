@@ -226,15 +226,92 @@ def _build_review_enrichment_status_for_past_run(
     }
 
 
-def _build_clusters_from_review(
+def _build_clusters_and_drilldown_availability(
     run_id: str, review_data: dict[str, object], runs_dir: Path
-) -> list[dict[str, object]]:
-    """Build clusters list from review artifact's selected_drilldowns."""
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """Build clusters list and drilldown availability from review artifact in a single pass.
+
+    This is an optimized version that reads drilldown artifacts ONCE and produces
+    both clusters data and drilldown availability data, avoiding redundant disk I/O.
+
+    Previously this work was split into two functions (_build_clusters_from_review and
+    _build_drilldown_availability_from_review) that each did their own glob + parse
+    operations.
+
+    Args:
+        run_id: The run ID for artifact matching
+        review_data: The review artifact data containing selected_drilldowns
+        runs_dir: The base runs directory
+
+    Returns:
+        Tuple of (clusters list, drilldown availability dict)
+    """
     clusters: list[dict[str, object]] = []
     selected_drilldowns = review_data.get("selected_drilldowns", [])
 
     if not isinstance(selected_drilldowns, list):
-        return clusters
+        selected_drilldowns = []
+
+    # Phase 1: Read all drilldown artifacts for this run in a single pass
+    # This replaces separate glob+parse operations in both _build_clusters_from_review
+    # and _build_drilldown_availability_from_review.
+    #
+    # We use selected_drilldowns labels as authoritative and match drilldown artifacts
+    # by exact "{run_id}-{label}-" prefix. For prefix collision handling (e.g. "cluster"
+    # and "cluster-prod"), we prefer longest-label match.
+    #
+    # Artifact filename pattern: {run_id}-{cluster_label}-...
+    # Example: health-run-20260501T063733Z-cluster-prod-a-diagnostic.json
+    drilldown_data_by_label: dict[str, dict[str, object]] = {}
+    drilldowns_dir = runs_dir / "health" / "drilldowns"
+
+    if drilldowns_dir.exists():
+        for df in drilldowns_dir.glob(f"{run_id}-*.json"):
+            try:
+                df_data = json.loads(df.read_text(encoding="utf-8"))
+                df_name = df.stem
+                if not df_name.startswith(run_id + "-"):
+                    continue
+
+                # Extract potential label suffix: {run_id}-{potential_label}
+                # We'll match this against authoritative selected_drilldowns labels
+                potential_label = df_name[len(run_id) + 1:]
+
+                # Find the best matching label from selected_drilldowns
+                # Prefer longest match to handle prefix collisions (e.g. "cluster-prod" vs "cluster")
+                best_match: str | None = None
+                best_match_len = 0
+
+                for drilldown in selected_drilldowns:
+                    if not isinstance(drilldown, dict):
+                        continue
+                    label = drilldown.get("label", "")
+                    if not isinstance(label, str) or not label:
+                        continue
+
+                    # Check if this artifact matches this label (exact prefix match)
+                    expected_suffix = label + "-"
+                    if potential_label.startswith(expected_suffix):
+                        if len(label) > best_match_len:
+                            best_match = label
+                            best_match_len = len(label)
+
+                # Store only if we found a matching label and it's not already stored
+                # (first artifact wins for each label due to glob ordering)
+                if best_match is not None and best_match not in drilldown_data_by_label:
+                    drilldown_data_by_label[best_match] = {
+                        "artifact": str(df.relative_to(runs_dir)),
+                        "timestamp": df_data.get("timestamp"),
+                    }
+            except Exception:
+                continue
+
+    # Phase 2: Build clusters using pre-loaded drilldown data
+    total = len(selected_drilldowns)
+    available = 0
+    missing_labels: list[str] = []
+    coverage: list[dict[str, object]] = []
+    review_timestamp = review_data.get("timestamp", "")
 
     for drilldown in selected_drilldowns:
         if not isinstance(drilldown, dict):
@@ -243,19 +320,19 @@ def _build_clusters_from_review(
         label = drilldown.get("label", "unknown")
         context = drilldown.get("context", "")
 
-        # Check if drilldown artifact exists
-        drilldowns_dir = runs_dir / "health" / "drilldowns"
+        # Use pre-loaded drilldown data instead of doing another glob+parse
+        dd_info = drilldown_data_by_label.get(label)
         drilldown_artifact = None
         drilldown_timestamp = None
-        if drilldowns_dir.exists():
-            for df in drilldowns_dir.glob(f"{run_id}-{label}-*.json"):
-                try:
-                    df_data = json.loads(df.read_text(encoding="utf-8"))
-                    drilldown_artifact = str(df.relative_to(runs_dir))
-                    drilldown_timestamp = df_data.get("timestamp")
-                    break
-                except Exception:
-                    continue
+        is_available = False
+
+        if dd_info is not None:
+            drilldown_artifact = dd_info["artifact"]
+            drilldown_timestamp = dd_info["timestamp"]
+            is_available = True
+            available += 1
+        else:
+            missing_labels.append(label)
 
         clusters.append({
             "label": label,
@@ -270,9 +347,9 @@ def _build_clusters_from_review(
             "non_running_pods": drilldown.get("non_running_pod_count", 0),
             "baseline_policy_path": "",
             "missing_evidence": drilldown.get("missing_evidence", []),
-            "latest_run_timestamp": review_data.get("timestamp", ""),
+            "latest_run_timestamp": review_timestamp,
             "top_trigger_reason": drilldown.get("reasons", [None])[0] if drilldown.get("reasons") else None,
-            "drilldown_available": drilldown_artifact is not None,
+            "drilldown_available": is_available,
             "drilldown_timestamp": drilldown_timestamp,
             "artifact_paths": {
                 "snapshot": None,
@@ -281,6 +358,35 @@ def _build_clusters_from_review(
             },
         })
 
+        # Build drilldown availability coverage entry
+        coverage.append({
+            "label": label,
+            "context": context,
+            "available": is_available,
+            "timestamp": drilldown_timestamp or review_timestamp,
+            "artifact_path": drilldown_artifact,
+        })
+
+    drilldown_availability = {
+        "total_clusters": total,
+        "available": available,
+        "missing": max(total - available, 0),
+        "missing_clusters": missing_labels,
+        "coverage": coverage,
+    }
+
+    return clusters, drilldown_availability
+
+
+def _build_clusters_from_review(
+    run_id: str, review_data: dict[str, object], runs_dir: Path
+) -> list[dict[str, object]]:
+    """Build clusters list from review artifact's selected_drilldowns.
+
+    NOTE: This function is kept for backward compatibility. For new code, prefer
+    _build_clusters_and_drilldown_availability() which does both in a single pass.
+    """
+    clusters, _ = _build_clusters_and_drilldown_availability(run_id, review_data, runs_dir)
     return clusters
 
 
