@@ -91,18 +91,23 @@ const fetchJson = async <T>(
 ): Promise<T> => {
   const headers = options?.headers || {};
   const clientRequestId = headers["X-K9B-Client-Request-Id"];
-  // Extract runId from extended FetchRunInit interface
-  const runId = (extraInit as { __runId?: string } | undefined)?.__runId;
   
-  const init: RequestInit = { cache: "no-store", ...extraInit };
+  // CRITICAL: Destructure debug-only fields FIRST before building RequestInit.
+  // __runId and __requestKind are for debug logging only - they are not valid
+  // RequestInit fields and must NOT be passed to the browser's fetch().
+  const { __runId, __requestKind, ...cleanExtraInit } = extraInit || {};
+  
+  // Extract runId and requestKind for debug logging BEFORE building init
+  const runId = __runId;
+  const requestKind = __requestKind;
+  
+  // Build init from cleanExtraInit only (debug fields already removed)
+  const init: RequestInit = { cache: "no-store", ...cleanExtraInit };
   if (options?.headers) {
-    init.headers = { ...options.headers, ...extraInit?.headers as Record<string, string> };
+    init.headers = { ...options.headers, ...cleanExtraInit?.headers as Record<string, string> };
   }
   // NOTE: We no longer set Connection: close here - that header is forbidden in fetch.
   // Instead, we rely on the backend to set Connection: close in responses via _send_json().
-  
-  // Extract requestKind from extraInit (used by fetchRun to mark run-detail)
-  const requestKind = (extraInit as { __requestKind?: string } | undefined)?.__requestKind;
   
   const startTime = performance.now();
   logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "start", elapsedMs: 0, status: undefined, aborted: undefined });

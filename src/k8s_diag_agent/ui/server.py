@@ -9,7 +9,7 @@ import mimetypes
 import re
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -1107,10 +1107,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             UIIndexContext for the requested run, or None if not found.
         """
         # Phase timing instrumentation for cold /api/run diagnosis
-        _timings: dict[str, float] = {}
+        _timings: dict[str, float | str] = {}
         _total_start = time.perf_counter()
 
-        def _phase(name: str, fn: object) -> object:
+        def _phase(name: str, fn: Callable[[], object]) -> object:
             """Time a phase and return its result."""
             _t0 = time.perf_counter()
             result = fn()
@@ -1174,12 +1174,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             status_counts = review_proposal_status_summary.get("status_counts", [])
             proposal_count = sum(item.get("count", 0) for item in status_counts if isinstance(item, dict))
             _timings["proposals_scan_ms"] = 0.0
-            _timings["proposals_source"] = "summary_deferred"  # type: ignore[assignment]
+            _timings["proposals_source"] = "summary_deferred"
         else:
             # Fall back to full proposals scan (backward compatibility)
             proposals_result = _phase("proposals_scan_ms", lambda: _load_proposals_for_run(self.runs_dir / "health" / "proposals", run_id))
-            proposals_data, proposal_count = proposals_result
-            _timings["proposals_source"] = "directory_scan"  # type: ignore[assignment]
+            proposals_data, proposal_count = cast(tuple[list[dict[str, object]], int], proposals_result)
+            _timings["proposals_source"] = "directory_scan"
 
         # Phase 5: Scan for external-analysis artifacts for this run
         external_analysis_dir = self._health_root / "external-analysis"
@@ -1222,8 +1222,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             notifications_source = "deferred"
 
         _timings["notifications_scan_ms"] = (time.perf_counter() - notification_t0) * 1000
-        _timings["notifications_source"] = notifications_source  # type: ignore[assignment]
-        _timings["notification_index_available"] = notification_index_available  # type: ignore[assignment]
+        _timings["notifications_source"] = notifications_source
+        _timings["notification_index_available"] = notification_index_available
 
         # Phase 8: Build per-run artifact index ONCE for reuse across multiple lookups
         # NOTE: clusters and drilldown_availability were already built in Phase 2+7 above
@@ -1252,16 +1252,18 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 if isinstance(candidate, dict):
                     run_config = candidate
 
-            review_enrichment_status = _phase("review_enrichment_status_build_ms", lambda: _build_review_enrichment_status_for_past_run(run_config))
+            review_enrichment_status = cast(dict[str, object], _phase("review_enrichment_status_build_ms", lambda: _build_review_enrichment_status_for_past_run(run_config)))
 
         # Phase 10: Find next-check plan artifact (uses shared index)
-        next_check_plan = _phase("next_check_plan_lookup_ms", lambda: _find_next_check_plan(external_analysis_dir, run_id, artifact_index))
+        next_check_plan = cast(dict[str, object] | None, _phase("next_check_plan_lookup_ms", lambda: _find_next_check_plan(external_analysis_dir, run_id, artifact_index)))
 
         # Phase 11: Build next_check_queue from plan if exists
-        next_check_queue = _phase("next_check_queue_build_ms", lambda: _build_queue_from_plan(next_check_plan))
+        next_check_queue: list[dict[str, object]] = cast(list[dict[str, object]], _phase("next_check_queue_build_ms", lambda: _build_queue_from_plan(next_check_plan)))
 
         # Phase 12: Build next_check_execution_history (uses shared index)
-        execution_history, exec_telemetry = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id, artifact_index))
+        execution_history: list[dict[str, object]]
+        exec_result = _phase("execution_history_build_ms", lambda: _build_execution_history(external_analysis_dir, run_id, artifact_index))
+        execution_history, exec_telemetry = cast(tuple[list[dict[str, object]], dict[str, object]], exec_result)
 
         # Phase 13: Build llm_stats from external-analysis artifacts for this run (uses shared index)
         llm_stats = _phase("llm_stats_build_ms", lambda: _build_llm_stats_for_run(external_analysis_dir, run_id, artifact_index))
@@ -1346,14 +1348,14 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if review_proposal_status_summary is not None:
             proposal_status_summary = review_proposal_status_summary
             _timings["proposal_status_summary_build_ms"] = 0.0
-            _timings["proposal_status_summary_source"] = "review_artifact"  # type: ignore[assignment]
+            _timings["proposal_status_summary_source"] = "review_artifact"
         else:
             # Fall back to building from loaded proposals (backward compatibility)
-            proposal_status_summary = _phase("proposal_status_summary_build_ms", lambda: _build_proposal_status_summary(proposals_data))
-            _timings["proposal_status_summary_source"] = "built_from_proposals"  # type: ignore[assignment]
+            proposal_status_summary = cast(dict[str, object], _phase("proposal_status_summary_build_ms", lambda: _build_proposal_status_summary(proposals_data)))
+            _timings["proposal_status_summary_source"] = "built_from_proposals"
 
         # Phase 18: Build UI index structure
-        index: dict[str, object] = {
+        run_index: dict[str, object] = {
             "run": run_entry,
             "clusters": clusters,
             "latest_assessment": None,
@@ -1371,7 +1373,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         _timings["build_ui_context_ms"] = (time.perf_counter() - _total_start) * 1000  # reset after build
         _ctx_start = time.perf_counter()
         try:
-            ctx = build_ui_context(index)
+            ctx = build_ui_context(run_index)
             _timings["build_ui_context_ms"] = (time.perf_counter() - _ctx_start) * 1000
         except Exception as exc:
             logger.warning(
@@ -1391,26 +1393,26 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             run_label=run_label,
             severity="INFO",
             metadata={
-                "total_ms": round(_timings.get("total_ms", 0), 2),
-                "review_artifact_read_ms": round(_timings.get("review_artifact_read_ms", 0), 2),
-                "clusters_build_ms": round(_timings.get("clusters_build_ms", 0), 2),
-                "drilldown_scan_ms": round(_timings.get("drilldown_scan_ms", 0), 2),
-                "proposals_scan_ms": round(_timings.get("proposals_scan_ms", 0), 2),
-                "external_analysis_scan_ms": round(_timings.get("external_analysis_scan_ms", 0), 2),
-                "notifications_scan_ms": round(_timings.get("notifications_scan_ms", 0), 2),
-                "drilldown_availability_build_ms": round(_timings.get("drilldown_availability_build_ms", 0), 2),
-                "review_enrichment_lookup_ms": round(_timings.get("review_enrichment_lookup_ms", 0), 2),
-                "review_enrichment_status_build_ms": round(_timings.get("review_enrichment_status_build_ms", 0), 2),
-                "next_check_plan_lookup_ms": round(_timings.get("next_check_plan_lookup_ms", 0), 2),
-                "next_check_queue_build_ms": round(_timings.get("next_check_queue_build_ms", 0), 2),
-                "execution_history_build_ms": round(_timings.get("execution_history_build_ms", 0), 2),
-                "llm_stats_build_ms": round(_timings.get("llm_stats_build_ms", 0), 2),
-                "alertmanager_compact_read_ms": round(_timings.get("alertmanager_compact_read_ms", 0), 2),
-                "alertmanager_sources_build_ms": round(_timings.get("alertmanager_sources_build_ms", 0), 2),
-                "proposal_status_summary_build_ms": round(_timings.get("proposal_status_summary_build_ms", 0), 2),
-                "build_ui_context_ms": round(_timings.get("build_ui_context_ms", 0), 2),
-                "proposals_source": _timings.get("proposals_source", "missing"),
-                "proposal_status_summary_source": _timings.get("proposal_status_summary_source", "missing"),
+                "total_ms": round(cast(float, _timings.get("total_ms", 0.0)), 2),
+                "review_artifact_read_ms": round(cast(float, _timings.get("review_artifact_read_ms", 0.0)), 2),
+                "clusters_build_ms": round(cast(float, _timings.get("clusters_build_ms", 0.0)), 2),
+                "drilldown_scan_ms": round(cast(float, _timings.get("drilldown_scan_ms", 0.0)), 2),
+                "proposals_scan_ms": round(cast(float, _timings.get("proposals_scan_ms", 0.0)), 2),
+                "external_analysis_scan_ms": round(cast(float, _timings.get("external_analysis_scan_ms", 0.0)), 2),
+                "notifications_scan_ms": round(cast(float, _timings.get("notifications_scan_ms", 0.0)), 2),
+                "drilldown_availability_build_ms": round(cast(float, _timings.get("drilldown_availability_build_ms", 0.0)), 2),
+                "review_enrichment_lookup_ms": round(cast(float, _timings.get("review_enrichment_lookup_ms", 0.0)), 2),
+                "review_enrichment_status_build_ms": round(cast(float, _timings.get("review_enrichment_status_build_ms", 0.0)), 2),
+                "next_check_plan_lookup_ms": round(cast(float, _timings.get("next_check_plan_lookup_ms", 0.0)), 2),
+                "next_check_queue_build_ms": round(cast(float, _timings.get("next_check_queue_build_ms", 0.0)), 2),
+                "execution_history_build_ms": round(cast(float, _timings.get("execution_history_build_ms", 0.0)), 2),
+                "llm_stats_build_ms": round(cast(float, _timings.get("llm_stats_build_ms", 0.0)), 2),
+                "alertmanager_compact_read_ms": round(cast(float, _timings.get("alertmanager_compact_read_ms", 0.0)), 2),
+                "alertmanager_sources_build_ms": round(cast(float, _timings.get("alertmanager_sources_build_ms", 0.0)), 2),
+                "proposal_status_summary_build_ms": round(cast(float, _timings.get("proposal_status_summary_build_ms", 0.0)), 2),
+                "build_ui_context_ms": round(cast(float, _timings.get("build_ui_context_ms", 0.0)), 2),
+                "proposals_source": cast(str, _timings.get("proposals_source", "missing")),
+                "proposal_status_summary_source": cast(str, _timings.get("proposal_status_summary_source", "missing")),
                 "run_id": run_id,
                 "run_label": run_label,
                 "cluster_count": cluster_count,
@@ -1630,10 +1632,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         send_headers_done = time.perf_counter()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
-        # DIAGNOSTIC: Force Connection: close to prevent keep-alive socket reuse delays
-        # This addresses observed 30s+ delays between backend ui-send completion and
-        # browser-visible response resolution. The issue is likely in proxy/Vite/podman
-        # keep-alive handling where the browser waits for a fresh socket.
+        # INTENTIONAL: Always force Connection: close for development and single-threaded
+        # server instances. This prevents proxy/Vite/podman keep-alive socket reuse delays
+        # where the browser waits for a fresh socket after backend completion.
+        # For production multi-process servers behind a reverse proxy, this header can be
+        # removed if the proxy handles connection management correctly.
         self.send_header("Connection", "close")
         self.end_headers()
         flush_done = time.perf_counter()

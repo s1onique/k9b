@@ -1023,7 +1023,16 @@ def _parse_positive_int(value: object | None) -> int | None:
 def _build_llm_stats_for_run(
     external_analysis_dir: Path, run_id: str, artifact_index: RunArtifactIndex | None = None
 ) -> dict[str, object]:
-    """Build LLM stats from external-analysis artifacts for a specific run.
+    """Build external-analysis activity stats for a specific run.
+
+    NOTE: Despite the name, this function counts ALL external-analysis artifacts
+    with success/failed status, not just LLM calls. The "llm_stats" name is a legacy
+    label from when external-analysis primarily meant LLM provider calls. In practice,
+    it includes drilldown, review enrichment, next-check planning/execution, auto
+    drilldown, and other status-bearing external-analysis activities.
+
+    This naming is kept for backward compatibility (API contract), but the actual
+    content reflects the broader scope of status-bearing external analysis.
 
     Uses artifact_index if provided for O(1) lookup, otherwise falls back
     to scanning the directory (for backward compatibility).
@@ -1034,7 +1043,8 @@ def _build_llm_stats_for_run(
         artifact_index: Pre-built index for O(1) lookup (optional)
 
     Returns:
-        LLM stats data dict with call counts, latency percentiles, and provider breakdown
+        Stats data dict with call counts, latency percentiles, and provider breakdown.
+        Labeled as "llm_stats" for API contract, but includes all external-analysis.
     """
     total_calls = 0
     successful_calls = 0

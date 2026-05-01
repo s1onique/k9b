@@ -219,6 +219,47 @@ describe("fetchRun", () => {
       })
     );
   });
+
+  test("REGRESSION: fetch() init does NOT contain __runId debug field", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/run?run_id=run-debug-test": mockResponse({ runId: "run-debug-test" }),
+      })
+    );
+    await fetchRun("run-debug-test");
+    
+    // Verify the call was made and inspect the init object
+    const calls = vi.mocked(globalThis.fetch).mock.calls;
+    expect(calls.length).toBe(1);
+    const [, init] = calls[0] as [string, RequestInit];
+    
+    // Debug field __runId must NOT be passed to browser fetch()
+    expect(init).not.toHaveProperty("__runId");
+    expect(init).not.toHaveProperty("__requestKind");
+    
+    // But standard fields should be present
+    expect(init).toHaveProperty("cache", "no-store");
+  });
+
+  test("REGRESSION: fetch() init does NOT contain __requestKind debug field", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/run?run_id=run-detail-test": mockResponse({ runId: "run-detail-test" }),
+      })
+    );
+    await fetchRun("run-detail-test");
+    
+    // Verify the call was made and inspect the init object
+    const calls = vi.mocked(globalThis.fetch).mock.calls;
+    expect(calls.length).toBe(1);
+    const [, init] = calls[0] as [string, RequestInit];
+    
+    // Debug field __requestKind must NOT be passed to browser fetch()
+    expect(init).not.toHaveProperty("__requestKind");
+    expect(init).not.toHaveProperty("__runId");
+  });
 });
 
 // ---------------------------------------------------------------------------

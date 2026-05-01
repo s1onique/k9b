@@ -810,6 +810,15 @@ def _write_proposal_status_summary_to_review(
 ) -> None:
     """Write proposal_status_summary to review artifact for fast past-run loading.
 
+    NOTE: The summary is stored as _proposal_status_summary in the review artifact.
+    This is derived read-model metadata (underscore-prefixed to mark as internal
+    indexing data), NOT source evidence. It provides a fast path to skip proposals/
+    directory scanning when loading historical runs via /api/run?run_id=.
+    
+    Fallback behavior: If a review artifact lacks _proposal_status_summary (e.g., from
+    an older run created before this optimization), _load_context_for_run() will fall
+    back to scanning the proposals/ directory and building the summary on-demand.
+
     This is the key optimization to avoid _load_context_for_run() scanning
     the proposals/ directory on each /api/run request for historical runs.
 
