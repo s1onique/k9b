@@ -926,13 +926,13 @@ def _build_execution_history(
             telemetry["execution_entries_returned"] = 0
             return history, telemetry
         execution_artifacts = []
-        # Pre-sort files by length (longest first) to handle prefixed run_ids correctly
-        all_files = sorted(external_analysis_dir.glob("*-next-check-execution*.json"), key=lambda p: len(p.name), reverse=True)
-
-        for artifact_file in all_files:
+        # CRITICAL: Use run_id prefix in glob pattern to avoid matching other runs
+        # e.g., run_id="run-2024" should NOT match "run-20240-..."
+        # The suffix "-next-check-execution*.json" ensures we only match execution artifacts
+        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")):
             filename = artifact_file.stem
-            if not filename.startswith(run_id):
-                continue
+            # Enforce prefix boundary to prevent run_id collision
+            # e.g., run_id="run-2024" should NOT match "run-20240-..."
             if len(filename) > len(run_id) and filename[len(run_id)] != "-":
                 continue
 
@@ -1062,8 +1062,13 @@ def _build_llm_stats_for_run(
         artifacts = artifact_index.artifacts
     else:
         # Fall back to directory scan for backward compatibility
+        # CRITICAL: Enforce prefix boundary to prevent run_id collision
+        # e.g., run_id="run-2024" should NOT match "run-20240-..."
         artifacts = []
         for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+            filename = artifact_file.stem
+            if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+                continue
             try:
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                 if isinstance(artifact_data, dict):

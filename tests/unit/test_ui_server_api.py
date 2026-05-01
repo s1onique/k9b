@@ -776,12 +776,13 @@ class RunApiServerTests(unittest.TestCase):
         from k8s_diag_agent.ui.server import _build_execution_history
 
         # Build history for run-2024
-        history_2024 = _build_execution_history(external_analysis_dir, "run-2024")
+        # Note: _build_execution_history returns tuple[history, telemetry]
+        history_2024, _ = _build_execution_history(external_analysis_dir, "run-2024")
         self.assertEqual(len(history_2024), 1)
         self.assertEqual(history_2024[0].get("candidateDescription"), "Check run-2024")
 
         # Build history for run-2024-01
-        history_2024_01 = _build_execution_history(external_analysis_dir, "run-2024-01")
+        history_2024_01, _ = _build_execution_history(external_analysis_dir, "run-2024-01")
         self.assertEqual(len(history_2024_01), 1)
         self.assertEqual(history_2024_01[0].get("candidateDescription"), "Check run-2024-01")
 
