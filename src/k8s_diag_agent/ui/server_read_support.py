@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,9 +76,16 @@ def _load_alertmanager_review_artifacts(
     if not external_analysis_dir.exists():
         return reviews_by_source
 
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty result
+        return reviews_by_source
+
     # Find all Alertmanager review artifacts for this run
-    review_pattern = f"{run_id}-next-check-execution-alertmanager-review-*.json"
-    for review_file in external_analysis_dir.glob(review_pattern):
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution-alertmanager-review-*.json")
+    for review_file in external_analysis_dir.glob(glob_pattern):
         try:
             review_data = json.loads(review_file.read_text(encoding="utf-8"))
             if not isinstance(review_data, dict):
@@ -265,8 +274,31 @@ def _build_clusters_and_drilldown_availability(
     drilldown_data_by_label: dict[str, dict[str, object]] = {}
     drilldowns_dir = runs_dir / "health" / "drilldowns"
 
+    # Phase 2: Build clusters using pre-loaded drilldown data
+    total = len(selected_drilldowns)
+    available = 0
+    missing_labels: list[str] = []
+    coverage: list[dict[str, object]] = []
+    review_timestamp = review_data.get("timestamp", "")
+
     if drilldowns_dir.exists():
-        for df in drilldowns_dir.glob(f"{run_id}-*.json"):
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return empty results
+            # Return empty clusters and empty drilldown availability
+            drilldown_availability = {
+                "total_clusters": total,
+                "available": 0,
+                "missing": total,
+                "missing_clusters": [d.get("label", "unknown") for d in selected_drilldowns if isinstance(d, dict)],
+                "coverage": [],
+            }
+            return clusters, drilldown_availability
+
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+        for df in drilldowns_dir.glob(glob_pattern):
             try:
                 df_data = json.loads(df.read_text(encoding="utf-8"))
                 df_name = df.stem
@@ -305,13 +337,6 @@ def _build_clusters_and_drilldown_availability(
                     }
             except Exception:
                 continue
-
-    # Phase 2: Build clusters using pre-loaded drilldown data
-    total = len(selected_drilldowns)
-    available = 0
-    missing_labels: list[str] = []
-    coverage: list[dict[str, object]] = []
-    review_timestamp = review_data.get("timestamp", "")
 
     for drilldown in selected_drilldowns:
         if not isinstance(drilldown, dict):
@@ -394,8 +419,17 @@ def _count_run_artifacts(artifacts_dir: Path, run_id: str) -> int:
     """Count artifacts belonging to a specific run in a directory."""
     if not artifacts_dir.exists():
         return 0
+
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return 0
+        return 0
+
     count = 0
-    for artifact_file in artifacts_dir.glob(f"{run_id}-*.json"):
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+    for artifact_file in artifacts_dir.glob(glob_pattern):
         count += 1
     return count
 
@@ -409,7 +443,15 @@ def _load_proposals_for_run(
     if not proposals_dir.exists():
         return proposals, 0
 
-    for proposal_file in sorted(proposals_dir.glob(f"{run_id}-*.json")):
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty result
+        return proposals, 0
+
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+    for proposal_file in sorted(proposals_dir.glob(glob_pattern)):
         try:
             proposal_data = json.loads(proposal_file.read_text(encoding="utf-8"))
             if isinstance(proposal_data, dict):
@@ -430,7 +472,15 @@ def _scan_external_analysis(
     if not external_analysis_dir.exists():
         return {"count": 0, "status_counts": [], "artifacts": entries}
 
-    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty result
+        return {"count": 0, "status_counts": [], "artifacts": entries}
+
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+    for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
         try:
             artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
             if not isinstance(artifact_data, dict):

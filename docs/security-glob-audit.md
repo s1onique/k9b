@@ -43,20 +43,20 @@ This audit covers glob interpolation usages in `src/k8s_diag_agent/` to identify
 |------|------|---------|------|--------|
 | `ui/api.py` | 392 | `external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")` | MEDIUM | ✅ FIXED - Phase 2 |
 | `ui/api.py` | 419 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | ✅ FIXED - Phase 2 |
-| `ui/server_read_support.py` | 78 | `external_analysis_dir.glob(review_pattern)` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 269 | `drilldowns_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 398 | `artifacts_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 412 | `proposals_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 433 | `external_analysis_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 520 | `drilldowns_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 541 | `drilldowns_dir.glob(f"{run_id}-{label}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 623 | `external_analysis_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 703 | `external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 776 | `external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/server_read_support.py` | 932 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | Add validate_run_id() |
+| `ui/server_read_support.py` | 78 | `external_analysis_dir.glob(review_pattern)` | MEDIUM | ✅ FIXED - Phase 2 (first half) |
+| `ui/server_read_support.py` | 269 | `drilldowns_dir.glob(f"{run_id}-*.json")` | MEDIUM | ✅ FIXED - Phase 2 (first half) |
+| `ui/server_read_support.py` | 398 | `artifacts_dir.glob(f"{run_id}-*.json")` | MEDIUM | ✅ FIXED - Phase 2 (first half) |
+| `ui/server_read_support.py` | 412 | `proposals_dir.glob(f"{run_id}-*.json")` | MEDIUM | ✅ FIXED - Phase 2 (first half) |
+| `ui/server_read_support.py` | 433 | `external_analysis_dir.glob(f"{run_id}-*.json")` | MEDIUM | ✅ FIXED - Phase 2 (first half) |
+| `ui/server_read_support.py` | 520 | `drilldowns_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `ui/server_read_support.py` | 541 | `drilldowns_dir.glob(f"{run_id}-{label}-*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `ui/server_read_support.py` | 623 | `external_analysis_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `ui/server_read_support.py` | 703 | `external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `ui/server_read_support.py` | 776 | `external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `ui/server_read_support.py` | 932 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
 | `ui/notifications.py` | 477 | `notifications_dir.glob("*.json")` | LOW | Constant pattern |
-| `health/summary.py` | TBD | `assessments_dir.glob(f"{run_id}-*-assessment.json")` | MEDIUM | Add validate_run_id() |
-| `health/ui.py` | TBD | `external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json")` | MEDIUM | Add validate_run_id() |
+| `health/summary.py` | TBD | `assessments_dir.glob(f"{run_id}-*-assessment.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
+| `health/ui.py` | TBD | `external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json")` | MEDIUM | Add validate_run_id() - Phase 2 backlog |
 
 ### Constant Patterns (No Action Needed)
 
@@ -101,7 +101,13 @@ These use run_id that was already validated elsewhere:
 
 - [x] `ui/api.py` - `_compute_batch_eligibility()`: ✅ FIXED - validate_run_id() + safe_run_artifact_glob()
 - [x] `ui/api.py` - `_compute_batch_eligibility_from_cache()`: ✅ FIXED - validate_run_id() + validated_run_id dict lookup
-- [ ] `ui/server_read_support.py` - Multiple functions need validate_run_id()
+- [x] `ui/server_read_support.py` (first half): ✅ FIXED - Phase 2 first half complete
+  - `_load_alertmanager_review_artifacts()` (line 78)
+  - `_build_clusters_and_drilldown_availability()` (line 269)
+  - `_count_run_artifacts()` (line 398)
+  - `_load_proposals_for_run()` (line 412)
+  - `_scan_external_analysis()` (line 433)
+- [ ] `ui/server_read_support.py` (second half): Add validate_run_id() + safe_run_artifact_glob()
 - [ ] `health/summary.py` - Add validate_run_id() for assessment lookups
 - [ ] `health/ui.py` - Add validate_run_id() for promotion lookups
 
