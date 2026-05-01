@@ -12,7 +12,13 @@ from pathlib import Path
 import pytest
 
 from k8s_diag_agent.ui.server_read_support import (
+    _build_drilldown_availability_from_review,
+    _build_execution_history,
+    _build_llm_stats_for_run,
+    _build_run_artifact_index,
     _count_run_artifacts,
+    _find_next_check_plan,
+    _find_review_enrichment,
     _load_alertmanager_review_artifacts,
     _load_proposals_for_run,
     _scan_external_analysis,
@@ -287,3 +293,277 @@ class TestBuildClustersAndDrilldownAvailability:
         )
         assert clusters == []
         assert drilldown_availability["available"] == 0
+
+
+class TestBuildDrilldownAvailabilityFromReview:
+    """Tests for _build_drilldown_availability_from_review() security hardening."""
+
+    def test_valid_run_id_builds_availability(self, tmp_path: Path) -> None:
+        """Valid run_id should build drilldown availability."""
+        review_data = {
+            "selected_drilldowns": [
+                {"label": "prod", "context": "production"},
+            ],
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        drilldowns_dir = tmp_path / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+        (drilldowns_dir / "run-test-prod-diagnostic.json").write_text(
+            json.dumps({"timestamp": "2024-01-01T00:00:00Z"}),
+            encoding="utf-8",
+        )
+
+        result = _build_drilldown_availability_from_review(
+            review_data, drilldowns_dir, "run-test"
+        )
+        assert result["available"] == 1
+        assert result["missing"] == 0
+
+    def test_traversal_run_id_returns_empty(self, tmp_path: Path) -> None:
+        """Traversal run_id should return empty result, not raise."""
+        review_data = {
+            "selected_drilldowns": [
+                {"label": "prod", "context": "production"},
+            ],
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        drilldowns_dir = tmp_path / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _build_drilldown_availability_from_review(
+            review_data, drilldowns_dir, "../etc"
+        )
+        assert result["available"] == 0
+        assert result["missing"] == 1
+
+    def test_glob_metachar_run_id_returns_empty(self, tmp_path: Path) -> None:
+        """Glob metacharacter in run_id should return empty result."""
+        review_data = {
+            "selected_drilldowns": [
+                {"label": "prod", "context": "production"},
+            ],
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        drilldowns_dir = tmp_path / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _build_drilldown_availability_from_review(
+            review_data, drilldowns_dir, "run*"
+        )
+        assert result["available"] == 0
+
+    def test_label_traversal_rejected(self, tmp_path: Path) -> None:
+        """Label with traversal pattern should be handled safely."""
+        review_data = {
+            "selected_drilldowns": [
+                {"label": "../etc", "context": "production"},
+            ],
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        drilldowns_dir = tmp_path / "drilldowns"
+        drilldowns_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _build_drilldown_availability_from_review(
+            review_data, drilldowns_dir, "run-test"
+        )
+        # Should not crash, label should be rejected
+        assert result["available"] == 0
+
+
+class TestBuildRunArtifactIndex:
+    """Tests for _build_run_artifact_index() security hardening."""
+
+    def test_valid_run_id_builds_index(self, tmp_path: Path) -> None:
+        """Valid run_id should build artifact index."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-review-enrichment.json").write_text(
+            json.dumps({"purpose": "review-enrichment"}),
+            encoding="utf-8",
+        )
+        (ea_dir / "run-test-next-check-plan.json").write_text(
+            json.dumps({"purpose": "next-check-planning"}),
+            encoding="utf-8",
+        )
+
+        index = _build_run_artifact_index(ea_dir, "run-test")
+        assert index.artifacts_considered == 2
+        assert len(index.review_enrichment) == 1
+        assert len(index.next_check_plan) == 1
+
+    def test_traversal_run_id_returns_empty_index(self, tmp_path: Path) -> None:
+        """Traversal run_id should return empty index, not raise."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        index = _build_run_artifact_index(ea_dir, "../etc")
+        assert index.artifacts_considered == 0
+        assert index.source == "file_scan"
+
+    def test_glob_metachar_run_id_returns_empty_index(self, tmp_path: Path) -> None:
+        """Glob metacharacter in run_id should return empty index."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        index = _build_run_artifact_index(ea_dir, "run*")
+        assert index.artifacts_considered == 0
+
+
+class TestFindReviewEnrichment:
+    """Tests for _find_review_enrichment() security hardening (fallback path)."""
+
+    def test_valid_run_id_finds_enrichment(self, tmp_path: Path) -> None:
+        """Valid run_id should find review enrichment artifact."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-review-enrichment.json").write_text(
+            json.dumps({
+                "purpose": "review-enrichment",
+                "status": "success",
+                "provider": "test-provider",
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_review_enrichment(ea_dir, "run-test")
+        assert result is not None
+        assert result["status"] == "success"
+
+    def test_traversal_run_id_returns_none(self, tmp_path: Path) -> None:
+        """Traversal run_id should return None, not raise."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _find_review_enrichment(ea_dir, "../etc")
+        assert result is None
+
+    def test_glob_metachar_run_id_returns_none(self, tmp_path: Path) -> None:
+        """Glob metacharacter in run_id should return None."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _find_review_enrichment(ea_dir, "run*")
+        assert result is None
+
+
+class TestFindNextCheckPlan:
+    """Tests for _find_next_check_plan() security hardening (fallback path)."""
+
+    def test_valid_run_id_finds_plan(self, tmp_path: Path) -> None:
+        """Valid run_id should find next-check plan artifact."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-next-check-plan.json").write_text(
+            json.dumps({
+                "purpose": "next-check-planning",
+                "status": "success",
+                "payload": {"summary": "test"},
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_next_check_plan(ea_dir, "run-test")
+        assert result is not None
+        assert result["status"] == "success"
+
+    def test_traversal_run_id_returns_none(self, tmp_path: Path) -> None:
+        """Traversal run_id should return None, not raise."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _find_next_check_plan(ea_dir, "../etc")
+        assert result is None
+
+    def test_glob_metachar_run_id_returns_none(self, tmp_path: Path) -> None:
+        """Glob metacharacter in run_id should return None."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        result = _find_next_check_plan(ea_dir, "run*")
+        assert result is None
+
+
+class TestBuildExecutionHistory:
+    """Tests for _build_execution_history() security hardening (fallback path)."""
+
+    def test_valid_run_id_builds_history(self, tmp_path: Path) -> None:
+        """Valid run_id should build execution history."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-next-check-execution-001.json").write_text(
+            json.dumps({
+                "purpose": "next-check-execution",
+                "status": "success",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "payload": {},
+            }),
+            encoding="utf-8",
+        )
+
+        history, telemetry = _build_execution_history(ea_dir, "run-test")
+        assert len(history) == 1
+        assert telemetry["execution_history_source"] == "file_scan"
+
+    def test_traversal_run_id_returns_empty_history(self, tmp_path: Path) -> None:
+        """Traversal run_id should return empty history, not raise."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        history, telemetry = _build_execution_history(ea_dir, "../etc")
+        assert history == []
+        assert telemetry["execution_history_source"] == "file_scan"
+
+    def test_glob_metachar_run_id_returns_empty_history(self, tmp_path: Path) -> None:
+        """Glob metacharacter in run_id should return empty history."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        history, telemetry = _build_execution_history(ea_dir, "run*")
+        assert history == []
+
+
+class TestBuildLlmStatsForRun:
+    """Tests for _build_llm_stats_for_run() security hardening (fallback path)."""
+
+    def test_valid_run_id_builds_stats(self, tmp_path: Path) -> None:
+        """Valid run_id should build LLM stats."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-001.json").write_text(
+            json.dumps({
+                "status": "success",
+                "tool_name": "test-tool",
+                "duration_ms": 100,
+            }),
+            encoding="utf-8",
+        )
+
+        stats = _build_llm_stats_for_run(ea_dir, "run-test")
+        assert stats["totalCalls"] == 1
+        assert stats["successfulCalls"] == 1
+
+    def test_traversal_run_id_returns_empty_stats(self, tmp_path: Path) -> None:
+        """Traversal run_id should return empty stats, not raise."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        stats = _build_llm_stats_for_run(ea_dir, "../etc")
+        assert stats["totalCalls"] == 0
+        assert stats["successfulCalls"] == 0
+
+    def test_glob_metachar_run_id_returns_empty_stats(self, tmp_path: Path) -> None:
+        """Glob metacharacter in run_id should return empty stats."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        stats = _build_llm_stats_for_run(ea_dir, "run*")
+        assert stats["totalCalls"] == 0

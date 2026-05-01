@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
-from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id, validate_safe_path_id
 
 logger = logging.getLogger(__name__)
 
@@ -564,15 +564,30 @@ def _build_drilldown_availability_from_review(
     missing_labels: list[str] = []
     coverage: list[dict[str, object]] = []
 
+    # Validate run_id at function boundary for safe glob construction
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty result
+        return {
+            "total_clusters": total,
+            "available": 0,
+            "missing": total,
+            "missing_clusters": [d.get("label", "unknown") for d in selected_drilldowns if isinstance(d, dict)],
+            "coverage": [],
+        }
+
     # Check which drilldowns have artifacts
     existing_drilldowns = set()
     if drilldowns_dir.exists():
-        for df in drilldowns_dir.glob(f"{run_id}-*.json"):
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+        for df in drilldowns_dir.glob(glob_pattern):
             # Extract cluster label from filename pattern
             df_name = df.stem
             # Pattern: {run_id}-{cluster_label}-...
-            if df_name.startswith(run_id + "-"):
-                cluster_label = df_name[len(run_id) + 1:].split("-")[0]
+            if df_name.startswith(validated_run_id + "-"):
+                cluster_label = df_name[len(validated_run_id) + 1:].split("-")[0]
                 existing_drilldowns.add(cluster_label)
 
     for drilldown in selected_drilldowns:
@@ -586,11 +601,18 @@ def _build_drilldown_availability_from_review(
             available += 1
             timestamp = review_data.get("timestamp")  # Use review timestamp as approximation
             available_flag = True
-            # Find the actual artifact path
+            # Find the actual artifact path - validate label for safe glob construction
             artifact_path = None
-            for df in drilldowns_dir.glob(f"{run_id}-{label}-*.json"):
-                artifact_path = str(df.relative_to(drilldowns_dir.parent))
-                break
+            try:
+                validated_label = validate_safe_path_id(label, "label")
+                # SECURITY: run_id and label validated before glob construction
+                label_glob_pattern = safe_run_artifact_glob(validated_run_id, f"-{validated_label}-*.json")
+                for df in drilldowns_dir.glob(label_glob_pattern):
+                    artifact_path = str(df.relative_to(drilldowns_dir.parent))
+                    break
+            except SecurityError:
+                # Invalid label - cannot safely search
+                artifact_path = None
         else:
             timestamp = None
             artifact_path = None
@@ -670,15 +692,24 @@ def _build_run_artifact_index(
     if not external_analysis_dir.exists():
         return RunArtifactIndex(run_id=run_id, artifacts_considered=0, source="file_scan")
 
-    for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+    # Validate run_id at function boundary for safe glob construction
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return empty index
+        return RunArtifactIndex(run_id=run_id, artifacts_considered=0, source="file_scan")
+
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+    for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
         filename = artifact_file.stem
-        
+
         # CRITICAL: Enforce prefix boundary to prevent run_id collision
         # e.g., run_id="run-2024" should NOT match "run-20240-..."
         # Only match if run_id is followed by "-" or is the entire stem (exact match)
-        if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+        if len(filename) > len(validated_run_id) and filename[len(validated_run_id)] != "-":
             continue
-        
+
         try:
             artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
             if not isinstance(artifact_data, dict):
@@ -749,13 +780,24 @@ def _find_review_enrichment(
         # Fall back to directory scan for backward compatibility
         if not external_analysis_dir.exists():
             return None
+
+        # Validate run_id at function boundary for safe glob construction
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return None
+            return None
+
         artifacts = []
-        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-review-enrichment*.json")):
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-review-enrichment*.json")
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
             try:
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                 if isinstance(artifact_data, dict):
                     purpose = artifact_data.get("purpose")
                     if purpose == "review-enrichment":
+                        artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         artifacts.append(artifact_data)
             except Exception:
                 continue
@@ -822,13 +864,24 @@ def _find_next_check_plan(
         # Fall back to directory scan for backward compatibility
         if not external_analysis_dir.exists():
             return None
+
+        # Validate run_id at function boundary for safe glob construction
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return None
+            return None
+
         plan_artifacts = []
-        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")):
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
             try:
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                 if isinstance(artifact_data, dict):
                     purpose = artifact_data.get("purpose")
                     if purpose == "next-check-planning":
+                        artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         plan_artifacts.append(artifact_data)
             except Exception:
                 continue
@@ -975,15 +1028,24 @@ def _build_execution_history(
         if not external_analysis_dir.exists():
             telemetry["execution_entries_returned"] = 0
             return history, telemetry
+
+        # Validate run_id at function boundary for safe glob construction
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return empty history
+            telemetry["execution_entries_returned"] = 0
+            return history, telemetry
+
         execution_artifacts = []
-        # CRITICAL: Use run_id prefix in glob pattern to avoid matching other runs
-        # e.g., run_id="run-2024" should NOT match "run-20240-..."
+        # SECURITY: run_id validated by validate_run_id() before glob construction
         # The suffix "-next-check-execution*.json" ensures we only match execution artifacts
-        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")):
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution*.json")
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
             filename = artifact_file.stem
             # Enforce prefix boundary to prevent run_id collision
             # e.g., run_id="run-2024" should NOT match "run-20240-..."
-            if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+            if len(filename) > len(validated_run_id) and filename[len(validated_run_id)] != "-":
                 continue
 
             try:
@@ -1121,13 +1183,31 @@ def _build_llm_stats_for_run(
     if artifact_index is not None:
         artifacts = artifact_index.artifacts
     else:
+        # Validate run_id at function boundary for safe glob construction
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            # Invalid run_id - cannot safely search, return empty stats
+            return {
+                "totalCalls": 0,
+                "successfulCalls": 0,
+                "failedCalls": 0,
+                "lastCallTimestamp": None,
+                "p50LatencyMs": None,
+                "p95LatencyMs": None,
+                "p99LatencyMs": None,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            }
+
         # Fall back to directory scan for backward compatibility
-        # CRITICAL: Enforce prefix boundary to prevent run_id collision
-        # e.g., run_id="run-2024" should NOT match "run-20240-..."
         artifacts = []
-        for artifact_file in sorted(external_analysis_dir.glob(f"{run_id}-*.json")):
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
             filename = artifact_file.stem
-            if len(filename) > len(run_id) and filename[len(run_id)] != "-":
+            # Enforce prefix boundary to prevent run_id collision
+            if len(filename) > len(validated_run_id) and filename[len(validated_run_id)] != "-":
                 continue
             try:
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
