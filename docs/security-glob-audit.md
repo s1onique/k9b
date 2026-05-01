@@ -41,8 +41,8 @@ This audit covers glob interpolation usages in `src/k8s_diag_agent/` to identify
 
 | File | Line | Pattern | Risk | Action |
 |------|------|---------|------|--------|
-| `ui/api.py` | 392 | `external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")` | MEDIUM | Add validate_run_id() |
-| `ui/api.py` | 419 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | Add validate_run_id() |
+| `ui/api.py` | 392 | `external_analysis_dir.glob(f"{run_id}-next-check-plan*.json")` | MEDIUM | ✅ FIXED - Phase 2 |
+| `ui/api.py` | 419 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | ✅ FIXED - Phase 2 |
 | `ui/server_read_support.py` | 78 | `external_analysis_dir.glob(review_pattern)` | MEDIUM | Add validate_run_id() |
 | `ui/server_read_support.py` | 269 | `drilldowns_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
 | `ui/server_read_support.py` | 398 | `artifacts_dir.glob(f"{run_id}-*.json")` | MEDIUM | Add validate_run_id() |
@@ -92,10 +92,15 @@ These use run_id that was already validated elsewhere:
 2. **`ui/server.py`** - `_find_candidate_in_all_plan_artifacts()`: Validates run_id, uses `safe_run_artifact_glob()`, returns `(None, None, None)` on `SecurityError`
 3. **`ui/server.py`** - `_find_candidate_in_all_plan_artifacts_from_health_root()`: Validates run_id, uses `safe_run_artifact_glob()`, passes `validated_run_id` to `collect_promoted_queue_entries()`
 
+### Phase 2: Medium-Priority External-Input (ui/api.py batch eligibility)
+
+1. **`ui/api.py`** - `_compute_batch_eligibility()`: Added `validate_run_id()` at boundary, uses `safe_run_artifact_glob()` for both plan and execution globs, returns `(False, 0)` on `SecurityError`
+2. **`ui/api.py`** - `_compute_batch_eligibility_from_cache()`: Added `validate_run_id()` at boundary, uses `validated_run_id` for both `all_plan_data` and `all_execution_indices` dict lookups, returns `(False, 0)` on `SecurityError`
+
 ## Remaining Phase 2 Backlog
 
-- [ ] `ui/api.py` - `_compute_batch_eligibility()`: Add validate_run_id()
-- [ ] `ui/api.py` - `_compute_batch_eligibility_from_cache()`: Add validate_run_id()  
+- [x] `ui/api.py` - `_compute_batch_eligibility()`: ✅ FIXED - validate_run_id() + safe_run_artifact_glob()
+- [x] `ui/api.py` - `_compute_batch_eligibility_from_cache()`: ✅ FIXED - validate_run_id() + validated_run_id dict lookup
 - [ ] `ui/server_read_support.py` - Multiple functions need validate_run_id()
 - [ ] `health/summary.py` - Add validate_run_id() for assessment lookups
 - [ ] `health/ui.py` - Add validate_run_id() for promotion lookups

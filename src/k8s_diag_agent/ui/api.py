@@ -22,6 +22,7 @@ import ijson
 
 from ..datetime_utils import parse_iso_to_utc
 from ..health.freshness import freshness_status
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 
 # Import Alertmanager serializers from extracted module.
 # Re-export for backward compatibility: callers importing from api.py continue to work.
@@ -383,13 +384,22 @@ def _compute_batch_eligibility(
     """
     from typing import cast
 
+    # SECURITY: Validate run_id before using in glob patterns
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return safe fallback
+        return False, 0
+
     external_analysis_dir = run_health_dir / "external-analysis"
 
     # Load next_check_plan for this run
     plan_data: dict[str, object] | None = None
 
     if external_analysis_dir.is_dir():
-        for plan_path in external_analysis_dir.glob(f"{run_id}-next-check-plan*.json"):
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
+        for plan_path in external_analysis_dir.glob(glob_pattern):
             try:
                 raw = json.loads(plan_path.read_text(encoding="utf-8"))
                 if raw.get("purpose") == "next-check-planning":
@@ -416,7 +426,9 @@ def _compute_batch_eligibility(
     # Load already-executed indices
     execution_indices: set[int] = set()
     if external_analysis_dir.is_dir():
-        for exec_path in external_analysis_dir.glob(f"{run_id}-next-check-execution*.json"):
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution*.json")
+        for exec_path in external_analysis_dir.glob(glob_pattern):
             try:
                 raw = json.loads(exec_path.read_text(encoding="utf-8"))
                 if raw.get("purpose") == "next-check-execution":
@@ -484,7 +496,14 @@ def _compute_batch_eligibility_from_cache(
     """
     from typing import cast
 
-    plan_data = all_plan_data.get(run_id)
+    # SECURITY: Validate run_id for consistency even though no glob is used here
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - return safe fallback
+        return False, 0
+
+    plan_data = all_plan_data.get(validated_run_id)
     if not plan_data:
         return False, 0
 
@@ -500,8 +519,8 @@ def _compute_batch_eligibility_from_cache(
     if not candidates_data:
         return False, 0
 
-    # Get pre-loaded execution indices
-    execution_indices = all_execution_indices.get(run_id, set())
+    # Get pre-loaded execution indices (use validated_run_id for dict lookup)
+    execution_indices = all_execution_indices.get(validated_run_id, set())
 
     # Count eligible candidates using the same logic as run_batch_next_checks.py
     eligible_count = 0
