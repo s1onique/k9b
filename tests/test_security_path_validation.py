@@ -618,3 +618,102 @@ class TestHealthSummaryAssessmentGlob:
         # Double dots should be rejected
         summaries = _build_cluster_summaries(assessments_dir, "foo..bar", {})
         assert summaries == []
+
+
+class TestHealthUIPromotionGlob:
+    """Tests for health/ui.py _build_promotions_index() security hardening.
+
+    These tests verify that the promotion artifact glob pattern in _build_promotions_index
+    properly validates run_id before using it in glob patterns.
+    """
+
+    def test_valid_run_id_finds_promotion_artifacts(self, tmp_path: Path) -> None:
+        """Valid run_id should find promotion artifacts."""
+        from k8s_diag_agent.health.ui import _build_promotions_index
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-promotion-0.json").write_text(
+            '{"payload": {"candidateId": "c1", "promotionIndex": 0, "description": "test 1"}}',
+            encoding="utf-8",
+        )
+        (external_analysis_dir / "run-test-next-check-promotion-1.json").write_text(
+            '{"payload": {"candidateId": "c2", "promotionIndex": 1, "description": "test 2"}}',
+            encoding="utf-8",
+        )
+
+        result = _build_promotions_index(external_analysis_dir, "run-test")
+        assert len(result["promotions"]) == 2
+        assert result["total_count"] == 2
+        assert result["run_id"] == "run-test"
+
+    def test_traversal_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Path traversal in run_id should return empty list (safe fallback)."""
+        from k8s_diag_agent.health.ui import _build_promotions_index
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-promotion-0.json").write_text(
+            '{"payload": {"candidateId": "c1", "promotionIndex": 0}}',
+            encoding="utf-8",
+        )
+
+        result = _build_promotions_index(external_analysis_dir, "../etc")
+        assert result["promotions"] == []
+        assert result["total_count"] == 0
+
+    def test_glob_metachar_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Glob metacharacters in run_id should return empty list."""
+        from k8s_diag_agent.health.ui import _build_promotions_index
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-promotion-0.json").write_text(
+            '{"payload": {"candidateId": "c1", "promotionIndex": 0}}',
+            encoding="utf-8",
+        )
+
+        result = _build_promotions_index(external_analysis_dir, "run*")
+        assert result["promotions"] == []
+        assert result["total_count"] == 0
+
+    def test_prefix_collision_is_prevented(self, tmp_path: Path) -> None:
+        """Verify that invalid run_id patterns cannot match other runs' artifacts."""
+        from k8s_diag_agent.health.ui import _build_promotions_index
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-promotion-0.json").write_text(
+            '{"payload": {"candidateId": "c1", "promotionIndex": 0}}',
+            encoding="utf-8",
+        )
+        (external_analysis_dir / "run-other-next-check-promotion-0.json").write_text(
+            '{"payload": {"candidateId": "c99", "promotionIndex": 0}}',
+            encoding="utf-8",
+        )
+
+        result = _build_promotions_index(external_analysis_dir, "run-test")
+        assert len(result["promotions"]) == 1
+        assert result["promotions"][0].get("candidateId") == "c1"
+
+        result = _build_promotions_index(external_analysis_dir, "run/../../etc")
+        assert result["promotions"] == []
+
+    def test_double_dots_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
+        """Double dots in run_id should return empty list."""
+        from k8s_diag_agent.health.ui import _build_promotions_index
+
+        external_analysis_dir = tmp_path / "external-analysis"
+        external_analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        (external_analysis_dir / "run-test-next-check-promotion-0.json").write_text(
+            '{"payload": {"candidateId": "c1", "promotionIndex": 0}}',
+            encoding="utf-8",
+        )
+
+        result = _build_promotions_index(external_analysis_dir, "foo..bar")
+        assert result["promotions"] == []

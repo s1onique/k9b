@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 
 from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from ..external_analysis.config import (
     AutoDrilldownPolicy,
     ExternalAnalysisSettings,
@@ -753,9 +754,23 @@ def _build_promotions_index(
             "version": 1,
         }
 
+    # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - cannot safely search, return safe fallback
+        return {
+            "run_id": run_id,
+            "promotions": [],
+            "total_count": 0,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "version": 1,
+        }
+
     # Scan for promotion artifacts for this run only
     promotion_entries: list[dict[str, object]] = []
-    for artifact_path in external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json"):
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    for artifact_path in external_analysis_dir.glob(safe_run_artifact_glob(validated_run_id, "-next-check-promotion-*.json")):
         try:
             raw = json.loads(artifact_path.read_text(encoding="utf-8"))
         except Exception:

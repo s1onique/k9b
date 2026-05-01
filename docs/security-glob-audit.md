@@ -56,7 +56,7 @@ This audit covers glob interpolation usages in `src/k8s_diag_agent/` to identify
 | `ui/server_read_support.py` | 932 | `external_analysis_dir.glob(f"{run_id}-next-check-execution*.json")` | MEDIUM | ✅ FIXED - Phase 2 (second half) |
 | `health/summary.py` | 319 | `assessments_dir.glob(f"{run_id}-*-assessment.json")` | MEDIUM | ✅ FIXED - Phase 2 slice |
 | `ui/notifications.py` | 477 | `notifications_dir.glob("*.json")` | LOW | Constant pattern |
-| `health/ui.py` | 758 | `external_analysis_dir.glob(f"{run_id}-next-check-promotion-*.json")` | MEDIUM | Phase 2 backlog |
+| `health/ui.py` | 758 | `external_analysis_dir.glob(...)` via safe_run_artifact_glob() | MEDIUM | ✅ FIXED - Phase 2 slice |
 | `ui/server_reads.py` | 654 | `external_analysis_dir.glob(f"{context.run.run_id}-*.json")` | MEDIUM | Phase 2 backlog |
 | `health/ui_diagnostic_pack.py` | 123 | `glob_pattern = f"diagnostic-pack-{run_id}-*.zip"` | MEDIUM | Phase 2 backlog |
 
@@ -120,7 +120,10 @@ These use run_id that was already validated elsewhere:
   - Assessment glob now uses validate_run_id() + safe_run_artifact_glob()
   - Returns empty list on SecurityError (safe fallback)
   - Tests added: TestHealthSummaryAssessmentGlob (5 tests)
-- [ ] `health/ui.py` - Add validate_run_id() for promotion lookups
+- [x] `health/ui.py` - _build_promotions_index(): ✅ FIXED - Phase 2 slice complete
+  - Promotion glob now uses validate_run_id() + safe_run_artifact_glob()
+  - Returns empty promotions list on SecurityError (safe fallback)
+  - Tests added: TestHealthUIPromotionGlob (5 tests)
 - [ ] `ui/server_reads.py` - Add validate_run_id() for artifact count lookups
 - [ ] `health/ui_diagnostic_pack.py` - Add validate_run_id() for diagnostic pack lookups
 
