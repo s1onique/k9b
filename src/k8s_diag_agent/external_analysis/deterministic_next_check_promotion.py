@@ -199,7 +199,9 @@ def collect_promoted_next_check_payloads(
             continue
         try:
             data = json.loads(candidate.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError):
+            # REVIEWED: Non-fatal artifact read fallback in promotion scan.
+            # Silently skip unreadable files - not all files are valid promotion artifacts.
             continue
         
         # OPTIMIZATION: Check run_id in raw data before parsing full artifact
@@ -213,7 +215,9 @@ def collect_promoted_next_check_payloads(
             
         try:
             artifact = ExternalAnalysisArtifact.from_dict(data)
-        except Exception:
+        except (ValueError, TypeError, KeyError):
+            # REVIEWED: Non-fatal artifact deserialization fallback.
+            # Silently skip malformed artifacts - run_id check handles mismatches.
             continue
             
         if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_PROMOTION:

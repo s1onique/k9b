@@ -15,6 +15,8 @@ def artifact_matches_run(artifact: ExternalAnalysisArtifact, run_id: str) -> boo
         return False
     try:
         candidate = Path(str(artifact_path)).name
-    except Exception:
+    except (ValueError, TypeError):
+        # REVIEWED: Non-fatal path extraction fallback.
+        # Silently skip artifacts with invalid path strings.
         return False
     return candidate.startswith(f"{run_id}-")

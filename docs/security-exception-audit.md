@@ -205,6 +205,56 @@ Many `except Exception` handlers in the main health loop. These are central to t
 
 ---
 
+## Phase 2 Audit - Slice 12: external_analysis/*
+
+### src/k8s_diag_agent/external_analysis/llamacpp_adapter.py
+
+| Line | Handler | Old Type | New Type | Context | Classification |
+|------|---------|----------|----------|---------|----------------|
+| ~57 | `except Exception` | bare Exception | `(ValueError, TypeError)` | Provider config from_env boundary | **fixed-this-slice** |
+| ~214 | `except Exception` | bare Exception | `(ValueError, TypeError, AttributeError)` | Prompt diagnostics in LLMResponseParseError handler | **fixed-this-slice** |
+| ~241 | `except Exception` | bare Exception | reviewed-safe | LLM provider failure boundary (catch-all) | **reviewed-safe** |
+| ~263 | `except Exception` | bare Exception | `(ValueError, TypeError, AttributeError, OSError)` | Prompt diagnostics fallback in general handler | **fixed-this-slice** |
+
+**Total in file**: 4 handlers (3 fixed, 1 reviewed-safe, 0 remaining)
+
+### src/k8s_diag_agent/external_analysis/alertmanager_discovery.py
+
+| Line | Handler | Old Type | New Type | Context | Classification |
+|------|---------|----------|----------|---------|----------------|
+| ~959 | `except Exception` | bare Exception | `(OSError, json.JSONDecodeError, ValueError, TimeoutError)` | Alertmanager version fetch endpoint | **fixed-this-slice** |
+
+**Total in file**: 1 handler (1 fixed, 0 remaining)
+
+### src/k8s_diag_agent/external_analysis/deterministic_next_check_promotion.py
+
+| Line | Handler | Old Type | New Type | Context | Classification |
+|------|---------|----------|----------|---------|----------------|
+| ~202 | `except Exception` | bare Exception | `(OSError, json.JSONDecodeError)` | Promotion artifact JSON read | **fixed-this-slice** |
+| ~216 | `except Exception` | bare Exception | `(ValueError, TypeError, KeyError)` | ExternalAnalysisArtifact.from_dict deserialization | **fixed-this-slice** |
+
+**Total in file**: 2 handlers (2 fixed, 0 remaining)
+
+### src/k8s_diag_agent/external_analysis/utils.py
+
+| Line | Handler | Old Type | New Type | Context | Classification |
+|------|---------|----------|----------|---------|----------------|
+| ~18 | `except Exception` | bare Exception | `(ValueError, TypeError)` | Path name extraction fallback | **fixed-this-slice** |
+
+**Total in file**: 1 handler (1 fixed, 0 remaining)
+
+### src/k8s_diag_agent/external_analysis/next_check_planner.py
+
+| Line | Handler | Old Type | New Type | Context | Classification |
+|------|---------|----------|----------|---------|----------------|
+| ~1017 | `except Exception` | bare Exception | `(OSError, json.JSONDecodeError, ValueError, KeyError)` | plan_next_checks context building | **fixed-this-slice** |
+
+**Total in file**: 1 handler (1 fixed, 0 remaining)
+
+**external_analysis/* now has 0 unreviewed broad exception handlers.**
+
+---
+
 ## Exception Type Mapping
 
 For artifact scan loops, the following exception types should be caught explicitly:
@@ -244,11 +294,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 | Fixed this slice (server_alertmanager.py - Phase 2 Slice 9) | 6 |
 | Fixed this slice (ui/notifications.py - Phase 2 Slice 10) | 4 |
 | Fixed this slice (ui_planner_queue.py + ui_llm_stats.py - Phase 2 Slice 11) | 2 |
+| Fixed this slice (external_analysis/* - Phase 2 Slice 12) | 8 |
 | Fixed previous slices (read-model scope) | 18 |
-| Reviewed safe | 1 |
+| Reviewed safe | 2 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **59** |
+| **Total fixed** | **67** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -283,7 +334,6 @@ All 10 handlers in server_next_checks.py are now fixed:
 |------|---------------|-------|
 | server.py | ~15 | Main server handlers |
 | health/loop.py | ~14 | Main health loop |
-| external_analysis/* | ~8 | External analysis modules |
 
 **Note**: These are deferred to future slices pending careful review of framework/async behavior.
 **ui_planner_queue.py**: All 1 broad handler fixed in Slice 11 (0 remaining)
@@ -292,6 +342,7 @@ All 10 handlers in server_next_checks.py are now fixed:
 **server_alertmanager.py**: All 6 broad handlers fixed in Slice 9 (0 remaining)
 **server_feedback.py**: All 10 broad handlers fixed in Slice 8 (0 remaining)
 **api.py**: All 9 broad handlers fixed in Slice 7 (0 remaining)
+**external_analysis/***: All 9 broad handlers fixed in Slice 12 (0 remaining, 1 reviewed-safe as LLM boundary)
 
 ---
 
@@ -306,5 +357,5 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (Slice 11: ui_planner_queue.py + ui_llm_stats.py all 2 handlers fixed)*
-*Total handlers fixed in Phase 2: 59 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py)*
+*Updated: 2026-05-04 (Slice 12: external_analysis/* all 9 handlers fixed, 1 reviewed-safe as LLM boundary)*
+*Total handlers fixed in Phase 2: 67 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/*)*

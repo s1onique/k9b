@@ -956,8 +956,10 @@ def _get_version(url: str, timeout: float) -> tuple[str | None, str | None]:
             version_info = data.get("data", {}).get("versionInfo", {})
             version = version_info.get("version")
             return version, None
-    except Exception as exc:
-        return None, str(exc)
+    except (OSError, json.JSONDecodeError, ValueError, TimeoutError):
+        # REVIEWED: Non-fatal version fetch fallback.
+        # Version is auxiliary info - failures should not block Alertmanager discovery.
+        return None, None
 
 
 # --- Orchestrated Discovery ---

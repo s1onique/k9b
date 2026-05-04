@@ -54,7 +54,10 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 http_intent = True
             except RuntimeError:
                 http_intent = False
-            except Exception as exc:
+            except (ValueError, TypeError) as exc:
+                # REVIEWED: Intentional broad catch for provider config boundary.
+                # Catches config-related value/type errors without leaking internal details.
+                # Behavior: config error is stored and triggers HTTP path with failure artifact.
                 http_intent = True
                 self._http_config_error = exc
         if http_intent:
@@ -211,7 +214,9 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                     exception_type="LLMResponseParseError",
                 )
                 failure_metadata["prompt_diagnostics"] = prompt_diags.to_dict()
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
+                # REVIEWED: Non-fatal diagnostic capture fallback.
+                # Silently skip if prompt diagnostics building fails - core LLM logic proceeds.
                 pass
             # Build skip_reason that is bounded for logging
             skip_reason_bounded = self._bound_skip_reason(str(exc))
@@ -234,6 +239,9 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 skip_reason=str(exc),
             )
         except Exception as exc:  # noqa: BLE001
+            # REVIEWED: Intentional catch-all for LLM provider failure boundary.
+            # Catches provider/client/network errors not covered by specific handlers.
+            # All such failures produce structured failure artifacts with metadata.
             duration_ms = int((time.perf_counter() - start) * 1000)
             # Classify the failure for structured metadata
             failure_class, exc_type = classify_llm_failure(exc)
@@ -260,8 +268,9 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                     failure_class=failure_class.value,
                     exception_type=exc_type,
                 )
-            except Exception:  # noqa: BLE001
-                # Fallback: record full prompt as one section with exact measurement
+            except (ValueError, TypeError, AttributeError, OSError):
+                # REVIEWED: Non-fatal diagnostic fallback.
+                # Build full prompt diagnostics when named section extraction fails.
                 prompt_diags = build_full_prompt_diagnostics(
                     provider="llamacpp",
                     operation="review-enrichment",

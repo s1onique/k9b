@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -1014,7 +1015,9 @@ def plan_next_checks(
         return None
     try:
         context = build_review_enrichment_input(review_path, run_id)
-    except Exception:
+    except (OSError, json.JSONDecodeError, ValueError, KeyError):
+        # REVIEWED: Non-fatal context building fallback.
+        # Silently skip if review artifact cannot be loaded - returns None to caller.
         return None
     evidence_map = _collect_existing_evidence(context)
     selections = context.selections
