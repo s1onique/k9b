@@ -2,6 +2,17 @@
 
 This repository uses GitHub Actions to build and push Docker images to DockerHub.
 
+## Verification Gate
+
+Before any Docker image is built or pushed, the workflow runs `./scripts/verify_all.sh` as a verification gate. This ensures:
+- Python code passes linting (ruff), unit tests, and type checking (mypy)
+- Frontend code passes dependency installation, UI tests, and build
+
+If verification fails:
+- No Docker images are built
+- No images are pushed to DockerHub
+- The workflow exits with failure
+
 ## GitHub Actions Secrets Required
 
 Before the workflow can push images, add these secrets to your GitHub repository:
@@ -28,11 +39,11 @@ To create a DockerHub access token:
 
 | Event | Trigger Condition | Action |
 |-------|-------------------|--------|
-| `pull_request` | PR opened/updated on `main` | Build only (no push) |
-| `push` | Merge to `main` | Build + push |
-| `push` | Push to `release/**` branch | Build + push |
-| `push` | Push version tag `v*` | Build + push |
-| `workflow_dispatch` | Manual trigger from GitHub Actions UI or `gh workflow run` | Build + push |
+| `pull_request` | PR opened/updated on `main` | Build only (no push) - verification gate runs first |
+| `push` | Merge to `main` | Build + push after verification |
+| `push` | Push to `release/**` branch | Build + push after verification |
+| `push` | Push version tag `v*` | Build + push after verification |
+| `workflow_dispatch` | Manual trigger from GitHub Actions UI or `gh workflow run` | Build + push after verification |
 
 ### Manual Runs
 
@@ -67,6 +78,30 @@ Example image tags:
 
 The workflow is defined in `.github/workflows/dockerhub.yml`.
 
+## Workflow Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     dockerhub.yml                          │
+│                                                             │
+│  ┌─────────┐                                                │
+│  │ verify  │ ── runs ./scripts/verify_all.sh ───────────────│
+│  └────┬────┘                                                │
+│       │                                                     │
+│       ├─────────────────┬────────────────────┐               │
+│       ▼                 ▼                    ▼               │
+│  ┌───────────┐    ┌───────────┐   ┌───────────────┐        │
+│  │ build-    │    │ frontend  │   │ (future jobs) │        │
+│  │ push      │    │           │   │               │        │
+│  └───────────┘    └───────────┘   └───────────────┘        │
+│       │                 │                                │
+│       ▼                 ▼                                │
+│  DockerHub push    DockerHub push                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The `verify` job runs first. Both `build-push` and `frontend` jobs depend on `verify` completing successfully before they start. If verification fails, no Docker builds or pushes occur.
+
 ## Platforms
 
 Both images are built for:
@@ -75,6 +110,7 @@ Both images are built for:
 
 ## Security Notes
 
+- **Verification gate runs before any Docker operations** - ensures code quality before shipping
 - Images are **never** pushed from `pull_request` events (untrusted context)
 - Credentials are stored as GitHub Actions secrets, never in code
 - DockerHub login only runs when push is enabled (not on PR builds)
