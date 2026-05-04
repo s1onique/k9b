@@ -378,6 +378,159 @@ class TestBuildLlmStatsExceptionHandling(TestCase):
 
 
 # =============================================================================
+# Tests for health/summary.py exception handlers
+# =============================================================================
+
+from k8s_diag_agent.health.summary import (
+    _load_json,
+    _collect_comparison_summaries,
+)
+
+
+class TestLoadJsonExceptionHandling(TestCase):
+    """Test _load_json handles malformed/unreadable artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_json_returns_empty_dict_with_warning(self) -> None:
+        """Malformed JSON returns empty dict and logs warning."""
+        malformed_file = self.tmpdir / "malformed-assessment.json"
+        malformed_file.write_text("{ invalid json", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.health.summary", level=logging.WARNING) as cm:
+            result = _load_json(malformed_file)
+
+        self.assertEqual(result, {})
+        self.assertTrue(any("Skipped malformed assessment artifact" in msg for msg in cm.output))
+        self.assertTrue(any("malformed-assessment.json" in msg for msg in cm.output))
+
+    def test_unreadable_file_returns_empty_dict_with_warning(self) -> None:
+        """Unreadable file (permission denied) returns empty dict and logs warning."""
+        unreadable_file = self.tmpdir / "unreadable-assessment.json"
+        unreadable_file.write_text('{"valid": "json"}', encoding="utf-8")
+        unreadable_file.chmod(0o000)
+
+        try:
+            with self.assertLogs("k8s_diag_agent.health.summary", level=logging.WARNING) as cm:
+                result = _load_json(unreadable_file)
+
+            self.assertEqual(result, {})
+            self.assertTrue(any("Skipped malformed assessment artifact" in msg for msg in cm.output))
+            self.assertTrue(any("unreadable-assessment.json" in msg for msg in cm.output))
+        finally:
+            unreadable_file.chmod(0o644)
+
+    def test_valid_json_loads_correctly(self) -> None:
+        """Valid JSON loads without warnings."""
+        valid_file = self.tmpdir / "valid-assessment.json"
+        valid_file.write_text(json.dumps({"findings": ["test"]}), encoding="utf-8")
+
+        with self.assertNoLogs("k8s_diag_agent.health.summary", level=logging.WARNING):
+            result = _load_json(valid_file)
+
+        self.assertEqual(result, {"findings": ["test"]})
+
+    def test_non_mapping_json_returns_empty_dict(self) -> None:
+        """JSON that is not a mapping returns empty dict without warning."""
+        array_file = self.tmpdir / "array-assessment.json"
+        array_file.write_text(json.dumps(["not", "a", "mapping"]), encoding="utf-8")
+
+        with self.assertNoLogs("k8s_diag_agent.health.summary", level=logging.WARNING):
+            result = _load_json(array_file)
+
+        self.assertEqual(result, {})
+
+
+class TestCollectComparisonSummariesExceptionHandling(TestCase):
+    """Test _collect_comparison_summaries handles malformed comparison-decisions artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.run_id = "comparison-test-20260501T063733Z"
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_comparison_decisions_returns_empty_list_with_warning(self) -> None:
+        """Malformed comparison-decisions artifact returns empty list and logs warning."""
+        comparison_file = self.tmpdir / f"{self.run_id}-comparison-decisions.json"
+        comparison_file.write_text("{ invalid json", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.health.summary", level=logging.WARNING) as cm:
+            result = _collect_comparison_summaries(self.tmpdir, self.run_id)
+
+        self.assertEqual(result, [])
+        self.assertTrue(
+            any("Skipped malformed comparison-decisions artifact" in msg for msg in cm.output)
+        )
+        self.assertTrue(any(f"{self.run_id}-comparison-decisions.json" in msg for msg in cm.output))
+
+    def test_unreadable_comparison_decisions_returns_empty_list_with_warning(self) -> None:
+        """Unreadable comparison-decisions file returns empty list and logs warning."""
+        comparison_file = self.tmpdir / f"{self.run_id}-comparison-decisions.json"
+        comparison_file.write_text(json.dumps([]), encoding="utf-8")
+        comparison_file.chmod(0o000)
+
+        try:
+            with self.assertLogs("k8s_diag_agent.health.summary", level=logging.WARNING) as cm:
+                result = _collect_comparison_summaries(self.tmpdir, self.run_id)
+
+            self.assertEqual(result, [])
+            self.assertTrue(
+                any("Skipped malformed comparison-decisions artifact" in msg for msg in cm.output)
+            )
+        finally:
+            comparison_file.chmod(0o644)
+
+    def test_valid_comparison_decisions_loads_correctly(self) -> None:
+        """Valid comparison-decisions artifact loads without warnings."""
+        comparison_file = self.tmpdir / f"{self.run_id}-comparison-decisions.json"
+        comparison_file.write_text(
+            json.dumps([
+                {
+                    "primary_label": "cluster-alpha",
+                    "secondary_label": "cluster-beta",
+                    "policy_eligible": True,
+                    "triggered": True,
+                    "comparison_intent": "test",
+                    "reason": "test comparison",
+                }
+            ]),
+            encoding="utf-8",
+        )
+
+        with self.assertNoLogs("k8s_diag_agent.health.summary", level=logging.WARNING):
+            result = _collect_comparison_summaries(self.tmpdir, self.run_id)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].primary_label, "cluster-alpha")
+        self.assertEqual(result[0].secondary_label, "cluster-beta")
+
+    def test_nonexistent_comparison_decisions_returns_empty_list(self) -> None:
+        """Nonexistent comparison-decisions file returns empty list without warning."""
+        with self.assertNoLogs("k8s_diag_agent.health.summary", level=logging.WARNING):
+            result = _collect_comparison_summaries(self.tmpdir, "nonexistent-20260501T063733Z")
+
+        self.assertEqual(result, [])
+
+    def test_non_sequence_comparison_decisions_returns_empty_list(self) -> None:
+        """Non-sequence comparison-decisions returns empty list without warning."""
+        comparison_file = self.tmpdir / f"{self.run_id}-comparison-decisions.json"
+        comparison_file.write_text(json.dumps({"not": "a sequence"}), encoding="utf-8")
+
+        with self.assertNoLogs("k8s_diag_agent.health.summary", level=logging.WARNING):
+            result = _collect_comparison_summaries(self.tmpdir, self.run_id)
+
+        self.assertEqual(result, [])
+
+
+# =============================================================================
 # Tests for health/ui.py exception handlers
 # =============================================================================
 

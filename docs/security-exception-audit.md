@@ -48,10 +48,10 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 | Line | Handler | Context | Classification |
 |------|---------|---------|----------------|
 | 307 | `except Exception: return {}` | JSON parse/read in `_load_history` | **fixed-this-slice** (opportunistic) |
-| 366 | `except Exception: return {}` | JSON parse/read in `_load_json` | needs-follow-up |
-| 537 | `except Exception: return []` | JSON parse/read in `_collect_comparison_summaries` | needs-follow-up |
+| 366 | `except Exception: return {}` | JSON parse/read in `_load_json` | **fixed-this-slice** |
+| 537 | `except Exception: return []` | JSON parse/read in `_collect_comparison_summaries` | **fixed-this-slice** |
 
-**Total in file**: 3 handlers (1 fixed, 2 remaining)
+**Total in file**: 3 handlers (3 fixed, 0 remaining)
 
 ---
 
@@ -87,45 +87,46 @@ except (ValueError, KeyError, TypeError):
 
 | Category | Count |
 |----------|-------|
-| Fixed this slice | 16 |
+| Fixed this slice | 18 |
 | Reviewed safe | 0 |
-| Needs follow-up | 2 |
+| Needs follow-up | 0 |
 | Out of scope | 0 |
 | **Total** | **18** |
 
-### Fixed This Slice (Phase 2 Audit - Slice 3: health/ui.py remaining handlers)
+### Fixed This Slice (Phase 2 Audit - Slice 4: health/summary.py remaining handlers)
 
 | File | Line | Handler | Type | Logging |
 |------|------|---------|------|---------|
-| health/ui.py | 554 | `_collect_review_timestamps` | OSError, json.JSONDecodeError | **yes** |
-| health/ui.py | 594 | `_build_recent_runs_summary` | OSError, json.JSONDecodeError | **yes** |
-| health/ui.py | 776 | `_build_promotions_index` | OSError, json.JSONDecodeError | **yes** |
-| health/ui.py | 862 | `_write_proposal_status_summary_to_review` | OSError | **yes** (write failure) |
+| health/summary.py | 366 | `_load_json` | OSError, json.JSONDecodeError | **yes** |
+| health/summary.py | 537 | `_collect_comparison_summaries` | OSError, json.JSONDecodeError | **yes** |
 
 ### Logging Behavior by Category
 
+- **health/summary.py handlers**: Explicit exceptions `(OSError, json.JSONDecodeError)` + structured `logger.warning(..., exc_info=True)` with artifact metadata
 - **health/ui.py handlers**: Explicit exceptions `(OSError, json.JSONDecodeError)` + structured `logger.warning(..., exc_info=True)` with artifact metadata
 - **health/ui.py write handler**: Explicit `OSError` for write failures + structured `logger.warning(..., exc_info=True)`
 
-### Remaining Backlog (2 handlers)
+### Remaining Backlog (0 handlers)
 
 | File | Count | Lines |
 |------|-------|-------|
 | health/ui.py | 0 | (all fixed) |
-| health/summary.py | 2 | 366, 537 |
+| health/summary.py | 0 | (all fixed) |
+
+**Read-model exception-audit scope: COMPLETE**
 
 ---
 
 ## Next Steps
 
-1. **Immediate**: Continue fixing remaining handlers in health/summary.py (2 handlers)
+1. **Immediate**: Audit remaining exception handlers in other modules (server.py, api.py, etc.)
 2. **Short-term**: Add structured logging infrastructure for artifact scan telemetry
-3. **Medium-term**: Audit remaining exception handlers in other modules (server.py, api.py, etc.)
-4. **Long-term**: Implement comprehensive artifact validation schema
+3. **Medium-term**: Implement comprehensive artifact validation schema
+4. **Long-term**: Add eval coverage for exception handling behavior
 
 ---
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (4 additional handlers fixed in slice 3)*
-*Total handlers fixed in Phase 2: 16*
+*Updated: 2026-05-04 (2 additional handlers fixed in slice 4 - read-model scope complete)*
+*Total handlers fixed in Phase 2: 18*

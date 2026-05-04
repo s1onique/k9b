@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from ..security.path_validation import SecurityError, safe_run_artifact_glob, va
 from .adaptation import HealthProposal, ProposalLifecycleStatus
 from .proposal_lifecycle_events import derive_current_proposal_status
 from .utils import normalize_ref
+
+logger = logging.getLogger(__name__)
 
 _ASSESSMENT_PATTERN = re.compile(r"(?P<run_id>.+-\d{8}T\d{6}Z)-(?P<label>.+)-assessment\.json$")
 _TIMESTAMP_LENGTH = 16  # YYYYMMDDTHHMMSSZ
@@ -363,7 +366,8 @@ def _build_cluster_summaries(
 def _load_json(path: Path) -> Mapping[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Skipped malformed assessment artifact: %s", path.name, exc_info=True)
         return {}
     if isinstance(raw, Mapping):
         return raw
@@ -534,7 +538,10 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> list[ComparisonSum
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "Skipped malformed comparison-decisions artifact: %s", path.name, exc_info=True
+        )
         return []
     if not isinstance(raw, Sequence):
         return []
