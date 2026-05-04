@@ -222,7 +222,7 @@ def create_diagnostic_pack_review(
     base_dir = Path(tempfile.mkdtemp(prefix="diagnostic-pack-review-") if temporarily_extract_to is None else temporarily_extract_to)
     try:
         run_health_dir = extract_diagnostic_pack(pack_path, base_dir)
-        manifest = load_manifest(run_health_dir)
+        _manifest = load_manifest(run_health_dir)
         summary_text = load_summary(run_health_dir)
         ui_index = load_ui_index(run_health_dir)
         context = build_ui_context(ui_index)

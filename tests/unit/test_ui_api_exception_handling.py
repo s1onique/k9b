@@ -7,13 +7,14 @@ handle exceptions explicitly rather than using broad `except Exception` catches.
 import json
 import logging
 import tempfile
+import time
 from pathlib import Path
 from unittest import TestCase
 
 from k8s_diag_agent.ui.api import (
+    _build_runs_list_review_streaming,
     _compute_batch_eligibility,
     _extract_review_metadata_streaming,
-    _build_runs_list_review_streaming,
 )
 
 
@@ -196,7 +197,6 @@ class TestBuildRunsListReviewStreamingExceptionHandling(TestCase):
         malformed_review.write_text("{ malformed json", encoding="utf-8")
 
         timings = {}
-        import time
         start_time = time.perf_counter()
 
         with self.assertLogs("k8s_diag_agent.ui.api", level=logging.WARNING) as cm:
@@ -224,7 +224,6 @@ class TestBuildRunsListReviewStreamingExceptionHandling(TestCase):
             }), encoding="utf-8")
 
         timings = {}
-        import time
         start_time = time.perf_counter()
 
         with self.assertNoLogs("k8s_diag_agent.ui.api", level=logging.WARNING):

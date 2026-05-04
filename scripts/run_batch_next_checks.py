@@ -24,7 +24,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = ROOT / "src"

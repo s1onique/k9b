@@ -12,16 +12,25 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase
 
+from k8s_diag_agent.health.summary import (
+    _collect_comparison_summaries,
+    _load_json,
+)
+from k8s_diag_agent.health.ui import (
+    _build_promotions_index,
+    _build_recent_runs_summary,
+    _collect_review_timestamps,
+    _write_proposal_status_summary_to_review,
+)
 from k8s_diag_agent.ui.server_read_support import (
-    _load_proposals_for_run,
-    _load_notifications_for_run,
-    _scan_external_analysis,
-    _build_run_artifact_index,
-    _find_review_enrichment,
-    _find_next_check_plan,
     _build_execution_history,
     _build_llm_stats_for_run,
-    RunArtifactIndex,
+    _build_run_artifact_index,
+    _find_next_check_plan,
+    _find_review_enrichment,
+    _load_notifications_for_run,
+    _load_proposals_for_run,
+    _scan_external_analysis,
 )
 
 
@@ -376,15 +385,9 @@ class TestBuildLlmStatsExceptionHandling(TestCase):
         self.assertEqual(stats["totalCalls"], 2)
         self.assertEqual(stats["successfulCalls"], 2)
 
-
 # =============================================================================
 # Tests for health/summary.py exception handlers
 # =============================================================================
-
-from k8s_diag_agent.health.summary import (
-    _load_json,
-    _collect_comparison_summaries,
-)
 
 
 class TestLoadJsonExceptionHandling(TestCase):
@@ -533,13 +536,6 @@ class TestCollectComparisonSummariesExceptionHandling(TestCase):
 # =============================================================================
 # Tests for health/ui.py exception handlers
 # =============================================================================
-
-from k8s_diag_agent.health.ui import (
-    _build_promotions_index,
-    _build_recent_runs_summary,
-    _collect_review_timestamps,
-    _write_proposal_status_summary_to_review,
-)
 
 
 class TestCollectReviewTimestampsExceptionHandling(TestCase):

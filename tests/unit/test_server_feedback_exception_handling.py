@@ -9,7 +9,6 @@ Tests cover:
 """
 
 import json
-import logging
 import shutil
 import tempfile
 import unittest
@@ -198,7 +197,7 @@ class TestArtifactReadErrors(unittest.TestCase):
         # Logger should have safe metadata (relative paths, no absolute)
         mock_logger.error.assert_called()
         call_args = mock_logger.error.call_args
-        log_msg = call_args[0][0]
+        _log_msg = call_args[0][0]
         extra = call_args[1]["extra"]
         self.assertIn("artifact_rel", extra)
         self.assertIn("run_id", extra)
