@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from k8s_diag_agent.security.subprocess_helpers import (
     _safe_command_summary,
     _stderr_tail,

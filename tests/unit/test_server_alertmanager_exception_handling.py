@@ -11,7 +11,6 @@ These tests verify that:
 
 import functools
 import json
-import logging
 import shutil
 import tempfile
 import threading
@@ -22,7 +21,6 @@ from datetime import UTC, datetime
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
-from unittest.mock import ANY
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,

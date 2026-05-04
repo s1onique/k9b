@@ -865,7 +865,7 @@ def _write_proposal_status_summary_to_review(
 
         # Write back preserving original formatting (compact write)
         review_path.write_text(json.dumps(review_data, ensure_ascii=False), encoding="utf-8")
-    except OSError as e:
+    except OSError:
         # Non-fatal: if we can't write the summary, past runs will still work
         # by falling back to the directory scan path
         logger.warning("Failed to write proposal status summary to review: %s", review_path.name, exc_info=True)

@@ -622,7 +622,6 @@ def _process_entry(
                 continue
 
     # Generate unique review artifact filename and artifact_id (single source of truth)
-    import uuid
     review_uuid = str(uuid.uuid4())[:8]
     review_filename = f"{run_id}-next-check-execution-usefulness-review-{review_uuid}.json"
 

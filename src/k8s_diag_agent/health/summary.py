@@ -366,7 +366,7 @@ def _build_cluster_summaries(
 def _load_json(path: Path) -> Mapping[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError):
         logger.warning("Skipped malformed assessment artifact: %s", path.name, exc_info=True)
         return {}
     if isinstance(raw, Mapping):
@@ -538,7 +538,7 @@ def _collect_comparison_summaries(root: Path, run_id: str) -> list[ComparisonSum
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError):
         logger.warning(
             "Skipped malformed comparison-decisions artifact: %s", path.name, exc_info=True
         )

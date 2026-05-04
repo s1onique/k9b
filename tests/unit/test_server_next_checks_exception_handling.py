@@ -149,6 +149,7 @@ class TestUiIndexNestedExceptionHandler(unittest.TestCase):
         and logs `str(touch_exc)`.
         """
         import inspect
+
         from k8s_diag_agent.ui import server_next_checks
 
         source = inspect.getsource(server_next_checks.handle_next_check_execution)
@@ -172,6 +173,7 @@ class TestUiIndexNestedExceptionHandler(unittest.TestCase):
     def test_touch_handler_has_exc_info(self) -> None:
         """Verify touch failure handler includes exc_info=True for debugging."""
         import inspect
+
         from k8s_diag_agent.ui import server_next_checks
 
         source = inspect.getsource(server_next_checks.handle_next_check_execution)
@@ -182,6 +184,7 @@ class TestUiIndexNestedExceptionHandler(unittest.TestCase):
     def test_outer_ui_index_handler_has_exc_info(self) -> None:
         """Verify outer ui-index write handler includes exc_info=True."""
         import inspect
+
         from k8s_diag_agent.ui import server_next_checks
 
         source = inspect.getsource(server_next_checks.handle_next_check_execution)
