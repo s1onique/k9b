@@ -23,13 +23,13 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 | 459 | `except Exception: continue` | JSON parse/read for proposals in `_load_proposals_for_run` | **fixed-this-slice** |
 | 510 | `except Exception: continue` | JSON parse/read for external analysis scan | **fixed-this-slice** |
 | 548 | `except Exception: continue` | JSON parse/read for notifications | **fixed-this-slice** |
-| 744 | `except Exception: continue` | JSON parse/read in `_build_run_artifact_index` | needs-follow-up |
-| 802 | `except Exception: continue` | JSON parse/read for review enrichment fallback | needs-follow-up |
-| 886 | `except Exception: continue` | JSON parse/read for next-check plan | needs-follow-up |
-| 1059 | `except Exception: continue` | JSON parse/read for execution artifacts | needs-follow-up |
-| 1216 | `except Exception: continue` | JSON parse/read for LLM stats | needs-follow-up |
+| 799 | `except Exception: continue` | JSON parse/read in `_build_run_artifact_index` | **fixed-this-slice** |
+| 868 | `except Exception: continue` | JSON parse/read for review enrichment fallback | **fixed-this-slice** |
+| 963 | `except Exception: continue` | JSON parse/read for next-check plan | **fixed-this-slice** |
+| 1147 | `except Exception: continue` | JSON parse/read for execution artifacts | **fixed-this-slice** |
+| 1315 | `except Exception: continue` | JSON parse/read for LLM stats | **fixed-this-slice** |
 
-**Total in file**: 10 handlers (5 fixed, 5 remaining)
+**Total in file**: 10 handlers (10 fixed, 0 remaining)
 
 ### src/k8s_diag_agent/health/ui.py
 
@@ -71,7 +71,7 @@ except (json.JSONDecodeError, ValueError):
     continue
 
 # Combined for artifact loops
-except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+except (OSError, json.JSONDecodeError):
     continue
 ```
 
@@ -87,13 +87,13 @@ except (ValueError, KeyError, TypeError):
 
 | Category | Count |
 |----------|-------|
-| Fixed this slice | 7 |
+| Fixed this slice | 12 |
 | Reviewed safe | 0 |
-| Needs follow-up | 11 |
+| Needs follow-up | 6 |
 | Out of scope | 0 |
 | **Total** | **18** |
 
-### Fixed This Slice (Phase 2 Audit - Read-Model Artifact Paths)
+### Fixed This Slice (Phase 2 Audit - Read-Model Artifact Paths - Slice 2)
 
 | File | Line | Handler | Type | Logging |
 |------|------|---------|------|---------|
@@ -102,6 +102,11 @@ except (ValueError, KeyError, TypeError):
 | server_read_support.py | 459 | `_load_proposals_for_run` | OSError, json.JSONDecodeError | **yes** |
 | server_read_support.py | 510 | `_scan_external_analysis` | OSError, json.JSONDecodeError | **yes** |
 | server_read_support.py | 548 | `_load_notifications_for_run` | OSError, json.JSONDecodeError | **yes** |
+| server_read_support.py | 799 | `_build_run_artifact_index` | OSError, json.JSONDecodeError | **yes** |
+| server_read_support.py | 868 | `_find_review_enrichment` | OSError, json.JSONDecodeError | **yes** |
+| server_read_support.py | 963 | `_find_next_check_plan` | OSError, json.JSONDecodeError | **yes** |
+| server_read_support.py | 1147 | `_build_execution_history` | OSError, json.JSONDecodeError | **yes** |
+| server_read_support.py | 1315 | `_build_llm_stats_for_run` | OSError, json.JSONDecodeError | **yes** |
 | health/ui.py | 335 | `_serialize_review_enrichment` | ValueError, KeyError, TypeError | no (from_dict shape) |
 | health/summary.py | 307 | `_load_history` | OSError, json.JSONDecodeError | no (opportunistic) |
 
@@ -111,11 +116,11 @@ except (ValueError, KeyError, TypeError):
 - **health/ui.py handler**: Explicit exceptions `(ValueError, KeyError, TypeError)` for `from_dict()` shape errors, no warning (payload conversion is expected to fail on malformed data)
 - **health/summary.py handler**: Explicit exceptions `(OSError, json.JSONDecodeError)` for `_load_history`, no warning (opportunistic narrowing, not part of primary artifact scan loop)
 
-### Remaining Backlog (11 handlers)
+### Remaining Backlog (6 handlers)
 
 | File | Count | Lines |
 |------|-------|-------|
-| server_read_support.py | 5 | 744, 802, 886, 1059, 1216 |
+| server_read_support.py | 0 | (all fixed) |
 | health/ui.py | 4 | 554, 594, 776, 862 |
 | health/summary.py | 2 | 366, 537 |
 
@@ -123,13 +128,14 @@ except (ValueError, KeyError, TypeError):
 
 ## Next Steps
 
-1. **Immediate**: Continue fixing remaining server_read_support.py handlers
-2. **Short-term**: Fix remaining handlers in health/ui.py and health/summary.py
+1. **Immediate**: Continue fixing remaining handlers in health/ui.py and health/summary.py
+2. **Short-term**: Add structured logging infrastructure for artifact scan telemetry
 3. **Medium-term**: Audit remaining exception handlers in other modules (server.py, api.py, etc.)
-4. **Long-term**: Add structured logging infrastructure for artifact scan telemetry
+4. **Long-term**: Implement comprehensive artifact validation schema
 
 ---
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-01-05 (6 handlers fixed in this slice)*
+*Updated: 2026-01-05 (10 additional handlers fixed in slice 2)*
+*Total handlers fixed in Phase 2: 12*

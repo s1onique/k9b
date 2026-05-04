@@ -796,7 +796,18 @@ def _build_run_artifact_index(
                         alertmanager_reviews_by_source[source_artifact] = artifact_data
             # Other artifact types are kept in artifacts list but not indexed by purpose
 
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Skipped malformed artifact in index scan: %s",
+                artifact_file.name,
+                extra={
+                    "run_id": run_id,
+                    "artifact_kind": "external-analysis",
+                    "scan_name": "_build_run_artifact_index",
+                    "error": str(exc),
+                },
+                exc_info=True,
+            )
             continue
 
     return RunArtifactIndex(
@@ -854,7 +865,18 @@ def _find_review_enrichment(
                     if purpose == "review-enrichment":
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         artifacts.append(artifact_data)
-            except Exception:
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(
+                    "Skipped malformed review-enrichment artifact: %s",
+                    artifact_file.name,
+                    extra={
+                        "run_id": run_id,
+                        "artifact_kind": "review-enrichment",
+                        "scan_name": "_find_review_enrichment",
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
                 continue
 
     if not artifacts:
@@ -938,7 +960,18 @@ def _find_next_check_plan(
                     if purpose == "next-check-planning":
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         plan_artifacts.append(artifact_data)
-            except Exception:
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(
+                    "Skipped malformed next-check-plan artifact: %s",
+                    artifact_file.name,
+                    extra={
+                        "run_id": run_id,
+                        "artifact_kind": "next-check-plan",
+                        "scan_name": "_find_next_check_plan",
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
                 continue
 
     if not plan_artifacts:
@@ -1111,7 +1144,18 @@ def _build_execution_history(
                         # Add artifact_path for reference
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         execution_artifacts.append(artifact_data)
-            except Exception:
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(
+                    "Skipped malformed next-check-execution artifact: %s",
+                    artifact_file.name,
+                    extra={
+                        "run_id": run_id,
+                        "artifact_kind": "next-check-execution",
+                        "scan_name": "_build_execution_history",
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
                 continue
 
     for artifact_data in execution_artifacts:
@@ -1268,7 +1312,18 @@ def _build_llm_stats_for_run(
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                 if isinstance(artifact_data, dict):
                     artifacts.append(artifact_data)
-            except Exception:
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(
+                    "Skipped malformed artifact in llm_stats scan: %s",
+                    artifact_file.name,
+                    extra={
+                        "run_id": run_id,
+                        "artifact_kind": "external-analysis",
+                        "scan_name": "_build_llm_stats_for_run",
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
                 continue
 
     for artifact_data in artifacts:

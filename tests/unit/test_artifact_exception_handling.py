@@ -16,6 +16,12 @@ from k8s_diag_agent.ui.server_read_support import (
     _load_proposals_for_run,
     _load_notifications_for_run,
     _scan_external_analysis,
+    _build_run_artifact_index,
+    _find_review_enrichment,
+    _find_next_check_plan,
+    _build_execution_history,
+    _build_llm_stats_for_run,
+    RunArtifactIndex,
 )
 
 
@@ -150,3 +156,222 @@ class TestArtifactExceptionHandling(TestCase):
 
         self.assertEqual(count, 3)
         self.assertEqual(len(proposals), 3)
+
+
+class TestBuildRunArtifactIndexExceptionHandling(TestCase):
+    """Test _build_run_artifact_index handles malformed artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.run_id = "health-run-20260501T063733Z"
+        self.external_analysis_dir = self.tmpdir / "external-analysis"
+        self.external_analysis_dir.mkdir()
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_json_in_index_scan_is_skipped_with_warning(self) -> None:
+        """Malformed JSON in _build_run_artifact_index is skipped with warning."""
+        # Write valid artifact
+        valid_artifact = self.external_analysis_dir / f"{self.run_id}-review-enrichment-1.json"
+        valid_artifact.write_text(
+            json.dumps({"purpose": "review-enrichment", "status": "success"}),
+            encoding="utf-8",
+        )
+
+        # Write malformed JSON
+        malformed_artifact = self.external_analysis_dir / f"{self.run_id}-review-enrichment-2.json"
+        malformed_artifact.write_text("{ malformed", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+            index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        # Should have indexed 1 valid artifact
+        self.assertEqual(len(index.review_enrichment), 1)
+
+        # Should have logged a warning for the malformed artifact
+        self.assertTrue(any("Skipped malformed artifact in index scan" in msg for msg in cm.output))
+        self.assertTrue(any("review-enrichment-2.json" in msg for msg in cm.output))
+
+    def test_valid_artifacts_in_index_load_correctly(self) -> None:
+        """Valid artifacts in _build_run_artifact_index load correctly."""
+        # Write valid artifacts
+        for i in range(2):
+            artifact = self.external_analysis_dir / f"{self.run_id}-review-enrichment-{i}.json"
+            artifact.write_text(
+                json.dumps({"purpose": "review-enrichment", "status": "success"}),
+                encoding="utf-8",
+            )
+
+        with self.assertNoLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING):
+            index = _build_run_artifact_index(self.external_analysis_dir, self.run_id)
+
+        self.assertEqual(len(index.review_enrichment), 2)
+
+
+class TestFindReviewEnrichmentExceptionHandling(TestCase):
+    """Test _find_review_enrichment handles malformed artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.run_id = "health-run-20260501T063733Z"
+        self.external_analysis_dir = self.tmpdir / "external-analysis"
+        self.external_analysis_dir.mkdir()
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_json_in_review_enrichment_scan_is_skipped(self) -> None:
+        """Malformed JSON in _find_review_enrichment fallback scan is skipped with warning."""
+        # Write valid artifact
+        valid_artifact = self.external_analysis_dir / f"{self.run_id}-review-enrichment-1.json"
+        valid_artifact.write_text(
+            json.dumps({"purpose": "review-enrichment", "status": "success"}),
+            encoding="utf-8",
+        )
+
+        # Write malformed JSON
+        malformed_artifact = self.external_analysis_dir / f"{self.run_id}-review-enrichment-2.json"
+        malformed_artifact.write_text("{ malformed", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+            result = _find_review_enrichment(self.external_analysis_dir, self.run_id)
+
+        # Should have found the valid artifact
+        self.assertIsNotNone(result)
+        self.assertEqual(result.get("status"), "success")
+
+        # Should have logged a warning for the malformed artifact
+        self.assertTrue(any("Skipped malformed review-enrichment artifact" in msg for msg in cm.output))
+        self.assertTrue(any("review-enrichment-2.json" in msg for msg in cm.output))
+
+
+class TestFindNextCheckPlanExceptionHandling(TestCase):
+    """Test _find_next_check_plan handles malformed artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.run_id = "health-run-20260501T063733Z"
+        self.external_analysis_dir = self.tmpdir / "external-analysis"
+        self.external_analysis_dir.mkdir()
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_json_in_next_check_plan_scan_is_skipped(self) -> None:
+        """Malformed JSON in _find_next_check_plan fallback scan is skipped with warning."""
+        # Write valid artifact
+        valid_artifact = self.external_analysis_dir / f"{self.run_id}-next-check-plan-1.json"
+        valid_artifact.write_text(
+            json.dumps({"purpose": "next-check-planning", "status": "success"}),
+            encoding="utf-8",
+        )
+
+        # Write malformed JSON
+        malformed_artifact = self.external_analysis_dir / f"{self.run_id}-next-check-plan-2.json"
+        malformed_artifact.write_text("{ malformed", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+            result = _find_next_check_plan(self.external_analysis_dir, self.run_id)
+
+        # Should have found the valid artifact
+        self.assertIsNotNone(result)
+        self.assertEqual(result.get("status"), "success")
+
+        # Should have logged a warning for the malformed artifact
+        self.assertTrue(any("Skipped malformed next-check-plan artifact" in msg for msg in cm.output))
+        self.assertTrue(any("next-check-plan-2.json" in msg for msg in cm.output))
+
+
+class TestBuildExecutionHistoryExceptionHandling(TestCase):
+    """Test _build_execution_history handles malformed artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.run_id = "health-run-20260501T063733Z"
+        self.external_analysis_dir = self.tmpdir / "external-analysis"
+        self.external_analysis_dir.mkdir()
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_json_in_execution_history_scan_is_skipped(self) -> None:
+        """Malformed JSON in _build_execution_history fallback scan is skipped with warning."""
+        # Write valid artifact
+        valid_artifact = self.external_analysis_dir / f"{self.run_id}-next-check-execution-1.json"
+        valid_artifact.write_text(
+            json.dumps({"purpose": "next-check-execution", "status": "success"}),
+            encoding="utf-8",
+        )
+
+        # Write malformed JSON
+        malformed_artifact = self.external_analysis_dir / f"{self.run_id}-next-check-execution-2.json"
+        malformed_artifact.write_text("{ malformed", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+            history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id)
+
+        # Should have found 1 valid execution entry
+        self.assertEqual(len(history), 1)
+
+        # Should have logged a warning for the malformed artifact
+        self.assertTrue(any("Skipped malformed next-check-execution artifact" in msg for msg in cm.output))
+        self.assertTrue(any("next-check-execution-2.json" in msg for msg in cm.output))
+
+
+class TestBuildLlmStatsExceptionHandling(TestCase):
+    """Test _build_llm_stats_for_run handles malformed artifacts gracefully."""
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.run_id = "health-run-20260501T063733Z"
+        self.external_analysis_dir = self.tmpdir / "external-analysis"
+        self.external_analysis_dir.mkdir()
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_malformed_json_in_llm_stats_scan_is_skipped(self) -> None:
+        """Malformed JSON in _build_llm_stats_for_run fallback scan is skipped with warning."""
+        # Write valid artifact
+        valid_artifact = self.external_analysis_dir / f"{self.run_id}-drilldown-1.json"
+        valid_artifact.write_text(
+            json.dumps({"status": "success", "run_id": self.run_id}),
+            encoding="utf-8",
+        )
+
+        # Write malformed JSON
+        malformed_artifact = self.external_analysis_dir / f"{self.run_id}-drilldown-2.json"
+        malformed_artifact.write_text("{ malformed", encoding="utf-8")
+
+        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+            stats = _build_llm_stats_for_run(self.external_analysis_dir, self.run_id)
+
+        # Should have counted 1 valid artifact
+        self.assertEqual(stats["totalCalls"], 1)
+        self.assertEqual(stats["successfulCalls"], 1)
+
+        # Should have logged a warning for the malformed artifact
+        self.assertTrue(any("Skipped malformed artifact in llm_stats scan" in msg for msg in cm.output))
+        self.assertTrue(any("drilldown-2.json" in msg for msg in cm.output))
+
+    def test_valid_artifacts_in_llm_stats_load_correctly(self) -> None:
+        """Valid artifacts in _build_llm_stats_for_run load correctly."""
+        # Write valid artifacts
+        for i in range(2):
+            artifact = self.external_analysis_dir / f"{self.run_id}-drilldown-{i}.json"
+            artifact.write_text(
+                json.dumps({"status": "success", "run_id": self.run_id}),
+                encoding="utf-8",
+            )
+
+        with self.assertNoLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING):
+            stats = _build_llm_stats_for_run(self.external_analysis_dir, self.run_id)
+
+        self.assertEqual(stats["totalCalls"], 2)
+        self.assertEqual(stats["successfulCalls"], 2)
