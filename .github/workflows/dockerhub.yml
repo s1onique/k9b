@@ -15,7 +15,7 @@ on:
 env:
   # Configurable DockerHub namespace and image names
   DOCKERHUB_NAMESPACE: gitinsky
-  BACKEND_IMAGE_NAME: k9b-python
+  BACKEND_IMAGE_NAME: k9b-backend
   FRONTEND_IMAGE_NAME: k9b-frontend
 
 jobs:
