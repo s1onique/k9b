@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -71,6 +72,8 @@ from .ui_serialization import (
     _stringify_notification_value,
 )
 from .ui_shared import _relative_path
+
+logger = logging.getLogger(__name__)
 
 # Re-export: required by test_health_ui.py
 __all__ = ["_classify_deterministic_next_check"]
@@ -551,7 +554,8 @@ def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
     for path in reviews_dir.glob("*-review.json"):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Skipped malformed review timestamp artifact: %s", path.name, exc_info=True)
             continue
         run_id = raw.get("run_id")
         timestamp = raw.get("timestamp")
@@ -591,7 +595,8 @@ def _build_recent_runs_summary(reviews_dir: Path, max_runs: int = 500) -> dict[s
     for path in reviews_dir.glob("*-review.json"):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Skipped malformed recent-run artifact: %s", path.name, exc_info=True)
             continue
 
         run_id = raw.get("run_id")
@@ -773,7 +778,8 @@ def _build_promotions_index(
     for artifact_path in external_analysis_dir.glob(safe_run_artifact_glob(validated_run_id, "-next-check-promotion-*.json")):
         try:
             raw = json.loads(artifact_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Skipped malformed promotion artifact: %s", artifact_path.name, exc_info=True)
             continue
 
         # Extract payload for queue entry reconstruction
@@ -859,7 +865,7 @@ def _write_proposal_status_summary_to_review(
 
         # Write back preserving original formatting (compact write)
         review_path.write_text(json.dumps(review_data, ensure_ascii=False), encoding="utf-8")
-    except Exception:
+    except OSError as e:
         # Non-fatal: if we can't write the summary, past runs will still work
         # by falling back to the directory scan path
-        pass
+        logger.warning("Failed to write proposal status summary to review: %s", review_path.name, exc_info=True)

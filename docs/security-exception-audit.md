@@ -36,12 +36,12 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 | Line | Handler | Context | Classification |
 |------|---------|---------|----------------|
 | 335 | `except Exception: continue` | `ExternalAnalysisArtifact.from_dict()` in `_serialize_review_enrichment` | **fixed-this-slice** |
-| 554 | `except Exception: continue` | JSON parse/read for review timestamps in `_collect_review_timestamps` | needs-follow-up |
-| 594 | `except Exception: continue` | JSON parse/read for recent runs summary in `_build_recent_runs_summary` | needs-follow-up |
-| 776 | `except Exception: continue` | JSON parse/read for promotions in `_build_promotions_index` | needs-follow-up |
-| 862 | `except Exception: pass` | `write_text` in `_write_proposal_status_summary_to_review` | needs-follow-up |
+| 554 | `except Exception: continue` | JSON parse/read for review timestamps in `_collect_review_timestamps` | **fixed-this-slice** |
+| 594 | `except Exception: continue` | JSON parse/read for recent runs summary in `_build_recent_runs_summary` | **fixed-this-slice** |
+| 776 | `except Exception: continue` | JSON parse/read for promotions in `_build_promotions_index` | **fixed-this-slice** |
+| 862 | `except Exception: pass` | `write_text` in `_write_proposal_status_summary_to_review` | **fixed-this-slice** |
 
-**Total in file**: 5 handlers (1 fixed, 4 remaining)
+**Total in file**: 5 handlers (5 fixed, 0 remaining)
 
 ### src/k8s_diag_agent/health/summary.py
 
@@ -87,48 +87,38 @@ except (ValueError, KeyError, TypeError):
 
 | Category | Count |
 |----------|-------|
-| Fixed this slice | 12 |
+| Fixed this slice | 16 |
 | Reviewed safe | 0 |
-| Needs follow-up | 6 |
+| Needs follow-up | 2 |
 | Out of scope | 0 |
 | **Total** | **18** |
 
-### Fixed This Slice (Phase 2 Audit - Read-Model Artifact Paths - Slice 2)
+### Fixed This Slice (Phase 2 Audit - Slice 3: health/ui.py remaining handlers)
 
 | File | Line | Handler | Type | Logging |
 |------|------|---------|------|---------|
-| server_read_support.py | 115 | `_load_alertmanager_review_artifacts` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 338 | `_build_clusters_and_drilldown_availability` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 459 | `_load_proposals_for_run` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 510 | `_scan_external_analysis` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 548 | `_load_notifications_for_run` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 799 | `_build_run_artifact_index` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 868 | `_find_review_enrichment` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 963 | `_find_next_check_plan` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 1147 | `_build_execution_history` | OSError, json.JSONDecodeError | **yes** |
-| server_read_support.py | 1315 | `_build_llm_stats_for_run` | OSError, json.JSONDecodeError | **yes** |
-| health/ui.py | 335 | `_serialize_review_enrichment` | ValueError, KeyError, TypeError | no (from_dict shape) |
-| health/summary.py | 307 | `_load_history` | OSError, json.JSONDecodeError | no (opportunistic) |
+| health/ui.py | 554 | `_collect_review_timestamps` | OSError, json.JSONDecodeError | **yes** |
+| health/ui.py | 594 | `_build_recent_runs_summary` | OSError, json.JSONDecodeError | **yes** |
+| health/ui.py | 776 | `_build_promotions_index` | OSError, json.JSONDecodeError | **yes** |
+| health/ui.py | 862 | `_write_proposal_status_summary_to_review` | OSError | **yes** (write failure) |
 
 ### Logging Behavior by Category
 
-- **server_read_support.py handlers**: Explicit exceptions `(OSError, json.JSONDecodeError)` + structured `logger.warning(..., exc_info=True)` with artifact metadata
-- **health/ui.py handler**: Explicit exceptions `(ValueError, KeyError, TypeError)` for `from_dict()` shape errors, no warning (payload conversion is expected to fail on malformed data)
-- **health/summary.py handler**: Explicit exceptions `(OSError, json.JSONDecodeError)` for `_load_history`, no warning (opportunistic narrowing, not part of primary artifact scan loop)
+- **health/ui.py handlers**: Explicit exceptions `(OSError, json.JSONDecodeError)` + structured `logger.warning(..., exc_info=True)` with artifact metadata
+- **health/ui.py write handler**: Explicit `OSError` for write failures + structured `logger.warning(..., exc_info=True)`
 
-### Remaining Backlog (6 handlers)
+### Remaining Backlog (2 handlers)
 
 | File | Count | Lines |
 |------|-------|-------|
-| server_read_support.py | 0 | (all fixed) |
-| health/ui.py | 4 | 554, 594, 776, 862 |
+| health/ui.py | 0 | (all fixed) |
 | health/summary.py | 2 | 366, 537 |
 
 ---
 
 ## Next Steps
 
-1. **Immediate**: Continue fixing remaining handlers in health/ui.py and health/summary.py
+1. **Immediate**: Continue fixing remaining handlers in health/summary.py (2 handlers)
 2. **Short-term**: Add structured logging infrastructure for artifact scan telemetry
 3. **Medium-term**: Audit remaining exception handlers in other modules (server.py, api.py, etc.)
 4. **Long-term**: Implement comprehensive artifact validation schema
@@ -137,5 +127,5 @@ except (ValueError, KeyError, TypeError):
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-01-05 (10 additional handlers fixed in slice 2)*
-*Total handlers fixed in Phase 2: 12*
+*Updated: 2026-05-04 (4 additional handlers fixed in slice 3)*
+*Total handlers fixed in Phase 2: 16*
