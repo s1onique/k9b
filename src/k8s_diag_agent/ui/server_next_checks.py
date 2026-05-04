@@ -57,7 +57,7 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
     try:
         raw_payload = handler.rfile.read(content_length).decode("utf-8")
         payload = json.loads(raw_payload)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         handler._send_json({"error": "Invalid JSON payload"}, 400)
         return
     candidate_index_raw = payload.get("candidateIndex")
@@ -187,7 +187,7 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
                     candidate_found_in_request_artifact = True
                 else:
                     candidate_found_in_index_artifact = True
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             pass
 
     if candidate_entry is None or resolved_index is None:
@@ -474,7 +474,7 @@ def handle_deterministic_promotion(handler: HealthUIRequestHandler) -> None:
     try:
         raw_payload = handler.rfile.read(content_length).decode("utf-8")
         payload = json.loads(raw_payload)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         handler._send_json({"error": "Invalid JSON payload"}, 400)
         return
     cluster_label = payload.get("clusterLabel")
@@ -576,7 +576,7 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
     try:
         raw_payload = handler.rfile.read(content_length).decode("utf-8")
         payload = json.loads(raw_payload)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         handler._send_json({"error": "Invalid JSON payload"}, 400)
         return
     candidate_index_raw = payload.get("candidateIndex")
@@ -609,7 +609,7 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
             )
             if raw_entry is not None and resolved_index is not None:
                 candidate_entry = dict(raw_entry)
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             pass
 
     if candidate_entry is None or resolved_index is None:
@@ -818,7 +818,7 @@ def find_candidate_in_all_plan_artifacts(
                 )
                 if entry is not None and idx is not None:
                     return dict(entry), idx, Path("external-analysis") / artifact_file.name
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError):
                 continue
 
     return None, None, None

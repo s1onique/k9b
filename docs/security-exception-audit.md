@@ -1,7 +1,7 @@
 # Security Exception Audit - Read-Model Artifact Parsing
 
 ## Scope
-This audit covers broad `except Exception` handlers in artifact scan/read-model paths.
+This audit covers broad `except Exception` handlers in artifact scan/read-model paths and broader exception audit for UI/API mutation paths.
 Phase 2 security baseline work: replacing silent catches with explicit exception handling and structured warnings.
 
 ## Classification Legend
@@ -13,6 +13,25 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 ---
 
 ## Findings by File
+
+### src/k8s_diag_agent/ui/server_next_checks.py
+
+| Line | Handler | Context | Classification |
+|------|---------|---------|----------------|
+| 60 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_next_check_execution | **fixed-this-slice** |
+| 190 | `except (OSError, json.JSONDecodeError, ValueError)` | Plan artifact JSON read in handle_next_check_execution | **fixed-this-slice** |
+| 373 | `except Exception as exc:` | Artifact persistence in handle_next_check_execution | **needs-follow-up** (mutation write path) |
+| 449 | `except Exception as exc:` | ui-index.json persistence + nested touch | **needs-follow-up** (file write paths) |
+| 477 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_deterministic_promotion | **fixed-this-slice** |
+| 544 | `except Exception as exc:` | write_deterministic_next_check_promotion call | **needs-follow-up** (mutation write path) |
+| 579 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_next_check_approval | **fixed-this-slice** |
+| 612 | `except (OSError, json.JSONDecodeError, ValueError)` | Plan artifact JSON read in handle_next_check_approval | **fixed-this-slice** |
+| 699 | `except Exception as exc:` | record_next_check_approval mutation | **needs-follow-up** (mutation write path) |
+| 821 | `except (OSError, json.JSONDecodeError, ValueError)` | Artifact JSON read in find_candidate_in_all_plan_artifacts | **fixed-this-slice** |
+
+**Total in file**: 10 handlers (6 fixed, 0 reviewed-safe, 4 needs-follow-up, 0 out-of-scope)
+
+---
 
 ### src/k8s_diag_agent/ui/server_read_support.py
 
@@ -55,6 +74,40 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 
 ---
 
+## Broader Exception Audit - Out-of-Scope Modules
+
+### src/k8s_diag_agent/ui/server.py
+
+Multiple `except Exception` handlers in the main server module. These require careful review as they handle HTTP request/response semantics and framework behavior.
+
+**Review status**: Deferred to future slice
+
+### src/k8s_diag_agent/ui/api.py
+
+Multiple `except Exception` handlers in the API module. Requires careful review for framework semantics.
+
+**Review status**: Deferred to future slice
+
+### src/k8s_diag_agent/ui/server_feedback.py
+
+Multiple `except Exception` handlers in feedback handlers. Requires careful review.
+
+**Review status**: Deferred to future slice
+
+### src/k8s_diag_agent/ui/server_alertmanager.py
+
+Multiple `except Exception` handlers in Alertmanager UI handlers.
+
+**Review status**: Deferred to future slice
+
+### src/k8s_diag_agent/health/loop.py
+
+Many `except Exception` handlers in the main health loop. These are central to the health assessment flow.
+
+**Review status**: Deferred to future slice
+
+---
+
 ## Exception Type Mapping
 
 For artifact scan loops, the following exception types should be caught explicitly:
@@ -75,10 +128,11 @@ except (OSError, json.JSONDecodeError):
     continue
 ```
 
-For `ExternalAnalysisArtifact.from_dict()` calls:
+For request payload parsing:
 ```python
-except (ValueError, KeyError, TypeError):
-    continue
+except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+    handler._send_json({"error": "Invalid JSON payload"}, 400)
+    return
 ```
 
 ---
@@ -87,46 +141,61 @@ except (ValueError, KeyError, TypeError):
 
 | Category | Count |
 |----------|-------|
-| Fixed this slice | 18 |
+| Fixed this slice (server_next_checks.py - Phase 2 Slice 5) | 6 |
+| Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 0 |
-| Needs follow-up | 0 |
-| Out of scope | 0 |
-| **Total** | **18** |
+| Needs follow-up | 4 |
+| Out of scope (deferred modules) | ~100+ |
+| **Total fixed** | **24** |
 
-### Fixed This Slice (Phase 2 Audit - Slice 4: health/summary.py remaining handlers)
+### Fixed This Slice (Phase 2 Audit - Slice 5: server_next_checks.py)
 
-| File | Line | Handler | Type | Logging |
-|------|------|---------|------|---------|
-| health/summary.py | 366 | `_load_json` | OSError, json.JSONDecodeError | **yes** |
-| health/summary.py | 537 | `_collect_comparison_summaries` | OSError, json.JSONDecodeError | **yes** |
+| Function | Line | Type | Context |
+|----------|------|------|---------|
+| handle_next_check_execution | 60 | JSON decode | Payload parsing |
+| handle_next_check_execution | 190 | OSError, JSON | Plan artifact read |
+| handle_deterministic_promotion | 477 | JSON decode | Payload parsing |
+| handle_next_check_approval | 579 | JSON decode | Payload parsing |
+| handle_next_check_approval | 612 | OSError, JSON | Plan artifact read |
+| find_candidate_in_all_plan_artifacts | 821 | OSError, JSON | Artifact glob scan |
 
-### Logging Behavior by Category
+### Needs Follow-up (server_next_checks.py)
 
-- **health/summary.py handlers**: Explicit exceptions `(OSError, json.JSONDecodeError)` + structured `logger.warning(..., exc_info=True)` with artifact metadata
-- **health/ui.py handlers**: Explicit exceptions `(OSError, json.JSONDecodeError)` + structured `logger.warning(..., exc_info=True)` with artifact metadata
-- **health/ui.py write handler**: Explicit `OSError` for write failures + structured `logger.warning(..., exc_info=True)`
+| Function | Line | Context |
+|----------|------|---------|
+| handle_next_check_execution | 373 | Artifact persistence write |
+| handle_next_check_execution | 449 | ui-index.json write + touch |
+| handle_deterministic_promotion | 544 | write_deterministic_next_check_promotion call |
+| handle_next_check_approval | 699 | record_next_check_approval call |
 
-### Remaining Backlog (0 handlers)
+### Remaining Backlog
 
-| File | Count | Lines |
-|------|-------|-------|
-| health/ui.py | 0 | (all fixed) |
-| health/summary.py | 0 | (all fixed) |
+| File | Handler Count | Notes |
+|------|---------------|-------|
+| server.py | ~15 | Main server handlers |
+| api.py | ~10 | API mutation handlers |
+| server_feedback.py | ~10 | Feedback handlers |
+| server_alertmanager.py | ~6 | Alertmanager UI |
+| notifications.py | ~4 | Notification handlers |
+| health/loop.py | ~14 | Main health loop |
+| health/ui_planner_queue.py | ~1 | Planner queue |
+| health/ui_llm_stats.py | ~1 | LLM stats |
+| external_analysis/* | ~8 | External analysis modules |
 
-**Read-model exception-audit scope: COMPLETE**
+**Note**: These are deferred to future slices pending careful review of framework/async behavior.
 
 ---
 
 ## Next Steps
 
-1. **Immediate**: Audit remaining exception handlers in other modules (server.py, api.py, etc.)
-2. **Short-term**: Add structured logging infrastructure for artifact scan telemetry
-3. **Medium-term**: Implement comprehensive artifact validation schema
+1. **Immediate**: Continue auditing remaining UI/API exception handlers
+2. **Short-term**: Address needs-follow-up handlers in server_next_checks.py
+3. **Medium-term**: Audit server.py and api.py exception handlers
 4. **Long-term**: Add eval coverage for exception handling behavior
 
 ---
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (2 additional handlers fixed in slice 4 - read-model scope complete)*
-*Total handlers fixed in Phase 2: 18*
+*Updated: 2026-05-04 (Slice 5: server_next_checks.py - 6 JSON/file I/O handlers fixed)*
+*Total handlers fixed in Phase 2: 24 (18 read-model + 6 server_next_checks.py)*
