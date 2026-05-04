@@ -370,10 +370,14 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
                 artifact_path_obj.write_text(json.dumps(artifact_data, indent=2), encoding="utf-8")
                 response_payload["packRefreshStatus"] = refresh_status.value
                 response_payload["packRefreshWarning"] = refresh_warning
-            except Exception as exc:
+            except (OSError, json.JSONDecodeError, TypeError) as exc:
                 logger.warning(
                     "Failed to persist pack refresh status to artifact",
-                    extra={"artifact": str(artifact_path_obj), "error": str(exc)},
+                    extra={
+                        "artifact": artifact_path_obj.name,
+                        "run_id": context.run.run_id,
+                        "error": str(exc),
+                    },
                 )
 
     emit_structured_log(
@@ -439,15 +443,30 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
             "Persisted execution history to ui-index.json",
             extra={"ui_index": str(ui_index_path), "run_id": context.run.run_id, "history_count": len(history_list)},
         )
-    except Exception as exc:
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        # Fallback: attempt touch-only invalidation to signal UI refresh needed
         logger.warning(
             "Failed to persist execution history to ui-index.json, falling back to touch-only invalidation",
-            extra={"ui_index": str(ui_index_path), "error": str(exc)},
+            extra={
+                "ui_index": ui_index_path.name,
+                "run_id": context.run.run_id,
+                "candidate_index": candidate_index,
+                "error": str(exc),
+            },
+            exc_info=True,
         )
         try:
             ui_index_path.touch()
-        except Exception:
-            pass
+        except OSError as touch_exc:
+            logger.warning(
+                "Failed to touch ui-index.json for invalidation",
+                extra={
+                    "ui_index": ui_index_path.name,
+                    "run_id": context.run.run_id,
+                    "error": str(touch_exc),
+                },
+                exc_info=True,
+            )
 
     handler._send_json(response_payload)
 
@@ -541,7 +560,17 @@ def handle_deterministic_promotion(handler: HealthUIRequestHandler) -> None:
             target_context=target_context,
             summary=summary,
         )
-    except Exception as exc:
+    except (FileExistsError, OSError) as exc:
+        logger.error(
+            "Failed to persist deterministic promotion artifact",
+            extra={
+                "run_id": context.run.run_id,
+                "candidate_id": candidate_id,
+                "cluster_label": cluster_label,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
         handler._send_json({"error": f"Unable to persist promotion: {exc}"}, 500)
         return
     response = {
@@ -696,7 +725,18 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
             candidate_description=plan_candidate_description,
             target_cluster=request_cluster,
         )
-    except Exception as exc:
+    except (FileExistsError, OSError) as exc:
+        logger.error(
+            "Failed to persist approval artifact",
+            extra={
+                "run_id": context.run.run_id,
+                "candidate_id": candidate_id_value,
+                "candidate_index": candidate_index,
+                "cluster_label": request_cluster,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
         handler._send_json({"error": f"Approval failed: {exc}"}, 500)
         return
     artifact_path = _relative_path(handler.runs_dir, artifact.artifact_path)

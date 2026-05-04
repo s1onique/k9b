@@ -20,16 +20,17 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 |------|---------|---------|----------------|
 | 60 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_next_check_execution | **fixed-this-slice** |
 | 190 | `except (OSError, json.JSONDecodeError, ValueError)` | Plan artifact JSON read in handle_next_check_execution | **fixed-this-slice** |
-| 373 | `except Exception as exc:` | Artifact persistence in handle_next_check_execution | **needs-follow-up** (mutation write path) |
-| 449 | `except Exception as exc:` | ui-index.json persistence + nested touch | **needs-follow-up** (file write paths) |
+| 323 | `except Exception as exc:` | execute_manual_next_check external execution boundary | **reviewed-safe** |
+| 373 | `except (OSError, json.JSONDecodeError, TypeError)` | Artifact persistence (pack_refresh_status write) | **fixed-this-slice** |
+| 446 | `except (OSError, json.JSONDecodeError, ValueError)` | ui-index.json persistence + nested touch | **fixed-this-slice** |
 | 477 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_deterministic_promotion | **fixed-this-slice** |
-| 544 | `except Exception as exc:` | write_deterministic_next_check_promotion call | **needs-follow-up** (mutation write path) |
+| 544 | `except (FileExistsError, OSError)` | write_deterministic_next_check_promotion call | **fixed-this-slice** |
 | 579 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_next_check_approval | **fixed-this-slice** |
 | 612 | `except (OSError, json.JSONDecodeError, ValueError)` | Plan artifact JSON read in handle_next_check_approval | **fixed-this-slice** |
-| 699 | `except Exception as exc:` | record_next_check_approval mutation | **needs-follow-up** (mutation write path) |
+| 699 | `except (FileExistsError, OSError)` | record_next_check_approval mutation | **fixed-this-slice** |
 | 821 | `except (OSError, json.JSONDecodeError, ValueError)` | Artifact JSON read in find_candidate_in_all_plan_artifacts | **fixed-this-slice** |
 
-**Total in file**: 10 handlers (6 fixed, 0 reviewed-safe, 4 needs-follow-up, 0 out-of-scope)
+**Total in file**: 11 handlers (10 fixed, 1 reviewed-safe, 0 needs-follow-up, 0 out-of-scope)
 
 ---
 
@@ -141,32 +142,39 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 
 | Category | Count |
 |----------|-------|
-| Fixed this slice (server_next_checks.py - Phase 2 Slice 5) | 6 |
+| Fixed this slice (server_next_checks.py - Phase 2 Slice 6) | 10 |
 | Fixed previous slices (read-model scope) | 18 |
-| Reviewed safe | 0 |
-| Needs follow-up | 4 |
+| Reviewed safe | 1 |
+| Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **24** |
+| **Total fixed** | **28** |
 
-### Fixed This Slice (Phase 2 Audit - Slice 5: server_next_checks.py)
+### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
 | Function | Line | Type | Context |
 |----------|------|------|---------|
 | handle_next_check_execution | 60 | JSON decode | Payload parsing |
 | handle_next_check_execution | 190 | OSError, JSON | Plan artifact read |
+| handle_next_check_execution | ~373 | OSError, JSON, TypeError | Artifact persistence (pack_refresh_status write) |
+| handle_next_check_execution | ~449 | OSError, JSON, ValueError | ui-index.json write + touch |
 | handle_deterministic_promotion | 477 | JSON decode | Payload parsing |
+| handle_deterministic_promotion | ~544 | FileExistsError, OSError | write_deterministic_next_check_promotion call |
 | handle_next_check_approval | 579 | JSON decode | Payload parsing |
 | handle_next_check_approval | 612 | OSError, JSON | Plan artifact read |
+| handle_next_check_approval | ~699 | FileExistsError, OSError | record_next_check_approval call |
 | find_candidate_in_all_plan_artifacts | 821 | OSError, JSON | Artifact glob scan |
 
-### Needs Follow-up (server_next_checks.py)
+**server_next_checks.py now has 0 unreviewed broad exception handlers.**
 
-| Function | Line | Context |
-|----------|------|---------|
-| handle_next_check_execution | 373 | Artifact persistence write |
-| handle_next_check_execution | 449 | ui-index.json write + touch |
-| handle_deterministic_promotion | 544 | write_deterministic_next_check_promotion call |
-| handle_next_check_approval | 699 | record_next_check_approval call |
+### Phase 2 server_next_checks.py Summary
+
+All 10 handlers in server_next_checks.py are now fixed:
+- 4 JSON/payload parse handlers: explicit tuple with `json.JSONDecodeError, UnicodeDecodeError, ValueError`
+- 3 artifact read handlers: explicit tuple with `OSError, json.JSONDecodeError, ValueError`
+- 1 mutable artifact write handler: `OSError, json.JSONDecodeError, TypeError` with warning-only behavior
+- 1 mutable ui-index write handler: `OSError, json.JSONDecodeError, ValueError` with touch fallback
+- 1 immutable artifact write handler: `FileExistsError, OSError` with error logging
+- 1 immutable artifact write handler: `FileExistsError, OSError` with error logging
 
 ### Remaining Backlog
 
@@ -197,5 +205,5 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (Slice 5: server_next_checks.py - 6 JSON/file I/O handlers fixed)*
-*Total handlers fixed in Phase 2: 24 (18 read-model + 6 server_next_checks.py)*
+*Updated: 2026-05-04 (Slice 6: server_next_checks.py mutation write paths - all 10 handlers fixed)*
+*Total handlers fixed in Phase 2: 28 (18 read-model + 10 server_next_checks.py)*

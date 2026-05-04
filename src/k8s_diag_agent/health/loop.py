@@ -28,7 +28,7 @@ from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
 from ..render.formatter import assessment_to_dict
-from ..security.subprocess_helpers import _log_subprocess_failure, _stderr_tail
+from ..security.subprocess_helpers import _log_subprocess_failure
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
