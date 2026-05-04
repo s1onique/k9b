@@ -245,7 +245,7 @@ def _load_notification_records(
         # Either no metadata filter, or metadata filter passed - do full parse
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
             continue
         
         # Update parse counter
@@ -346,7 +346,7 @@ def _load_notification_records_optimized(
         # Full parse required
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
             continue
         
         if counters is not None:
@@ -431,7 +431,7 @@ def _count_matching_records(
         # Need content-based filtering - do minimal parse
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
             continue
         
         try:
@@ -560,5 +560,5 @@ def _stringify_value(value: object | None) -> str:
 def _relative_path(base: Path, target: Path) -> str | None:
     try:
         return str(target.relative_to(base))
-    except Exception:
+    except (ValueError, OSError):
         return str(target)

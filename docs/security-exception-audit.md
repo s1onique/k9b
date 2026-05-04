@@ -157,6 +157,28 @@ Many `except Exception` handlers in the main health loop. These are central to t
 
 **Review status**: Deferred to future slice
 
+### src/k8s_diag_agent/ui/notifications.py
+
+| Line | Handler | Context | Classification |
+|------|---------|---------|----------------|
+| ~247 | `except (json.JSONDecodeError, UnicodeDecodeError, OSError)` | JSON parse/read in _load_notification_records | **fixed-this-slice** |
+| ~348 | `except (json.JSONDecodeError, UnicodeDecodeError, OSError)` | JSON parse/read in _load_notification_records_optimized | **fixed-this-slice** |
+| ~433 | `except (json.JSONDecodeError, UnicodeDecodeError, OSError)` | JSON parse/read in _count_matching_records | **fixed-this-slice** |
+| ~563 | `except (ValueError, OSError)` | Path resolution in _relative_path | **fixed-this-slice** |
+
+**Total in file**: 4 handlers (4 fixed, 0 remaining)
+
+**Security hardening applied**:
+- JSON parse/read in artifact loops: explicit tuple with `json.JSONDecodeError, UnicodeDecodeError, OSError`
+- Path resolution fallback: explicit tuple with `ValueError, OSError`
+- Non-fatal behavior preserved (continue on parse errors, graceful fallback on path resolution)
+- Logs do not include raw notification content or secret-like values
+
+**Notes**:
+- `src/k8s_diag_agent/notifications/delivery.py`: Already uses explicit `(OSError, json.JSONDecodeError)` at line ~35
+- `src/k8s_diag_agent/notifications/mattermost.py`: Uses precise `requests.RequestException` at line ~50
+- `src/k8s_diag_agent/health/notifications.py`: No broad exception handlers, uses explicit `ValueError` in `from_dict()`
+
 ---
 
 ## Exception Type Mapping
@@ -196,11 +218,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 | Fixed this slice (server_next_checks.py - Phase 2 Slice 6) | 10 |
 | Fixed this slice (server_feedback.py - Phase 2 Slice 8) | 10 |
 | Fixed this slice (server_alertmanager.py - Phase 2 Slice 9) | 6 |
+| Fixed this slice (ui/notifications.py - Phase 2 Slice 10) | 4 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 1 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **53** |
+| **Total fixed** | **57** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -234,13 +257,13 @@ All 10 handlers in server_next_checks.py are now fixed:
 | File | Handler Count | Notes |
 |------|---------------|-------|
 | server.py | ~15 | Main server handlers |
-| notifications.py | ~4 | Notification handlers |
 | health/loop.py | ~14 | Main health loop |
 | health/ui_planner_queue.py | ~1 | Planner queue |
 | health/ui_llm_stats.py | ~1 | LLM stats |
 | external_analysis/* | ~8 | External analysis modules |
 
 **Note**: These are deferred to future slices pending careful review of framework/async behavior.
+**ui/notifications.py**: All 4 broad handlers fixed in Slice 10 (0 remaining)
 **server_alertmanager.py**: All 6 broad handlers fixed in Slice 9 (0 remaining)
 **server_feedback.py**: All 10 broad handlers fixed in Slice 8 (0 remaining)
 **api.py**: All 9 broad handlers fixed in Slice 7 (0 remaining)
@@ -258,5 +281,5 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (Slice 8: server_feedback.py all 10 handlers fixed)*
-*Total handlers fixed in Phase 2: 47 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py)*
+*Updated: 2026-05-04 (Slice 10: ui/notifications.py all 4 handlers fixed)*
+*Total handlers fixed in Phase 2: 57 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py)*
