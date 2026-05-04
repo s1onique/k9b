@@ -12,6 +12,7 @@ import {
   createFetchQueueMock,
   createStorageMock,
   makeDiagnosticPackReview,
+  makeFetchResponse,
   makeRunWithOverrides,
   sampleClusterDetail,
   sampleFleet,
@@ -1340,24 +1341,14 @@ describe("App", () => {
     const fetchMock = vi.fn((input: RequestInfo, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.url;
       if (url === "/api/next-check-execution" && init?.method === "POST") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve(executionResponse),
-        });
+        return makeFetchResponse(executionResponse);
       }
       const base = url.split("?")[0];
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -1410,24 +1401,14 @@ describe("App", () => {
     const fetchMock = vi.fn((input: RequestInfo, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.url;
       if (url === "/api/next-check-approval" && init?.method === "POST") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve(approvalResponse),
-        });
+        return makeFetchResponse(approvalResponse);
       }
       const base = url.split("?")[0];
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -2728,22 +2709,16 @@ describe("Recent runs selection", () => {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-122") {
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve({
+          return makeFetchResponse({
               ...sampleRun,
               runId: "run-122",
               label: "Run 122 specific",
               nextCheckExecutionHistory: [],
               nextCheckQueue: [],
-            }),
-          });
+            });
         }
         if (runId === "run-123" || !runId) {
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve(sampleRun),
-          });
+          return makeFetchResponse(sampleRun);
         }
       }
       
@@ -2751,10 +2726,7 @@ describe("Recent runs selection", () => {
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
     
     vi.stubGlobal("fetch", fetchMock);
@@ -2860,9 +2832,7 @@ describe("Recent runs selection", () => {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-122") {
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve(makeRunWithOverrides({
+          return makeFetchResponse(makeRunWithOverrides({
               runId: "run-122",
               label: "2026-04-07-1100",
               nextCheckExecutionHistory: [
@@ -2885,24 +2855,17 @@ describe("Recent runs selection", () => {
                 },
               ],
               nextCheckQueue: [],
-            })),
-          });
+            });
         }
         // Default to sampleRun for any other run_id
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(sampleRun),
-        });
+        return makeFetchResponse(sampleRun);
       }
       
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -2957,9 +2920,7 @@ describe("Recent runs selection", () => {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-122") {
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve(makeRunWithOverrides({
+          return makeFetchResponse(makeRunWithOverrides({
               runId: "run-122",
               label: "2026-04-07-1100",
               nextCheckExecutionHistory: [],
@@ -2991,24 +2952,17 @@ describe("Recent runs selection", () => {
                   workstream: "incident",
                 },
               ],
-            })),
-          });
+            });
         }
         // Default to sampleRun for any other run_id
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(sampleRun),
-        });
+        return makeFetchResponse(sampleRun);
       }
       
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -3185,31 +3139,22 @@ describe("Recent runs selection", () => {
         const runId = params.get("run_id");
         if (runId === "run-122") {
           // Return run with empty execution history
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve(makeRunWithOverrides({
+          return makeFetchResponse(makeRunWithOverrides({
               runId: "run-122",
               label: "2026-04-07-1100",
               nextCheckExecutionHistory: [],
               nextCheckQueue: [],
-            })),
-          });
+            });
         }
         // Default to sampleRun for any other run_id
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(sampleRun),
-        });
+        return makeFetchResponse(sampleRun);
       }
       
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -3264,31 +3209,22 @@ describe("Recent runs selection", () => {
         const runId = params.get("run_id");
         if (runId === "run-122") {
           // Return run with empty queue
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve(makeRunWithOverrides({
+          return makeFetchResponse(makeRunWithOverrides({
               runId: "run-122",
               label: "2026-04-07-1100",
               nextCheckExecutionHistory: [],
               nextCheckQueue: [],
-            })),
-          });
+            });
         }
         // Default to sampleRun for any other run_id
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(sampleRun),
-        });
+        return makeFetchResponse(sampleRun);
       }
       
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -3734,23 +3670,20 @@ describe("Run freshness thresholds", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(runsWithDifferentTimestamps),
-        });
+        return Promise.resolve(makeFetchResponse(runsWithDifferentTimestamps));
       }
       if (base === "/api/run") {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-122") {
-          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(staleRun) });
+          return Promise.resolve(makeFetchResponse(staleRun));
         }
-        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(freshRun) });
+        return Promise.resolve(makeFetchResponse(freshRun));
       }
 
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
-      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+      return Promise.resolve(makeFetchResponse(payload));
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -3825,23 +3758,20 @@ describe("Run freshness thresholds", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(runsWithStaleLatest),
-        });
+        return Promise.resolve(makeFetchResponse(runsWithStaleLatest));
       }
       if (base === "/api/run") {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-122") {
-          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(olderStaleRun) });
+          return Promise.resolve(makeFetchResponse(olderStaleRun));
         }
-        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(staleRun) });
+        return Promise.resolve(makeFetchResponse(staleRun));
       }
 
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
-      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+      return Promise.resolve(makeFetchResponse(payload));
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -3959,23 +3889,20 @@ describe("Cockpit header selection vs freshness semantics", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(runsWithPastAndFreshLatest),
-        });
+        return Promise.resolve(makeFetchResponse(runsWithPastAndFreshLatest));
       }
       if (base === "/api/run") {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-past") {
-          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(pastRun) });
+          return Promise.resolve(makeFetchResponse(pastRun));
         }
-        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(latestRun) });
+        return Promise.resolve(makeFetchResponse(latestRun));
       }
 
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
-      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+      return Promise.resolve(makeFetchResponse(payload));
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -4080,23 +4007,20 @@ describe("Cockpit header selection vs freshness semantics", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(runsWithPastAndFreshLatest),
-        });
+        return Promise.resolve(makeFetchResponse(runsWithPastAndFreshLatest));
       }
       if (base === "/api/run") {
         const params = new URLSearchParams(url.split("?")[1] || "");
         const runId = params.get("run_id");
         if (runId === "run-past") {
-          return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(pastRun) });
+          return Promise.resolve(makeFetchResponse(pastRun));
         }
-        return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(latestRun) });
+        return Promise.resolve(makeFetchResponse(latestRun));
       }
 
       const payload = defaultPayloads[url] ?? defaultPayloads[base];
       if (!payload) return Promise.reject(new Error(`Unexpected fetch ${url}`));
-      return Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(payload) });
+      return Promise.resolve(makeFetchResponse(payload));
     });
 
     vi.stubGlobal("fetch", fetchMock);

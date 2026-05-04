@@ -13,6 +13,7 @@ import type { RunPayload } from "../types";
 import {
   createFetchMock,
   createStorageMock,
+  makeFetchResponse,
   makeRunWithOverrides,
   sampleClusterDetail,
   sampleFleet,
@@ -63,23 +64,17 @@ describe("Stale selected-run fallback", () => {
       
       // Handle /api/runs - only returns latest-run, NOT run-999
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve({
-            runs: [
-              { runId: "run-123", runLabel: "Latest run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
-            ],
-            totalCount: 1,
-          }),
+        return makeFetchResponse({
+          runs: [
+            { runId: "run-123", runLabel: "Latest run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
+          ],
+          totalCount: 1,
         });
       }
       
       // Handle /api/run - only return latest-run data
       if (base === "/api/run") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(latestRun),
-        });
+        return makeFetchResponse(latestRun);
       }
       
       // Use sample fixtures for all other endpoints
@@ -93,16 +88,10 @@ describe("Stale selected-run fallback", () => {
       
       const payload = samplePayloads[base] ?? samplePayloads[url];
       if (payload) {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(payload),
-        });
+        return makeFetchResponse(payload);
       }
       
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve({}),
-      });
+      return makeFetchResponse({});
     });
     
     vi.stubGlobal("fetch", smartMock);
@@ -140,22 +129,16 @@ describe("Stale selected-run fallback", () => {
       const base = url.split("?")[0];
       
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve({
-            runs: [
-              { runId: "current-run", runLabel: "Current run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
-            ],
-            totalCount: 1,
-          }),
+        return makeFetchResponse({
+          runs: [
+            { runId: "current-run", runLabel: "Current run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
+          ],
+          totalCount: 1,
         });
       }
       
       if (base === "/api/run") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(latestRun),
-        });
+        return makeFetchResponse(latestRun);
       }
       
       const samplePayloads = {
@@ -168,16 +151,10 @@ describe("Stale selected-run fallback", () => {
       
       const payload = samplePayloads[base] ?? samplePayloads[url];
       if (payload) {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(payload),
-        });
+        return makeFetchResponse(payload);
       }
       
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve({}),
-      });
+      return makeFetchResponse({});
     });
     
     vi.stubGlobal("fetch", smartMock);

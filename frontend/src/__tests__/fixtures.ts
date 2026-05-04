@@ -995,6 +995,29 @@ export const sampleClusterDetail: ClusterDetailPayload = {
 // ============================================================
 
 /**
+ * Creates a complete mock fetch Response object for tests.
+ * Includes headers.get() and text() methods required by api.ts.
+ * Use this for inline mocks instead of returning plain objects.
+ */
+export const makeFetchResponse = (payload: unknown) => {
+  const payloadText = JSON.stringify(payload);
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    headers: {
+      get: (name: string) => {
+        if (name === "Content-Type") return "application/json";
+        if (name === "Content-Length") return payloadText.length.toString();
+        return null;
+      },
+    },
+    text: () => Promise.resolve(payloadText),
+    json: () => Promise.resolve(payload),
+  };
+};
+
+/**
  * Creates a mock localStorage object for testing.
  * Used in app.test.tsx, panel-selection-binding.test.tsx,
  * queue-workstream-filter.test.tsx, execution-history-filter.test.tsx
@@ -1043,10 +1066,20 @@ export const createFetchMock = (payloads: Record<string, unknown>) =>
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${rawUrl}`));
     }
+    const payloadText = JSON.stringify(payload);
     return Promise.resolve({
       ok: true,
       status: 200,
       statusText: "OK",
+      // Include headers object with get method for api.ts debug logging
+      headers: {
+        get: (name: string) => {
+          if (name === "Content-Type") return "application/json";
+          if (name === "Content-Length") return payloadText.length.toString();
+          return null;
+        },
+      },
+      text: () => Promise.resolve(payloadText),
       json: () => Promise.resolve(payload),
     });
   });
@@ -1092,11 +1125,21 @@ export const createFetchQueueMock = (
       // Use the corresponding queue item, or fall back to last item if queue exhausted
       const responseIndex = Math.min(callIndex, queue.length - 1);
       const payload = queue[responseIndex];
+      const payloadText = JSON.stringify(payload);
 
       return Promise.resolve({
         ok: true,
         status: 200,
         statusText: "OK",
+        // Include headers object with get method for api.ts debug logging
+        headers: {
+          get: (name: string) => {
+            if (name === "Content-Type") return "application/json";
+            if (name === "Content-Length") return payloadText.length.toString();
+            return null;
+          },
+        },
+        text: () => Promise.resolve(payloadText),
         json: () => Promise.resolve(payload),
       });
     }
@@ -1106,10 +1149,20 @@ export const createFetchQueueMock = (
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${url}`));
     }
+    const payloadText = JSON.stringify(payload);
     return Promise.resolve({
       ok: true,
       status: 200,
       statusText: "OK",
+      // Include headers object with get method for api.ts debug logging
+      headers: {
+        get: (name: string) => {
+          if (name === "Content-Type") return "application/json";
+          if (name === "Content-Length") return payloadText.length.toString();
+          return null;
+        },
+      },
+      text: () => Promise.resolve(payloadText),
       json: () => Promise.resolve(payload),
     });
   });

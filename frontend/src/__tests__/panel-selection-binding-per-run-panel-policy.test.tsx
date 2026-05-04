@@ -46,26 +46,17 @@ const createRunAwareFetchMock = (
       const params = new URLSearchParams(url.split("?")[1] || "");
       const runId = params.get("run_id");
       if (runId === "run-122") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(run122Payload),
-        });
+        return makeFetchResponse(run122Payload);
       }
       // Default to run-123 payload
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve(run123Payload),
-      });
+      return makeFetchResponse(run123Payload);
     }
 
     const payload = defaultPayloads[url] ?? defaultPayloads[base];
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${url}`));
     }
-    return Promise.resolve({
-      ok: true, status: 200, statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
+    return makeFetchResponse(payload);
   });
 };
 

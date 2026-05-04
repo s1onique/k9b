@@ -23,6 +23,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import App from "../App";
 import type { RunPayload } from "../types";
+import { createFetchMock, makeFetchResponse } from "./fixtures";
 import {
   createPanelSelectionRun122,
   createPanelSelectionRun123,
@@ -144,32 +145,17 @@ const createRunAwareFetchMock = (
       const params = new URLSearchParams(url.split("?")[1] || "");
       const runId = params.get("run_id");
       if (runId === "run-past") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve(pastRunPayload),
-        });
+        return makeFetchResponse(pastRunPayload);
       }
       // Default to latest run payload (no run_id = latest)
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(latestRunPayload),
-      });
+      return makeFetchResponse(latestRunPayload);
     }
 
     const payload = GLOBAL_PAYLOADS[url as keyof typeof GLOBAL_PAYLOADS] ?? GLOBAL_PAYLOADS[base as keyof typeof GLOBAL_PAYLOADS];
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${url}`));
     }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
+    return makeFetchResponse(payload);
   });
 };
 
@@ -524,12 +510,7 @@ describe("Selected-run immediate refresh regression", () => {
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);

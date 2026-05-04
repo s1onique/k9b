@@ -97,23 +97,13 @@ const createRunAwareFetchMock = (runsList: RunsListPayload) => {
 
     const payload = payloads[path];
     if (payload !== undefined) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     }
 
     // Also check full URL for exact matches
     const exactPayload = payloads[rawUrl];
     if (exactPayload !== undefined) {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(exactPayload),
-      });
+      return makeFetchResponse(exactPayload);
     }
 
     return Promise.reject(new Error(`Unexpected fetch ${rawUrl}`));

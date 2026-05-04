@@ -18,7 +18,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { useRunSelection } from "../useRunSelection";
-import { createStorageMock } from "../../__tests__/fixtures";
+import { createStorageMock, makeFetchResponse } from "../../__tests__/fixtures";
 import type { RunsListPayload } from "../../types";
 
 describe("useRunSelection refresh behavior", () => {
@@ -69,17 +69,11 @@ describe("useRunSelection refresh behavior", () => {
 
       if (base === "/api/runs") {
         callCount++;
-        return {
-          ok: true, status: 200, statusText: "OK",
-          json: async () => ({ ...currentRunsList }),
-        };
+        return makeFetchResponse({ ...currentRunsList });
       }
 
       // Default responses for other endpoints
-      return {
-        ok: true, status: 200, statusText: "OK",
-        json: async () => ({}),
-      };
+      return makeFetchResponse({});
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -120,16 +114,10 @@ describe("useRunSelection refresh behavior", () => {
           currentRunsList = { ...updatedRunsList };
           return updatedRunsList;
         })();
-        return {
-          ok: true, status: 200, statusText: "OK",
-          json: async () => ({ ...payload }),
-        };
+        return makeFetchResponse({ ...payload });
       }
 
-      return {
-        ok: true, status: 200, statusText: "OK",
-        json: async () => ({}),
-      };
+      return makeFetchResponse({});
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -182,16 +170,10 @@ describe("useRunSelection refresh behavior", () => {
           currentRunsList = { ...updatedRunsList };
           return updatedRunsList;
         })();
-        return {
-          ok: true, status: 200, statusText: "OK",
-          json: async () => ({ ...payload }),
-        };
+        return makeFetchResponse({ ...payload });
       }
 
-      return {
-        ok: true, status: 200, statusText: "OK",
-        json: async () => ({}),
-      };
+      return makeFetchResponse({});
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -243,16 +225,10 @@ describe("useRunSelection refresh behavior", () => {
 
       if (base === "/api/runs") {
         runsCallCount++;
-        return {
-          ok: true, status: 200, statusText: "OK",
-          json: async () => ({ ...currentRunsList }),
-        };
+        return makeFetchResponse({ ...currentRunsList });
       }
 
-      return {
-        ok: true, status: 200, statusText: "OK",
-        json: async () => ({}),
-      };
+      return makeFetchResponse({});
     });
 
     vi.stubGlobal("fetch", fetchMock);

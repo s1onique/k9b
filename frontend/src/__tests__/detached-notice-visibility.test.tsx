@@ -62,12 +62,7 @@ const setupFetchMock = (fetchMock: ReturnType<typeof vi.fn>, payloads: Record<st
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${url}`));
     }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => Promise.resolve(payload),
-    });
+    return makeFetchResponse(payload);
   });
 };
 

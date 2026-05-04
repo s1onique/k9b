@@ -16,6 +16,7 @@ import type { RunPayload } from "../types";
 import {
   createFetchMock,
   createStorageMock,
+  makeFetchResponse,
   makeRunWithOverrides,
   sampleClusterDetail,
   sampleFleet,
@@ -340,30 +341,21 @@ describe("Historical runs with null deterministicNextChecks", () => {
       
       // Handle /api/runs
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve({
-            runs: [
-              { runId: "latest-run", runLabel: "Latest run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
-              { runId: "historical-run-3", runLabel: "Historical run 3", timestamp: "2026-03-01T12:00:00Z", clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
-            ],
-            totalCount: 2,
-          }),
+        return makeFetchResponse({
+          runs: [
+            { runId: "latest-run", runLabel: "Latest run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
+            { runId: "historical-run-3", runLabel: "Historical run 3", timestamp: "2026-04-01T12:00:00Z", clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
+          ],
+          totalCount: 2,
         });
       }
       
       // Handle /api/run
       if (base === "/api/run") {
         if (runId === "historical-run-3") {
-          return Promise.resolve({
-            ok: true, status: 200, statusText: "OK",
-            json: () => Promise.resolve(historicalPayload),
-          });
+          return makeFetchResponse(historicalPayload);
         }
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(latestPayload),
-        });
+        return makeFetchResponse(latestPayload);
       }
       
       // Use sample fixtures for all other endpoints
@@ -377,16 +369,10 @@ describe("Historical runs with null deterministicNextChecks", () => {
       
       const payload = samplePayloads[base] ?? samplePayloads[url];
       if (payload) {
-        return Promise.resolve({
-          ok: true, status: 200, statusText: "OK",
-          json: () => Promise.resolve(payload),
-        });
+        return makeFetchResponse(payload);
       }
       
-      return Promise.resolve({
-        ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve({}),
-      });
+      return makeFetchResponse({});
     });
     
     vi.stubGlobal("fetch", smartMock);

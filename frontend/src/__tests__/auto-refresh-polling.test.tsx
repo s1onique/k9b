@@ -131,24 +131,14 @@ describe("Auto-refresh polling behavior", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve({ ...currentRunsList }),
-        });
+        return makeFetchResponse({ ...currentRunsList });
       }
 
       const payload = (defaultPayloads as Record<string, unknown>)[url] ?? (defaultPayloads as Record<string, unknown>)[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -259,24 +249,14 @@ describe("Auto-refresh polling behavior", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve({ ...currentRunsList }),
-        });
+        return makeFetchResponse({ ...currentRunsList });
       }
 
       const payload = (defaultPayloads as Record<string, unknown>)[url] ?? (defaultPayloads as Record<string, unknown>)[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
@@ -412,24 +392,14 @@ describe("Auto-refresh polling behavior", () => {
       const base = url.split("?")[0];
 
       if (base === "/api/runs") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve({ ...currentRunsList }),
-        });
+        return makeFetchResponse({ ...currentRunsList });
       }
 
       const payload = (defaultPayloads as Record<string, unknown>)[url] ?? (defaultPayloads as Record<string, unknown>)[base];
       if (!payload) {
         return Promise.reject(new Error(`Unexpected fetch ${url}`));
       }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: () => Promise.resolve(payload),
-      });
+      return makeFetchResponse(payload);
     });
 
     vi.stubGlobal("fetch", fetchMock);
