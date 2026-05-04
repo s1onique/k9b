@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import App, { formatAgeDuration } from "../App";
 import type { RunPayload, RunsListPayload } from "../types";
-import { createStorageMock, sampleFleet, sampleProposals, sampleNotifications, sampleClusterDetail, makeRunWithOverrides } from "./fixtures";
+import { createStorageMock, makeFetchResponse, sampleFleet, sampleProposals, sampleNotifications, sampleClusterDetail, makeRunWithOverrides } from "./fixtures";
 import { SELECTED_RUN_STORAGE_KEY } from "../App";
 
 const minsAgo = (minutes: number) => dayjs().subtract(minutes, "minute").toISOString();

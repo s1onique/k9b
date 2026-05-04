@@ -23,7 +23,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import App from '../App';
 import type { RunsListPayload } from '../types';
-import { createStorageMock, makeRunWithOverrides } from './fixtures';
+import { createStorageMock, makeFetchResponse, makeRunWithOverrides } from './fixtures';
 
 // =============================================================================
 // Helper: creates a multi-page runs list for pagination tests
@@ -69,12 +69,7 @@ const setupFetchMock = (fetchMock: ReturnType<typeof vi.fn>, payloads: Record<st
     if (!payload) {
       return Promise.reject(new Error(`Unexpected fetch ${url}`));
     }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve(payload),
-    });
+    return makeFetchResponse(payload);
   });
 };
 

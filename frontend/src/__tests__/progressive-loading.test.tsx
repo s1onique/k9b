@@ -83,7 +83,7 @@ describe("Progressive Loading Contract", () => {
   });
 
   test("2. no runtime crash when run data fails to load", async () => {
-    // Mock fleet/proposals to succeed, but /api/run to fail
+    // Mock fleet/proposals to succeed with complete Response objects
     const fetchMock = vi.fn((input: RequestInfo) => {
       const url = typeof input === "string" ? input : input.url;
       const base = url.split("?")[0];
@@ -92,6 +92,14 @@ describe("Progressive Loading Contract", () => {
         return Promise.resolve({
           ok: true,
           status: 200,
+          statusText: "OK",
+          headers: {
+            get: (name: string) => {
+              if (name === "Content-Type") return "application/json";
+              return null;
+            },
+          },
+          text: () => Promise.resolve(JSON.stringify(minimalFleet)),
           json: () => Promise.resolve(minimalFleet),
         });
       }
@@ -99,6 +107,14 @@ describe("Progressive Loading Contract", () => {
         return Promise.resolve({
           ok: true,
           status: 200,
+          statusText: "OK",
+          headers: {
+            get: (name: string) => {
+              if (name === "Content-Type") return "application/json";
+              return null;
+            },
+          },
+          text: () => Promise.resolve(JSON.stringify(minimalProposals)),
           json: () => Promise.resolve(minimalProposals),
         });
       }
@@ -106,6 +122,14 @@ describe("Progressive Loading Contract", () => {
         return Promise.resolve({
           ok: true,
           status: 200,
+          statusText: "OK",
+          headers: {
+            get: (name: string) => {
+              if (name === "Content-Type") return "application/json";
+              return null;
+            },
+          },
+          text: () => Promise.resolve(JSON.stringify(minimalRunsList)),
           json: () => Promise.resolve(minimalRunsList),
         });
       }

@@ -1544,8 +1544,12 @@ describe("App", () => {
     await screen.findByRole("heading", { name: /Fleet overview/i });
     // The run stats line is rendered in a single .run-duration-summary element
     // but split across spans, so use textContent match on the correct container
-    const durationSummary = document.querySelector(".run-duration-summary");
-    expect(durationSummary).not.toBeNull();
+    // Wait for the KPI strip to render (async content)
+    await waitFor(() => {
+      const el = document.querySelector(".run-duration-summary");
+      expect(el).not.toBeNull();
+    });
+    const durationSummary = document.querySelector(".run-duration-summary")!;
     expect(durationSummary!.textContent).toMatch(/Last 32s/);
     expect(durationSummary!.textContent).toMatch(/Runs 12/);
     expect(durationSummary!.textContent).toMatch(/P50 24s/);
@@ -2851,11 +2855,11 @@ describe("Recent runs selection", () => {
                   stderrTruncated: false,
                   outputBytesCaptured: 1024,
                   resultClass: "useful-signal",
-                  resultSummary: "Run-122 specific execution result.",
-                },
-              ],
-              nextCheckQueue: [],
-            });
+                resultSummary: "Run-122 specific execution result.",
+              },
+            ],
+            nextCheckQueue: [],
+          }));
         }
         // Default to sampleRun for any other run_id
         return makeFetchResponse(sampleRun);
@@ -2952,7 +2956,7 @@ describe("Recent runs selection", () => {
                   workstream: "incident",
                 },
               ],
-            });
+            }));
         }
         // Default to sampleRun for any other run_id
         return makeFetchResponse(sampleRun);
@@ -3144,7 +3148,7 @@ describe("Recent runs selection", () => {
               label: "2026-04-07-1100",
               nextCheckExecutionHistory: [],
               nextCheckQueue: [],
-            });
+            }));
         }
         // Default to sampleRun for any other run_id
         return makeFetchResponse(sampleRun);
@@ -3214,7 +3218,7 @@ describe("Recent runs selection", () => {
               label: "2026-04-07-1100",
               nextCheckExecutionHistory: [],
               nextCheckQueue: [],
-            });
+            }));
         }
         // Default to sampleRun for any other run_id
         return makeFetchResponse(sampleRun);

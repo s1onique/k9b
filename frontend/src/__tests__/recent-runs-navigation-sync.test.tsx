@@ -15,7 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import App from "../App";
 import type { RunsListPayload } from "../types";
-import { createStorageMock, makeRunWithOverrides } from "./fixtures";
+import { createStorageMock, makeFetchResponse, makeRunWithOverrides } from "./fixtures";
 
 // =============================================================================
 // Helper: creates a multi-page runs list for pagination tests

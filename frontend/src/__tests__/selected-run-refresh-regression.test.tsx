@@ -455,24 +455,14 @@ describe("Selected-run immediate refresh regression", () => {
     // Deferred promise for latest run response
     const latestDeferred = new Promise<unknown>((resolve) => {
       latestResolve = () => {
-        resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve(latestRun),
-        });
+        resolve(makeFetchResponse(latestRun));
       };
     });
 
     // Deferred promise for past run response
     const pastDeferred = new Promise<unknown>((resolve) => {
       pastResolve = () => {
-        resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: () => Promise.resolve(pastRun),
-        });
+        resolve(makeFetchResponse(pastRun));
       };
     });
 
@@ -492,12 +482,7 @@ describe("Selected-run immediate refresh regression", () => {
           // Latest run: return deferred promise
           // But if initial load hasn't completed, return a fast mock instead
           if (!initialLoadComplete) {
-            return {
-              ok: true,
-              status: 200,
-              statusText: "OK",
-              json: () => Promise.resolve(latestRun),
-            };
+            return makeFetchResponse(latestRun);
           }
           // After initial load, the latest response comes from the polling timer
           // which fires after the user has already selected the past run

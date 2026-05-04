@@ -10,6 +10,7 @@ import {
   sampleRunsList,
   sampleClusterDetail,
   makeRunWithOverrides,
+  makeFetchResponse,
 } from "./fixtures";
 
 import type { NextCheckExecutionHistoryEntry, RunPayload } from "../types";
@@ -165,45 +166,27 @@ const createStorageMock = () => {
 
 let storageMock: ReturnType<typeof createStorageMock>;
 
-// Create a mock fetch that returns our test data
+// Create a mock fetch that returns our test data using makeFetchResponse
 const createFetchMock = (runPayload: RunPayload = sampleRun) => {
   const mockFetch = vi.fn().mockImplementation((url: string | Request) => {
     const urlStr = typeof url === "string" ? url : url.url;
     // Check /api/runs FIRST to avoid /api/run matching /api/runs
     if (urlStr.includes("/api/runs")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(sampleRunsList),
-      });
+      return makeFetchResponse(sampleRunsList);
     }
     if (urlStr.includes("/api/run")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(runPayload),
-      });
+      return makeFetchResponse(runPayload);
     }
     if (urlStr.includes("/api/fleet")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(sampleFleet),
-      });
+      return makeFetchResponse(sampleFleet);
     }
     if (urlStr.includes("/api/proposals")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(sampleProposals),
-      });
+      return makeFetchResponse(sampleProposals);
     }
     if (urlStr.includes("/api/cluster-detail")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(sampleClusterDetail),
-      });
+      return makeFetchResponse(sampleClusterDetail);
     }
-    return Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve({}),
-    });
+    return makeFetchResponse({});
   });
   return mockFetch;
 };

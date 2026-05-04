@@ -9,6 +9,7 @@ import {
   createPanelSelectionRun123,
   createPanelSelectionRun122,
   createStorageMock,
+  makeFetchResponse,
   sampleClusterDetail,
   sampleFleet,
   sampleNotifications,
