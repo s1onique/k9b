@@ -19,10 +19,10 @@ To create a DockerHub access token:
 
 | Image | DockerHub URL |
 |-------|---------------|
-| Backend (Python) | `docker.io/s1onique/k9b-python` |
-| Frontend (Node) | `docker.io/s1onique/k9b-python-frontend` |
+| Backend (Python) | `docker.io/gitinsky/k9b-python` |
+| Frontend (Node) | `docker.io/gitinsky/k9b-python-frontend` |
 
-**Namespace:** `s1onique` (GitHub username matches DockerHub namespace)
+**Namespace:** `gitinsky`
 
 ## Trigger Events
 
@@ -47,22 +47,20 @@ Or via GitHub Actions UI: Repository → Actions → Build and Push to DockerHub
 
 ## Image Tags Produced
 
+All images are tagged with the short Git commit SHA only:
+- `{COMMIT_SHORT_SHA}` - e.g., `4344ab1`
+
+Example image tags:
+- `docker.io/gitinsky/k9b-python:4344ab1`
+- `docker.io/gitinsky/k9b-python-frontend:4344ab1`
+
 ### On `pull_request` (build only)
+- `{sha}` - short Git commit SHA (not pushed)
+
+### On `push` to `main`, `release/**`, or version tag `v*`
 - `{sha}` - short Git commit SHA
 
-### On `push` to `main`
-- `{branch}` - branch name (e.g., `main`)
-- `{sha}` - short Git commit SHA
-- `latest` - always tagged
-
-### On `push` to `release/**`
-- `{branch}` - branch name (e.g., `release/v1`)
-- `{sha}` - short Git commit SHA
-
-### On `push` of version tag `v1.2.3`
-- `1.2.3` - full semantic version
-- `1.2` - major.minor
-- `1` - major only
+### Manual `workflow_dispatch` runs
 - `{sha}` - short Git commit SHA
 
 ## Workflow File

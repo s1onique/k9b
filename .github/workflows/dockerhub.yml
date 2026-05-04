@@ -13,8 +13,10 @@ on:
       - main
 
 env:
-  # Canonical DockerHub image names (s1onique = DockerHub namespace)
-  IMAGE_NAME: docker.io/s1onique/k9b-python
+  # Configurable DockerHub namespace and image names
+  DOCKERHUB_NAMESPACE: gitinsky
+  BACKEND_IMAGE_NAME: k9b-python
+  FRONTEND_IMAGE_NAME: k9b-python-frontend
 
 jobs:
   build-push:
@@ -40,15 +42,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.BACKEND_IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=,suffix=,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=sha,prefix=,format=short
 
       - name: Build and push backend image
         uses: docker/build-push-action@v6
@@ -89,16 +85,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # Frontend image uses -frontend suffix
-          images: ${{ env.IMAGE_NAME }}-frontend
+          images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.FRONTEND_IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=,suffix=,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=sha,prefix=,format=short
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
