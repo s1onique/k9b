@@ -20,7 +20,7 @@ To create a DockerHub access token:
 | Image | DockerHub URL |
 |-------|---------------|
 | Backend (Python) | `docker.io/gitinsky/k9b-python` |
-| Frontend (Node) | `docker.io/gitinsky/k9b-python-frontend` |
+| Frontend (Node) | `docker.io/gitinsky/k9b-frontend` |
 
 **Namespace:** `gitinsky`
 
@@ -52,7 +52,7 @@ All images are tagged with the short Git commit SHA only:
 
 Example image tags:
 - `docker.io/gitinsky/k9b-python:4344ab1`
-- `docker.io/gitinsky/k9b-python-frontend:4344ab1`
+- `docker.io/gitinsky/k9b-frontend:4344ab1`
 
 ### On `pull_request` (build only)
 - `{sha}` - short Git commit SHA (not pushed)
