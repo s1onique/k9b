@@ -85,9 +85,24 @@ Multiple `except Exception` handlers in the main server module. These require ca
 
 ### src/k8s_diag_agent/ui/api.py
 
-Multiple `except Exception` handlers in the API module. Requires careful review for framework semantics.
+| Line (approx) | Handler | Context | Classification |
+|---------------|---------|---------|----------------|
+| ~406 | `except (OSError, json.JSONDecodeError, ValueError)` | Plan artifact JSON read in _compute_batch_eligibility | **fixed-this-slice** |
+| ~437 | `except (OSError, json.JSONDecodeError, ValueError)` | Execution artifact JSON read in _compute_batch_eligibility | **fixed-this-slice** |
+| ~600 | `except (OSError, UnicodeDecodeError, ValueError, ijson.common.IncompleteJSONError)` | ijson streaming parse in _extract_review_metadata_streaming | **fixed-this-slice** |
+| ~626 | `except (OSError, json.JSONDecodeError, ValueError)` | Review artifact JSON parse in _build_runs_list_review_streaming | **fixed-this-slice** |
+| ~1028 | `except (OSError, json.JSONDecodeError, ValueError)` | Plan artifact parse in batch eligibility prescan loop | **fixed-this-slice** |
+| ~1061 | `except (OSError, json.JSONDecodeError, ValueError)` | Execution artifact parse in batch eligibility prescan loop | **fixed-this-slice** |
+| ~966 | `except (OSError, json.JSONDecodeError, ValueError)` | Execution artifact JSON read in build_runs_list (Stage 2b) | **fixed-this-slice** |
+| ~1098 | `except (OSError, json.JSONDecodeError, ValueError)` | JSON parse fallback in build_runs_list (review fast-path) | **fixed-this-slice** |
+| ~892 | `except (OSError, json.JSONDecodeError, ValueError)` | ui-index.json read in _build_runs_list_super_fast | **fixed-this-slice** |
 
-**Review status**: Deferred to future slice
+**Total in file**: 9 handlers (9 fixed, 0 needs-follow-up, 0 broad remaining)
+
+**ijson exception used**: `ijson.common.IncompleteJSONError` (ijson.common module)
+- Available ijson exceptions: `IncompleteJSONError`, `JSONError`
+- Malformed/incomplete JSON raises `IncompleteJSONError` during stream iteration
+- Verified: `ijson.common.IncompleteJSONError` is raised for `{ invalid json` input
 
 ### src/k8s_diag_agent/ui/server_feedback.py
 
@@ -142,12 +157,13 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 
 | Category | Count |
 |----------|-------|
+| Fixed this slice (ui/api.py - Phase 2 Slice 7) | 9 |
 | Fixed this slice (server_next_checks.py - Phase 2 Slice 6) | 10 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 1 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **28** |
+| **Total fixed** | **37** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -181,7 +197,6 @@ All 10 handlers in server_next_checks.py are now fixed:
 | File | Handler Count | Notes |
 |------|---------------|-------|
 | server.py | ~15 | Main server handlers |
-| api.py | ~10 | API mutation handlers |
 | server_feedback.py | ~10 | Feedback handlers |
 | server_alertmanager.py | ~6 | Alertmanager UI |
 | notifications.py | ~4 | Notification handlers |
@@ -191,6 +206,7 @@ All 10 handlers in server_next_checks.py are now fixed:
 | external_analysis/* | ~8 | External analysis modules |
 
 **Note**: These are deferred to future slices pending careful review of framework/async behavior.
+**api.py**: All 9 broad handlers fixed in this slice (0 remaining)
 
 ---
 
@@ -205,5 +221,5 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (Slice 6: server_next_checks.py mutation write paths - all 10 handlers fixed)*
-*Total handlers fixed in Phase 2: 28 (18 read-model + 10 server_next_checks.py)*
+*Updated: 2026-05-04 (Slice 7: ui/api.py all 9 handlers fixed)*
+*Total handlers fixed in Phase 2: 37 (18 read-model + 10 server_next_checks.py + 9 ui/api.py)*

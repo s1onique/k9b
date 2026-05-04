@@ -13,6 +13,7 @@ Ownership reminder:
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -185,6 +186,8 @@ from .model import (
     RunStatsView,
     UIIndexContext,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def build_run_payload(
@@ -405,7 +408,7 @@ def _compute_batch_eligibility(
                 if raw.get("purpose") == "next-check-planning":
                     plan_data = cast(dict[str, object], raw)
                     break
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError):
                 continue
 
     if not plan_data:
@@ -436,7 +439,7 @@ def _compute_batch_eligibility(
                     candidate_index = payload.get("candidateIndex")
                     if isinstance(candidate_index, int):
                         execution_indices.add(candidate_index)
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError):
                 continue
 
     # Count eligible candidates using the same logic as run_batch_next_checks.py
@@ -594,7 +597,14 @@ def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] |
                 return None
 
             return extracted
-    except Exception:
+    except (OSError, UnicodeDecodeError, ValueError, ijson.common.IncompleteJSONError) as exc:
+        # Note: catches ijson.common.IncompleteJSONError (malformed/incomplete JSON during streaming)
+        logger.warning(
+            "Failed to stream-parse review artifact: artifact=%s, error=%s",
+            review_path.name,
+            str(exc),
+            exc_info=True,
+        )
         return None
 
 
@@ -747,7 +757,13 @@ def _build_runs_list_review_streaming(
                 timestamp = raw.get("timestamp")
                 run_label = raw.get("run_label")
                 cluster_count = raw.get("cluster_count", 0) or 0
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError) as exc:
+                logger.warning(
+                    "Skipped malformed review artifact in streaming fallback: artifact=%s, error=%s",
+                    review_path.name,
+                    str(exc),
+                    exc_info=True,
+                )
                 continue
 
         if not isinstance(run_id, str) or not isinstance(timestamp, str):
@@ -890,7 +906,7 @@ def _build_runs_list_super_fast(
                     if _timings:
                         return payload, timings
                     return payload
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             pass
 
     # Fall back to review file streaming (when index is absent/malformed)
@@ -1021,7 +1037,7 @@ def build_runs_list(
             review_fast_path_fallbacks += 1
             try:
                 raw = json.loads(review_path.read_text(encoding="utf-8"))
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError):
                 review_fast_path_failure_json += 1
                 continue
 
@@ -1158,7 +1174,7 @@ def build_runs_list(
             execution_parsed += 1
             try:
                 raw = json.loads(exec_path.read_text(encoding="utf-8"))
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError):
                 continue
 
             # Check if this is an execution artifact
@@ -1255,7 +1271,7 @@ def build_runs_list(
                     if raw.get("purpose") == "next-check-planning":
                         plan_data[run_id] = raw
                         break
-                except Exception:
+                except (OSError, json.JSONDecodeError, ValueError):
                     continue
             # If run_id is not in window_run_ids, skip without parsing
     timings["batch_plan_parse_ms"] = (time_module.perf_counter() - batch_plan_parse_start) * 1000
@@ -1283,7 +1299,7 @@ def build_runs_list(
                         candidate_index = exec_payload.get("candidateIndex")
                         if isinstance(candidate_index, int):
                             execution_indices[run_id].add(candidate_index)
-                except Exception:
+                except (OSError, json.JSONDecodeError, ValueError):
                     continue
             # If run_id is not in window_run_ids, skip without parsing
     timings["batch_exec_parse_ms"] = (time_module.perf_counter() - batch_exec_parse_start) * 1000
