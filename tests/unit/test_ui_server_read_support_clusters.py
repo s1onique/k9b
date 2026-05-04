@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.ui.server_read_support import (
     _build_clusters_and_drilldown_availability,
@@ -111,6 +112,7 @@ class TestBuildClustersAndDrilldownAvailability(unittest.TestCase):
         # 'cluster-prod' should have its own artifact
         self.assertIn("cluster-prod", cluster_labels)
         self.assertTrue(cluster_labels["cluster-prod"]["drilldown_available"])
+        assert isinstance(cluster_labels["cluster-prod"]["artifact_paths"], dict)
         artifact_path = cluster_labels["cluster-prod"]["artifact_paths"]["drilldown"]
         self.assertIsNotNone(artifact_path)
         self.assertIn("cluster-prod", artifact_path)
@@ -118,6 +120,7 @@ class TestBuildClustersAndDrilldownAvailability(unittest.TestCase):
         # 'cluster' should have its own artifact
         self.assertIn("cluster", cluster_labels)
         self.assertTrue(cluster_labels["cluster"]["drilldown_available"])
+        assert isinstance(cluster_labels["cluster"]["artifact_paths"], dict)
         artifact_path = cluster_labels["cluster"]["artifact_paths"]["drilldown"]
         self.assertIsNotNone(artifact_path)
         self.assertIn("cluster-", artifact_path)  # Should be "cluster-" prefix, not "clusterprod-"
@@ -139,6 +142,7 @@ class TestBuildClustersAndDrilldownAvailability(unittest.TestCase):
         self.assertEqual(clusters[0]["label"], label)
         self.assertFalse(clusters[0]["drilldown_available"])
         self.assertIsNone(clusters[0]["drilldown_timestamp"])
+        assert isinstance(clusters[0]["artifact_paths"], dict)
         self.assertIsNone(clusters[0]["artifact_paths"]["drilldown"])
 
         # Verify drilldown availability reflects the missing cluster
@@ -148,7 +152,9 @@ class TestBuildClustersAndDrilldownAvailability(unittest.TestCase):
         self.assertEqual(drilldown_availability["missing_clusters"], [label])
 
         # Verify coverage entry shows unavailable
+        assert isinstance(drilldown_availability["coverage"], list)
         self.assertEqual(len(drilldown_availability["coverage"]), 1)
+        assert isinstance(drilldown_availability["coverage"][0], dict)
         self.assertFalse(drilldown_availability["coverage"][0]["available"])
 
     def test_backward_compatible_clusters_only(self) -> None:
@@ -193,7 +199,12 @@ class TestBuildClustersAndDrilldownAvailability(unittest.TestCase):
         for label in labels:
             self.assertIn(label, cluster_map)
             self.assertTrue(cluster_map[label]["drilldown_available"])
-            self.assertIn(label, cluster_map[label]["artifact_paths"]["drilldown"] or "")
+            assert isinstance(cluster_map[label]["artifact_paths"], dict)
+            artifact_paths = cluster_map[label]["artifact_paths"]
+            assert isinstance(artifact_paths, dict)
+            drilldown_paths = artifact_paths.get("drilldown")
+            assert drilldown_paths is not None
+            self.assertIn(label, drilldown_paths)
 
     def test_partial_match_does_not_spoof(self) -> None:
         """Run ID prefix collision should not match unrelated labels."""
@@ -240,7 +251,7 @@ class TestBuildClustersAndDrilldownAvailabilityEdgeCases(unittest.TestCase):
         }
 
         clusters, drilldown_availability = _build_clusters_and_drilldown_availability(
-            run_id, review_data, Path(self.temp_dir)
+            run_id, cast(dict[str, object], review_data), Path(self.temp_dir)
         )
 
         self.assertEqual(clusters, [])
@@ -256,7 +267,7 @@ class TestBuildClustersAndDrilldownAvailabilityEdgeCases(unittest.TestCase):
         }
 
         clusters, drilldown_availability = _build_clusters_and_drilldown_availability(
-            run_id, review_data, Path(self.temp_dir)
+            run_id, cast(dict[str, object], review_data), Path(self.temp_dir)
         )
 
         self.assertEqual(clusters, [])
@@ -272,7 +283,7 @@ class TestBuildClustersAndDrilldownAvailabilityEdgeCases(unittest.TestCase):
         }
 
         clusters, drilldown_availability = _build_clusters_and_drilldown_availability(
-            run_id, review_data, Path(self.temp_dir)
+            run_id, cast(dict[str, object], review_data), Path(self.temp_dir)
         )
 
         self.assertEqual(clusters, [])

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.ui.server_read_support import (
     _build_clusters_and_drilldown_availability,
@@ -200,6 +201,8 @@ class TestScanExternalAnalysis:
 
         result = _scan_external_analysis(ea_dir, "run-test")
         assert result["count"] == 1
+        assert isinstance(result, dict)
+        assert isinstance(result["artifacts"], list)
         assert len(result["artifacts"]) == 1
 
     def test_traversal_run_id_returns_empty(self, tmp_path: Path) -> None:
@@ -250,7 +253,7 @@ class TestBuildClustersAndDrilldownAvailability:
         )
 
         clusters, drilldown_availability = _build_clusters_and_drilldown_availability(
-            "run-test", review_data, tmp_path
+            "run-test", cast(dict[str, object], review_data), tmp_path
         )
         assert len(clusters) == 1
         assert clusters[0]["label"] == "prod"
@@ -268,7 +271,7 @@ class TestBuildClustersAndDrilldownAvailability:
         drilldowns_dir.mkdir(parents=True, exist_ok=True)
 
         clusters, drilldown_availability = _build_clusters_and_drilldown_availability(
-            "../etc", review_data, tmp_path
+            "../etc", cast(dict[str, object], review_data), tmp_path
         )
         assert clusters == []
         assert drilldown_availability["available"] == 0
@@ -287,7 +290,7 @@ class TestBuildClustersAndDrilldownAvailability:
         drilldowns_dir.mkdir(parents=True, exist_ok=True)
 
         clusters, drilldown_availability = _build_clusters_and_drilldown_availability(
-            "run*", review_data, tmp_path
+            "run*", cast(dict[str, object], review_data), tmp_path
         )
         assert clusters == []
         assert drilldown_availability["available"] == 0
@@ -313,7 +316,7 @@ class TestBuildDrilldownAvailabilityFromReview:
         )
 
         result = _build_drilldown_availability_from_review(
-            review_data, drilldowns_dir, "run-test"
+            cast(dict[str, object], review_data), drilldowns_dir, "run-test"
         )
         assert result["available"] == 1
         assert result["missing"] == 0
@@ -331,7 +334,7 @@ class TestBuildDrilldownAvailabilityFromReview:
         drilldowns_dir.mkdir(parents=True, exist_ok=True)
 
         result = _build_drilldown_availability_from_review(
-            review_data, drilldowns_dir, "../etc"
+            cast(dict[str, object], review_data), drilldowns_dir, "../etc"
         )
         assert result["available"] == 0
         assert result["missing"] == 1
@@ -349,7 +352,7 @@ class TestBuildDrilldownAvailabilityFromReview:
         drilldowns_dir.mkdir(parents=True, exist_ok=True)
 
         result = _build_drilldown_availability_from_review(
-            review_data, drilldowns_dir, "run*"
+            cast(dict[str, object], review_data), drilldowns_dir, "run*"
         )
         assert result["available"] == 0
 
@@ -366,7 +369,7 @@ class TestBuildDrilldownAvailabilityFromReview:
         drilldowns_dir.mkdir(parents=True, exist_ok=True)
 
         result = _build_drilldown_availability_from_review(
-            review_data, drilldowns_dir, "run-test"
+            cast(dict[str, object], review_data), drilldowns_dir, "run-test"
         )
         # Should not crash, label should be rejected
         assert result["available"] == 0

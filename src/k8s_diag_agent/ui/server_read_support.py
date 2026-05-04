@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -841,7 +841,7 @@ def _find_review_enrichment(
     """
     # Use index for O(1) lookup if available
     if artifact_index is not None:
-        artifacts = artifact_index.review_enrichment
+        artifacts: Sequence[dict[str, object]] = artifact_index.review_enrichment
     else:
         # Fall back to directory scan for backward compatibility
         if not external_analysis_dir.exists():
@@ -854,7 +854,7 @@ def _find_review_enrichment(
             # Invalid run_id - cannot safely search, return None
             return None
 
-        artifacts = []
+        _scan_artifacts: list[dict[str, object]] = []
         # SECURITY: run_id validated by validate_run_id() before glob construction
         glob_pattern = safe_run_artifact_glob(validated_run_id, "-review-enrichment*.json")
         for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
@@ -864,7 +864,7 @@ def _find_review_enrichment(
                     purpose = artifact_data.get("purpose")
                     if purpose == "review-enrichment":
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
-                        artifacts.append(artifact_data)
+                        _scan_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(
                     "Skipped malformed review-enrichment artifact: %s",
@@ -878,6 +878,7 @@ def _find_review_enrichment(
                     exc_info=True,
                 )
                 continue
+        artifacts = _scan_artifacts
 
     if not artifacts:
         return None
@@ -935,8 +936,9 @@ def _find_next_check_plan(
         Next-check plan data dict, or None if not found
     """
     # Use index for O(1) lookup if available
+    _scan_plan_artifacts: list[dict[str, object]] = []
     if artifact_index is not None:
-        plan_artifacts = artifact_index.next_check_plan
+        _scan_plan_artifacts = list(artifact_index.next_check_plan)
     else:
         # Fall back to directory scan for backward compatibility
         if not external_analysis_dir.exists():
@@ -949,7 +951,6 @@ def _find_next_check_plan(
             # Invalid run_id - cannot safely search, return None
             return None
 
-        plan_artifacts = []
         # SECURITY: run_id validated by validate_run_id() before glob construction
         glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
         for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
@@ -959,7 +960,7 @@ def _find_next_check_plan(
                     purpose = artifact_data.get("purpose")
                     if purpose == "next-check-planning":
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
-                        plan_artifacts.append(artifact_data)
+                        _scan_plan_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(
                     "Skipped malformed next-check-plan artifact: %s",
@@ -974,11 +975,11 @@ def _find_next_check_plan(
                 )
                 continue
 
-    if not plan_artifacts:
+    if not _scan_plan_artifacts:
         return None
 
     # Take the first (sorted) matching artifact
-    artifact_data = plan_artifacts[0]
+    artifact_data = _scan_plan_artifacts[0]
 
     payload = artifact_data.get("payload", {})
     candidates = payload.get("candidates", [])
@@ -1107,6 +1108,8 @@ def _build_execution_history(
         telemetry["alertmanager_reviews_indexed"] = len(reviews_by_source)
 
     # Use index for O(1) lookup if available
+    # Declare type annotation to allow both tuple (from index) and list (from scan)
+    execution_artifacts: Sequence[dict[str, object]]
     if artifact_index is not None:
         execution_artifacts = artifact_index.next_check_execution
         telemetry["execution_history_source"] = "artifact_index"
@@ -1125,7 +1128,7 @@ def _build_execution_history(
             telemetry["execution_entries_returned"] = 0
             return history, telemetry
 
-        execution_artifacts = []
+        _scan_execution_artifacts: list[dict[str, object]] = []
         # SECURITY: run_id validated by validate_run_id() before glob construction
         # The suffix "-next-check-execution*.json" ensures we only match execution artifacts
         glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution*.json")
@@ -1143,7 +1146,7 @@ def _build_execution_history(
                     if purpose == "next-check-execution":
                         # Add artifact_path for reference
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
-                        execution_artifacts.append(artifact_data)
+                        _scan_execution_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(
                     "Skipped malformed next-check-execution artifact: %s",
@@ -1158,6 +1161,9 @@ def _build_execution_history(
                 )
                 continue
 
+        # Assign scanned artifacts for iteration
+        execution_artifacts = _scan_execution_artifacts
+
     for artifact_data in execution_artifacts:
         # Verify run_id matches in artifact data as additional safety check
         # Only enforce if artifact has a run_id field (backward compatibility)
@@ -1168,6 +1174,7 @@ def _build_execution_history(
         payload = artifact_data.get("payload", {})
 
         # Extract provenance fields from payload
+        assert isinstance(payload, dict), "payload must be dict after isinstance check above"
         candidate_id = _get_field_with_fallback(payload, "candidateId", "candidate_id")
         candidate_index_raw = _get_field_with_default(payload, None, "candidateIndex", "candidate_index")
         candidate_index: int | None = None
@@ -1195,7 +1202,7 @@ def _build_execution_history(
 
         # Merge Alertmanager review if exists for this source artifact
         source_artifact = artifact_data.get("artifact_path")
-        if source_artifact:
+        if isinstance(source_artifact, str) and source_artifact:
             review = reviews_by_source.get(source_artifact)
             if review is not None:
                 entry = _merge_alertmanager_review_into_history_entry(entry, review)
@@ -1279,6 +1286,8 @@ def _build_llm_stats_for_run(
         }
 
     # Use index for O(1) lookup if available
+    # Declare type annotation to allow both tuple (from index) and list (from scan)
+    artifacts: Sequence[dict[str, object]]
     if artifact_index is not None:
         artifacts = artifact_index.artifacts
     else:
@@ -1300,7 +1309,7 @@ def _build_llm_stats_for_run(
             }
 
         # Fall back to directory scan for backward compatibility
-        artifacts = []
+        _scan_llm_artifacts: list[dict[str, object]] = []
         # SECURITY: run_id validated by validate_run_id() before glob construction
         glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
         for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
@@ -1311,7 +1320,7 @@ def _build_llm_stats_for_run(
             try:
                 artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
                 if isinstance(artifact_data, dict):
-                    artifacts.append(artifact_data)
+                    _scan_llm_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(
                     "Skipped malformed artifact in llm_stats scan: %s",
@@ -1325,6 +1334,7 @@ def _build_llm_stats_for_run(
                     exc_info=True,
                 )
                 continue
+        artifacts = _scan_llm_artifacts
 
     for artifact_data in artifacts:
         status = str(artifact_data.get("status", "")).lower()
@@ -1348,7 +1358,7 @@ def _build_llm_stats_for_run(
 
         # Track latest timestamp
         timestamp = artifact_data.get("timestamp")
-        if timestamp:
+        if isinstance(timestamp, str) and timestamp:
             if latest_timestamp is None or timestamp > latest_timestamp:
                 latest_timestamp = timestamp
 

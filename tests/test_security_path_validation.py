@@ -644,6 +644,8 @@ class TestHealthUIPromotionGlob:
         )
 
         result = _build_promotions_index(external_analysis_dir, "run-test")
+        assert isinstance(result, dict)
+        assert isinstance(result["promotions"], list)
         assert len(result["promotions"]) == 2
         assert result["total_count"] == 2
         assert result["run_id"] == "run-test"
@@ -697,10 +699,13 @@ class TestHealthUIPromotionGlob:
         )
 
         result = _build_promotions_index(external_analysis_dir, "run-test")
-        assert len(result["promotions"]) == 1
-        assert result["promotions"][0].get("candidateId") == "c1"
+        assert isinstance(result, dict)
+        promotions = result["promotions"]
+        assert isinstance(promotions, list) and len(promotions) >= 1
+        assert isinstance(promotions[0], dict) and promotions[0].get("candidateId") == "c1"
 
         result = _build_promotions_index(external_analysis_dir, "run/../../etc")
+        assert isinstance(result, dict)
         assert result["promotions"] == []
 
     def test_double_dots_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
@@ -905,10 +910,13 @@ class TestSerializeDiagnosticPackGlob:
         # Valid run_id should find the latest pack
         result = _serialize_diagnostic_pack(tmp_path, "run-test", "Test Run")
         assert result is not None
+        assert isinstance(result, dict)
         assert "path" in result
         assert "timestamp" in result
         # Should find the latest (20250106)
-        assert "20250106" in result["path"]
+        path_val = result["path"]
+        assert isinstance(path_val, str)
+        assert "20250106" in path_val
 
     def test_traversal_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
         """Path traversal in run_id should return None (safe fallback)."""
@@ -963,8 +971,11 @@ class TestSerializeDiagnosticPackGlob:
 
         result = _serialize_diagnostic_pack(tmp_path, "run-test", "Test")
         assert result is not None
+        assert isinstance(result, dict)
+        path_val = result["path"]
+        assert isinstance(path_val, str)
         # Should find the latest by timestamp
-        assert "20250106" in result["path"]
+        assert "20250106" in path_val
 
     def test_glob_is_bounded_to_directory(self, tmp_path: Path) -> None:
         """Verify glob cannot escape the diagnostic-packs directory.
@@ -982,8 +993,11 @@ class TestSerializeDiagnosticPackGlob:
         # Valid run_id should work
         result = _serialize_diagnostic_pack(tmp_path, "run-test", "Test")
         assert result is not None
+        assert isinstance(result, dict)
+        path_val = result["path"]
+        assert isinstance(path_val, str)
         # Result path should be relative to root_dir
-        assert "diagnostic-packs" in result["path"]
+        assert "diagnostic-packs" in path_val
 
     def test_double_dots_run_id_returns_safe_fallback(self, tmp_path: Path) -> None:
         """Double dots in run_id should return None."""

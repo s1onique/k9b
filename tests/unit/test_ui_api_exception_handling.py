@@ -9,6 +9,7 @@ import logging
 import tempfile
 import time
 from pathlib import Path
+from typing import cast
 from unittest import TestCase
 
 from k8s_diag_agent.ui.api import (
@@ -16,6 +17,7 @@ from k8s_diag_agent.ui.api import (
     _compute_batch_eligibility,
     _extract_review_metadata_streaming,
 )
+from k8s_diag_agent.ui.api_payloads import RunsListTimings
 
 
 class TestBatchEligibilityExceptionHandling(TestCase):
@@ -163,6 +165,7 @@ class TestExtractReviewMetadataStreamingExceptionHandling(TestCase):
             result = _extract_review_metadata_streaming(valid_review)
 
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.get("run_id"), "test-run")
         self.assertEqual(result.get("timestamp"), "2026-01-01T00:00:00Z")
 
@@ -196,12 +199,12 @@ class TestBuildRunsListReviewStreamingExceptionHandling(TestCase):
         malformed_review = self.reviews_dir / "malformed-review.json"
         malformed_review.write_text("{ malformed json", encoding="utf-8")
 
-        timings = {}
+        timings: dict[str, float] = {}
         start_time = time.perf_counter()
 
         with self.assertLogs("k8s_diag_agent.ui.api", level=logging.WARNING) as cm:
             result = _build_runs_list_review_streaming(
-                self.tmpdir, limit=100, timings=timings, start_time=start_time
+                self.tmpdir, limit=100, timings=cast(RunsListTimings, timings), start_time=start_time
             )
 
         # Should have loaded 1 valid review
@@ -223,12 +226,12 @@ class TestBuildRunsListReviewStreamingExceptionHandling(TestCase):
                 "cluster_count": i + 1,
             }), encoding="utf-8")
 
-        timings = {}
+        timings: dict[str, float] = {}
         start_time = time.perf_counter()
 
         with self.assertNoLogs("k8s_diag_agent.ui.api", level=logging.WARNING):
             result = _build_runs_list_review_streaming(
-                self.tmpdir, limit=100, timings=timings, start_time=start_time
+                self.tmpdir, limit=100, timings=cast(RunsListTimings, timings), start_time=start_time
             )
 
         self.assertEqual(result["totalCount"], 3)

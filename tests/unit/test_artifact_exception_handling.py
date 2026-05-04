@@ -115,6 +115,8 @@ class TestArtifactExceptionHandling(TestCase):
 
         # Should have scanned 1 valid artifact
         self.assertEqual(result["count"], 1)
+        assert isinstance(result, dict)
+        assert isinstance(result["artifacts"], list)
         self.assertEqual(len(result["artifacts"]), 1)
 
         # Should have logged a warning for the malformed artifact
@@ -250,6 +252,7 @@ class TestFindReviewEnrichmentExceptionHandling(TestCase):
 
         # Should have found the valid artifact
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.get("status"), "success")
 
         # Should have logged a warning for the malformed artifact
@@ -288,6 +291,7 @@ class TestFindNextCheckPlanExceptionHandling(TestCase):
 
         # Should have found the valid artifact
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.get("status"), "success")
 
         # Should have logged a warning for the malformed artifact
@@ -627,6 +631,8 @@ class TestBuildRecentRunsSummaryExceptionHandling(TestCase):
 
         # Should have processed 1 valid run
         self.assertEqual(result["total_count"], 1)
+        assert isinstance(result, dict)
+        assert isinstance(result["runs"], list)
         self.assertEqual(len(result["runs"]), 1)
 
         # Should have logged a warning for the malformed artifact
@@ -652,6 +658,8 @@ class TestBuildRecentRunsSummaryExceptionHandling(TestCase):
             result = _build_recent_runs_summary(reviews_dir)
 
         self.assertEqual(result["total_count"], 3)
+        assert isinstance(result, dict)
+        assert isinstance(result["runs"], list)
         self.assertEqual(len(result["runs"]), 3)
 
 
@@ -693,6 +701,8 @@ class TestBuildPromotionsIndexExceptionHandling(TestCase):
 
         # Should have indexed 1 valid promotion
         self.assertEqual(result["total_count"], 1)
+        assert isinstance(result, dict)
+        assert isinstance(result["promotions"], list)
         self.assertEqual(len(result["promotions"]), 1)
 
         # Should have logged a warning for the malformed artifact
@@ -722,6 +732,8 @@ class TestBuildPromotionsIndexExceptionHandling(TestCase):
             result = _build_promotions_index(external_analysis_dir, self.run_id)
 
         self.assertEqual(result["total_count"], 2)
+        assert isinstance(result, dict)
+        assert isinstance(result["promotions"], list)
         self.assertEqual(len(result["promotions"]), 2)
 
 

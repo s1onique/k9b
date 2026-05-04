@@ -16,6 +16,7 @@ import unittest
 import unittest.mock as mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -568,7 +569,7 @@ class RunArtifactIndexTests(unittest.TestCase):
         # Verify review artifact path is preserved in merged entry
         review_path = entry.get("alertmanagerReviewArtifactPath")
         self.assertIsNotNone(review_path)
-        self.assertIn(review_artifact_path, review_path)
+        self.assertIn(review_artifact_path, cast(str, review_path))
 
     def test_alertmanager_review_missing_non_fatal(self) -> None:
         """Test that missing Alertmanager review artifacts remain non-fatal."""
@@ -683,7 +684,7 @@ class RunArtifactIndexTests(unittest.TestCase):
         original_glob = Path.glob
 
         def track_glob(self_path: Path, pattern: str) -> list[Path]:
-            result = original_glob(self_path, pattern)
+            result = list(original_glob(self_path, pattern))
             glob_calls.append((str(self_path), pattern))
             return result
 

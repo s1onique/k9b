@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.ui.api import (
     _compute_batch_eligibility,
@@ -211,10 +212,10 @@ class TestComputeBatchEligibilityFromCache:
                 }
             }
         }
-        execution_indices = {"run-test": set()}
+        execution_indices = {"run-test": set()}  # type: ignore[var-annotated]
 
         executable, count = _compute_batch_eligibility_from_cache(
-            "run-test", plan_data, execution_indices
+            "run-test", cast(dict[str, dict[str, object]], plan_data), execution_indices
         )
         assert executable is True
         assert count == 1
@@ -283,14 +284,14 @@ class TestComputeBatchEligibilityFromCache:
 
         # run-test should find 1 eligible (c1 executed, c2 not)
         executable, count = _compute_batch_eligibility_from_cache(
-            "run-test", plan_data, execution_indices
+            "run-test", cast(dict[str, dict[str, object]], plan_data), execution_indices
         )
         assert executable is True
         assert count == 1
 
         # Invalid run_id should return 0 (no dict lookup)
         executable, count = _compute_batch_eligibility_from_cache(
-            "../evil", plan_data, execution_indices
+            "../evil", cast(dict[str, dict[str, object]], plan_data), execution_indices
         )
         assert executable is False
         assert count == 0
@@ -312,7 +313,7 @@ class TestComputeBatchEligibilityFromCache:
         execution_indices: dict[str, set[int]] = {}
 
         executable, count = _compute_batch_eligibility_from_cache(
-            "run-test", plan_data, execution_indices
+            "run-test", cast(dict[str, dict[str, object]], plan_data), execution_indices
         )
         assert executable is False
         assert count == 0
@@ -337,18 +338,18 @@ class TestComputeBatchEligibilityFromCache:
             }
         }
         # Execution indices for run-123
-        execution_indices = {"run-123": set()}
+        execution_indices = {"run-123": set()}  # type: ignore[var-annotated]
 
         # Valid run_id should find both plan and indices
         executable, count = _compute_batch_eligibility_from_cache(
-            "run-123", plan_data, execution_indices
+            "run-123", cast(dict[str, dict[str, object]], plan_data), execution_indices
         )
         assert executable is True
         assert count == 1
 
         # Invalid run_id should not find anything (no glob needed, but dict lookup)
         executable, count = _compute_batch_eligibility_from_cache(
-            "run-456", plan_data, execution_indices
+            "run-456", cast(dict[str, dict[str, object]], plan_data), execution_indices
         )
         assert executable is False
         assert count == 0
