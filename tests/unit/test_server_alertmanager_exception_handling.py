@@ -17,6 +17,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -51,7 +52,7 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
     def _write_index_with_sources(
         self,
         run_id: str,
-        sources: list[dict[str, object]],
+        sources: Sequence[Mapping[str, object]],
     ) -> None:
         """Write health UI index with alertmanager sources."""
         self.health_dir.mkdir(parents=True, exist_ok=True)
@@ -472,7 +473,7 @@ class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
     def _write_index_with_sources(
         self,
         run_id: str,
-        sources: list[dict[str, object]],
+        sources: Sequence[Mapping[str, object]],
     ) -> None:
         """Write health UI index with alertmanager sources."""
         self.health_dir.mkdir(parents=True, exist_ok=True)

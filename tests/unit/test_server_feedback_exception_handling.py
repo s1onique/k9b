@@ -14,8 +14,10 @@ import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
+from k8s_diag_agent.ui.server import HealthUIRequestHandler
 from k8s_diag_agent.ui.server_feedback import (
     handle_alertmanager_relevance_feedback,
     handle_usefulness_feedback,
@@ -59,7 +61,8 @@ class TestUsefulnessFeedbackMalformedPayload(unittest.TestCase):
         """Malformed JSON should return 400."""
         self.handler.headers["Content-Length"] = str(len(b"not valid json"))
         self.handler.rfile = BytesIO(b"not valid json")
-        handle_usefulness_feedback(self.handler)
+        handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 400)
         self.assertIn("error", response)
@@ -69,7 +72,8 @@ class TestUsefulnessFeedbackMalformedPayload(unittest.TestCase):
         invalid_utf8 = b"\xff\xfe invalid json"
         self.handler.headers["Content-Length"] = str(len(invalid_utf8))
         self.handler.rfile = BytesIO(invalid_utf8)
-        handle_usefulness_feedback(self.handler)
+        handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 400)
 
@@ -77,7 +81,8 @@ class TestUsefulnessFeedbackMalformedPayload(unittest.TestCase):
         """Non-dict JSON should return 400."""
         self.handler.headers["Content-Length"] = str(len(b'"just a string"'))
         self.handler.rfile = BytesIO(b'"just a string"')
-        handle_usefulness_feedback(self.handler)
+        handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 400)
 
@@ -96,7 +101,8 @@ class TestAlertmanagerFeedbackMalformedPayload(unittest.TestCase):
         """Malformed JSON should return 400."""
         self.handler.headers["Content-Length"] = str(len(b"not valid json"))
         self.handler.rfile = BytesIO(b"not valid json")
-        handle_alertmanager_relevance_feedback(self.handler)
+        handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 400)
         self.assertIn("error", response)
@@ -106,7 +112,8 @@ class TestAlertmanagerFeedbackMalformedPayload(unittest.TestCase):
         invalid_utf8 = b"\xff\xfe invalid json"
         self.handler.headers["Content-Length"] = str(len(invalid_utf8))
         self.handler.rfile = BytesIO(invalid_utf8)
-        handle_alertmanager_relevance_feedback(self.handler)
+        handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 400)
 
@@ -114,7 +121,8 @@ class TestAlertmanagerFeedbackMalformedPayload(unittest.TestCase):
         """Non-dict JSON should return 400."""
         self.handler.headers["Content-Length"] = str(len(b'"just a string"'))
         self.handler.rfile = BytesIO(b'"just a string"')
-        handle_alertmanager_relevance_feedback(self.handler)
+        handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 400)
 
@@ -160,8 +168,9 @@ class TestArtifactReadErrors(unittest.TestCase):
 
         # Mock the logger to capture log calls
         with patch("k8s_diag_agent.ui.server_feedback.logger") as mock_logger:
-            handle_usefulness_feedback(self.handler)
+            handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
 
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 500)
         self.assertIn("error", response)
@@ -189,8 +198,9 @@ class TestArtifactReadErrors(unittest.TestCase):
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
         with patch("k8s_diag_agent.ui.server_feedback.logger") as mock_logger:
-            handle_usefulness_feedback(self.handler)
+            handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
 
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 500)
 
@@ -261,8 +271,9 @@ class TestArtifactWriteErrors(unittest.TestCase):
 
         try:
             with patch("k8s_diag_agent.ui.server_feedback.logger") as mock_logger:
-                handle_usefulness_feedback(self.handler)
+                handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
 
+            assert self.handler.sent_response is not None
             response, status = self.handler.sent_response
             self.assertEqual(status, 500)
             self.assertIn("error", response)
@@ -329,7 +340,8 @@ class TestUIIndexTouchNonFatal(unittest.TestCase):
         ui_index_path.chmod(0o444)  # Read-only
 
         try:
-            handle_usefulness_feedback(self.handler)
+            handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
+            assert self.handler.sent_response is not None
             response, status = self.handler.sent_response
             # Should still succeed even if touch fails
             self.assertEqual(status, 200)
@@ -383,8 +395,9 @@ class TestLogSecurity(unittest.TestCase):
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
         with patch("k8s_diag_agent.ui.server_feedback.logger") as mock_logger:
-            handle_usefulness_feedback(self.handler)
+            handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
 
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 200)
 
@@ -409,8 +422,9 @@ class TestLogSecurity(unittest.TestCase):
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
         with patch("k8s_diag_agent.ui.server_feedback.logger") as mock_logger:
-            handle_alertmanager_relevance_feedback(self.handler)
+            handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
 
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 200)
 
@@ -463,7 +477,8 @@ class TestValidFeedbackPath(unittest.TestCase):
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
-        handle_usefulness_feedback(self.handler)
+        handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 200)
         self.assertEqual(response["status"], "success")
@@ -482,7 +497,8 @@ class TestValidFeedbackPath(unittest.TestCase):
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
-        handle_alertmanager_relevance_feedback(self.handler)
+        handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
+        assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
         self.assertEqual(status, 200)
         self.assertEqual(response["status"], "success")
