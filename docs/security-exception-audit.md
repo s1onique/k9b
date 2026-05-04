@@ -106,9 +106,28 @@ Multiple `except Exception` handlers in the main server module. These require ca
 
 ### src/k8s_diag_agent/ui/server_feedback.py
 
-Multiple `except Exception` handlers in feedback handlers. Requires careful review.
+| Line | Handler | Context | Classification |
+|------|---------|---------|----------------|
+| 50 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_usefulness_feedback | **fixed-this-slice** |
+| 100 | `except (OSError, ValueError)` | Artifact path resolve in handle_usefulness_feedback | **fixed-this-slice** |
+| 109 | `except (OSError, json.JSONDecodeError, ValueError)` | Execution artifact read in handle_usefulness_feedback | **fixed-this-slice** |
+| 173 | `except OSError` | Review artifact write in handle_usefulness_feedback | **fixed-this-slice** |
+| 187 | `except OSError` | UI index touch (non-fatal) in handle_usefulness_feedback | **fixed-this-slice** |
+| 237 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError)` | Payload parsing in handle_alertmanager_relevance_feedback | **fixed-this-slice** |
+| 287 | `except (OSError, ValueError)` | Artifact path resolve in handle_alertmanager_relevance_feedback | **fixed-this-slice** |
+| 296 | `except (OSError, json.JSONDecodeError, ValueError)` | Execution artifact read in handle_alertmanager_relevance_feedback | **fixed-this-slice** |
+| 348 | `except OSError` | Review artifact write in handle_alertmanager_relevance_feedback | **fixed-this-slice** |
+| 362 | `except OSError` | UI index touch (non-fatal) in handle_alertmanager_relevance_feedback | **fixed-this-slice** |
 
-**Review status**: Deferred to future slice
+**Total in file**: 10 handlers (10 fixed, 0 remaining)
+
+**Security hardening applied**:
+- Request payload parse: explicit tuple with `json.JSONDecodeError, UnicodeDecodeError, ValueError`
+- Path resolve: explicit tuple with `OSError, ValueError`
+- Artifact read: explicit tuple with `OSError, json.JSONDecodeError, ValueError` + safe error logging
+- Artifact write: explicit `OSError` with safe error logging (returns 500)
+- UI index touch: explicit `OSError` (non-fatal, silently passed)
+- Logs exclude raw feedback content (usefulness_summary, alertmanager_relevance_summary)
 
 ### src/k8s_diag_agent/ui/server_alertmanager.py
 
@@ -159,11 +178,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 |----------|-------|
 | Fixed this slice (ui/api.py - Phase 2 Slice 7) | 9 |
 | Fixed this slice (server_next_checks.py - Phase 2 Slice 6) | 10 |
+| Fixed this slice (server_feedback.py - Phase 2 Slice 8) | 10 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 1 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **37** |
+| **Total fixed** | **47** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -221,5 +241,5 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 *Audit created: 2026-01-05*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (Slice 7: ui/api.py all 9 handlers fixed)*
-*Total handlers fixed in Phase 2: 37 (18 read-model + 10 server_next_checks.py + 9 ui/api.py)*
+*Updated: 2026-05-04 (Slice 8: server_feedback.py all 10 handlers fixed)*
+*Total handlers fixed in Phase 2: 47 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py)*

@@ -46,7 +46,12 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
     try:
         raw_payload = handler.rfile.read(content_length).decode("utf-8")
         payload = json.loads(raw_payload)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError):
+        handler._send_json({"error": "Invalid JSON payload"}, 400)
+        return
+
+    # Ensure payload is a dict (defensive against non-object JSON)
+    if not isinstance(payload, dict):
         handler._send_json({"error": "Invalid JSON payload"}, 400)
         return
 
@@ -104,7 +109,7 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
     # Resolve artifact path securely
     try:
         artifact_path = (handler.runs_dir / artifact_path_rel).resolve()
-    except Exception:
+    except (OSError, ValueError):
         handler._send_json({"error": "Invalid artifact path"}, 400)
         return
 
@@ -120,8 +125,17 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
     # Read the execution artifact to extract metadata
     try:
         execution_artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        handler._send_json({"error": f"Unable to read execution artifact: {exc}"}, 500)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.error(
+            "Unable to read execution artifact for usefulness feedback",
+            extra={
+                "artifact_rel": artifact_path_rel,
+                "run_id": artifact_path_rel,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
+        handler._send_json({"error": "Unable to read execution artifact"}, 500)
         return
 
     # Extract execution metadata for the review artifact
@@ -154,7 +168,7 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
         # Immutable artifact instance identity for provenance/debugging
         "artifact_id": artifact_id,
         # Link back to original execution artifact
-        "source_artifact": str(artifact_path.relative_to(handler._health_root)),
+        "source_artifact": str(artifact_path.relative_to(handler._health_root.resolve())),
         # Usefulness judgment
         "usefulness_class": usefulness_class.value,
         "usefulness_summary": usefulness_summary,
@@ -177,17 +191,27 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
 
     try:
         review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
-    except Exception as exc:
-        handler._send_json({"error": f"Unable to persist review artifact: {exc}"}, 500)
+    except OSError as exc:
+        logger.error(
+            "Unable to persist usefulness review artifact",
+            extra={
+                "review_filename": review_filename,
+                "source_artifact_rel": artifact_path_rel,
+                "usefulness_class": usefulness_class.value,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
+        handler._send_json({"error": "Unable to persist review artifact"}, 500)
         return
 
     logger.info(
         "Operator recorded usefulness feedback",
         extra={
-            "review_artifact": str(review_path),
-            "source_artifact": str(artifact_path),
+            "review_filename": review_filename,
+            "source_artifact_rel": artifact_path_rel,
             "usefulness_class": usefulness_class.value,
-            "usefulness_summary": usefulness_summary,
+            # NOTE: usefulness_summary intentionally excluded from logs
         },
     )
 
@@ -196,7 +220,7 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
     if ui_index_path.exists():
         try:
             ui_index_path.touch()
-        except Exception:
+        except OSError:
             pass  # Non-fatal
 
     handler._send_json({
@@ -204,7 +228,7 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
         "summary": "Usefulness feedback recorded",
         "usefulnessClass": usefulness_class.value,
         "usefulnessSummary": usefulness_summary,
-        "reviewArtifactPath": str(review_path.relative_to(handler._health_root)),
+        "reviewArtifactPath": str(review_path.relative_to(handler._health_root.resolve())),
     })
 
 
@@ -230,7 +254,12 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
     try:
         raw_payload = handler.rfile.read(content_length).decode("utf-8")
         payload = json.loads(raw_payload)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError):
+        handler._send_json({"error": "Invalid JSON payload"}, 400)
+        return
+
+    # Ensure payload is a dict (defensive against non-object JSON)
+    if not isinstance(payload, dict):
         handler._send_json({"error": "Invalid JSON payload"}, 400)
         return
 
@@ -266,7 +295,7 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
     # Resolve artifact path securely
     try:
         artifact_path = (handler.runs_dir / artifact_path_rel).resolve()
-    except Exception:
+    except (OSError, ValueError):
         handler._send_json({"error": "Invalid artifact path"}, 400)
         return
 
@@ -282,8 +311,17 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
     # Read the execution artifact to extract provenance and metadata
     try:
         execution_artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        handler._send_json({"error": f"Unable to read execution artifact: {exc}"}, 500)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.error(
+            "Unable to read execution artifact for alertmanager relevance feedback",
+            extra={
+                "artifact_rel": artifact_path_rel,
+                "run_id": artifact_path_rel,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
+        handler._send_json({"error": "Unable to read execution artifact"}, 500)
         return
 
     # Extract provenance from execution artifact (server-owned, not client-supplied)
@@ -317,7 +355,7 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
         "timestamp": timestamp,
         "reviewed_at": datetime.now(UTC).isoformat(),
         # Link back to original execution artifact
-        "source_artifact": str(artifact_path.relative_to(handler._health_root)),
+        "source_artifact": str(artifact_path.relative_to(handler._health_root.resolve())),
         # Alertmanager relevance judgment
         "alertmanager_relevance": relevance.value,
         "alertmanager_relevance_summary": relevance_summary,
@@ -330,17 +368,27 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
 
     try:
         review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
-    except Exception as exc:
-        handler._send_json({"error": f"Unable to persist review artifact: {exc}"}, 500)
+    except OSError as exc:
+        logger.error(
+            "Unable to persist alertmanager relevance review artifact",
+            extra={
+                "review_filename": review_filename,
+                "source_artifact_rel": artifact_path_rel,
+                "alertmanager_relevance": relevance.value,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
+        handler._send_json({"error": "Unable to persist review artifact"}, 500)
         return
 
     logger.info(
         "Operator recorded Alertmanager relevance feedback",
         extra={
-            "review_artifact": str(review_path),
-            "source_artifact": str(artifact_path),
+            "review_filename": review_filename,
+            "source_artifact_rel": artifact_path_rel,
             "alertmanager_relevance": relevance.value,
-            "alertmanager_relevance_summary": relevance_summary,
+            # NOTE: alertmanager_relevance_summary intentionally excluded from logs
         },
     )
 
@@ -349,7 +397,7 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
     if ui_index_path.exists():
         try:
             ui_index_path.touch()
-        except Exception:
+        except OSError:
             pass  # Non-fatal
 
     handler._send_json({
@@ -357,5 +405,5 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
         "summary": "Alertmanager relevance feedback recorded",
         "alertmanagerRelevance": relevance.value,
         "alertmanagerRelevanceSummary": relevance_summary,
-        "reviewArtifactPath": str(review_path.relative_to(handler._health_root)),
+        "reviewArtifactPath": str(review_path.relative_to(handler._health_root.resolve())),
     })
