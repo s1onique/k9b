@@ -163,13 +163,19 @@ describe("run-control-app-fetch-ownership", () => {
     });
 
     // Verify the selected run ID is shown (proves RunControl populated the selection)
-    const heroRunId = document.querySelector(".hero-run-id");
-    expect(heroRunId).toBeTruthy();
-    expect(heroRunId?.textContent).toContain(PERSISTED_RUN_ID);
+    // Wrap in waitFor to avoid race condition with async state update
+    await waitFor(() => {
+      const heroRunId = document.querySelector(".hero-run-id");
+      expect(heroRunId).not.toBeNull();
+      expect(heroRunId!.textContent).toContain(PERSISTED_RUN_ID);
+    });
 
-    // Verify the run label is shown
-    const heroTitle = document.querySelector(".hero-run-title");
-    expect(heroTitle?.textContent).toContain("Past Run");
+    // Verify the run label is shown - wrap in waitFor
+    await waitFor(() => {
+      const heroTitle = document.querySelector(".hero-run-title");
+      expect(heroTitle).not.toBeNull();
+      expect(heroTitle!.textContent).toContain("Past Run");
+    });
 
     // Guard test: selected-run detail fetch happens exactly once during boot
     // This assertion will FAIL if the bug exists (persisted selection not fetched)
@@ -200,15 +206,21 @@ describe("run-control-app-fetch-ownership", () => {
       expect(appShell).toBeTruthy();
     });
 
-    // Verify the selected run ID is shown
-    const heroRunId = document.querySelector(".hero-run-id");
-    expect(heroRunId?.textContent).toContain(PERSISTED_RUN_ID);
+    // Verify the selected run ID is shown - wrap in waitFor to avoid race condition
+    await waitFor(() => {
+      const heroRunId = document.querySelector(".hero-run-id");
+      expect(heroRunId).not.toBeNull();
+      expect(heroRunId!.textContent).toContain(PERSISTED_RUN_ID);
+    });
 
     // Verify the "Past run" badge is shown (proves the run is not the latest)
     // The selected run is NOT the latest (run-latest comes first in the sorted list)
-    const pastRunBadge = document.querySelector(".run-badge--past");
-    expect(pastRunBadge).toBeTruthy();
-    expect(pastRunBadge?.textContent).toContain("Past run");
+    // Wrap in waitFor to avoid race condition
+    await waitFor(() => {
+      const pastRunBadge = document.querySelector(".run-badge--past");
+      expect(pastRunBadge).not.toBeNull();
+      expect(pastRunBadge!.textContent).toContain("Past run");
+    });
 
     // Guard test: selected-run detail fetch happens exactly once during boot
     // This assertion will FAIL if the bug exists (persisted selection not fetched)
