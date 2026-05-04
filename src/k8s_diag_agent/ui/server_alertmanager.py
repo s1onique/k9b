@@ -85,14 +85,16 @@ def handle_alertmanager_source_action(
     try:
         raw_payload = handler.rfile.read(content_length).decode("utf-8")
         payload = json.loads(raw_payload)
-    except Exception:
+        # Validate payload is a dict (not array, number, etc.)
+        if not isinstance(payload, dict):
+            raise TypeError("payload must be a dict")
+        # Validate action field (required in body)
+        action_raw = payload.get("action")
+        if not isinstance(action_raw, str) or not action_raw:
+            handler._send_json({"error": "action is required in request body"}, 400)
+            return
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError, AttributeError):
         handler._send_json({"error": "Invalid JSON payload"}, 400)
-        return
-
-    # Validate action field (required in body)
-    action_raw = payload.get("action")
-    if not isinstance(action_raw, str) or not action_raw:
-        handler._send_json({"error": "action is required in request body"}, 400)
         return
 
     # Parse action enum
@@ -197,7 +199,16 @@ def handle_alertmanager_source_action(
         overrides_path.write_text(
             json.dumps(existing_overrides.to_dict(), indent=2), encoding="utf-8"
         )
-    except Exception as exc:
+    except OSError as exc:
+        logger.error(
+            "Failed to persist override",
+            extra={
+                "source_id": source_key,
+                "cluster_label": cluster_label,
+                "action": action.value,
+                "error": str(exc),
+            },
+        )
         handler._send_json({"error": f"Failed to persist override: {exc}"}, 500)
         return
 
@@ -262,7 +273,7 @@ def handle_alertmanager_source_action(
             registry.add_entry(updated_entry)
 
         write_source_registry(registry, handler._health_root)
-    except Exception as exc:
+    except OSError as exc:
         # Log warning but don't fail the request - override was written successfully
         logger.warning(
             "Failed to persist source to durable registry",
@@ -308,7 +319,7 @@ def handle_alertmanager_source_action(
                 "action": action.value,
             },
         )
-    except Exception as exc:
+    except OSError as exc:
         # Non-fatal: log warning but don't fail the request
         # The override and registry were already written successfully
         logger.warning(
@@ -327,7 +338,7 @@ def handle_alertmanager_source_action(
     if ui_index_path.exists():
         try:
             ui_index_path.touch()
-        except Exception:
+        except OSError:
             pass  # Non-fatal
 
     # Also clear the in-memory cache for this run
@@ -344,7 +355,7 @@ def handle_alertmanager_source_action(
             "source_id": source_key,
             "endpoint": source_view.endpoint,
             "namespace": source_view.namespace,
-            "name": source_view.name,
+            "source_name": source_view.name,
             "original_origin": source_view.origin,
             "original_state": source_view.state,
             "run_id": context.run.run_id,
@@ -370,7 +381,7 @@ def handle_alertmanager_source_action(
             artifact_content = json.loads(action_artifact_path.read_text(encoding="utf-8"))
             if "artifact_id" in artifact_content:
                 response["actionArtifactId"] = artifact_content["artifact_id"]
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError):
             # Non-fatal: log but don't fail the response
             logger.warning(
                 "Failed to read artifact_id from action artifact",

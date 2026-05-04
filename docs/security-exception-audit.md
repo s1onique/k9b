@@ -131,9 +131,25 @@ Multiple `except Exception` handlers in the main server module. These require ca
 
 ### src/k8s_diag_agent/ui/server_alertmanager.py
 
-Multiple `except Exception` handlers in Alertmanager UI handlers.
+| Line | Handler | Context | Classification |
+|------|---------|---------|----------------|
+| ~88 | `except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError, AttributeError)` | Request body parse + validation in handle_alertmanager_source_action | **fixed-this-slice** |
+| ~196 | `except OSError` | Override artifact write in handle_alertmanager_source_action | **fixed-this-slice** |
+| ~264 | `except OSError` | Registry write in handle_alertmanager_source_action | **fixed-this-slice** |
+| ~304 | `except OSError` | Action artifact write in handle_alertmanager_source_action | **fixed-this-slice** |
+| ~329 | `except OSError` | UI index touch (non-fatal) in handle_alertmanager_source_action | **fixed-this-slice** |
+| ~369 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Artifact ID read from action artifact | **fixed-this-slice** |
 
-**Review status**: Deferred to future slice
+**Total in file**: 6 handlers (6 fixed, 0 remaining)
+
+**Security hardening applied**:
+- Request payload parse: explicit tuple with `json.JSONDecodeError, UnicodeDecodeError, ValueError`
+- Override artifact write: explicit `OSError` with error logging and 500 response
+- Registry write: explicit `OSError` with warning logging (non-fatal, request succeeds)
+- Action artifact write: explicit `OSError` with warning logging (non-fatal, request succeeds)
+- UI index touch: explicit `OSError` (non-fatal, silently passed)
+- Artifact ID read: explicit tuple with `OSError, json.JSONDecodeError, ValueError, KeyError` (non-fatal)
+- Logs exclude raw request payloads, Alertmanager URLs containing credentials, kubeconfig, bearer tokens
 
 ### src/k8s_diag_agent/health/loop.py
 
@@ -179,11 +195,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 | Fixed this slice (ui/api.py - Phase 2 Slice 7) | 9 |
 | Fixed this slice (server_next_checks.py - Phase 2 Slice 6) | 10 |
 | Fixed this slice (server_feedback.py - Phase 2 Slice 8) | 10 |
+| Fixed this slice (server_alertmanager.py - Phase 2 Slice 9) | 6 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 1 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **47** |
+| **Total fixed** | **53** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -217,8 +234,6 @@ All 10 handlers in server_next_checks.py are now fixed:
 | File | Handler Count | Notes |
 |------|---------------|-------|
 | server.py | ~15 | Main server handlers |
-| server_feedback.py | ~10 | Feedback handlers |
-| server_alertmanager.py | ~6 | Alertmanager UI |
 | notifications.py | ~4 | Notification handlers |
 | health/loop.py | ~14 | Main health loop |
 | health/ui_planner_queue.py | ~1 | Planner queue |
@@ -226,7 +241,9 @@ All 10 handlers in server_next_checks.py are now fixed:
 | external_analysis/* | ~8 | External analysis modules |
 
 **Note**: These are deferred to future slices pending careful review of framework/async behavior.
-**api.py**: All 9 broad handlers fixed in this slice (0 remaining)
+**server_alertmanager.py**: All 6 broad handlers fixed in Slice 9 (0 remaining)
+**server_feedback.py**: All 10 broad handlers fixed in Slice 8 (0 remaining)
+**api.py**: All 9 broad handlers fixed in Slice 7 (0 remaining)
 
 ---
 
