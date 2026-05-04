@@ -28,6 +28,7 @@ from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
 from ..render.formatter import assessment_to_dict
+from ..security.subprocess_helpers import _log_subprocess_failure, _stderr_tail
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
@@ -3444,18 +3445,42 @@ class HealthLoopRunner:
         
         try:
             # Start the port-forward process with text mode for type compatibility
+            # Capture stderr for diagnostics (stdout discarded as it's kubectl port-forward noise)
             port_forward_process: subprocess.Popen[str] = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 text=True,
             )
             
             # Wait for the port to become ready (with retries)
             if not self._wait_for_port_ready("127.0.0.1", local_port, timeout_seconds=5.0):
-                # Port did not become ready
-                port_forward_process.kill()
-                port_forward_process.wait()
+                # Port did not become ready - capture stderr for diagnostics before cleanup
+                # Avoid communicate-before-kill hang: kill first if still running, then collect stderr
+                stderr_output = ""
+                if port_forward_process.poll() is None:
+                    port_forward_process.kill()
+                    try:
+                        _, stderr_output = port_forward_process.communicate(timeout=2.0)
+                    except subprocess.TimeoutExpired:
+                        port_forward_process.kill()
+                        _, stderr_output = port_forward_process.communicate()
+                else:
+                    try:
+                        _, stderr_output = port_forward_process.communicate(timeout=0.1)
+                    except subprocess.TimeoutExpired:
+                        stderr_output = ""
+
+                # Log subprocess failure with safe metadata
+                _log_subprocess_failure(
+                    operation="port_forward",
+                    command_args=cmd,
+                    return_code=port_forward_process.returncode,
+                    stderr=stderr_output,
+                    run_id=self.run_id,
+                    cluster_label=self.run_label,
+                )
+
                 self._log_event(
                     "alertmanager-snapshot",
                     "ERROR",
