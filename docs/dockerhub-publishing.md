@@ -32,6 +32,18 @@ To create a DockerHub access token:
 | `push` | Merge to `main` | Build + push |
 | `push` | Push to `release/**` branch | Build + push |
 | `push` | Push version tag `v*` | Build + push |
+| `workflow_dispatch` | Manual trigger from GitHub Actions UI or `gh workflow run` | Build + push |
+
+### Manual Runs
+
+Manual runs (`workflow_dispatch`) are **publishing runs** because the workflow pushes whenever the event is not `pull_request`. Use caution when triggering manually from the Actions UI.
+
+To trigger manually:
+```bash
+gh workflow run dockerhub.yml
+```
+
+Or via GitHub Actions UI: Repository → Actions → Build and Push to DockerHub → Run workflow
 
 ## Image Tags Produced
 
