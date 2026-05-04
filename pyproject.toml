@@ -41,10 +41,9 @@ exclude = ["__pycache__", "dist", "build"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
-per-file-ignores = {
-    "__init__.py" = ["F401"],
-    "scripts/*" = ["E402"],
-}
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"scripts/*" = ["E402"]
 
 [tool.coverage.run]
 branch = true
