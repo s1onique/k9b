@@ -286,8 +286,11 @@ describe("Historical runs with null deterministicNextChecks", () => {
 
   test("historical run queue is visible when deterministic panel shows empty state", async () => {
     const historicalPayload = createHistoricalRunPayload("historical-run-2", sampleQueueItems);
+    // Historical deterministic-null fixtures load through selected-run detail via /api/run?run_id=...
+    // Must mock both the base path and the query-param variant for the App's fetch behavior.
     const payloads = {
       "/api/run": historicalPayload,
+      "/api/run?run_id=historical-run-2": historicalPayload,
       "/api/runs": {
         runs: [
           { runId: "historical-run-2", runLabel: "Historical run 2", timestamp: "2026-03-15T12:00:00Z", clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
@@ -306,20 +309,20 @@ describe("Historical runs with null deterministicNextChecks", () => {
     
     await screen.findByRole("heading", { name: /Fleet overview/i });
     
-    // Wait for queue items to load (use waitFor since they may appear after initial render)
+    // Wait for "Loading selected run" placeholder to clear before asserting queue contents.
+    // Historical deterministic-null fixtures load through selected-run detail.
     await waitFor(() => {
-      const queueItems = document.querySelectorAll("article");
-      expect(queueItems.length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText(/Loading selected run/i)).not.toBeInTheDocument();
     }, { timeout: 5000 });
     
-    // Verify queue panel heading is visible
+    // Get queue panel scope after loading state settles
     const queuePanel = await getQueuePanel();
     
-    // Verify first queue item is visible
-    expect(queuePanel.getByText(/Collect kubelet logs for web deployment/i)).toBeInTheDocument();
+    // Verify first queue item is visible using findByText (async, waits for element)
+    await queuePanel.findByText(/Collect kubelet logs for web deployment/i);
     
     // Verify second queue item (approval needed) is visible
-    expect(queuePanel.getByText(/Describe diag CRD for control plane/i)).toBeInTheDocument();
+    await queuePanel.findByText(/Describe diag CRD for control plane/i);
     
     // Verify deterministic panel shows empty state
     const deterministicPanel = await getDeterministicPanel();
