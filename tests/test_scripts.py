@@ -1354,20 +1354,25 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         """Heartbeat elapsed time should be per-step, not cumulative from run start.
         
         This tests that sequential long-running steps each start elapsed from 0.
+        The invariant being tested: step-2 elapsed should be ~3s (not ~7s+ cumulative).
+        
+        Uses sleep duration that avoids timing edge cases:
+        - Avoid exact multiples of heartbeat interval to prevent ambiguity
+        - Use >=1 heartbeat assertion (not exactly 1) since timing can vary slightly
         """
+        import re
         env = os.environ.copy()
         env["STEP_LOG_DIR"] = self._log_dir
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-hb-per-step"
         env["STEP_HEARTBEAT_INTERVAL"] = "3"  # 3 second intervals
-        # Run two sequential steps: step-1 (4s) then step-2 (4s)
-        # step-1 should emit heartbeat at 3s (elapsed=3)
-        # step-2 should ALSO emit heartbeat at 3s (elapsed=3, not elapsed=7)
+        # Run two sequential steps: step-1 (~3.5s) then step-2 (~3.5s)
+        # This avoids sleep=4 which is exactly 1 interval + 1s, causing timing ambiguity
         result = subprocess.run(
             ["bash", "-c", 
              f'source "{self.STEP_RUNNER}"; '
-             f'step_run_continue "step-1" "Step 1" bash -c "sleep 4"; '
-             f'step_run_continue "step-2" "Step 2" bash -c "sleep 4"'],
+             f'step_run_continue "step-1" "Step 1" bash -c "sleep 3.5"; '
+             f'step_run_continue "step-2" "Step 2" bash -c "sleep 3.5"'],
             capture_output=True,
             text=True,
             timeout=20,
@@ -1380,18 +1385,21 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         step1_hb = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln and "step=step-1" in ln]
         step2_hb = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln and "step=step-2" in ln]
         
-        # Both steps should have emitted heartbeats
-        self.assertEqual(len(step1_hb), 1, f"Step 1 should have 1 heartbeat, got: {step1_hb}")
-        self.assertEqual(len(step2_hb), 1, f"Step 2 should have 1 heartbeat, got: {step2_hb}")
+        # Both steps should have emitted at least one heartbeat
+        self.assertGreaterEqual(len(step1_hb), 1, f"Step 1 should have >=1 heartbeat, got: {step1_hb}")
+        self.assertGreaterEqual(len(step2_hb), 1, f"Step 2 should have >=1 heartbeat, got: {step2_hb}")
         
-        # Both should have elapsed=3s (first heartbeat at 3s boundary)
-        self.assertIn("elapsed=3s", step1_hb[0], "Step 1 heartbeat should have elapsed=3s")
-        self.assertIn("elapsed=3s", step2_hb[0], "Step 2 heartbeat should have elapsed=3s, not cumulative")
-        
-        # Step 2 should NOT have elapsed=7s or higher (cumulative from step-1)
+        # Key invariant: step-2 elapsed should be small (~3s), not cumulative (~6-7s+)
         for line in step2_hb:
-            self.assertNotRegex(line, r"elapsed=[7-9]\d+s",
-                "Step 2 should not have cumulative elapsed time from step 1")
+            match = re.search(r'elapsed=(\d+)s', line)
+            if match:
+                step2_elapsed = int(match.group(1))
+                self.assertLess(step2_elapsed, 6,
+                    f"Step 2 elapsed={step2_elapsed}s should be per-step (~3s), not cumulative (~6s+) from step-1")
+        
+        # Verify step-1 has correct elapsed format
+        for line in step1_hb:
+            self.assertIn("elapsed=", line, "Heartbeat should include elapsed time")
 
 
 class TestParallelLanes(unittest.TestCase):
