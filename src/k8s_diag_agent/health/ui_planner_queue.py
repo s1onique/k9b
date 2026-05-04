@@ -151,7 +151,7 @@ def _plan_paths_match(plan_path: str | None, approval_path: str | None) -> bool:
         return True
     try:
         return Path(plan_path).name == Path(approval_path).name
-    except Exception:
+    except (OSError, ValueError):
         return False
 
 

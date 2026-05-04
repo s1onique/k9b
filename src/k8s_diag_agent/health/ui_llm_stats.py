@@ -86,7 +86,7 @@ def _collect_historical_external_analysis_entries(
     for path in sorted(directory.glob("*.json")):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
             continue
         if isinstance(raw, Mapping):
             entries.append(raw)
