@@ -52,6 +52,7 @@ from .loop_scheduler import (
     LockFileSnapshot,  # noqa: F401 - re-exported for backward compatibility
     ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
 )
+from .loop_signal_id import _SignalIdGenerator
 from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
@@ -738,16 +739,6 @@ class HealthRunConfig:
         return self.target_baselines.get(
             target.label, (self.baseline_policy, self.baseline_policy_path)
         )
-
-
-class _SignalIdGenerator:
-    def __init__(self, label: str) -> None:
-        self._label = _safe_label(label)
-        self._counter = 0
-
-    def next_id(self) -> str:
-        self._counter += 1
-        return f"health-{self._label}-sig-{self._counter:02d}"
 
 
 def build_health_assessment(
