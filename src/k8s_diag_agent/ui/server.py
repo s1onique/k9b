@@ -1116,7 +1116,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             # ui-index.json is written to runs/health/ by write_health_ui_index
             index = load_ui_index(self.runs_dir / "health")
             return build_ui_context(index)
-        except Exception as exc:  # pragma: no cover - read-model may be malformed
+        except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
             self._send_text(500, f"Unable to read ui-index.json: {exc}")
             return None
 
@@ -1243,7 +1243,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     # Mark as incomplete if we had more than 20 and truncated
                     notification_history_complete = len(filtered) <= 20
                     notifications_source = "index"
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError):
             # Malformed index - defer notification loading
             notifications_source = "deferred"
 
@@ -1316,7 +1316,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     # Per-cluster breakdown for cluster-scoped UI panels
                     "by_cluster": compact_raw.get("by_cluster", []),
                 }
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 _timings["alertmanager_compact_read_ms"] = 0.0
                 pass  # Compact not available - non-fatal
         else:
@@ -1332,7 +1332,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             from ..health.ui import _serialize_alertmanager_sources as _serialize_am_sources
             try:
                 alertmanager_sources_entry = _phase("alertmanager_sources_build_ms", lambda: _serialize_am_sources(self._health_root, run_id))
-            except Exception:
+            except (OSError, json.JSONDecodeError, ValueError, KeyError):
                 _timings["alertmanager_sources_build_ms"] = 0.0
                 pass  # Sources not available - non-fatal
         else:
@@ -1401,7 +1401,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         try:
             ctx = build_ui_context(run_index)
             _timings["build_ui_context_ms"] = (time.perf_counter() - _ctx_start) * 1000
-        except Exception as exc:
+        except (ValueError, TypeError, KeyError) as exc:
             logger.warning(
                 "Failed to build context for run",
                 extra={"run_id": run_id, "error": str(exc)},
@@ -1527,7 +1527,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     timings[key] = cast(float, value)
             else:
                 payload = cast(dict[str, object], result)
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             logger.warning(
                 "Failed to build runs list payload",
                 extra={"error": str(exc)},
@@ -1743,10 +1743,10 @@ def _persist_batch_execution_history_to_ui_index(runs_dir: Path, run_id: str) ->
     # Load existing ui-index.json
     try:
         index_data = json.loads(ui_index_path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         logger.warning(
             "Failed to read ui-index.json for batch execution history update",
-            extra={"ui_index": str(ui_index_path), "run_id": run_id},
+            extra={"run_id": run_id},
         )
         return
 
@@ -1806,17 +1806,12 @@ def _persist_batch_execution_history_to_ui_index(runs_dir: Path, run_id: str) ->
             ui_index_path.write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
             logger.debug(
                 "Persisted batch execution history to ui-index.json",
-                extra={
-                    "ui_index": str(ui_index_path),
-                    "run_id": run_id,
-                    "new_entries": new_count,
-                    "total_entries": len(merged_history),
-                },
+                extra={"run_id": run_id, "new_entries": new_count},
             )
-        except Exception as exc:
+        except (OSError, TypeError, ValueError) as exc:
             logger.warning(
                 "Failed to persist batch execution history to ui-index.json",
-                extra={"ui_index": str(ui_index_path), "run_id": run_id, "error": str(exc)},
+                extra={"run_id": run_id, "error": str(exc)},
             )
 
 

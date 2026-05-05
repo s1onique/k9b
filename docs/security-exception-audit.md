@@ -75,7 +75,7 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 
 ---
 
-## Broader Exception Audit - server.py Slice 13
+## Broader Exception Audit - server.py Slice 14
 
 ### src/k8s_diag_agent/ui/server.py
 
@@ -85,38 +85,55 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 | ~990 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts_from_health_root` | **fixed-this-slice** |
 | ~1158 | `except (OSError, json.JSONDecodeError)` | Review artifact read in `_load_context_for_run` | **fixed-this-slice** |
 | ~1697 | `except OSError` | Static file read in `_send_file` | **fixed-this-slice** |
-| ~1743 | `except Exception` | ui-index.json read in `_persist_batch_execution_history_to_ui_index` | **deferred-read-model** |
-| ~1814 | `except Exception` | ui-index.json write in `_persist_batch_execution_history_to_ui_index` | **deferred-read-model** |
+| ~1743 | `except (OSError, json.JSONDecodeError)` | ui-index.json read in `_persist_batch_execution_history_to_ui_index` | **fixed-this-slice** |
+| ~1814 | `except OSError` | ui-index.json write in `_persist_batch_execution_history_to_ui_index` | **fixed-this-slice** |
 | ~593 | `except Exception` | Script import in `_export_usefulness_review_for_run` | **deferred-mutation** |
 | ~774 | `except Exception` | do_GET framework catch-all | **deferred-framework-boundary** |
 | ~924 | `except Exception` | do_POST framework catch-all | **deferred-framework-boundary** |
-| ~1009 | `except Exception` | JSON payload parse in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1047 | `except Exception` | Module import in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1060 | `except Exception` | Batch execution in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1117 | `except Exception` | ui-index.json read in `_load_context` | **deferred-read-model** |
-| ~1244 | `except Exception` | Index read in `_load_context_for_run` (notification index) | **deferred-read-model** |
-| ~1317 | `except Exception` | Alertmanager compact read in `_load_context_for_run` | **deferred-read-model** |
-| ~1333 | `except Exception` | Alertmanager sources build in `_load_context_for_run` | **deferred-read-model** |
-| ~1402 | `except Exception` | Context build in `_load_context_for_run` | **deferred-read-model** |
-| ~1528 | `except Exception` | Runs list build in `_build_runs_list_payload` | **deferred-read-model** |
+| ~697 | `except Exception` | JSON payload parse in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~722 | `except Exception` | Module import in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1011 | `except Exception` | Batch execution in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1049 | `except Exception` | Result processing in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1062 | `except Exception` | Response construction in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1117 | `except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError)` | ui-index.json read/build in `_load_context` | **fixed-this-slice** |
+| ~1244 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Index read in `_load_context_for_run` (notification index) | **fixed-this-slice** |
+| ~1317 | `except (OSError, json.JSONDecodeError)` | Alertmanager compact read in `_load_context_for_run` | **fixed-this-slice** |
+| ~1333 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Alertmanager sources build in `_load_context_for_run` | **fixed-this-slice** |
+| ~1402 | `except (ValueError, TypeError, KeyError)` | Context build in `_load_context_for_run` | **fixed-this-slice** |
+| ~1528 | `except (OSError, ValueError, TypeError, json.JSONDecodeError)` | Runs list build in `_build_runs_list_payload` | **fixed-this-slice** |
 
-**Total in file**: 18 handlers (3 fixed, 1 already-correct, 14 deferred/remaining)
+**Total in file**: 18 handlers (11 fixed, 1 already-correct, 6 deferred/remaining)
 
-**This slice fixed**: 3 read/static/file-path handlers
-- 2 artifact glob scan handlers: explicit tuple with `OSError, json.JSONDecodeError`
-- 1 review artifact read: explicit tuple with `OSError, json.JSONDecodeError`
+**Remaining broad handlers**: 7
+- ~593: `_export_usefulness_review_for_run` - script import/mutation boundary
+- ~697: `_handle_run_batch_next_check_execution` - JSON payload parse (mutation)
+- ~722: `_handle_run_batch_next_check_execution` - module import (mutation)
+- ~774: `do_GET` - framework catch-all
+- ~1011: `_handle_run_batch_next_check_execution` - batch execution (mutation)
+- ~1049: `_handle_run_batch_next_check_execution` - result processing (mutation)
+- ~1062: `_handle_run_batch_next_check_execution` - response construction (mutation)
+
+**This slice (Slice 14) fixed**: 8 read-model handlers
+- ~1743 ui-index.json read: `OSError, json.JSONDecodeError` (file I/O + JSON parse)
+- ~1814 ui-index.json write: `OSError` (file I/O only)
+- ~1117 ui-index.json read in `_load_context`: `OSError, json.JSONDecodeError`
+- ~1244 notification index read: `OSError, json.JSONDecodeError, ValueError, KeyError` (index structure errors)
+- ~1317 Alertmanager compact read: `OSError, json.JSONDecodeError`
+- ~1333 Alertmanager sources build: `OSError, json.JSONDecodeError, ValueError, KeyError`
+- ~1402 context build: `ValueError, TypeError, KeyError` (data shape errors)
+- ~1528 runs list build: `OSError, ValueError, TypeError, json.JSONDecodeError` (file I/O + data shape + parse)
 
 **Already correct**: 1 handler
-- 1 static file send: explicit `OSError` (verified correct before this slice)
+- 1 static file send: explicit `OSError` (verified correct before Slice 13)
 
 **Security hardening applied**:
-- Artifact JSON read in candidate search: explicit tuple with `OSError, json.JSONDecodeError`
-- Review artifact read: explicit tuple with `OSError, json.JSONDecodeError`
-- Behavior preserved (continue on parse/read errors, graceful fallback)
-- Non-fatal artifact scan errors continue searching instead of returning
+- File I/O: explicit `OSError` tuple
+- JSON parse errors: explicit `json.JSONDecodeError`
+- Data shape/malformed: explicit `ValueError, TypeError, KeyError`
+- Logging: safe metadata only (run_id, error string, no full paths/secrets)
+- Behavior preserved: graceful fallback, non-fatal continue
 
 **Deferred categories**:
-- `deferred-read-model`: Read-model malformed/corruption scenarios (needs structured error handling)
 - `deferred-mutation`: Mutation routes with batch execution, review export (needs careful boundary)
 - `deferred-framework-boundary`: HTTP framework-level catch-alls in do_GET/do_POST (needs route architecture review)
 
@@ -333,11 +350,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 | Fixed this slice (ui_planner_queue.py + ui_llm_stats.py - Phase 2 Slice 11) | 2 |
 | Fixed this slice (external_analysis/* - Phase 2 Slice 12) | 8 |
 | Fixed this slice (server.py - Phase 2 Slice 13) | 3 |
+| Fixed this slice (server.py - Phase 2 Slice 14) | 8 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 2 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **70** |
+| **Total fixed** | **78** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -395,5 +413,5 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 *Audit created: 2026-05-01*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-05 (Slice 13: server.py read/static/file-path handlers - 3 fixed, 1 already-correct, 14 deferred)*
-*Total handlers fixed in Phase 2: 70 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/* + 3 server.py)*
+*Updated: 2026-05-05 (Slice 14: server.py read-model handlers - 8 fixed, 11 total fixed, 6 deferred)*
+*Total handlers fixed in Phase 2: 78 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/* + 11 server.py)*
