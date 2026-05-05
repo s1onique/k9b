@@ -1935,7 +1935,7 @@ class HealthLoopRunner:
                 external_analysis_count=len(external_artifacts),
                 event="ui-index-generated",
             )
-        except Exception as exc:
+        except OSError as exc:
             self._log_event(
                 "health-loop",
                 "ERROR",
@@ -3092,7 +3092,7 @@ class HealthLoopRunner:
                     history_facts_dir=str(history_facts_dir),
                     event="history-facts-written",
                 )
-            except Exception as exc:
+            except OSError as exc:
                 # Fact artifact write failure is non-fatal; log and continue
                 self._log_event(
                     "health-loop",

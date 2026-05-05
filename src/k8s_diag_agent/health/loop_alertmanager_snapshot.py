@@ -368,7 +368,7 @@ def run_alertmanager_snapshot_collection(
             cluster_context=effective_cluster_context,
         )
 
-    except Exception as exc:
+    except OSError as exc:
         log_event(
             "alertmanager-snapshot",
             "ERROR",

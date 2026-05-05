@@ -262,7 +262,7 @@ def run_alertmanager_discovery(
             source_count=len(verified_inventory.sources),
             artifact_path=str(artifact_path),
         )
-    except Exception as exc:
+    except (OSError, RuntimeError) as exc:
         log_event(
             "alertmanager-discovery",
             "ERROR",
