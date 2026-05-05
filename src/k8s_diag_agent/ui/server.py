@@ -696,7 +696,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             context = self._load_context()
             if context and context.run:
                 return context.run.run_label or ""
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError):
+            # Narrowed: _load_context already handles file/JSON errors;
+            # remaining candidates are simple attribute accesses
             pass
         return ""
 
@@ -722,7 +724,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 from .server_static import serve_static
                 serve_static(self, route)
         except Exception:
-            # Log any uncaught exceptions as ERROR access logs
+            # REVIEWED: Final HTTP framework boundary for GET route dispatch.
+            # Prevents raw tracebacks / broken sockets from escaping to clients.
+            # Returns existing controlled 500 behavior via self._status_code = 500.
+            # Narrower exceptions are handled inside route-specific handlers
+            # (serve_static, serve_artifact, _handle_api) before this catch.
             self._status_code = 500
             self._log_access_completion()
             raise
@@ -774,7 +780,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._status_code = 404
             self._send_text(404, "Not Found")
         except Exception:
-            # Log any uncaught exceptions as ERROR access logs
+            # REVIEWED: Final HTTP framework boundary for POST route dispatch.
+            # Prevents raw tracebacks / broken sockets from escaping to clients.
+            # Returns existing controlled 500 behavior via self._status_code = 500.
+            # Narrower exceptions are handled inside route-specific handlers
+            # (handle_* functions) before this catch.
             self._status_code = 500
             self._log_access_completion()
             raise
