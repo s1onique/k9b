@@ -53,6 +53,7 @@ from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_dr
 from .loop_failure_metadata import extract_failure_metadata_field
 from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _watched_crd_versions, _watched_release_versions, _write_json, persist_history_fact_artifacts
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
+from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
 from .loop_scheduler import (
@@ -1968,69 +1969,12 @@ class HealthLoopRunner:
         return subdirs
 
     def _prune_external_analysis_history(self, directory: Path) -> None:
-        retention = self.config.external_analysis.retention
-        if retention.max_artifacts is None and retention.max_age_days is None:
-            return
-        files: list[tuple[Path, float]] = []
-        prefix = f"{self.run_id}-"
-        for path in directory.glob("*.json"):
-            if not path.is_file() or path.name.startswith(prefix):
-                continue
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                continue
-            files.append((path, mtime))
-        if not files:
-            return
-        files.sort(key=lambda item: item[1])
-        now = datetime.now(UTC)
-        candidates = files.copy()
-        to_delete: list[Path] = []
-        if retention.max_age_days is not None:
-            threshold_seconds = retention.max_age_days * 86400
-            survivors: list[tuple[Path, float]] = []
-            for path, mtime in candidates:
-                age_seconds = (now - datetime.fromtimestamp(mtime, UTC)).total_seconds()
-                if age_seconds > threshold_seconds:
-                    to_delete.append(path)
-                else:
-                    survivors.append((path, mtime))
-            candidates = survivors
-        if retention.max_artifacts is not None and len(candidates) > retention.max_artifacts:
-            excess = len(candidates) - retention.max_artifacts
-            to_delete.extend(path for path, _ in candidates[:excess])
-            candidates = candidates[excess:]
-        deleted: list[str] = []
-        for path in to_delete:
-            try:
-                path.unlink()
-                deleted.append(path.name)
-            except OSError as exc:
-                self._log_event(
-                    "health-loop",
-                    "WARNING",
-                    "Failed to remove retained external analysis artifact",
-                    artifact_path=str(path),
-                    severity_reason=str(exc),
-                    event="external-analysis-retention-failed",
-                )
-        if deleted:
-            metadata = {
-                "deleted_count": len(deleted),
-                "deleted_paths": deleted[:5],
-                "retention_policy": {
-                    "max_artifacts": retention.max_artifacts,
-                    "max_age_days": retention.max_age_days,
-                },
-            }
-            self._log_event(
-                "health-loop",
-                "INFO",
-                "External analysis retention pruned old artifacts",
-                event="external-analysis-retention",
-                **metadata,
-            )
+        prune_external_analysis_history(
+            retention=self.config.external_analysis.retention,
+            directory=directory,
+            run_id=self.run_id,
+            log_event=self._log_event,
+        )
 
     def _collect_snapshots(self, directory: Path) -> list[HealthSnapshotRecord]:
         records: list[HealthSnapshotRecord] = []
