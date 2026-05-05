@@ -2056,7 +2056,12 @@ class HealthLoopRunner:
                         (),
                         record.snapshot.health_signals.warning_events,
                     )
-                except Exception as exc:
+                # REVIEWED: kubectl inspection subprocess boundary.
+                # ImagePullSecretInspector.inspect() runs kubectl get commands against cluster.
+                # Exceptions: OSError (kubectl not found), RuntimeError (kubectl command failure),
+                # TimeoutError (cluster unreachable). All non-fatal -- inspection is best-effort,
+                # health assessment continues regardless. No credential exposure.
+                except (OSError, RuntimeError, TimeoutError) as exc:
                     self._log_event(
                         "health-loop",
                         "WARNING",

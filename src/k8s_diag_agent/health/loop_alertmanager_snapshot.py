@@ -308,7 +308,14 @@ def run_alertmanager_snapshot_collection(
         )
         # Non-fatal: continue with error snapshot
 
-    except Exception as exc:
+    # REVIEWED: HTTP/urllib fetch boundary for Alertmanager snapshot.
+    # urllib.error.HTTPError and urllib.error.URLError already handled above.
+    # This fallback catches: OSError (socket/network), TimeoutError (request timeout),
+    # UnicodeDecodeError (response body encoding), json.JSONDecodeError (malformed JSON),
+    # ValueError (malformed URL/headers). All result in INVALID_RESPONSE snapshot, non-fatal.
+    # No credential exposure: error_msg from str(exc) sanitized by callers above, source_endpoint
+    # is the Alertmanager URL (auth info not logged per upstream handlers).
+    except (OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         error_msg = str(exc)
         snapshot = create_error_snapshot(
             AlertmanagerStatus.INVALID_RESPONSE,

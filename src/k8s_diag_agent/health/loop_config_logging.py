@@ -33,6 +33,9 @@ def _sanitize_url_for_logging(url: str | None) -> str | None:
             netloc = f"{netloc}:{parsed.port}"
         sanitized = f"{parsed.scheme}://{netloc}{parsed.path}"
         return sanitized.rstrip("/")
+    # REVIEWED: URL sanitization fallback boundary.
+    # urlparse may raise ValueError or other exceptions for malformed URLs.
+    # Non-fatal fallback: strip credentials and query strings via regex.
     except Exception:
         # Fallback: just strip common secret patterns
         result = url

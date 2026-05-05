@@ -145,8 +145,14 @@ def run_alertmanager_discovery(
                         cluster_context=target_context,
                     )
                 aggregated_inventory.add_source(source_with_cluster)
-                    
-        except Exception as exc:
+            
+            # REVIEWED: kubectl/cluster discovery boundary.
+            # Subprocess failures (OSError), context resolution (RuntimeError), and
+            # timeout/connectivity errors (TimeoutError) are all non-fatal discovery failures.
+            # Narrowed to explicit operational failure types -- discovery failures result in
+            # empty inventory, which is the correct non-fatal fallback behavior.
+            # No credential exposure in error string.
+        except (OSError, RuntimeError, TimeoutError) as exc:
             log_event(
                 "alertmanager-discovery",
                 "WARNING",

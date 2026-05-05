@@ -76,6 +76,9 @@ def write_review_and_proposals(
             drilldowns=drilldowns,
             warning_threshold=warning_threshold,
         )
+    # REVIEWED: health review build boundary.
+    # build_health_review() may raise ValueError, TypeError, or other exceptions from
+    # assessment/drilldown data processing. Non-fatal fallback: return None, empty proposals.
     except Exception:
         return None, ()
 
@@ -122,6 +125,10 @@ def write_review_and_proposals(
             severity_reason=str(exc),
             event="proposal-generation-failed",
         )
+    # REVIEWED: proposal generation boundary.
+    # generate_proposals_from_review() may raise various exceptions from
+    # assessment/drilldown processing. Review was already written, so this
+    # is best-effort proposal generation. Non-fatal, returns review_path only.
 
     return review_path, tuple(proposal_records)
 

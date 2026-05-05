@@ -429,16 +429,16 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 
 | File | Line | Handler | Context | Classification |
 |------|------|---------|---------|----------------|
-| loop_alertmanager_discovery.py | 149 | `except Exception as exc` | Cluster discovery (kubectl/cluster boundary) | **reviewed-safe** (subprocess boundary) |
-| loop_alertmanager_discovery.py | 265 | `except OSError` | Alertmanager sources artifact write | **fixed-this-slice** |
-| loop_alertmanager_snapshot.py | 311 | `except Exception as exc` | Snapshot fetch (HTTP/urllib boundary) | **reviewed-safe** (HTTP boundary) |
+| loop_alertmanager_discovery.py | 149 | `except (OSError, RuntimeError, TimeoutError) as exc` | Cluster discovery (kubectl/cluster boundary) | **fixed-this-slice** |
+| loop_alertmanager_discovery.py | 265 | `except (OSError, RuntimeError)` | Alertmanager sources artifact write | **fixed-this-slice** |
+| loop_alertmanager_snapshot.py | 311 | `except (OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc` | Snapshot fetch (HTTP/urllib boundary) | **fixed-this-slice** |
 | loop_alertmanager_snapshot.py | 371 | `except OSError` | Snapshot artifacts write | **fixed-this-slice** |
 | loop_config_logging.py | 36 | `except Exception` | URL sanitization fallback | **reviewed-safe** (logging config, no file I/O) |
 | loop_review_pipeline.py | 79 | `except Exception` | Health review build (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
 | loop_review_pipeline.py | 114 | `except Exception as exc` | Proposal generation (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
 | loop_alertmanager_port_forward.py | 222 | `except Exception as exc` | Port-forward cleanup (subprocess boundary) | **reviewed-safe** (subprocess boundary) |
 | loop.py | 1938 | `except OSError` | UI index artifact write | **fixed-this-slice** |
-| loop.py | 2059 | `except Exception as exc` | Image pull secret inspection (kubectl boundary) | **reviewed-safe** (kubectl subprocess) |
+| loop.py | 2059 | `except (OSError, RuntimeError, TimeoutError) as exc` | Image pull secret inspection (kubectl boundary) | **fixed-this-slice** |
 | loop.py | 2426 | `except Exception as exc` | LLM call in auto-drilldown | **reviewed-safe** (LLM provider boundary) |
 | loop.py | 2480 | `except Exception` | Prompt diagnostics fallback (internal) | **reviewed-safe** (internal diagnostics) |
 | loop.py | 2632 | `except Exception as exc` | Review enrichment LLM call | **reviewed-safe** (LLM provider boundary) |
@@ -446,14 +446,21 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 | loop.py | 3095 | `except OSError` | History fact artifacts write | **fixed-this-slice** |
 
 **Total tracked handlers**: 15
-**This slice fixed (Phase 2 Slice 17)**: 4 handlers
+**This slice fixed (Phase 2 Slice 18)**: 3 handlers narrowed + 1 reviewed-safe = 4 total
+- `loop_alertmanager_discovery.py:149`: cluster discovery → `(OSError, RuntimeError, TimeoutError)` — **fixed**
+- `loop_alertmanager_snapshot.py:311`: snapshot fetch HTTP → `(OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError, ValueError)` — **fixed**
+- `loop.py:2059`: kubectl inspection → `(OSError, RuntimeError, TimeoutError)` — **fixed**
+- `loop_alertmanager_port_forward.py:222`: port-forward cleanup → **reviewed-safe** (subprocess boundary, must not crash loop)
+
+**Prior slice (Phase 2 Slice 17) fixed**: 4 handlers
 - `loop_alertmanager_discovery.py:265`: artifact write → `(OSError, RuntimeError)`
 - `loop_alertmanager_snapshot.py:371`: artifact write → `OSError`
 - `loop.py:1938`: UI index write → `OSError`
 - `loop.py:3095`: history fact artifacts write → `OSError`
 
-**Remaining broad handlers**: 11 (all reviewed-safe boundaries)
-**Reviewed-safe**: 10 handlers (subprocess/HTTP/LLM/port-forward boundaries - need architecture review)
+**Remaining broad handlers**: 7 (6 reviewed-safe, 1 out-of-scope deferred)
+**Unreviewed broad handlers**: 0
+**Reviewed-safe**: 6 handlers (subprocess/HTTP/LLM/port-forward boundaries - need architecture review)
 **Out-of-scope deferred**: 1 handler (loop_config_logging URL sanitization - no file I/O)
 
 ### Rationale for this slice
@@ -470,17 +477,14 @@ Artifact write failures are the smallest coherent fix batch because:
 - `src/k8s_diag_agent/health/loop_alertmanager_snapshot.py`
 - `src/k8s_diag_agent/health/loop.py`
 
-### Deferred handlers (needs-follow-up)
+### Deferred handlers (needs-follow-up / reviewed-safe)
 
 | File | Line | Context | Deferral Reason |
 |------|------|---------|----------------|
-| loop_alertmanager_discovery.py | 149 | kubectl/cluster discovery | Subprocess/kubectl boundary |
-| loop_alertmanager_snapshot.py | 311 | HTTP fetch | urllib.error boundary |
 | loop_config_logging.py | 36 | URL sanitization | No file I/O, reviewed-safe |
 | loop_review_pipeline.py | 79 | LLM adapter call | Provider boundary |
 | loop_review_pipeline.py | 114 | Proposal LLM call | Provider boundary |
-| loop_alertmanager_port_forward.py | 222 | Subprocess cleanup | Subprocess boundary |
-| loop.py | 2059 | kubectl inspection | kubectl subprocess |
+| loop_alertmanager_port_forward.py | 222 | Subprocess cleanup | **reviewed-safe** (must not crash loop) |
 | loop.py | 2426 | LLM call | Provider boundary |
 | loop.py | 2480 | Diagnostics fallback | Internal helper |
 | loop.py | 2632 | Review enrichment | Provider boundary |
@@ -495,4 +499,4 @@ Artifact write failures are the smallest coherent fix batch because:
 | Out-of-scope (deferred) | 1 |
 | **Total handlers in health/ loop modules** | **15** |
 
-**Phase 2 total fixed**: 86 (82 prior + 4 this slice)
+**Phase 2 total fixed**: 89 (86 prior + 3 this slice)
