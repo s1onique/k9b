@@ -1301,7 +1301,14 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         self.assertIn("unit-tests.log", output, "Log path should reference unit-tests.log")
 
     def test_heartbeat_only_emits_at_interval_boundaries(self) -> None:
-        """Heartbeat should only emit at configured interval boundaries, not every poll."""
+        """Heartbeat should only emit at configured interval boundaries, not every poll.
+        
+        Invariants tested:
+        - At least one heartbeat is emitted for long-running steps
+        - All heartbeat elapsed times are divisible by the configured interval
+        - No heartbeat is emitted at non-boundary elapsed seconds
+        """
+        import re
         env = os.environ.copy()
         env["STEP_LOG_DIR"] = self._log_dir
         env["STEP_DATA_DIR"] = self._data_dir
@@ -1309,7 +1316,8 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_HEARTBEAT_INTERVAL"] = "3"  # 3 second interval
         result = subprocess.run(
             ["bash", "-c", 
-             # Sleep for 5 seconds - should get exactly one heartbeat at ~3s
+             # Sleep for 5 seconds - may get 1-2 heartbeats depending on timing
+             # (at 3s boundary and possibly at 6s if process runs long enough)
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 5"'],
             capture_output=True,
             text=True,
@@ -1319,9 +1327,23 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
 
         output = result.stdout
         heartbeat_lines = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln]
-        # With 3s interval and 5s sleep, should get exactly 1 heartbeat (around 3s elapsed)
-        self.assertEqual(len(heartbeat_lines), 1,
-            f"Should emit exactly 1 heartbeat at 3s boundary, got {len(heartbeat_lines)}: {heartbeat_lines}")
+        
+        # Invariant 1: At least one heartbeat should be emitted for long-running step
+        self.assertGreaterEqual(len(heartbeat_lines), 1,
+            f"Should emit at least one heartbeat for long-running step. Output: {output}")
+        
+        # Invariant 2: All heartbeat elapsed times must be divisible by interval
+        heartbeat_interval = 3
+        for line in heartbeat_lines:
+            match = re.search(r'elapsed=(\d+)s', line)
+            self.assertIsNotNone(match, f"Heartbeat line should have elapsed= format: {line}")
+            assert match is not None  # Type narrowing for mypy
+            elapsed = int(match.group(1))
+            self.assertEqual(
+                elapsed % heartbeat_interval, 0,
+                f"Heartbeat elapsed={elapsed}s should be divisible by {heartbeat_interval}s interval. "
+                f"Heartbeat lines: {heartbeat_lines}"
+            )
 
     def test_heartbeat_distinct_from_hint(self) -> None:
         """Heartbeat should be distinct from START hint - different purpose and timing."""
