@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..llm.assessor_schema import AssessorAssessment
+from .artifact_readers import try_read_drilldown_artifact
 from .drilldown import DrilldownArtifact, DrilldownPod
 from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON
 
@@ -30,10 +31,8 @@ def collect_drilldown_candidates(drilldown_dir: Path) -> tuple[DrilldownCandidat
         return ()
     candidates: list[DrilldownCandidate] = []
     for path in sorted(drilldown_dir.glob("*.json")):
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            artifact = DrilldownArtifact.from_dict(raw)
-        except (OSError, json.JSONDecodeError, ValueError):
+        artifact = try_read_drilldown_artifact(path, log_failures=False)
+        if artifact is None:
             continue
         candidates.append(DrilldownCandidate(path=path, artifact=artifact))
     return tuple(candidates)

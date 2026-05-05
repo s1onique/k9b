@@ -839,3 +839,145 @@ After HealthProposal, consider:
 1. **`DrilldownArtifact`**: Used in CLI handlers and UI, has `from_dict()`
 2. **`ClusterSnapshot`**: Used in CLI and batch, has `from_dict()`
 3. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
+
+---
+
+## Typed Artifact Reader: DrilldownArtifact (Phase 2 Follow-up)
+
+### Overview
+This section documents the DrilldownArtifact typed artifact reader as the next step after HealthProposal.
+
+### New Files
+- `src/k8s_diag_agent/health/artifact_readers.py` - DrilldownArtifact typed readers (added to existing module)
+- `tests/unit/test_drilldown_artifact_readers.py` - Reader tests
+
+### Reader API
+
+```python
+# Strict reader - raises on failure
+def read_drilldown_artifact(path: Path) -> DrilldownArtifact:
+    """Read and parse a DrilldownArtifact from disk.
+
+    Raises:
+        OSError: If the file cannot be read
+        json.JSONDecodeError: If the file content is not valid JSON
+        ValueError: If the JSON is valid but not a mapping, or from_dict validation fails
+        TypeError: If from_dict receives unexpected type
+        KeyError: If required fields are missing in from_dict
+    """
+
+# Optional reader - returns None on failure
+def try_read_drilldown_artifact(
+    path: Path,
+    *,
+    run_id: str = "",
+    artifact_kind: str = "drilldown",
+    log_failures: bool = True,
+) -> DrilldownArtifact | None:
+    """Try to read a DrilldownArtifact, returning None on failure.
+
+    Logs a warning with safe metadata on failure when log_failures=True.
+    Never logs raw content.
+    """
+```
+
+### Error Handling Contract
+- **Strict reader raises**:
+  - `OSError`
+  - `json.JSONDecodeError`
+  - `ValueError`
+  - `TypeError`
+  - `KeyError`
+- **Optional reader returns** `None` on those failures
+- **Optional reader logs only when** `log_failures=True`
+
+### Logging Policy
+- Safe metadata only:
+  - artifact filename
+  - artifact kind
+  - run_id (if safe)
+  - error type
+- Never log raw drilldown content, command output, kubectl output, pod logs, kubeconfig, tokens, or full absolute paths
+
+### DrilldownArtifact Call Site Inventory
+
+| File | Function | Type | Pattern | Classification |
+|------|----------|------|---------|----------------|
+| `health/review.py` | `collect_drilldown_candidates` | broad scan | drilldown glob scan | **fixed-this-slice** |
+| `ui/server_read_support.py` | `_build_clusters_and_drilldown_availability` | broad scan | drilldown data read | **skipped** (UI path uses dict-based scan, not typed) |
+| `cli_handlers.py` | `handle_assess_drilldown` | targeted read | CLI artifact read | **skipped** (CLI path, no fallback needed) |
+| `health/validators.py` | `DrilldownArtifactValidator` | validation | schema validation | **skipped** (test/validation only) |
+
+### Chosen Call Sites and Rationale
+
+**Migrated (1 call site)**:
+- `health/review.py::collect_drilldown_candidates`: Uses `log_failures=False` for silent scan behavior. Previously used raw `json.loads()` + `from_dict()` pattern. Migration preserves behavior where malformed artifacts are skipped silently.
+
+**Skipped**:
+- `ui/server_read_support.py::_build_clusters_and_drilldown_availability`: Already uses dict-based JSON scan with explicit exception handling. The drilldown data is used for metadata display (cluster availability), not for typed object operations. Migration would be low-value here.
+- `cli_handlers.py::handle_assess_drilldown`: CLI entry point expects strict parsing - malformed artifacts should fail fast. No fallback behavior needed.
+- `health/validators.py::DrilldownArtifactValidator`: Test/validation path, not a production read path.
+
+### Compatibility Decision
+
+**No legacy dict fallback needed**: Unlike HealthProposal, DrilldownArtifact does not have the same legacy fallback requirement because:
+1. DrilldownArtifact schema is stable with no optional fields that caused issues for HealthProposal
+2. All existing artifacts should pass `from_dict()` validation
+3. Migration preserves behavior where malformed artifacts are skipped
+
+### Preserved Behavior
+- Valid drilldowns still load and render the same
+- Malformed drilldowns still skip/fallback exactly as before
+- No API response shape changes
+- No CLI output shape changes
+- No change to write-path schema
+
+### Tests Added
+
+| Test | Purpose |
+|------|---------|
+| `test_valid_drilldown_loads_typed_object` | Valid drilldown parses into DrilldownArtifact |
+| `test_malformed_json_raises_json_decode_error` | Strict reader raises JSONDecodeError |
+| `test_missing_file_raises_os_error` | Strict reader raises OSError |
+| `test_non_object_json_raises_value_error` | Strict reader raises ValueError |
+| `test_missing_required_timestamp_field_raises_value_error` | Strict reader raises ValueError |
+| `test_invalid_timestamp_raises_value_error` | Strict reader raises ValueError |
+| `test_valid_drilldown_returns_typed_object` | Optional reader returns typed object |
+| `test_malformed_json_returns_none_with_logging` | Optional reader returns None + logs |
+| `test_malformed_json_returns_none_silently_without_logging` | log_failures=False suppresses warnings |
+| `test_missing_file_returns_none` | Optional reader returns None |
+| `test_missing_file_silent_with_log_failures_false` | log_failures=False suppresses warnings |
+| `test_non_object_json_returns_none` | Optional reader returns None |
+| `test_missing_required_field_returns_none` | Optional reader returns None |
+| `test_log_failures_true_logs_warning_with_safe_message` | Logs only safe metadata |
+| `test_roundtrip_serialization_preserves_fields` | Roundtrip preserves all fields |
+| `test_log_failures_false_does_not_log_raw_content` | Sensitive content never logged |
+| `test_exception_carrying_safe_path` | DrilldownArtifactReadError uses basename only |
+| `test_exception_with_cause` | DrilldownArtifactReadError chains cause |
+| `test_multiple_artifacts_scanned_preserves_valid_skips_invalid` | Call-site behavior preserved |
+| `test_legacy_dict_compatibility_not_needed_for_current_artifacts` | Schema stability documented |
+
+### Verification
+
+```bash
+# Run new reader tests
+pytest tests/unit/test_drilldown_artifact_readers.py -v
+
+# Run affected call-site tests
+pytest tests/ -k "drilldown" -v
+
+# Run ruff check on changed files
+ruff check src/k8s_diag_agent/health/artifact_readers.py
+ruff check src/k8s_diag_agent/health/review.py
+
+# Run security baseline
+bash scripts/check_security_baseline.sh --mode baseline
+```
+
+### Next Artifact Family Recommendation
+
+After DrilldownArtifact, consider:
+
+1. **`ClusterSnapshot`**: Used in CLI and batch, has `from_dict()`
+2. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
+3. **`HealthAssessmentArtifact`**: Used in review pipeline, has `from_dict()`
