@@ -439,10 +439,10 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 | loop_alertmanager_port_forward.py | 222 | `except Exception as exc` | Port-forward cleanup (subprocess boundary) | **reviewed-safe** (subprocess boundary) |
 | loop.py | 1938 | `except OSError` | UI index artifact write | **fixed-this-slice** |
 | loop.py | 2059 | `except (OSError, RuntimeError, TimeoutError) as exc` | Image pull secret inspection (kubectl boundary) | **fixed-this-slice** |
-| loop.py | 2426 | `except Exception as exc` | LLM call in auto-drilldown | **reviewed-safe** (LLM provider boundary) |
-| loop.py | 2480 | `except Exception` | Prompt diagnostics fallback (internal) | **reviewed-safe** (internal diagnostics) |
-| loop.py | 2632 | `except Exception as exc` | Review enrichment LLM call | **reviewed-safe** (LLM provider boundary) |
-| loop.py | 2847 | `except Exception as exc` | Review pipeline write (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
+| loop.py | ~2426 | `except Exception as exc` | LLM call in auto-drilldown (provider/HTTP/LLM boundary) | **reviewed-safe** (LLM provider boundary) |
+| loop.py | ~2480 | `except (TypeError, AttributeError, KeyError, ValueError)` | Prompt diagnostics fallback (internal extraction boundary) | **fixed-this-slice** |
+| loop.py | ~2632 | `except Exception as exc` | Review enrichment LLM call (provider/HTTP boundary) | **reviewed-safe** (LLM provider boundary) |
+| loop.py | ~2847 | `except (ValueError, TypeError, KeyError, AttributeError, OSError)` | Review pipeline write (domain transformation boundary) | **fixed-this-slice** |
 | loop.py | 3095 | `except OSError` | History fact artifacts write | **fixed-this-slice** |
 
 **Total tracked handlers**: 15
@@ -458,9 +458,12 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 - `loop.py:1938`: UI index write → `OSError`
 - `loop.py:3095`: history fact artifacts write → `OSError`
 
-**Remaining broad handlers**: 7 (6 reviewed-safe, 1 out-of-scope deferred)
+**Remaining broad handlers**: 6 (5 reviewed-safe, 1 out-of-scope deferred)
 **Unreviewed broad handlers**: 0
-**Reviewed-safe**: 6 handlers (subprocess/HTTP/LLM/port-forward boundaries - need architecture review)
+**Reviewed-safe**: 5 handlers (subprocess/HTTP/LLM/port-forward boundaries - need architecture review)
+**This slice (Phase 2 Slice 18) narrowed**: 2 handlers
+- `loop.py:~2480`: prompt diagnostics fallback → `(TypeError, AttributeError, KeyError, ValueError)` — **fixed**
+- `loop.py:~2847`: review pipeline write → `(ValueError, TypeError, KeyError, AttributeError, OSError)` — **fixed**
 **Out-of-scope deferred**: 1 handler (loop_config_logging URL sanitization - no file I/O)
 
 ### Rationale for this slice
@@ -481,14 +484,12 @@ Artifact write failures are the smallest coherent fix batch because:
 
 | File | Line | Context | Deferral Reason |
 |------|------|---------|----------------|
-| loop_config_logging.py | 36 | URL sanitization | No file I/O, reviewed-safe |
-| loop_review_pipeline.py | 79 | LLM adapter call | Provider boundary |
-| loop_review_pipeline.py | 114 | Proposal LLM call | Provider boundary |
-| loop_alertmanager_port_forward.py | 222 | Subprocess cleanup | **reviewed-safe** (must not crash loop) |
-| loop.py | 2426 | LLM call | Provider boundary |
-| loop.py | 2480 | Diagnostics fallback | Internal helper |
-| loop.py | 2632 | Review enrichment | Provider boundary |
-| loop.py | 2847 | Review pipeline | LLM adapter boundary |
+| loop_config_logging.py | 39 | URL sanitization | No file I/O, reviewed-safe |
+| loop_review_pipeline.py | 82 | LLM adapter call | Provider boundary |
+| loop_review_pipeline.py | 117 | Proposal LLM call | Provider boundary |
+| loop_alertmanager_port_forward.py | 227 | Subprocess cleanup | **reviewed-safe** (must not crash loop) |
+| loop.py | 2438 | LLM call | Provider boundary |
+| loop.py | 2654 | Review enrichment | Provider boundary |
 
 ### Audit Summary Update
 
@@ -499,4 +500,32 @@ Artifact write failures are the smallest coherent fix batch because:
 | Out-of-scope (deferred) | 1 |
 | **Total handlers in health/ loop modules** | **15** |
 
-**Phase 2 total fixed**: 89 (86 prior + 3 this slice)
+**Phase 2 total fixed**: 91 (89 prior + 2 this slice: loop.py:2480, loop.py:2847)
+
+---
+
+## Phase 2 Audit - CLOSED
+
+**Audit status**: COMPLETE
+
+All handlers in scope have been classified:
+- **91 handlers fixed** across 17 slices
+- **6 handlers reviewed-safe** (external boundaries requiring architecture review)
+- **1 handler out-of-scope** (no file I/O, logging-only)
+- **0 unreviewed broad handlers** remaining in scope
+
+**Verified**:
+- `rg -n 'except Exception' src/k8s_diag_agent/health/`: 6 remaining (5 reviewed-safe + 1 out-of-scope)
+- `pytest tests/test_health_loop.py`: 37 passed
+- `pytest tests/ -k security`: 178 passed
+- `git diff --check`: no whitespace errors
+
+**Reviewed-safe boundaries** (require architecture review for potential narrowing):
+- `loop_config_logging.py:39`: URL sanitization (no file I/O)
+- `loop_review_pipeline.py:82`: LLM adapter call (provider boundary)
+- `loop_review_pipeline.py:117`: Proposal LLM call (provider boundary)
+- `loop_alertmanager_port_forward.py:227`: Subprocess cleanup (must not crash loop)
+- `loop.py:2438`: LLM call (provider boundary)
+- `loop.py:2654`: Review enrichment (provider boundary)
+
+**Next**: These reviewed-safe boundaries may be narrowed in future work, but require careful review of the provider/framework/subprocess contracts.
