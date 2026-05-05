@@ -28,7 +28,6 @@ from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
 from ..render.formatter import assessment_to_dict
-from ..security.subprocess_helpers import _log_subprocess_failure
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
@@ -37,6 +36,10 @@ from .drilldown import DrilldownArtifact, DrilldownCollector
 from .drilldown_assessor import assess_drilldown_artifact
 from .image_pull_secret import ImagePullSecretInsight, ImagePullSecretInspector
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
+from .loop_alertmanager_port_forward import (
+    start_alertmanager_port_forward,
+    stop_alertmanager_port_forward,
+)
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
 from .loop_comparison_policy import (  # noqa: F401
@@ -3233,196 +3236,37 @@ class HealthLoopRunner:
     ) -> tuple[subprocess.Popen[str], int]:
         """Start kubectl port-forward to an Alertmanager service.
         
-        Chooses a free local port and waits for it to become ready before returning.
-        
-        Returns:
-            Tuple of (subprocess handle, local port number)
-            
-        Raises:
-            RuntimeError: If port-forward cannot be started or the port
-                        does not become ready within the timeout.
+        Delegates to start_alertmanager_port_forward from loop_alertmanager_port_forward module.
+        Kept as a wrapper for backward compatibility.
         """
-        # Choose a free local port before starting kubectl
-        local_port = self._choose_free_local_port()
-        
-        # Build the kubectl command with the chosen port
-        cmd = [
-            "kubectl", "port-forward",
-            "-n", namespace,
-            f"svc/{service_name}",
-            f"{local_port}:9093",  # Forward to Alertmanager's default port
-        ]
-        if context:
-            cmd.extend(["--context", context])
-        
-        self._log_event(
-            "alertmanager-snapshot",
-            "INFO",
-            "Starting Alertmanager port-forward",
-            event="alertmanager-portforward-start",
-            run_id=self.run_id,
-            run_label=self.run_label,
+        return start_alertmanager_port_forward(
             namespace=namespace,
             service_name=service_name,
-            cluster_context=context,
-            local_port=local_port,
+            context=context,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            log_event=self._log_event,
+            choose_free_local_port=self._choose_free_local_port,
+            wait_for_port_ready=self._wait_for_port_ready,
         )
-        
-        try:
-            # Start the port-forward process with text mode for type compatibility
-            # Capture stderr for diagnostics (stdout discarded as it's kubectl port-forward noise)
-            port_forward_process: subprocess.Popen[str] = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            
-            # Wait for the port to become ready (with retries)
-            if not self._wait_for_port_ready("127.0.0.1", local_port, timeout_seconds=5.0):
-                # Port did not become ready - capture stderr for diagnostics before cleanup
-                # Avoid communicate-before-kill hang: kill first if still running, then collect stderr
-                stderr_output = ""
-                if port_forward_process.poll() is None:
-                    port_forward_process.kill()
-                    try:
-                        _, stderr_output = port_forward_process.communicate(timeout=2.0)
-                    except subprocess.TimeoutExpired:
-                        port_forward_process.kill()
-                        _, stderr_output = port_forward_process.communicate()
-                else:
-                    try:
-                        _, stderr_output = port_forward_process.communicate(timeout=0.1)
-                    except subprocess.TimeoutExpired:
-                        stderr_output = ""
-
-                # Log subprocess failure with safe metadata
-                _log_subprocess_failure(
-                    operation="port_forward",
-                    command_args=cmd,
-                    return_code=port_forward_process.returncode,
-                    stderr=stderr_output,
-                    run_id=self.run_id,
-                    cluster_label=self.run_label,
-                )
-
-                self._log_event(
-                    "alertmanager-snapshot",
-                    "ERROR",
-                    "Alertmanager port-forward failed to become ready",
-                    event="alertmanager-portforward-failed",
-                    run_id=self.run_id,
-                    run_label=self.run_label,
-                    namespace=namespace,
-                    service_name=service_name,
-                    local_port=local_port,
-                    reason="port-not-ready",
-                )
-                raise RuntimeError(
-                    f"kubectl port-forward for {namespace}/{service_name} "
-                    f"did not become ready on port {local_port}"
-                )
-            
-            # Check if process is still running
-            if port_forward_process.poll() is not None:
-                self._log_event(
-                    "alertmanager-snapshot",
-                    "ERROR",
-                    "Alertmanager port-forward failed to start",
-                    event="alertmanager-portforward-failed",
-                    run_id=self.run_id,
-                    run_label=self.run_label,
-                    namespace=namespace,
-                    service_name=service_name,
-                    exit_code=port_forward_process.returncode,
-                    reason="process-exited",
-                )
-                raise RuntimeError(
-                    f"kubectl port-forward exited unexpectedly with code "
-                    f"{port_forward_process.returncode}"
-                )
-            
-            self._log_event(
-                "alertmanager-snapshot",
-                "INFO",
-                "Alertmanager port-forward ready",
-                event="alertmanager-portforward-ready",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                namespace=namespace,
-                service_name=service_name,
-                local_port=local_port,
-            )
-            
-            return port_forward_process, local_port
-            
-        except FileNotFoundError:
-            self._log_event(
-                "alertmanager-snapshot",
-                "ERROR",
-                "kubectl not found - cannot establish port-forward",
-                event="alertmanager-portforward-failed",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                namespace=namespace,
-                service_name=service_name,
-                reason="kubectl-not-found",
-            )
-            raise RuntimeError("kubectl not found in PATH - cannot port-forward to Alertmanager")
-        except OSError as exc:
-            self._log_event(
-                "alertmanager-snapshot",
-                "ERROR",
-                "Failed to start port-forward subprocess",
-                event="alertmanager-portforward-failed",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                namespace=namespace,
-                service_name=service_name,
-                severity_reason=str(exc),
-                reason="subprocess-error",
-            )
-            raise RuntimeError(f"Failed to start kubectl port-forward: {exc}")
 
     def _stop_alertmanager_port_forward(
         self,
         process: subprocess.Popen[str],
         local_port: int | None,
     ) -> None:
-        """Stop the port-forward process and log the event."""
-        try:
-            if process.poll() is None:
-                # Process is still running, terminate it gracefully
-                process.terminate()
-                try:
-                    # Wait briefly for graceful termination
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    # Force kill if it doesn't stop gracefully
-                    process.kill()
-                    process.wait()
-            
-            self._log_event(
-                "alertmanager-snapshot",
-                "INFO",
-                "Alertmanager port-forward stopped",
-                event="alertmanager-portforward-stopped",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                local_port=local_port,
-            )
-        except Exception as exc:
-            self._log_event(
-                "alertmanager-snapshot",
-                "WARNING",
-                "Error during port-forward cleanup",
-                event="alertmanager-portforward-stopped",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                local_port=local_port,
-                severity_reason=str(exc),
-                reason="cleanup-error",
-            )
+        """Stop the port-forward process and log the event.
+        
+        Delegates to stop_alertmanager_port_forward from loop_alertmanager_port_forward module.
+        Kept as a wrapper for backward compatibility.
+        """
+        stop_alertmanager_port_forward(
+            process=process,
+            local_port=local_port,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            log_event=self._log_event,
+        )
 
 def run_health_loop(
     config_path: Path,
