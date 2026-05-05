@@ -61,6 +61,7 @@ import {
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
 import { QueuePanel } from "./components/QueuePanel";
+import type { QueuePanelProps } from "./components/QueuePanel";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
@@ -928,7 +929,7 @@ const App = () => {
 
   // Queue wiring props - packaged for QueuePanel call site reduction
   // This creates a clean seam for future extraction without changing behavior
-  const queuePanelProps = {
+  const queuePanelProps: QueuePanelProps = {
     queueClusterFilter,
     queueStatusFilter,
     queueCommandFamilyFilter,
