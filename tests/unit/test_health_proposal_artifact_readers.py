@@ -285,7 +285,7 @@ class TestTryReadHealthProposalArtifact:
             expected_benefit="Stop baseline alerts.",
             rollback_note="Remove version.",
             promotion_payload={"release_key": "my-release", "versions": ["v2.0.0"]},
-            lifecycle_history=[],  # Empty lifecycle for simpler test
+            lifecycle_history=(),  # Empty tuple for simpler test
             artifact_id="0192a1b8-test-uuid",
         )
 
