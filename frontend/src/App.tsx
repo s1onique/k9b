@@ -926,6 +926,61 @@ const App = () => {
     providers: run.llmStats.providerBreakdown,
   } : null;
 
+  // Queue wiring props - packaged for QueuePanel call site reduction
+  // This creates a clean seam for future extraction without changing behavior
+  const queuePanelProps = {
+    queueClusterFilter,
+    queueStatusFilter,
+    queueCommandFamilyFilter,
+    queuePriorityFilter,
+    queueWorkstreamFilter,
+    queueSearch,
+    queueSortOption,
+    queueFocusMode,
+    setQueueClusterFilter,
+    setQueueStatusFilter,
+    setQueueCommandFamilyFilter,
+    setQueuePriorityFilter,
+    setQueueWorkstreamFilter,
+    setQueueSearch,
+    setQueueSortOption,
+    setQueueFocusMode,
+    queueClusterOptions,
+    queueCommandFamilyOptions,
+    queuePriorityOptions,
+    queueWorkstreamOptions,
+    runQueue,
+    sortedQueue,
+    queueGroups,
+    queueExplanation,
+    expandedQueueItems,
+    toggleQueueDetails,
+    queueHighlightKey,
+    executionResults,
+    approvalResults,
+    executingCandidate,
+    approvingCandidate,
+    onToggleQueueFocusPreset: toggleQueueFocusPreset,
+    onResetQueueFilters: resetQueueFilters,
+    onResetQueueView: resetQueueView,
+    onBackToQueue: handleBackToQueue,
+    onManualExecution: handleManualExecution,
+    onApproveCandidate: handleApproveCandidate,
+    onQueueClusterJump: handleQueueClusterJump,
+    onQueueExecutionJump: handleQueueExecutionJump,
+    buildCandidateKey,
+    findExecutionHistoryEntry,
+    isManualExecutionAllowed,
+    getNotRunnableExplanation,
+    getAlertmanagerProvenanceSubtext,
+    formatAlertmanagerProvenance,
+    getFeedbackAdaptationProvenanceSubtext,
+    formatFeedbackAdaptationProvenance,
+    getAlertmanagerPromotionSubtext,
+    formatAlertmanagerPromotion,
+    onRefresh: refresh,
+  };
+
   return (
     <div className="app-shell">
       <header className="panel hero compact">
@@ -1222,58 +1277,7 @@ const App = () => {
       </section>
     )}
     {run ? (
-      <QueuePanel
-        queueClusterFilter={queueClusterFilter}
-        queueStatusFilter={queueStatusFilter}
-        queueCommandFamilyFilter={queueCommandFamilyFilter}
-        queuePriorityFilter={queuePriorityFilter}
-        queueWorkstreamFilter={queueWorkstreamFilter}
-        queueSearch={queueSearch}
-        queueSortOption={queueSortOption}
-        queueFocusMode={queueFocusMode}
-        setQueueClusterFilter={setQueueClusterFilter}
-        setQueueStatusFilter={setQueueStatusFilter}
-        setQueueCommandFamilyFilter={setQueueCommandFamilyFilter}
-        setQueuePriorityFilter={setQueuePriorityFilter}
-        setQueueWorkstreamFilter={setQueueWorkstreamFilter}
-        setQueueSearch={setQueueSearch}
-        setQueueSortOption={setQueueSortOption}
-        setQueueFocusMode={setQueueFocusMode}
-        queueClusterOptions={queueClusterOptions}
-        queueCommandFamilyOptions={queueCommandFamilyOptions}
-        queuePriorityOptions={queuePriorityOptions}
-        queueWorkstreamOptions={queueWorkstreamOptions}
-        runQueue={runQueue}
-        sortedQueue={sortedQueue}
-        queueGroups={queueGroups}
-        queueExplanation={queueExplanation}
-        expandedQueueItems={expandedQueueItems}
-        toggleQueueDetails={toggleQueueDetails}
-        queueHighlightKey={queueHighlightKey}
-        executionResults={executionResults}
-        approvalResults={approvalResults}
-        executingCandidate={executingCandidate}
-        approvingCandidate={approvingCandidate}
-        onToggleQueueFocusPreset={toggleQueueFocusPreset}
-        onResetQueueFilters={resetQueueFilters}
-        onResetQueueView={resetQueueView}
-        onBackToQueue={handleBackToQueue}
-        onManualExecution={handleManualExecution}
-        onApproveCandidate={handleApproveCandidate}
-        onQueueClusterJump={handleQueueClusterJump}
-        onQueueExecutionJump={handleQueueExecutionJump}
-        buildCandidateKey={buildCandidateKey}
-        findExecutionHistoryEntry={findExecutionHistoryEntry}
-        isManualExecutionAllowed={isManualExecutionAllowed}
-        getNotRunnableExplanation={getNotRunnableExplanation}
-        getAlertmanagerProvenanceSubtext={getAlertmanagerProvenanceSubtext}
-        formatAlertmanagerProvenance={formatAlertmanagerProvenance}
-        getFeedbackAdaptationProvenanceSubtext={getFeedbackAdaptationProvenanceSubtext}
-        formatFeedbackAdaptationProvenance={formatFeedbackAdaptationProvenance}
-        getAlertmanagerPromotionSubtext={getAlertmanagerPromotionSubtext}
-        formatAlertmanagerPromotion={formatAlertmanagerPromotion}
-        onRefresh={refresh}
-      />
+      <QueuePanel {...queuePanelProps} />
     ) : (
       <section className="panel next-check-queue-panel" id="next-check-queue">
         <div className="section-head">
