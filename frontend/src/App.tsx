@@ -73,6 +73,68 @@ import {
   statusClass,
   truncateText,
 } from "./utils";
+import {
+  confidenceWeight,
+  priorityLabel,
+  getPageFreshnessLevel,
+  getRunFreshnessLevel,
+  FRESHNESS_EMOJI,
+  FRESHNESS_LABEL,
+  FRESHNESS_THRESHOLD_MINUTES,
+  isStaleTimestamp,
+  formatAgeDuration,
+  WORKFLOW_LANES,
+  AUTOREFRESH_STORAGE_KEY,
+  AUTOREFRESH_OPTIONS,
+  getLlmScopeLabel,
+  buildClusterRecommendedArtifacts,
+  sortDeterministicSummaries,
+  safetyClass,
+  formatSourceType,
+  humanizeReason,
+  formatCandidatePriority,
+  ALLOWED_MANUAL_FAMILIES,
+  approvalStatusLabels,
+  determineNextCheckStatusVariant,
+  nextCheckStatusLabel,
+  getPlanStatusLabel,
+  NEXT_CHECK_QUEUE_STATUS_LABELS,
+  NEXT_CHECK_QUEUE_STATUS_ORDER,
+  QUEUE_SORT_OPTIONS,
+  QUEUE_PRIORITY_ORDER,
+  QUEUE_FOCUS_FILTERS,
+  RUNS_REVIEW_FILTER_OPTIONS,
+  computeRunsFilterCounts,
+  RUNS_REVIEW_FILTER_VALUES,
+  isRunsReviewFilterValue,
+  normalizeQueuePriority,
+  queuePriorityRank,
+  queueTimestampValue,
+  outcomeStatusLabels,
+  outcomeStatusDisplay,
+  outcomeStatusClass,
+  parseNextCheckEntry,
+  formatAlertmanagerPromotion,
+  getAlertmanagerPromotionSubtext,
+  formatAlertmanagerProvenance,
+  getAlertmanagerProvenanceSubtext,
+  formatFeedbackAdaptationProvenance,
+  formatFeedbackSummary,
+  getFeedbackAdaptationProvenanceSubtext,
+  type ParsedNextCheck,
+  type NextCheckStatusVariant,
+  type NextCheckQueueStatus,
+  type QueueSortOption,
+  type QueueFocusMode,
+  type RunsReviewFilter,
+} from "./utils/selectors";
+// Re-export for backward compatibility with existing tests and importers
+export { AUTOREFRESH_STORAGE_KEY, formatAgeDuration } from "./utils/selectors";
+// Re-export parseNextCheckEntry for components that import from App
+export { parseNextCheckEntry } from "./utils/selectors";
+// Re-export types
+export type { ParsedNextCheck } from "./utils/selectors";
+
 import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
 
 dayjs.extend(relativeTime);
@@ -80,114 +142,14 @@ dayjs.extend(utc);
 
 type SortKey = "proposalId" | "confidence" | "status";
 
-const confidenceWeight = (value: string) => {
-  const tier = value.toLowerCase();
-  const order = ["critical", "high", "medium", "low"];
-  const idx = order.indexOf(tier);
-  return idx === -1 ? order.length : idx;
-};
-
-type FreshnessLevel = "fresh" | "warning" | "stale";
-
-// Page/data freshness thresholds: <=30s fresh, >30s and <3m warning, >=3m stale
-const getPageFreshnessLevel = (lastRefreshTime: dayjs.Dayjs): FreshnessLevel => {
-  const seconds = dayjs().diff(lastRefreshTime, "second");
-  if (seconds <= 30) return "fresh";
-  if (seconds < 180) return "warning";
-  return "stale";
-};
-
-// Run freshness thresholds: <=15m fresh, >15m and <=45m warning (Aging), >45m stale
-const getRunFreshnessLevel = (timestamp: string): FreshnessLevel => {
-  const minutes = dayjs().diff(dayjs(timestamp), "minute");
-  if (minutes <= 15) return "fresh";
-  if (minutes <= 45) return "warning";
-  return "stale";
-};
-
-const FRESHNESS_EMOJI: Record<FreshnessLevel, string> = {
-  fresh: "🟢",
-  warning: "🟡",
-  stale: "🔴",
-};
-
-// Run freshness labels: green=Fresh, yellow=Aging, red=Stale
-const FRESHNESS_LABEL: Record<FreshnessLevel, string> = {
-  fresh: "Fresh",
-  warning: "Aging",
-  stale: "Stale",
-};
-
-const FRESHNESS_THRESHOLD_MINUTES = 10;
-const isStaleTimestamp = (timestamp: string) =>
-  dayjs().diff(timestamp, "minute") >= FRESHNESS_THRESHOLD_MINUTES;
-
-/**
- * Format duration for age display in past-run notice.
- * Rules:
- * - under 1 hour: X minutes
- * - under 1 day: X hours Y minutes
- * - 1 day+: X days Y hours Z minutes
- * - no seconds
- */
-export const formatAgeDuration = (minutes: number): string => {
-  if (minutes < 0) {
-    return "—";
-  }
-  if (minutes < 60) {
-    return `${Math.round(minutes)} minute${Math.round(minutes) === 1 ? "" : "s"}`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = Math.round(minutes % 60);
-  if (hours < 24) {
-    const hourStr = `${hours} hour${hours === 1 ? "" : "s"}`;
-    if (remainingMinutes === 0) {
-      return hourStr;
-    }
-    return `${hourStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
-  }
-  const days = Math.floor(hours / 24);
-  const remainingHours = hours % 24;
-  const dayStr = `${days} day${days === 1 ? "" : "s"}`;
-  if (remainingHours === 0) {
-    if (remainingMinutes === 0) {
-      return dayStr;
-    }
-    return `${dayStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
-  }
-  const hourStr = `${remainingHours} hour${remainingHours === 1 ? "" : "s"}`;
-  if (remainingMinutes === 0) {
-    return `${dayStr} ${hourStr}`;
-  }
-  return `${dayStr} ${hourStr} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
-};
-
-
-// Workflow lanes for operator guidance
-const WORKFLOW_LANES = {
-  diagnose: {
-    label: "Diagnose now",
-    description: "Understand the current problem and review candidate evidence to gather",
-  },
-  work: {
-    label: "Work next checks",
-    description: "Run or review the shortlist of actionable checks",
-  },
-  improve: {
-    label: "Improve the system",
-    description: "Review durable policy and config changes suggested by what we learned",
-  },
-};
-
 const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
 
-const getLlmScopeLabel = (scope?: string | null) =>
-  scope === "retained_history" ? "Historical LLM" : "Run LLM";
-
-const buildLlmStatEntries = (stats: LLMStats) => {
+// renderLlmStatsLine needs buildLlmStatEntries with formatLatency applied
+// Keep it here since it uses formatLatency which is not in selectors.ts
+const renderLlmStatsLine = (stats: LLMStats, modifier?: string) => {
   const scopeLabel = getLlmScopeLabel(stats.scope ?? null);
   const lastCallValue = stats.lastCallTimestamp ? relativeRecency(stats.lastCallTimestamp) : "—";
-  return [
+  const entries = [
     { label: `${scopeLabel} calls`, value: String(stats.totalCalls) },
     { label: "OK", value: String(stats.successfulCalls) },
     { label: "Failed", value: String(stats.failedCalls) },
@@ -196,10 +158,6 @@ const buildLlmStatEntries = (stats: LLMStats) => {
     { label: "P99", value: formatLatency(stats.p99LatencyMs) },
     { label: "Last call", value: lastCallValue },
   ];
-};
-
-const renderLlmStatsLine = (stats: LLMStats, modifier?: string) => {
-  const entries = buildLlmStatEntries(stats);
   const classNames = [
     "run-header-inline-stats",
     "llm-stats-line",
@@ -221,259 +179,6 @@ const renderLlmStatsLine = (stats: LLMStats, modifier?: string) => {
   );
 };
 
-// Autorefresh options and storage key used by header UI (state managed in useRunSelection hook)
-// AUTOREFRESH_STORAGE_KEY retained for test compatibility
-export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
-export const AUTOREFRESH_OPTIONS = [
-  { label: "Off", value: "off" },
-  { label: "5s", value: "5" },
-  { label: "10s", value: "10" },
-  { label: "30s", value: "30" },
-  { label: "1m", value: "60" },
-  { label: "5m", value: "300" },
-];
-
-const buildClusterRecommendedArtifacts = (detail?: ClusterDetailPayload) => {
-  if (!detail) {
-    return [];
-  }
-  const seen = new Map<string, ArtifactLink>();
-  const add = (artifact: ArtifactLink | null | undefined) => {
-    if (!artifact || !artifact.path) {
-      return;
-    }
-    if (seen.has(artifact.path)) {
-      return;
-    }
-    seen.set(artifact.path, artifact);
-  };
-  if (detail.assessment?.artifactPath) {
-    add({ label: "Assessment artifact", path: detail.assessment.artifactPath });
-  }
-  detail.artifacts.forEach((artifact) => add(artifact));
-  detail.drilldownCoverage.forEach((entry) => {
-    if (entry.available && entry.artifactPath) {
-      add({ label: `${entry.label} drilldown`, path: entry.artifactPath });
-    }
-  });
-  return Array.from(seen.values()).slice(0, 3);
-};
-
-const sortDeterministicSummaries = (
-  summaries: DeterministicNextCheckSummary[] = []
-) => [...summaries].sort((first, second) => (second.priorityScore ?? 0) - (first.priorityScore ?? 0));
-
-const safetyClass = (value?: string) => {
-  const normalized = value ? value.replace(/[^a-z0-9]+/gi, "-").toLowerCase() : "";
-  return `safety-pill ${normalized ? `safety-pill-${normalized}` : ""}`.trim();
-};
-
-const priorityLabel = (confidence: string) => {
-  const normalized = confidence.toLowerCase();
-  if (normalized.includes("critical")) return "critical";
-  if (normalized.includes("high")) return "high";
-  if (normalized.includes("medium")) return "medium";
-  if (normalized.includes("low")) return "low";
-  return "default";
-};
-
-const formatSourceType = (value?: string | null) => {
-  if (!value) return null;
-  if (value === "deterministic") {
-    return "Deterministic evidence";
-  }
-  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
-};
-
-const humanizeReason = (value?: string | null) => {
-  if (!value) {
-    return null;
-  }
-  return value
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-};
-
-const formatCandidatePriority = (value?: string | null) => {
-  const normalized = (value ?? "secondary").toLowerCase();
-  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
-};
-
-const ALLOWED_MANUAL_FAMILIES = new Set([
-  "kubectl-get",
-  "kubectl-describe",
-  "kubectl-logs",
-  "kubectl-get-crd",
-  "kubectl-top",
-]);
-
-type ExecutionErrorResult = {
-  status: "error";
-  summary: string;
-  blockingReason?: string | null;
-};
-
-type ExecutionResult = NextCheckExecutionResponse | ExecutionErrorResult;
-
-type ApprovalResult = {
-  status: "success" | "error";
-  summary: string;
-  artifactPath?: string | null;
-  approvalTimestamp?: string | null;
-};
-
-type PromotionStatus = {
-  status: "idle" | "pending" | "success" | "error";
-  message?: string | null;
-};
-
-const approvalStatusLabels: Record<string, string> = {
-  approved: "Approved candidate",
-  "approval-required": "Approval needed",
-  "approval-stale": "Approval stale",
-  "approval-orphaned": "Orphaned approval",
-  "not-required": "Safe candidate",
-};
-
-type NextCheckStatusVariant = "safe" | "approval" | "approved" | "duplicate" | "stale";
-
-type NextCheckQueueStatus =
-  | "approved-ready"
-  | "safe-ready"
-  | "approval-needed"
-  | "failed"
-  | "completed"
-  | "duplicate-or-stale";
-
-const determineNextCheckStatusVariant = (
-  candidate: NextCheckPlanCandidate
-): NextCheckStatusVariant => {
-  if (candidate.duplicateOfExistingEvidence) {
-    return "duplicate";
-  }
-  if (candidate.requiresOperatorApproval) {
-    if (candidate.approvalStatus === "approved") {
-      return "approved";
-    }
-    if (candidate.approvalStatus === "approval-stale") {
-      return "stale";
-    }
-    return "approval";
-  }
-  return "safe";
-};
-
-const nextCheckStatusLabel = (variant: NextCheckStatusVariant) => {
-  switch (variant) {
-    case "approval":
-      return "Approval needed";
-    case "approved":
-      return "Approved candidate";
-    case "duplicate":
-      return "Duplicate / already covered";
-    case "stale":
-      return "Approval stale";
-    default:
-      return "Safe candidate";
-  }
-};
-
-const getPlanStatusLabel = (variant: NextCheckStatusVariant, candidate: NextCheckPlanCandidate) => {
-  if (candidate.approvalStatus) {
-    const override = approvalStatusLabels[candidate.approvalStatus];
-    if (override) {
-      return override;
-    }
-  }
-  return nextCheckStatusLabel(variant);
-};
-
-const NEXT_CHECK_QUEUE_STATUS_LABELS: Record<NextCheckQueueStatus, string> = {
-  "approved-ready": "Approved & ready",
-  "safe-ready": "Safe to automate",
-  "approval-needed": "Approval needed",
-  "failed": "Failed executions",
-  "completed": "Completed",
-  "duplicate-or-stale": "Duplicate / stale",
-};
-
-const NEXT_CHECK_QUEUE_STATUS_ORDER: NextCheckQueueStatus[] = [
-  "approved-ready",
-  "safe-ready",
-  "approval-needed",
-  "failed",
-  "completed",
-  "duplicate-or-stale",
-];
-
-const QUEUE_SORT_OPTIONS = [
-  { label: "Backend order", value: "default" },
-  { label: "Priority", value: "priority" },
-  { label: "Cluster", value: "cluster" },
-  { label: "Latest activity", value: "activity" },
-] as const;
-
-type QueueSortOption = (typeof QUEUE_SORT_OPTIONS)[number]["value"];
-
-const QUEUE_PRIORITY_ORDER: Record<string, number> = {
-  primary: 0,
-  secondary: 1,
-  fallback: 2,
-};
-
-type QueueFocusMode = "none" | "work" | "review";
-const QUEUE_FOCUS_FILTERS: Record<QueueFocusMode, NextCheckQueueStatus[]> = {
-  none: [],
-  work: ["approved-ready", "safe-ready", "failed"],
-  review: ["approval-needed", "duplicate-or-stale"],
-};
-
-// Review status filter types for recent runs panel
-// Uses reviewStatus from backend: "no-executions", "unreviewed", "partially-reviewed", "fully-reviewed"
-type RunsReviewFilter = "all" | "no-executions" | "awaiting-review" | "partially-reviewed" | "fully-reviewed" | "needs-attention";
-const RUNS_REVIEW_FILTER_OPTIONS: { label: string; value: RunsReviewFilter }[] = [
-  { label: "All runs", value: "all" },
-  { label: "No executions yet", value: "no-executions" },
-  { label: "Awaiting review", value: "awaiting-review" },
-  { label: "Partially reviewed", value: "partially-reviewed" },
-  { label: "Fully reviewed", value: "fully-reviewed" },
-  { label: "Needs attention", value: "needs-attention" },
-];
-
-// Compute filter counts from runs list
-const computeRunsFilterCounts = (
-  runs: RunsListEntry[]
-): Record<RunsReviewFilter, number> => {
-  const counts: Record<RunsReviewFilter, number> = {
-    all: runs.length,
-    "no-executions": 0,
-    "awaiting-review": 0,
-    "partially-reviewed": 0,
-    "fully-reviewed": 0,
-    "needs-attention": 0,
-  };
-
-  runs.forEach((run) => {
-    if (run.reviewStatus === "no-executions") {
-      counts["no-executions"]++;
-    } else if (run.reviewStatus === "unreviewed") {
-      counts["awaiting-review"]++;
-      counts["needs-attention"]++;
-    } else if (run.reviewStatus === "partially-reviewed") {
-      counts["partially-reviewed"]++;
-      counts["needs-attention"]++;
-    } else if (run.reviewStatus === "fully-reviewed") {
-      counts["fully-reviewed"]++;
-    }
-  });
-
-  return counts;
-};
-
-const RUNS_REVIEW_FILTER_VALUES: RunsReviewFilter[] = ["all", "no-executions", "awaiting-review", "partially-reviewed", "fully-reviewed", "needs-attention"];
-
-const isRunsReviewFilterValue = (value: unknown): value is RunsReviewFilter =>
-  typeof value === "string" && RUNS_REVIEW_FILTER_VALUES.includes(value as RunsReviewFilter);
 
 export const QUEUE_VIEW_STORAGE_KEY = "dashboard-queue-view-state";
 export const RUNS_REVIEW_FILTER_STORAGE_KEY = "dashboard-runs-review-filter";
@@ -657,39 +362,6 @@ const clearStoredQueueViewState = () => {
   window.localStorage.removeItem(QUEUE_VIEW_STORAGE_KEY);
 };
 
-const normalizeQueuePriority = (value: string | null | undefined) =>
-  (value ?? "unknown").toLowerCase();
-
-const queuePriorityRank = (value: string | null | undefined) =>
-  QUEUE_PRIORITY_ORDER[normalizeQueuePriority(value)] ?? Object.keys(QUEUE_PRIORITY_ORDER).length;
-
-const queueTimestampValue = (value: string | null | undefined) => {
-  if (!value) {
-    return 0;
-  }
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
-
-const outcomeStatusLabels: Record<string, string> = {
-  "executed-success": "Executed (success)",
-  "executed-failed": "Executed (failed)",
-  "timed-out": "Execution timed out",
-  "approval-required": "Awaiting approval",
-  approved: "Approved",
-  "approval-stale": "Approval stale",
-  "approval-orphaned": "Orphaned approval",
-  "not-used": "Not used",
-  unknown: "Unknown",
-};
-
-const outcomeStatusDisplay = (status?: string | null) =>
-  outcomeStatusLabels[status ?? "unknown"] || (status ? status : "Unknown");
-
-const outcomeStatusClass = (status?: string | null) =>
-  `outcome-pill outcome-pill-${((status ?? "unknown").replace(/[^a-z0-9]+/gi, "-").toLowerCase())}`;
-
-
 const LLMPolicyPanel = ({ policy }: { policy?: LLMPolicy | null }) => {
   const auto = policy?.autoDrilldown;
   const budgetStatus = auto
@@ -746,59 +418,6 @@ const LLMPolicyPanel = ({ policy }: { policy?: LLMPolicy | null }) => {
 };
 
 // ==========================================================================
-// Advisory lower-section view-model helpers
-// ==========================================================================
-
-export type ParsedNextCheck = {
-  intent: string;
-  targetCluster: string | null;
-  commandPreview: string | null;
-};
-
-/**
- * Parse a raw next-check string into structured fields.
- * Handles:
- *   - Optional [cluster-name] prefix → targetCluster
- *   - Optional kubectl / k9s command in the text → commandPreview
- *   - Remaining text → intent
- * Keeps string surgery out of JSX.
- */
-export const parseNextCheckEntry = (raw: string): ParsedNextCheck => {
-  const clusterPrefixMatch = raw.match(/^\[([^\]]{1,60})\]\s*/);
-  const withoutPrefix = clusterPrefixMatch ? raw.slice(clusterPrefixMatch[0].length) : raw;
-  const targetCluster = clusterPrefixMatch ? clusterPrefixMatch[1] : null;
-
-  const cmdMatch = withoutPrefix.match(/\b(kubectl\s+\S+(?:\s+[^\n]+)?|k9s\b[^\n]*)/);
-
-  if (!cmdMatch) {
-    return {
-      intent: withoutPrefix.slice(0, 120).trim(),
-      targetCluster,
-      commandPreview: null,
-    };
-  }
-
-  const commandRaw = cmdMatch[1].trim();
-  const cmdStart = withoutPrefix.indexOf(cmdMatch[0]);
-  const beforeCmd = withoutPrefix.slice(0, cmdStart).trim().replace(/[:\-–]+$/, "").trim();
-
-  if (!beforeCmd) {
-    // Whole entry is a command - show as intent, no separate preview
-    return {
-      intent: commandRaw.slice(0, 80).trim(),
-      targetCluster,
-      commandPreview: null,
-    };
-  }
-
-  return {
-    intent: beforeCmd,
-    targetCluster,
-    commandPreview: commandRaw.slice(0, 90),
-  };
-};
-
-// ==========================================================================
 // Specialized lower advisory section components
 // ==========================================================================
 
@@ -810,211 +429,6 @@ export const parseNextCheckEntry = (raw: string): ParsedNextCheck => {
 
 /** Focus notes - demoted secondary guidance hints */
 
-
-// Operator-friendly labels for Alertmanager ranking promotion display.
-// Maps internal match dimensions to concise, trustworthy operator-facing text.
-const ALERTMANAGER_PROMOTION_LABELS: Record<string, string> = {
-  namespace: "Matched namespace",
-  namespaces: "Matched namespaces",
-  cluster: "Matched cluster",
-  clusters: "Matched clusters",
-  service: "Matched service",
-  services: "Matched services",
-};
-
-/** Format Alertmanager promotion text for operator display.
- * Converts internal format like "promoted:matched namespace(s): monitoring"
- * into human-friendly text like "Promoted: Matched namespace monitoring".
- */
-const formatAlertmanagerPromotion = (rankingReason: string): string => {
-  // Remove internal prefix
-  const internal = rankingReason.replace(/^alertmanager-context:/, "");
-  
-  // Split into parts: "promoted" + "matched {dimensions}: {values}"
-  const parts = internal.split(":");
-  if (parts.length < 2) {
-    return "Promoted by Alertmanager";
-  }
-  
-  // Parse "promoted" and "matched {dims}: {values}"
-  const action = parts[0]; // "promoted"
-  const rest = parts.slice(1).join(":"); // "matched namespace(s): monitoring"
-  
-  // Extract dimension and values
-  const matchPartMatch = rest.match(/^matched\s+(.+?):\s*(.+)$/);
-  if (!matchPartMatch) {
-    return "Promoted by Alertmanager";
-  }
-  
-  const dimensionRaw = matchPartMatch[1];
-  const values = matchPartMatch[2];
-  
-  // Normalize dimension name (namespace(s) -> namespace/namespaces)
-  let normalizedDim = dimensionRaw;
-  if (dimensionRaw.includes("namespace")) {
-    normalizedDim = dimensionRaw.includes("(") && dimensionRaw.includes(")")
-      ? "namespaces"
-      : "namespace";
-  } else if (dimensionRaw.includes("cluster")) {
-    normalizedDim = dimensionRaw.includes("(") && dimensionRaw.includes(")")
-      ? "clusters"
-      : "cluster";
-  } else if (dimensionRaw.includes("service")) {
-    normalizedDim = dimensionRaw.includes("(") && dimensionRaw.includes(")")
-      ? "services"
-      : "service";
-  }
-  
-  const label = ALERTMANAGER_PROMOTION_LABELS[normalizedDim] || normalizedDim;
-  
-  return `${label}: ${values}`;
-};
-
-/** Get subtext for Alertmanager promotion tooltip.
- * Provides detail when multiple dimensions are matched.
- */
-const getAlertmanagerPromotionSubtext = (rankingReason: string): string | null => {
-  // If internal reason has multiple match dimensions, provide subtext
-  const internal = rankingReason.replace(/^alertmanager-context:/, "");
-  const parts = internal.split(":");
-  if (parts.length >= 2) {
-    return "Ranking influenced by Alertmanager snapshot for selected run";
-  }
-  return null;
-};
-
-/** Format structured Alertmanager provenance for operator display.
- * Converts AlertmanagerProvenance into human-friendly text.
- */
-const formatAlertmanagerProvenance = (provenance: AlertmanagerProvenance): string => {
-  const { matchedDimensions, matchedValues, appliedBonus } = provenance;
-  
-  if (matchedDimensions.length === 0) {
-    return "Promoted by Alertmanager";
-  }
-  
-  // Format matched dimensions and values
-  const parts = matchedDimensions.map((dim) => {
-    const values = matchedValues[dim] ?? [];
-    const valuesStr = values.length > 0 ? `: ${values.join(", ")}` : "";
-    return `${dim}${valuesStr}`;
-  });
-  
-  const bonusStr = appliedBonus > 0 ? ` (+${appliedBonus})` : "";
-  return `Matched ${parts.join(", ")}${bonusStr}`;
-};
-
-/** Get subtext for structured Alertmanager provenance tooltip.
- * Provides bonus and severity detail when available.
- */
-const getAlertmanagerProvenanceSubtext = (provenance: AlertmanagerProvenance): string => {
-  const { baseBonus, appliedBonus, severitySummary, signalStatus } = provenance;
-  
-  const parts: string[] = [];
-  
-  if (baseBonus !== appliedBonus) {
-    parts.push(`Base bonus: ${baseBonus}, Applied: ${appliedBonus}`);
-  } else if (appliedBonus > 0) {
-    parts.push(`Bonus: ${appliedBonus}`);
-  }
-  
-  if (Object.keys(severitySummary).length > 0) {
-    const severityParts = Object.entries(severitySummary)
-      .map(([sev, count]) => `${sev}: ${count}`)
-      .join(", ");
-    parts.push(`Severity: ${severityParts}`);
-  }
-  
-  if (signalStatus) {
-    parts.push(`Signal: ${signalStatus}`);
-  }
-  
-  if (parts.length === 0) {
-    return "Ranking influenced by Alertmanager snapshot";
-  }
-  
-  return parts.join(" · ");
-
-};
-
-const formatFeedbackAdaptationProvenance = (provenance: FeedbackAdaptationProvenance): string => {
-  const { feedbackAdaptation, adaptationReason, suppressedBonus, penaltyApplied } = provenance;
-  
-  if (!feedbackAdaptation) {
-    return "No feedback adaptation";
-  }
-  
-  const parts: string[] = [];
-  
-  if (adaptationReason) {
-    parts.push(adaptationReason);
-  }
-  
-  if (suppressedBonus > 0) {
-    parts.push(`Suppressed: ${suppressedBonus}`);
-  }
-  
-  if (penaltyApplied !== 0) {
-    parts.push(`Penalty: ${penaltyApplied}`);
-  }
-  
-  return parts.length > 0 ? parts.join(" · ") : "Feedback adaptation applied";
-};
-
-/** Format structured feedback summary for tooltip display.
- * Handles both modern structured FeedbackSummary and legacy string fallback.
- */
-const formatFeedbackSummary = (summary: FeedbackSummary): string => {
-  // Legacy fallback: preserve original text if summaryText is present
-  // (indicates input was a legacy string that was wrapped into structured shape)
-  if (summary.summaryText) {
-    return summary.summaryText;
-  }
-  
-  const parts: string[] = [];
-  if (summary.totalEntries > 0) {
-    parts.push(`${summary.totalEntries} entries`);
-  }
-  const nsCount = summary.namespacesWithFeedback.length;
-  const clusterCount = summary.clustersWithFeedback.length;
-  const svcCount = summary.servicesWithFeedback.length;
-  if (nsCount > 0) parts.push(`${nsCount} ns`);
-  if (clusterCount > 0) parts.push(`${clusterCount} cluster(s)`);
-  if (svcCount > 0) parts.push(`${svcCount} service(s)`);
-  return parts.length > 0 ? parts.join(', ') : 'No feedback';
-};
-
-const getFeedbackAdaptationProvenanceSubtext = (provenance: FeedbackAdaptationProvenance): string => {
-  const { originalBonus, suppressedBonus, penaltyApplied, explanation, feedbackSummary } = provenance;
-  
-  const parts: string[] = [];
-  
-  if (originalBonus > 0) {
-    parts.push(`Original bonus: ${originalBonus}`);
-  }
-  
-  if (suppressedBonus > 0) {
-    parts.push(`Suppressed: ${suppressedBonus}`);
-  }
-  
-  if (penaltyApplied !== 0) {
-    parts.push(`Penalty applied: ${penaltyApplied}`);
-  }
-  
-  if (explanation) {
-    parts.push(`Explanation: ${explanation}`);
-  }
-  
-  if (feedbackSummary) {
-    // Handle both structured FeedbackSummary and legacy string shape
-    const summaryText = typeof feedbackSummary === 'string' 
-      ? feedbackSummary 
-      : formatFeedbackSummary(feedbackSummary);
-    parts.push(`Feedback: ${summaryText}`);
-  }
-  
-  return parts.length > 0 ? parts.join(' · ') : 'Feedback adaptation applied';
-};
 export const ProposalList = ({
   proposals,
   filter,
