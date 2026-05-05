@@ -26,6 +26,7 @@ from .health.adaptation import (
     evaluate_proposal,
     render_proposal_patch,
 )
+from .health.artifact_readers import read_cluster_snapshot_artifact
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
 from .health.notifications import (
@@ -727,5 +728,5 @@ def _str_or_none(value: object | None) -> str | None:
 
 
 def _load_snapshot(path: Path) -> ClusterSnapshot:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    return ClusterSnapshot.from_dict(raw)
+    """Load a ClusterSnapshot from disk using the typed artifact reader."""
+    return read_cluster_snapshot_artifact(path)

@@ -981,3 +981,146 @@ After DrilldownArtifact, consider:
 1. **`ClusterSnapshot`**: Used in CLI and batch, has `from_dict()`
 2. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
 3. **`HealthAssessmentArtifact`**: Used in review pipeline, has `from_dict()`
+
+---
+
+## Typed Artifact Reader: ClusterSnapshot (Phase 2 Follow-up)
+
+### Overview
+
+This section documents the ClusterSnapshot typed artifact reader as the next step after DrilldownArtifact.
+
+### New Files
+
+- `src/k8s_diag_agent/health/artifact_readers.py` - ClusterSnapshot typed readers (added to existing module)
+- `tests/unit/test_cluster_snapshot_artifact_readers.py` - Reader tests
+
+### Reader API
+
+```python
+# Strict reader - raises on failure
+def read_cluster_snapshot_artifact(path: Path) -> ClusterSnapshot:
+    """Read and parse a ClusterSnapshot from disk.
+
+    Raises:
+        OSError: If the file cannot be read
+        json.JSONDecodeError: If the file content is not valid JSON
+        ValueError: If the JSON is valid but not a mapping, or from_dict validation fails
+        TypeError: If from_dict receives unexpected type
+        KeyError: If required fields are missing in from_dict
+    """
+
+# Optional reader - returns None on failure
+def try_read_cluster_snapshot_artifact(
+    path: Path,
+    *,
+    run_id: str = "",
+    artifact_kind: str = "cluster-snapshot",
+    log_failures: bool = True,
+) -> ClusterSnapshot | None:
+    """Try to read a ClusterSnapshot, returning None on failure.
+
+    Logs a warning with safe metadata on failure when log_failures=True.
+    Never logs raw content.
+    """
+```
+
+### Error Handling Contract
+
+- **Strict reader raises**:
+  - `OSError`
+  - `json.JSONDecodeError`
+  - `ValueError`
+  - `TypeError`
+  - `KeyError`
+- **Optional reader returns** `None` on those failures
+- **Optional reader logs only when** `log_failures=True`
+
+### Logging Policy
+
+- Safe metadata only:
+  - artifact filename
+  - artifact kind
+  - run_id (if safe)
+  - error type
+- Never log raw snapshot content, Kubernetes object specs, pod logs, events, kubeconfig, tokens, or full absolute paths
+
+### ClusterSnapshot Call Site Inventory
+
+| File | Function | Type | Pattern | Classification |
+|------|----------|------|---------|----------------|
+| `cli_handlers.py` | `_load_snapshot` | targeted read | CLI compare/assess snapshot read | **fixed-this-slice** |
+| `health/adaptation.py` | `_load_fixture_snapshot` | fixture load | Test/fixture loading | **skipped** (not a production read path) |
+| `external_analysis/alertmanager_artifact.py` | `read_alertmanager_snapshot` | targeted read | Alertmanager snapshot read | **skipped** (different artifact type) |
+
+### Chosen Call Sites and Rationale
+
+**Migrated (1 call site)**:
+
+- `cli_handlers.py::_load_snapshot`: Targeted CLI read used by `handle_compare` and `handle_assess_snapshots`. This is a strict CLI path where failures should propagate (malformed snapshots should fail fast, as is appropriate for CLI operations). The pattern already uses `json.loads() + from_dict()` which maps directly to the typed reader.
+
+**Skipped**:
+
+- `health/adaptation.py::_load_fixture_snapshot`: Fixture loading for testing, not a production read path. The fixture validation already handles malformed input.
+- `external_analysis/alertmanager_artifact.py::read_alertmanager_snapshot`: Alertmanager snapshots are a different artifact type with their own schema and `from_dict()`.
+
+### Compatibility Decision
+
+**No legacy dict fallback needed**: ClusterSnapshot does not have the same legacy fallback requirement because:
+
+1. ClusterSnapshot schema is stable with required `cluster_id` field in metadata
+2. All existing artifacts should pass `from_dict()` validation
+3. CLI behavior (strict parsing) is preserved - malformed snapshots fail fast
+
+### Preserved Behavior
+
+- Valid snapshots still load and render the same
+- Malformed snapshots still fail with explicit exceptions (CLI behavior)
+- No API response shape changes
+- No CLI output shape changes
+- No change to write-path schema
+
+### Tests Added
+
+| Test | Purpose |
+|------|---------|
+| `test_valid_snapshot_loads_and_returns_typed_object` | Valid snapshot parses into ClusterSnapshot |
+| `test_malformed_json_fails_with_json_decode_error` | Strict reader raises JSONDecodeError |
+| `test_missing_required_cluster_id_field_fails` | Strict reader raises KeyError/ValueError |
+| `test_non_object_json_fails` | Strict reader raises ValueError |
+| `test_unreadable_missing_file_raises_os_error` | Strict reader raises OSError |
+| `test_roundtrip_with_all_fields` | Snapshot roundtrip preserves all fields |
+| `test_valid_snapshot_returns_typed_object` | Optional reader returns typed object |
+| `test_malformed_json_returns_none_and_logs` | Optional reader returns None + logs |
+| `test_missing_file_returns_none` | Optional reader returns None |
+| `test_log_failures_false_returns_none_without_logging` | log_failures=False suppresses warnings |
+| `test_log_failures_false_with_valid_snapshot` | Valid snapshot returns object even with log_failures=False |
+| `test_missing_cluster_id_returns_none` | Optional reader returns None |
+| `test_array_json_returns_none` | Optional reader returns None |
+| `test_cli_load_snapshot_still_works` | Regression: CLI pattern preserved |
+| `test_cli_compare_reports_differences_still_works` | Regression: compare behavior preserved |
+| `test_malformed_snapshot_raises_in_strict_mode` | Regression: strict mode behavior preserved |
+
+### Verification
+
+```bash
+# Run new reader tests
+pytest tests/unit/test_cluster_snapshot_artifact_readers.py -v
+
+# Run affected call-site tests
+pytest tests/unit/test_cli_compare.py -v
+
+# Run ruff check on changed files
+ruff check src/k8s_diag_agent/health/artifact_readers.py
+ruff check src/k8s_diag_agent/cli_handlers.py
+
+# Run security baseline
+bash scripts/check_security_baseline.sh --mode baseline
+```
+
+### Next Artifact Family Recommendation
+
+After ClusterSnapshot, consider:
+
+1. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
+2. **`HealthAssessmentArtifact`**: Used in review pipeline, has `from_dict()`
