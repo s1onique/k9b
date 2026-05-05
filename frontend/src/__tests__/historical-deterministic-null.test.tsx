@@ -34,8 +34,8 @@ const getQueuePanel = async () => {
   return within(queuePanel);
 };
 
-// Helper to get the deterministic panel
-const getDeterministicPanel = async () => {
+// Helper to get the deterministic panel (synchronous - uses document.getElementById directly)
+const getDeterministicPanel = () => {
   const panel = document.getElementById("deterministic-next-checks");
   if (!panel) {
     throw new Error("Deterministic panel not rendered");
@@ -214,8 +214,11 @@ afterEach(() => {
 describe("Historical runs with null deterministicNextChecks", () => {
   test("latest run shows deterministic checks when available", async () => {
     const latestPayload = createLatestRunPayload(sampleQueueItems);
+    // Must mock both /api/run and /api/run?run_id=latest-run because App calls
+    // fetchRun(runId) which appends the run_id query param when selecting a run.
     const payloads = {
       "/api/run": latestPayload,
+      "/api/run?run_id=latest-run": latestPayload,
       "/api/runs": {
         runs: [
           { runId: "latest-run", runLabel: "Latest run", timestamp: new Date().toISOString(), clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
@@ -245,8 +248,11 @@ describe("Historical runs with null deterministicNextChecks", () => {
 
   test("historical run with null deterministic shows empty state but queue is visible", async () => {
     const historicalPayload = createHistoricalRunPayload("historical-run", sampleQueueItems);
+    // Must mock both /api/run and /api/run?run_id=historical-run because App calls
+    // fetchRun(runId) which appends the run_id query param when selecting a run.
     const payloads = {
       "/api/run": historicalPayload,
+      "/api/run?run_id=historical-run": historicalPayload,
       "/api/runs": {
         runs: [
           { runId: "historical-run", runLabel: "Historical run", timestamp: "2026-04-01T12:00:00Z", clusterCount: 1, triaged: true, executionCount: 0, reviewedCount: 0, reviewStatus: "no-executions" },
@@ -270,9 +276,10 @@ describe("Historical runs with null deterministicNextChecks", () => {
       expect(document.getElementById("deterministic-next-checks")).toBeInTheDocument();
     });
     
-    // Now get the within-scoped panel after data has loaded
-    const deterministicPanel = await getDeterministicPanel();
+    // Re-query deterministic panel inside waitFor to avoid stale within-scoped query
+    // if React replaces the panel during selected-run load.
     await waitFor(() => {
+      const deterministicPanel = getDeterministicPanel();
       expect(deterministicPanel.getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
       // Should point to Work list
       expect(deterministicPanel.getByText(/Use the Work list below for the full queue of planner candidates/i)).toBeInTheDocument();
@@ -324,9 +331,10 @@ describe("Historical runs with null deterministicNextChecks", () => {
     // Verify second queue item (approval needed) is visible
     await queuePanel.findByText(/Describe diag CRD for control plane/i);
     
-    // Verify deterministic panel shows empty state
-    const deterministicPanel = await getDeterministicPanel();
+    // Re-query deterministic panel inside waitFor to avoid stale within-scoped query
+    // if React replaces the panel during selected-run load.
     await waitFor(() => {
+      const deterministicPanel = getDeterministicPanel();
       expect(deterministicPanel.getByText(/No evidence-based checks are available for this run/i)).toBeInTheDocument();
     });
   });
