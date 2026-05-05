@@ -922,8 +922,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     if entry is not None and idx is not None:
                         # Return full relative path within runs_dir (external-analysis/filename)
                         return dict(entry), idx, Path("external-analysis") / artifact_file.name
-                except Exception:
-                    # Skip malformed artifacts, continue searching
+                except (OSError, json.JSONDecodeError):
+                    # Skip malformed/unreadable artifacts, continue searching
+                    # File I/O errors (OSError) and JSON parse errors (JSONDecodeError) are non-fatal
                     continue
 
         return None, None, None
@@ -987,8 +988,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     if entry is not None and idx is not None:
                         # Return full relative path within health_root (external-analysis/filename)
                         return dict(entry), idx, Path("external-analysis") / artifact_file.name
-                except Exception:
-                    # Skip malformed artifacts, continue searching
+                except (OSError, json.JSONDecodeError):
+                    # Skip malformed/unreadable artifacts, continue searching
+                    # File I/O errors (OSError) and JSON parse errors (JSONDecodeError) are non-fatal
                     continue
 
         return None, None, None
@@ -1156,7 +1158,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         try:
             review_data = json.loads(review_artifact_path.read_text(encoding="utf-8"))
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError) as exc:
             logger.warning(
                 "Failed to read run review artifact",
                 extra={"run_id": run_id, "error": str(exc)},

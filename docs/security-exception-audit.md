@@ -75,13 +75,50 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 
 ---
 
-## Broader Exception Audit - Out-of-Scope Modules
+## Broader Exception Audit - server.py Slice 13
 
 ### src/k8s_diag_agent/ui/server.py
 
-Multiple `except Exception` handlers in the main server module. These require careful review as they handle HTTP request/response semantics and framework behavior.
+| Line | Handler | Context | Classification |
+|------|---------|---------|----------------|
+| ~925 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts` | **fixed-this-slice** |
+| ~990 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts_from_health_root` | **fixed-this-slice** |
+| ~1158 | `except (OSError, json.JSONDecodeError)` | Review artifact read in `_load_context_for_run` | **fixed-this-slice** |
+| ~1697 | `except OSError` | Static file read in `_send_file` | **fixed-this-slice** |
+| ~1743 | `except Exception` | ui-index.json read in `_persist_batch_execution_history_to_ui_index` | **deferred-read-model** |
+| ~1814 | `except Exception` | ui-index.json write in `_persist_batch_execution_history_to_ui_index` | **deferred-read-model** |
+| ~593 | `except Exception` | Script import in `_export_usefulness_review_for_run` | **deferred-mutation** |
+| ~774 | `except Exception` | do_GET framework catch-all | **deferred-framework-boundary** |
+| ~924 | `except Exception` | do_POST framework catch-all | **deferred-framework-boundary** |
+| ~1009 | `except Exception` | JSON payload parse in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1047 | `except Exception` | Module import in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1060 | `except Exception` | Batch execution in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
+| ~1117 | `except Exception` | ui-index.json read in `_load_context` | **deferred-read-model** |
+| ~1244 | `except Exception` | Index read in `_load_context_for_run` (notification index) | **deferred-read-model** |
+| ~1317 | `except Exception` | Alertmanager compact read in `_load_context_for_run` | **deferred-read-model** |
+| ~1333 | `except Exception` | Alertmanager sources build in `_load_context_for_run` | **deferred-read-model** |
+| ~1402 | `except Exception` | Context build in `_load_context_for_run` | **deferred-read-model** |
+| ~1528 | `except Exception` | Runs list build in `_build_runs_list_payload` | **deferred-read-model** |
 
-**Review status**: Deferred to future slice
+**Total in file**: 18 handlers (3 fixed, 1 already-correct, 14 deferred/remaining)
+
+**This slice fixed**: 3 read/static/file-path handlers
+- 2 artifact glob scan handlers: explicit tuple with `OSError, json.JSONDecodeError`
+- 1 review artifact read: explicit tuple with `OSError, json.JSONDecodeError`
+
+**Already correct**: 1 handler
+- 1 static file send: explicit `OSError` (verified correct before this slice)
+
+**Security hardening applied**:
+- Artifact JSON read in candidate search: explicit tuple with `OSError, json.JSONDecodeError`
+- Review artifact read: explicit tuple with `OSError, json.JSONDecodeError`
+- Behavior preserved (continue on parse/read errors, graceful fallback)
+- Non-fatal artifact scan errors continue searching instead of returning
+
+**Deferred categories**:
+- `deferred-read-model`: Read-model malformed/corruption scenarios (needs structured error handling)
+- `deferred-mutation`: Mutation routes with batch execution, review export (needs careful boundary)
+- `deferred-framework-boundary`: HTTP framework-level catch-alls in do_GET/do_POST (needs route architecture review)
 
 ### src/k8s_diag_agent/ui/api.py
 
@@ -295,11 +332,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 | Fixed this slice (ui/notifications.py - Phase 2 Slice 10) | 4 |
 | Fixed this slice (ui_planner_queue.py + ui_llm_stats.py - Phase 2 Slice 11) | 2 |
 | Fixed this slice (external_analysis/* - Phase 2 Slice 12) | 8 |
+| Fixed this slice (server.py - Phase 2 Slice 13) | 3 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 2 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **67** |
+| **Total fixed** | **70** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -355,7 +393,7 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 ---
 
-*Audit created: 2026-01-05*
+*Audit created: 2026-05-01*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-04 (Slice 12: external_analysis/* all 9 handlers fixed, 1 reviewed-safe as LLM boundary)*
-*Total handlers fixed in Phase 2: 67 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/*)*
+*Updated: 2026-05-05 (Slice 13: server.py read/static/file-path handlers - 3 fixed, 1 already-correct, 14 deferred)*
+*Total handlers fixed in Phase 2: 70 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/* + 3 server.py)*
