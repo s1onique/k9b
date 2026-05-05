@@ -590,7 +590,9 @@ def _export_usefulness_review_for_run(run_id: str, runs_dir: Path) -> bool:
         )
 
         return file_exists
-    except Exception as exc:
+    except (OSError, ImportError, ModuleNotFoundError, AttributeError) as exc:
+        # REVIEWED: Script import boundary - narrowing would risk silent failures in export flow
+        # ImportErrors from scripts/export_next_check_usefulness_review are non-fatal
         emit_structured_log(
             component="pack-refresh",
             message="Failed to export run-scoped usefulness review artifact",
@@ -1008,7 +1010,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         try:
             raw_payload = self.rfile.read(content_length).decode("utf-8")
             payload = json.loads(raw_payload)
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             self._send_json({"error": "Invalid JSON payload"}, 400)
             return
 
@@ -1046,7 +1048,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # Import the batch execution function from the package
         try:
             from k8s_diag_agent.batch import run_batch_next_checks
-        except Exception as exc:
+        except (ModuleNotFoundError, ImportError, AttributeError) as exc:
+            # REVIEWED: Module import boundary - narrowing to expected import errors
             self._send_json({"error": f"Failed to load batch execution module: {exc}"}, 500)
             return
 
@@ -1060,6 +1063,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Run not found: {run_id}"}, 404)
             return
         except Exception as exc:
+            # REVIEWED: External execution boundary - run_batch_next_checks may raise
+            # diverse exceptions from artifact writes, subprocess calls, JSON serialization
+            # Narrowing would risk leaking uncontrolled failures to 500 response
             self._send_json({"error": f"Batch execution failed: {exc}"}, 500)
             return
 

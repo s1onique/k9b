@@ -75,58 +75,55 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 
 ---
 
-## Broader Exception Audit - server.py Slice 14
+## Broader Exception Audit - server.py Slice 15 (Mutation Handlers)
 
 ### src/k8s_diag_agent/ui/server.py
 
+**Actual remaining `except Exception` in server.py** (verified via `rg -n 'except Exception'`):
 | Line | Handler | Context | Classification |
 |------|---------|---------|----------------|
-| ~925 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts` | **fixed-this-slice** |
-| ~990 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts_from_health_root` | **fixed-this-slice** |
-| ~1158 | `except (OSError, json.JSONDecodeError)` | Review artifact read in `_load_context_for_run` | **fixed-this-slice** |
-| ~1697 | `except OSError` | Static file read in `_send_file` | **fixed-this-slice** |
-| ~1743 | `except (OSError, json.JSONDecodeError)` | ui-index.json read in `_persist_batch_execution_history_to_ui_index` | **fixed-this-slice** |
-| ~1814 | `except OSError` | ui-index.json write in `_persist_batch_execution_history_to_ui_index` | **fixed-this-slice** |
-| ~593 | `except Exception` | Script import in `_export_usefulness_review_for_run` | **deferred-mutation** |
-| ~774 | `except Exception` | do_GET framework catch-all | **deferred-framework-boundary** |
-| ~924 | `except Exception` | do_POST framework catch-all | **deferred-framework-boundary** |
-| ~697 | `except Exception` | JSON payload parse in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~722 | `except Exception` | Module import in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1011 | `except Exception` | Batch execution in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1049 | `except Exception` | Result processing in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1062 | `except Exception` | Response construction in `_handle_run_batch_next_check_execution` | **deferred-mutation** |
-| ~1117 | `except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError)` | ui-index.json read/build in `_load_context` | **fixed-this-slice** |
-| ~1244 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Index read in `_load_context_for_run` (notification index) | **fixed-this-slice** |
-| ~1317 | `except (OSError, json.JSONDecodeError)` | Alertmanager compact read in `_load_context_for_run` | **fixed-this-slice** |
-| ~1333 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Alertmanager sources build in `_load_context_for_run` | **fixed-this-slice** |
-| ~1402 | `except (ValueError, TypeError, KeyError)` | Context build in `_load_context_for_run` | **fixed-this-slice** |
-| ~1528 | `except (OSError, ValueError, TypeError, json.JSONDecodeError)` | Runs list build in `_build_runs_list_payload` | **fixed-this-slice** |
+| ~925 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts` | **fixed** |
+| ~990 | `except (OSError, json.JSONDecodeError)` | Artifact JSON read in `_find_candidate_in_all_plan_artifacts_from_health_root` | **fixed** |
+| ~1158 | `except (OSError, json.JSONDecodeError)` | Review artifact read in `_load_context_for_run` | **fixed** |
+| ~1697 | `except OSError` | Static file read in `_send_file` | **fixed** |
+| ~1743 | `except (OSError, json.JSONDecodeError)` | ui-index.json read in `_persist_batch_execution_history_to_ui_index` | **fixed** |
+| ~1814 | `except OSError` | ui-index.json write in `_persist_batch_execution_history_to_ui_index` | **fixed** |
+| ~593 | `except (OSError, ImportError, ModuleNotFoundError, AttributeError)` | Script import in `_export_usefulness_review_for_run` | **fixed** (Slice 15) |
+| ~699 | `except Exception` | _get_run_label framework utility | **deferred-utility** |
+| ~724 | `except Exception` | do_GET framework catch-all | **deferred-framework-boundary** |
+| ~776 | `except Exception` | do_POST framework catch-all | **deferred-framework-boundary** |
+| ~697 | `except (json.JSONDecodeError, UnicodeDecodeError)` | JSON payload parse in `_handle_run_batch_next_check_execution` | **fixed** (Slice 15) |
+| ~722 | `except (ModuleNotFoundError, ImportError, AttributeError)` | Module import in `_handle_run_batch_next_check_execution` | **fixed** (Slice 15) |
+| ~1065 | `except Exception` | Batch execution in `_handle_run_batch_next_check_execution` | **reviewed-safe** |
+| ~1117 | `except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError)` | ui-index.json read/build in `_load_context` | **fixed** |
+| ~1244 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Index read in `_load_context_for_run` (notification index) | **fixed** |
+| ~1317 | `except (OSError, json.JSONDecodeError)` | Alertmanager compact read in `_load_context_for_run` | **fixed** |
+| ~1333 | `except (OSError, json.JSONDecodeError, ValueError, KeyError)` | Alertmanager sources build in `_load_context_for_run` | **fixed** |
+| ~1402 | `except (ValueError, TypeError, KeyError)` | Context build in `_load_context_for_run` | **fixed** |
+| ~1528 | `except (OSError, ValueError, TypeError, json.JSONDecodeError)` | Runs list build in `_build_runs_list_payload` | **fixed** |
 
-**Total in file**: 18 handlers (11 fixed, 1 already-correct, 6 deferred/remaining)
+**Total in file**: 19 handlers (16 fixed, 1 reviewed-safe, 0 needs-follow-up, 3 deferred)
 
-**Remaining broad handlers**: 7
-- ~593: `_export_usefulness_review_for_run` - script import/mutation boundary
-- ~697: `_handle_run_batch_next_check_execution` - JSON payload parse (mutation)
-- ~722: `_handle_run_batch_next_check_execution` - module import (mutation)
-- ~774: `do_GET` - framework catch-all
-- ~1011: `_handle_run_batch_next_check_execution` - batch execution (mutation)
-- ~1049: `_handle_run_batch_next_check_execution` - result processing (mutation)
-- ~1062: `_handle_run_batch_next_check_execution` - response construction (mutation)
+**Remaining broad handlers**: 4
+- ~699: `_get_run_label` - framework utility (non-mutation, defensive)
+- ~724: `do_GET` - framework catch-all (deferred)
+- ~776: `do_POST` - framework catch-all (deferred)
+- ~1065: `_handle_run_batch_next_check_execution` - REVIEWED-safe (external execution boundary)
 
-**This slice (Slice 14) fixed**: 8 read-model handlers
-- ~1743 ui-index.json read: `OSError, json.JSONDecodeError` (file I/O + JSON parse)
-- ~1814 ui-index.json write: `OSError` (file I/O only)
-- ~1117 ui-index.json read in `_load_context`: `OSError, json.JSONDecodeError`
-- ~1244 notification index read: `OSError, json.JSONDecodeError, ValueError, KeyError` (index structure errors)
-- ~1317 Alertmanager compact read: `OSError, json.JSONDecodeError`
-- ~1333 Alertmanager sources build: `OSError, json.JSONDecodeError, ValueError, KeyError`
-- ~1402 context build: `ValueError, TypeError, KeyError` (data shape errors)
-- ~1528 runs list build: `OSError, ValueError, TypeError, json.JSONDecodeError` (file I/O + data shape + parse)
+**This slice (Slice 15) fixed**: 3 mutation handlers
+- ~593 `_export_usefulness_review_for_run`: `OSError, ImportError, ModuleNotFoundError, AttributeError` (script import boundary)
+- ~697 `_handle_run_batch_next_check_execution`: `json.JSONDecodeError, UnicodeDecodeError` (JSON payload parse)
+- ~722 `_handle_run_batch_next_check_execution`: `ModuleNotFoundError, ImportError, AttributeError` (module import)
+
+**Reviewed-safe boundaries**:
+- Batch execution external boundary (~1065): `run_batch_next_checks` may raise diverse exceptions from artifact writes, subprocess calls, JSON serialization. Narrowing would risk leaking uncontrolled failures.
 
 **Already correct**: 1 handler
 - 1 static file send: explicit `OSError` (verified correct before Slice 13)
 
 **Security hardening applied**:
+- Request JSON/body parse: explicit `json.JSONDecodeError, UnicodeDecodeError`
+- Script/module import boundary: explicit `OSError, ImportError, ModuleNotFoundError, AttributeError`
 - File I/O: explicit `OSError` tuple
 - JSON parse errors: explicit `json.JSONDecodeError`
 - Data shape/malformed: explicit `ValueError, TypeError, KeyError`
@@ -134,7 +131,6 @@ Phase 2 security baseline work: replacing silent catches with explicit exception
 - Behavior preserved: graceful fallback, non-fatal continue
 
 **Deferred categories**:
-- `deferred-mutation`: Mutation routes with batch execution, review export (needs careful boundary)
 - `deferred-framework-boundary`: HTTP framework-level catch-alls in do_GET/do_POST (needs route architecture review)
 
 ### src/k8s_diag_agent/ui/api.py
@@ -351,11 +347,12 @@ except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
 | Fixed this slice (external_analysis/* - Phase 2 Slice 12) | 8 |
 | Fixed this slice (server.py - Phase 2 Slice 13) | 3 |
 | Fixed this slice (server.py - Phase 2 Slice 14) | 8 |
+| Fixed this slice (server.py - Phase 2 Slice 15) | 3 |
 | Fixed previous slices (read-model scope) | 18 |
 | Reviewed safe | 2 |
 | Needs follow-up | 0 |
 | Out of scope (deferred modules) | ~100+ |
-| **Total fixed** | **78** |
+| **Total fixed** | **81** |
 
 ### Fixed This Slice (Phase 2 Audit - Slice 6: server_next_checks.py mutation write paths)
 
@@ -413,5 +410,11 @@ All 10 handlers in server_next_checks.py are now fixed:
 
 *Audit created: 2026-05-01*
 *Audit scope: Phase 2 Security Hardening - Read-Model Artifact Parsing Paths*
-*Updated: 2026-05-05 (Slice 14: server.py read-model handlers - 8 fixed, 11 total fixed, 6 deferred)*
-*Total handlers fixed in Phase 2: 78 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/* + 11 server.py)*
+*Updated: 2026-05-05 (Slice 15: server.py mutation handlers - 3 fixed, 1 reviewed-safe)*
+*Total handlers fixed in Phase 2: 81 (18 read-model + 10 server_next_checks.py + 9 ui/api.py + 10 server_feedback.py + 6 server_alertmanager.py + 4 ui/notifications.py + 2 ui_planner_queue.py + ui_llm_stats.py + 8 external_analysis/* + 14 server.py)*
+
+**Phase 2 Slice 15 summary**:
+- 3 mutation handlers narrowed in server.py
+- 1 reviewed-safe boundary (external execution boundary at ~1065)
+- 4 remaining broad handlers: 1 framework utility, 2 framework catch-alls (deferred), 1 reviewed-safe
+- server.py now has 16 fixed handlers, 1 reviewed-safe, 3 deferred
