@@ -1,0 +1,86 @@
+{{/*
+Scheduler deployment.
+Runs the scheduled health loop for k9b diagnostics.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k9b.scheduler.fullname" . }}
+  labels:
+    {{- include "k9b.scheduler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.scheduler.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "k9b.scheduler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k9b.scheduler.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: scheduler
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["scheduler"]
+          env:
+            - name: LLAMA_CPP_BASE_URL
+              value: {{ .Values.scheduler.env.LLAMA_CPP_BASE_URL | quote }}
+            - name: LLAMA_CPP_MODEL
+              value: {{ .Values.scheduler.env.LLAMA_CPP_MODEL | quote }}
+            - name: HEALTH_CONFIG_PATH
+              value: {{ .Values.scheduler.env.HEALTH_CONFIG_PATH | quote }}
+            - name: HEALTH_RUNS_DIR
+              value: {{ .Values.scheduler.env.HEALTH_RUNS_DIR | quote }}
+            - name: KUBECONFIG
+              value: {{ .Values.scheduler.env.KUBECONFIG | quote }}
+            - name: PYTHONPATH
+              value: {{ .Values.scheduler.env.PYTHONPATH | quote }}
+            - name: HEALTH_BUILD_DIAGNOSTIC_PACK
+              value: {{ .Values.scheduler.env.HEALTH_BUILD_DIAGNOSTIC_PACK | quote }}
+            - name: LLAMA_CPP_ENABLE_THINKING
+              value: {{ .Values.scheduler.env.LLAMA_CPP_ENABLE_THINKING | quote }}
+          resources:
+            {{- toYaml .Values.scheduler.resources | nindent 10 }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.healthConfig.enabled }}
+            - name: health-config
+              mountPath: {{ .Values.healthConfig.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.kubeconfig.enabled }}
+            - name: kubeconfig
+              mountPath: {{ .Values.kubeconfig.mountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.healthConfig.enabled }}
+        - name: health-config
+          configMap:
+            name: {{ .Values.healthConfig.configMapName }}
+        {{- end }}
+        {{- if .Values.kubeconfig.enabled }}
+        - name: kubeconfig
+          secret:
+            secretName: {{ .Values.kubeconfig.secretName }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

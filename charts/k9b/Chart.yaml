@@ -1,0 +1,20 @@
+# k9b Helm Chart
+# Kubernetes diagnostics and monitoring agent
+
+apiVersion: v2
+name: k9b
+description: LLM-based Kubernetes monitoring and diagnostics agent
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - diagnostics
+  - monitoring
+  - llm
+home: https://github.com/s1onique/k9b
+sources:
+  - https://github.com/s1onique/k9b
+maintainers:
+  - name: k9b Maintainers
+    email: maintainers@k9b.local

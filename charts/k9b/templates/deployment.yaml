@@ -1,0 +1,90 @@
+{{/*
+Backend deployment.
+Provides the REST API and UI for k9b diagnostics.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k9b.backend.fullname" . }}
+  labels:
+    {{- include "k9b.backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "k9b.backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k9b.backend.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["backend"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.service.port }}
+              protocol: TCP
+          env:
+            - name: HEALTH_SKIP_REFRESH
+              value: {{ .Values.backend.env.HEALTH_SKIP_REFRESH | quote }}
+            - name: HEALTH_UI_HOST
+              value: {{ .Values.backend.env.HEALTH_UI_HOST | quote }}
+            - name: HEALTH_UI_PORT
+              value: {{ .Values.backend.env.HEALTH_UI_PORT | quote }}
+            - name: HEALTH_CONFIG_PATH
+              value: {{ .Values.backend.env.HEALTH_CONFIG_PATH | quote }}
+            - name: HEALTH_RUNS_DIR
+              value: {{ .Values.backend.env.HEALTH_RUNS_DIR | quote }}
+            - name: HEALTH_UI_RUNS_DIR
+              value: {{ .Values.backend.env.HEALTH_UI_RUNS_DIR | quote }}
+            - name: KUBECONFIG
+              value: {{ .Values.backend.env.KUBECONFIG | quote }}
+            - name: PYTHONPATH
+              value: {{ .Values.backend.env.PYTHONPATH | quote }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 10 }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.healthConfig.enabled }}
+            - name: health-config
+              mountPath: {{ .Values.healthConfig.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.kubeconfig.enabled }}
+            - name: kubeconfig
+              mountPath: {{ .Values.kubeconfig.mountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.healthConfig.enabled }}
+        - name: health-config
+          configMap:
+            name: {{ .Values.healthConfig.configMapName }}
+        {{- end }}
+        {{- if .Values.kubeconfig.enabled }}
+        - name: kubeconfig
+          secret:
+            secretName: {{ .Values.kubeconfig.secretName }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

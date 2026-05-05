@@ -1,0 +1,57 @@
+{{/*
+Frontend deployment.
+Provides the web UI for k9b diagnostics.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k9b.frontend.fullname" . }}
+  labels:
+    {{- include "k9b.frontend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "k9b.frontend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k9b.frontend.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag }}"
+          imagePullPolicy: {{ .Values.image.frontend.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.frontend.service.port }}
+              protocol: TCP
+          env:
+            - name: VITE_BACKEND_HOST
+              value: {{ .Values.frontend.env.VITE_BACKEND_HOST | quote }}
+            - name: VITE_BACKEND_PORT
+              value: {{ .Values.frontend.env.VITE_BACKEND_PORT | quote }}
+            - name: FRONTEND_HOST
+              value: {{ .Values.frontend.env.FRONTEND_HOST | quote }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 10 }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

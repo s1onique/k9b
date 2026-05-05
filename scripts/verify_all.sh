@@ -12,12 +12,14 @@
 #   scripts/verify_all.sh --json              # full gate, JSON output only
 #   scripts/verify_all.sh --python-only      # Python lane only
 #   scripts/verify_all.sh --frontend-only    # Frontend lane only
+#   scripts/verify_all.sh --helm-only        # Helm chart verification only
 #   scripts/verify_all.sh --python-only --json
 #   STEP_VERBOSE=1 scripts/verify_all.sh     # verbose output
 #
 # Scope options:
 #   --python-only    Run only ruff-lint, unit-tests, mypy (Python lane)
 #   --frontend-only  Run only npm-ci, npm-test-ui, npm-build (Frontend lane)
+#   --helm-only      Run only helm-lint, helm-template, helm-selector (Helm lane)
 #   (no flag)        Run all steps (full canonical gate)
 #
 # Output contract:
@@ -204,7 +206,7 @@ _LANE_STATE_FILE="$REPO_ROOT/runs/verification/${_RUN_TIMESTAMP}-lane-state.json
 _GLOBAL_FAILED_FILE="$REPO_ROOT/runs/verification/${_RUN_TIMESTAMP}-global-failed.flag"
 
 # Initialize lane state
-echo '{"python": [], "frontend": []}' > "$_LANE_STATE_FILE"
+echo '{"python": [], "frontend": [], "helm": []}' > "$_LANE_STATE_FILE"
 
 # Initialize global failure flag as not existing
 unset _GLOBAL_FAILED_SET
@@ -373,38 +375,58 @@ _run_frontend_lane() {
     popd >/dev/null
 }
 
+# Run Helm lane
+_run_helm_lane() {
+    if ! command -v helm >/dev/null 2>&1; then
+        # Record helm failure as a FAIL using a command that will fail
+        # We use a subshell that exits 1 to trigger the failure path
+        _run_and_record "helm" "helm-chart" "Helm chart verification (helm not installed)" bash -c 'echo "ERROR: helm not installed" >&2; exit 1'
+        return 0
+    fi
+    _run_and_record "helm" "helm-chart" "Verifying Helm chart" bash "$SCRIPT_DIR/verify_helm_chart.sh"
+}
+
 # Launch lanes based on scope
-# - "all": run both lanes concurrently
-# - "python": run only Python lane (no parallelism needed)
-# - "frontend": run only Frontend lane (no parallelism needed)
+# - "all": run all lanes concurrently
+# - "python": run only Python lane
+# - "frontend": run only Frontend lane
+# - "helm": run only Helm lane
 python_exit=0
 frontend_exit=0
+helm_exit=0
 
 case "$STEP_SCOPE" in
     all)
-        # Run both lanes concurrently
+        # Run all lanes concurrently
         _run_python_lane &
         python_pid=$!
         _run_frontend_lane &
         frontend_pid=$!
+        _run_helm_lane &
+        helm_pid=$!
         
-        # Wait for both lanes and capture exit codes
+        # Wait for all lanes and capture exit codes
         wait $python_pid
         python_exit=$?
         wait $frontend_pid
         frontend_exit=$?
+        wait $helm_pid
+        helm_exit=$?
         ;;
     python)
         # Run only Python lane
-        # Note: Do NOT reset lane state file after running - it's already populated
         _run_python_lane
         python_exit=$?
         ;;
     frontend)
         # Run only Frontend lane
-        # Note: Do NOT reset lane state file after running - it's already populated
         _run_frontend_lane
         frontend_exit=$?
+        ;;
+    helm)
+        # Run only Helm lane
+        _run_helm_lane
+        helm_exit=$?
         ;;
 esac
 
@@ -438,8 +460,8 @@ for step in state['python'] + state['frontend']:
 ")"
 fi
 
-# Determine overall exit code (non-zero if either lane failed)
-if (( python_exit != 0 )) || (( frontend_exit != 0 )); then
+# Determine overall exit code (non-zero if any lane failed)
+if (( python_exit != 0 )) || (( frontend_exit != 0 )) || (( helm_exit != 0 )); then
     _OVERALL_EXIT=1
 else
     _OVERALL_EXIT=0
@@ -452,12 +474,12 @@ fi
 # Determine exit code: non-zero if any step failed (tracked via lane results)
 final_exit=0
 if [[ -f "$_LANE_STATE_FILE" ]]; then
-    # Check if any step failed from lane state
+    # Check if any step failed from lane state (include helm lane)
     failed_count=$("$PYTHON" -c "
 import json
 with open('$_LANE_STATE_FILE', 'r') as f:
     state = json.load(f)
-failed = sum(1 for s in state['python'] + state['frontend'] if s['status'] == 'FAIL')
+failed = sum(1 for s in state['python'] + state['frontend'] + state.get('helm', []) if s['status'] == 'FAIL')
 print(failed)
 ")
     if (( failed_count > 0 )); then

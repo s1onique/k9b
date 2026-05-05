@@ -1,0 +1,118 @@
+# Default values for k9b Helm chart.
+# No secrets are embedded here - provide via --set or external Secret/ConfigMap references.
+
+image:
+  backend:
+    repository: localhost/k9b_python
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: localhost/k9b_frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+backend:
+  replicaCount: 1
+  service:
+    port: 8080
+  env:
+    # HEALTH_SKIP_REFRESH: Set to "0" to enable auto-refresh, "1" to skip.
+    HEALTH_SKIP_REFRESH: "1"
+    HEALTH_UI_HOST: "0.0.0.0"
+    HEALTH_UI_PORT: "8080"
+    # HEALTH_CONFIG_PATH: Path to health config inside the container.
+    HEALTH_CONFIG_PATH: "/app/runs/health-config.json"
+    # HEALTH_RUNS_DIR: Directory for health run artifacts.
+    HEALTH_RUNS_DIR: "/app/runs"
+    HEALTH_UI_RUNS_DIR: "/app/runs"
+    # KUBECONFIG: Path to kubeconfig inside the container.
+    KUBECONFIG: "/app/kubeconfig/config"
+    # PYTHONPATH: Python module search path.
+    PYTHONPATH: "/app/src"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+scheduler:
+  replicaCount: 1
+  env:
+    # LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible).
+    # Override via --set scheduler.env.LLAMA_CPP_BASE_URL=http://your-llm:8080
+    LLAMA_CPP_BASE_URL: ""
+    LLAMA_CPP_MODEL: ""
+    HEALTH_CONFIG_PATH: "/app/runs/health-config.json"
+    HEALTH_RUNS_DIR: "/app/runs/health"
+    KUBECONFIG: "/app/kubeconfig/config"
+    PYTHONPATH: "/app/src"
+    HEALTH_BUILD_DIAGNOSTIC_PACK: "1"
+    LLAMA_CPP_ENABLE_THINKING: "false"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+frontend:
+  replicaCount: 1
+  service:
+    port: 5173
+  env:
+    VITE_BACKEND_HOST: "k9b-backend"
+    VITE_BACKEND_PORT: "8080"
+    FRONTEND_HOST: "0.0.0.0"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+
+# Reference to external kubeconfig secret.
+# Create a Secret named "k9b-kubeconfig" in the release namespace with your kubeconfig content.
+kubeconfig:
+  enabled: false
+  secretName: "k9b-kubeconfig"
+  mountPath: "/app/kubeconfig"
+  fileName: "config"
+
+# Reference to external health config configmap.
+# Create a ConfigMap named "k9b-health-config" in the release namespace.
+healthConfig:
+  enabled: false
+  configMapName: "k9b-health-config"
+  mountPath: "/app/runs"
+  fileName: "health-config.json"
+
+# Pod-level security context (applied to all pods if set)
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container-level security context
+containerSecurityContext:
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# Node selection and tolerations
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

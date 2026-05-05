@@ -1,0 +1,93 @@
+Thank you for installing k9b {{ .Chart.Version }}.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about k9b, visit: https://github.com/s1onique/k9b
+
+== Usage ==
+
+Render templates locally:
+  helm template {{ .Release.Name }} ./charts/k9b
+
+Install with default values:
+  helm install {{ .Release.Name }} ./charts/k9b
+
+Install with custom values:
+  helm install {{ .Release.Name }} ./charts/k9b \
+    --set image.backend.repository=your-registry/k9b-python \
+    --set image.backend.tag=v1.0.0 \
+    --set image.frontend.repository=your-registry/k9b-frontend \
+    --set image.frontend.tag=v1.0.0
+
+Dry-run to inspect generated manifests:
+  helm install {{ .Release.Name }} ./charts/k9b --dry-run
+
+Upgrade an existing release:
+  helm upgrade {{ .Release.Name }} ./charts/k9b
+
+== Prerequisites ==
+
+Before installing, ensure you have:
+
+1. A Kubernetes cluster (v1.21+)
+2. kubectl configured with cluster access
+3. Helm v3 installed
+
+== Required Resources ==
+
+External resources are required only when explicitly enabled via values:
+
+1. Kubeconfig Secret (required only when kubeconfig.enabled=true):
+   Create a Secret named "{{ .Values.kubeconfig.secretName }}" in the release namespace
+   containing your kubeconfig content:
+
+   kubectl create secret generic {{ .Values.kubeconfig.secretName }} \
+     --from-file=config=/path/to/kubeconfig
+
+   Then install with:
+   helm install {{ .Release.Name }} ./charts/k9b --set kubeconfig.enabled=true
+
+2. Health Config ConfigMap (required only when healthConfig.enabled=true):
+   Create a ConfigMap named "{{ .Values.healthConfig.configMapName }}" in the release namespace
+   containing your health configuration:
+
+   kubectl create configmap {{ .Values.healthConfig.configMapName }} \
+     --from-file=health-config.json=/path/to/health-config.json
+
+   Then install with:
+   helm install {{ .Release.Name }} ./charts/k9b --set healthConfig.enabled=true
+
+== Service Endpoints ==
+
+Once installed, the services are available at:
+
+- Backend API: {{ include "k9b.backend.fullname" . }}.{{ .Release.Namespace }}:{{ .Values.backend.service.port }}
+- Frontend UI: {{ include "k9b.frontend.fullname" . }}.{{ .Release.Namespace }}:{{ .Values.frontend.service.port }}
+
+If using ingress, access at: http://{{ .Values.ingress.host | default "k9b.local" }}
+
+== Environment Variables ==
+
+Key environment variables that can be customized:
+
+Backend:
+  HEALTH_SKIP_REFRESH: Set to "0" to enable auto-refresh (default: "1")
+  HEALTH_UI_PORT: Backend port (default: 8080)
+  KUBECONFIG: Path to kubeconfig inside container
+
+Scheduler:
+  LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible)
+  LLAMA_CPP_MODEL: Model name for LLM provider
+  HEALTH_BUILD_DIAGNOSTIC_PACK: Enable diagnostic pack building (default: "1")
+
+Frontend:
+  VITE_BACKEND_HOST: Backend service hostname
+  VITE_BACKEND_PORT: Backend service port
+
+== Uninstall ==
+
+To uninstall/delete the release:
+
+  helm uninstall {{ .Release.Name }}
+
+This removes all Kubernetes resources associated with the chart.
