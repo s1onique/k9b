@@ -12,12 +12,17 @@ Do NOT test framework catch-alls (do_GET/do_POST) - those are out of scope.
 
 from __future__ import annotations
 
+import inspect
 import json
-import tempfile
-from pathlib import Path
+from collections import namedtuple
 from typing import Any, cast
 
 import pytest
+
+from k8s_diag_agent.ui.server import (
+    HealthUIRequestHandler,
+    _export_usefulness_review_for_run,
+)
 
 
 class ResponseCapture:
@@ -42,7 +47,7 @@ class TestBatchExecutionJSONPayloadParse:
         # Simulate the parse logic from _handle_run_batch_next_check_execution
         raw_payload = b"not valid json"
         try:
-            payload = json.loads(raw_payload.decode("utf-8"))
+            json.loads(raw_payload.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             handler._send_json({"error": "Invalid JSON payload"}, 400)
 
@@ -57,7 +62,7 @@ class TestBatchExecutionJSONPayloadParse:
         invalid_utf8 = b"\xff\xfe\xfd"
         try:
             raw_payload = invalid_utf8.decode("utf-8")
-            payload = json.loads(raw_payload)
+            json.loads(raw_payload)
         except (json.JSONDecodeError, UnicodeDecodeError):
             handler._send_json({"error": "Invalid JSON payload"}, 400)
 
@@ -70,7 +75,7 @@ class TestBatchExecutionJSONPayloadParse:
 
         raw_payload = '"just a string"'
         try:
-            payload = json.loads(raw_payload)
+            json.loads(raw_payload)
         except (json.JSONDecodeError, UnicodeDecodeError):
             handler._send_json({"error": "Invalid JSON payload"}, 400)
 
@@ -102,7 +107,7 @@ class TestBatchExecutionModuleImport:
     def test_module_import_boundary_catches_expected_exceptions(self) -> None:
         """Module import boundary catches ModuleNotFoundError, ImportError, AttributeError."""
         # Test each exception type
-        for exc_type in [ModuleNotFoundError, ImportError, AttributeError]:
+        for exc_type in cast(tuple[type[Exception], ...], (ModuleNotFoundError, ImportError, AttributeError)):
             handler = ResponseCapture()
             exc = exc_type("test error")
             try:
@@ -147,13 +152,10 @@ class TestBatchExecutionExternalBoundary:
 
     def test_batch_execution_external_boundary_reviewed_safe(self) -> None:
         """Verify the external execution boundary is reviewed-safe with comment."""
-        from k8s_diag_agent.ui.server import HealthUIRequestHandler
-
         # Verify the handler exists
-        assert hasattr(HealthUIRequestHandler, '_handle_run_batch_next_check_execution')
+        assert hasattr(HealthUIRequestHandler, "_handle_run_batch_next_check_execution")
 
         # The REVIEWED: comment is in the source code
-        import inspect
         source = inspect.getsource(HealthUIRequestHandler._handle_run_batch_next_check_execution)
         assert "REVIEWED" in source or "External execution boundary" in source
 
@@ -163,9 +165,6 @@ class TestUsefulnessReviewExportBoundary:
 
     def test_script_import_boundary_narrows_correctly(self) -> None:
         """Verify script import boundary narrows to expected exceptions."""
-        from k8s_diag_agent.ui.server import _export_usefulness_review_for_run
-
-        import inspect
         source = inspect.getsource(_export_usefulness_review_for_run)
 
         # Verify the boundary catches specific exceptions
@@ -176,9 +175,6 @@ class TestUsefulnessReviewExportBoundary:
 
     def test_script_import_boundary_has_reviewed_comment(self) -> None:
         """Verify script import boundary has REVIEWED comment."""
-        from k8s_diag_agent.ui.server import _export_usefulness_review_for_run
-
-        import inspect
         source = inspect.getsource(_export_usefulness_review_for_run)
 
         # Verify REVIEWED comment is present
@@ -191,24 +187,10 @@ class TestResponseConstruction:
 
     def test_result_attributes_accessed_safely(self) -> None:
         """Verify result attributes are accessed without exception."""
-        from collections import namedtuple
-
         # Mock BatchExecutionResult
-        BatchExecutionResult = namedtuple(
-            'BatchExecutionResult',
-            ['total_candidates', 'eligible_candidates', 'executed_count',
-             'skipped_already_executed', 'skipped_ineligible', 'failed_count', 'success_count']
-        )
+        BatchExecutionResult = namedtuple("BatchExecutionResult", ["total_candidates", "eligible_candidates", "executed_count", "skipped_already_executed", "skipped_ineligible", "failed_count", "success_count"])
 
-        result = BatchExecutionResult(
-            total_candidates=10,
-            eligible_candidates=5,
-            executed_count=3,
-            skipped_already_executed=1,
-            skipped_ineligible=1,
-            failed_count=1,
-            success_count=2
-        )
+        result = BatchExecutionResult(total_candidates=10, eligible_candidates=5, executed_count=3, skipped_already_executed=1, skipped_ineligible=1, failed_count=1, success_count=2)
 
         # Verify all attributes are accessible
         assert result.total_candidates == 10
@@ -219,23 +201,9 @@ class TestResponseConstruction:
 
     def test_response_dict_construction(self) -> None:
         """Verify response dict can be constructed from result."""
-        from collections import namedtuple
+        BatchExecutionResult = namedtuple("BatchExecutionResult", ["total_candidates", "eligible_candidates", "executed_count", "skipped_already_executed", "skipped_ineligible", "failed_count", "success_count"])
 
-        BatchExecutionResult = namedtuple(
-            'BatchExecutionResult',
-            ['total_candidates', 'eligible_candidates', 'executed_count',
-             'skipped_already_executed', 'skipped_ineligible', 'failed_count', 'success_count']
-        )
-
-        result = BatchExecutionResult(
-            total_candidates=10,
-            eligible_candidates=5,
-            executed_count=3,
-            skipped_already_executed=1,
-            skipped_ineligible=1,
-            failed_count=1,
-            success_count=2
-        )
+        result = BatchExecutionResult(total_candidates=10, eligible_candidates=5, executed_count=3, skipped_already_executed=1, skipped_ineligible=1, failed_count=1, success_count=2)
 
         run_id = "test-run-123"
         dry_run = False
