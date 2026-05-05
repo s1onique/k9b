@@ -302,6 +302,35 @@ export const nextCheckStatusLabel = (variant: NextCheckStatusVariant): string =>
   }
 };
 
+/** Ordered variants for discovery variant display. */
+export const DISCOVERY_VARIANT_ORDER: NextCheckStatusVariant[] = [
+  "safe",
+  "approval",
+  "approved",
+  "duplicate",
+  "stale",
+];
+
+/** Count next-check candidates by their status variant.
+ * Used for the RunSummaryPanel discovery summary.
+ */
+export const buildDiscoveryVariantCounts = (
+  candidates: NextCheckPlanCandidate[]
+): Record<NextCheckStatusVariant, number> => {
+  const counts: Record<NextCheckStatusVariant, number> = {
+    safe: 0,
+    approval: 0,
+    approved: 0,
+    duplicate: 0,
+    stale: 0,
+  };
+  candidates.forEach((candidate) => {
+    const variant = determineNextCheckStatusVariant(candidate);
+    counts[variant] = (counts[variant] ?? 0) + 1;
+  });
+  return counts;
+};
+
 export const getPlanStatusLabel = (
   variant: NextCheckStatusVariant,
   candidate: NextCheckPlanCandidate

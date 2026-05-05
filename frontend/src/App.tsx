@@ -100,6 +100,8 @@ import {
   determineNextCheckStatusVariant,
   nextCheckStatusLabel,
   getPlanStatusLabel,
+  buildDiscoveryVariantCounts,
+  DISCOVERY_VARIANT_ORDER,
   NEXT_CHECK_QUEUE_STATUS_LABELS,
   NEXT_CHECK_QUEUE_STATUS_ORDER,
   QUEUE_SORT_OPTIONS,
@@ -854,24 +856,8 @@ const App = () => {
   const outcomeSummary = runPlan?.outcomeCounts ?? [];
 
   const runPlanCandidates: NextCheckPlanCandidate[] = runPlan?.candidates ?? [];
-  const discoveryVariantOrder: NextCheckStatusVariant[] = [
-    "safe",
-    "approval",
-    "approved",
-    "duplicate",
-    "stale",
-  ];
-  const discoveryVariantCounts: Record<NextCheckStatusVariant, number> = {
-    safe: 0,
-    approval: 0,
-    approved: 0,
-    duplicate: 0,
-    stale: 0,
-  };
-  runPlanCandidates.forEach((candidate) => {
-    const variant = determineNextCheckStatusVariant(candidate);
-    discoveryVariantCounts[variant] = (discoveryVariantCounts[variant] ?? 0) + 1;
-  });
+  const discoveryVariantOrder: NextCheckStatusVariant[] = DISCOVERY_VARIANT_ORDER;
+  const discoveryVariantCounts = buildDiscoveryVariantCounts(runPlanCandidates);
   const discoveryClusters = Array.from(
     new Set(
       runPlanCandidates

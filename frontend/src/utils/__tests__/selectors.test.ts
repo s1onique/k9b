@@ -24,6 +24,7 @@ import {
   determineNextCheckStatusVariant,
   nextCheckStatusLabel,
   buildLlmStatEntries,
+  buildDiscoveryVariantCounts,
 } from "../selectors";
 import type { NextCheckPlanCandidate } from "../../types";
 
@@ -323,6 +324,108 @@ describe("determineNextCheckStatusVariant", () => {
         makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-required" })
       )
     ).toBe("approval");
+  });
+});
+
+describe("buildDiscoveryVariantCounts", () => {
+  const makeCandidate = (overrides: Partial<NextCheckPlanCandidate> = {}): NextCheckPlanCandidate =>
+    ({
+      candidateId: "test-1",
+      targetCluster: "test-cluster",
+      suggestedCommandFamily: "kubectl-get",
+      safeToAutomate: true,
+      requiresOperatorApproval: false,
+      duplicateOfExistingEvidence: false,
+      approvalStatus: undefined,
+      ...overrides,
+    } as NextCheckPlanCandidate);
+
+  it("returns zero counts for empty array", () => {
+    const result = buildDiscoveryVariantCounts([]);
+    expect(result).toEqual({
+      safe: 0,
+      approval: 0,
+      approved: 0,
+      duplicate: 0,
+      stale: 0,
+    });
+  });
+
+  it("counts safe candidates", () => {
+    const candidates = [
+      makeCandidate(),
+      makeCandidate({ candidateId: "test-2" }),
+      makeCandidate({ candidateId: "test-3" }),
+    ];
+    const result = buildDiscoveryVariantCounts(candidates);
+    expect(result.safe).toBe(3);
+  });
+
+  it("counts approval-needed candidates", () => {
+    const candidates = [
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-required" }),
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-required" }),
+    ];
+    const result = buildDiscoveryVariantCounts(candidates);
+    expect(result.approval).toBe(2);
+    expect(result.safe).toBe(0);
+  });
+
+  it("counts approved candidates", () => {
+    const candidates = [
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approved" }),
+    ];
+    const result = buildDiscoveryVariantCounts(candidates);
+    expect(result.approved).toBe(1);
+    expect(result.approval).toBe(0);
+  });
+
+  it("counts stale candidates", () => {
+    const candidates = [
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-stale" }),
+    ];
+    const result = buildDiscoveryVariantCounts(candidates);
+    expect(result.stale).toBe(1);
+  });
+
+  it("counts duplicate candidates", () => {
+    const candidates = [
+      makeCandidate({ duplicateOfExistingEvidence: true }),
+      makeCandidate({ duplicateOfExistingEvidence: true }),
+      makeCandidate({ duplicateOfExistingEvidence: true }),
+    ];
+    const result = buildDiscoveryVariantCounts(candidates);
+    expect(result.duplicate).toBe(3);
+  });
+
+  it("counts mixed variants correctly", () => {
+    const candidates = [
+      makeCandidate(), // safe
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-required" }), // approval
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approved" }), // approved
+      makeCandidate({ duplicateOfExistingEvidence: true }), // duplicate
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-stale" }), // stale
+      makeCandidate(), // safe
+    ];
+    const result = buildDiscoveryVariantCounts(candidates);
+    expect(result).toEqual({
+      safe: 2,
+      approval: 1,
+      approved: 1,
+      duplicate: 1,
+      stale: 1,
+    });
+  });
+
+  it("is deterministic - same input always gives same output", () => {
+    const candidates = [
+      makeCandidate({ requiresOperatorApproval: true, approvalStatus: "approval-required" }),
+      makeCandidate({ duplicateOfExistingEvidence: true }),
+      makeCandidate(),
+    ];
+    const first = buildDiscoveryVariantCounts(candidates);
+    const second = buildDiscoveryVariantCounts(candidates);
+    expect(first).toEqual(second);
   });
 });
 
