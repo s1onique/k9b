@@ -39,6 +39,12 @@ from .image_pull_secret import ImagePullSecretInsight, ImagePullSecretInspector
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
+from .loop_comparison_policy import (  # noqa: F401
+    BaselineRegistry,  # noqa: F401 - re-exported for backward compatibility
+    _policy_eligible_pair,  # noqa: F401 - re-exported for backward compatibility
+    _resolve_peer_role,  # noqa: F401 - re-exported for backward compatibility
+    _validate_suspicious_pairs,  # noqa: F401 - re-exported for backward compatibility
+)
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _watched_crd_versions, _watched_release_versions, _write_json, persist_history_fact_artifacts
@@ -57,156 +63,6 @@ from .notifications import NotificationArtifact, build_degraded_health_notificat
 from .ui import write_health_ui_index
 from .utils import normalize_ref
 from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator, HealthAssessmentValidator
-
-
-class BaselineRegistry:
-    def __init__(self, policies: Iterable[BaselinePolicy] | None = None) -> None:
-        self._policies: list[BaselinePolicy] = []
-        if policies:
-            for policy in policies:
-                self.add(policy)
-
-    def add(self, policy: BaselinePolicy) -> None:
-        if policy in self._policies:
-            return
-        self._policies.append(policy)
-
-    def role_for(self, reference: str) -> str | None:
-        for policy in self._policies:
-            role = policy.role_for(reference)
-            if role:
-                return role
-        return None
-
-
-def _resolve_peer_role(
-    record: HealthSnapshotRecord,
-    registry: BaselineRegistry | None,
-) -> str | None:
-    """Resolve the peer role for a health snapshot record.
-
-    Priority:
-    1. Explicit cluster_role from the target metadata
-    2. Registry lookup using record references (context or label)
-    """
-    explicit_role = record.target.cluster_role
-    if explicit_role:
-        return explicit_role.strip() or None
-    if registry:
-        for reference in record.refs():
-            role = registry.role_for(reference)
-            if role:
-                return role
-    return None
-
-
-def _validate_suspicious_pairs(
-    peers: Sequence[ComparisonPeer],
-    target_lookup: dict[str, HealthTarget],
-    baseline: BaselinePolicy,
-) -> None:
-    """Validate that all suspicious-drift peer mappings are within the same class/cohort."""
-    issues: list[str] = []
-    for peer in peers:
-        if peer.intent != ComparisonIntent.SUSPICIOUS_DRIFT:
-            continue
-        primary = target_lookup.get(peer.primary)
-        secondary = target_lookup.get(peer.secondary)
-        if not primary or not secondary:
-            issues.append(
-                f"Suspicious-drift mapping {peer.primary} -> {peer.secondary} references unknown targets."
-            )
-            continue
-        problems: list[str] = []
-        if primary.cluster_class != secondary.cluster_class:
-            problems.append(
-                f"cluster_class differs ({primary.cluster_class or 'missing'} vs {secondary.cluster_class or 'missing'})"
-            )
-        if primary.baseline_cohort != secondary.baseline_cohort:
-            problems.append(
-                f"baseline_cohort differs ({primary.baseline_cohort or 'missing'} vs {secondary.baseline_cohort or 'missing'})"
-            )
-        if problems:
-            issues.append(
-                f"Suspicious-drift pair {primary.label} ({primary.context}) vs "
-                f"{secondary.label} ({secondary.context}) invalid: "
-                + "; ".join(problems)
-            )
-    if issues:
-        raise ValueError(
-            "Suspicious-drift comparisons must stay within the same class/cohort and be backed by baseline peer roles. "
-            + "Fix the following issues:\n- "
-            + "\n- ".join(issues)
-        )
-
-
-def _policy_eligible_pair(
-    primary: HealthSnapshotRecord,
-    secondary: HealthSnapshotRecord,
-    intent: ComparisonIntent,
-    baseline_registry: BaselineRegistry | None,
-) -> tuple[
-    bool,
-    str,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-]:
-    """Determine if a pair of health snapshot records is eligible for comparison.
-
-    Returns:
-        Tuple of (eligible, reason, primary_class, secondary_class, primary_role,
-                 secondary_role, primary_cohort, secondary_cohort)
-    """
-    primary_class = primary.target.cluster_class
-    secondary_class = secondary.target.cluster_class
-    primary_role = _resolve_peer_role(primary, baseline_registry)
-    secondary_role = _resolve_peer_role(secondary, baseline_registry)
-    primary_cohort = primary.target.baseline_cohort
-    secondary_cohort = secondary.target.baseline_cohort
-    reasons: list[str] = []
-    if not primary_class or not secondary_class:
-        reasons.append("cluster class metadata missing")
-    elif primary_class != secondary_class:
-        reasons.append("cluster class mismatch")
-    if intent == ComparisonIntent.SUSPICIOUS_DRIFT:
-        if not primary_role or not secondary_role:
-            reasons.append("peer role metadata missing")
-        elif primary_role != secondary_role:
-            reasons.append("peer roles differ")
-        if not primary_cohort or not secondary_cohort:
-            reasons.append("baseline cohort metadata missing")
-        elif primary_cohort != secondary_cohort:
-            reasons.append(
-                f"baseline cohorts differ ({primary_cohort} vs {secondary_cohort})"
-            )
-    if intent == ComparisonIntent.IRRELEVANT_DRIFT:
-        reasons.append("comparison intent marked this pair as irrelevant drift")
-    if reasons:
-        return (
-            False,
-            "; ".join(reasons),
-            primary_class,
-            secondary_class,
-            primary_role,
-            secondary_role,
-            primary_cohort,
-            secondary_cohort,
-        )
-    return (
-        True,
-        "policy compatible",
-        primary_class,
-        secondary_class,
-        primary_role,
-        secondary_role,
-        primary_cohort,
-        secondary_cohort,
-    )
-
 
 _HISTORY_FILENAME = loop_history._HISTORY_FILENAME
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
