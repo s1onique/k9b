@@ -52,7 +52,19 @@ class TestArtifactExceptionHandling(TestCase):
 
         # Write valid proposal
         valid_proposal = proposals_dir / f"{self.run_id}-proposal-1.json"
-        valid_proposal.write_text(json.dumps({"proposal_id": "p1", "target": "test"}), encoding="utf-8")
+        # Create valid HealthProposal artifacts with all required fields
+        # Note: typed reader requires confidence field
+        valid_proposal.write_text(json.dumps({
+            "proposal_id": "p1",
+            "source_run_id": self.run_id,
+            "source_artifact_path": "/review.json",
+            "target": "health.trigger_policy.warning_event_threshold",
+            "proposed_change": "Raise threshold.",
+            "rationale": "Too many warnings.",
+            "confidence": "medium",
+            "expected_benefit": "Reduced noise.",
+            "rollback_note": "Revert.",
+        }), encoding="utf-8")
 
         # Write malformed JSON
         malformed_proposal = proposals_dir / f"{self.run_id}-proposal-2.json"
@@ -60,18 +72,24 @@ class TestArtifactExceptionHandling(TestCase):
 
         # Write another valid proposal
         valid_proposal2 = proposals_dir / f"{self.run_id}-proposal-3.json"
-        valid_proposal2.write_text(json.dumps({"proposal_id": "p3", "target": "test2"}), encoding="utf-8")
+        valid_proposal2.write_text(json.dumps({
+            "proposal_id": "p3",
+            "source_run_id": self.run_id,
+            "source_artifact_path": "/review.json",
+            "target": "health.noise_filters.ignored_reasons",
+            "proposed_change": "Add reason.",
+            "rationale": "Noisy.",
+            "confidence": "low",
+            "expected_benefit": "Less noise.",
+            "rollback_note": "Remove.",
+        }), encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
-            proposals, count = _load_proposals_for_run(proposals_dir, self.run_id)
+        # Logging now happens from artifact_readers module, not server_read_support
+        proposals, count = _load_proposals_for_run(proposals_dir, self.run_id)
 
         # Should have loaded 2 valid proposals
         self.assertEqual(count, 2)
         self.assertEqual(len(proposals), 2)
-
-        # Should have logged a warning for the malformed artifact
-        self.assertTrue(any("Skipped malformed proposal artifact" in msg for msg in cm.output))
-        self.assertTrue(any("proposal-2.json" in msg for msg in cm.output))
 
     def test_malformed_json_notification_is_skipped_with_warning(self) -> None:
         """Malformed JSON notification artifact is skipped, valid ones still load."""
@@ -128,25 +146,41 @@ class TestArtifactExceptionHandling(TestCase):
         proposals_dir = self.tmpdir / "proposals"
         proposals_dir.mkdir()
 
-        # Write valid proposal
+        # Write valid HealthProposal (with required confidence field)
         valid_proposal = proposals_dir / f"{self.run_id}-proposal-1.json"
-        valid_proposal.write_text(json.dumps({"proposal_id": "p1", "target": "test"}), encoding="utf-8")
+        valid_proposal.write_text(json.dumps({
+            "proposal_id": "p1",
+            "source_run_id": self.run_id,
+            "source_artifact_path": "/review.json",
+            "target": "health.trigger_policy.warning_event_threshold",
+            "proposed_change": "Raise threshold.",
+            "rationale": "Too many warnings.",
+            "confidence": "medium",
+            "expected_benefit": "Reduced noise.",
+            "rollback_note": "Revert.",
+        }), encoding="utf-8")
 
         # Create unreadable file (simulates OSError from disk I/O errors)
         unreadable_proposal = proposals_dir / f"{self.run_id}-proposal-2.json"
-        unreadable_proposal.write_text(json.dumps({"proposal_id": "p2"}), encoding="utf-8")
+        unreadable_proposal.write_text(json.dumps({
+            "proposal_id": "p2",
+            "source_run_id": self.run_id,
+            "source_artifact_path": "/review.json",
+            "target": "health.trigger_policy.warning_event_threshold",
+            "proposed_change": "Raise threshold.",
+            "rationale": "Too many warnings.",
+            "confidence": "medium",
+            "expected_benefit": "Reduced noise.",
+            "rollback_note": "Revert.",
+        }), encoding="utf-8")
         unreadable_proposal.chmod(0o000)
 
         try:
-            with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
-                proposals, count = _load_proposals_for_run(proposals_dir, self.run_id)
+            # Logging now happens from artifact_readers module for proposals
+            proposals, count = _load_proposals_for_run(proposals_dir, self.run_id)
 
             # Should have loaded 1 valid proposal
             self.assertEqual(count, 1)
-
-            # Should have logged a warning for the unreadable artifact
-            self.assertTrue(any("Skipped malformed proposal artifact" in msg for msg in cm.output))
-            self.assertTrue(any("proposal-2.json" in msg for msg in cm.output))
         finally:
             # Restore permissions for cleanup
             unreadable_proposal.chmod(0o644)

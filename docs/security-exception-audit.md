@@ -724,25 +724,118 @@ In priority order for future migration:
 3. **`ClusterSnapshot`**: Used in CLI and batch, has `from_dict()`
 4. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
 
+---
+
+## Typed Artifact Reader: HealthProposal Pilot (Phase 2 Follow-up)
+
+### Overview
+This section documents the HealthProposal typed artifact reader expansion as a follow-up to Phase 2 security hardening.
+
+### New Files
+- `src/k8s_diag_agent/health/artifact_readers.py` - HealthProposal typed readers
+- `tests/unit/test_health_proposal_artifact_readers.py` - Reader tests
+
+### Reader API
+
+```python
+# Strict reader - raises on failure
+def read_health_proposal_artifact(path: Path) -> HealthProposal:
+    """Read and parse a HealthProposal from disk.
+
+    Raises:
+        OSError: If the file cannot be read
+        json.JSONDecodeError: If the file content is not valid JSON
+        ValueError: If the JSON is valid but not a mapping, or from_dict validation fails
+        TypeError: If from_dict receives unexpected type
+        KeyError: If required fields are missing in from_dict
+    """
+
+# Optional reader - returns None on failure
+def try_read_health_proposal_artifact(
+    path: Path,
+    *,
+    run_id: str = "",
+    artifact_kind: str = "health-proposal",
+    log_failures: bool = True,
+) -> HealthProposal | None:
+    """Try to read a HealthProposal, returning None on failure.
+
+    Logs a warning with safe metadata on failure when log_failures=True.
+    Never logs raw content.
+    """
+```
+
+### Error Handling Contract
+- **Strict reader raises**:
+  - `OSError`
+  - `json.JSONDecodeError`
+  - `ValueError`
+  - `TypeError`
+  - `KeyError`
+- **Optional reader returns** `None` on those failures
+- **Optional reader logs only when** `log_failures=True`
+
+### Logging Policy
+- Safe metadata only:
+  - artifact filename
+  - artifact kind
+  - run_id (if safe)
+  - error type
+- Never log raw proposal payloads, command text, kubeconfig, env vars, prompts/responses, tokens, or full absolute paths
+
+### Migrated Call Sites
+
+| Call Site | Type | log_failures | Notes |
+|----------|------|-------------|-------|
+| `ui/server_read_support.py::_load_proposals_for_run` | broad scan | True | Preserves existing logged failure behavior |
+
+### Preserved Behavior
+- Valid proposals still load and render the same
+- Malformed proposals still skip/fallback exactly as before
+- No API response shape changes
+
+### Tests Added
+
+| Test | Purpose |
+|------|---------|
+| `test_valid_proposal_loads_typed_object` | Valid proposal parses into HealthProposal |
+| `test_malformed_json_raises_json_decode_error` | Strict reader raises JSONDecodeError |
+| `test_missing_file_raises_os_error` | Strict reader raises OSError |
+| `test_non_object_json_raises_value_error` | Strict reader raises ValueError |
+| `test_missing_required_confidence_field_raises_value_error` | Strict reader raises ValueError |
+| `test_invalid_confidence_value_raises_value_error` | Strict reader raises ValueError |
+| `test_valid_proposal_returns_typed_object` | Optional reader returns typed object |
+| `test_malformed_json_returns_none_with_logging` | Optional reader returns None + logs |
+| `test_malformed_json_returns_none_silently_without_logging` | log_failures=False suppresses warnings |
+| `test_missing_file_returns_none` | Optional reader returns None |
+| `test_missing_file_silent_with_log_failures_false` | log_failures=False suppresses warnings |
+| `test_non_object_json_returns_none` | Optional reader returns None |
+| `test_missing_required_field_returns_none` | Optional reader returns None |
+| `test_log_failures_true_logs_warning_with_safe_message` | Logs only safe metadata |
+| `test_roundtrip_serialization_preserves_fields` | Roundtrip preserves all fields |
+| `test_log_failures_false_does_not_log_raw_content` | Sensitive content never logged |
+
 ### Verification
 
 ```bash
 # Run new reader tests
-pytest tests/unit/test_artifact_readers.py -v
+pytest tests/unit/test_health_proposal_artifact_readers.py -v
 
 # Run affected call-site tests
-pytest tests/test_batch.py -v
-pytest tests/unit/test_external_analysis_deterministic_next_check_promotion.py -v
+pytest tests/ -k "proposal" -v
 
-# Run ruff check
-ruff check src/k8s_diag_agent/external_analysis/artifact_readers.py
-
-# Run mypy if in gate
-mypy src/k8s_diag_agent/external_analysis/artifact_readers.py
+# Run ruff check on changed files
+ruff check src/k8s_diag_agent/health/artifact_readers.py
+ruff check src/k8s_diag_agent/ui/server_read_support.py
 
 # Run security baseline
 bash scripts/check_security_baseline.sh --mode baseline
-
-# Run full verification
-bash scripts/verify_all.sh
 ```
+
+### Next Artifact Family Recommendation
+
+After HealthProposal, consider:
+
+1. **`DrilldownArtifact`**: Used in CLI handlers and UI, has `from_dict()`
+2. **`ClusterSnapshot`**: Used in CLI and batch, has `from_dict()`
+3. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`

@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from k8s_diag_agent.ui.server_read_support import (
     _build_clusters_and_drilldown_availability,
     _build_drilldown_availability_from_review,
@@ -152,15 +154,29 @@ class TestLoadProposalsForRun:
         proposals_dir = tmp_path / "proposals"
         proposals_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create proposal
+        # Create a valid HealthProposal artifact
+        # Note: typed reader requires confidence field
         (proposals_dir / "run-test-001.json").write_text(
-            json.dumps({"status": "pending", "type": "proposal"}),
+            json.dumps({
+                "proposal_id": "run-test-001",
+                "source_run_id": "run-test",
+                "source_artifact_path": "/review.json",
+                "target": "health.trigger_policy.warning_event_threshold",
+                "proposed_change": "Raise threshold.",
+                "rationale": "Too many warnings.",
+                "confidence": "medium",
+                "expected_benefit": "Reduced noise.",
+                "rollback_note": "Revert.",
+                "lifecycle_history": [
+                    {"status": "pending", "timestamp": "2024-01-01T00:00:00Z"}
+                ],
+            }),
             encoding="utf-8",
         )
 
         proposals, count = _load_proposals_for_run(proposals_dir, "run-test")
         assert count == 1
-        assert proposals[0]["type"] == "proposal"
+        assert proposals[0]["proposal_id"] == "run-test-001"
 
     def test_traversal_run_id_returns_empty(self, tmp_path: Path) -> None:
         """Traversal run_id should return empty list, not raise."""
@@ -179,6 +195,70 @@ class TestLoadProposalsForRun:
         proposals, count = _load_proposals_for_run(proposals_dir, "run*")
         assert proposals == []
         assert count == 0
+
+    def test_legacy_minimal_proposal_dict_loads(self, tmp_path: Path) -> None:
+        """Legacy minimal proposal dict (missing optional fields) should still load.
+
+        This tests the legacy fallback path: if typed reader fails (e.g., missing
+        confidence field), a valid dict-shaped JSON object is preserved.
+        """
+        proposals_dir = tmp_path / "proposals"
+        proposals_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a minimal proposal without confidence field
+        (proposals_dir / "run-test-legacy.json").write_text(
+            json.dumps({
+                "proposal_id": "run-test-legacy",
+                "source_run_id": "run-test",
+                "target": "health.trigger_policy.warning_event_threshold",
+                "proposed_change": "Raise threshold.",
+                # Note: no confidence, expected_benefit, rollback_note, lifecycle_history
+            }),
+            encoding="utf-8",
+        )
+
+        proposals, count = _load_proposals_for_run(proposals_dir, "run-test")
+
+        assert count == 1
+        assert proposals[0]["proposal_id"] == "run-test-legacy"
+        assert proposals[0]["target"] == "health.trigger_policy.warning_event_threshold"
+
+    def test_malformed_json_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Malformed JSON should be skipped (not raise, not log raw content)."""
+        import logging
+
+        proposals_dir = tmp_path / "proposals"
+        proposals_dir.mkdir(parents=True, exist_ok=True)
+
+        (proposals_dir / "run-test-malformed.json").write_text(
+            "{ not valid json",
+            encoding="utf-8",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            proposals, count = _load_proposals_for_run(proposals_dir, "run-test")
+
+        assert count == 0
+        assert proposals == []
+        # Verify no raw content leaked into logs
+        all_log_text = " ".join(record.message for record in caplog.records)
+        assert "{" not in all_log_text
+        assert "not valid json" not in all_log_text
+
+    def test_non_object_json_skipped(self, tmp_path: Path) -> None:
+        """Non-object JSON (array) should be skipped."""
+        proposals_dir = tmp_path / "proposals"
+        proposals_dir.mkdir(parents=True, exist_ok=True)
+
+        (proposals_dir / "run-test-array.json").write_text(
+            json.dumps([{"proposal_id": "p1"}, {"proposal_id": "p2"}]),
+            encoding="utf-8",
+        )
+
+        proposals, count = _load_proposals_for_run(proposals_dir, "run-test")
+
+        assert count == 0
+        assert proposals == []
 
 
 class TestScanExternalAnalysis:

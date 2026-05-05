@@ -459,7 +459,18 @@ def _count_run_artifacts(artifacts_dir: Path, run_id: str) -> int:
 def _load_proposals_for_run(
     proposals_dir: Path, run_id: str
 ) -> tuple[list[dict[str, object]], int]:
-    """Load proposals for a specific run and return proposals data + count."""
+    """Load proposals for a specific run and return proposals data + count.
+
+    This function uses typed HealthProposal readers as the preferred path.
+    Legacy dict compatibility is preserved for valid JSON objects that don't
+    pass HealthProposal.from_dict() validation (e.g., artifacts from older
+    schema versions with missing optional fields).
+
+    Future cleanup: Remove legacy fallback once artifact schema migration is complete.
+    """
+    # Import here to avoid circular imports at module level
+    from ..health.artifact_readers import try_read_health_proposal_artifact
+
     proposals: list[dict[str, object]] = []
 
     if not proposals_dir.exists():
@@ -474,23 +485,28 @@ def _load_proposals_for_run(
     # SECURITY: run_id validated by validate_run_id() before glob construction
     glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
     for proposal_file in sorted(proposals_dir.glob(glob_pattern)):
-        try:
-            proposal_data = json.loads(proposal_file.read_text(encoding="utf-8"))
-            if isinstance(proposal_data, dict):
-                proposals.append(proposal_data)
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning(
-                "Skipped malformed proposal artifact: %s",
-                proposal_file.name,
-                extra={
-                    "run_id": run_id,
-                    "artifact_kind": "proposal",
-                    "scan_name": "_load_proposals_for_run",
-                    "error": str(exc),
-                },
-                exc_info=True,
-            )
+        # Try typed reader first (preferred path)
+        proposal = try_read_health_proposal_artifact(
+            proposal_file,
+            run_id=run_id,
+            artifact_kind="proposal",
+            log_failures=True,
+        )
+        if proposal is not None:
+            proposals.append(proposal.to_dict())
             continue
+
+        # Legacy fallback: if typed reader fails, try to preserve valid JSON objects
+        # This handles artifacts from older schema versions that may be missing optional fields
+        try:
+            raw = json.loads(proposal_file.read_text(encoding="utf-8"))
+            # Only preserve dict-shaped objects (not arrays, strings, etc.)
+            if isinstance(raw, dict):
+                proposals.append(raw)
+        except (OSError, json.JSONDecodeError):
+            # Malformed JSON already logged by typed reader above
+            # Skip unreadable files silently (logged by typed reader if file exists)
+            pass
 
     return proposals, len(proposals)
 
