@@ -1,0 +1,55 @@
+# Security Baseline Allowlist
+# Format: <file> <context_pattern> <reason>
+# Paths are relative to k8s_diag_agent/ (e.g., ui/server.py)
+# Patterns match against function name or context lines near the except handler.
+# Entries are reviewed-safe boundaries consciously accepted until architecture-level refactor.
+
+# === HTTP Framework Boundaries ===
+ui/server.py do_GET HTTP framework catch-all - docs/security-exception-audit.md ~724
+ui/server.py do_POST HTTP framework catch-all - docs/security-exception-audit.md ~776
+
+# === External Execution Boundaries ===
+ui/server.py _handle_run_batch_next_check_execution External execution boundary - docs/security-exception-audit.md ~1075
+ui/server_next_checks.py execute_manual_next_check manual execution boundary - docs/security-exception-audit.md ~323
+ui/server_static.py serve_artifact static file path resolution defensive guard - path traversal guard
+
+# === LLM Provider Boundaries ===
+health/loop.py assess_drilldown_artifact LLM call boundary in auto-drilldown - docs/security-exception-audit.md ~2431
+health/loop.py _enrich_with_llm_review review enrichment LLM call boundary - docs/security-exception-audit.md ~2647
+health/loop.py _run_review_enrichment review enrichment LLM call boundary - docs/security-exception-audit.md ~2647
+health/loop_review_pipeline.py write_review_and_proposals health review build boundary - docs/security-exception-audit.md ~82
+external_analysis/llamacpp_adapter.py _run_http LLM provider failure boundary - docs/security-exception-audit.md ~241
+
+# === Subprocess Boundaries ===
+health/loop_alertmanager_port_forward.py stop_alertmanager_port_forward port-forward cleanup boundary - docs/security-exception-audit.md ~222
+
+# === Logging/Config Boundaries ===
+health/loop_config_logging.py _sanitize_url URL sanitization fallback - docs/security-exception-audit.md ~39
+
+# === Security Helpers ===
+security/subprocess_helpers.py _stderr_tail non-UTF8 stderr fallback - inline # REVIEWED comment
+security/path_validation.py safe_child_path path resolution boundary - docs/security-exception-audit.md ~207
+
+# === LLM Provider Helpers ===
+llm/llamacpp_provider.py _extract_assessment best-effort response extraction - graceful continue, no credential exposure
+
+# === UI Read Loops (graceful continue on malformed data) ===
+ui/server_reads.py handle_api graceful API handler fallback - graceful continue, no credential exposure
+ui/server_reads.py query_notifications graceful notifications query fallback - graceful continue, no credential exposure
+ui/server_reads.py raw_promotions_index graceful promotions index loading fallback - graceful continue, no credential exposure
+ui/server_reads.py compact_run_serialization fallback - graceful continue, no credential exposure
+ui/server_reads.py load_context_for_run graceful context loading fallback - graceful continue, no credential exposure
+ui/server_reads.py build_ui_context graceful UI context build fallback - graceful continue, no credential exposure
+ui/server_reads.py compact_raw graceful compact alertmanager parsing fallback - graceful continue, no credential exposure
+ui/server_reads.py _serialize_am_sources graceful alertmanager sources serialization fallback - graceful continue, no credential exposure
+
+# === Batch Execution ===
+batch.py run_batch_next_checks batch execution candidate boundary - docs/security-exception-audit.md ~443
+
+# === Feedback Runner ===
+feedback/runner.py _run_assessment feedback assessment boundary - docs/security-exception-audit.md ~444
+
+# === CLI Handlers ===
+cli_handlers.py handle_assess_snapshots CLI snapshot assessment boundary - graceful continue, no credential exposure
+cli_handlers.py handle_assess_drilldown CLI drilldown assessment boundary - graceful continue, no credential exposure
+cli_handlers.py handle_deliver_notifications CLI notification delivery boundary - graceful continue, no credential exposure

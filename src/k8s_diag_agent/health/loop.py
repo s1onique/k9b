@@ -2428,6 +2428,13 @@ class HealthLoopRunner:
                         "max_tokens": start_max_tokens,
                         "actual_prompt_chars": actual_prompt_chars,
                     }
+            # REVIEWED: LLM call boundary in auto-drilldown.
+            # assess_drilldown_artifact() calls the provider and may raise exceptions from:
+            # - provider network/HTTP errors (requests.RequestException, httpx.HTTPError, etc.)
+            # - LLM parsing errors (ValueError subclasses, already handled above)
+            # - unexpected provider SDK errors
+            # Non-fatal fallback: FAILED status with failure_metadata (when available).
+            # No credential exposure: failure_metadata uses bounded field extraction, not raw response.
             except Exception as exc:
                 status = ExternalAnalysisStatus.FAILED
                 summary = str(exc)
@@ -2482,8 +2489,11 @@ class HealthLoopRunner:
                         exception_type=classified_exc_type,
                     )
                     failure_metadata = {"prompt_diagnostics": prompt_diags}
-                except Exception:  # noqa: BLE001
-                    # If diagnostics extraction fails, log with fallback
+                # REVIEWED: internal diagnostics extraction boundary.
+                # Narrowed to TypeError/AttributeError/KeyError/ValueError: these are
+                # the expected exceptions when accessing dict fields or calling helpers
+                # during prompt diagnostics extraction. Non-fatal fallback: no diagnostics.
+                except (TypeError, AttributeError, KeyError, ValueError):
                     failure_metadata = None
             duration_ms = int((time.perf_counter() - start) * 1000)
             artifact = ExternalAnalysisArtifact(
@@ -2634,6 +2644,13 @@ class HealthLoopRunner:
                 purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
                 skip_reason=str(exc),
             )
+        # REVIEWED: review enrichment LLM call boundary.
+        # adapter.run() calls the provider and may raise exceptions from:
+        # - provider network/HTTP errors (requests.RequestException, httpx.HTTPError, etc.)
+        # - LLM parsing errors (ValueError subclasses, already handled above)
+        # - unexpected provider SDK errors
+        # Non-fatal fallback: FAILED status with bounded error_summary (str(exc)).
+        # No credential exposure: error_summary is the exception message only.
         except Exception as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
             artifact = ExternalAnalysisArtifact(
@@ -2849,7 +2866,14 @@ class HealthLoopRunner:
                 warning_threshold=self.config.trigger_policy.warning_event_threshold,
                 baseline_policy=self.config.baseline_policy,
             )
-        except Exception as exc:
+        # REVIEWED: review pipeline write / domain transformation boundary.
+        # _write_review_and_proposals_impl may raise exceptions from:
+        # - domain transformation errors (ValueError, TypeError, KeyError, AttributeError)
+        # - artifact write errors (OSError)
+        # Internal pipeline already catches build_health_review and proposal generation
+        # errors separately; this catches JSON write failures and unexpected transform
+        # errors. Non-fatal fallback: return None, empty proposals. No credential exposure.
+        except (ValueError, TypeError, KeyError, AttributeError, OSError) as exc:
             self._log_event(
                 "review-assessment",
                 "ERROR",

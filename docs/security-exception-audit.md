@@ -529,3 +529,220 @@ All handlers in scope have been classified:
 - `loop.py:2654`: Review enrichment (provider boundary)
 
 **Next**: These reviewed-safe boundaries may be narrowed in future work, but require careful review of the provider/framework/subprocess contracts.
+
+---
+
+## Security Baseline Allowlist
+
+The `scripts/check_security_baseline.sh` script enforces the security baseline for CI guardrails. It operates in two modes:
+
+### Modes
+
+**baseline (default)**: Permits documented reviewed-safe findings, fails on new unreviewed patterns. This is the current CI gate mode.
+
+**strict**: Fails on all broad `except Exception` findings, including reviewed-safe. Useful for future cleanup or local hardening. This mode is allowed to fail today.
+
+### Allowlist
+
+The reviewed-safe handlers are documented in `scripts/security_baseline_allowlist.txt`. This allowlist uses a simple text format:
+
+```
+<file_path> <function_pattern> <reason>
+```
+
+Where:
+- `file_path`: Path relative to `src/` (e.g., `k8s_diag_agent/ui/server.py`)
+- `function_pattern`: A unique substring in the function or context near the handler (e.g., `do_GET`)
+- `reason`: Description of why this is reviewed-safe, optionally with audit reference
+
+### Adding a New Allowlist Entry
+
+1. Identify the handler that needs to be allowlisted
+2. Add an entry to `scripts/security_baseline_allowlist.txt` with:
+   - The file path (relative to `src/`, without the `src/` prefix)
+   - A unique pattern that appears in the function name or context near the except
+   - A reason explaining why this is reviewed-safe
+   - Optionally, reference the audit section or line number
+
+Example:
+```
+k8s_diag_agent/ui/server.py do_GET HTTP framework catch-all boundary - docs/security-exception-audit.md line ~724
+```
+
+### What "Reviewed-Safe" Means
+
+"Reviewed-safe" is NOT the same as "ignore forever". It means:
+
+1. The handler was consciously reviewed and accepted as a boundary that requires architecture-level refactor to narrow
+2. The context is documented (typically with a `# REVIEWED:` comment in the code)
+3. The handler is in the allowlist and linked to this audit
+4. Any new handler MUST be either:
+   - Narrowed to specific exception types (preferred)
+   - Reviewed and added to the allowlist if narrowing is impractical
+
+### When to Narrow vs. Allowlist
+
+**Narrow (preferred)**:
+- Handlers that catch specific, predictable exceptions (file I/O, JSON parse, etc.)
+- Handlers where the failure mode is known and bounded
+- Handlers that can be tested with specific exception types
+
+**Allowlist (when narrowing is impractical)**:
+- HTTP framework catch-alls that must not leak raw tracebacks
+- LLM provider boundaries where unexpected exceptions may occur
+- Subprocess boundaries where failures are non-fatal (like port-forward cleanup)
+- Path traversal guards that must not crash the server
+
+### Verification
+
+```bash
+# Baseline mode (default for CI)
+bash scripts/check_security_baseline.sh
+
+# Strict mode (for future cleanup)
+bash scripts/check_security_baseline.sh --mode strict
+
+# Run the security baseline tests
+pytest tests/test_scripts.py::TestSecurityBaseline -v
+```
+
+---
+
+## Typed Artifact Reader Pilot
+
+### Overview
+
+Phase 2 follow-up: Introduced a typed artifact reader boundary for `ExternalAnalysisArtifact` family to reduce ad-hoc `json.loads()` + `dict[str, Any]` artifact parsing patterns.
+
+### Motivation
+
+The security exception audit fixed broad `except Exception` handlers, but artifact read paths still used scattered raw JSON parsing patterns:
+
+```python
+# Before: scattered pattern
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    continue
+artifact = ExternalAnalysisArtifact.from_dict(data)
+```
+
+### Solution
+
+Created `src/k8s_diag_agent/external_analysis/artifact_readers.py` with two functions:
+
+**Strict reader** (raises on failure):
+```python
+def read_external_analysis_artifact(path: Path) -> ExternalAnalysisArtifact:
+    """Read and parse an ExternalAnalysisArtifact from disk.
+
+    Raises:
+        OSError: If the file cannot be read
+        json.JSONDecodeError: If the file content is not valid JSON
+        ValueError: If the JSON is valid but not a mapping, or from_dict validation fails
+        TypeError: If from_dict receives unexpected type
+        KeyError: If required fields are missing in from_dict
+    """
+```
+
+**Optional reader** (returns None on failure, with optional logging):
+```python
+def try_read_external_analysis_artifact(
+    path: Path,
+    *,
+    run_id: str = "",
+    artifact_kind: str = "external-analysis",
+    log_failures: bool = True,
+) -> ExternalAnalysisArtifact | None:
+```
+
+### Contract
+
+- **Strict reader**: Raises specific exceptions - callers must handle failures explicitly
+- **Optional reader**: Returns `None` on failure, logs safe metadata only when `log_failures=True`
+- **Logging policy**: Only safe metadata logged - never raw content, prompts, responses, kubeconfig, tokens, or secrets
+- **Behavior preservation**: Malformed artifacts are skipped (non-fatal), valid artifacts load correctly
+
+### Path Classification
+
+**Broad scan paths** (use `log_failures=False`):
+- `batch.py::load_existing_execution_indices` - Scans execution artifacts to find already-executed indices
+- `deterministic_next_check_promotion.py::collect_promoted_next_check_payloads` - Scans promotion artifacts to collect payloads
+
+**Targeted reads** (use `log_failures=True`):
+- `server_feedback.py::handle_usefulness_feedback` - Reads a specific execution artifact for feedback
+- `server_feedback.py::handle_alertmanager_relevance_feedback` - Reads a specific execution artifact for feedback
+
+Rationale: Broad scan paths iterate over potentially many files where malformed artifacts are expected noise. Targeted reads read a specific artifact where failures are unexpected and should be logged for debugging.
+
+### Call Sites Migrated (Pilot Slice)
+
+| File | Function | Pattern | Classification |
+|------|----------|---------|----------------|
+| `batch.py` | `load_existing_execution_indices` | Next-check-execution scan | **fixed-this-slice** |
+| `external_analysis/deterministic_next_check_promotion.py` | `collect_promoted_next_check_payloads` | Promotion artifact scan | **fixed-this-slice** |
+| `ui/server_feedback.py` | `handle_usefulness_feedback` | Execution artifact read | **fixed-this-slice** |
+| `ui/server_feedback.py` | `handle_alertmanager_relevance_feedback` | Execution artifact read | **fixed-this-slice** |
+
+### Files Changed
+
+- **New**: `src/k8s_diag_agent/external_analysis/artifact_readers.py`
+- **Modified**: `src/k8s_diag_agent/batch.py`
+- **Modified**: `src/k8s_diag_agent/external_analysis/deterministic_next_check_promotion.py`
+- **Modified**: `src/k8s_diag_agent/ui/server_feedback.py`
+- **New**: `tests/unit/test_artifact_readers.py`
+
+### Tests Added
+
+| Test | Purpose |
+|------|---------|
+| `test_valid_artifact_loads_and_returns_typed_object` | Valid artifact roundtrip |
+| `test_malformed_json_fails_with_json_decode_error` | Malformed JSON raises JSONDecodeError |
+| `test_missing_required_field_fails_with_value_error` | Missing fields raise ValueError |
+| `test_non_object_json_fails` | Array/non-mapping JSON raises ValueError |
+| `test_unreadable_missing_file_raises_os_error` | Missing file raises OSError |
+| `test_malformed_json_returns_none_and_logs` | Optional reader returns None + logs safe metadata |
+| `test_batch_execution_indices_still_work` | Regression: batch pattern preserves skip-malformed behavior |
+| `test_promotion_artifact_preserves_run_id_filter` | Regression: promotion pattern preserves run_id filter |
+
+### Migration Rule
+
+**New artifact readers should prefer typed boundary helpers:**
+
+1. If an artifact family has a `from_dict()` class method, create a typed reader module (e.g., `artifact_readers.py`)
+2. Use `read_<artifact>_artifact()` for paths where failures should propagate (strict boundary)
+3. Use `try_read_<artifact>_artifact()` for paths where failures should be skipped (graceful fallback)
+4. Log only safe metadata: filename, run_id, error type - never raw content
+5. Catch only expected shape errors: `ValueError`, `TypeError`, `KeyError` from `from_dict()`
+
+### Next Artifact Family Recommendation
+
+In priority order for future migration:
+
+1. **`HealthProposal`**: Already has `from_dict()` in `health/adaptation.py`, UI reads in `health/ui.py`
+2. **`DrilldownArtifact`**: Used in CLI handlers and UI, has `from_dict()`
+3. **`ClusterSnapshot`**: Used in CLI and batch, has `from_dict()`
+4. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
+
+### Verification
+
+```bash
+# Run new reader tests
+pytest tests/unit/test_artifact_readers.py -v
+
+# Run affected call-site tests
+pytest tests/test_batch.py -v
+pytest tests/unit/test_external_analysis_deterministic_next_check_promotion.py -v
+
+# Run ruff check
+ruff check src/k8s_diag_agent/external_analysis/artifact_readers.py
+
+# Run mypy if in gate
+mypy src/k8s_diag_agent/external_analysis/artifact_readers.py
+
+# Run security baseline
+bash scripts/check_security_baseline.sh --mode baseline
+
+# Run full verification
+bash scripts/verify_all.sh
+```

@@ -25,6 +25,7 @@ from typing import Any, cast
 from .external_analysis.artifact import (
     ExternalAnalysisPurpose,
 )
+from .external_analysis.artifact_readers import try_read_external_analysis_artifact
 from .external_analysis.manual_next_check import (
     ManualNextCheckError,
     execute_manual_next_check,
@@ -158,18 +159,21 @@ def load_existing_execution_indices(run_health_dir: Path, run_id: str) -> set[in
         return execution_indices
 
     for artifact_path in external_dir.glob(f"{validated_run_id}-next-check-execution-*.json"):  # REVIEWED: safe
-        try:
-            artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
-            # Check if this is a next-check-execution artifact
-            purpose = artifact_data.get("purpose")
-            if purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value:
-                payload = cast(dict[str, Any], artifact_data.get("payload") or {})
-                candidate_index = payload.get("candidateIndex")
-                if isinstance(candidate_index, int):
-                    execution_indices.add(candidate_index)
-        except (json.JSONDecodeError, KeyError, TypeError):
+        artifact = try_read_external_analysis_artifact(
+            artifact_path,
+            run_id=run_id,
+            artifact_kind="next-check-execution",
+            log_failures=False,  # Broad scan path: skip silently
+        )
+        if artifact is None:
             # Skip malformed artifacts
             continue
+        if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION:
+            continue
+        payload = artifact.payload or {}
+        candidate_index = payload.get("candidateIndex")
+        if isinstance(candidate_index, int):
+            execution_indices.add(candidate_index)
 
     return execution_indices
 

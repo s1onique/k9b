@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
@@ -14,6 +13,7 @@ from .artifact import (
     ExternalAnalysisStatus,
     write_external_analysis_artifact,
 )
+from .artifact_readers import try_read_external_analysis_artifact
 from .next_check_planner import CommandFamily, detect_command_family, detect_expected_signal
 from .utils import artifact_matches_run
 
@@ -197,37 +197,30 @@ def collect_promoted_next_check_payloads(
     for candidate in sorted(promotion_files, key=lambda item: item.name):
         if not candidate.is_file():
             continue
-        try:
-            data = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+
+        artifact = try_read_external_analysis_artifact(
+            candidate,
+            run_id=run_id,
+            artifact_kind="next-check-promotion",
+            log_failures=False,  # Broad scan path: skip silently
+        )
+        if artifact is None:
             # REVIEWED: Non-fatal artifact read fallback in promotion scan.
             # Silently skip unreadable files - not all files are valid promotion artifacts.
             continue
-        
-        # OPTIMIZATION: Check run_id in raw data before parsing full artifact
-        # This avoids the overhead of creating ExternalAnalysisArtifact for non-matching runs
-        payload = data.get("payload")
+
+        if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_PROMOTION:
+            continue
+
+        # Already verified run_id matches above, double-check for safety
+        if not artifact_matches_run(artifact, run_id):
+            continue
+
+        payload = artifact.payload
         if not isinstance(payload, Mapping):
             continue
         payload_run_id = payload.get("runId")
         if payload_run_id != run_id:
-            continue
-            
-        try:
-            artifact = ExternalAnalysisArtifact.from_dict(data)
-        except (ValueError, TypeError, KeyError):
-            # REVIEWED: Non-fatal artifact deserialization fallback.
-            # Silently skip malformed artifacts - run_id check handles mismatches.
-            continue
-            
-        if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_PROMOTION:
-            continue
-            
-        # Already verified run_id matches above, double-check for safety
-        if not artifact_matches_run(artifact, run_id):
-            continue
-            
-        if not isinstance(payload, Mapping):
             continue
         entry: DeterministicNextCheckPromotionPayload = {
             "description": _coerce_str(payload.get("description")),

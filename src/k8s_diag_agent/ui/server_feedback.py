@@ -19,6 +19,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from ..external_analysis.artifact_readers import try_read_external_analysis_artifact
+
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
@@ -123,27 +125,29 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
         return
 
     # Read the execution artifact to extract metadata
-    try:
-        execution_artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    execution_artifact = try_read_external_analysis_artifact(
+        artifact_path,
+        artifact_kind="next-check-execution",
+        log_failures=True,  # Targeted read: log failures for debugging
+    )
+    if execution_artifact is None:
         logger.error(
             "Unable to read execution artifact for usefulness feedback",
             extra={
                 "artifact_rel": artifact_path_rel,
                 "run_id": artifact_path_rel,
-                "error": str(exc),
+                "error": "parse_failed",
             },
-            exc_info=True,
         )
         handler._send_json({"error": "Unable to read execution artifact"}, 500)
         return
 
     # Extract execution metadata for the review artifact
-    run_id = execution_artifact.get("run_id", "")
-    cluster_label = execution_artifact.get("cluster_label", "")
-    tool_name = execution_artifact.get("tool_name", "")
-    status = execution_artifact.get("status", "")
-    timestamp = execution_artifact.get("timestamp", datetime.now(UTC).isoformat())
+    run_id = execution_artifact.run_id
+    cluster_label = execution_artifact.cluster_label
+    tool_name = execution_artifact.tool_name
+    status = execution_artifact.status.value
+    timestamp = execution_artifact.timestamp.isoformat()
 
     # Generate unique review artifact filename and artifact_id (single source of truth)
     review_uuid = str(uuid.uuid4())[:8]
@@ -160,7 +164,7 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
         "purpose": ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_USEFULNESS_REVIEW.value,
         "tool_name": tool_name,
         "run_id": run_id,
-        "run_label": execution_artifact.get("run_label", ""),
+        "run_label": execution_artifact.run_label,
         "cluster_label": cluster_label,
         "status": status,
         "timestamp": timestamp,
@@ -173,8 +177,8 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
         "usefulness_class": usefulness_class.value,
         "usefulness_summary": usefulness_summary,
         # Include execution summary for context
-        "summary": execution_artifact.get("summary"),
-        "duration_ms": execution_artifact.get("duration_ms"),
+        "summary": execution_artifact.summary,
+        "duration_ms": execution_artifact.duration_ms,
     }
 
     # Add optional context fields if provided
@@ -309,31 +313,33 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
         return
 
     # Read the execution artifact to extract provenance and metadata
-    try:
-        execution_artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    execution_artifact = try_read_external_analysis_artifact(
+        artifact_path,
+        artifact_kind="next-check-execution",
+        log_failures=True,  # Targeted read: log failures for debugging
+    )
+    if execution_artifact is None:
         logger.error(
             "Unable to read execution artifact for alertmanager relevance feedback",
             extra={
                 "artifact_rel": artifact_path_rel,
                 "run_id": artifact_path_rel,
-                "error": str(exc),
+                "error": "parse_failed",
             },
-            exc_info=True,
         )
         handler._send_json({"error": "Unable to read execution artifact"}, 500)
         return
 
     # Extract provenance from execution artifact (server-owned, not client-supplied)
     # This preserves provenance integrity - operator cannot alter evidence
-    provenance = execution_artifact.get("alertmanager_provenance")
+    provenance = execution_artifact.alertmanager_provenance
 
     # Extract execution metadata for the review artifact
-    run_id = execution_artifact.get("run_id", "")
-    cluster_label = execution_artifact.get("cluster_label", "")
-    tool_name = execution_artifact.get("tool_name", "")
-    status = execution_artifact.get("status", "")
-    timestamp = execution_artifact.get("timestamp", datetime.now(UTC).isoformat())
+    run_id = execution_artifact.run_id
+    cluster_label = execution_artifact.cluster_label
+    tool_name = execution_artifact.tool_name
+    status = execution_artifact.status.value
+    timestamp = execution_artifact.timestamp.isoformat()
 
     # Generate unique review artifact filename
     # Pattern: {run_id}-next-check-execution-alertmanager-review-{uuid}.json
@@ -349,7 +355,7 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
         "purpose": ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION_ALERTMANAGER_REVIEW.value,
         "tool_name": tool_name,
         "run_id": run_id,
-        "run_label": execution_artifact.get("run_label", ""),
+        "run_label": execution_artifact.run_label,
         "cluster_label": cluster_label,
         "status": status,
         "timestamp": timestamp,
@@ -362,8 +368,8 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
         # Preserve provenance from execution artifact (server-owned)
         "alertmanager_provenance": provenance,
         # Include execution summary for context
-        "summary": execution_artifact.get("summary"),
-        "duration_ms": execution_artifact.get("duration_ms"),
+        "summary": execution_artifact.summary,
+        "duration_ms": execution_artifact.duration_ms,
     }
 
     try:
