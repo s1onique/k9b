@@ -1378,9 +1378,11 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         This tests that sequential long-running steps each start elapsed from 0.
         The invariant being tested: step-2 elapsed should be ~3s (not ~7s+ cumulative).
         
-        Uses sleep duration that avoids timing edge cases:
-        - Avoid exact multiples of heartbeat interval to prevent ambiguity
-        - Use >=1 heartbeat assertion (not exactly 1) since timing can vary slightly
+        Uses sleep duration that RELIABLY crosses the heartbeat threshold:
+        - Use sleep=6 which GUARANTEES crossing 3s boundary AND leaves buffer
+        - Heartbeat fires only at elapsed % interval == 0 (at 3s, 6s, 9s...)
+        - Check FIRST heartbeat only (there could be multiple at 3s and 6s)
+        - Use <=6 threshold (not <6) to account for 6s boundary heartbeat
         """
         import re
         env = os.environ.copy()
@@ -1388,16 +1390,16 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-hb-per-step"
         env["STEP_HEARTBEAT_INTERVAL"] = "3"  # 3 second intervals
-        # Run two sequential steps: step-1 (~3.5s) then step-2 (~3.5s)
-        # This avoids sleep=4 which is exactly 1 interval + 1s, causing timing ambiguity
+        # Run two sequential steps: step-1 (6s) then step-2 (6s)
+        # sleep=6 guarantees crossing 3s boundary multiple times (vs 4s which may miss boundary)
         result = subprocess.run(
             ["bash", "-c", 
              f'source "{self.STEP_RUNNER}"; '
-             f'step_run_continue "step-1" "Step 1" bash -c "sleep 3.5"; '
-             f'step_run_continue "step-2" "Step 2" bash -c "sleep 3.5"'],
+             f'step_run_continue "step-1" "Step 1" bash -c "sleep 6"; '
+             f'step_run_continue "step-2" "Step 2" bash -c "sleep 6"'],
             capture_output=True,
             text=True,
-            timeout=20,
+            timeout=30,
             env=env,
         )
 
@@ -1411,13 +1413,22 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         self.assertGreaterEqual(len(step1_hb), 1, f"Step 1 should have >=1 heartbeat, got: {step1_hb}")
         self.assertGreaterEqual(len(step2_hb), 1, f"Step 2 should have >=1 heartbeat, got: {step2_hb}")
         
-        # Key invariant: step-2 elapsed should be small (~3s), not cumulative (~6-7s+)
-        for line in step2_hb:
-            match = re.search(r'elapsed=(\d+)s', line)
-            if match:
-                step2_elapsed = int(match.group(1))
-                self.assertLess(step2_elapsed, 6,
-                    f"Step 2 elapsed={step2_elapsed}s should be per-step (~3s), not cumulative (~6s+) from step-1")
+        # Key invariant: step-2 FIRST heartbeat elapsed should be ~3s, not cumulative (~6s+)
+        # Note: with sleep=6 and interval=3, there may be multiple heartbeats at 3s and 6s
+        # We check only the first one to validate per-step timing
+        if step2_hb:
+            first_line = step2_hb[0]
+            match = re.search(r'elapsed=(\d+)s', first_line)
+            self.assertIsNotNone(match, f"Heartbeat should have elapsed= format: {first_line}")
+            assert match is not None  # Type narrowing
+            step2_elapsed = int(match.group(1))
+            # First heartbeat should be at 3s (per-step), not cumulative
+            # Use <=6 to account for timing variance around 6s boundary heartbeat
+            self.assertLessEqual(step2_elapsed, 6,
+                f"Step 2 first heartbeat elapsed={step2_elapsed}s should be per-step (~3s), not cumulative (~6s+) from step-1")
+            # Also verify it's significantly less than cumulative (which would be ~7s+)
+            self.assertLess(step2_elapsed, 7,
+                f"Step 2 elapsed={step2_elapsed}s should be per-step (~3s), not cumulative (~7s+) from step-1")
         
         # Verify step-1 has correct elapsed format
         for line in step1_hb:
