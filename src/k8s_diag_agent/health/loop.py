@@ -47,6 +47,7 @@ from .loop_comparison_policy import (  # noqa: F401
 )
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
+from .loop_failure_metadata import extract_failure_metadata_field
 from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _watched_crd_versions, _watched_release_versions, _write_json, persist_history_fact_artifacts
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
@@ -1826,35 +1827,12 @@ class HealthLoopRunner:
 
     @staticmethod
     def _failure_metadata_field(metadata: dict[str, object] | None, key: str) -> Any:
-        """Extract a field from failure metadata, checking top-level and nested prompt_diagnostics.
+        """Extract a field from failure metadata.
 
-        This helper enables result logs to extract failure details from either:
-        1. metadata[key] - top-level failure class or exception type
-        2. metadata["prompt_diagnostics"][key] - nested in prompt diagnostics
-
-        Args:
-            metadata: The failure_metadata dict from ExternalAnalysisArtifact
-            key: The field name to extract (e.g., "failure_class", "exception_type")
-
-        Returns:
-            The field value (str for text fields, bool for boolean fields), or None if not found
+        Delegates to extract_failure_metadata_field for the implementation.
+        Kept as a static method for backward compatibility.
         """
-        if not metadata:
-            return None
-        value = metadata.get(key)
-        if value is not None:
-            # Preserve boolean values as-is; convert other truthy values to string
-            if isinstance(value, bool):
-                return value
-            return str(value)
-        prompt_diags = metadata.get("prompt_diagnostics")
-        if isinstance(prompt_diags, dict):
-            value = prompt_diags.get(key)
-            if value is not None:
-                if isinstance(value, bool):
-                    return value
-                return str(value)
-        return None
+        return extract_failure_metadata_field(metadata, key)
 
     def _record_notification(self, directory: Path, artifact: NotificationArtifact) -> Path:
         artifact_path = write_notification_artifact(directory, artifact)
