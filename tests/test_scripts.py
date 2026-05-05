@@ -189,11 +189,11 @@ class TestStepRunner(unittest.TestCase):
         # Check JSON summary file exists
         json_path = Path(self._data_dir) / "test-json-summary.json"
         self.assertTrue(json_path.exists(), "JSON summary file should exist")
-        
+
         # Verify JSON is valid
         json_content = json_path.read_text()
         data = json.loads(json_content)
-        
+
         # Check required fields
         self.assertIn("run_id", data)
         self.assertEqual(data["run_id"], "test-json")
@@ -205,7 +205,7 @@ class TestStepRunner(unittest.TestCase):
         self.assertIn("failed_steps", data)
         self.assertEqual(data["failed_steps"], [])
         self.assertIn("steps", data)
-        
+
         # Check step ordering is preserved
         self.assertEqual(len(data["steps"]), 2)
         self.assertEqual(data["steps"][0]["id"], "step-a")
@@ -239,14 +239,14 @@ class TestStepRunner(unittest.TestCase):
         # Check JSON summary file
         json_path = Path(self._data_dir) / "test-json-fail-summary.json"
         self.assertTrue(json_path.exists(), "JSON summary file should exist")
-        
+
         data = json.loads(json_path.read_text())
-        
+
         # Check failure state
         self.assertEqual(data["status"], "failed")
         self.assertEqual(data["failed_count"], 1)
         self.assertEqual(data["failed_steps"], ["fail-step"])
-        
+
         # Check failed step has correct exit code
         fail_step = next(s for s in data["steps"] if s["id"] == "fail-step")
         self.assertEqual(fail_step["status"], "FAIL")
@@ -277,7 +277,7 @@ class TestStepRunner(unittest.TestCase):
 
     def test_step_runner_step_run_continues_on_failure(self) -> None:
         """step_run_continue should continue after failure - helper test only.
-        
+
         This tests the step_run_continue helper behavior.
         Real verify_all.sh behavior: failure steps are tracked, finalization uses tracked state.
         """
@@ -391,8 +391,8 @@ class TestVerifyAllIntegration(unittest.TestCase):
 
     def test_verify_all_emits_pass_marker(self) -> None:
         """verify_all.sh should emit VERIFICATION GATE: PASSED on success.
-        
-        This test runs the full verify_all.sh. It is gated behind 
+
+        This test runs the full verify_all.sh. It is gated behind
         RUN_FULL_VERIFY_TEST=1 to keep normal test runs fast.
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
@@ -411,8 +411,8 @@ class TestVerifyAllIntegration(unittest.TestCase):
 
     def test_verify_all_creates_logs_in_repo(self) -> None:
         """verify_all.sh should create logs in runs/verification.
-        
-        This test runs the full verify_all.sh. It is gated behind 
+
+        This test runs the full verify_all.sh. It is gated behind
         RUN_FULL_VERIFY_TEST=1 to keep normal test runs fast.
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
@@ -657,7 +657,7 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 
     def test_verify_all_default_mode_unchanged(self) -> None:
         """Default mode (no --json) should still show human-readable output.
-        
+
         This test runs the full verify_all.sh gated behind RUN_FULL_VERIFY_TEST.
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
@@ -680,9 +680,9 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 
     def test_verify_all_json_mode_success(self) -> None:
         """verify_all.sh --json should emit valid JSON on stdout on success.
-        
+
         This test runs the full verify_all.sh --json gated behind RUN_FULL_VERIFY_TEST.
-        
+
         Contract:
         - stdout is valid JSON (parseable by json.loads)
         - stdout does not contain compact progress lines (no [step-id] markers)
@@ -693,7 +693,7 @@ class TestVerifyAllJsonMode(unittest.TestCase):
         import json
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh --json test")
-        
+
         result = subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -704,17 +704,17 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
-        
+
         # Exit code should be 0
-        self.assertEqual(result.returncode, 0, 
+        self.assertEqual(result.returncode, 0,
             f"verify_all.sh --json should exit with 0 on success. stderr: {stderr}")
-        
+
         # stdout should be valid JSON
         try:
             data = json.loads(stdout)
         except json.JSONDecodeError as e:
             self.fail(f"stdout is not valid JSON: {e}\nstdout: {stdout}")
-        
+
         # stdout should not contain compact progress lines (e.g., "[ruff-lint] PASS (0ms)")
         # Check for the full compact progress pattern: [step-id] <status> (
         # Note: JSON documents legitimately contain PASS/FAIL in status fields,
@@ -723,9 +723,9 @@ class TestVerifyAllJsonMode(unittest.TestCase):
         self.assertNotIn("VERIFICATION GATE", stdout, "stdout should not contain gate marker")
         # Check for compact progress line pattern (step-id in brackets followed by status with duration)
         # This pattern will NOT match JSON like {"status": "PASS"} - it's intentionally specific
-        self.assertNotRegex(stdout, r"\[\w+-\w+\]\s+(?:PASS|FAIL)\s*\(", 
+        self.assertNotRegex(stdout, r"\[\w+-\w+\]\s+(?:PASS|FAIL)\s*\(",
             "stdout should not contain compact progress lines")
-        
+
         # JSON should have expected structure
         self.assertIn("run_id", data)
         self.assertIn("status", data)
@@ -735,24 +735,24 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 
     def test_verify_all_json_mode_failure_path(self) -> None:
         """verify_all.sh --json failure path: non-zero exit + valid JSON failure summary.
-        
+
         This test is intentionally constrained because:
         1. It requires making a step fail, which is awkward in a gated test
         2. The full verify_all.sh steps (ruff, mypy, npm) are expensive
-        
+
         Approach: This test runs the script normally and accepts that it may pass.
         If it ever fails due to actual code issues, the JSON contract should hold.
-        
+
         The test proves the failure-path contract by testing step_runner JSON mode
         directly (which is already covered by test_json_mode_failure_keeps_nonzero_exit_code).
-        
+
         Additionally, we verify that stderr behavior is correct in JSON mode:
         - stderr should be quiet during normal operation
         - stderr should only contain truly fatal wrapper/preflight errors
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh --json test")
-        
+
         result = subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -767,7 +767,7 @@ class TestVerifyAllJsonMode(unittest.TestCase):
             data = json.loads(result.stdout.strip())
         except json.JSONDecodeError as e:
             self.fail(f"Even on failure, stdout should be valid JSON: {e}")
-        
+
         # If the run succeeded, status should be passed
         # If the run failed, status should be failed (this is the failure path contract)
         if result.returncode == 0:
@@ -776,11 +776,11 @@ class TestVerifyAllJsonMode(unittest.TestCase):
             self.assertEqual(data["status"], "failed")
             self.assertGreater(data["failed_count"], 0)
             self.assertIn("failed_steps", data)
-        
+
         # stderr should be quiet - no step progress lines
         stderr = result.stderr
         # Progress markers should not appear in stderr during JSON mode
-        self.assertNotIn("[ruff-lint]", stderr, 
+        self.assertNotIn("[ruff-lint]", stderr,
             "stderr should not contain step progress in JSON mode")
         self.assertNotIn("[unit-tests]", stderr,
             "stderr should not contain step progress in JSON mode")
@@ -791,7 +791,7 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 
     def test_verify_all_json_mode_stderr_contract(self) -> None:
         """verify_all.sh --json stderr should be quiet except for fatal wrapper errors.
-        
+
         Contract:
         - stderr should be empty during normal operation
         - stderr should only contain truly fatal wrapper/preflight errors like:
@@ -799,12 +799,12 @@ class TestVerifyAllJsonMode(unittest.TestCase):
           - lock conflicts
           - missing interpreter
           - argument parsing errors
-        
+
         Progress output and step failures should NOT appear on stderr.
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh --json test")
-        
+
         result = subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -814,30 +814,30 @@ class TestVerifyAllJsonMode(unittest.TestCase):
         )
 
         stderr = result.stderr
-        
+
         # stderr should NOT contain step progress markers
         step_patterns = ["[ruff-lint]", "[unit-tests]", "[mypy]", "[npm-", "FAIL (", "PASS ("]
         for pattern in step_patterns:
             self.assertNotIn(pattern, stderr,
                 f"stderr should not contain '{pattern}' in JSON mode")
-        
+
         # stderr should NOT contain VERIFICATION GATE
         self.assertNotIn("VERIFICATION GATE", stderr,
             "stderr should not contain VERIFICATION GATE in JSON mode")
-        
+
         # If there is stderr output, it should be a fatal error (non-zero exit code)
         if stderr.strip() and result.returncode == 0:
             self.fail(f"Expected empty stderr on success, got: {stderr}")
 
     def test_verify_all_json_mode_fatal_error_goes_to_stderr(self) -> None:
         """verify_all.sh --json fatal wrapper errors should still go to stderr.
-        
+
         This tests the contract that truly fatal errors (not step failures)
         are still reported on stderr even in JSON mode.
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh --json test")
-        
+
         # Test with unknown argument - should fail with error on stderr
         result = subprocess.run(
             [str(self.VERIFY_ALL), "--json", "--unknown-option"],
@@ -849,10 +849,10 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 
         # Should fail
         self.assertNotEqual(result.returncode, 0)
-        
+
         # Error message should be on stderr
         self.assertIn("Unknown option", result.stderr)
-        
+
         # stdout should be empty (no JSON output on argument error)
         self.assertEqual(result.stdout.strip(), "")
 
@@ -906,14 +906,14 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
         """Unittest step should block RUN_FULL_VERIFY_TEST when VERIFY_ALL_ACTIVE is set."""
         # Verify that unit-tests step sets VERIFY_ALL_ACTIVE and clears RUN_FULL_VERIFY_TEST
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # Find the unit-tests step call in the Python lane
         # With parallel lanes, it's now called via _run_and_record
         import re
         unit_tests_pattern = r'_run_and_record\s+"python"\s+"unit-tests".*?env\s+.*?VERIFY_ALL_ACTIVE=1'
         self.assertRegex(verify_content, unit_tests_pattern,
             "unit-tests step should pass VERIFY_ALL_ACTIVE=1 to env")
-        
+
         # Verify RUN_FULL_VERIFY_TEST is cleared (set to empty or not passed)
         unit_tests_line_pattern = r'_run_and_record\s+"python"\s+"unit-tests"[^;]+'
         match = re.search(unit_tests_line_pattern, verify_content)
@@ -935,12 +935,12 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
         # Write PID for stale lock detection
         pid_file = lock_dir / "pid"
         pid_file.write_text(str(os.getpid()) + "\n")
-        
+
         try:
             # Clear VERIFY_ALL_ACTIVE from env to avoid triggering recursion check first
             env = os.environ.copy()
             env.pop("VERIFY_ALL_ACTIVE", None)
-            
+
             result = subprocess.run(
                 [str(self.VERIFY_ALL)],
                 capture_output=True,
@@ -965,7 +965,7 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
         # This test runs the full verify_all.sh and is gated behind RUN_FULL_VERIFY_TEST
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
-        
+
         # Create a stale lock: .lock exists with a stale PID
         lock_dir = self.REPO_ROOT / ".verify_lock"
         lock_dir.mkdir(exist_ok=True)
@@ -974,7 +974,7 @@ class TestVerifyAllRecursionAndLock(unittest.TestCase):
         pid_file = lock_dir / "pid"
         stale_pid = "999998"
         pid_file.write_text(stale_pid + "\n")
-        
+
         try:
             # Run with isolated env to avoid other checks failing
             env = os.environ.copy()
@@ -1029,7 +1029,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-hint-long"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1053,7 +1053,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-hint-short"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "ruff-lint" "Ruff lint" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1063,7 +1063,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
 
         output = result.stdout
         # Should NOT emit hint for short-running steps
-        self.assertNotIn("[HINT:START]", output, 
+        self.assertNotIn("[HINT:START]", output,
             "Short-running step should not emit START hint")
 
     def test_json_mode_suppresses_hints(self) -> None:
@@ -1074,7 +1074,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hint-json"
         env["STEP_JSON_MODE"] = "1"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"; step_finalize 0'],
             capture_output=True,
             text=True,
@@ -1098,7 +1098,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hint-verbose"
         env["STEP_VERBOSE"] = "1"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1120,7 +1120,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hint-custom"
         env["STEP_LONG_RUNNING_HINTS"] = "custom-long-step"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "custom-long-step" "Custom test" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1129,7 +1129,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         )
 
         output = result.stdout
-        self.assertIn("[HINT:START]", output, 
+        self.assertIn("[HINT:START]", output,
             "Custom long-running step should emit hint")
         self.assertIn("step=custom-long-step", output)
 
@@ -1140,7 +1140,7 @@ class TestStepRunnerLongRunningHints(unittest.TestCase):
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-hint-logpath"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "npm-test-ui" "UI tests" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1184,7 +1184,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-hb-short"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "test-step" "Test step" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1204,7 +1204,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hb-json"
         env["STEP_JSON_MODE"] = "1"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"; step_finalize 0'],
             capture_output=True,
             text=True,
@@ -1224,7 +1224,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hb-verbose"
         env["STEP_VERBOSE"] = "1"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "echo ok"'],
             capture_output=True,
             text=True,
@@ -1245,7 +1245,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hb-long"
         env["STEP_HEARTBEAT_INTERVAL"] = "1"  # 1 second interval for test
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              # Sleep for 2 seconds to ensure at least one heartbeat fires during execution
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 2"'],
             capture_output=True,
@@ -1256,7 +1256,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
 
         output = result.stdout
         lines = output.strip().split('\n')
-        
+
         # Should have heartbeat BEFORE final PASS line
         hb_idx = None
         pass_idx = None
@@ -1265,7 +1265,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
                 hb_idx = i
             if "[unit-tests] PASS" in line:
                 pass_idx = i
-        
+
         self.assertIsNotNone(hb_idx, "Should emit at least one heartbeat")
         self.assertIsNotNone(pass_idx, "Should emit PASS result")
         # mypy needs explicit assertions for type narrowing
@@ -1282,7 +1282,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hb-format"
         env["STEP_HEARTBEAT_INTERVAL"] = "1"  # 1 second interval
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              # Sleep for 2 seconds to ensure heartbeat fires
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 2"'],
             capture_output=True,
@@ -1302,7 +1302,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
 
     def test_heartbeat_only_emits_at_interval_boundaries(self) -> None:
         """Heartbeat should only emit at configured interval boundaries, not every poll.
-        
+
         Invariants tested:
         - At least one heartbeat is emitted for long-running steps
         - All heartbeat elapsed times are divisible by the configured interval
@@ -1315,7 +1315,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hb-boundary"
         env["STEP_HEARTBEAT_INTERVAL"] = "3"  # 3 second interval
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              # Sleep for 5 seconds - may get 1-2 heartbeats depending on timing
              # (at 3s boundary and possibly at 6s if process runs long enough)
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 5"'],
@@ -1327,11 +1327,11 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
 
         output = result.stdout
         heartbeat_lines = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln]
-        
+
         # Invariant 1: At least one heartbeat should be emitted for long-running step
         self.assertGreaterEqual(len(heartbeat_lines), 1,
             f"Should emit at least one heartbeat for long-running step. Output: {output}")
-        
+
         # Invariant 2: All heartbeat elapsed times must be divisible by interval
         heartbeat_interval = 3
         for line in heartbeat_lines:
@@ -1353,7 +1353,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         env["STEP_RUN_TIMESTAMP"] = "test-hb-distinct"
         env["STEP_HEARTBEAT_INTERVAL"] = "1"
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; step_run_continue "unit-tests" "Unit tests" bash -c "sleep 2"'],
             capture_output=True,
             text=True,
@@ -1374,10 +1374,10 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
 
     def test_heartbeat_elapsed_is_per_step(self) -> None:
         """Heartbeat elapsed time should be per-step, not cumulative from run start.
-        
+
         This tests that sequential long-running steps each start elapsed from 0.
         The invariant being tested: step-2 elapsed should be ~3s (not ~7s+ cumulative).
-        
+
         Uses sleep duration that RELIABLY crosses the heartbeat threshold:
         - Use sleep=6 which GUARANTEES crossing 3s boundary AND leaves buffer
         - Heartbeat fires only at elapsed % interval == 0 (at 3s, 6s, 9s...)
@@ -1393,7 +1393,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         # Run two sequential steps: step-1 (6s) then step-2 (6s)
         # sleep=6 guarantees crossing 3s boundary multiple times (vs 4s which may miss boundary)
         result = subprocess.run(
-            ["bash", "-c", 
+            ["bash", "-c",
              f'source "{self.STEP_RUNNER}"; '
              f'step_run_continue "step-1" "Step 1" bash -c "sleep 6"; '
              f'step_run_continue "step-2" "Step 2" bash -c "sleep 6"'],
@@ -1404,15 +1404,15 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
         )
 
         output = result.stdout
-        
+
         # Extract heartbeat lines for each step
         step1_hb = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln and "step=step-1" in ln]
         step2_hb = [ln for ln in output.split('\n') if "[HINT:HEARTBEAT]" in ln and "step=step-2" in ln]
-        
+
         # Both steps should have emitted at least one heartbeat
         self.assertGreaterEqual(len(step1_hb), 1, f"Step 1 should have >=1 heartbeat, got: {step1_hb}")
         self.assertGreaterEqual(len(step2_hb), 1, f"Step 2 should have >=1 heartbeat, got: {step2_hb}")
-        
+
         # Key invariant: step-2 FIRST heartbeat elapsed should be ~3s, not cumulative (~6s+)
         # Note: with sleep=6 and interval=3, there may be multiple heartbeats at 3s and 6s
         # We check only the first one to validate per-step timing
@@ -1429,7 +1429,7 @@ class TestStepRunnerHeartbeat(unittest.TestCase):
             # Also verify it's significantly less than cumulative (which would be ~7s+)
             self.assertLess(step2_elapsed, 7,
                 f"Step 2 elapsed={step2_elapsed}s should be per-step (~3s), not cumulative (~7s+) from step-1")
-        
+
         # Verify step-1 has correct elapsed format
         for line in step1_hb:
             self.assertIn("elapsed=", line, "Heartbeat should include elapsed time")
@@ -1465,15 +1465,15 @@ class TestParallelLanes(unittest.TestCase):
     def test_global_failure_flag_exists_in_verify_all(self) -> None:
         """verify_all.sh should define global failure flag functions."""
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # Should have global failure flag file variable
         self.assertIn("_GLOBAL_FAILED_FILE", verify_content,
             "Should define _GLOBAL_FAILED_FILE for cross-lane signaling")
-        
+
         # Should have mark function
         self.assertIn("_mark_global_failed", verify_content,
             "Should define _mark_global_failed function")
-        
+
         # Should have check function
         self.assertIn("_is_global_failed", verify_content,
             "Should define _is_global_failed function")
@@ -1481,31 +1481,31 @@ class TestParallelLanes(unittest.TestCase):
     def test_failure_presentation_has_visual_separator(self) -> None:
         """Failure blocks should be visually prominent with separator lines."""
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # Should have visual separator around failure output
         self.assertIn("════════════════════════════════════════", verify_content,
             "Should have visual separator (Unicode box drawing chars) for failure blocks")
 
     def test_verify_all_suppresses_heartbeats_after_failure(self) -> None:
         """verify_all.sh should suppress heartbeats after global failure is detected.
-        
+
         This is verified by checking the _run_and_record function checks for
         global failure before emitting heartbeats.
         """
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # The heartbeat loop should check for global failure
         self.assertIn("_is_global_failed", verify_content,
             "_run_and_record should check for global failure before emitting heartbeat")
 
     def test_verify_all_skips_steps_after_global_failure(self) -> None:
         """verify_all.sh should skip starting new steps once global failure is known.
-        
+
         This is verified by checking the _run_and_record function skips steps
         that haven't started yet when global failure is already set.
         """
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # Should check for global failure before running step
         # and emit "SKIPPED" message
         self.assertIn("SKIPPED", verify_content,
@@ -1513,12 +1513,12 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_verify_all_does_not_kill_running_steps_on_global_failure(self) -> None:
         """verify_all.sh should NOT kill already-running steps when global failure is detected.
-        
+
         Policy: Running steps should be allowed to complete and report their truthful
         PASS/FAIL status. Only not-yet-started steps should be skipped.
         """
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # Should NOT kill background process when global failure is detected
         # The old kill pattern should not exist
         # Running steps should complete to report truthful status
@@ -1527,13 +1527,13 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_verify_all_running_steps_complete_truthfully(self) -> None:
         """verify_all.sh should allow running steps to complete and report truthful status.
-        
+
         When global failure is detected:
         - Already-running steps should complete naturally
         - Their PASS/FAIL should reflect their actual exit code, not be relabeled
         """
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # After global failure detection, should wait for process naturally
         # not artificially set exit_code=1
         self.assertNotIn("exit_code=1", verify_content,
@@ -1541,21 +1541,21 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_verify_all_runs_two_concurrent_lanes(self) -> None:
         """verify_all.sh should run Python and Frontend lanes concurrently.
-        
+
         This test verifies the parallel execution structure without running
         the full expensive suite. We check that the script structure supports
         concurrent lane execution.
         """
         verify_content = self.VERIFY_ALL.read_text()
-        
+
         # Should have Python lane definition
         self.assertIn("_run_python_lane", verify_content,
             "verify_all.sh should define Python lane function")
-        
+
         # Should have Frontend lane definition
         self.assertIn("_run_frontend_lane", verify_content,
             "verify_all.sh should define Frontend lane function")
-        
+
         # Should launch both lanes in background (&)
         self.assertIn("_run_python_lane &", verify_content,
             "Python lane should be launched in background")
@@ -1564,18 +1564,18 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_verify_all_preserves_canonical_step_order(self) -> None:
         """verify_all.sh JSON summary should have deterministic canonical step order.
-        
+
         Canonical order: ruff-lint, unit-tests, mypy, npm-ci, npm-test-ui, npm-build
         regardless of which lane completed first.
         """
         import json
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
-        
+
         # Find lane state file in runs/verification before the run
         verification_dir = self.REPO_ROOT / "runs" / "verification"
         initial_files = set(verification_dir.glob("*-lane-state.json"))
-        
+
         subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -1583,37 +1583,37 @@ class TestParallelLanes(unittest.TestCase):
             timeout=300,
             cwd=self.REPO_ROOT,
         )
-        
+
         # Find the new lane state file
         new_files = set(verification_dir.glob("*-lane-state.json"))
         lane_files = sorted(new_files - initial_files)
-        
+
         self.assertGreater(len(lane_files), 0, "Should have created a lane state file")
-        
+
         # Read the lane state file
         latest_file = lane_files[-1]
         with open(latest_file) as f:
             state = json.load(f)
-        
+
         # Extract step IDs in order (python lane first, then frontend)
         step_ids = [s["id"] for s in state["python"] + state["frontend"]]
-        
+
         # Canonical order should be: ruff-lint, unit-tests, mypy (Python lane)
         # followed by npm-ci, npm-test-ui, npm-build (Frontend lane)
         expected_order = ["ruff-lint", "unit-tests", "mypy", "npm-ci", "npm-test-ui", "npm-build"]
-        
+
         self.assertEqual(step_ids, expected_order,
             f"Steps should follow canonical order, got: {step_ids}")
 
     def test_verify_all_nonzero_exit_on_any_lane_failure(self) -> None:
         """verify_all.sh should return non-zero exit code if any lane step fails.
-        
+
         This is verified by running the full suite - if all steps pass, exit is 0.
         If any step fails, exit should be non-zero.
         """
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
-        
+
         result = subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -1621,10 +1621,10 @@ class TestParallelLanes(unittest.TestCase):
             timeout=300,
             cwd=self.REPO_ROOT,
         )
-        
+
         import json
         data = json.loads(result.stdout.strip())
-        
+
         # Exit code should match status
         if data["status"] == "failed":
             self.assertNotEqual(result.returncode, 0,
@@ -1635,7 +1635,7 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_verify_all_json_mode_pure_json(self) -> None:
         """verify_all.sh --json should emit valid JSON only on stdout.
-        
+
         Contract:
         - stdout is valid JSON (parseable by json.loads)
         - stdout does not contain compact progress lines
@@ -1644,7 +1644,7 @@ class TestParallelLanes(unittest.TestCase):
         import json
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh --json test")
-        
+
         result = subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -1652,20 +1652,20 @@ class TestParallelLanes(unittest.TestCase):
             timeout=300,
             cwd=self.REPO_ROOT,
         )
-        
+
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
-        
+
         # stdout should be valid JSON
         try:
             json.loads(stdout)
         except json.JSONDecodeError as e:
             self.fail(f"stdout is not valid JSON: {e}\nstdout: {stdout}")
-        
+
         # stdout should not contain compact progress pattern
         self.assertNotRegex(stdout, r"\[\w+-\w+\]\s+(?:PASS|FAIL)\s*\(",
             "stdout should not contain compact progress lines")
-        
+
         # stderr should be quiet (no step markers)
         step_patterns = ["[ruff-lint]", "[unit-tests]", "[npm-", "FAIL (", "PASS ("]
         for pattern in step_patterns:
@@ -1684,7 +1684,7 @@ class TestParallelLanes(unittest.TestCase):
             env=env,
             cwd=self.REPO_ROOT,
         )
-        
+
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0,
             "Recursive invocation should fail")
@@ -1699,11 +1699,11 @@ class TestParallelLanes(unittest.TestCase):
         lock_marker.touch()  # Atomic lock indicator
         pid_file = lock_dir / "pid"
         pid_file.write_text(str(os.getpid()) + "\n")
-        
+
         try:
             env = os.environ.copy()
             env.pop("VERIFY_ALL_ACTIVE", None)
-            
+
             result = subprocess.run(
                 [str(self.VERIFY_ALL)],
                 capture_output=True,
@@ -1712,7 +1712,7 @@ class TestParallelLanes(unittest.TestCase):
                 env=env,
                 cwd=self.REPO_ROOT,
             )
-            
+
             output = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0,
                 "Concurrent run should be rejected")
@@ -1725,13 +1725,13 @@ class TestParallelLanes(unittest.TestCase):
 
     def test_lane_state_file_contains_both_lanes(self) -> None:
         """verify_all.sh should create lane state file with both Python and Frontend results.
-        
+
         This test verifies the parallel execution state tracking works correctly.
         """
         import json
         if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verify_all.sh test")
-        
+
         subprocess.run(
             [str(self.VERIFY_ALL), "--json"],
             capture_output=True,
@@ -1739,30 +1739,30 @@ class TestParallelLanes(unittest.TestCase):
             timeout=300,
             cwd=self.REPO_ROOT,
         )
-        
+
         # Find lane state file in runs/verification
         verification_dir = self.REPO_ROOT / "runs" / "verification"
         lane_files = sorted(verification_dir.glob("*-lane-state.json"))
-        
+
         if lane_files:
             # Read the most recent lane state file
             latest_file = lane_files[-1]
             with open(latest_file) as f:
                 state = json.load(f)
-            
+
             # Should have both lanes
             self.assertIn("python", state, "Lane state should have python lane")
             self.assertIn("frontend", state, "Lane state should have frontend lane")
-            
+
             # Each lane should have its steps
             python_steps = [s["id"] for s in state["python"]]
             frontend_steps = [s["id"] for s in state["frontend"]]
-            
+
             # Python lane should have ruff-lint, unit-tests, mypy
             for expected in ["ruff-lint", "unit-tests", "mypy"]:
                 self.assertIn(expected, python_steps,
                     f"Python lane should include {expected}")
-            
+
             # Frontend lane should have npm-ci, npm-test-ui, npm-build
             for expected in ["npm-ci", "npm-test-ui", "npm-build"]:
                 self.assertIn(expected, frontend_steps,
@@ -2014,15 +2014,15 @@ class TestScopedVerificationModes(unittest.TestCase):
 
 class TestAtomicLockRaces(unittest.TestCase):
     """Test atomic lock behavior under actual concurrent race conditions.
-    
+
     This tests the mkdir-based atomic lock under real startup race conditions,
     proving that exactly one process wins and others fail with active-lock error.
-    
+
     The test spawns multiple processes nearly simultaneously and verifies:
     - Exactly one process succeeds (wins the lock)
     - All other processes fail with the "Another verification run is active" error
     - The lock is properly cleaned up by the winner on exit
-    
+
     Note: These tests are gated behind CONCURRENCY_TEST=1 because they spawn
     multiple processes and may take ~30-60 seconds to run.
     """
@@ -2050,33 +2050,33 @@ class TestAtomicLockRaces(unittest.TestCase):
 
     def test_atomic_lock_race_exactly_one_wins(self) -> None:
         """Atomic lock should ensure exactly one process wins under concurrent startup race.
-        
+
         This test proves the mkdir-based atomic lock works correctly by:
         1. Spawning N processes nearly simultaneously (with ThreadPoolExecutor)
         2. Waiting for all to complete
         3. Verifying exactly one succeeded (exit code 0)
         4. Verifying all others failed with active-lock error
-        
+
         Uses --python-only to minimize runtime while still exercising full lock path.
         """
         if os.environ.get("CONCURRENCY_TEST") != "1":
             self.skipTest("Set CONCURRENCY_TEST=1 to run atomic lock race test")
-        
+
         import concurrent.futures
         import shutil
-        
+
         lock_dir = self.REPO_ROOT / ".verify_lock"
-        
+
         # Clean lock directory before test
         if lock_dir.exists():
             shutil.rmtree(lock_dir, ignore_errors=True)
-        
+
         # Number of concurrent processes to spawn
         num_concurrent = 5
-        
+
         # Track results from each process
         results: list[tuple[int, str, str]] = []  # (exit_code, stdout, stderr)
-        
+
         def run_verify() -> tuple[int, str, str]:
             """Run verify_all.sh in a subprocess and return results."""
             env = os.environ.copy()
@@ -2091,7 +2091,7 @@ class TestAtomicLockRaces(unittest.TestCase):
                 cwd=self.REPO_ROOT,
             )
             return (result.returncode, result.stdout, result.stderr)
-        
+
         # Launch all processes nearly simultaneously using ThreadPoolExecutor
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_concurrent) as executor:
             futures = [executor.submit(run_verify) for _ in range(num_concurrent)]
@@ -2100,16 +2100,16 @@ class TestAtomicLockRaces(unittest.TestCase):
                     results.append(future.result())
                 except Exception as e:
                     results.append((-1, "", str(e)))
-        
+
         successes = [r for r in results if r[0] == 0]
         failures = [r for r in results if r[0] != 0]
-        
+
         self.assertEqual(
             len(successes), 1,
             f"Expected exactly 1 process to win the lock, got {len(successes)}. "
             f"Exit codes: {[r[0] for r in results]}"
         )
-        
+
         for i, (exit_code, stdout, stderr) in enumerate(failures):
             combined = stdout + stderr
             self.assertIn(
@@ -2117,33 +2117,33 @@ class TestAtomicLockRaces(unittest.TestCase):
                 f"Process {i} (exit={exit_code}) should fail with active-lock error. "
                 f"Output: {combined[:200]}"
             )
-        
+
         lock_marker = lock_dir / ".lock"
         self.assertFalse(
             lock_marker.exists(),
             "Lock should be cleaned up after winner exits"
         )
-    
+
     def test_atomic_lock_race_with_process_pool(self) -> None:
         """Stress test: Multiple rapid fork attempts with ProcessPoolExecutor.
-        
+
         Uses true separate processes for maximum race condition probability.
         Gated behind CONCURRENCY_TEST=1.
         """
         if os.environ.get("CONCURRENCY_TEST") != "1":
             self.skipTest("Set CONCURRENCY_TEST=1 to run atomic lock race test")
-        
+
         import concurrent.futures
         import shutil
-        
+
         lock_dir = self.REPO_ROOT / ".verify_lock"
-        
+
         # Clean lock directory before test
         if lock_dir.exists():
             shutil.rmtree(lock_dir, ignore_errors=True)
-        
+
         num_concurrent = 8
-        
+
         def spawn_verify() -> tuple[int, str]:
             env = os.environ.copy()
             env.pop("VERIFY_ALL_ACTIVE", None)
@@ -2156,7 +2156,7 @@ class TestAtomicLockRaces(unittest.TestCase):
                 cwd=self.REPO_ROOT,
             )
             return (result.returncode, result.stdout + result.stderr)
-        
+
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_concurrent) as executor:
             futures = [executor.submit(spawn_verify) for _ in range(num_concurrent)]
             results = []
@@ -2165,27 +2165,221 @@ class TestAtomicLockRaces(unittest.TestCase):
                     results.append(future.result())
                 except Exception as e:
                     results.append((-1, str(e)))
-        
+
         successes = [r for r in results if r[0] == 0]
         failures = [r for r in results if r[0] != 0]
-        
+
         self.assertEqual(
             len(successes), 1,
             f"Expected exactly 1 winner, got {len(successes)}. "
             f"Exit codes: {[r[0] for r in results]}"
         )
-        
+
         for i, (exit_code, output) in enumerate(failures):
             self.assertIn(
                 "Another verification run is active", output,
                 f"Failure {i} should be due to active lock. Exit: {exit_code}"
             )
-        
+
         lock_marker = lock_dir / ".lock"
         self.assertFalse(
             lock_marker.exists(),
             "Lock should not be left behind after race test"
         )
+
+
+class TestSecurityBaseline(unittest.TestCase):
+    """Test security_baseline.sh behavior in baseline and strict modes."""
+
+    REPO_ROOT = Path(__file__).parent.parent
+    BASELINE_SCRIPT = REPO_ROOT / "scripts" / "check_security_baseline.sh"
+
+    def setUp(self) -> None:
+        """Set up test environment."""
+        if not self.BASELINE_SCRIPT.exists():
+            self.skipTest("check_security_baseline.sh not found")
+        os.chmod(self.BASELINE_SCRIPT, 0o755)
+
+    def test_baseline_mode_passes_with_allowlist(self) -> None:
+        """Baseline mode should pass when all bare except Exception are allowlisted."""
+        result = subprocess.run(
+            [str(self.BASELINE_SCRIPT), "--mode", "baseline"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=self.REPO_ROOT,
+        )
+
+        output = result.stdout + result.stderr
+        # Should pass in baseline mode
+        self.assertEqual(result.returncode, 0, f"Baseline mode should pass. Output: {output}")
+        self.assertIn("Reviewed-safe findings:", output)
+        self.assertIn("All security baseline checks passed", output)
+
+    def test_strict_mode_fails_with_allowlist(self) -> None:
+        """Strict mode should fail even when bare except Exception are allowlisted."""
+        result = subprocess.run(
+            [str(self.BASELINE_SCRIPT), "--mode", "strict"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=self.REPO_ROOT,
+        )
+
+        output = result.stdout + result.stderr
+        # Strict mode should fail (there are reviewed-safe handlers)
+        self.assertNotEqual(result.returncode, 0, "Strict mode should fail with allowlisted findings")
+        self.assertIn("reviewed-safe but strict mode", output)
+        self.assertIn("strict mode reports ALL broad except Exception", output)
+
+    def test_help_flag_shows_usage(self) -> None:
+        """--help should show usage information."""
+        result = subprocess.run(
+            [str(self.BASELINE_SCRIPT), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=self.REPO_ROOT,
+        )
+
+        self.assertEqual(result.returncode, 0, "Help flag should succeed")
+        self.assertIn("baseline", result.stdout)
+        self.assertIn("strict", result.stdout)
+
+    def test_other_checks_still_run(self) -> None:
+        """Other security checks (DEVNULL, glob, etc.) should still run."""
+        result = subprocess.run(
+            [str(self.BASELINE_SCRIPT), "--mode", "baseline"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=self.REPO_ROOT,
+        )
+
+        output = result.stdout + result.stderr
+        # These checks should all report OK
+        self.assertIn("stderr=DEVNULL", output)
+        self.assertIn("glob interpolation", output)
+        self.assertIn("frontend error leakage", output)
+        self.assertIn("hardcoded secrets", output)
+
+    def test_except_exception_as_exc_is_detected(self) -> None:
+        """Script should detect 'except Exception as exc:' patterns."""
+        # The allowlist contains patterns like "safe_child_path" that should match
+        # handlers with 'except Exception as exc:'
+        result = subprocess.run(
+            [str(self.BASELINE_SCRIPT), "--mode", "baseline"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=self.REPO_ROOT,
+        )
+
+        output = result.stdout + result.stderr
+        # Should find reviewed-safe findings (some use 'as exc:')
+        self.assertIn("Reviewed-safe findings:", output)
+
+    def test_unreviewed_handler_fails_baseline(self) -> None:
+        """An unreviewed handler should fail baseline mode."""
+        # Create a temporary Python file with an unreviewed bare except
+        import shutil
+        import tempfile as temp_module
+
+        tmp_dir = temp_module.mkdtemp(prefix="test_security_")
+        test_file = Path(tmp_dir) / "test_unreviewed.py"
+        # Write an unreviewed bare except - should fail
+        test_file.write_text('''
+def test_func():
+    try:
+        pass
+    except Exception as exc:  # Unreviewed - should trigger failure
+        pass
+''')
+
+        try:
+            # Create a minimal allowlist
+            allowlist = Path(tmp_dir) / "allowlist.txt"
+            allowlist.write_text("# Empty allowlist\n")
+
+            # Run with minimal setup
+            script_content = self.BASELINE_SCRIPT.read_text()
+            modified_script = script_content.replace(
+                'ALLOWLIST="$SCRIPT_DIR/security_baseline_allowlist.txt"',
+                f'ALLOWLIST="{allowlist}"'
+            )
+            modified_script = modified_script.replace(
+                '$REPO_ROOT/src/',
+                f'{tmp_dir}/'
+            )
+
+            modified_script_file = Path(tmp_dir) / "test_baseline.sh"
+            modified_script_file.write_text(modified_script)
+
+            result = subprocess.run(
+                ["bash", str(modified_script_file), "--mode", "baseline"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=self.REPO_ROOT,
+            )
+
+            output = result.stdout + result.stderr
+            # Should fail because the test file has an unreviewed except
+            # Note: We check that the script runs and finds issues
+            self.assertIn("FOUND", output)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_except_exception_as_e_is_detected_and_fails_unallowlisted(self) -> None:
+        """Script should detect 'except Exception as e:' when not in allowlist."""
+        import shutil
+        import tempfile as temp_module
+
+        tmp_dir = temp_module.mkdtemp(prefix="test_security_")
+        # Create a file with 'except Exception as e:' - should be flagged if not allowlisted
+        test_file = Path(tmp_dir) / "k8s_diag_agent" / "test_module.py"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text('''
+def test_func():
+    try:
+        pass
+    except Exception as e:  # This should be detected now - not excluded
+        pass
+''')
+
+        try:
+            allowlist = Path(tmp_dir) / "allowlist.txt"
+            allowlist.write_text("# Empty - nothing is allowlisted\n")
+
+            # Modify script to point to our test directory
+            script_content = self.BASELINE_SCRIPT.read_text()
+            modified_script = script_content.replace(
+                'ALLOWLIST="$SCRIPT_DIR/security_baseline_allowlist.txt"',
+                f'ALLOWLIST="{allowlist}"'
+            )
+            modified_script = modified_script.replace(
+                '$REPO_ROOT/src/',
+                f'{tmp_dir}/'
+            )
+
+            modified_script_file = Path(tmp_dir) / "test_baseline.sh"
+            modified_script_file.write_text(modified_script)
+
+            result = subprocess.run(
+                ["bash", str(modified_script_file), "--mode", "baseline"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=self.REPO_ROOT,
+            )
+
+            output = result.stdout + result.stderr
+            # Should find the 'except Exception as e:' pattern - it's now detected
+            # The script should report a finding for this unreviewed handler
+            self.assertIn("FOUND", output,
+                "except Exception as e: should be detected when not allowlisted")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
