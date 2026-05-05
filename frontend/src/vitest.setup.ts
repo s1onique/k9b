@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import { beforeEach } from "vitest";
 
 // Mock localStorage for all tests
 const localStorageMock = (() => {
@@ -28,4 +29,8 @@ Object.defineProperty(globalThis, "localStorage", {
   value: localStorageMock,
   writable: true,
   configurable: true,
+});
+
+beforeEach(() => {
+  localStorage.clear();
 });
