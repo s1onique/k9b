@@ -53,15 +53,12 @@ import { ProposalList } from "./components/ProposalList";
 import { ReviewEnrichmentPanel } from "./components/ReviewEnrichmentPanel";
 import { DiagnosticPackReviewPanel } from "./components/DiagnosticPackReviewPanel";
 import { ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
-import {
-  ExecutionHistoryPanel,
-  buildExecutionEntryKey,
-  formatDuration,
-} from "./components/ExecutionHistoryPanel";
+import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
 import { QueuePanel } from "./components/QueuePanel";
 import type { QueuePanelProps } from "./components/QueuePanel";
+import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
@@ -1247,46 +1244,19 @@ const App = () => {
         </div>
       </section>
     )}
-    {/* Workflow Lane: Work Next Checks */}
-    <div className="workflow-lane-header">
-      <div className="workflow-lane-label">
-        <span className="workflow-lane-icon">⚡</span>
-        <span className="workflow-lane-title">{WORKFLOW_LANES.work.label}</span>
-      </div>
-      <p className="workflow-lane-description muted small">{WORKFLOW_LANES.work.description}</p>
-    </div>
-    {run ? (
-      <ExecutionHistoryPanel
-        history={executionHistory}
-        runId={run.runId}
-        runLabel={run.label}
-        queueCandidateCount={runQueue.length}
-        highlightedKey={executionHistoryHighlightKey}
-        onSubmitFeedback={handleUsefulnessFeedback}
-        onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
-        filter={executionHistoryFilter}
-        onFilterChange={setExecutionHistoryFilter}
-        runQueue={runQueue}
-        onHighlightQueueCard={highlightQueueCard}
-      />
-    ) : (
-      <section className="panel execution-history-panel" id="execution-history">
-        <div className="section-head">
-          <h2>Execution review</h2>
-          <p className="muted">Loading selected run…</p>
-        </div>
-      </section>
-    )}
-    {run ? (
-      <QueuePanel {...queuePanelProps} />
-    ) : (
-      <section className="panel next-check-queue-panel" id="next-check-queue">
-        <div className="section-head">
-          <h2>Work list</h2>
-          <p className="muted">Loading selected run…</p>
-        </div>
-      </section>
-    )}
+    <WorkNextChecksLane
+      run={run}
+      history={executionHistory}
+      queueCandidateCount={runQueue.length}
+      executionHistoryHighlightKey={executionHistoryHighlightKey}
+      onSubmitFeedback={handleUsefulnessFeedback}
+      onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
+      executionHistoryFilter={executionHistoryFilter}
+      onExecutionHistoryFilterChange={setExecutionHistoryFilter}
+      runQueue={runQueue}
+      onHighlightQueueCard={highlightQueueCard}
+      queuePanelProps={queuePanelProps}
+    />
       <section className="panel" id="fleet">
         <div className="section-head">
           <div>
