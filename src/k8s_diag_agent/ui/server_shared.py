@@ -7,10 +7,93 @@ depend on request-handler instance state.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .server import HealthUIRequestHandler
 
 logger = logging.getLogger(__name__)
+
+# Default maximum content length for JSON mutation requests (1 MiB)
+DEFAULT_MAX_CONTENT_LENGTH = 1 * 1024 * 1024
+
+
+def _validate_json_mutation_request(
+    handler: HealthUIRequestHandler,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
+) -> dict[str, object] | None:
+    """Validate Content-Type and request size for JSON mutation requests.
+
+    This shared helper provides consistent validation for all mutation endpoints:
+    - Validates Content-Type is application/json (or application/json with charset)
+    - Enforces max Content-Length to prevent oversized payloads
+    - Returns the parsed JSON payload if validation passes
+    - Sends appropriate HTTP error responses (400, 413, 415) on failure
+
+    Args:
+        handler: The HealthUIRequestHandler instance
+        max_content_length: Maximum allowed Content-Length in bytes (default 1 MiB)
+
+    Returns:
+        Parsed JSON payload dict if validation passes, None if validation failed
+        (in which case the handler has already sent an error response)
+    """
+    # Validate Content-Type header
+    content_type = handler.headers.get("Content-Type", "")
+    # Normalize: strip parameters (e.g., charset) and lowercase for comparison
+    if content_type:
+        # Extract just the media type before any semicolon
+        base_content_type = content_type.split(";")[0].strip().lower()
+    else:
+        base_content_type = ""
+
+    # Require Content-Type to be application/json with optional charset parameter
+    # Reject text/plain, form-urlencoded, multipart, or missing/empty content type
+    if base_content_type not in ("application/json",):
+        handler._send_json(
+            {"error": "Content-Type must be application/json"},
+            415,  # Unsupported Media Type
+        )
+        return None
+
+    # Handle Content-Length
+    content_length_str = handler.headers.get("Content-Length", "")
+    try:
+        content_length = int(content_length_str) if content_length_str else 0
+    except ValueError:
+        # Invalid Content-Length header - treat as missing/zero
+        content_length = 0
+
+    # Check for empty request body on POST endpoints
+    if content_length <= 0:
+        handler._send_json({"error": "Request body required"}, 400)
+        return None
+
+    # Enforce max Content-Length
+    if content_length > max_content_length:
+        handler._send_json(
+            {"error": f"Request body too large (max {max_content_length} bytes)"},
+            413,  # Payload Too Large
+        )
+        return None
+
+    # Read and parse the request body
+    try:
+        raw_payload = handler.rfile.read(content_length).decode("utf-8")
+        payload = json.loads(raw_payload)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        handler._send_json({"error": "Invalid JSON payload"}, 400)
+        return None
+
+    # Ensure payload is a dict (not array, number, string, etc.)
+    if not isinstance(payload, dict):
+        handler._send_json({"error": "Invalid JSON payload"}, 400)
+        return None
+
+    return payload
 
 
 def _normalize_runs_dir(runs_dir: Path) -> Path:

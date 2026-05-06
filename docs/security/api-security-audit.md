@@ -60,9 +60,11 @@
 
 ### 2.4 Content-Type Handling
 
-- All mutation handlers parse JSON body explicitly
-- No multipart/form-data or URL-encoded forms accepted
-- `Content-Type` header is not validated (assumes JSON)
+- **API-R1 implemented**: `_validate_json_mutation_request()` in `server_shared.py`
+- Requires `Content-Type: application/json` (accepts charset parameter)
+- Rejects missing/empty Content-Type with 415 Unsupported Media Type
+- Rejects non-JSON Content-Types (text/plain, form-urlencoded, multipart) with 415
+- All mutation handlers use shared validation helper for consistency
 
 ---
 
@@ -195,16 +197,16 @@
 
 | Risk | Severity | Affected Endpoints | Mitigation Status |
 |------|----------|---------------------|-------------------|
-| No authentication layer | HIGH | All POST endpoints | Assumes localhost-only |
-| No CSRF protection | HIGH | All POST endpoints | None |
-| CSRF on state-changing GET | MEDIUM | `/api/run?run_id=X` (cache invalidation) | None |
-| Path traversal via artifactPath | HIGH | Feedback endpoints | Validated (containment check) |
-| Path traversal via planArtifactPath | MEDIUM | Execution endpoint | Falls back to index, may mask errors |
-| run_id not validated in batch | MEDIUM | Batch execution | Depends on downstream validation |
-| Content-Type not enforced | LOW | All mutation endpoints | Assumes JSON client |
-| No rate limiting | MEDIUM | All endpoints | None |
-| No request size limits | MEDIUM | All mutation endpoints | `Content-Length` check only |
-| No audit trail for reads | LOW | GET endpoints | Structured logs present |
+| No authentication layer | HIGH | All POST endpoints | OPEN (assumes localhost-only) |
+| No CSRF protection | HIGH | All POST endpoints | OPEN |
+| CSRF on state-changing GET | MEDIUM | `/api/run?run_id=X` (cache invalidation) | OPEN |
+| Path traversal via artifactPath | HIGH | Feedback endpoints | MITIGATED (containment check) |
+| Path traversal via planArtifactPath | MEDIUM | Execution endpoint | MITIGATED (fallback to index) |
+| run_id not validated in batch | MEDIUM | Batch execution | OPEN (depends on downstream) |
+| Content-Type not enforced | LOW | All mutation endpoints | **MITIGATED by API-R1** |
+| No rate limiting | MEDIUM | All endpoints | OPEN |
+| **Request size limits** | MEDIUM | All mutation endpoints | **MITIGATED by API-R1 (1 MiB)** |
+| No audit trail for reads | LOW | GET endpoints | OPEN |
 
 ---
 
@@ -272,16 +274,16 @@
 
 ## 7. Remediation Backlog
 
-| Priority | Issue | Effort | Notes |
-|----------|-------|--------|-------|
-| P0 | Add CSRF token validation | Medium | Affects all POST endpoints |
-| P0 | Add Content-Type validation | Low | Validate `application/json` |
-| P1 | Add request size limits | Low | Max content length per endpoint |
-| P1 | Add operator authentication | High | Depends on deployment model |
-| P2 | Add idempotency keys for feedback | Medium | UUID already used; add client-provided key |
-| P2 | Add audit fields to artifacts | Low | Consistent timestamp/operator fields |
-| P3 | Add rate limiting | Medium | Per-IP or per-session |
-| P3 | Add Origin header validation | Low | Reject cross-origin requests |
+| Priority | Issue | Effort | Status | Notes |
+|----------|-------|--------|--------|-------|
+| P0 | Add CSRF token validation | Medium | OPEN | Affects all POST endpoints |
+| **P0** | **Add Content-Type validation** | Low | **DONE (API-R1)** | Validated via `_validate_json_mutation_request()` |
+| **P1** | **Add request size limits** | Low | **DONE (API-R1)** | 1 MiB limit enforced |
+| P1 | Add operator authentication | High | OPEN | Depends on deployment model |
+| P2 | Add idempotency keys for feedback | Medium | OPEN | UUID already used; add client-provided key |
+| P2 | Add audit fields to artifacts | Low | OPEN | Consistent timestamp/operator fields |
+| P3 | Add rate limiting | Medium | OPEN | Per-IP or per-session |
+| P3 | Add Origin header validation | Low | OPEN | Reject cross-origin requests |
 
 ---
 

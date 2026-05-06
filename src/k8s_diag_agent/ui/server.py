@@ -26,7 +26,7 @@ from ..external_analysis.deterministic_next_check_promotion import (
 )
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
-from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_runs_dir
+from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_json_mutation_request, _validate_runs_dir
 
 # Route patterns for path matching
 _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
@@ -1013,15 +1013,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         Accepts run_id in the payload and executes all eligible candidates
         that haven't been executed yet.
         """
-        content_length = int(self.headers.get("Content-Length") or 0)
-        if content_length <= 0:
-            self._send_json({"error": "Request body required"}, 400)
-            return
-        try:
-            raw_payload = self.rfile.read(content_length).decode("utf-8")
-            payload = json.loads(raw_payload)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self._send_json({"error": "Invalid JSON payload"}, 400)
+        # Validate Content-Type and request size, parse JSON body
+        payload = _validate_json_mutation_request(self)
+        if payload is None:
             return
 
         run_id = payload.get("runId")

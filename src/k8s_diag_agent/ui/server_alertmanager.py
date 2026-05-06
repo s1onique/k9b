@@ -61,6 +61,12 @@ def handle_alertmanager_source_action(
         write_source_registry,
     )
     from .server import _run_payload_cache, _run_payload_cache_lock
+    from .server_shared import _validate_json_mutation_request
+
+    # Validate Content-Type and request size, parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
+        return
 
     # Load context for the specific run_id from the URL path
     context = handler._load_context(requested_run_id=run_id)
@@ -77,27 +83,11 @@ def handle_alertmanager_source_action(
                 extra={"requested_run_id": run_id, "using_run_id": context.run.run_id},
             )
 
-    # Parse request body
-    content_length = int(handler.headers.get("Content-Length") or 0)
-    if content_length <= 0:
-        handler._send_json({"error": "Request body required"}, 400)
-        return
-    try:
-        raw_payload = handler.rfile.read(content_length).decode("utf-8")
-        payload = json.loads(raw_payload)
-        # Validate payload is a dict (not array, number, etc.)
-        if not isinstance(payload, dict):
-            raise TypeError("payload must be a dict")
-        # Validate action field (required in body)
-        action_raw = payload.get("action")
-        if not isinstance(action_raw, str) or not action_raw:
-            handler._send_json({"error": "action is required in request body"}, 400)
-            return
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError, AttributeError):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
-        return
-
     # Parse action enum
+    action_raw = payload.get("action")
+    if not isinstance(action_raw, str) or not action_raw:
+        handler._send_json({"error": "action is required in request body"}, 400)
+        return
     if action_raw == "promote":
         action = SourceAction.PROMOTE
     elif action_raw == "disable":

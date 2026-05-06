@@ -40,21 +40,11 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
         handler: The HealthUIRequestHandler instance
     """
     from ..external_analysis.artifact import ExternalAnalysisPurpose, UsefulnessClass
+    from .server_shared import _validate_json_mutation_request
 
-    content_length = int(handler.headers.get("Content-Length") or 0)
-    if content_length <= 0:
-        handler._send_json({"error": "Request body required"}, 400)
-        return
-    try:
-        raw_payload = handler.rfile.read(content_length).decode("utf-8")
-        payload = json.loads(raw_payload)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
-        return
-
-    # Ensure payload is a dict (defensive against non-object JSON)
-    if not isinstance(payload, dict):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
+    # Validate Content-Type and request size, parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
         return
 
     # Validate required fields
@@ -250,21 +240,11 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
         handler: The HealthUIRequestHandler instance
     """
     from ..external_analysis.artifact import AlertmanagerRelevanceClass, ExternalAnalysisPurpose
+    from .server_shared import _validate_json_mutation_request
 
-    content_length = int(handler.headers.get("Content-Length") or 0)
-    if content_length <= 0:
-        handler._send_json({"error": "Request body required"}, 400)
-        return
-    try:
-        raw_payload = handler.rfile.read(content_length).decode("utf-8")
-        payload = json.loads(raw_payload)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
-        return
-
-    # Ensure payload is a dict (defensive against non-object JSON)
-    if not isinstance(payload, dict):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
+    # Validate Content-Type and request size, parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
         return
 
     # Validate required fields

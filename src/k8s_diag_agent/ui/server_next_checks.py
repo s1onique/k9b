@@ -42,6 +42,7 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
     from ..health.ui_next_check_execution import _derive_outcome_status
     from ..structured_logging import emit_structured_log
     from .server import _compute_health_root, _relative_path
+    from .server_shared import _validate_json_mutation_request
 
     context = handler._load_context()
     if context is None:
@@ -50,16 +51,12 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
     if not plan or not plan.artifact_path:
         handler._send_json({"error": "Next-check plan unavailable"}, 400)
         return
-    content_length = int(handler.headers.get("Content-Length") or 0)
-    if content_length <= 0:
-        handler._send_json({"error": "Request body required"}, 400)
+
+    # Validate Content-Type and request size, parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
         return
-    try:
-        raw_payload = handler.rfile.read(content_length).decode("utf-8")
-        payload = json.loads(raw_payload)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
-        return
+
     candidate_index_raw = payload.get("candidateIndex")
     candidate_index = candidate_index_raw if isinstance(candidate_index_raw, int) else None
     if candidate_index_raw is not None and candidate_index is None:
@@ -482,19 +479,15 @@ def handle_deterministic_promotion(handler: HealthUIRequestHandler) -> None:
         collect_promoted_queue_entries,
         write_deterministic_next_check_promotion,
     )
+    from .server_shared import _validate_json_mutation_request
+
+    # Validate Content-Type and request size, parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
+        return
 
     context = handler._load_context()
     if context is None:
-        return
-    content_length = int(handler.headers.get("Content-Length") or 0)
-    if content_length <= 0:
-        handler._send_json({"error": "Request body required"}, 400)
-        return
-    try:
-        raw_payload = handler.rfile.read(content_length).decode("utf-8")
-        payload = json.loads(raw_payload)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
         return
     cluster_label = payload.get("clusterLabel")
     if not isinstance(cluster_label, str) or not cluster_label:
@@ -590,6 +583,7 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
     """
     from ..external_analysis.next_check_approval import log_next_check_approval_event, record_next_check_approval
     from .server import _relative_path
+    from .server_shared import _validate_json_mutation_request
 
     context = handler._load_context()
     if context is None:
@@ -598,16 +592,12 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
     if not plan or not plan.artifact_path:
         handler._send_json({"error": "Next-check plan unavailable"}, 400)
         return
-    content_length = int(handler.headers.get("Content-Length") or 0)
-    if content_length <= 0:
-        handler._send_json({"error": "Request body required"}, 400)
+
+    # Validate Content-Type and request size, parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
         return
-    try:
-        raw_payload = handler.rfile.read(content_length).decode("utf-8")
-        payload = json.loads(raw_payload)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-        handler._send_json({"error": "Invalid JSON payload"}, 400)
-        return
+
     candidate_index_raw = payload.get("candidateIndex")
     candidate_index = candidate_index_raw if isinstance(candidate_index_raw, int) else None
     if candidate_index_raw is not None and candidate_index is None:
