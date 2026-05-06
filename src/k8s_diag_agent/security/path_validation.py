@@ -19,6 +19,21 @@ _SAFE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 # Pattern for valid glob suffix (without the leading run_id)
 _GLOB_SUFFIX_PATTERN = re.compile(r"^[a-zA-Z0-9_-]*$")
 
+# Kubernetes DNS label pattern: lowercase alphanumeric, hyphens, max 63 chars.
+# Must start with alphanumeric, can end with alphanumeric.
+# Examples: default, my-namespace, app-v1-beta
+_K8S_DNS_LABEL_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$")
+
+# Kubernetes DNS name pattern (for resource names): lowercase alphanumeric, hyphens, dots, max 253 chars.
+# Must start with alphanumeric, can end with alphanumeric.
+# Examples: my-service, my.namespace.svc, configmap-name
+_K8S_DNS_NAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$")
+
+# Shell metacharacters that could be used for injection
+_SHELL_METACHARACTERS = frozenset(
+    ';&|><$`\\"\'{}[]!#*?%~ \t\n\r\x00'
+)
+
 
 class SecurityError(ValueError):
     """Raised when a security validation check fails.
@@ -283,3 +298,193 @@ def safe_glob_pattern(base_dir: Path, validated_prefix: str, suffix: str = "*.js
     # This function validates that the prefix is safe before any interpolation
 
     return base_dir
+
+
+def validate_kube_context_name(value: str) -> str:
+    """Validate a Kubernetes context name.
+
+    Context names are user-defined in kubeconfig and follow DNS-like naming
+    conventions. This validation ensures:
+    - Non-empty
+    - No shell metacharacters
+    - No path separators or traversal patterns
+    - Length is reasonable (1-500 chars)
+    - No control characters
+
+    Args:
+        value: The kube context name to validate.
+
+    Returns:
+        The validated context name if valid.
+
+    Raises:
+        SecurityError: If the context name is invalid.
+
+    Examples:
+        >>> validate_kube_context_name("kind-cluster")
+        'kind-cluster'
+        >>> validate_kube_context_name("")
+        Traceback (most recent call last):
+            ...
+        k8s_diag_agent.security.path_validation.SecurityError: ...
+    """
+    if not value:
+        raise SecurityError("kube context name cannot be empty")
+
+    # Reject whitespace-only values
+    if value.strip() != value:
+        raise SecurityError("kube context name contains leading/trailing whitespace")
+
+    # Reject null bytes
+    if "\x00" in value:
+        raise SecurityError("kube context name contains null byte")
+
+    # Reject path traversal and separator patterns
+    if ".." in value or "/" in value or "\\" in value:
+        raise SecurityError("kube context name contains path traversal pattern")
+
+    # Reject shell metacharacters
+    for char in _SHELL_METACHARACTERS:
+        if char in value:
+            raise SecurityError(f"kube context name contains shell metacharacter: {char!r}")
+
+    # Length bounds check
+    if len(value) > 500:
+        raise SecurityError("kube context name exceeds maximum length (500)")
+
+    return value
+
+
+def validate_kubernetes_namespace(value: str) -> str:
+    """Validate a Kubernetes namespace name.
+
+    Kubernetes namespaces must conform to DNS label naming conventions per
+    the Kubernetes API spec. This validation ensures:
+    - Non-empty
+    - Matches DNS label pattern (lowercase alphanumerics and hyphens)
+    - Length is valid (1-63 chars)
+    - No shell metacharacters or control characters
+
+    Per Kubernetes spec:
+    - Must be lowercase alphanumeric or hyphens
+    - Must start and end with alphanumeric
+    - Maximum 63 characters
+
+    Args:
+        value: The namespace name to validate.
+
+    Returns:
+        The validated namespace name if valid.
+
+    Raises:
+        SecurityError: If the namespace name is invalid.
+
+    Examples:
+        >>> validate_kubernetes_namespace("default")
+        'default'
+        >>> validate_kubernetes_namespace("my-app-v1")
+        'my-app-v1'
+        >>> validate_kubernetes_namespace("UPPER")
+        Traceback (most recent call last):
+            ...
+        k8s_diag_agent.security.path_validation.SecurityError: ...
+    """
+    if not value:
+        raise SecurityError("kubernetes namespace cannot be empty")
+
+    # Reject whitespace-only values
+    if value.strip() != value:
+        raise SecurityError("kubernetes namespace contains leading/trailing whitespace")
+
+    # Reject null bytes
+    if "\x00" in value:
+        raise SecurityError("kubernetes namespace contains null byte")
+
+    # Reject path traversal patterns (shouldn't apply to namespaces but defensive)
+    if ".." in value or "/" in value or "\\" in value:
+        raise SecurityError("kubernetes namespace contains path traversal pattern")
+
+    # Reject shell metacharacters
+    for char in _SHELL_METACHARACTERS:
+        if char in value:
+            raise SecurityError(f"kubernetes namespace contains shell metacharacter: {char!r}")
+
+    # Validate against Kubernetes DNS label pattern
+    if not _K8S_DNS_LABEL_PATTERN.match(value):
+        raise SecurityError(
+            f"kubernetes namespace does not match DNS label pattern: {value!r}"
+        )
+
+    # Length bounds check per Kubernetes spec (max 63 chars)
+    if len(value) > 63:
+        raise SecurityError("kubernetes namespace exceeds maximum length (63)")
+
+    return value
+
+
+def validate_kubernetes_resource_name(value: str) -> str:
+    """Validate a Kubernetes resource name.
+
+    Kubernetes resource names (pods, services, deployments, etc.) must conform
+    to DNS subdomain naming conventions. This validation ensures:
+    - Non-empty
+    - Matches DNS name pattern (lowercase alphanumerics, hyphens, dots)
+    - Length is valid (1-253 chars)
+    - No shell metacharacters or control characters
+    - No path traversal patterns
+
+    Per Kubernetes spec:
+    - Must be lowercase alphanumeric or hyphens or dots
+    - Must start and end with alphanumeric
+    - Maximum 253 characters
+
+    Args:
+        value: The resource name to validate.
+
+    Returns:
+        The validated resource name if valid.
+
+    Raises:
+        SecurityError: If the resource name is invalid.
+
+    Examples:
+        >>> validate_kubernetes_resource_name("nginx-deployment")
+        'nginx-deployment'
+        >>> validate_kubernetes_resource_name("my-service.default.svc")
+        'my-service.default.svc'
+        >>> validate_kubernetes_resource_name("Pod_Name")
+        Traceback (most recent call last):
+            ...
+        k8s_diag_agent.security.path_validation.SecurityError: ...
+    """
+    if not value:
+        raise SecurityError("kubernetes resource name cannot be empty")
+
+    # Reject whitespace-only values
+    if value.strip() != value:
+        raise SecurityError("kubernetes resource name contains leading/trailing whitespace")
+
+    # Reject null bytes
+    if "\x00" in value:
+        raise SecurityError("kubernetes resource name contains null byte")
+
+    # Reject path traversal patterns
+    if ".." in value or "/" in value or "\\" in value:
+        raise SecurityError("kubernetes resource name contains path traversal pattern")
+
+    # Reject shell metacharacters
+    for char in _SHELL_METACHARACTERS:
+        if char in value:
+            raise SecurityError(f"kubernetes resource name contains shell metacharacter: {char!r}")
+
+    # Validate against Kubernetes DNS name pattern
+    if not _K8S_DNS_NAME_PATTERN.match(value):
+        raise SecurityError(
+            f"kubernetes resource name does not match DNS name pattern: {value!r}"
+        )
+
+    # Length bounds check per Kubernetes spec (max 253 chars for DNS names)
+    if len(value) > 253:
+        raise SecurityError("kubernetes resource name exceeds maximum length (253)")
+
+    return value

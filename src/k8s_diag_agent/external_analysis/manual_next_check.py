@@ -9,6 +9,12 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..security.path_validation import (
+    SecurityError,
+    validate_kube_context_name,
+    validate_kubernetes_namespace,
+    validate_kubernetes_resource_name,
+)
 from ..structured_logging import emit_structured_log
 from .artifact import (
     ExternalAnalysisArtifact,
@@ -108,6 +114,52 @@ def _validate_command_tokens(family: CommandFamily, tokens: Sequence[str]) -> No
             raise ManualNextCheckError("Command contains unsupported punctuation for manual execution.")
 
 
+def _validate_llm_namespace(namespace: str) -> str:
+    """Validate a namespace name from LLM output.
+
+    This is a defense-in-depth check for LLM-derived namespace names.
+    The namespace must conform to Kubernetes DNS label conventions.
+
+    Args:
+        namespace: The namespace name to validate.
+
+    Returns:
+        The validated namespace name.
+
+    Raises:
+        ManualNextCheckError: If the namespace name is invalid.
+    """
+    try:
+        return validate_kubernetes_namespace(namespace)
+    except SecurityError as exc:
+        raise ManualNextCheckError(
+            f"LLM suggested invalid namespace name: {exc}"
+        ) from exc
+
+
+def _validate_llm_resource_name(resource: str) -> str:
+    """Validate a resource name from LLM output.
+
+    This is a defense-in-depth check for LLM-derived resource names.
+    The resource name must conform to Kubernetes DNS name conventions.
+
+    Args:
+        resource: The resource name to validate.
+
+    Returns:
+        The validated resource name.
+
+    Raises:
+        ManualNextCheckError: If the resource name is invalid.
+    """
+    try:
+        return validate_kubernetes_resource_name(resource)
+    except SecurityError as exc:
+        raise ManualNextCheckError(
+            f"LLM suggested invalid resource name: {exc}"
+        ) from exc
+
+
 def _candidate_blocking_reason(candidate: Mapping[str, object]) -> BlockingReason | None:
     raw = candidate.get("blockingReason")
     if isinstance(raw, str) and raw:
@@ -119,6 +171,22 @@ def _candidate_blocking_reason(candidate: Mapping[str, object]) -> BlockingReaso
 
 
 def _build_command(description: str, target_context: str, family: CommandFamily) -> list[str]:
+    """Build a kubectl command from LLM description with validation.
+
+    This function parses the LLM description, validates all identifiers,
+    and constructs a safe kubectl command.
+
+    Args:
+        description: LLM-generated command description
+        target_context: Validated kube context
+        family: Command family
+
+    Returns:
+        Validated kubectl command list
+
+    Raises:
+        ManualNextCheckError: If parsing or validation fails
+    """
     try:
         tokens = shlex.split(description)
     except ValueError as exc:
@@ -129,7 +197,56 @@ def _build_command(description: str, target_context: str, family: CommandFamily)
     _validate_command_tokens(family, remainder)
     if not remainder:
         raise ManualNextCheckError("Candidate command does not include a subcommand.")
-    return ["kubectl", *remainder, "--context", target_context]
+
+    # Validate target context (defense-in-depth)
+    try:
+        validated_context = validate_kube_context_name(target_context)
+    except SecurityError as exc:
+        raise ManualNextCheckError(
+            f"Invalid kubectl context: {exc}"
+        ) from exc
+
+    # Validate namespace and resource names in the command (defense-in-depth for LLM input)
+    validated_remainder: list[str] = []
+    i = 0
+    while i < len(remainder):
+        token = remainder[i]
+        # Check for -n or --namespace flag followed by namespace value
+        if token in ("-n", "--namespace"):
+            if i + 1 < len(remainder):
+                namespace = remainder[i + 1]
+                try:
+                    validated_namespace = _validate_llm_namespace(namespace)
+                    validated_remainder.append(token)
+                    validated_remainder.append(validated_namespace)
+                    i += 2
+                    continue
+                except ManualNextCheckError:
+                    raise
+        # Check for resource name after common resource-type tokens
+        elif token in ("pod", "pods", "deployment", "deployments", "service", "services",
+                      "secret", "secrets", "configmap", "configmaps", "ingress", "ingresses",
+                      "pvc", "pvcs", "hpa", "statefulset", "statefulsets", "daemonset",
+                      "daemonsets", "job", "jobs", "cronjob", "cronjobs", "node", "nodes"):
+            # This token is a resource type, the next token (if any) is likely the resource name
+            validated_remainder.append(token)
+            i += 1
+            # Check if next token looks like a resource name (not a flag)
+            if i < len(remainder) and not remainder[i].startswith("-"):
+                resource = remainder[i]
+                try:
+                    validated_resource = _validate_llm_resource_name(resource)
+                    validated_remainder.append(validated_resource)
+                    i += 1
+                    continue
+                except ManualNextCheckError:
+                    raise
+            continue
+        else:
+            validated_remainder.append(token)
+        i += 1
+
+    return ["kubectl", *validated_remainder, "--context", validated_context]
 
 
 def _extract_alertmanager_provenance(

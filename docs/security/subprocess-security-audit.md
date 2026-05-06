@@ -310,9 +310,32 @@ LLM output → next_check_planner.py → NextCheckCandidate.description
 **Severity:** Medium  
 **Affected paths:** All kubectl execution paths
 
-No validation that namespace names are well-formed Kubernetes identifiers (matching `[a-z0-9]([-a-z0-9]*[a-z0-9])?`).
+**Status (as of REM-S4):** Partially Mitigated.
 
-No validation that context names are well-formed kubeconfig context names.
+**Mitigation (REM-S4):**
+Added validation helpers in `security/path_validation.py`:
+- `validate_kube_context_name()` - validates context names against shell metacharacters, path traversal, and length bounds
+- `validate_kubernetes_namespace()` - validates namespace names against Kubernetes DNS label conventions
+- `validate_kubernetes_resource_name()` - validates resource names against Kubernetes DNS name conventions
+
+Validation integrated into:
+- `health/image_pull_secret.py` - `_kubectl()`, `_kubectl_with_namespace()`, `_kubectl_with_resource()` helpers
+- `health/drilldown.py` - `_kubectl()` method validates context
+- `collect/live_snapshot.py` - `_kubectl()` and `_run_helm_command()` validate context
+- `external_analysis/manual_next_check.py` - `_build_command()` validates context, namespace, and resource names from LLM output
+
+**Remaining paths:**
+- `identity/cluster.py` - Uses context from config, validated by kubectl itself
+- `external_analysis/alertmanager_discovery.py` - Static discovery commands with context parameter; can be extended in future work
+
+**Key validation checks applied:**
+- Empty/whitespace-only rejection
+- Null byte rejection
+- Path traversal rejection (`..`, `/`, `\`)
+- Shell metacharacter rejection (`;&|<>$`\`"'{}[]!#*?%~` and whitespace)
+- Kubernetes DNS label pattern validation (namespace: lowercase alphanumerics + hyphens, max 63 chars)
+- Kubernetes DNS name pattern validation (resource: lowercase alphanumerics + hyphens + dots, max 253 chars)
+- Context length validation (max 500 chars)
 
 ### Gap 3: External Adapter Command Not Validated (SUBPROC-02)
 **Severity:** Medium  

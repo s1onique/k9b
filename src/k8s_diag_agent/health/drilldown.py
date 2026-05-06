@@ -11,6 +11,9 @@ from typing import Any, ClassVar
 
 from ..collect.cluster_snapshot import WarningEventSummary
 from ..datetime_utils import parse_iso_to_utc
+from ..security.path_validation import (
+    validate_kube_context_name,
+)
 from .image_pull_secret import KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS, ImagePullSecretInsight
 
 
@@ -247,7 +250,21 @@ class DrilldownCollector:
         )
 
     def _kubectl(self, context: str, *args: str) -> str:
-        return self._runner(["kubectl", *args, "--context", context])
+        """Build and execute a kubectl command with validated context.
+
+        Args:
+            context: Kubernetes context name (validated)
+            *args: kubectl arguments
+
+        Returns:
+            Command output
+
+        Raises:
+            SecurityError: If context name is invalid
+        """
+        # Validate context before constructing command
+        validated_context = validate_kube_context_name(context)
+        return self._runner(["kubectl", *args, "--context", validated_context])
 
     def _collect_warning_events(
         self, context: str, limit: int

@@ -8,6 +8,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..identity.cluster import derive_cluster_uid
+from ..security.path_validation import (
+    validate_kube_context_name,
+)
 from .cluster_snapshot import (
     ClusterHealthSignals,
     ClusterSnapshot,
@@ -191,7 +194,8 @@ def _collect_warning_events(
         last_seen = str(
             metadata.get("lastTimestamp") or
             metadata.get("eventTime") or
-            metadata.get("creationTimestamp") or ""
+            metadata.get("creationTimestamp")
+            or ""
         )
         events.append(
             WarningEventSummary(
@@ -332,11 +336,39 @@ def _int_or_zero(value: Any) -> int:
 
 
 def _kubectl(context: str, *args: str) -> str:
-    return _run_command(["kubectl", *args, "--context", context])
+    """Build and execute a kubectl command with validated context.
+
+    Args:
+        context: Kubernetes context name (validated)
+        *args: kubectl arguments
+
+    Returns:
+        Command output
+
+    Raises:
+        SecurityError: If context name is invalid
+    """
+    # Validate context before constructing command
+    validated_context = validate_kube_context_name(context)
+    return _run_command(["kubectl", *args, "--context", validated_context])
 
 
 def _run_helm_command(context: str, *args: str) -> str:
-    return _run_command(["helm", *args, "--kube-context", context])
+    """Build and execute a helm command with validated context.
+
+    Args:
+        context: Kubernetes context name (validated)
+        *args: helm arguments
+
+    Returns:
+        Command output
+
+    Raises:
+        SecurityError: If context name is invalid
+    """
+    # Validate context before constructing command
+    validated_context = validate_kube_context_name(context)
+    return _run_command(["helm", *args, "--kube-context", validated_context])
 
 
 def _run_command(command: Sequence[str]) -> str:

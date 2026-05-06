@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..collect.cluster_snapshot import WarningEventSummary
+from ..security.path_validation import (
+    validate_kube_context_name,
+    validate_kubernetes_namespace,
+    validate_kubernetes_resource_name,
+)
 
 CommandRunner = Callable[[Sequence[str]], str]
 
@@ -41,7 +46,72 @@ def _run_command(command: Sequence[str]) -> str:
 
 
 def _kubectl(context: str, *args: str, runner: CommandRunner) -> str:
-    return runner(("kubectl", *args, "--context", context))
+    """Build and execute a kubectl command with validated arguments.
+
+    Args:
+        context: Kubernetes context name (validated)
+        *args: kubectl arguments
+        runner: Command runner function
+
+    Returns:
+        Command output
+
+    Raises:
+        SecurityError: If context/namespace/resource names are invalid
+    """
+    # Validate context before constructing command
+    validated_context = validate_kube_context_name(context)
+    return runner(("kubectl", *args, "--context", validated_context))
+
+
+def _kubectl_with_namespace(
+    context: str, namespace: str, *args: str, runner: CommandRunner
+) -> str:
+    """Build and execute a kubectl command with validated context and namespace.
+
+    Args:
+        context: Kubernetes context name (validated)
+        namespace: Kubernetes namespace name (validated)
+        *args: kubectl arguments
+        runner: Command runner function
+
+    Returns:
+        Command output
+
+    Raises:
+        SecurityError: If context/namespace/resource names are invalid
+    """
+    # Validate both context and namespace before constructing command
+    validated_context = validate_kube_context_name(context)
+    validated_namespace = validate_kubernetes_namespace(namespace)
+    return runner(("kubectl", *args, "--context", validated_context, "-n", validated_namespace))
+
+
+def _kubectl_with_resource(
+    context: str, namespace: str, resource: str, *args: str, runner: CommandRunner
+) -> str:
+    """Build and execute a kubectl command with validated context, namespace, and resource.
+
+    Args:
+        context: Kubernetes context name (validated)
+        namespace: Kubernetes namespace name (validated)
+        resource: Kubernetes resource name (validated)
+        *args: kubectl arguments
+        runner: Command runner function
+
+    Returns:
+        Command output
+
+    Raises:
+        SecurityError: If context/namespace/resource names are invalid
+    """
+    # Validate all identifiers before constructing command
+    validated_context = validate_kube_context_name(context)
+    validated_namespace = validate_kubernetes_namespace(namespace)
+    validated_resource = validate_kubernetes_resource_name(resource)
+    return runner(
+        ("kubectl", *args, "--context", validated_context, "-n", validated_namespace, validated_resource)
+    )
 
 
 def _extract_items(payload: Any) -> list[Mapping[str, Any]]:
@@ -257,7 +327,9 @@ class ImagePullSecretInspector:
         self, context: str, namespace: str, secret_name: str
     ) -> list[dict[str, str]]:
         try:
-            output = _kubectl(context, "get", "deployments", "-n", namespace, "-o", "json", runner=self._runner)
+            output = _kubectl_with_namespace(
+                context, namespace, "get", "deployments", "-o", "json", runner=self._runner
+            )
         except RuntimeError:
             return []
         try:
@@ -283,12 +355,11 @@ class ImagePullSecretInspector:
         self, context: str, namespace: str
     ) -> tuple[ExternalSecretStatus, ...]:
         try:
-            output = _kubectl(
+            output = _kubectl_with_namespace(
                 context,
+                namespace,
                 "get",
                 "externalsecrets.external-secrets.io",
-                "-n",
-                namespace,
                 "-o",
                 "json",
                 runner=self._runner,
@@ -341,13 +412,12 @@ class ImagePullSecretInspector:
         self, context: str, namespace: str, secret_name: str
     ) -> TargetSecretStatus:
         try:
-            output = _kubectl(
+            output = _kubectl_with_resource(
                 context,
+                namespace,
+                secret_name,
                 "get",
                 "secret",
-                secret_name,
-                "-n",
-                namespace,
                 "-o",
                 "json",
                 runner=self._runner,
