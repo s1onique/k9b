@@ -66,6 +66,15 @@
 - Rejects non-JSON Content-Types (text/plain, form-urlencoded, multipart) with 415
 - All mutation handlers use shared validation helper for consistency
 
+### 2.5 Origin/Referer Guard (API-R2)
+
+- **API-R2 implemented**: `_validate_mutation_origin()` in `server_shared.py`
+- Validates Origin header against Host header (scheme/host/port comparison)
+- Falls back to Referer validation if Origin is absent
+- Allows requests with neither Origin nor Referer (CLI/non-browser clients)
+- Strict same-origin checking - rejects mismatched origins with 403 Forbidden
+- Integrated at the start of `_validate_json_mutation_request()` for all mutation endpoints
+
 ---
 
 ## 3. Mutation Endpoint Analysis
@@ -198,7 +207,7 @@
 | Risk | Severity | Affected Endpoints | Mitigation Status |
 |------|----------|---------------------|-------------------|
 | No authentication layer | HIGH | All POST endpoints | OPEN (assumes localhost-only) |
-| No CSRF protection | HIGH | All POST endpoints | OPEN |
+| No CSRF protection | HIGH | All POST endpoints | **PARTIALLY MITIGATED by API-R2** (strict Origin/Referer guard; full CSRF token/session auth OPEN) |
 | CSRF on state-changing GET | MEDIUM | `/api/run?run_id=X` (cache invalidation) | OPEN |
 | Path traversal via artifactPath | HIGH | Feedback endpoints | MITIGATED (containment check) |
 | Path traversal via planArtifactPath | MEDIUM | Execution endpoint | MITIGATED (fallback to index) |
@@ -283,7 +292,7 @@
 | P2 | Add idempotency keys for feedback | Medium | OPEN | UUID already used; add client-provided key |
 | P2 | Add audit fields to artifacts | Low | OPEN | Consistent timestamp/operator fields |
 | P3 | Add rate limiting | Medium | OPEN | Per-IP or per-session |
-| P3 | Add Origin header validation | Low | OPEN | Reject cross-origin requests |
+| **P3** | **Add Origin header validation** | Low | **DONE (API-R2)** | Strict Origin/Referer guard via `_validate_mutation_origin()` |
 
 ---
 

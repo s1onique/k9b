@@ -16,6 +16,7 @@ from io import BytesIO
 from k8s_diag_agent.ui.server_shared import (
     DEFAULT_MAX_CONTENT_LENGTH,
     _validate_json_mutation_request,
+    _validate_mutation_origin,
 )
 
 
@@ -263,6 +264,288 @@ class TestDefaultContentLengthLimit(unittest.TestCase):
     def test_default_limit_is_1_mib(self) -> None:
         """DEFAULT_MAX_CONTENT_LENGTH should be 1 MiB (1048576 bytes)."""
         self.assertEqual(DEFAULT_MAX_CONTENT_LENGTH, 1 * 1024 * 1024)
+
+
+class TestOriginValidation(unittest.TestCase):
+    """Tests for Origin/Referer header validation (API-R2)."""
+
+    def test_same_origin_origin_accepted(self) -> None:
+        """Same-origin Origin header should be accepted."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "http://localhost:8080",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+        self.assertEqual(result, {"test": 1})
+
+    def test_cross_origin_origin_rejected_with_403(self) -> None:
+        """Cross-origin Origin header should be rejected with 403."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "http://evil.example.com",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        self.assertIsNone(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+        self.assertIn("Origin mismatch", response.get("error", ""))
+
+    def test_same_host_different_port_rejected(self) -> None:
+        """Same host but different port should be rejected."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "http://localhost:9000",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        self.assertIsNone(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+        self.assertIn("Origin mismatch", response.get("error", ""))
+
+    def test_missing_origin_missing_referer_accepted(self) -> None:
+        """Missing Origin and missing Referer should be accepted (CLI/non-browser)."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+        self.assertEqual(result, {"test": 1})
+
+    def test_missing_origin_same_origin_referer_accepted(self) -> None:
+        """Missing Origin but same-origin Referer should be accepted."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Referer": "http://localhost:8080/ui",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+        self.assertEqual(result, {"test": 1})
+
+    def test_missing_origin_hostile_referer_rejected(self) -> None:
+        """Missing Origin but hostile Referer should be rejected with 403."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Referer": "http://evil.example.com/page",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        self.assertIsNone(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+        self.assertIn("Referer mismatch", response.get("error", ""))
+
+    def test_https_origin_with_http_host_rejected(self) -> None:
+        """HTTPS Origin with HTTP Host should be rejected (scheme mismatch)."""
+        # Scheme mismatch: Origin is https but server expects http
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "https://localhost",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        self.assertIsNone(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+        self.assertIn("Origin mismatch", response.get("error", ""))
+
+    def test_https_origin_with_matching_host_port_rejected(self) -> None:
+        """HTTPS Origin with matching host/port should be rejected (scheme mismatch)."""
+        # Even when host and port match exactly, https Origin must be rejected
+        # for HTTP dev server (cross-protocol attack prevention)
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "https://localhost:8080",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        self.assertIsNone(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+        self.assertIn("Origin mismatch", response.get("error", ""))
+
+    def test_http_origin_same_host_accepted(self) -> None:
+        """HTTP Origin with same host should be accepted."""
+        # This is the normal case for HTTP dev server
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "http://localhost:8080",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+        self.assertEqual(result, {"test": 1})
+
+    def test_http_origin_no_port_accepted(self) -> None:
+        """HTTP Origin without explicit port (implies 80) should be accepted."""
+        # HTTP without explicit port implies standard port 80
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost",
+                "Origin": "http://localhost",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+        self.assertEqual(result, {"test": 1})
+
+    def test_case_insensitive_host_comparison(self) -> None:
+        """Host comparison should be case-insensitive."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "LOCALHOST:8080",
+                "Origin": "http://localhost:8080",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+        self.assertEqual(result, {"test": 1})
+
+    def test_explicit_port_must_match(self) -> None:
+        """If Origin has explicit port, it must match request port."""
+        # Origin has explicit port 8080, request has port 8080 - should pass
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "http://localhost:8080",
+            },
+            body=b'{"test":1}',
+        )
+        result = _validate_json_mutation_request(handler)
+        assert result is not None
+
+        # Origin has explicit port 9000, request has port 8080 - should fail
+        handler2 = MockHealthUIRequestHandler(
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "10",
+                "Host": "localhost:8080",
+                "Origin": "http://localhost:9000",
+            },
+            body=b'{"test":1}',
+        )
+        result2 = _validate_json_mutation_request(handler2)
+        self.assertIsNone(result2)
+        assert handler2.sent_response is not None
+        response, status = handler2.sent_response
+        self.assertEqual(status, 403)
+
+
+class TestOriginValidationDirect(unittest.TestCase):
+    """Direct tests for _validate_mutation_origin function."""
+
+    def test_origin_validation_passes(self) -> None:
+        """Test _validate_mutation_origin with valid Origin."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Host": "localhost:8080",
+                "Origin": "http://localhost:8080",
+            },
+        )
+        result = _validate_mutation_origin(handler)
+        self.assertTrue(result)
+        self.assertIsNone(handler.sent_response)
+
+    def test_origin_validation_fails(self) -> None:
+        """Test _validate_mutation_origin with mismatched Origin."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Host": "localhost:8080",
+                "Origin": "http://evil.example.com",
+            },
+        )
+        result = _validate_mutation_origin(handler)
+        self.assertFalse(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+
+    def test_referer_validation_passes(self) -> None:
+        """Test _validate_mutation_origin with valid Referer (no Origin)."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Host": "localhost:8080",
+                "Referer": "http://localhost:8080/ui",
+            },
+        )
+        result = _validate_mutation_origin(handler)
+        self.assertTrue(result)
+
+    def test_referer_validation_fails(self) -> None:
+        """Test _validate_mutation_origin with mismatched Referer."""
+        handler = MockHealthUIRequestHandler(
+            headers={
+                "Host": "localhost:8080",
+                "Referer": "http://evil.example.com/page",
+            },
+        )
+        result = _validate_mutation_origin(handler)
+        self.assertFalse(result)
+        assert handler.sent_response is not None
+        response, status = handler.sent_response
+        self.assertEqual(status, 403)
+
+    def test_no_headers_allowed(self) -> None:
+        """Test _validate_mutation_origin with no Origin or Referer (CLI)."""
+        handler = MockHealthUIRequestHandler(
+            headers={"Host": "localhost:8080"},
+        )
+        result = _validate_mutation_origin(handler)
+        self.assertTrue(result)
 
 
 if __name__ == "__main__":

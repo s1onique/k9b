@@ -11,6 +11,7 @@ import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
@@ -21,17 +22,146 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_CONTENT_LENGTH = 1 * 1024 * 1024
 
 
+def _validate_mutation_origin(handler: HealthUIRequestHandler) -> bool:
+    """Validate Origin/Referer headers for CSRF protection on mutation endpoints.
+
+    This implements API-R2: strict Origin/Referer guard for mutation endpoints.
+    Follows OWASP recommendation for CSRF protection on state-changing operations.
+
+    Logic:
+    1. If Origin header is present, parse it and compare origin scheme/host/port
+       to the request Host header. Reject mismatch with 403.
+    2. If Origin is absent but Referer is present, parse Referer and compare
+       scheme/host/port to request Host. Reject mismatch with 403.
+    3. If both Origin and Referer are absent, allow (CLI/non-browser client).
+    4. Default scheme is http unless the handler has a trusted scheme source.
+
+    This is strict same-origin checking - do not broadly allow all localhost ports.
+
+    Args:
+        handler: The HealthUIRequestHandler instance
+
+    Returns:
+        True if origin validation passes (request allowed), False if rejected
+        (in which case the handler has already sent a 403 error response)
+    """
+    origin = handler.headers.get("Origin")
+    referer = handler.headers.get("Referer")
+    host = handler.headers.get("Host", "")
+
+    # Parse host to extract host and port
+    # Host header may include port (e.g., "localhost:8080" or "example.com:443")
+    def _parse_host(host_header: str) -> tuple[str, int | None]:
+        """Parse Host header into (host, port)."""
+        if ":" in host_header:
+            host_part, port_part = host_header.rsplit(":", 1)
+            try:
+                port = int(port_part)
+            except ValueError:
+                port = None
+            return host_part.strip(), port
+        # No explicit port - infer from scheme
+        return host_header.strip(), None
+
+    def _compare_origin(
+        origin_url: str,
+        request_host: str,
+        expected_scheme: str = "http",
+    ) -> bool:
+        """Compare parsed origin to request host.
+
+        Args:
+            origin_url: The Origin or Referer URL to validate
+            request_host: The Host header value from the request
+            expected_scheme: The expected scheme for this server (http for HTTP dev server)
+
+        Returns:
+            True if origin matches request host, False otherwise
+        """
+        try:
+            parsed = urlparse(origin_url)
+        except ValueError:
+            # Invalid URL - reject
+            return False
+
+        origin_host = parsed.hostname
+        origin_port = parsed.port
+        origin_scheme = parsed.scheme
+
+        if not origin_host:
+            return False
+
+        # Reject invalid schemes
+        if origin_scheme not in ("http", "https"):
+            return False
+
+        # CRITICAL: Compare scheme explicitly against expected request scheme.
+        # This is an HTTP dev server, so https Origin must be rejected
+        # even when host/port match. This prevents cross-protocol attacks.
+        if origin_scheme != expected_scheme:
+            return False
+
+        request_host_name, request_port = _parse_host(request_host)
+
+        # Compare host (case-insensitive per RFC 6454)
+        if origin_host.lower() != request_host_name.lower():
+            return False
+
+        # Compare port:
+        # - If origin has explicit port, it must match request port
+        # - If origin has no explicit port, it implies standard port for its scheme
+        if origin_port is not None:
+            # Origin has explicit port - must match request port
+            if origin_port != request_port:
+                return False
+        else:
+            # Origin has no explicit port - check standard port for origin scheme
+            standard_port = 80 if origin_scheme == "http" else 443
+            # If request is on non-standard port, origin must specify it
+            if request_port is not None and request_port != standard_port:
+                return False
+
+        return True
+
+    # Case 1: Origin header is present - validate against Host
+    if origin:
+        if not _compare_origin(origin, host):
+            handler._send_json(
+                {"error": "Origin mismatch (CSRF protection: API-R2)"},
+                403,  # Forbidden
+            )
+            return False
+        return True
+
+    # Case 2: Origin absent but Referer present - validate Referer against Host
+    if referer:
+        if not _compare_origin(referer, host):
+            handler._send_json(
+                {"error": "Referer mismatch (CSRF protection: API-R2)"},
+                403,  # Forbidden
+            )
+            return False
+        return True
+
+    # Case 3: Both Origin and Referer absent - allow (CLI/non-browser client)
+    # This is intentional: CLI tools, server-to-server calls, and direct API
+    # clients typically don't send these headers. Combined with localhost-only
+    # binding assumption, this is acceptable.
+    return True
+
+
 def _validate_json_mutation_request(
     handler: HealthUIRequestHandler,
     max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> dict[str, object] | None:
-    """Validate Content-Type and request size for JSON mutation requests.
+    """Validate Content-Type, Origin/Referer, and request size for JSON mutation requests.
 
     This shared helper provides consistent validation for all mutation endpoints:
+    - Validates Origin/Referer headers for CSRF protection (API-R2)
     - Validates Content-Type is application/json (or application/json with charset)
     - Enforces max Content-Length to prevent oversized payloads
     - Returns the parsed JSON payload if validation passes
-    - Sends appropriate HTTP error responses (400, 413, 415) on failure
+    - Sends appropriate HTTP error responses (400, 403, 413, 415) on failure
 
     Args:
         handler: The HealthUIRequestHandler instance
@@ -41,6 +171,10 @@ def _validate_json_mutation_request(
         Parsed JSON payload dict if validation passes, None if validation failed
         (in which case the handler has already sent an error response)
     """
+    # API-R2: Validate Origin/Referer headers for CSRF protection
+    if not _validate_mutation_origin(handler):
+        return None
+
     # Validate Content-Type header
     content_type = handler.headers.get("Content-Type", "")
     # Normalize: strip parameters (e.g., charset) and lowercase for comparison
