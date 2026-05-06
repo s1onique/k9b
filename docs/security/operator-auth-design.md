@@ -520,7 +520,7 @@ Potential breaking change (Phase 3):
 | AUTH-04 | Add `_validate_bearer_token()` helper | Low | server_shared.py | **DONE** |
 | AUTH-05 | Integrate token validation into do_POST() | Medium | server.py | **DONE** |
 | AUTH-06 | Add unit tests for token validation | Low | tests/ | **DONE** |
-| AUTH-07 | Update Helm chart README with auth docs | Low | charts/ | OPEN |
+| AUTH-07 | Update Helm chart README with auth docs | Low | charts/ | **DONE** |
 
 ### Priority 3 (Deferred)
 

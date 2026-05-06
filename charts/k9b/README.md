@@ -192,12 +192,137 @@ helm template k9b charts/k9b \
 
 ## Security Considerations
 
+### General Security
+
 - No secrets are embedded in chart defaults
 - Kubeconfig is expected to be provided via an external Secret
 - Health configuration is expected to be provided via an external ConfigMap
 - Container runs as non-root by default (uid 1000)
 - Capability dropping is enabled by default
 - Use `containerSecurityContext` to further restrict privileges
+
+### UI/API Authentication (AUTH-07)
+
+The k9b backend exposes a REST API and UI server with mutation endpoints that can modify cluster state. By default, the backend binds to `0.0.0.0` (all interfaces) which makes it network-accessible within the Kubernetes cluster.
+
+#### Secure Deployment Patterns
+
+**IMPORTANT**: When exposing the UI/API server to non-loopback addresses, you MUST use one of the following protection mechanisms:
+
+1. **Bearer Token Authentication** (recommended for direct exposure)
+2. **Reverse Proxy Authentication** (recommended for ingress-based access)
+
+#### Bearer Token Authentication
+
+When `backend.env.HEALTH_UI_HOST` is set to `0.0.0.0` or an external IP address, you strongly SHOULD configure bearer token authentication or place the service behind an authenticated reverse proxy:
+
+**Step 1: Create the Kubernetes Secret**
+
+```bash
+kubectl create secret generic k9b-ui-auth --from-literal=K9B_UI_TOKEN=<your-secure-token>
+```
+
+**Step 2: Install/upgrade the chart with auth enabled**
+
+```bash
+helm install k9b ./charts/k9b \
+  --set uiAuth.enabled=true \
+  --set uiAuth.secretName=k9b-ui-auth
+```
+
+**values.yaml configuration:**
+
+```yaml
+uiAuth:
+  enabled: true
+  secretName: "k9b-ui-auth"
+```
+
+**Example Secret manifest:**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: k9b-ui-auth
+type: Opaque
+stringData:
+  K9B_UI_TOKEN: "your-secure-bearer-token-here"
+```
+
+**Making authenticated requests:**
+
+```bash
+curl -X POST http://k9b-backend:8080/api/next-check-approval \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-secure-token>" \
+  -d '{"clusterLabel": "prod", "candidateIndex": 0}'
+```
+
+**Protected endpoints**: The following POST mutation endpoints are protected by bearer token authentication when `K9B_UI_TOKEN` is configured:
+- `/api/deterministic-next-check/promote`
+- `/api/next-check-execution`
+- `/api/next-check-approval`
+- `/api/next-check-execution-usefulness`
+- `/api/alertmanager-relevance-feedback`
+- `/api/run-batch-next-check-execution`
+- `/api/runs/{run_id}/alertmanager-sources/{source_id}/action`
+
+**Note**: GET endpoints remain unprotected. If you require read authentication, use a reverse proxy with auth.
+
+#### Reverse Proxy Authentication
+
+Alternative to bearer tokens: configure authentication at your reverse proxy layer (nginx, traefik, ambassador) before requests reach k9b.
+
+**Ingress example with Basic Auth annotation (nginx-ingress):**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k9b-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: k9b-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "k9b API"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: k9b.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: k9b-backend
+            port:
+              number: 8080
+```
+
+Create the auth secret:
+
+```bash
+htpasswd -c auth admin
+kubectl create secret generic k9b-basic-auth --from-file=auth
+```
+
+#### Security Notes
+
+| Aspect | Status |
+|--------|--------|
+| Bearer token auth for POST endpoints | **Implemented** (AUTH-04/05/06) |
+| GET endpoint protection | **Deferred** (use reverse proxy) |
+| Token validation | Timing-attack resistant via `hmac.compare_digest` |
+| Token logging | Token never echoed in logs or errors |
+
+#### Helm Values Security Options
+
+| Value | Purpose | Default |
+|-------|---------|---------|
+| `uiAuth.enabled` | Enable bearer token auth | `false` |
+| `uiAuth.secretName` | Secret containing `K9B_UI_TOKEN` | `k9b-ui-auth` |
+| `backend.env.HEALTH_UI_HOST` | Bind address | `0.0.0.0` |
 
 ## Architecture
 
@@ -220,10 +345,10 @@ helm template k9b charts/k9b \
 │                   │     Cluster    │                            │
 │                   └────────────────┘                            │
 │                                                                 │
-│  ┌─────────────┐    ┌─────────────┐                             │
-│  │  Kubeconfig │    │   Health    │                             │
-│  │   Secret    │    │  ConfigMap  │                             │
-│  └─────────────┘    └─────────────┘                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
+│  │  Kubeconfig │    │   Health    │    │   UI Auth Secret    │   │
+│  │   Secret    │    │  ConfigMap  │    │  (K9B_UI_TOKEN)     │   │
+│  └─────────────┘    └─────────────┘    └─────────────────────┘   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```

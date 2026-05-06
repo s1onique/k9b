@@ -48,6 +48,13 @@ spec:
               value: {{ .Values.backend.env.KUBECONFIG | quote }}
             - name: PYTHONPATH
               value: {{ .Values.backend.env.PYTHONPATH | quote }}
+            {{- if .Values.uiAuth.enabled }}
+            - name: K9B_UI_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.uiAuth.secretName }}
+                  key: K9B_UI_TOKEN
+            {{- end }}
           resources:
             {{- toYaml .Values.backend.resources | nindent 10 }}
           {{- with .Values.containerSecurityContext }}

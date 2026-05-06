@@ -96,6 +96,15 @@ healthConfig:
   mountPath: "/app/runs"
   fileName: "health-config.json"
 
+# Authentication token for UI/API mutation endpoints.
+# Strongly recommended when HEALTH_UI_HOST is set to a non-loopback address
+# unless the UI/API is protected by an authenticated reverse proxy.
+uiAuth:
+  enabled: false
+  # Secret name containing K9B_UI_TOKEN key with the bearer token value.
+  # Create via: kubectl create secret generic k9b-ui-auth --from-literal=K9B_UI_TOKEN=<your-token>
+  secretName: "k9b-ui-auth"
+
 # Pod-level security context (applied to all pods if set)
 podSecurityContext:
   runAsNonRoot: true
