@@ -28,7 +28,7 @@ This document provides a comprehensive threat model for k9b, a Kubernetes monito
 | RISK-05 | Unauthorized cluster mutations via API | HIGH | Tampering | ✅ Mitigated |
 | RISK-06 | Sensitive cluster info disclosure to LLM | HIGH | Info Disclosure | ⚠️ Partial |
 | RISK-07 | Secrets in logs via instrumentation | HIGH | Info Disclosure | ✅ Mitigated |
-| RISK-08 | No RBAC documentation for operators | HIGH | Governance | ❌ Gap |
+| RISK-08 | No RBAC documentation for operators | HIGH | Governance | ✅ Documented |
 | RISK-09 | DoS via UI server resource exhaustion | MEDIUM | DoS | ⚠️ Partial |
 | RISK-10 | Compromised PyPI dependency | MEDIUM | Supply Chain | ⚠️ Partial |
 | RISK-11 | Artifact tampering | MEDIUM | Tampering | ⚠️ Partial |
@@ -666,7 +666,7 @@ kubectl/helm subprocess ──► Kubernetes Cluster
 | Gap ID | Description | Severity | Risk Score | Feasibility |
 |--------|-------------|----------|------------|-------------|
 | **GAP-01** | No cluster data anonymization before LLM prompts | **CRITICAL** | 9 | HIGH |
-| **GAP-02** | No RBAC permission documentation | **HIGH** | 7 | MEDIUM |
+| **GAP-02** | No RBAC permission documentation | ~~**HIGH**~~ | ~~7~~ | ✅ Addressed by `docs/security/rbac-deployment-guide.md` |
 | **GAP-03** | No SLSA attestation on builds | **HIGH** | 6 | MEDIUM |
 | **GAP-04** | No kubectl/helm binary verification | **HIGH** | 7 | HIGH |
 | **GAP-05** | No rate limiting on UI server | **MEDIUM** | 5 | HIGH |
@@ -690,9 +690,10 @@ kubectl/helm subprocess ──► Kubernetes Cluster
 
 #### GAP-02: RBAC Documentation (HIGH)
 
-**Current State**: No documented minimum RBAC permissions for k9b operations.  
+**Current State**: Documented in `docs/security/rbac-deployment-guide.md`.  
 **Risk**: Operators may grant excessive permissions to k9b's service account.  
-**Recommended Fix**: Document minimum required RBAC rules for read-only and write operations.
+**Recommended Fix**: See RBAC deployment guide for minimum required RBAC rules.  
+**Status**: ✅ Addressed - see `docs/security/rbac-deployment-guide.md`
 
 #### GAP-07: Prompt Injection Detection (HIGH)
 
@@ -717,7 +718,7 @@ kubectl/helm subprocess ──► Kubernetes Cluster
 | ID | Remediation | Effort | Priority | Owner | Dependencies |
 |----|-------------|--------|----------|-------|-------|-------------|
 | **REM-H1** | Add kubectl/helm binary checksum verification | 1 week | **P1** | DevOps | GAP-04 |
-| **REM-H2** | Document minimum RBAC permissions | 2 days | **P1** | Docs | GAP-02 |
+| **REM-H2** | Document minimum RBAC permissions | ~~2 days~~ | ✅ DONE | Docs | GAP-02 |
 | **REM-H3** | Pin dependency hashes in pyproject.toml | 1 day | **P1** | DevOps | GAP-09 |
 | **REM-H4** | Add injection detection patterns | 1 week | **P1** | Backend | GAP-07 |
 | **REM-H5** | Add artifact integrity verification (SHA256) | 1 week | **P1** | Backend | GAP-06 |
@@ -836,7 +837,7 @@ docker build -f Dockerfile.python -t k9b:test .
 | **AU-03** | Dependency CVE Scan and Remediation | **HIGH** | Scan | Pending |
 | **AU-04** | Dockerfile Supply Chain Audit | **HIGH** | Review | Pending |
 | **AU-05** | UI Server Security Hardening | **MEDIUM** | Implementation | Pending |
-| **AU-06** | RBAC Documentation | **HIGH** | Documentation | Pending |
+| **AU-06** | RBAC Documentation | **HIGH** | Documentation | ✅ Addressed |
 | **AU-07** | Artifact Integrity Implementation | **MEDIUM** | Implementation | Pending |
 | **AU-08** | Prompt Injection Red Team Testing | **HIGH** | Red Team | Pending |
 | **AU-09** | Rate Limiting Implementation | **MEDIUM** | Implementation | Pending |
