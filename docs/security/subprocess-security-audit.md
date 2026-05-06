@@ -301,10 +301,12 @@ LLM output → next_check_planner.py → NextCheckCandidate.description
 - `health/drilldown.py` - 60s timeout (KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS) added to `_run_command()`
 - `health/loop_scheduler.py` - 120s timeout (DIAGNOSTIC_PACK_TIMEOUT_SECONDS) added to `_maybe_build_diagnostic_pack()`
 
-**Remaining path (REM-S5 - separate slice):**
-- `health/loop_alertmanager_port_forward.py` - Popen without timeout (MEDIUM risk)
-  - Lifecycle management requires careful coordination with health loop shutdown
-  - Tracking as REM-S5 for port-forward Popen lifecycle
+**Mitigated path (REM-S5 - COMPLETED):**
+- `health/loop_alertmanager_port_forward.py` - Popen lifecycle bounded:
+  - `stop_alertmanager_port_forward()`: terminate-first, kill-after-grace (2s) pattern
+  - Cleanup on readiness failure via `kill()` before error raising
+  - All cleanup exceptions caught and logged (not raised)
+  - Focus tests in `tests/unit/test_loop_alertmanager_port_forward.py`
 
 ### Gap 2: Namespace/Context Not Validated (SUBPROC-04)
 **Severity:** Medium  
@@ -362,7 +364,9 @@ stderr output captured in error messages without sanitization. May leak sensitiv
 **Severity:** Medium  
 **Affected path:** `loop_alertmanager_port_forward.py`
 
-The kubectl port-forward Popen process has no explicit timeout. Only the port-ready check has 5s timeout. If kubectl hangs, the process may run indefinitely.
+**Status (as of REM-S5):** Mitigated.
+
+The kubectl port-forward Popen process lifecycle is now bounded via `stop_alertmanager_port_forward()`.
 
 ---
 
