@@ -892,4 +892,33 @@ docker build -f Dockerfile.python -t k9b:test .
 
 ---
 
+## 22. Security Audit Closeout
+
+### 22.1 Audit Closeout Report
+
+The k9b security audit meta-epic has been completed. See the closeout report for full details:
+
+**Document**: `docs/security/security-audit-closeout.md`
+
+**Key Outcomes**:
+- 2 CRITICAL risks mitigated (RISK-01 partial, RISK-02 mitigated)
+- 5 HIGH risks addressed (RISK-05, RISK-07, RISK-08, RISK-17, RISK-18)
+- 4 audit deep-dives completed (AU-01 through AU-04)
+- 13 remediation items completed
+- 7 follow-up epics recommended for next cycle
+
+**Go/No-Go Posture**: **GO** - System safe to deploy with documented operational constraints.
+
+### 22.2 Related Documents
+
+| Document | Purpose |
+|----------|---------|
+| `security-audit-closeout.md` | Meta-epic closeout report |
+| `llm-prompt-security-audit.md` | AU-01: LLM prompt security deep-dive |
+| `subprocess-security-audit.md` | AU-02: Subprocess security deep-dive |
+| `api-security-audit.md` | AU-03: API security analysis |
+| `operator-auth-design.md` | API-R3: Authentication design |
+| `artifact-integrity-audit.md` | Artifact integrity and provenance |
+| `rbac-deployment-guide.md` | RBAC permissions guidance |
+
 **Document End**
