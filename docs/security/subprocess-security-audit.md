@@ -286,21 +286,25 @@ LLM output → next_check_planner.py → NextCheckCandidate.description
 
 ### Gap 1: Missing Timeouts (SUBPROC-05)
 **Severity:** High  
-**Affected paths:** 8 production paths lack timeouts (4 now partially mitigated)
+**Affected paths:** 8 production paths lack timeouts (now 7 mitigated by REM-S1 + REM-S1b)
 
-**Status (as of REM-S1):** Partially mitigated for 4 highest-risk paths.
+**Status (as of REM-S1b):** Mitigated for 7 run-based paths. Port-forward Popen remains open as REM-S5.
 
-**Partially mitigated paths (REM-S1):**
+**Mitigated paths (REM-S1):**
 - `collect/live_snapshot.py` - 60s timeout added to `_run_command()`
 - `external_analysis/adapter.py` - 120s timeout added to `_run_subprocess()`
 - `external_analysis/k8sgpt_adapter.py` - inherits timeout via `_run_subprocess()`
 - `external_analysis/llamacpp_adapter.py` - inherits timeout via `_run_subprocess()` when subprocess mode used
 
-**Remaining paths without timeout:**
-- `health/image_pull_secret.py` - No timeout on kubectl inspection
-- `health/drilldown.py` - No timeout on drilldown commands
-- `health/loop_scheduler.py` - No timeout on script execution
+**Mitigated paths (REM-S1b):**
+- `health/image_pull_secret.py` - 60s timeout (KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS) added to `_run_command()`
+- `health/drilldown.py` - 60s timeout (KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS) added to `_run_command()`
+- `health/loop_scheduler.py` - 120s timeout (DIAGNOSTIC_PACK_TIMEOUT_SECONDS) added to `_maybe_build_diagnostic_pack()`
+
+**Remaining path (REM-S5 - separate slice):**
 - `health/loop_alertmanager_port_forward.py` - Popen without timeout (MEDIUM risk)
+  - Lifecycle management requires careful coordination with health loop shutdown
+  - Tracking as REM-S5 for port-forward Popen lifecycle
 
 ### Gap 2: Namespace/Context Not Validated (SUBPROC-04)
 **Severity:** Medium  

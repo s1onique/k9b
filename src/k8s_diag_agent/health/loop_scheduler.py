@@ -36,6 +36,9 @@ if TYPE_CHECKING:
 _HEALTH_LOCK_FILENAME = ".health-loop.lock"
 _HEALTH_ONLY_MESSAGE = "No peer mappings configured; running health-only mode."
 
+# Subprocess timeout for diagnostic pack build scripts (120s)
+DIAGNOSTIC_PACK_TIMEOUT_SECONDS = 120
+
 # Stale lock evaluation thresholds
 _LOCK_SKIP_ESCALATION_THRESHOLD = 3
 _LOCK_STALE_MIN_SECONDS = 60
@@ -828,7 +831,21 @@ class HealthLoopScheduler:
             runs_dir,
         ]
         try:
-            subprocess.run(build_cmd, check=True, env=os.environ)
+            subprocess.run(
+                build_cmd,
+                check=True,
+                env=os.environ,
+                timeout=DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            self._log_event(
+                "ERROR",
+                "Scheduled diagnostic pack build timed out",
+                run_id=run_id,
+                severity_reason=f"build timed out after {DIAGNOSTIC_PACK_TIMEOUT_SECONDS}s",
+                event="diag-pack-build-timeout",
+            )
+            return
         except (subprocess.CalledProcessError, OSError) as exc:
             self._log_event(
                 "ERROR",
@@ -848,7 +865,21 @@ class HealthLoopScheduler:
             runs_dir,
         ]
         try:
-            subprocess.run(update_cmd, check=True, env=os.environ)
+            subprocess.run(
+                update_cmd,
+                check=True,
+                env=os.environ,
+                timeout=DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            self._log_event(
+                "ERROR",
+                "Scheduled UI index refresh timed out after diagnostic pack build",
+                run_id=run_id,
+                severity_reason=f"index refresh timed out after {DIAGNOSTIC_PACK_TIMEOUT_SECONDS}s",
+                event="diag-pack-ui-refresh-timeout",
+            )
+            return
         except (subprocess.CalledProcessError, OSError) as exc:
             self._log_event(
                 "ERROR",

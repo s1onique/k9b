@@ -1,0 +1,110 @@
+"""Tests for subprocess timeout behavior in health module command runners.
+
+These tests verify that subprocess.TimeoutExpired is properly handled
+and converted to RuntimeError with safe error messages.
+"""
+from __future__ import annotations
+
+import subprocess
+from unittest import mock
+
+import pytest
+
+from k8s_diag_agent.health import drilldown, image_pull_secret
+
+
+class TestImagePullSecretRunCommandTimeout:
+    """Tests for _run_command timeout handling in image_pull_secret module."""
+
+    def test_run_command_timeout_raises_runtime_error(self) -> None:
+        """Verify TimeoutExpired is converted to RuntimeError with safe message."""
+        command = ["kubectl", "get", "secrets", "--context", "test-context"]
+        with mock.patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=command, timeout=60),
+        ):
+            with pytest.raises(RuntimeError) as exc_info:
+                image_pull_secret._run_command(command)
+            # Message should include command family but not full args with secrets
+            assert "kubectl" in str(exc_info.value)
+            assert "timed out" in str(exc_info.value)
+            assert "60s" in str(exc_info.value)
+
+    def test_run_command_timeout_message_safe(self) -> None:
+        """Verify timeout message does not leak sensitive args like --token or --kubeconfig."""
+        unsafe_command = [
+            "kubectl", "get", "pods",
+            "--token=super-secret-token",
+            "--kubeconfig=/path/to/config",
+            "--context=prod-cluster",
+        ]
+        with mock.patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=unsafe_command, timeout=60),
+        ):
+            with pytest.raises(RuntimeError) as exc_info:
+                image_pull_secret._run_command(unsafe_command)
+            error_msg = str(exc_info.value)
+            # Should mention command name but not full args
+            assert "kubectl" in error_msg
+            assert "timed out" in error_msg
+            assert "super-secret-token" not in error_msg
+            assert "/path/to/config" not in error_msg
+
+
+class TestDrilldownRunCommandTimeout:
+    """Tests for _run_command timeout handling in drilldown module."""
+
+    def test_run_command_timeout_raises_runtime_error(self) -> None:
+        """Verify TimeoutExpired is converted to RuntimeError with safe message."""
+        command = ["kubectl", "get", "pods", "--all-namespaces", "--context", "test-context"]
+        with mock.patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=command, timeout=60),
+        ):
+            with pytest.raises(RuntimeError) as exc_info:
+                drilldown._run_command(command)
+            # Message should include command family but not full args
+            assert "kubectl" in str(exc_info.value)
+            assert "timed out" in str(exc_info.value)
+            assert "60s" in str(exc_info.value)
+
+    def test_run_command_timeout_message_safe(self) -> None:
+        """Verify timeout message does not leak sensitive args."""
+        unsafe_command = [
+            "kubectl", "describe", "pods",
+            "--token=secret-bearer",
+            "--context=staging",
+        ]
+        with mock.patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=unsafe_command, timeout=60),
+        ):
+            with pytest.raises(RuntimeError) as exc_info:
+                drilldown._run_command(unsafe_command)
+            error_msg = str(exc_info.value)
+            assert "kubectl" in error_msg
+            assert "timed out" in error_msg
+            assert "secret-bearer" not in error_msg
+
+
+class TestTimeoutConstants:
+    """Tests for timeout constant values."""
+
+    def test_kubectl_health_command_timeout_value(self) -> None:
+        """Verify KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS is 60."""
+        assert image_pull_secret.KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS == 60
+
+    def test_drilldown_imports_timeout_constant(self) -> None:
+        """Verify drilldown module imports the constant correctly."""
+        # This is an integration check - if import works, the constant is accessible
+        from k8s_diag_agent.health.drilldown import KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS
+        assert KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS == 60
+
+    def test_timeout_constant_exported(self) -> None:
+        """Verify constants are accessible from the module."""
+        from k8s_diag_agent.health.image_pull_secret import (
+            KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
+        )
+        assert isinstance(KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS, int)
+        assert KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS > 0

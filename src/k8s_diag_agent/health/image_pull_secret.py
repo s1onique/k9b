@@ -12,6 +12,9 @@ from ..collect.cluster_snapshot import WarningEventSummary
 
 CommandRunner = Callable[[Sequence[str]], str]
 
+# Subprocess timeout for kubectl health commands (60s)
+KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS = 60
+
 _SECRET_MESSAGE_PATTERN = re.compile(r'image pull secret "(?P<secret>[^"]+)"', re.IGNORECASE)
 _FAILED_REASON = "UpdateFailed"
 _MISSING_SECRET_MESSAGE = "Secret does not exist"
@@ -25,12 +28,15 @@ def _run_command(command: Sequence[str]) -> str:
             check=True,
             capture_output=True,
             text=True,
+            timeout=KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
         )
     except FileNotFoundError as exc:
         raise RuntimeError(f"Command `{command[0]}` not found.") from exc
     except subprocess.CalledProcessError as exc:
         message = (exc.stderr or exc.stdout or "").strip()
         raise RuntimeError(f"`{command[0]}` failed: {message}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"`{command[0]}` timed out after {KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS}s") from exc
     return result.stdout
 
 
