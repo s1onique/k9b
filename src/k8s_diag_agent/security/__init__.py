@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .anonymizer import (
+    MetadataAnonymizer,
+    anonymize_metadata,
+)
 from .path_validation import (
     SecurityError,
     safe_child_path,
@@ -26,4 +30,6 @@ __all__ = [
     "sanitize_prompt",
     "validate_run_id",
     "validate_safe_path_id",
+    "MetadataAnonymizer",
+    "anonymize_metadata",
 ]
