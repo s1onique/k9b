@@ -25,6 +25,7 @@ from ..llm.prompt_diagnostics import (
     build_full_prompt_diagnostics,
     build_prompt_diagnostics,
 )
+from ..security import sanitize_prompt
 from .adapter import (
     ExternalAnalysisAdapter,
     ExternalAnalysisExecutionError,
@@ -590,7 +591,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             "  - 'Check all clusters for CRDs' (has 'all clusters')\n"
             "  - 'Verify cluster2 version and upgrade to v1.33' (has 'upgrade')"
         )
-        return "\n".join(prompt_parts)
+        return sanitize_prompt("\n".join(prompt_parts))
 
     def _build_payload_from_context(
         self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput

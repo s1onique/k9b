@@ -2,10 +2,10 @@
 
 **Document**: LLM Prompt Security Audit (AU-01)  
 **Project**: k9b - Kubernetes Diagnostics Operator Console  
-**Version**: 1.0  
-**Date**: 2026-05-06
+**Version**: 1.1  
+**Date**: 2026-05-06  
 **Author**: k9b Security Audit  
-**Status**: Initial Draft  
+**Status**: Mitigations Applied  
 
 ---
 
@@ -15,10 +15,10 @@ This document presents the findings of AU-01: a deep-dive audit of all LLM promp
 
 **Key Findings**:
 - **3 primary prompt construction paths** identified across `prompts.py`, `drilldown_prompts.py`, and `llamacpp_adapter.py`
-- **1 gap**: `llamacpp_adapter._build_prompt()` does **NOT** call `sanitize_prompt()` before sending to LLM provider
-- **1 structural gap**: No systematic namespace/cluster name anonymization layer
+- **1 gap**: GAP-P1 mitigated; all paths now call `sanitize_prompt()` before sending to LLM provider
+- **1 structural gap**: No systematic namespace/cluster name anonymization layer (GAP-P2 open)
 - **11 distinct data inputs** across all prompt paths
-- **5 CRITICAL/HIGH risk items** in remediation backlog
+- **4 CRITICAL/HIGH risk items** in remediation backlog (reduced from 5)
 
 ---
 
@@ -171,37 +171,37 @@ LLM Provider
 
 ---
 
-### 2.3 Path 3: Review Enrichment (CRITICAL GAP)
+### 2.3 Path 3: Review Enrichment (GAP-P1 Mitigated)
 
 | Property | Value |
 |----------|-------|
 | **Source File** | `src/k8s_diag_agent/external_analysis/llamacpp_adapter.py` |
 | **Function** | `_build_prompt()` |
 | **Called By** | `_prepare_provider_request()` |
-| **Sanitizer** | ❌ **NOT CALLED** |
+| **Sanitizer** | ✅ `sanitize_prompt()` called on final prompt |
 | **Provider** | llama.cpp HTTP via `LlamaCppProvider` |
 
 #### Input Data
 
 | Input Field | Source | Type | Classification | Sanitization | Secrets Leak Risk | Injection Risk |
 |-------------|--------|------|---------------|---------------|-------------------|----------------|
-| `run_id` | Request param | string | **MEDIUM** | ❌ **NONE** | LOW | MEDIUM |
-| `cluster_label` | Request param | string | **MEDIUM** | ❌ **NONE** | LOW | MEDIUM |
-| `review` JSON | Artifact | dict | **HIGH** | ❌ **NONE** | LOW | **HIGH** |
-| `alertmanager_context` | Artifact | dict | **MEDIUM** | ❌ **NONE** | LOW | MEDIUM |
-| `selections[*].entry` | Artifact | dict | **HIGH** | ❌ **NONE** | LOW | **HIGH** |
-| `selections[*].drilldown` | Artifact | dict | **HIGH** | ❌ **NONE** | LOW | **HIGH** |
-| `selections[*].assessment` | Artifact | dict | **MEDIUM** | ❌ **NONE** | LOW | MEDIUM |
-| `selections[*].snapshot` | Artifact | dict | **MEDIUM** | ❌ **NONE** | LOW | MEDIUM |
-| `missing_*` lists | Artifact | list | LOW | ❌ **NONE** | NONE | LOW |
+| `run_id` | Request param | string | **MEDIUM** | Via sanitize_prompt() | LOW | MEDIUM |
+| `cluster_label` | Request param | string | **MEDIUM** | Via sanitize_prompt() | LOW | MEDIUM |
+| `review` JSON | Artifact | dict | **HIGH** | ✅ Via sanitize_prompt() | LOW | **HIGH** |
+| `alertmanager_context` | Artifact | dict | **MEDIUM** | ✅ Via sanitize_prompt() | LOW | MEDIUM |
+| `selections[*].entry` | Artifact | dict | **HIGH** | ✅ Via sanitize_prompt() | LOW | **HIGH** |
+| `selections[*].drilldown` | Artifact | dict | **HIGH** | ✅ Via sanitize_prompt() | LOW | **HIGH** |
+| `selections[*].assessment` | Artifact | dict | **MEDIUM** | ✅ Via sanitize_prompt() | LOW | MEDIUM |
+| `selections[*].snapshot` | Artifact | dict | **MEDIUM** | ✅ Via sanitize_prompt() | LOW | MEDIUM |
+| `missing_*` lists | Artifact | list | LOW | Via sanitize_prompt() | NONE | LOW |
 
 #### Security Assessment
 
 | Risk | Severity | Current State | Evidence |
 |------|----------|---------------|----------|
-| Credentials in prompt | **HIGH** | ❌ **NOT SANITIZED** | Risk of bearer tokens, API keys in cluster data |
-| Cluster metadata exfiltration | **CRITICAL** | ❌ **NOT SANITIZED** | All cluster data sent unredacted |
-| Prompt injection | **CRITICAL** | ❌ **NOT SANITIZED** | Review/alertmanager data could contain injected prompts |
+| Credentials in prompt | **HIGH** | ✅ Sanitized | `sanitize_prompt()` called in `_build_prompt()` |
+| Cluster metadata exfiltration | **HIGH** | ⚠️ Not anonymized | GAP-P2 open; no anonymization yet |
+| Prompt injection | **HIGH** | ⚠️ Basic patterns only | GAP-P3 open; basic pattern matching |
 | Structured field boundaries | **HIGH** | ⚠️ Partial | JSON dumps used but no field markers |
 
 #### Data Flow
@@ -219,19 +219,22 @@ build_review_enrichment_input() ──► Loads review.json, alertmanager, drill
 _llamacpp_adapter._build_prompt()
     │
     ▼
-json.dumps(context.review) ──► UNREDACTED cluster data
+json.dumps(context.review) ──► Cluster data
     │
     ▼
-json.dumps(alertmanager_context) ──► UNREDACTED
+json.dumps(alertmanager_context) ──► Alertmanager data
     │
     ▼
-json.dumps(selections[*].*) ──► UNREDACTED drilldown/assessment/snapshot data
+json.dumps(selections[*].*) ──► Drilldown/assessment/snapshot data
     │
     ▼
-"\n".join(prompt_parts) ──► NO sanitize_prompt() call
+"\n".join(prompt_parts) ──► Prompt constructed
     │
     ▼
-LLM Provider (EXTERNAL - UNTRUSTED)
+sanitize_prompt() ──► Credential redaction (GAP-P1 MITIGATED)
+    │
+    ▼
+LLM Provider
 ```
 
 ---
@@ -283,15 +286,15 @@ LLM Provider (EXTERNAL - UNTRUSTED)
 | Malicious namespace names | MEDIUM | MEDIUM | Namespace list enters prompt |
 | Malicious run labels | LOW | MEDIUM | Labels from artifact metadata |
 
-#### Path 3: Review Enrichment (CRITICAL)
+#### Path 3: Review Enrichment (GAP-P1 Mitigated)
 
 | Vector | Likelihood | Impact | Evidence |
 |--------|------------|--------|----------|
-| **Malicious review JSON** | **HIGH** | **CRITICAL** | No sanitization; attacker-controlled data enters LLM |
-| **Malicious alertmanager context** | **HIGH** | **CRITICAL** | Alertmanager data not sanitized |
-| **Malicious drilldown artifact** | **HIGH** | **CRITICAL** | Drilldown data loaded and inserted verbatim |
-| **Malicious assessment artifact** | **MEDIUM** | **HIGH** | Assessment data loaded and inserted verbatim |
-| **Malicious snapshot data** | **HIGH** | **HIGH** | Snapshot references loaded without sanitization |
+| **Malicious review JSON** | **HIGH** | **HIGH** | ✅ Sanitized via `sanitize_prompt()` |
+| **Malicious alertmanager context** | **HIGH** | **HIGH** | ✅ Sanitized via `sanitize_prompt()` |
+| **Malicious drilldown artifact** | **HIGH** | **HIGH** | ✅ Sanitized via `sanitize_prompt()` |
+| **Malicious assessment artifact** | **MEDIUM** | **MEDIUM** | ✅ Sanitized via `sanitize_prompt()` |
+| **Malicious snapshot data** | **HIGH** | **HIGH** | ✅ Sanitized via `sanitize_prompt()` |
 
 ### 4.2 Example Injection Scenario
 
@@ -321,15 +324,15 @@ message: |
 
 | Data Type | Path 1 | Path 2 | Path 3 | Risk Level |
 |-----------|--------|--------|--------|------------|
-| Cluster credentials | ✅ Redacted | ✅ Redacted | ❌ Exposed | CRITICAL |
-| Bearer tokens | ✅ Redacted | ✅ Redacted | ❌ Exposed | CRITICAL |
-| API keys | ✅ Redacted | ✅ Redacted | ❌ Exposed | CRITICAL |
-| Cluster IDs/names | ⚠️ Not anonymized | ⚠️ Not anonymized | ❌ Exposed | HIGH |
-| Namespace names | ❌ Not anonymized | ❌ Not anonymized | ❌ Exposed | HIGH |
-| Pod names | ❌ Not anonymized | ❌ Not anonymized | ❌ Exposed | MEDIUM |
-| Helm release configs | ⚠️ Partial | ⚠️ Partial | ❌ Exposed | HIGH |
-| CRD data | ⚠️ Partial | N/A | ❌ Exposed | HIGH |
-| Workload configurations | ⚠️ Partial | ⚠️ Partial | ❌ Exposed | MEDIUM |
+| Cluster credentials | ✅ Redacted | ✅ Redacted | ✅ Redacted | HIGH |
+| Bearer tokens | ✅ Redacted | ✅ Redacted | ✅ Redacted | HIGH |
+| API keys | ✅ Redacted | ✅ Redacted | ✅ Redacted | HIGH |
+| Cluster IDs/names | ⚠️ Not anonymized | ⚠️ Not anonymized | ⚠️ Not anonymized | HIGH |
+| Namespace names | ❌ Not anonymized | ❌ Not anonymized | ❌ Not anonymized | HIGH |
+| Pod names | ❌ Not anonymized | ❌ Not anonymized | ❌ Not anonymized | MEDIUM |
+| Helm release configs | ⚠️ Partial | ⚠️ Partial | ⚠️ Partial | HIGH |
+| CRD data | ⚠️ Partial | N/A | ⚠️ Partial | HIGH |
+| Workload configurations | ⚠️ Partial | ⚠️ Partial | ⚠️ Partial | MEDIUM |
 
 ### 5.2 External LLM Provider Exposure
 
@@ -346,11 +349,11 @@ message: |
 
 | Control | Path 1 | Path 2 | Path 3 |
 |---------|--------|--------|--------|
-| `sanitize_prompt()` called | ✅ YES | ✅ YES | ❌ **NO** |
-| Credential patterns redacted | ✅ YES | ✅ YES | ❌ NO |
-| Secret manifest detection | ✅ YES | ✅ YES | ❌ NO |
-| Namespace anonymization | ❌ NO | ❌ NO | ❌ NO |
-| Cluster name anonymization | ❌ NO | ❌ NO | ❌ NO |
+| `sanitize_prompt()` called | ✅ YES | ✅ YES | ✅ YES (GAP-P1 MITIGATED) |
+| Credential patterns redacted | ✅ YES | ✅ YES | ✅ YES |
+| Secret manifest detection | ✅ YES | ✅ YES | ✅ YES |
+| Namespace anonymization | ❌ NO | ❌ NO | ❌ NO (GAP-P2 open) |
+| Cluster name anonymization | ❌ NO | ❌ NO | ❌ NO (GAP-P2 open) |
 | Structured field boundaries | ⚠️ Partial | ⚠️ Partial | ⚠️ Partial |
 | Schema validation on input | ⚠️ Via artifact loading | ⚠️ Via artifact loading | ⚠️ Via artifact loading |
 
