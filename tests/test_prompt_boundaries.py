@@ -13,6 +13,7 @@ Boundary Convention:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from k8s_diag_agent.llm.prompt_boundaries import (
@@ -310,7 +311,7 @@ class TestLlamaCppAdapterPromptBoundaries:
         # Build a minimal context with required run_id and review_path
         context = ReviewEnrichmentInput(
             run_id="test-run-001",
-            review_path="/tmp/test.json",
+            review_path=Path("/tmp/test.json"),
             review={
                 "run_id": "review-run-001",
                 "review_version": "1.0",
@@ -325,7 +326,7 @@ class TestLlamaCppAdapterPromptBoundaries:
                 status="active",
                 compact=None,
             ),
-            selections=[
+            selections=(
                 ReviewSelectionContext(
                     label="test-selection",
                     context="test-context",
@@ -337,10 +338,10 @@ class TestLlamaCppAdapterPromptBoundaries:
                     snapshot=None,
                     snapshot_path=None,
                 ),
-            ],
-            missing_drilldowns=[],
-            missing_assessments=[],
-            missing_snapshots=[],
+            ),
+            missing_drilldowns=(),
+            missing_assessments=(),
+            missing_snapshots=(),
         )
 
         from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
