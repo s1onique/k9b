@@ -59,8 +59,10 @@ class TestUsefulnessFeedbackMalformedPayload(unittest.TestCase):
 
     def test_invalid_json_returns_400(self) -> None:
         """Malformed JSON should return 400."""
-        self.handler.headers["Content-Length"] = str(len(b"not valid json"))
-        self.handler.rfile = BytesIO(b"not valid json")
+        payload = b"not valid json"
+        self.handler.headers["Content-Type"] = "application/json"
+        self.handler.headers["Content-Length"] = str(len(payload))
+        self.handler.rfile = BytesIO(payload)
         handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
         assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
@@ -70,6 +72,7 @@ class TestUsefulnessFeedbackMalformedPayload(unittest.TestCase):
     def test_invalid_utf8_returns_400(self) -> None:
         """Invalid UTF-8 bytes should return 400."""
         invalid_utf8 = b"\xff\xfe invalid json"
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(invalid_utf8))
         self.handler.rfile = BytesIO(invalid_utf8)
         handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
@@ -79,8 +82,10 @@ class TestUsefulnessFeedbackMalformedPayload(unittest.TestCase):
 
     def test_non_dict_json_returns_400(self) -> None:
         """Non-dict JSON should return 400."""
-        self.handler.headers["Content-Length"] = str(len(b'"just a string"'))
-        self.handler.rfile = BytesIO(b'"just a string"')
+        payload = b'"just a string"'
+        self.handler.headers["Content-Type"] = "application/json"
+        self.handler.headers["Content-Length"] = str(len(payload))
+        self.handler.rfile = BytesIO(payload)
         handle_usefulness_feedback(cast(HealthUIRequestHandler, self.handler))
         assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
@@ -99,8 +104,10 @@ class TestAlertmanagerFeedbackMalformedPayload(unittest.TestCase):
 
     def test_invalid_json_returns_400(self) -> None:
         """Malformed JSON should return 400."""
-        self.handler.headers["Content-Length"] = str(len(b"not valid json"))
-        self.handler.rfile = BytesIO(b"not valid json")
+        payload = b"not valid json"
+        self.handler.headers["Content-Type"] = "application/json"
+        self.handler.headers["Content-Length"] = str(len(payload))
+        self.handler.rfile = BytesIO(payload)
         handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
         assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
@@ -110,6 +117,7 @@ class TestAlertmanagerFeedbackMalformedPayload(unittest.TestCase):
     def test_invalid_utf8_returns_400(self) -> None:
         """Invalid UTF-8 bytes should return 400."""
         invalid_utf8 = b"\xff\xfe invalid json"
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(invalid_utf8))
         self.handler.rfile = BytesIO(invalid_utf8)
         handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
@@ -119,8 +127,10 @@ class TestAlertmanagerFeedbackMalformedPayload(unittest.TestCase):
 
     def test_non_dict_json_returns_400(self) -> None:
         """Non-dict JSON should return 400."""
-        self.handler.headers["Content-Length"] = str(len(b'"just a string"'))
-        self.handler.rfile = BytesIO(b'"just a string"')
+        payload = b'"just a string"'
+        self.handler.headers["Content-Type"] = "application/json"
+        self.handler.headers["Content-Length"] = str(len(payload))
+        self.handler.rfile = BytesIO(payload)
         handle_alertmanager_relevance_feedback(cast(HealthUIRequestHandler, self.handler))
         assert self.handler.sent_response is not None
         response, status = self.handler.sent_response
@@ -163,6 +173,7 @@ class TestArtifactReadErrors(unittest.TestCase):
             "usefulnessClass": "useful",
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -194,6 +205,7 @@ class TestArtifactReadErrors(unittest.TestCase):
             "usefulnessClass": "useful",
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -262,6 +274,7 @@ class TestArtifactWriteErrors(unittest.TestCase):
             "usefulnessClass": "useful",
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -331,6 +344,7 @@ class TestUIIndexTouchNonFatal(unittest.TestCase):
             "usefulnessSummary": "Test summary",
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -391,6 +405,7 @@ class TestLogSecurity(unittest.TestCase):
             "usefulnessSummary": sensitive_summary,
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -418,6 +433,7 @@ class TestLogSecurity(unittest.TestCase):
             "alertmanagerRelevanceSummary": sensitive_summary,
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -474,6 +490,7 @@ class TestValidFeedbackPath(unittest.TestCase):
             "usefulnessSummary": "Found relevant logs",
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
@@ -494,6 +511,7 @@ class TestValidFeedbackPath(unittest.TestCase):
             "alertmanagerRelevance": "relevant",
         })
 
+        self.handler.headers["Content-Type"] = "application/json"
         self.handler.headers["Content-Length"] = str(len(payload))
         self.handler.rfile = BytesIO(payload.encode("utf-8"))
 
