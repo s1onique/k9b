@@ -292,6 +292,7 @@
 | P0 | **Add `--unsafe-bind` flag** | Low | **DONE (AUTH-01)** | Implemented in cli.py; refuses non-loopback without flag |
 | P0 | **Add bind warning when exposing** | Low | **DONE (AUTH-02)** | Implemented in server.py; prints warning for exposed hosts |
 | P1 | Add bearer token auth | Medium | **DONE (AUTH-04/05/06/07)** | Implemented via K9B_UI_TOKEN env var, --auth-token CLI flag, and Helm chart docs |
+| P1 | **Helm default to 127.0.0.1** | Medium | **DONE (AUTH-10)** | Default HEALTH_UI_HOST to localhost; unsafeBind flag required for 0.0.0.0 |
 | P2 | Add idempotency keys for feedback | Medium | OPEN | UUID already used; add client-provided key |
 | P2 | Add audit fields to artifacts | Low | OPEN | Consistent timestamp/operator fields |
 | P3 | Add rate limiting | Medium | OPEN | Per-IP or per-session |

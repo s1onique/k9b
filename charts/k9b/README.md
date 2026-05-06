@@ -201,16 +201,58 @@ helm template k9b charts/k9b \
 - Capability dropping is enabled by default
 - Use `containerSecurityContext` to further restrict privileges
 
-### UI/API Authentication (AUTH-07)
+### UI/API Authentication (AUTH-07, AUTH-10)
 
-The k9b backend exposes a REST API and UI server with mutation endpoints that can modify cluster state. By default, the backend binds to `0.0.0.0` (all interfaces) which makes it network-accessible within the Kubernetes cluster.
+The k9b backend exposes a REST API and UI server with mutation endpoints that can modify cluster state.
+
+#### Default Security Posture
+
+By default, the backend binds to `127.0.0.1` (localhost-only) which provides safe access without additional configuration. This is suitable for:
+
+- Local development with `kubectl port-forward`
+- Standalone operator workstation deployments
+- CI/CD pipelines with local access
+
+#### Exposed Deployment Pattern (AUTH-10)
+
+If you need cluster-wide access (binding to `0.0.0.0` or external IPs), you MUST enable both:
+
+1. **`backend.unsafeBind: true`** - Acknowledges the risk of binding to non-loopback
+2. **`uiAuth.enabled: true`** - Protects mutation endpoints with bearer token
+
+**Example: Cluster-wide exposed deployment**
+
+```bash
+# Step 1: Create the auth secret
+kubectl create secret generic k9b-ui-auth --from-literal=K9B_UI_TOKEN=<your-secure-token>
+
+# Step 2: Install with exposed bind + auth
+helm install k9b ./charts/k9b \
+  --set backend.env.HEALTH_UI_HOST=0.0.0.0 \
+  --set backend.unsafeBind=true \
+  --set uiAuth.enabled=true \
+  --set uiAuth.secretName=k9b-ui-auth
+```
+
+**values.yaml equivalent:**
+
+```yaml
+backend:
+  unsafeBind: true
+  env:
+    HEALTH_UI_HOST: "0.0.0.0"
+
+uiAuth:
+  enabled: true
+  secretName: "k9b-ui-auth"
+```
 
 #### Secure Deployment Patterns
 
-**IMPORTANT**: When exposing the UI/API server to non-loopback addresses, you MUST use one of the following protection mechanisms:
+When binding to non-loopback addresses, you MUST use one of the following:
 
-1. **Bearer Token Authentication** (recommended for direct exposure)
-2. **Reverse Proxy Authentication** (recommended for ingress-based access)
+1. **Bearer Token Authentication** (recommended for direct exposure) - See below
+2. **Reverse Proxy Authentication** (recommended for ingress-based access) - See below
 
 #### Bearer Token Authentication
 
@@ -272,7 +314,7 @@ curl -X POST http://k9b-backend:8080/api/next-check-approval \
 
 #### Reverse Proxy Authentication
 
-Alternative to bearer tokens: configure authentication at your reverse proxy layer (nginx, traefik, ambassador) before requests reach k9b.
+Configure authentication at your reverse proxy layer (nginx, traefik, ambassador) before requests reach k9b.
 
 **Ingress example with Basic Auth annotation (nginx-ingress):**
 
@@ -311,6 +353,8 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 
 | Aspect | Status |
 |--------|--------|
+| Default bind address | `127.0.0.1` (localhost-only) **DONE** (AUTH-10) |
+| Non-loopback requires unsafeBind | **Enforced** via `--unsafe-bind` flag **DONE** (AUTH-10) |
 | Bearer token auth for POST endpoints | **Implemented** (AUTH-04/05/06) |
 | GET endpoint protection | **Deferred** (use reverse proxy) |
 | Token validation | Timing-attack resistant via `hmac.compare_digest` |
@@ -320,9 +364,10 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 
 | Value | Purpose | Default |
 |-------|---------|---------|
+| `backend.unsafeBind` | Allow non-loopback binding | `false` |
 | `uiAuth.enabled` | Enable bearer token auth | `false` |
 | `uiAuth.secretName` | Secret containing `K9B_UI_TOKEN` | `k9b-ui-auth` |
-| `backend.env.HEALTH_UI_HOST` | Bind address | `0.0.0.0` |
+| `backend.env.HEALTH_UI_HOST` | Bind address | `127.0.0.1` |
 
 ## Architecture
 

@@ -528,7 +528,7 @@ Potential breaking change (Phase 3):
 |----|------|--------|-------|--------|
 | AUTH-08 | GET endpoint protection (decision deferred) | TBD | TBD | DEFERRED |
 | AUTH-09 | Full CSRF token (deferred, API-R2 sufficient) | TBD | TBD | DEFERRED |
-| AUTH-10 | Helm default to 127.0.0.1 | Medium | charts/ | OPEN |
+| AUTH-10 | Helm default to 127.0.0.1 | Medium | charts/ | **DONE** |
 
 ---
 

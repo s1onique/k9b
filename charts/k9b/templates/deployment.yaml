@@ -26,7 +26,11 @@ spec:
         - name: backend
           image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
           imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          {{- if .Values.backend.unsafeBind }}
+          command: ["backend", "--unsafe-bind"]
+          {{- else }}
           command: ["backend"]
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.backend.service.port }}
