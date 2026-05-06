@@ -318,7 +318,16 @@ No validation that context names are well-formed kubeconfig context names.
 **Severity:** Medium  
 **Affected paths:** `k8sgpt_adapter.py`, `llamacpp_adapter.py`
 
-Commands are built from config without validation of argument well-formedness.
+**Status (as of REM-S3):** Mitigated.
+
+**Mitigation (REM-S3):**
+- `external_analysis/adapter.py` - Added `_validate_command_for_execution()` function
+- Validates command is non-empty list argv
+- Checks for shell metacharacters in command[0]
+- Enforces allowlist: `k8sgpt`, `llamacpp`, `llama-cli`, `llama.cpp`
+- Enforces blocklist: shell interpreters, scripting languages, network tools
+- Called before `_run_subprocess()` execution
+- Raises `ExternalAnalysisExecutionError` with safe error messages (no argv leakage)
 
 ### Gap 4: Inconsistent Sanitization (SUBPROC-06)
 **Severity:** Medium  
@@ -383,11 +392,11 @@ The kubectl port-forward Popen process has no explicit timeout. Only the port-re
 
 ### Priority 4: External Adapter Validation (SUBPROC-02)
 
-| Item | Description | Complexity |
-|------|-------------|------------|
-| R-16 | Add command argument validation to `k8sgpt_adapter.py` | Medium |
-| R-17 | Add command argument validation to `llamacpp_adapter.py` | Medium |
-| R-18 | Document expected command format for external adapters | Low |
+| Item | Description | Complexity | Status |
+|------|-------------|------------|--------|
+| R-16 | Add command argument validation to `k8sgpt_adapter.py` | Medium | **Mitigated (REM-S3)** |
+| R-17 | Add command argument validation to `llamacpp_adapter.py` | Medium | **Mitigated (REM-S3)** |
+| R-18 | Document expected command format for external adapters | Low | **Mitigated (REM-S3)** |
 
 ---
 

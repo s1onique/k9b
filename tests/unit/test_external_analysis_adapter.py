@@ -8,6 +8,7 @@ Tests cover:
 - _run_subprocess error handling
 - Custom exception classes
 - Default values and edge cases
+- Command validation (REM-S3)
 """
 
 import unittest
@@ -16,6 +17,9 @@ from unittest.mock import patch
 
 from k8s_diag_agent.external_analysis.adapter import (
     _ADAPTER_BUILDERS,
+    _ALLOWED_COMMAND_FAMILIES,
+    _BLOCKED_COMMAND_FAMILIES,
+    _SHELL_METACHAR_PATTERN,
     AuthError,
     ExternalAnalysisAdapter,
     ExternalAnalysisAdapterConfig,
@@ -26,6 +30,7 @@ from k8s_diag_agent.external_analysis.adapter import (
     TimeoutError,
     UpstreamError,
     _run_subprocess,
+    _validate_command_for_execution,
     build_external_analysis_adapters,
     register_external_analysis_adapter,
 )
@@ -284,36 +289,58 @@ class TestRunSubprocess(unittest.TestCase):
     """Tests for _run_subprocess error handling."""
 
     def test_run_subprocess_success(self) -> None:
-        """Test successful subprocess execution."""
-        result = _run_subprocess(["echo", "hello world"])
-
-        self.assertEqual(result, "hello world")
+        """Test successful subprocess execution with allowed command."""
+        mock_result = unittest.mock.Mock()
+        mock_result.stdout = "command output"
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result):
+            result = _run_subprocess(["k8sgpt", "--help"])
+            self.assertEqual(result, "command output")
 
     def test_run_subprocess_with_args(self) -> None:
-        """Test subprocess with arguments."""
-        result = _run_subprocess(["printf", "test %s", "value"])
-
-        self.assertEqual(result, "test value")
+        """Test subprocess with arguments using allowed command."""
+        mock_result = unittest.mock.Mock()
+        mock_result.stdout = "analysis result"
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result):
+            result = _run_subprocess(["llamacpp", "analyze", "--model", "test.gguf"])
+            self.assertEqual(result, "analysis result")
 
     def test_run_subprocess_empty_output(self) -> None:
-        """Test subprocess with no output."""
-        result = _run_subprocess(["true"])
-
-        self.assertEqual(result, "")
+        """Test subprocess that exits successfully with no output."""
+        mock_result = unittest.mock.Mock()
+        mock_result.stdout = ""
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result):
+            result = _run_subprocess(["llama-cli", "--version"])
+            self.assertEqual(result, "")
 
     def test_run_subprocess_nonexistent_command(self) -> None:
         """Test that nonexistent command raises ExternalAnalysisExecutionError."""
         with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
             _run_subprocess(["nonexistent-command-xyz123"])
 
-        self.assertIn("Command not found", str(ctx.exception))
+        self.assertIn("not a recognized", str(ctx.exception))
 
     def test_run_subprocess_failed_command(self) -> None:
         """Test that failed command raises ExternalAnalysisExecutionError."""
-        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
-            _run_subprocess(["python", "--invalid-arg"])
+        import subprocess
+        mock_result = unittest.mock.Mock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "error: invalid option"
 
-        self.assertIn("exited", str(ctx.exception))
+        def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=cmd, output="", stderr="error: invalid option"
+            )
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+                _run_subprocess(["llamacpp", "--invalid-option"])
+
+            self.assertIn("exited", str(ctx.exception))
+            self.assertIn("llamacpp", str(ctx.exception))
 
     def test_run_subprocess_timeout(self) -> None:
         """Test that subprocess.TimeoutExpired is converted to ExternalAnalysisExecutionError."""
@@ -603,6 +630,301 @@ class TestRequestMetadataHandling(unittest.TestCase):
 
         # Empty string is a valid value in the dataclass
         self.assertEqual(request.source_artifact, "")
+
+
+class TestValidateCommandForExecution(unittest.TestCase):
+    """Tests for _validate_command_for_execution (REM-S3)."""
+
+    # === Allowed Commands Tests ===
+
+    def test_accepts_k8sgpt_command(self) -> None:
+        """Test that k8sgpt command is accepted."""
+        _validate_command_for_execution(["k8sgpt", "analysis", "--explain"])
+
+    def test_accepts_k8sgpt_with_path(self) -> None:
+        """Test that k8sgpt with path prefix is accepted."""
+        _validate_command_for_execution(["/usr/local/bin/k8sgpt", "analysis"])
+
+    def test_accepts_llamacpp_command(self) -> None:
+        """Test that llamacpp command is accepted."""
+        _validate_command_for_execution(["llamacpp", "analyze", "--model", "model.gguf"])
+
+    def test_accepts_llama_cli_command(self) -> None:
+        """Test that llama-cli command is accepted."""
+        _validate_command_for_execution(["llama-cli", "-m", "model.gguf", "-p", "prompt"])
+
+    def test_accepts_llama_cpp_with_dots_command(self) -> None:
+        """Test that llama.cpp command is accepted."""
+        _validate_command_for_execution(["llama.cpp", "--help"])
+
+    def test_accepts_command_case_insensitive(self) -> None:
+        """Test that command matching is case-insensitive."""
+        _validate_command_for_execution(["K8SGPT", "analysis"])
+        _validate_command_for_execution(["K8sGpt", "analysis"])
+        _validate_command_for_execution(["LLAMACPP", "--help"])
+
+    # === Blocked Commands Tests ===
+
+    def test_rejects_shell_interpreters(self) -> None:
+        """Test that shell interpreters are rejected."""
+        for shell in ["sh", "bash", "zsh", "fish", "dash"]:
+            with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+                _validate_command_for_execution([shell, "-c", "echo test"])
+            self.assertIn("not allowed", str(ctx.exception))
+
+    def test_rejects_scripting_languages(self) -> None:
+        """Test that scripting language interpreters are rejected."""
+        blocked = ["python", "python3", "python2", "perl", "ruby", "node", "php", "lua"]
+        for lang in blocked:
+            with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+                _validate_command_for_execution([lang, "script"])
+            self.assertIn("not allowed", str(ctx.exception))
+
+    def test_rejects_network_tools(self) -> None:
+        """Test that network tools are rejected."""
+        for tool in ["curl", "wget", "nc", "netcat", "socat", "ncat", "openssl"]:
+            with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+                _validate_command_for_execution([tool, "https://example.com"])
+            self.assertIn("not allowed", str(ctx.exception))
+
+    def test_rejects_kubectl(self) -> None:
+        """Test that kubectl is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["kubectl", "get", "pods"])
+        self.assertIn("not allowed", str(ctx.exception))
+
+    def test_rejects_helm(self) -> None:
+        """Test that helm is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["helm", "list"])
+        self.assertIn("not allowed", str(ctx.exception))
+
+    def test_rejects_docker(self) -> None:
+        """Test that docker/podman are rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["docker", "ps"])
+        self.assertIn("not allowed", str(ctx.exception))
+
+    def test_rejects_ssh(self) -> None:
+        """Test that ssh and remote access tools are rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["ssh", "user@host"])
+        self.assertIn("not allowed", str(ctx.exception))
+
+    # === Unrecognized Commands Tests ===
+
+    def test_rejects_unknown_commands(self) -> None:
+        """Test that unknown commands are rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["unknown-binary", "arg"])
+        self.assertIn("not a recognized external analysis tool", str(ctx.exception))
+
+    def test_rejects_custom_arbitrary_command(self) -> None:
+        """Test that arbitrary local binaries are rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["my-custom-tool", "--flag"])
+        self.assertIn("not a recognized external analysis tool", str(ctx.exception))
+
+    # === Shell Metacharacter Tests ===
+
+    def test_rejects_command_with_semicolon_in_name(self) -> None:
+        """Test that command with semicolon is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["cmd;sleep", "1"])
+        self.assertIn("unsupported characters", str(ctx.exception))
+
+    def test_rejects_command_with_pipe_in_name(self) -> None:
+        """Test that command with pipe is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["cmd|cat", "arg"])
+        self.assertIn("unsupported characters", str(ctx.exception))
+
+    def test_rejects_command_with_backtick_in_name(self) -> None:
+        """Test that command with backtick is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["cmd`id`", "arg"])
+        self.assertIn("unsupported characters", str(ctx.exception))
+
+    def test_rejects_command_with_dollar_in_name(self) -> None:
+        """Test that command with dollar sign is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["cmd$(whoami)", "arg"])
+        self.assertIn("unsupported characters", str(ctx.exception))
+
+    def test_rejects_command_with_newline_in_name(self) -> None:
+        """Test that command with newline is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["cmd\nid", "arg"])
+        self.assertIn("unsupported characters", str(ctx.exception))
+
+    # === Empty/Invalid Input Tests ===
+
+    def test_rejects_empty_command(self) -> None:
+        """Test that empty command is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution([])
+        self.assertIn("empty command", str(ctx.exception))
+
+    def test_rejects_none_command(self) -> None:
+        """Test that None command is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(None)  # type: ignore[arg-type]
+        self.assertIn("empty command", str(ctx.exception))
+
+    def test_rejects_string_command(self) -> None:
+        """Test that string command (not list) is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution("echo hello")
+        self.assertIn("must be a list", str(ctx.exception))
+
+    def test_rejects_non_string_command_name(self) -> None:
+        """Test that non-string command name is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution([123, "arg"])  # type: ignore[list-item]
+        self.assertIn("must be a string", str(ctx.exception))
+
+    # === Path Stripping Tests ===
+
+    def test_strips_path_from_command_name(self) -> None:
+        """Test that path components are stripped before checking."""
+        # /usr/bin/k8sgpt should be recognized as k8sgpt
+        _validate_command_for_execution(["/usr/bin/k8sgpt", "analysis"])
+        _validate_command_for_execution(["/home/user/.local/bin/k8sgpt", "analysis"])
+
+    def test_rejects_path_to_blocked_binary(self) -> None:
+        """Test that path to blocked binary is rejected."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["/usr/bin/python", "script.py"])
+        self.assertIn("not allowed", str(ctx.exception))
+
+    # === Edge Cases ===
+
+    def test_accepts_allowed_command_with_many_args(self) -> None:
+        """Test that allowed command with many args is accepted."""
+        cmd = ["k8sgpt", "analysis", "--kubecontext", "prod", "--namespace", "default", "--explain", "--no-cache"]
+        _validate_command_for_execution(cmd)
+
+    def test_error_message_safe(self) -> None:
+        """Test that error messages do not leak sensitive arguments."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _validate_command_for_execution(["curl", "https://api.example.com/token=secret"])
+        error_msg = str(ctx.exception)
+        # Should mention the blocked command but not the full URL with token
+        self.assertIn("curl", error_msg)
+        self.assertNotIn("token=secret", error_msg)
+
+
+class TestAllowedCommandFamilies(unittest.TestCase):
+    """Tests for _ALLOWED_COMMAND_FAMILIES constant."""
+
+    def test_contains_expected_families(self) -> None:
+        """Test that allowed families contain expected commands."""
+        expected = {"k8sgpt", "llamacpp", "llama-cli", "llama.cpp"}
+        self.assertEqual(_ALLOWED_COMMAND_FAMILIES, expected)
+
+
+class TestBlockedCommandFamilies(unittest.TestCase):
+    """Tests for _BLOCKED_COMMAND_FAMILIES constant."""
+
+    def test_contains_shells(self) -> None:
+        """Test that blocked families include shell interpreters."""
+        shells = {"sh", "bash", "zsh", "fish", "dash"}
+        for shell in shells:
+            self.assertIn(shell, _BLOCKED_COMMAND_FAMILIES)
+
+    def test_contains_scripting_languages(self) -> None:
+        """Test that blocked families include scripting languages."""
+        languages = {"python", "python3", "perl", "ruby", "node", "php", "lua"}
+        for lang in languages:
+            self.assertIn(lang, _BLOCKED_COMMAND_FAMILIES)
+
+    def test_contains_network_tools(self) -> None:
+        """Test that blocked families include network tools."""
+        tools = {"curl", "wget", "nc", "netcat", "socat"}
+        for tool in tools:
+            self.assertIn(tool, _BLOCKED_COMMAND_FAMILIES)
+
+    def test_contains_kubectl_helm(self) -> None:
+        """Test that kubectl and helm are blocked."""
+        self.assertIn("kubectl", _BLOCKED_COMMAND_FAMILIES)
+        self.assertIn("helm", _BLOCKED_COMMAND_FAMILIES)
+
+
+class TestShellMetacharPattern(unittest.TestCase):
+    """Tests for _SHELL_METACHAR_PATTERN regex."""
+
+    def test_matches_semicolon(self) -> None:
+        """Test that semicolon is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd;"))
+
+    def test_matches_pipe(self) -> None:
+        """Test that pipe is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd|"))
+
+    def test_matches_ampersand(self) -> None:
+        """Test that ampersand is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd&"))
+
+    def test_matches_backtick(self) -> None:
+        """Test that backtick is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd`"))
+
+    def test_matches_dollar(self) -> None:
+        """Test that dollar is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd$"))
+
+    def test_matches_less_than(self) -> None:
+        """Test that less-than is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd<"))
+
+    def test_matches_greater_than(self) -> None:
+        """Test that greater-than is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd>"))
+
+    def test_matches_newline(self) -> None:
+        """Test that newline is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd\n"))
+
+    def test_matches_carriage_return(self) -> None:
+        """Test that carriage return is matched."""
+        self.assertIsNotNone(_SHELL_METACHAR_PATTERN.search("cmd\r"))
+
+    def test_no_match_for_normal_command(self) -> None:
+        """Test that normal command names don't match."""
+        self.assertIsNone(_SHELL_METACHAR_PATTERN.search("k8sgpt"))
+        self.assertIsNone(_SHELL_METACHAR_PATTERN.search("llama-cli"))
+        self.assertIsNone(_SHELL_METACHAR_PATTERN.search("/usr/bin/k8sgpt"))
+
+
+class TestRunSubprocessWithValidation(unittest.TestCase):
+    """Tests for _run_subprocess with command validation (REM-S3)."""
+
+    def test_subprocess_rejects_blocked_command(self) -> None:
+        """Test that _run_subprocess rejects blocked commands before execution."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _run_subprocess(["curl", "https://example.com"])
+        self.assertIn("not allowed", str(ctx.exception))
+
+    def test_subprocess_rejects_unknown_command(self) -> None:
+        """Test that _run_subprocess rejects unknown commands before execution."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _run_subprocess(["unknown-tool", "arg"])
+        self.assertIn("not a recognized", str(ctx.exception))
+
+    def test_subprocess_rejects_empty_command(self) -> None:
+        """Test that _run_subprocess rejects empty commands."""
+        with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+            _run_subprocess([])
+        self.assertIn("empty command", str(ctx.exception))
+
+    def test_subprocess_accepts_k8sgpt(self) -> None:
+        """Test that _run_subprocess accepts k8sgpt command."""
+        mock_result = unittest.mock.Mock()
+        mock_result.stdout = "k8sgpt version 0.1.0"
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result):
+            result = _run_subprocess(["k8sgpt", "version"])
+            self.assertEqual(result, "k8sgpt version 0.1.0")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
@@ -18,6 +19,88 @@ class ExternalAnalysisExecutionError(RuntimeError):
 
 # Subprocess timeout for external tool execution (120s)
 EXTERNAL_ANALYSIS_TIMEOUT_SECONDS = 120
+
+# Allowed command families for external analysis adapters (REM-S3)
+# These are the only permitted command binaries that may be configured
+# and executed as external analysis tools.
+_ALLOWED_COMMAND_FAMILIES = frozenset((
+    # k8sGPT - Kubernetes diagnostics tool
+    "k8sgpt",
+    # llama.cpp family - Local LLM inference
+    "llamacpp",
+    "llama-cli",
+    "llama.cpp",
+))
+
+# Blocked command families - shell interpreters, scripting languages,
+# and network tools that should never be executed as external analysis commands.
+_BLOCKED_COMMAND_FAMILIES = frozenset((
+    # Shell interpreters
+    "sh", "bash", "zsh", "fish", "dash", "ash", "ksh", "csh", "tcsh",
+    # Scripting language interpreters
+    "python", "python3", "python2", "perl", "ruby", "node", "php", "lua",
+    # Network tools
+    "curl", "wget", "nc", "netcat", "socat", "ncat", "openssl",
+    # Container/remote execution
+    "docker", "podman", "kubectl", "helm",
+    # Remote access
+    "ssh", "scp", "rsync", "ftp",
+))
+
+# Shell metacharacters that must not appear in command[0]
+# These patterns indicate potential shell injection or misuse.
+_SHELL_METACHAR_PATTERN = re.compile(r"[;|&$`<>\n\r]")
+
+
+def _validate_command_for_execution(command: Sequence[str]) -> None:
+    """Validate a command before execution.
+
+    Args:
+        command: The command argv to validate.
+
+    Raises:
+        ExternalAnalysisExecutionError: If the command is invalid or disallowed.
+    """
+    # Non-empty check
+    if not command:
+        raise ExternalAnalysisExecutionError(
+            "Cannot execute empty command"
+        )
+
+    # Must be a list/tuple of strings (not a string)
+    if not isinstance(command, (list, tuple)):
+        raise ExternalAnalysisExecutionError(
+            "Command must be a list of strings"
+        )
+
+    # First element is the command name
+    cmd0 = command[0]
+    if not isinstance(cmd0, str):
+        raise ExternalAnalysisExecutionError(
+            "Command name must be a string"
+        )
+
+    # Check for shell metacharacters in command[0]
+    if _SHELL_METACHAR_PATTERN.search(cmd0):
+        raise ExternalAnalysisExecutionError(
+            "Command contains unsupported characters"
+        )
+
+    # Extract the base command name (strip path components)
+    cmd_base = cmd0.split("/")[-1].lower()
+
+    # Check against blocked families
+    if cmd_base in _BLOCKED_COMMAND_FAMILIES:
+        raise ExternalAnalysisExecutionError(
+            f"Command '{cmd_base}' is not allowed for external analysis"
+        )
+
+    # Check against allowed families (if the set is not empty)
+    # Note: Empty _ALLOWED_COMMAND_FAMILIES means "allow all" - not the case here
+    if cmd_base not in _ALLOWED_COMMAND_FAMILIES:
+        raise ExternalAnalysisExecutionError(
+            f"Command '{cmd_base}' is not a recognized external analysis tool"
+        )
 
 
 class TimeoutError(Exception):
@@ -91,6 +174,8 @@ def build_external_analysis_adapters(
 
 
 def _run_subprocess(command: Sequence[str]) -> str:
+    # Validate command before execution (REM-S3)
+    _validate_command_for_execution(command)
     try:
         result = subprocess.run(
             list(command),
