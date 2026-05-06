@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from ..identity.artifact import new_artifact_id
 from ..identity.cluster import derive_cluster_uid
 from ..security.path_validation import (
     validate_kube_context_name,
@@ -78,6 +79,7 @@ def collect_cluster_snapshot(context: str) -> ClusterSnapshot:
         crds=crds,
         collection_status=status,
         health_signals=health_signals,
+        artifact_id=new_artifact_id(),
     )
 
 

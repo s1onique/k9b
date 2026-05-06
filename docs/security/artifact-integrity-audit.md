@@ -15,7 +15,7 @@ This audit examines how k9b writes, reads, trusts, replays, and mutates run arti
 
 **Key Findings**:
 - 14 artifact types identified across 5 trust categories
-- 3 artifact types lack artifact_id provenance
+- 1 artifact type (FeedbackArtifact) lacks artifact_id provenance
 - No cryptographic integrity verification (SHA256/HMAC)
 - ui-index.json is mutable without freshness validation
 - External analysis artifacts can influence queue execution
@@ -69,7 +69,7 @@ Artifacts are classified into 5 trust categories:
 | **Trust Category** | Trusted Writer / Unverified Storage |
 | **Schema Validation** | `from_dict()` with field coercion; lenient (accepts missing fields) |
 | **Overwrite Behavior** | Append-only via `write_append_only_json_artifact()`; rejects overwrite |
-| **artifact_id** | ❌ MISSING - no provenance field |
+| **artifact_id** | ✅ Optional (UUIDv7, None for legacy) |
 | **Mutation Influence** | None (read-only cluster state) |
 | **Execution Influence** | None |
 | **Stale/Replay Risk** | LOW - immutable by filename pattern |
@@ -231,11 +231,11 @@ Artifacts are classified into 5 trust categories:
 | **Trust Category** | LLM-Output Influenced (via external provider data) |
 | **Schema Validation** | `from_dict()` with nested type coercion |
 | **Overwrite Behavior** | Append-only |
-| **artifact_id** | ❌ MISSING |
+| **artifact_id** | ✅ Optional (UUIDv7, None for legacy) |
 | **LLM Influence** | Alertmanager data influences LLM ranking bonus |
 | **Stale/Replay Risk** | LOW |
-| **Existing Controls** | Append-only, port-forward security |
-| **Gaps** | No SHA256, no artifact_id |
+| **Existing Controls** | Append-only, port-forward security, artifact_id (partial) |
+| **Gaps** | No SHA256 |
 
 ---
 
@@ -250,11 +250,11 @@ Artifacts are classified into 5 trust categories:
 | **Trust Category** | LLM-Output Influenced |
 | **Schema Validation** | `from_dict()` with nested type coercion |
 | **Overwrite Behavior** | Append-only |
-| **artifact_id** | ❌ MISSING |
+| **artifact_id** | ✅ Optional (UUIDv7, None for legacy) |
 | **Ranking Influence** | Compact provides `affected_namespaces`, `affected_clusters`, `affected_services` for bonus |
 | **Stale/Replay Risk** | LOW |
-| **Existing Controls** | Append-only |
-| **Gaps** | No SHA256, no artifact_id |
+| **Existing Controls** | Append-only, artifact_id (partial) |
+| **Gaps** | No SHA256 |
 
 ---
 
@@ -343,7 +343,7 @@ Artifacts are classified into 5 trust categories:
 | **RISK-AI-02** | Stale ui-index.json trust without explicit freshness validation | ui-index.json | MEDIUM | LOW | 4 | Stale Index |
 | **RISK-AI-03** | LLM output can influence queue execution without strong schema validation | ExternalAnalysisArtifact | HIGH | MEDIUM | 7 | LLM Influence |
 | **RISK-AI-04** | Old approval artifacts can authorize stale execution | NextCheckApproval | MEDIUM | LOW | 5 | Replay |
-| **RISK-AI-05** | Several artifact types lack artifact_id provenance | ClusterSnapshot, AlertmanagerSnapshot, AlertmanagerCompact, FeedbackArtifact | LOW | MEDIUM | 3 | Provenance |
+| **RISK-AI-05** | FeedbackArtifact lacks artifact_id provenance (ClusterSnapshot, AlertmanagerSnapshot, AlertmanagerCompact addressed by REM-AI-02) | FeedbackArtifact | LOW | MEDIUM | 3 | Provenance |
 | **RISK-AI-06** | Path traversal mitigated but path confusion still possible | All artifacts | LOW | LOW | 2 | Path Confusion |
 | **RISK-AI-07** | Feedback artifacts are mutable (no immutability contract) | FeedbackArtifact | MEDIUM | LOW | 4 | Tampering |
 | **RISK-AI-08** | lenience in from_dict() allows malformed data | All artifact types | MEDIUM | MEDIUM | 6 | Schema Validation |
@@ -399,7 +399,7 @@ Artifacts are classified into 5 trust categories:
 
 | Gap ID | Description | Risk Score | Effort |
 |--------|-------------|------------|--------|
-| **GAP-AI-03** | Several artifact types lack artifact_id: ClusterSnapshot, AlertmanagerSnapshot, AlertmanagerCompact, FeedbackArtifact | 4 | 2 days |
+| **GAP-AI-03** | FeedbackArtifact lacks artifact_id provenance (ClusterSnapshot, AlertmanagerSnapshot, AlertmanagerCompact addressed by REM-AI-02) | 4 | 2 days |
 | **GAP-AI-04** | Approval artifacts have no timestamp validation to prevent stale replay | 5 | 1 day |
 | **GAP-AI-05** | FeedbackArtifact is mutable (no immutability contract) | 4 | 1 day |
 
@@ -424,10 +424,10 @@ Artifacts are classified into 5 trust categories:
 
 ### 7.1 Priority 1 (Immediate)
 
-| ID | Remediation | Dependencies | Effort |
-|----|-------------|--------------|--------|
-| **REM-AI-01** | Add SHA256 integrity field to `write_append_only_json_artifact()` (optional, backward compatible) | GAP-AI-01 | 2 days |
-| **REM-AI-02** | Add artifact_id to ClusterSnapshot, AlertmanagerSnapshot, AlertmanagerCompact | GAP-AI-03 | 1 day |
+| ID | Remediation | Dependencies | Effort | Status |
+|----|-------------|--------------|--------|--------|
+| **REM-AI-01** | Add SHA256 integrity field to `write_append_only_json_artifact()` (optional, backward compatible) | GAP-AI-01 | 2 days | Pending |
+| **REM-AI-02** | Add artifact_id to ClusterSnapshot, AlertmanagerSnapshot, AlertmanagerCompact | GAP-AI-03 | 1 day | ✅ DONE |
 
 ### 7.2 Priority 2 (Within 2 weeks)
 

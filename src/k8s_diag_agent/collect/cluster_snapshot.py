@@ -218,6 +218,13 @@ class CRDRecord:
 
 @dataclass(frozen=True)
 class ClusterSnapshot:
+    """Immutable cluster snapshot for run artifact storage.
+
+    Artifact identity:
+    - artifact_id is optional for backward compatibility with legacy artifacts
+    - New artifacts should have artifact_id set (via new_artifact_id())
+    - Legacy artifacts without artifact_id return None
+    """
     metadata: ClusterSnapshotMetadata
     workloads: dict[str, Any] = field(default_factory=dict)
     metrics: dict[str, float] = field(default_factory=dict)
@@ -225,6 +232,9 @@ class ClusterSnapshot:
     crds: dict[str, CRDRecord] = field(default_factory=dict)
     collection_status: CollectionStatus = field(default_factory=lambda: CollectionStatus())
     health_signals: ClusterHealthSignals = field(default_factory=ClusterHealthSignals.empty)
+    # Immutable artifact instance identity (UUIDv7)
+    # Optional for backward compatibility - None for legacy artifacts, generated for new
+    artifact_id: str | None = field(default=None)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ClusterSnapshot:
@@ -257,6 +267,11 @@ class ClusterSnapshot:
         crds = _build_crds(data.get("crds"))
         status = _build_collection_status(data.get("status"))
         signals = _build_health_signals(data.get("health_signals"))
+        # artifact_id is optional for backward compatibility
+        # Legacy artifacts without artifact_id will have None
+        artifact_id: str | None = None
+        if data.get("artifact_id"):
+            artifact_id = str(data["artifact_id"])
         return cls(
             metadata=metadata,
             workloads=workloads,
@@ -265,10 +280,11 @@ class ClusterSnapshot:
             crds=crds,
             collection_status=status,
             health_signals=signals,
+            artifact_id=artifact_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "metadata": {
                 "cluster_id": self.metadata.cluster_id,
                 "cluster_uid": self.metadata.cluster_uid,
@@ -286,6 +302,10 @@ class ClusterSnapshot:
             "status": self.collection_status.to_dict(),
             "health_signals": self.health_signals.to_dict(),
         }
+        # Include artifact_id when present (backward compat: legacy artifacts without it)
+        if self.artifact_id is not None:
+            result["artifact_id"] = self.artifact_id
+        return result
 
 
 def extract_cluster_snapshots(fixture: Mapping[str, Any]) -> list[ClusterSnapshot]:
