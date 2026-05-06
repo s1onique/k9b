@@ -286,6 +286,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=8080,
         help="Port to listen for operator UI requests.",
     )
+    ui_parser.add_argument(
+        "--unsafe-bind",
+        action="store_true",
+        help=(
+            "Allow binding to non-loopback addresses (0.0.0.0, ::, external IPs). "
+            "WARNING: The UI/API has mutation endpoints. Use only in trusted networks "
+            "or behind a reverse proxy with authentication."
+        ),
+    )
 
     notify_parser = subparsers.add_parser(
         "deliver-notifications",

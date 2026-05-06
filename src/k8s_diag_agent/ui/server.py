@@ -610,12 +610,65 @@ def _export_usefulness_review_for_run(run_id: str, runs_dir: Path) -> bool:
         return False
 
 
+# Safe loopback hosts that don't require --unsafe-bind
+_SAFE_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _is_exposed_host(host: str) -> bool:
+    """Check if the host is exposed (non-loopback).
+
+    Safe loopback hosts: 127.0.0.1, localhost, ::1
+    Unsafe/exposed hosts: 0.0.0.0, ::, external IPs, non-loopback hostnames.
+    """
+    return host.lower() not in _SAFE_LOOPBACK_HOSTS
+
+
 def start_ui_server(
     runs_dir: Path,
     host: str = "127.0.0.1",
     port: int = 8080,
     static_dir: Path | None = None,
+    unsafe_bind: bool = False,
 ) -> None:
+    # Check for exposed host binding
+    if _is_exposed_host(host):
+        if not unsafe_bind:
+            print(
+                f"ERROR: Refusing to bind to exposed address '{host}' without --unsafe-bind.",
+                file=sys.stderr,
+            )
+            print(
+                "The UI/API has mutation endpoints (POST /api/next-check-approval, "
+                "/api/next-check-execution, /api/deterministic-next-check/promote, etc.)",
+                file=sys.stderr,
+            )
+            print(
+                "To bind to non-loopback addresses, use --unsafe-bind to acknowledge the risk.",
+                file=sys.stderr,
+            )
+            print(
+                "Alternatively, bind to a loopback address (127.0.0.1, localhost, or ::1) "
+                "and use port-forwarding for remote access.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+        # Host is exposed and unsafe_bind is True - print security warning
+        print(
+            f"WARNING: Starting operator UI on exposed address '{host}:{port}'.",
+            file=sys.stderr,
+        )
+        print(
+            "The UI/API has mutation endpoints that can modify cluster state.",
+            file=sys.stderr,
+        )
+        print(
+            "Ensure this host is only accessible from trusted networks, "
+            "or use a reverse proxy with authentication in front of this service.",
+            file=sys.stderr,
+        )
+        print(file=sys.stderr)
+
     # Normalize and validate runs_dir
     normalized_runs_dir = _normalize_runs_dir(runs_dir)
     _validate_runs_dir(normalized_runs_dir)

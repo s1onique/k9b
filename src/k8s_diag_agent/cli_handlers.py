@@ -475,7 +475,7 @@ def handle_health_summary(args: argparse.Namespace) -> int:
 
 
 def handle_health_ui(args: argparse.Namespace) -> int:
-    start_ui_server(runs_dir=args.runs_dir, host=args.host, port=args.port)
+    start_ui_server(runs_dir=args.runs_dir, host=args.host, port=args.port, unsafe_bind=args.unsafe_bind)
     return 0
 
 

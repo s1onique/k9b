@@ -509,8 +509,8 @@ Potential breaking change (Phase 3):
 
 | ID | Task | Effort | Files | Status |
 |----|------|--------|-------|--------|
-| AUTH-01 | Add `--unsafe-bind` flag to CLI | Low | cli.py | OPEN |
-| AUTH-02 | Add bind warning when exposing without token | Low | server.py | OPEN |
+| AUTH-01 | Add `--unsafe-bind` flag to CLI | Low | cli.py | **DONE** |
+| AUTH-02 | Add bind warning when exposing without token | Low | server.py | **DONE** |
 | AUTH-03 | Update api-security-audit.md with AUTH-01/02 | Low | docs/ | **DONE** |
 
 ### Priority 2 (Next Sprint)
