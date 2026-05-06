@@ -11,6 +11,8 @@ Tests cover:
 """
 
 import unittest
+from typing import Any
+from unittest.mock import patch
 
 from k8s_diag_agent.external_analysis.adapter import (
     _ADAPTER_BUILDERS,
@@ -312,6 +314,60 @@ class TestRunSubprocess(unittest.TestCase):
             _run_subprocess(["python", "--invalid-arg"])
 
         self.assertIn("exited", str(ctx.exception))
+
+    def test_run_subprocess_timeout(self) -> None:
+        """Test that subprocess.TimeoutExpired is converted to ExternalAnalysisExecutionError."""
+        import subprocess
+
+        from k8s_diag_agent.external_analysis.adapter import (
+            EXTERNAL_ANALYSIS_TIMEOUT_SECONDS,
+            _run_subprocess,
+        )
+
+        def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+            raise subprocess.TimeoutExpired(cmd=cmd, timeout=EXTERNAL_ANALYSIS_TIMEOUT_SECONDS)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+                _run_subprocess(["k8sgpt", "analysis", "--sensitive-arg", "secret-value"])
+
+            error_msg = str(ctx.exception)
+            self.assertIn("timed out", error_msg)
+            self.assertIn(str(EXTERNAL_ANALYSIS_TIMEOUT_SECONDS), error_msg)
+            # Verify only safe command summary is included (first element only)
+            self.assertIn("k8sgpt", error_msg)
+            self.assertNotIn("sensitive-arg", error_msg)
+            self.assertNotIn("secret-value", error_msg)
+
+    def test_run_subprocess_timeout_error_message_safe(self) -> None:
+        """Test that timeout error message doesn't leak sensitive command args."""
+        import subprocess
+
+        from k8s_diag_agent.external_analysis.adapter import (
+            EXTERNAL_ANALYSIS_TIMEOUT_SECONDS,
+            _run_subprocess,
+        )
+
+        def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+            raise subprocess.TimeoutExpired(cmd=cmd, timeout=EXTERNAL_ANALYSIS_TIMEOUT_SECONDS)
+
+        sensitive_commands = [
+            ["kubectl", "get", "secrets", "--token=super-secret"],
+            ["helm", "install", "--kubeconfig=/path/to/sensitive/config"],
+            ["k8sgpt", "analyze", "--password=secret123"],
+        ]
+
+        for cmd in sensitive_commands:
+            with patch("subprocess.run", side_effect=fake_run):
+                with self.assertRaises(ExternalAnalysisExecutionError) as ctx:
+                    _run_subprocess(cmd)
+
+                error_msg = str(ctx.exception)
+                # Only the first command element should appear
+                self.assertIn(cmd[0], error_msg)
+                # Sensitive args should not appear
+                for part in cmd[1:]:
+                    self.assertNotIn(part, error_msg)
 
 
 class TestCustomExceptions(unittest.TestCase):

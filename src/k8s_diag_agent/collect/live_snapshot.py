@@ -20,6 +20,9 @@ from .cluster_snapshot import (
     WarningEventSummary,
 )
 
+# Subprocess timeout for kubectl/helm commands (60s)
+KUBECTL_COMMAND_TIMEOUT_SECONDS = 60
+
 
 def list_kube_contexts() -> list[str]:
     output = _run_command(["kubectl", "config", "get-contexts", "-o", "name"])
@@ -343,7 +346,13 @@ def _run_command(command: Sequence[str]) -> str:
             check=True,
             capture_output=True,
             text=True,
+            timeout=KUBECTL_COMMAND_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"`{command[0]}` timed out after {KUBECTL_COMMAND_TIMEOUT_SECONDS}s. "
+            "Cluster may be unresponsive or under load."
+        ) from exc
     except FileNotFoundError as exc:
         raise RuntimeError(f"Command `{command[0]}` not found. Ensure it is on PATH.") from exc
     except subprocess.CalledProcessError as exc:

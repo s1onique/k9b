@@ -16,6 +16,10 @@ class ExternalAnalysisExecutionError(RuntimeError):
     pass
 
 
+# Subprocess timeout for external tool execution (120s)
+EXTERNAL_ANALYSIS_TIMEOUT_SECONDS = 120
+
+
 class TimeoutError(Exception):
     """Raised when a request times out."""
     pass
@@ -93,12 +97,23 @@ def _run_subprocess(command: Sequence[str]) -> str:
             capture_output=True,
             text=True,
             check=True,
+            timeout=EXTERNAL_ANALYSIS_TIMEOUT_SECONDS,
         )
         return result.stdout.strip()
+    except subprocess.TimeoutExpired as exc:
+        # Include only safe truncated command summary (first element only)
+        # Do not leak full command args which may contain sensitive data
+        cmd_summary = command[0] if command else "unknown"
+        raise ExternalAnalysisExecutionError(
+            f"Command {cmd_summary} timed out after "
+            f"{EXTERNAL_ANALYSIS_TIMEOUT_SECONDS}s. External tool may be unresponsive.",
+        ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip() if exc.stderr else exc.stdout.strip()
+        # Include only safe command summary
+        cmd_summary = command[0] if command else "unknown"
         raise ExternalAnalysisExecutionError(
-            f"Command {command[0]} exited {exc.returncode}: {stderr or exc}",
+            f"Command {cmd_summary} exited {exc.returncode}: {stderr or exc}",
         )
     except FileNotFoundError as exc:
         raise ExternalAnalysisExecutionError(f"Command not found: {exc}")

@@ -102,6 +102,36 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
         self.assertEqual(snapshot.health_signals.pod_counts.completed_job_pods, 1)
 
 
+class TimeoutTest(unittest.TestCase):
+    """Tests for command timeout behavior."""
+
+    @patch("subprocess.run")
+    def test_timeout_raises_runtime_error(self, mock_run: Any) -> None:
+        """Test that command timeout is converted to RuntimeError."""
+        import subprocess
+
+        from k8s_diag_agent.collect.live_snapshot import KUBECTL_COMMAND_TIMEOUT_SECONDS
+
+        # Simulate subprocess.TimeoutExpired being raised by subprocess.run
+        mock_run.side_effect = subprocess.TimeoutExpired(
+            cmd=["kubectl", "get", "pods"],
+            timeout=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+        )
+
+        from k8s_diag_agent.collect.live_snapshot import list_kube_contexts
+
+        with self.assertRaises(RuntimeError) as ctx:
+            list_kube_contexts()
+
+        # Verify timeout message is informative but safe
+        error_msg = str(ctx.exception)
+        self.assertIn("timed out", error_msg)
+        self.assertIn(str(KUBECTL_COMMAND_TIMEOUT_SECONDS), error_msg)
+        self.assertIn("kubectl", error_msg)
+        self.assertNotIn("--token", error_msg)
+        self.assertNotIn("kubeconfig", error_msg)
+
+
 class VersionParsingTest(unittest.TestCase):
     def test_parse_server_version_from_json(self) -> None:
         payload = {"serverVersion": {"gitVersion": "v1.28.0", "minor": "28"}}

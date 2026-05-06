@@ -286,13 +286,21 @@ LLM output → next_check_planner.py → NextCheckCandidate.description
 
 ### Gap 1: Missing Timeouts (SUBPROC-05)
 **Severity:** High  
-**Affected paths:** 7 production paths lack timeouts
+**Affected paths:** 8 production paths lack timeouts (4 now partially mitigated)
 
-Critical paths without timeouts:
-- `collect/live_snapshot.py` - All kubectl/helm collection
-- `external_analysis/adapter.py` - All external tool execution
-- `external_analysis/k8sgpt_adapter.py` - k8sgpt execution
-- `external_analysis/llamacpp_adapter.py` - llamacpp subprocess path
+**Status (as of REM-S1):** Partially mitigated for 4 highest-risk paths.
+
+**Partially mitigated paths (REM-S1):**
+- `collect/live_snapshot.py` - 60s timeout added to `_run_command()`
+- `external_analysis/adapter.py` - 120s timeout added to `_run_subprocess()`
+- `external_analysis/k8sgpt_adapter.py` - inherits timeout via `_run_subprocess()`
+- `external_analysis/llamacpp_adapter.py` - inherits timeout via `_run_subprocess()` when subprocess mode used
+
+**Remaining paths without timeout:**
+- `health/image_pull_secret.py` - No timeout on kubectl inspection
+- `health/drilldown.py` - No timeout on drilldown commands
+- `health/loop_scheduler.py` - No timeout on script execution
+- `health/loop_alertmanager_port_forward.py` - Popen without timeout (MEDIUM risk)
 
 ### Gap 2: Namespace/Context Not Validated (SUBPROC-04)
 **Severity:** Medium  
