@@ -13,11 +13,16 @@ Requirements:
 
 from __future__ import annotations
 
+# mypy: disable-error-code=no-any-return
 import unittest
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
+from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
+from k8s_diag_agent.compare.two_cluster import ClusterComparison
+from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
 from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
 from k8s_diag_agent.external_analysis.review_input import (
     AlertmanagerContext,
@@ -32,6 +37,38 @@ from k8s_diag_agent.health.drilldown import (
 )
 from k8s_diag_agent.llm.drilldown_prompts import build_drilldown_prompt
 from k8s_diag_agent.llm.prompts import build_assessment_prompt
+
+# Type alias for mock comparison objects used in tests
+# These are created inline in test methods with only 'differences' attribute
+_MockComparisonType = Any
+
+
+# Helper wrapper to cast test mocks to concrete production types
+def _build_assessment_prompt_for_test(
+    primary: MockClusterSnapshot,
+    secondary: MockClusterSnapshot,
+    comparison: _MockComparisonType,
+) -> str:
+    """Wrapper that casts mock types to production types for build_assessment_prompt."""
+    # The cast() calls ensure runtime compatibility; mypy sees return as Any due to cast().
+    return build_assessment_prompt(
+        cast(ClusterSnapshot, primary),
+        cast(ClusterSnapshot, secondary),
+        cast(ClusterComparison, comparison),
+    )
+
+
+def _build_review_prompt_for_test(
+    adapter: LlamaCppAdapter,
+    request: MockRequest,
+    context: ReviewEnrichmentInput,
+) -> str:
+    """Wrapper that casts mock request to ExternalAnalysisRequest for _build_prompt."""
+    # The cast() ensures runtime compatibility; mypy sees return as Any due to cast().
+    return adapter._build_prompt(
+        cast(ExternalAnalysisRequest, request),
+        context,
+    )
 
 
 # Helper dataclasses for building test data
@@ -300,7 +337,7 @@ class TestAssessmentPromptAnonymization(unittest.TestCase):
 
         comparison = MockComparison(differences={})
 
-        prompt = build_assessment_prompt(primary, secondary, comparison)
+        prompt = _build_assessment_prompt_for_test(primary, secondary, comparison)
 
         # Verify original cluster names do NOT appear
         self.assertNotIn("prod-us-east-1", prompt)
@@ -346,7 +383,7 @@ class TestAssessmentPromptAnonymization(unittest.TestCase):
             },
         })
 
-        prompt = build_assessment_prompt(primary, secondary, comparison)
+        prompt = _build_assessment_prompt_for_test(primary, secondary, comparison)
 
         # Original namespace should not appear
         self.assertNotIn("production", prompt)
@@ -450,7 +487,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             cluster_id="prod-us-east-1",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original cluster ID should NOT appear
         self.assertNotIn("prod-us-east-1", prompt)
@@ -463,7 +500,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             namespace="production",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Namespace in context field should be anonymized
         self.assertIn("namespace-", prompt)
@@ -474,7 +511,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             deployment_name="api-gateway",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original deployment name in metadata.name should be anonymized
         # Note: name appearing in selector.matchLabels is beyond current scope
@@ -487,7 +524,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             cluster_id="my-production-cluster",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original cluster reference should NOT appear
         self.assertNotIn("my-production-cluster", prompt)
@@ -501,7 +538,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             namespace="staging",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original values should NOT appear
         self.assertNotIn("my-backend-service", prompt)
@@ -519,7 +556,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             namespace="default",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original deployment name should NOT appear
         self.assertNotIn("frontend-app", prompt)
@@ -535,7 +572,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
         # Override cluster_label to a meaningful name
         request = MockRequest(run_id="test-run", cluster_label="my-production-cluster")
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original cluster_label should NOT appear in header
         self.assertNotIn("my-production-cluster", prompt)
@@ -571,7 +608,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             alertmanager_context=context.alertmanager_context,
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original label should NOT appear in fallback message
         self.assertNotIn("my-app-server", prompt)
@@ -607,7 +644,7 @@ class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
             alertmanager_context=context.alertmanager_context,
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         # Original label should NOT appear in fallback message
         self.assertNotIn("api-gateway", prompt)
@@ -653,7 +690,7 @@ class TestAliasConsistency(unittest.TestCase):
             },
         })
 
-        prompt = build_assessment_prompt(primary, secondary, comparison)
+        prompt = _build_assessment_prompt_for_test(primary, secondary, comparison)
 
         # Count occurrences of namespace aliases
         import re
@@ -736,7 +773,7 @@ class TestAliasConsistency(unittest.TestCase):
             deployment_name="myapp",
         )
 
-        prompt = adapter._build_prompt(request, context)
+        prompt = _build_review_prompt_for_test(adapter, request, context)
 
         import re
         namespace_aliases = re.findall(r'namespace-[a-z]+', prompt)
@@ -776,7 +813,7 @@ class TestSanitizePromptStillRuns(unittest.TestCase):
             differences: dict[str, object]
 
         comparison = MockComparison(differences={})
-        prompt = build_assessment_prompt(primary, secondary, comparison)
+        prompt = _build_assessment_prompt_for_test(primary, secondary, comparison)
 
         # Token should be redacted (either by sanitize_prompt or anonymizer)
         self.assertNotIn("eyJhbGciOiJIUzI1NiJ9.secret123", prompt)
@@ -829,7 +866,7 @@ class TestSanitizePromptStillRuns(unittest.TestCase):
             alertmanager_context=context.alertmanager_context,
         )
 
-        prompt = adapter._build_prompt(request, context_with_creds)
+        prompt = _build_review_prompt_for_test(adapter, request, context_with_creds)
 
         # Token should be redacted
         self.assertNotIn("my-secret-token-xyz789", prompt)
@@ -884,7 +921,7 @@ class TestInputNotMutated(unittest.TestCase):
 
         comparison = MockComparison(differences={})
 
-        build_assessment_prompt(primary, secondary, comparison)
+        _build_assessment_prompt_for_test(primary, secondary, comparison)
 
         # Verify the original metadata is unchanged
         self.assertEqual(primary.metadata.cluster_id, original_cluster_id)

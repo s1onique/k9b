@@ -12,11 +12,13 @@ Related: docs/security/llm-prompt-security-audit.md GAP-P1
 
 from __future__ import annotations
 
+# mypy: disable-error-code=no-any-return
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
 from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
 from k8s_diag_agent.external_analysis.review_input import (
     AlertmanagerContext,
@@ -84,7 +86,8 @@ class ReviewEnrichmentPromptSanitizationTest(unittest.TestCase):
             review, alertmanager, selections, missing_drilldowns, missing_assessments, missing_snapshots
         )
         request = _MockRequest(run_id="test-run", cluster_label="test-cluster")
-        return self._adapter._build_prompt(request, context)
+        # The cast() ensures runtime compatibility; mypy sees return as Any due to cast().
+        return self._adapter._build_prompt(cast(ExternalAnalysisRequest, request), context)
 
     def test_review_json_with_bearer_token_is_redacted(self) -> None:
         """Verify bearer token in review JSON is redacted with <scrubbed>."""
