@@ -7,6 +7,7 @@ depend on request-handler instance state.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 from pathlib import Path
@@ -17,6 +18,60 @@ logger = logging.getLogger(__name__)
 
 # Default maximum content length for JSON mutation requests (1 MiB)
 DEFAULT_MAX_CONTENT_LENGTH = 1 * 1024 * 1024
+
+
+def _validate_bearer_token(handler: Any, expected_token: str | None) -> bool:
+    """Validate Bearer token for mutation endpoint authentication (AUTH-04).
+
+    This implements token-based authentication for POST mutation endpoints:
+    - If expected_token is None or empty, allow request (no auth required).
+    - If token is configured, require valid Authorization: Bearer <token> header.
+    - Use hmac.compare_digest() to prevent timing attacks.
+    - Never echo token values in error responses or logs.
+
+    Args:
+        handler: The HealthUIRequestHandler instance
+        expected_token: The expected bearer token, or None if auth is disabled
+
+    Returns:
+        True if token validation passes (request allowed), False if rejected
+        (in which case the handler has already sent a 401 error response)
+    """
+    # If no token is configured, auth is disabled - allow all requests
+    if not expected_token:
+        return True
+
+    auth_header = handler.headers.get("Authorization", "")
+
+    # Check for Authorization header presence and Bearer prefix
+    if not auth_header:
+        handler._send_json(
+            {"error": "Authorization required"},
+            401,  # Unauthorized
+        )
+        return False
+
+    # Must start with "Bearer " (case-sensitive per RFC 6750)
+    if not auth_header.startswith("Bearer "):
+        handler._send_json(
+            {"error": "Authorization required"},
+            401,  # Unauthorized
+        )
+        return False
+
+    # Extract the token value (everything after "Bearer ")
+    token = auth_header[7:]
+
+    # Validate token using constant-time comparison to prevent timing attacks
+    # hmac.compare_digest() is safe even if lengths differ (returns False)
+    if not hmac.compare_digest(token, expected_token):
+        handler._send_json(
+            {"error": "Invalid authorization"},
+            401,  # Unauthorized
+        )
+        return False
+
+    return True
 
 
 def _validate_mutation_origin(handler: Any) -> bool:
@@ -159,6 +214,9 @@ def _validate_json_mutation_request(
     - Enforces max Content-Length to prevent oversized payloads
     - Returns the parsed JSON payload if validation passes
     - Sends appropriate HTTP error responses (400, 403, 413, 415) on failure
+
+    Note: Bearer token validation (AUTH-04) is done separately in do_POST() before
+    calling this function, to ensure auth failures are caught early with 401 responses.
 
     Args:
         handler: The HealthUIRequestHandler instance

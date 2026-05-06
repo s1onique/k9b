@@ -517,9 +517,9 @@ Potential breaking change (Phase 3):
 
 | ID | Task | Effort | Files | Status |
 |----|------|--------|-------|--------|
-| AUTH-04 | Add `_validate_bearer_token()` helper | Low | server_shared.py | OPEN |
-| AUTH-05 | Integrate token validation into do_POST() | Medium | server.py | OPEN |
-| AUTH-06 | Add unit tests for token validation | Low | tests/ | OPEN |
+| AUTH-04 | Add `_validate_bearer_token()` helper | Low | server_shared.py | **DONE** |
+| AUTH-05 | Integrate token validation into do_POST() | Medium | server.py | **DONE** |
+| AUTH-06 | Add unit tests for token validation | Low | tests/ | **DONE** |
 | AUTH-07 | Update Helm chart README with auth docs | Low | charts/ | OPEN |
 
 ### Priority 3 (Deferred)

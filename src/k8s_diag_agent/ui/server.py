@@ -26,7 +26,7 @@ from ..external_analysis.deterministic_next_check_promotion import (
 )
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
-from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_json_mutation_request, _validate_runs_dir
+from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_bearer_token, _validate_json_mutation_request, _validate_runs_dir
 
 # Route patterns for path matching
 _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
@@ -629,6 +629,7 @@ def start_ui_server(
     port: int = 8080,
     static_dir: Path | None = None,
     unsafe_bind: bool = False,
+    auth_token: str | None = None,
 ) -> None:
     # Check for exposed host binding
     if _is_exposed_host(host):
@@ -662,6 +663,16 @@ def start_ui_server(
             "The UI/API has mutation endpoints that can modify cluster state.",
             file=sys.stderr,
         )
+        # Strong warning if no token configured
+        if not auth_token:
+            print(
+                "WARNING: No K9B_UI_TOKEN configured. Mutation endpoints are unprotected.",
+                file=sys.stderr,
+            )
+            print(
+                "Set the K9B_UI_TOKEN environment variable or --auth-token CLI flag to protect them.",
+                file=sys.stderr,
+            )
         print(
             "Ensure this host is only accessible from trusted networks, "
             "or use a reverse proxy with authentication in front of this service.",
@@ -674,7 +685,12 @@ def start_ui_server(
     _validate_runs_dir(normalized_runs_dir)
 
     assets = static_dir or DEFAULT_STATIC_DIR
-    handler = functools.partial(HealthUIRequestHandler, runs_dir=normalized_runs_dir, static_dir=assets)
+    handler = functools.partial(
+        HealthUIRequestHandler,
+        runs_dir=normalized_runs_dir,
+        static_dir=assets,
+        auth_token=auth_token,
+    )
     server = ThreadingHTTPServer((host, port), handler)
     print(
         f"Operator UI listening on http://{host}:{port}/ (runs: {normalized_runs_dir}, assets: {assets})",
@@ -692,9 +708,10 @@ def start_ui_server(
 class HealthUIRequestHandler(BaseHTTPRequestHandler):
     server_version = "HealthUI/2.0"
 
-    def __init__(self, *args: object, runs_dir: Path, static_dir: Path, **kwargs: object) -> None:
+    def __init__(self, *args: object, runs_dir: Path, static_dir: Path, auth_token: str | None = None, **kwargs: object) -> None:
         self.runs_dir = runs_dir
         self.static_dir = static_dir
+        self._auth_token = auth_token
         self._health_root = _compute_health_root(runs_dir)
         # Access logging state - initialized in __init__ for safety,
         # but RESET per-request in do_GET/do_POST to measure actual request time
@@ -799,6 +816,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self._request_path = route
         self._request_query = ""
         self._is_static = False
+
+        # AUTH-05: Validate bearer token for mutation endpoints if configured
+        if not _validate_bearer_token(self, self._auth_token):
+            self._status_code = 401
+            self._log_access_completion()
+            return
 
         try:
             # Delegate next-check mutation handlers to server_next_checks module

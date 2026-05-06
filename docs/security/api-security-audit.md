@@ -291,7 +291,7 @@
 | P1 | Add operator authentication | High | **DESIGN DONE (API-R3)** | See `operator-auth-design.md` for plan |
 | P0 | **Add `--unsafe-bind` flag** | Low | **DONE (AUTH-01)** | Implemented in cli.py; refuses non-loopback without flag |
 | P0 | **Add bind warning when exposing** | Low | **DONE (AUTH-02)** | Implemented in server.py; prints warning for exposed hosts |
-| P1 | Add bearer token auth | Medium | OPEN | AUTH-04-05 from operator-auth-design.md |
+| P1 | Add bearer token auth | Medium | **DONE (AUTH-04/05/06)** | Implemented via K9B_UI_TOKEN env var and --auth-token CLI flag |
 | P2 | Add idempotency keys for feedback | Medium | OPEN | UUID already used; add client-provided key |
 | P2 | Add audit fields to artifacts | Low | OPEN | Consistent timestamp/operator fields |
 | P3 | Add rate limiting | Medium | OPEN | Per-IP or per-session |

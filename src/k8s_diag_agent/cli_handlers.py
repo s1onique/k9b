@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -475,7 +476,9 @@ def handle_health_summary(args: argparse.Namespace) -> int:
 
 
 def handle_health_ui(args: argparse.Namespace) -> int:
-    start_ui_server(runs_dir=args.runs_dir, host=args.host, port=args.port, unsafe_bind=args.unsafe_bind)
+    # Read token from CLI arg or environment variable
+    auth_token = args.auth_token or os.environ.get("K9B_UI_TOKEN")
+    start_ui_server(runs_dir=args.runs_dir, host=args.host, port=args.port, unsafe_bind=args.unsafe_bind, auth_token=auth_token)
     return 0
 
 

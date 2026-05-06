@@ -295,6 +295,14 @@ def build_parser() -> argparse.ArgumentParser:
             "or behind a reverse proxy with authentication."
         ),
     )
+    ui_parser.add_argument(
+        "--auth-token",
+        help=(
+            "Bearer token for protecting mutation endpoints (POST /api/*). "
+            "When set, requests without valid Authorization: Bearer <token> header "
+            "will be rejected with 401. Can also be set via K9B_UI_TOKEN environment variable."
+        ),
+    )
 
     notify_parser = subparsers.add_parser(
         "deliver-notifications",
