@@ -31,6 +31,9 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from .loop import HealthRunConfig
 
+from ..security.subprocess_helpers import (
+    _sanitize_output,
+)
 
 # Module-level constants
 _HEALTH_LOCK_FILENAME = ".health-loop.lock"
@@ -847,11 +850,21 @@ class HealthLoopScheduler:
             )
             return
         except (subprocess.CalledProcessError, OSError) as exc:
+            # Sanitize error to prevent credential leakage
+            if isinstance(exc, subprocess.CalledProcessError):
+                stderr_output = exc.stderr if exc.stderr else exc.stdout
+                error_str = _sanitize_output(
+                    stderr_output.decode("utf-8", errors="replace")
+                    if isinstance(stderr_output, bytes)
+                    else (stderr_output or "")
+                )
+            else:
+                error_str = str(exc)
             self._log_event(
                 "ERROR",
                 "Scheduled diagnostic pack build failed",
                 run_id=run_id,
-                severity_reason=str(exc),
+                severity_reason=error_str,
                 event="diag-pack-build-failed",
             )
             return
@@ -881,11 +894,21 @@ class HealthLoopScheduler:
             )
             return
         except (subprocess.CalledProcessError, OSError) as exc:
+            # Sanitize error to prevent credential leakage
+            if isinstance(exc, subprocess.CalledProcessError):
+                stderr_output = exc.stderr if exc.stderr else exc.stdout
+                error_str = _sanitize_output(
+                    stderr_output.decode("utf-8", errors="replace")
+                    if isinstance(stderr_output, bytes)
+                    else (stderr_output or "")
+                )
+            else:
+                error_str = str(exc)
             self._log_event(
                 "ERROR",
                 "Scheduled UI index refresh failed after diagnostic pack build",
                 run_id=run_id,
-                severity_reason=str(exc),
+                severity_reason=error_str,
                 event="diag-pack-ui-refresh-failed",
             )
             return

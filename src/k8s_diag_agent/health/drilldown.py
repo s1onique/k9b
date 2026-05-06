@@ -14,6 +14,9 @@ from ..datetime_utils import parse_iso_to_utc
 from ..security.path_validation import (
     validate_kube_context_name,
 )
+from ..security.subprocess_helpers import (
+    sanitize_subprocess_error,
+)
 from .image_pull_secret import KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS, ImagePullSecretInsight
 
 
@@ -33,8 +36,14 @@ def _run_command(command: Sequence[str]) -> str:
     except FileNotFoundError as exc:
         raise RuntimeError(f"Command `{command[0]}` not found.") from exc
     except subprocess.CalledProcessError as exc:
-        message = (exc.stderr or exc.stdout or "").strip()
-        raise RuntimeError(f"`{command[0]}` failed: {message}") from exc
+        # Sanitize stderr to prevent credential leakage in error messages
+        stderr_output = exc.stderr if exc.stderr else exc.stdout
+        message = sanitize_subprocess_error(
+            f"`{command[0]}` failed",
+            stderr_output,
+            max_length=1000,
+        )
+        raise RuntimeError(message) from exc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"`{command[0]}` timed out after {KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS}s") from exc
     return result.stdout

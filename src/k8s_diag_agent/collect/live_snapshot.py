@@ -11,6 +11,9 @@ from ..identity.cluster import derive_cluster_uid
 from ..security.path_validation import (
     validate_kube_context_name,
 )
+from ..security.subprocess_helpers import (
+    sanitize_subprocess_error,
+)
 from .cluster_snapshot import (
     ClusterHealthSignals,
     ClusterSnapshot,
@@ -388,8 +391,14 @@ def _run_command(command: Sequence[str]) -> str:
     except FileNotFoundError as exc:
         raise RuntimeError(f"Command `{command[0]}` not found. Ensure it is on PATH.") from exc
     except subprocess.CalledProcessError as exc:
-        message = (exc.stderr or exc.stdout or "").strip()
-        raise RuntimeError(f"`{command[0]}` failed: {message}") from exc
+        # Sanitize stderr to prevent credential leakage in error messages
+        stderr_output = exc.stderr if exc.stderr else exc.stdout
+        message = sanitize_subprocess_error(
+            f"`{command[0]}` failed",
+            stderr_output,
+            max_length=1000,
+        )
+        raise RuntimeError(message) from exc
     return result.stdout
 
 

@@ -8,6 +8,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+from ..security.subprocess_helpers import (
+    sanitize_subprocess_error,
+)
 from .artifact import ExternalAnalysisArtifact
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 
@@ -194,11 +197,14 @@ def _run_subprocess(command: Sequence[str]) -> str:
             f"{EXTERNAL_ANALYSIS_TIMEOUT_SECONDS}s. External tool may be unresponsive.",
         ) from exc
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.strip() if exc.stderr else exc.stdout.strip()
-        # Include only safe command summary
+        # Use sanitize_subprocess_error for safe error message construction
+        stderr = exc.stderr if exc.stderr else exc.stdout
         cmd_summary = command[0] if command else "unknown"
-        raise ExternalAnalysisExecutionError(
-            f"Command {cmd_summary} exited {exc.returncode}: {stderr or exc}",
+        message = sanitize_subprocess_error(
+            f"Command {cmd_summary} exited {exc.returncode}",
+            stderr,
+            max_length=1000,
         )
+        raise ExternalAnalysisExecutionError(message)
     except FileNotFoundError as exc:
         raise ExternalAnalysisExecutionError(f"Command not found: {exc}")

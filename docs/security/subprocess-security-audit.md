@@ -356,9 +356,35 @@ Validation integrated into:
 
 ### Gap 4: Inconsistent Sanitization (SUBPROC-06)
 **Severity:** Medium  
-**Affected paths:** `collect/live_snapshot.py`, `image_pull_secret.py`, `drilldown.py`
+**Affected paths:** `collect/live_snapshot.py`, `image_pull_secret.py`, `drilldown.py`, `loop_scheduler.py`, `external_analysis/adapter.py`
 
-stderr output captured in error messages without sanitization. May leak sensitive information from cluster state.
+**Status (as of SUBPROC-06 implementation):** **MITIGATED**
+
+**Mitigation:**
+- Added `_sanitize_output()` function in `security/subprocess_helpers.py` that removes sensitive patterns from subprocess output
+- Added `sanitize_subprocess_error()` function that combines truncation + sanitization
+- Integrated sanitization into:
+  - `collect/live_snapshot.py._run_command()` - CalledProcessError handler
+  - `health/image_pull_secret.py._run_command()` - CalledProcessError handler
+  - `health/drilldown.py._run_command()` - CalledProcessError handler
+  - `health/loop_scheduler.py._maybe_build_diagnostic_pack()` - CalledProcessError handlers
+  - `external_analysis/adapter.py._run_subprocess()` - CalledProcessError handler
+
+**Sensitive patterns now redacted:**
+- Bearer tokens: `Bearer <token>`
+- Authorization headers: `Authorization: Bearer <token>`
+- Token flags: `--token=<value>`, `token=<value>`
+- Kubeconfig paths: `--kubeconfig=<path>`, `kubeconfig=<path>`
+- Authorization headers: `Authorization: <scheme> <credentials>`
+- JSON/YAML secrets: `"password": "..."`, `"secret": "..."`, `"token": "..."`
+- API keys: `api_key=<value>`, `apiKey: <value>`
+- Client secrets: `client_secret=<value>`
+- Access tokens: `access_token=<value>`
+
+**Remaining surfaces (minor, low risk):**
+- `loop_alertmanager_port_forward.py` - Already uses `_log_subprocess_failure()` which handles safe logging
+- `identity/cluster.py` - Static kubectl commands, uses 10s timeout, no credential output expected
+- `external_analysis/manual_next_check.py` - Already truncates output to 8KB
 
 ### Gap 5: Port-Forward Popen Unbounded (SUBPROC-05)
 **Severity:** Medium  
@@ -379,7 +405,7 @@ The kubectl port-forward Popen process lifecycle is now bounded via `stop_alertm
 | SUBPROC-03 | Mutation-capable path lacks approval gate | **Low** | Low | No mutation paths in production | Mitigated by design |
 | SUBPROC-04 | Namespace/context argument not validated | **Medium** | Low | Malformed names could cause issues | Gap identified |
 | SUBPROC-05 | Missing timeout on subprocess | **High** | Medium | Resource exhaustion, hangs | Multiple gaps |
-| SUBPROC-06 | stdout/stderr may leak secrets | **Medium** | Low | Sensitive cluster info in logs | Inconsistent coverage |
+| SUBPROC-06 | stdout/stderr may leak secrets | **Medium** | Low | Sensitive cluster info in logs | **MITIGATED (sanitization helpers)** |
 | SUBPROC-07 | Binary path/provenance not verified | **Low** | Low | Depends on PATH integrity | By design |
 | SUBPROC-08 | Test/CI subprocess mixed with production | **Low** | Not found | Test helpers could affect production | Clean separation exists |
 
