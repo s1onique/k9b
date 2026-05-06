@@ -5,8 +5,8 @@
 **Version**: 1.1  
 **Date**: 2026-05-06  
 **Author**: k9b Design  
-**Status**: Phase 1 Implemented  
-**Parent**: GAP-P2 from `llm-prompt-security-audit.md`, REM-P2 backlog  
+**Status**: Phase 2 Implemented  
+**Parent**: GAP-P2 from `llm-prompt-security-audit.md`, REM-P2 backlog
 
 ---
 
@@ -437,15 +437,26 @@ LLM_DUMP_PROMPTS=1 .venv/bin/python -m k9b health --run-id test-run
 
 **Rationale for deferral**: Labels/annotations require careful handling. Some operators may want them preserved for context. The core anonymizer works correctly for primary metadata fields; label/annotation handling is an enhancement.
 
-### 8.3 Phase 2: Prompt Path Integration (OPEN)
+### 8.3 Phase 2: Prompt Path Integration ✅ IMPLEMENTED
 
-- [ ] Integrate with `build_assessment_prompt()` in `prompts.py`
-- [ ] Integrate with `build_drilldown_prompt()` in `drilldown_prompts.py`
-- [ ] Integrate with `_build_prompt()` in `llamacpp_adapter.py`
-- [ ] Verify existing `sanitize_prompt()` still called after anonymization
-- [ ] Consider optional local-provider bypass (disabled by default per design)
+- [x] Integrate with `build_assessment_prompt()` in `prompts.py`
+- [x] Integrate with `build_drilldown_prompt()` in `drilldown_prompts.py`
+- [x] Integrate with `_build_prompt()` in `llamacpp_adapter.py`
+- [x] Verify existing `sanitize_prompt()` still called after anonymization
+- [x] Anonymization is enabled by default for all LLM prompt paths
+- [x] Local-provider bypass is NOT implemented (deferred per design)
 
-### 8.4 Phase 3: Testing & Validation
+**Phase 2 Status**: All 3 prompt paths now anonymize cluster metadata before building prompts.
+- Single `MetadataAnonymizer` instance per prompt for alias consistency
+- Original input objects are not mutated
+- `sanitize_prompt()` still runs after anonymization
+- Integration tests added in `tests/test_prompt_anonymization.py`
+
+**Note**: Local-provider bypass is intentionally not implemented in this slice.
+The design document (Section 2.2) describes this as a future/optional feature.
+If needed, it can be added by checking `LLAMACPP_BASE_URL` for localhost/127.0.0.1.
+
+### 8.4 Phase 3: Testing & Validation (OPEN)
 
 - [ ] Run unit tests from Section 7.1
 - [ ] Run integration tests from Section 7.2

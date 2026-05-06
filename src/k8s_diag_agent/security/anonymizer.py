@@ -39,6 +39,13 @@ _METADATA_FIELD_NAMES = frozenset((
     "crd_name",
 ))
 
+# Fields that contain cluster identifiers that should be anonymized
+_CLUSTER_CONTEXT_FIELDS = frozenset((
+    "context",
+    "cluster_context",
+    "user_context",
+))
+
 # Fields that should be preserved as-is (not name-like)
 _PRESERVE_FIELDS = frozenset((
     "kind",
@@ -121,6 +128,14 @@ def _detect_category(key: str, value: Any, parent_kind: str | None = None) -> st
         return "cluster"
     if key_lower == "cluster_name":
         return "cluster"
+    if key_lower == "cluster":
+        return "cluster"
+    if key_lower == "cluster_label":
+        return "cluster"
+    if key_lower == "label" and parent_kind is None:
+        # Top-level label fields often contain cluster/workload identifiers
+        return "label"
+
     if key_lower == "namespace":
         return "namespace"
     if key_lower in ("node_name", "node"):
@@ -141,6 +156,10 @@ def _detect_category(key: str, value: Any, parent_kind: str | None = None) -> st
     # ingress/host detection
     if key_lower == "ingress":
         return "host"
+
+    # Context fields that may contain cluster identifiers
+    if key_lower in ("context", "cluster_context", "user_context"):
+        return "cluster"
 
     # metadata.name with kind context
     if key_lower == "name" and parent_kind:
@@ -239,16 +258,28 @@ class MetadataAnonymizer:
         if isinstance(data, str):
             return self._anonymize_string(data, parent_key=parent_key, parent_kind=parent_kind)
 
-        # Handle list
+        # Handle list - preserve parent_key context for string items that need anonymization
         if isinstance(data, list):
-            return [self._anonymize_impl(item, parent_key=None, parent_kind=parent_kind) for item in data]
+            result: list[Any] = []
+            for item in data:
+                # For string items in lists, use the parent_key from context
+                if isinstance(item, str):
+                    processed = self._anonymize_string(item, parent_key=parent_key, parent_kind=parent_kind)
+                    result.append(processed)
+                else:
+                    result.append(self._anonymize_impl(item, parent_key=None, parent_kind=parent_kind))
+            return result
 
-        # Handle tuple - preserve tuple type
+        # Handle tuple - preserve tuple type and parent_key context
         if isinstance(data, tuple):
-            return tuple(
-                self._anonymize_impl(item, parent_key=None, parent_kind=parent_kind)
-                for item in data
-            )
+            tuple_result: list[Any] = []
+            for item in data:
+                if isinstance(item, str):
+                    processed = self._anonymize_string(item, parent_key=parent_key, parent_kind=parent_kind)
+                    tuple_result.append(processed)
+                else:
+                    tuple_result.append(self._anonymize_impl(item, parent_key=None, parent_kind=parent_kind))
+            return tuple(tuple_result)
 
         # Handle dict/mapping
         if isinstance(data, Mapping):

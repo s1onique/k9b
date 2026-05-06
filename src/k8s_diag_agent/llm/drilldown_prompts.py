@@ -7,6 +7,7 @@ from textwrap import dedent
 
 from ..health.drilldown import DrilldownArtifact
 from ..security import sanitize_prompt
+from ..security.anonymizer import MetadataAnonymizer
 
 
 def _format_table(items: list[str], header: str) -> str:
@@ -54,19 +55,80 @@ def _truncate_rollouts(rollout_lines: list[str], max_items: int = 3) -> tuple[li
 
 
 def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
+    # Create single anonymizer instance to preserve alias consistency within prompt
+    anonymizer = MetadataAnonymizer()
+
+    # Anonymize artifact-level string fields that may contain cluster identifiers
+    # Wrap each in a dict to give the anonymizer context for proper anonymization
+    anon_cluster_id_data = anonymizer.anonymize({"cluster_id": artifact.cluster_id})
+    anon_cluster_id = anon_cluster_id_data.get("cluster_id", artifact.cluster_id)
+
+    anon_context_data = anonymizer.anonymize({"context": artifact.context})
+    anon_context = anon_context_data.get("context", artifact.context)
+
+    anon_label_data = anonymizer.anonymize({"label": artifact.label})
+    anon_label = anon_label_data.get("label", artifact.label)
+
+    anon_run_label_data = anonymizer.anonymize({"run_label": artifact.run_label})
+    anon_run_label = anon_run_label_data.get("run_label", artifact.run_label)
+
+    # Anonymize affected_namespaces - each namespace string needs context for proper anonymization
+    # Wrap each namespace in a dict with "namespace" key, then extract the anonymized values
+    affected_ns_list = list(artifact.affected_namespaces)
+    anon_affected_namespaces_list = []
+    for ns in affected_ns_list:
+        anon_ns_data = anonymizer.anonymize({"namespace": ns})
+        anon_affected_namespaces_list.append(anon_ns_data.get("namespace", ns))
+    anon_affected_namespaces = anon_affected_namespaces_list
+
+    # Anonymize evidence summary
+    anon_evidence_summary = artifact.evidence_summary
+    if artifact.evidence_summary:
+        anon_evidence_summary_data = anonymizer.anonymize({"evidence_summary": artifact.evidence_summary})
+        anon_evidence_summary = anon_evidence_summary_data.get("evidence_summary", artifact.evidence_summary)
+
     # Truncate bulky input sections to reduce prompt size
+    # Anonymize event data
+    event_data_for_anonymization = [event.to_dict() for event in artifact.warning_events]
+    anon_event_data = anonymizer.anonymize(event_data_for_anonymization)
     event_lines, event_count = _truncate_events(
-        [json.dumps(event.to_dict(), indent=2) for event in artifact.warning_events],
+        [json.dumps(event, indent=2) for event in anon_event_data],
         max_items=5,
     )
+
+    # Build pod lines with anonymized namespaces/names
+    anon_pods = [
+        {"namespace": pod.namespace, "name": pod.name, "phase": pod.phase, "reason": pod.reason}
+        for pod in artifact.non_running_pods
+    ]
+    anon_pod_data = anonymizer.anonymize(anon_pods)
     pod_lines, pod_count = _truncate_pods(
-        [f"{pod.namespace}/{pod.name} ({pod.phase}) reason={pod.reason}" for pod in artifact.non_running_pods],
+        [f"{pod['namespace']}/{pod['name']} ({pod['phase']}) reason={pod['reason']}" for pod in anon_pod_data],
         max_items=5,
     )
+
+    # Build rollout lines with anonymized namespaces/names
+    anon_rollouts = [
+        entry.to_dict() for entry in artifact.rollout_status
+    ]
+    anon_rollout_data = anonymizer.anonymize(anon_rollouts)
     rollout_lines, rollout_count = _truncate_rollouts(
-        [f"{entry.kind} {entry.namespace}/{entry.name}: desired={entry.desired_replicas}, available={entry.available_replicas}, unavailable={entry.unavailable_replicas}" for entry in artifact.rollout_status],
+        [f"{entry['kind']} {entry['namespace']}/{entry['name']}: desired={entry['desired_replicas']}, available={entry['available_replicas']}, unavailable={entry['unavailable_replicas']}" for entry in anon_rollout_data],
         max_items=3,
     )
+
+    # Anonymize pod descriptions (keys are namespace/name format)
+    anon_descriptions: dict[str, str] = {}
+    for key, value in artifact.pod_descriptions.items():
+        # Key is in format "namespace/name" - anonymize it
+        parts = key.split("/", 1)
+        if len(parts) == 2:
+            ns, name = parts
+            anon_key_data = anonymizer.anonymize({"namespace": ns, "name": name})
+            anon_key = f"{anon_key_data.get('namespace', ns)}/{anon_key_data.get('name', name)}"
+        else:
+            anon_key = key
+        anon_descriptions[anon_key] = value
 
     # Schema reminder matching AssessorAssessment.from_dict() required fields:
     # - observed_signals[].id, description, layer, evidence_id, severity
@@ -102,18 +164,18 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
         Use evidence_id values like evt-1, evt-2 when exact IDs are unavailable.
 
         Artifact summary:
-        run_label: {artifact.run_label}
+        run_label: {anon_run_label}
         run_id: {artifact.run_id}
-        context: {artifact.context}
-        label: {artifact.label}
-        cluster_id: {artifact.cluster_id}
+        context: {anon_context}
+        label: {anon_label}
+        cluster_id: {anon_cluster_id}
         snapshot_timestamp: {artifact.snapshot_timestamp.isoformat()}
         artifact_timestamp: {artifact.timestamp.isoformat()}
         trigger_reasons: {"; ".join(artifact.trigger_reasons) or "none"}
         missing_evidence: {", ".join(artifact.missing_evidence) or "none"}
 
         Evidence summary:
-        {json.dumps(artifact.evidence_summary, indent=2)}
+        {json.dumps(anon_evidence_summary, indent=2)}
 
         Warning events (showing {len(event_lines)} of {event_count} total{", top 5 by timestamp" if event_count > 5 else ""}):
         {_join_lines(event_lines)}
@@ -124,10 +186,10 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
         Rollout/Deployment snapshots (showing {len(rollout_lines)} of {rollout_count} total):
         {_join_lines(rollout_lines)}
 
-        Affected namespaces: {", ".join(artifact.affected_namespaces) or "none"}
+        Affected namespaces: {", ".join(str(ns) for ns in anon_affected_namespaces) or "none"}
         Evidence collection timestamps: {json.dumps(artifact.collection_timestamps, indent=2)}
 
-        {_summarize_descriptions(artifact.pod_descriptions)}
+        {_summarize_descriptions(anon_descriptions)}
 
         Provide a concise structured JSON assessment that follows the schema exactly. Focus on the highest-signal evidence and recommend the next safest diagnostic step.
         Schema reminder (observe limits - produce no more than 2 items per list):

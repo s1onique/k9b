@@ -2,10 +2,10 @@
 
 **Document**: LLM Prompt Security Audit (AU-01)  
 **Project**: k9b - Kubernetes Diagnostics Operator Console  
-**Version**: 1.1  
+**Version**: 1.2  
 **Date**: 2026-05-06  
 **Author**: k9b Security Audit  
-**Status**: Mitigations Applied  
+**Status**: Mitigations Applied (GAP-P2 Phase 2 Complete)
 
 ---
 
@@ -16,9 +16,9 @@ This document presents the findings of AU-01: a deep-dive audit of all LLM promp
 **Key Findings**:
 - **3 primary prompt construction paths** identified across `prompts.py`, `drilldown_prompts.py`, and `llamacpp_adapter.py`
 - **1 gap**: GAP-P1 mitigated; all paths now call `sanitize_prompt()` before sending to LLM provider
-- **1 structural gap**: No systematic namespace/cluster name anonymization layer (GAP-P2 open)
+- **1 structural gap**: GAP-P2 partially mitigated for primary metadata fields; label/annotation values remain deferred to Phase 1b.
 - **11 distinct data inputs** across all prompt paths
-- **4 CRITICAL/HIGH risk items** in remediation backlog (reduced from 5)
+- **3 CRITICAL/HIGH risk items** in remediation backlog (reduced from 5)
 
 ---
 

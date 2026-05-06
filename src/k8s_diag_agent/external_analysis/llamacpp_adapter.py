@@ -26,6 +26,7 @@ from ..llm.prompt_diagnostics import (
     build_prompt_diagnostics,
 )
 from ..security import sanitize_prompt
+from ..security.anonymizer import MetadataAnonymizer
 from .adapter import (
     ExternalAnalysisAdapter,
     ExternalAnalysisExecutionError,
@@ -498,8 +499,18 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
     def _build_prompt(
         self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput
     ) -> str:
+        # Create single anonymizer instance to preserve alias consistency within prompt
+        anonymizer = MetadataAnonymizer()
+
+        # Anonymize the review data before building prompt
+        anon_review = anonymizer.anonymize(dict(context.review))
+
+        # Anonymize cluster_label for header (it's a cluster identifier)
+        anon_cluster_label_data = anonymizer.anonymize({"cluster_label": request.cluster_label})
+        anon_cluster_label = anon_cluster_label_data.get("cluster_label", request.cluster_label)
+
         prompt_parts: list[str] = [
-            f"LLM external analysis request\nrun_id={request.run_id}\ncluster_label={request.cluster_label}",
+            f"LLM external analysis request\nrun_id={request.run_id}\ncluster_label={anon_cluster_label}",
             (
                 "Produce a concise JSON advisory payload that includes summary, triageOrder/triage_order, "
                 "topConcerns/top_concerns, evidenceGaps/evidence_gaps, nextChecks/next_checks, and "
@@ -507,16 +518,21 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 "missing data explicitly."
             ),
             "Review artifact:",
-            json.dumps(context.review, indent=2),
+            json.dumps(anon_review, indent=2),
         ]
-        # Inject Alertmanager compact context when available
+
+        # Anonymize Alertmanager context when available
         if context.alertmanager_context.available:
+            # Anonymize compact data if present
+            anon_compact = None
+            if context.alertmanager_context.compact:
+                anon_compact = anonymizer.anonymize(context.alertmanager_context.compact)
             prompt_parts.append("Alertmanager operational context:")
             prompt_parts.append(json.dumps({
                 "available": True,
                 "source": context.alertmanager_context.source,
                 "status": context.alertmanager_context.status,
-                "compact": context.alertmanager_context.compact,
+                "compact": anon_compact,
             }, indent=2))
         else:
             prompt_parts.append("Alertmanager operational context:")
@@ -526,30 +542,46 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 "status": context.alertmanager_context.status,
                 "compact": None,
             }, indent=2))
+
+        # Anonymize selections (entry, drilldown, assessment, snapshot)
         if context.selections:
             for selection in context.selections:
                 label = selection.label or selection.context or "<unknown>"
-                prompt_parts.append(f"Selected drilldown: {label} ({selection.context})")
-                prompt_parts.append(json.dumps(selection.entry, indent=2))
+                # Anonymize label and context strings that may contain cluster identifiers
+                anon_label_data = anonymizer.anonymize({"label": label})
+                anon_label = anon_label_data.get("label", label)
+                anon_context_data = anonymizer.anonymize({"context": selection.context})
+                anon_context = anon_context_data.get("context", selection.context)
+                # Anonymize entry data
+                anon_entry = anonymizer.anonymize(dict(selection.entry)) if selection.entry else {}
+                prompt_parts.append(f"Selected drilldown: {anon_label} ({anon_context})")
+                prompt_parts.append(json.dumps(anon_entry, indent=2))
+
                 if selection.drilldown:
                     prompt_parts.append("Drilldown artifact:")
-                    prompt_parts.append(json.dumps(selection.drilldown, indent=2))
+                    anon_drilldown = anonymizer.anonymize(selection.drilldown)
+                    prompt_parts.append(json.dumps(anon_drilldown, indent=2))
                 else:
-                    prompt_parts.append(f"Drilldown artifact unavailable for {label}.")
+                    prompt_parts.append(f"Drilldown artifact unavailable for {anon_label}.")
+
                 if selection.assessment:
                     prompt_parts.append("Assessment artifact:")
-                    prompt_parts.append(json.dumps(selection.assessment, indent=2))
+                    anon_assessment = anonymizer.anonymize(selection.assessment)
+                    prompt_parts.append(json.dumps(anon_assessment, indent=2))
                 else:
-                    prompt_parts.append(f"Assessment artifact unavailable for {label}.")
+                    prompt_parts.append(f"Assessment artifact unavailable for {anon_label}.")
+
                 if selection.snapshot:
                     prompt_parts.append("Referenced snapshot:")
-                    prompt_parts.append(json.dumps(selection.snapshot, indent=2))
+                    anon_snapshot = anonymizer.anonymize(selection.snapshot)
+                    prompt_parts.append(json.dumps(anon_snapshot, indent=2))
                 elif selection.snapshot_path:
                     prompt_parts.append(
                         f"Snapshot referenced at {selection.snapshot_path} is unavailable."
                     )
         else:
             prompt_parts.append("No drilldown was selected for this review.")
+
         missing_notes: list[str] = []
         if context.missing_drilldowns:
             missing_notes.append(

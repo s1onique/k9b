@@ -9,6 +9,7 @@ from typing import Any
 from ..collect.cluster_snapshot import ClusterSnapshot
 from ..compare.two_cluster import ClusterComparison, ComparisonIntentMetadata
 from ..security import sanitize_prompt
+from ..security.anonymizer import MetadataAnonymizer
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,11 @@ def _summarize_helm_diffs(helm_diffs: dict[str, dict[str, Any]]) -> list[dict[st
         primary = diff.get("primary")
         secondary = diff.get("secondary")
         entry: dict[str, Any] = {"release": release_key}
+        # Include namespace if present (for anonymization)
+        if primary:
+            entry["namespace"] = primary.get("namespace")
+        elif secondary:
+            entry["namespace"] = secondary.get("namespace")
         if primary and secondary:
             entry["status"] = "version-mismatch"
             entry["primary_chart_version"] = primary.get("chart_version")
@@ -122,11 +128,27 @@ def build_assessment_prompt(
     comparison: ClusterComparison,
     intent_metadata: ComparisonIntentMetadata | None = None,
 ) -> str:
+    # Create single anonymizer instance to preserve alias consistency within prompt
+    anonymizer = MetadataAnonymizer()
+
+    # Anonymize metadata summaries before building prompt
+    primary_meta = anonymizer.anonymize(_metadata_summary(primary))
+    secondary_meta = anonymizer.anonymize(_metadata_summary(secondary))
+
+    # Anonymize helm diffs and crd diffs
     metadata_deltas = comparison.differences.get("metadata", {})
     helm_diffs = comparison.differences.get("helm_releases", {})
     crd_diffs = comparison.differences.get("crds", {})
+
+    # Anonymize metadata_deltas before using in prompt
+    anonymized_metadata_deltas = anonymizer.anonymize(metadata_deltas) if metadata_deltas else {}
+
+    # Anonymize helm_summary and crd_summary by anonymizing the input diffs
     helm_summary = _summarize_helm_diffs(helm_diffs)
     crd_summary = _summarize_crd_diffs(crd_diffs)
+    anonymized_helm_summary = anonymizer.anonymize(helm_summary)
+    anonymized_crd_summary = anonymizer.anonymize(crd_summary)
+
     statuses = {
         "primary": primary.collection_status.to_dict(),
         "secondary": secondary.collection_status.to_dict(),
@@ -251,13 +273,13 @@ def build_assessment_prompt(
         "overall_confidence" value example: "medium"
         """
     ).format(
-        primary_meta=json.dumps(_metadata_summary(primary), indent=2),
-        secondary_meta=json.dumps(_metadata_summary(secondary), indent=2),
-        metadata_deltas=json.dumps(metadata_deltas, indent=2) if metadata_deltas else "{}",
-        helm_diff_count=len(helm_summary),
-        helm_changes=json.dumps(helm_summary, indent=2),
-        crd_diff_count=len(crd_summary),
-        crd_changes=json.dumps(crd_summary, indent=2),
+        primary_meta=json.dumps(primary_meta, indent=2),
+        secondary_meta=json.dumps(secondary_meta, indent=2),
+        metadata_deltas=json.dumps(anonymized_metadata_deltas, indent=2) if anonymized_metadata_deltas else "{}",
+        helm_diff_count=len(anonymized_helm_summary),
+        helm_changes=json.dumps(anonymized_helm_summary, indent=2),
+        crd_diff_count=len(anonymized_crd_summary),
+        crd_changes=json.dumps(anonymized_crd_summary, indent=2),
         collection_status=json.dumps(statuses, indent=2),
         comparison_context=_describe_comparison_context(intent_metadata),
         intent_guidance=_build_intent_guidance(intent_metadata),
@@ -265,8 +287,8 @@ def build_assessment_prompt(
     sanitized = sanitize_prompt(prompt)
     logger.info(
         "LLM prompt prepared: helm_diffs=%d, crd_diffs=%d, prompt_chars=%d",
-        len(helm_summary),
-        len(crd_summary),
+        len(anonymized_helm_summary),
+        len(anonymized_crd_summary),
         len(sanitized),
     )
     return sanitized
