@@ -2,10 +2,10 @@
 
 **Document**: LLM Prompt Security Audit (AU-01)  
 **Project**: k9b - Kubernetes Diagnostics Operator Console  
-**Version**: 1.2  
+**Version**: 1.3  
 **Date**: 2026-05-06  
 **Author**: k9b Security Audit  
-**Status**: Mitigations Applied (GAP-P2 Phase 2 Complete)
+**Status**: Mitigations Applied (REM-P4 Complete - GAP-P4 Partially Mitigated)
 
 ---
 
@@ -389,35 +389,82 @@ message: |
 
 ### 7.2 Gap Details
 
-#### GAP-P1: Missing Sanitization in Review Enrichment (CRITICAL)
+#### GAP-P1: Missing Sanitization in Review Enrichment (CRITICAL) - **MITIGATED**
 
-**Current State**: `llamacpp_adapter._build_prompt()` constructs prompts from `ReviewEnrichmentInput` and sends directly to LLM provider without calling `sanitize_prompt()`.
+**Status**: ✅ Mitigated - `sanitize_prompt()` now called in `_build_prompt()`
 
-**Evidence**:
+**Implementation**:
 ```python
-# llamacpp_adapter.py:258-294
-def _build_prompt(
-    self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput
-) -> str:
-    prompt_parts: list[str] = [
-        f"LLM external analysis request\nrun_id={request.run_id}\n...",
-        "Review artifact:",
-        json.dumps(context.review, indent=2),  # UNREDACTED
-        ...
-    ]
-    return "\n".join(prompt_parts)  # NO sanitize_prompt() call
+# llamacpp_adapter.py:_build_prompt()
+prompt = (
+    instruction_header
+    + f"\n\n{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
+    + f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n"
+)
+return sanitize_prompt(prompt)
 ```
 
-**Impact**:
-- All review JSON sent unredacted to LLM
-- All alertmanager context sent unredacted
-- All drilldown/assessment artifacts sent unredacted
-- Cluster metadata (names, namespaces, IDs) fully exposed
+#### GAP-P2: No Cluster Name Anonymization (CRITICAL) - **PARTIALLY MITIGATED**
+
+**Status**: ⚠️ Partially Mitigated - Primary metadata fields (cluster_id, namespaces, pod names) now anonymized
+
+**Evidence**:
+- `build_assessment_prompt()` uses `MetadataAnonymizer`
+- `build_drilldown_prompt()` uses `MetadataAnonymizer`
+- `_build_prompt()` uses `MetadataAnonymizer`
+
+**Remaining Work**:
+- Label/annotation values still need anonymization (Phase 1b deferred)
+- Helm release names in Path 1 need anonymization
+
+#### GAP-P4: No Field Boundaries in JSON-based Prompts (HIGH) - **PARTIALLY MITIGATED**
+
+**Status**: ✅ Partially Mitigated via REM-P4 - Boundary markers implemented
+
+**Implementation**:
+All three prompt builders now use explicit boundary markers:
+
+```python
+# From src/k8s_diag_agent/llm/prompt_boundaries.py
+BEGIN_UNTRUSTED_CLUSTER_DATA = "===== BEGIN_UNTRUSTED_CLUSTER_DATA ====="
+END_UNTRUSTED_CLUSTER_DATA = "===== END_UNTRUSTED_CLUSTER_DATA ====="
+BEGIN_OUTPUT_SCHEMA = "===== BEGIN_OUTPUT_SCHEMA ====="
+END_OUTPUT_SCHEMA = "===== END_OUTPUT_SCHEMA ====="
+```
+
+**Prompt Structure**:
+```
+1. Trusted instruction header (system role, task description)
+2. Untrusted data section (cluster/artifact data, wrapped with boundary markers)
+3. Trusted output schema (instructions, wrapped with boundary markers)
+```
+
+**Key Properties**:
+- Cluster data MUST appear between `BEGIN_UNTRUSTED_CLUSTER_DATA` and `END_UNTRUSTED_CLUSTER_DATA`
+- Output schema MUST appear between `BEGIN_OUTPUT_SCHEMA` and `END_OUTPUT_SCHEMA`
+- Trusted instructions appear BEFORE untrusted data boundaries
+- `sanitize_prompt()` called AFTER boundary composition
+
+**Tests Added**:
+- `tests/test_prompt_boundaries.py`: Verifies markers present, injection contained, schema outside untrusted
+
+**Remaining Gap**:
+- GAP-P3 injection detection (basic pattern matching only) remains open
+- No active enforcement that data outside untrusted markers cannot override instructions
+- LLM model behavior still determines if boundaries provide actual protection
+
+#### GAP-P3: Basic Prompt Injection Detection (HIGH) - **OPEN**
+
+**Current State**: `sanitizer.py` uses regex patterns for basic credential redaction. No structured injection detection exists.
+
+**Evidence**: `_sanitize_string()` only applies regex replacements; no validation that injected content was removed.
+
+**Impact**: Sophisticated injection attempts may bypass basic sanitization.
 
 **Recommended Fix**:
-1. Add `sanitize_prompt()` call before returning from `_build_prompt()`
-2. Consider adding anonymization layer before sanitization
-3. Add integration test to verify sanitization coverage
+1. Add injection detection patterns (e.g., markdown fences, JSON delimiters)
+2. Add structured prompt construction with explicit field markers (✅ Done via REM-P4)
+3. Validate cluster data schema before prompt inclusion
 
 #### GAP-P2: No Cluster Name Anonymization (CRITICAL)
 

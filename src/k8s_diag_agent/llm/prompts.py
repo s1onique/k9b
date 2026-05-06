@@ -10,6 +10,12 @@ from ..collect.cluster_snapshot import ClusterSnapshot
 from ..compare.two_cluster import ClusterComparison, ComparisonIntentMetadata
 from ..security import sanitize_prompt
 from ..security.anonymizer import MetadataAnonymizer
+from .prompt_boundaries import (
+    BEGIN_OUTPUT_SCHEMA,
+    BEGIN_UNTRUSTED_CLUSTER_DATA,
+    END_OUTPUT_SCHEMA,
+    END_UNTRUSTED_CLUSTER_DATA,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,9 +159,10 @@ def build_assessment_prompt(
         "primary": primary.collection_status.to_dict(),
         "secondary": secondary.collection_status.to_dict(),
     }
-    prompt = dedent(
+
+    # Build untrusted data section with boundary markers
+    untrusted_data = dedent(
         """
-        You are a careful Kubernetes diagnostician.
         The compact context summary for both snapshots follows.
 
         Primary metadata summary:
@@ -181,7 +188,23 @@ def build_assessment_prompt(
 
         Interpretation guidance:
         {intent_guidance}
+        """
+    ).format(
+        primary_meta=json.dumps(primary_meta, indent=2),
+        secondary_meta=json.dumps(secondary_meta, indent=2),
+        metadata_deltas=json.dumps(anonymized_metadata_deltas, indent=2) if anonymized_metadata_deltas else "{}",
+        helm_diff_count=len(anonymized_helm_summary),
+        helm_changes=json.dumps(anonymized_helm_summary, indent=2),
+        crd_diff_count=len(anonymized_crd_summary),
+        crd_changes=json.dumps(anonymized_crd_summary, indent=2),
+        collection_status=json.dumps(statuses, indent=2),
+        comparison_context=_describe_comparison_context(intent_metadata),
+        intent_guidance=_build_intent_guidance(intent_metadata),
+    )
 
+    # Build output schema section with boundary markers
+    output_schema = dedent(
+        """
         Provide a structured JSON assessment that lists observed signals, findings, hypotheses (with confidence and falsifiable checks), next evidence to collect, recommended actions, safety level, and optional metadata such as probable layer of origin.
         Keep confidence aligned with how much difference exists between the snapshots. If no difference exists, recommend observation-only steps.
         Return JSON only. Do not wrap the object in markdown or add prose outside the single JSON payload, and do not replace the required objects with strings.
@@ -272,17 +295,16 @@ def build_assessment_prompt(
         "probable_layer_of_origin" value example: "workload"
         "overall_confidence" value example: "medium"
         """
-    ).format(
-        primary_meta=json.dumps(primary_meta, indent=2),
-        secondary_meta=json.dumps(secondary_meta, indent=2),
-        metadata_deltas=json.dumps(anonymized_metadata_deltas, indent=2) if anonymized_metadata_deltas else "{}",
-        helm_diff_count=len(anonymized_helm_summary),
-        helm_changes=json.dumps(anonymized_helm_summary, indent=2),
-        crd_diff_count=len(anonymized_crd_summary),
-        crd_changes=json.dumps(anonymized_crd_summary, indent=2),
-        collection_status=json.dumps(statuses, indent=2),
-        comparison_context=_describe_comparison_context(intent_metadata),
-        intent_guidance=_build_intent_guidance(intent_metadata),
+    )
+
+    # Compose prompt with explicit boundaries:
+    # 1. Trusted instruction header
+    # 2. Untrusted data section (wrapped with boundary markers)
+    # 3. Trusted output schema section (outside untrusted markers)
+    prompt = (
+        "You are a careful Kubernetes diagnostician.\n"
+        + f"{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
+        + f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n"
     )
     sanitized = sanitize_prompt(prompt)
     logger.info(

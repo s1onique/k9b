@@ -20,6 +20,12 @@ from ..llm.llamacpp_provider import (
     LLMResponseParseError,
     classify_llm_failure,
 )
+from ..llm.prompt_boundaries import (
+    BEGIN_OUTPUT_SCHEMA,
+    BEGIN_UNTRUSTED_CLUSTER_DATA,
+    END_OUTPUT_SCHEMA,
+    END_UNTRUSTED_CLUSTER_DATA,
+)
 from ..llm.prompt_diagnostics import (
     PromptSection,
     build_full_prompt_diagnostics,
@@ -509,17 +515,17 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         anon_cluster_label_data = anonymizer.anonymize({"cluster_label": request.cluster_label})
         anon_cluster_label = anon_cluster_label_data.get("cluster_label", request.cluster_label)
 
-        prompt_parts: list[str] = [
-            f"LLM external analysis request\nrun_id={request.run_id}\ncluster_label={anon_cluster_label}",
-            (
-                "Produce a concise JSON advisory payload that includes summary, triageOrder/triage_order, "
-                "topConcerns/top_concerns, evidenceGaps/evidence_gaps, nextChecks/next_checks, and "
-                "focusNotes/focus_notes. Use arrays of non-empty strings for the list entries and highlight "
-                "missing data explicitly."
-            ),
-            "Review artifact:",
-            json.dumps(anon_review, indent=2),
-        ]
+        # === TRUSTED INSTRUCTION HEADER (outside untrusted markers) ===
+        instruction_header = (
+            f"LLM external analysis request\nrun_id={request.run_id}\ncluster_label={anon_cluster_label}"
+        )
+
+        # === UNTRUSTED DATA SECTION ===
+        # All cluster/artifact data goes inside these markers
+        untrusted_parts: list[str] = []
+
+        untrusted_parts.append("Review artifact:")
+        untrusted_parts.append(json.dumps(anon_review, indent=2))
 
         # Anonymize Alertmanager context when available
         if context.alertmanager_context.available:
@@ -527,16 +533,16 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             anon_compact = None
             if context.alertmanager_context.compact:
                 anon_compact = anonymizer.anonymize(context.alertmanager_context.compact)
-            prompt_parts.append("Alertmanager operational context:")
-            prompt_parts.append(json.dumps({
+            untrusted_parts.append("Alertmanager operational context:")
+            untrusted_parts.append(json.dumps({
                 "available": True,
                 "source": context.alertmanager_context.source,
                 "status": context.alertmanager_context.status,
                 "compact": anon_compact,
             }, indent=2))
         else:
-            prompt_parts.append("Alertmanager operational context:")
-            prompt_parts.append(json.dumps({
+            untrusted_parts.append("Alertmanager operational context:")
+            untrusted_parts.append(json.dumps({
                 "available": False,
                 "source": context.alertmanager_context.source,
                 "status": context.alertmanager_context.status,
@@ -554,33 +560,33 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 anon_context = anon_context_data.get("context", selection.context)
                 # Anonymize entry data
                 anon_entry = anonymizer.anonymize(dict(selection.entry)) if selection.entry else {}
-                prompt_parts.append(f"Selected drilldown: {anon_label} ({anon_context})")
-                prompt_parts.append(json.dumps(anon_entry, indent=2))
+                untrusted_parts.append(f"Selected drilldown: {anon_label} ({anon_context})")
+                untrusted_parts.append(json.dumps(anon_entry, indent=2))
 
                 if selection.drilldown:
-                    prompt_parts.append("Drilldown artifact:")
+                    untrusted_parts.append("Drilldown artifact:")
                     anon_drilldown = anonymizer.anonymize(selection.drilldown)
-                    prompt_parts.append(json.dumps(anon_drilldown, indent=2))
+                    untrusted_parts.append(json.dumps(anon_drilldown, indent=2))
                 else:
-                    prompt_parts.append(f"Drilldown artifact unavailable for {anon_label}.")
+                    untrusted_parts.append(f"Drilldown artifact unavailable for {anon_label}.")
 
                 if selection.assessment:
-                    prompt_parts.append("Assessment artifact:")
+                    untrusted_parts.append("Assessment artifact:")
                     anon_assessment = anonymizer.anonymize(selection.assessment)
-                    prompt_parts.append(json.dumps(anon_assessment, indent=2))
+                    untrusted_parts.append(json.dumps(anon_assessment, indent=2))
                 else:
-                    prompt_parts.append(f"Assessment artifact unavailable for {anon_label}.")
+                    untrusted_parts.append(f"Assessment artifact unavailable for {anon_label}.")
 
                 if selection.snapshot:
-                    prompt_parts.append("Referenced snapshot:")
+                    untrusted_parts.append("Referenced snapshot:")
                     anon_snapshot = anonymizer.anonymize(selection.snapshot)
-                    prompt_parts.append(json.dumps(anon_snapshot, indent=2))
+                    untrusted_parts.append(json.dumps(anon_snapshot, indent=2))
                 elif selection.snapshot_path:
-                    prompt_parts.append(
+                    untrusted_parts.append(
                         f"Snapshot referenced at {selection.snapshot_path} is unavailable."
                     )
         else:
-            prompt_parts.append("No drilldown was selected for this review.")
+            untrusted_parts.append("No drilldown was selected for this review.")
 
         missing_notes: list[str] = []
         if context.missing_drilldowns:
@@ -596,12 +602,19 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 "Missing snapshots: " + ", ".join(context.missing_snapshots)
             )
         if missing_notes:
-            prompt_parts.append("Missing context details:")
-            prompt_parts.extend(missing_notes)
-        prompt_parts.append(
-            "Interpret the inputs conservatively and focus on actionable next checks and missing evidence."
-        )
-        prompt_parts.append(
+            untrusted_parts.append("Missing context details:")
+            untrusted_parts.extend(missing_notes)
+
+        untrusted_data = "\n".join(untrusted_parts)
+
+        # === OUTPUT SCHEMA SECTION (outside untrusted markers) ===
+        # Schema requirements remain outside untrusted data boundaries
+        output_schema = (
+            "Produce a concise JSON advisory payload that includes summary, triageOrder/triage_order, "
+            "topConcerns/top_concerns, evidenceGaps/evidence_gaps, nextChecks/next_checks, and "
+            "focusNotes/focus_notes. Use arrays of non-empty strings for the list entries and highlight "
+            "missing data explicitly.\n"
+            "Interpret the inputs conservatively and focus on actionable next checks and missing evidence.\n"
             "CRITICAL for nextChecks: each entry MUST be an explicit kubectl command in one of these formats:\n"
             "  - 'kubectl describe <resource> -n <namespace>'\n"
             "  - 'kubectl logs <pod> -n <namespace>'\n"
@@ -623,7 +636,17 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             "  - 'Check all clusters for CRDs' (has 'all clusters')\n"
             "  - 'Verify cluster2 version and upgrade to v1.33' (has 'upgrade')"
         )
-        return sanitize_prompt("\n".join(prompt_parts))
+
+        # === COMPOSE PROMPT WITH EXPLICIT BOUNDARIES ===
+        # 1. Trusted instruction header
+        # 2. Untrusted data section (wrapped with boundary markers)
+        # 3. Trusted output schema section (outside untrusted markers)
+        prompt = (
+            instruction_header
+            + f"\n\n{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
+            + f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n"
+        )
+        return sanitize_prompt(prompt)
 
     def _build_payload_from_context(
         self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput

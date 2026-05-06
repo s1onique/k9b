@@ -8,6 +8,12 @@ from textwrap import dedent
 from ..health.drilldown import DrilldownArtifact
 from ..security import sanitize_prompt
 from ..security.anonymizer import MetadataAnonymizer
+from .prompt_boundaries import (
+    BEGIN_OUTPUT_SCHEMA,
+    BEGIN_UNTRUSTED_CLUSTER_DATA,
+    END_OUTPUT_SCHEMA,
+    END_UNTRUSTED_CLUSTER_DATA,
+)
 
 
 def _format_table(items: list[str], header: str) -> str:
@@ -155,14 +161,9 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
         '"overall_confidence": "low|medium|high"}'
     )
 
-    prompt = dedent(
+    # Build untrusted data section with boundary markers
+    untrusted_data = dedent(
         f"""
-        You are a careful Kubernetes diagnostician.
-        The following drilldown artifact collects targeted evidence for a triggered health run.
-
-        Return ONLY JSON. No markdown. No prose. Use short strings.
-        Use evidence_id values like evt-1, evt-2 when exact IDs are unavailable.
-
         Artifact summary:
         run_label: {anon_run_label}
         run_id: {artifact.run_id}
@@ -190,6 +191,14 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
         Evidence collection timestamps: {json.dumps(artifact.collection_timestamps, indent=2)}
 
         {_summarize_descriptions(anon_descriptions)}
+        """
+    )
+
+    # Build output schema section with boundary markers
+    output_schema = dedent(
+        """
+        Return ONLY JSON. No markdown. No prose. Use short strings.
+        Use evidence_id values like evt-1, evt-2 when exact IDs are unavailable.
 
         Provide a concise structured JSON assessment that follows the schema exactly. Focus on the highest-signal evidence and recommend the next safest diagnostic step.
         Schema reminder (observe limits - produce no more than 2 items per list):
@@ -197,5 +206,16 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
 
         Constraint: max 2 items each for observed_signals, findings, hypotheses, next_evidence_to_collect. Keep descriptions under 60 characters. Do not explain every event.
         """
+    ).format(schema_reminder=schema_reminder)
+
+    # Compose prompt with explicit boundaries:
+    # 1. Trusted instruction header
+    # 2. Untrusted data section (wrapped with boundary markers)
+    # 3. Trusted output schema section (outside untrusted markers)
+    prompt = (
+        "You are a careful Kubernetes diagnostician.\n"
+        "The following drilldown artifact collects targeted evidence for a triggered health run.\n"
+        + f"\n{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
+        + f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n"
     )
     return sanitize_prompt(prompt)
