@@ -10,11 +10,8 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 from urllib.parse import urlparse
-
-if TYPE_CHECKING:
-    from .server import HealthUIRequestHandler
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +19,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_CONTENT_LENGTH = 1 * 1024 * 1024
 
 
-def _validate_mutation_origin(handler: HealthUIRequestHandler) -> bool:
+def _validate_mutation_origin(handler: Any) -> bool:
     """Validate Origin/Referer headers for CSRF protection on mutation endpoints.
 
     This implements API-R2: strict Origin/Referer guard for mutation endpoints.
@@ -151,7 +148,7 @@ def _validate_mutation_origin(handler: HealthUIRequestHandler) -> bool:
 
 
 def _validate_json_mutation_request(
-    handler: HealthUIRequestHandler,
+    handler: Any,
     max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> dict[str, object] | None:
     """Validate Content-Type, Origin/Referer, and request size for JSON mutation requests.

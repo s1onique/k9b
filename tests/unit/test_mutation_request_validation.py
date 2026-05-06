@@ -10,6 +10,8 @@ Tests cover:
 - Existing happy-path mutation tests still pass
 """
 
+from __future__ import annotations
+
 import unittest
 from io import BytesIO
 
@@ -21,20 +23,29 @@ from k8s_diag_agent.ui.server_shared import (
 
 
 class MockHealthUIRequestHandler:
-    """Minimal mock handler for testing validation."""
+    """Minimal mock handler for testing validation.
+
+    Provides the handler attributes used by _validate_json_mutation_request:
+    headers.get(...), rfile.read(...), and _send_json(...).
+    """
 
     def __init__(self, headers: dict[str, str] | None = None, body: bytes = b"") -> None:
-        self._headers = headers or {}
-        self.rfile = BytesIO(body)
-        self._sent_json: list[tuple[dict, int]] = []
+        self._headers: dict[str, str] = headers or {}
+        self._rfile = BytesIO(body)
+        self._sent_json: list[tuple[dict[str, object], int]] = []
 
     @property
     def headers(self) -> dict[str, str]:
-        """Return headers as a dict (mimics BaseHTTPRequestHandler.headers property)."""
+        """Return headers dict (dict has .get() to satisfy _HeaderLike)."""
         return self._headers
 
-    def _send_json(self, data: dict, status: int = 200) -> None:
-        self._sent_json.append((data, status))
+    @property
+    def rfile(self) -> BytesIO:
+        """Return BytesIO (has .read() to satisfy _BodyReader)."""
+        return self._rfile
+
+    def _send_json(self, data: dict[str, object], status: int = 200) -> None:
+        self._sent_json.append((dict(data), status))
 
     @property
     def sent_response(self) -> tuple[dict, int] | None:

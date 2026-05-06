@@ -81,6 +81,7 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
 
     candidate_entry: dict[str, object] | None = None
     resolved_index: int | None = None
+    plan_path: Path | None = None
     plan_path_used: Path | None = None
 
     def _log_resolution_attempt(
@@ -520,8 +521,11 @@ def handle_deterministic_promotion(handler: HealthUIRequestHandler) -> None:
             priority_value = int(priority_score)
         except ValueError:
             priority_value = None
-    target_context = payload.get("context") if isinstance(payload.get("context"), str) else None
-    if not target_context and matching_cluster:
+    target_context: str | None = None
+    payload_context = payload.get("context")
+    if isinstance(payload_context, str):
+        target_context = payload_context
+    if not target_context and matching_cluster and isinstance(matching_cluster.context, str):
         target_context = matching_cluster.context
     summary = {
         "description": description.strip(),
