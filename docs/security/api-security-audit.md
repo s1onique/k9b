@@ -285,14 +285,16 @@
 
 | Priority | Issue | Effort | Status | Notes |
 |----------|-------|--------|--------|-------|
-| P0 | Add CSRF token validation | Medium | OPEN | Affects all POST endpoints |
 | **P0** | **Add Content-Type validation** | Low | **DONE (API-R1)** | Validated via `_validate_json_mutation_request()` |
 | **P1** | **Add request size limits** | Low | **DONE (API-R1)** | 1 MiB limit enforced |
-| P1 | Add operator authentication | High | OPEN | Depends on deployment model |
+| **P3** | **Add Origin header validation** | Low | **DONE (API-R2)** | Strict Origin/Referer guard via `_validate_mutation_origin()` |
+| P1 | Add operator authentication | High | **DESIGN DONE (API-R3)** | See `operator-auth-design.md` for plan |
+| P0 | Add `--unsafe-bind` flag | Low | OPEN | AUTH-01 from operator-auth-design.md |
+| P0 | Add bind warning when exposing | Low | OPEN | AUTH-02 from operator-auth-design.md |
+| P1 | Add bearer token auth | Medium | OPEN | AUTH-04-05 from operator-auth-design.md |
 | P2 | Add idempotency keys for feedback | Medium | OPEN | UUID already used; add client-provided key |
 | P2 | Add audit fields to artifacts | Low | OPEN | Consistent timestamp/operator fields |
 | P3 | Add rate limiting | Medium | OPEN | Per-IP or per-session |
-| **P3** | **Add Origin header validation** | Low | **DONE (API-R2)** | Strict Origin/Referer guard via `_validate_mutation_origin()` |
 
 ---
 
