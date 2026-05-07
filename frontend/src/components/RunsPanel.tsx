@@ -300,7 +300,7 @@ const StatusBadge = ({ displayStatus }: { displayStatus: RunsDisplayStatus }) =>
     "unreviewed": "Awaiting review",
     "partially-reviewed": "Partially reviewed",
     "fully-reviewed": "Fully reviewed",
-    "unknown": "Execution status not loaded",
+    "unknown": "Not reviewed yet",
   }[displayStatus];
 
   const variant = {
