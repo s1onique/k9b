@@ -232,7 +232,6 @@ const App = () => {
     runOwnedPanelState,
     showLatestJump,
     clickLatest,
-    manualRefresh,
     poll,
     retrySelectedRun,
     model,
@@ -271,7 +270,10 @@ const App = () => {
     computePageForRunId,
     navigateToPageContainingRun,
     handleShowSelectedRun,
-  } = useRunSelection({ selectedRunId });
+  } = useRunSelection({
+    selectedRunId,
+    runControlPoll: poll,
+  });
 
   // Run payload from RunControl (now the authoritative source)
   const run = selectedRun;

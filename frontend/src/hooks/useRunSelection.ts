@@ -59,6 +59,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchRunsList } from "../api";
 import type { RunsListEntry, RunsListPayload } from "../types";
+import type { UseRunControlResult } from "../run-control";
 
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
@@ -245,11 +246,20 @@ export interface UseRunSelectionOptions {
    * Default: null (no selection)
    */
   selectedRunId?: string | null;
+
+  /**
+   * RunControl poll function for auto-refresh.
+   * PHASE 5: Auto-refresh must trigger RunControl's poll to update page freshness state.
+   * Without this, auto-refresh updates useRunSelection's runs state but not RunControl's
+   * model.runs.lastLoadedAtMs, causing the page freshness indicator to never update.
+   */
+  runControlPoll?: UseRunControlResult["poll"];
 }
 
 export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSelectionReturn => {
   // PHASE 3: selectedRunId is controlled via props from useRunControl
-  const { selectedRunId = null } = options;
+  // PHASE 5: runControlPoll for auto-refresh wiring to update page freshness
+  const { selectedRunId = null, runControlPoll } = options;
 
   const [runs, setRuns] = useState<RunsListEntry[]>([]);
   const [executionCountsComplete, setExecutionCountsComplete] = useState<boolean>(true);
@@ -386,6 +396,26 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
     }
   }, []);
 
+  // PHASE 5: Unified auto-refresh that goes through RunControl for page freshness updates.
+  // This ensures auto-refresh triggers RunControl's PollTick -> fetchRuns -> RunsLoaded,
+  // which updates model.runs.lastLoadedAtMs and keeps the page freshness indicator in sync.
+  // 
+  // NOTE: We call BOTH runControlPoll AND refreshRuns because:
+  // - runControlPoll updates RunControl's model.runs.lastLoadedAtMs (page freshness)
+  // - refreshRuns updates useRunSelection's local runs state (UI list)
+  // This dual-write is necessary until RunControl and useRunSelection are fully consolidated.
+  const triggerAutoRefresh = useCallback(async () => {
+    // Always update the UI list (this is the runs state that RecentRunsPanel reads)
+    refreshRuns();
+    // Also go through RunControl to update page freshness indicator
+    if (runControlPoll) {
+      runControlPoll();
+    }
+  }, [runControlPoll, refreshRuns]);
+
+  // NOTE: Manual refresh currently uses App's `refresh` callback.
+  // Auto-refresh is bridged here only because useRunSelection owns the timer.
+
   useEffect(() => {
     setIsLoading(true);
     refreshRuns().finally(() => {
@@ -396,10 +426,10 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
   useEffect(() => {
     if (!autoRefreshInterval) return;
     const timerId = setInterval(() => {
-      refreshRuns();
+      triggerAutoRefresh();
     }, autoRefreshInterval * 1000);
     return () => clearInterval(timerId);
-  }, [autoRefreshInterval, refreshRuns]);
+  }, [autoRefreshInterval, triggerAutoRefresh]);
 
   // Effect: After runs list refresh, navigate to the page containing the selected run.
   useEffect(() => {
