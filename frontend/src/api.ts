@@ -355,7 +355,10 @@ export const submitUsefulnessFeedback = async (
 export type RunsListPayload = import("./types").RunsListPayload;
 
 export const fetchRunsList = (): Promise<RunsListPayload> =>
-  fetchJson<RunsListPayload>("/api/runs");
+  // NOTE: include_status=true is REQUIRED for batch eligibility computation.
+  // Without it, batchExecutable will always be false and the Execute button
+  // will not show for runs with eligible next-check candidates.
+  fetchJson<RunsListPayload>("/api/runs?include_status=true");
 
 // Batch execution API
 export type BatchExecutionRequest = import("./types").BatchExecutionRequest;

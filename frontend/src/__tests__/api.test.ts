@@ -311,29 +311,25 @@ describe("fetchRunsList", () => {
     const result = await fetchRunsList();
     expect(result).toEqual({ runs: [] });
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/runs",
+      "/api/runs?include_status=true",
       expect.objectContaining({ cache: "no-store" })
     );
   });
 
-  test("REGRESSION: does not call /api/runs?include_status=true", async () => {
-    // This test ensures the backend fast path is used.
-    // Backend fast path (include_expensive=false) skips execution count derivation,
-    // providing sub-second response times for initial Recent Runs display.
+  test("calls /api/runs?include_status=true for batch eligibility", async () => {
+    // include_status=true is REQUIRED for batch eligibility computation.
+    // Without it, batchExecutable will always be false and the Execute button
+    // will not show for runs with eligible next-check candidates.
     const fetchMock = vi.fn(() => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await fetchRunsList();
-    // Assert no call was made to the slow path
+    // Assert the call includes include_status=true
     const calls = vi.mocked(globalThis.fetch).mock.calls;
-    for (const [url] of calls) {
-      const urlStr = typeof url === "string" ? url : String(url);
-      expect(urlStr).not.toContain("include_status=true");
-    }
-    // Must call the fast path
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/runs",
-      expect.any(Object)
-    );
+    expect(calls.length).toBe(1);
+    const [url] = calls[0];
+    const urlStr = typeof url === "string" ? url : String(url);
+    expect(urlStr).toContain("/api/runs");
+    expect(urlStr).toContain("include_status=true");
   });
 });
 
