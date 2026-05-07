@@ -17,6 +17,7 @@ from ..external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from ..security.deanonymization import deanonymize_review_enrichment, safe_alias_mapping
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
@@ -356,6 +357,13 @@ def _serialize_review_enrichment(
         for key, value in artifact.interpretation.items():
             if key not in payload:
                 payload[key] = value
+
+    # FIX: Apply de-anonymization to review enrichment payload before UI serialization
+    # This prevents provider aliases (cluster-a, namespace-f, etc.) from leaking to
+    # operator-facing UI fields in ui-index.json
+    alias_mapping = safe_alias_mapping(getattr(artifact, "alias_mapping", None))
+    if alias_mapping:
+        payload = deanonymize_review_enrichment(payload, alias_mapping)
 
     def _list_from(*keys: str) -> list[str]:
         for key in keys:

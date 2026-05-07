@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from ..external_analysis.next_check_approval import NextCheckApprovalRecord, collect_next_check_approvals
 from ..external_analysis.utils import artifact_matches_run
+from ..security.deanonymization import deanonymize_next_check_candidate, safe_alias_mapping
 from ..structured_logging import emit_structured_log
 from .ui_next_check_execution import (
     NextCheckExecutionRecord,
@@ -132,6 +133,19 @@ def _find_next_check_plan_artifact(
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
         if (
             artifact.purpose == ExternalAnalysisPurpose.NEXT_CHECK_PLANNING
+            and artifact_matches_run(artifact, run_id)
+        ):
+            return artifact
+    return None
+
+
+def _find_review_enrichment_artifact_for_alias(
+    artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
+) -> ExternalAnalysisArtifact | None:
+    """Find the latest review enrichment artifact for alias lookup."""
+    for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
+        if (
+            artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
             and artifact_matches_run(artifact, run_id)
         ):
             return artifact
@@ -422,6 +436,16 @@ def _serialize_next_check_plan(
         candidates_raw: Sequence[object] = raw_candidates
     else:
         candidates_raw = []
+
+    # FIX: Get alias_mapping from plan artifact or fall back to review enrichment
+    # This prevents provider aliases from leaking to operator-facing UI fields
+    alias_mapping: dict[str, str] = safe_alias_mapping(getattr(artifact, "alias_mapping", None))
+    if not alias_mapping:
+        # Fall back to finding alias_mapping from review enrichment artifact
+        review_artifact = _find_review_enrichment_artifact_for_alias(artifacts, run_id)
+        if review_artifact:
+            alias_mapping = safe_alias_mapping(getattr(review_artifact, "alias_mapping", None))
+
     approvals = collect_next_check_approvals(artifacts, run_id)
     used_approvals: set[NextCheckApprovalRecord] = set()
     plan_artifact_path = str(artifact.artifact_path) if artifact.artifact_path else None
@@ -488,6 +512,10 @@ def _serialize_next_check_plan(
         )
         candidate["latestArtifactPath"] = latest_artifact
         candidate["latestTimestamp"] = latest_timestamp
+        # FIX: Apply de-anonymization to candidate before appending to UI index
+        # This prevents provider aliases from leaking to operator-facing fields
+        if alias_mapping:
+            candidate = deanonymize_next_check_candidate(candidate, alias_mapping)
         status_counter[outcome_status] += 1
         candidates.append(candidate)
     orphaned: list[dict[str, object]] = []

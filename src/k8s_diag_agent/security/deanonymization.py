@@ -352,6 +352,29 @@ def flatten_alias_mappings(all_mappings: Mapping[str, object]) -> dict[str, str]
     return result
 
 
+def safe_alias_mapping(value: object | None) -> dict[str, str]:
+    """Normalize alias mapping to dict[str, str] for safe use in de-anonymization.
+
+    This helper ensures:
+    - Non-dict values become {}
+    - Non-string keys are filtered
+    - Non-string values are filtered
+
+    Args:
+        value: The alias_mapping value from an artifact
+
+    Returns:
+        Normalized dict with string keys and string values, or {} if invalid
+    """
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(k): str(v)
+        for k, v in value.items()
+        if isinstance(k, (str, int, float)) and isinstance(v, str)
+    }
+
+
 def assert_no_provider_aliases(data: Any, path: str = "payload") -> list[str]:
     """Assert that a payload or string contains no provider alias leaks.
 
