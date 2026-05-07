@@ -1,5 +1,8 @@
 /**
  * Tests for useAppData hook - handleAlertmanagerRelevanceFeedback
+ *
+ * RunControl owns runs refresh. useAppData owns fleet/proposals refresh.
+ * handleAlertmanagerRelevanceFeedback calls refreshAppData() after successful submission.
  */
 
 import { renderHook, waitFor } from "@testing-library/react";
@@ -45,11 +48,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     const { result } = renderHook(() =>
       useAppData({
         selectedRunId: "run-123",
-        lastRefresh: {
-          toISOString: () => "2026-04-06T12:00:00Z",
-        } as any,
-        refreshRuns: vi.fn(),
-        refreshRunData: vi.fn(),
+        lastRefreshMs: Date.now(),
       })
     );
 
@@ -73,44 +72,11 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     });
   });
 
-  test("calls submitAlertmanagerRelevanceFeedback without summary when not provided", async () => {
-    const { result } = renderHook(() =>
-      useAppData({
-        selectedRunId: "run-123",
-        lastRefresh: {
-          toISOString: () => "2026-04-06T12:00:00Z",
-        } as any,
-        refreshRuns: vi.fn(),
-        refreshRunData: vi.fn(),
-      })
-    );
-
-    await waitFor(() => {
-      expect(fetchFleet).toHaveBeenCalled();
-    });
-
-    await result.current.handleAlertmanagerRelevanceFeedback(
-      "/artifacts/execution-1.json",
-      "not_relevant",
-      undefined
-    );
-
-    expect(submitAlertmanagerRelevanceFeedback).toHaveBeenCalledWith({
-      artifactPath: "/artifacts/execution-1.json",
-      alertmanagerRelevance: "not_relevant",
-      alertmanagerRelevanceSummary: undefined,
-    });
-  });
-
   test("accepts all valid relevance values", async () => {
     const { result } = renderHook(() =>
       useAppData({
         selectedRunId: "run-123",
-        lastRefresh: {
-          toISOString: () => "2026-04-06T12:00:00Z",
-        } as any,
-        refreshRuns: vi.fn(),
-        refreshRunData: vi.fn(),
+        lastRefreshMs: Date.now(),
       })
     );
 
@@ -118,45 +84,38 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
       expect(fetchFleet).toHaveBeenCalled();
     });
 
-    // Test "noisy"
-    await result.current.handleAlertmanagerRelevanceFeedback(
-      "/artifacts/1.json",
+    // Test all valid relevance values
+    const validValues: Array<"relevant" | "not_relevant" | "noisy" | "unsure"> = [
+      "relevant",
+      "not_relevant",
       "noisy",
-      "Too many false positives"
-    );
-    expect(submitAlertmanagerRelevanceFeedback).toHaveBeenLastCalledWith({
-      artifactPath: "/artifacts/1.json",
-      alertmanagerRelevance: "noisy",
-      alertmanagerRelevanceSummary: "Too many false positives",
-    });
-
-    // Test "unsure"
-    await result.current.handleAlertmanagerRelevanceFeedback(
-      "/artifacts/2.json",
       "unsure",
-      undefined
-    );
-    expect(submitAlertmanagerRelevanceFeedback).toHaveBeenLastCalledWith({
-      artifactPath: "/artifacts/2.json",
-      alertmanagerRelevance: "unsure",
-      alertmanagerRelevanceSummary: undefined,
-    });
+    ];
+
+    for (const relevance of validValues) {
+      vi.clearAllMocks();
+
+      await result.current.handleAlertmanagerRelevanceFeedback(
+        "/artifacts/execution-1.json",
+        relevance,
+        undefined
+      );
+
+      expect(submitAlertmanagerRelevanceFeedback).toHaveBeenCalledWith({
+        artifactPath: "/artifacts/execution-1.json",
+        alertmanagerRelevance: relevance,
+        alertmanagerRelevanceSummary: undefined,
+      });
+    }
   });
 
   test("refreshes app data after successful submission", async () => {
-    const mockRefreshRuns = vi.fn();
-    const mockRefreshRunData = vi.fn();
-
     vi.mocked(submitAlertmanagerRelevanceFeedback).mockResolvedValue(undefined);
 
     const { result } = renderHook(() =>
       useAppData({
         selectedRunId: "run-123",
-        lastRefresh: {
-          toISOString: () => "2026-04-06T12:00:00Z",
-        } as any,
-        refreshRuns: mockRefreshRuns,
-        refreshRunData: mockRefreshRunData,
+        lastRefreshMs: Date.now(),
       })
     );
 
@@ -164,16 +123,26 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
       expect(fetchFleet).toHaveBeenCalled();
     });
 
+    // Count initial calls
+    const initialFleetCalls = fetchFleet.mock.calls.length;
+    const initialProposalsCalls = fetchProposals.mock.calls.length;
+
+    // Call the handler
     await result.current.handleAlertmanagerRelevanceFeedback(
       "/artifacts/execution-1.json",
       "relevant",
       undefined
     );
 
-    // Wait for the async refresh to be called
-    await waitFor(() => {
-      expect(mockRefreshRuns).toHaveBeenCalled();
-    });
+    // Wait for refresh to complete
+    await waitFor(
+      () => {
+        // refreshAppData() should be called which triggers fleet/proposals fetches
+        expect(fetchFleet.mock.calls.length).toBeGreaterThan(initialFleetCalls);
+        expect(fetchProposals.mock.calls.length).toBeGreaterThan(initialProposalsCalls);
+      },
+      { timeout: 2000 }
+    );
   });
 
   test("re-throws error from API on submission failure", async () => {
@@ -184,11 +153,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     const { result } = renderHook(() =>
       useAppData({
         selectedRunId: "run-123",
-        lastRefresh: {
-          toISOString: () => "2026-04-06T12:00:00Z",
-        } as any,
-        refreshRuns: vi.fn(),
-        refreshRunData: vi.fn(),
+        lastRefreshMs: Date.now(),
       })
     );
 

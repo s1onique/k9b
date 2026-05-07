@@ -1,38 +1,33 @@
 /**
- * useRunSelection hook — manages runs list UI (fetching, pagination, filtering).
+ * useRunSelection hook — manages runs list UI (pagination, filtering, navigation).
  *
- * PHASE 3/4: This hook is list UI only. It does NOT own selected-run data.
+ * Ownership model:
+ *   - RunControl is the single authoritative owner for run list loading and freshness.
+ *   - useRunSelection receives runs data as INPUT (from RunControl).
+ *   - useRunSelection owns only:
+ *     - autoRefreshInterval preference and localStorage persistence
+ *     - pagination state (page, pageSize)
+ *     - filter state (runsFilter)
+ *     - navigation helpers (computePageForRunId, navigateToPageContainingRun, handleShowSelectedRun)
  *
- * selectedRunId ownership:
- *   - RunControl owns selectedRunId as the source of truth for selected-run causality.
- *   - useRunSelection receives selectedRunId as an INPUT (from RunControl).
- *   - selectedRunId is used for:
- *     - Highlighting the selected run in the list
- *     - "Show Selected" / handleShowSelectedRun button
- *     - Following mode: auto-navigate to the page containing the selected run
- *     - Detached mode: when isRunsListFollowingSelection is false, the user has
- *       manually navigated away from the selected run's page
+ * Auto-refresh timer is owned by App.tsx. App.tsx reads autoRefreshInterval from this hook
+ * and calls RunControl's poll() on each interval tick. This hook does NOT own the timer.
  *
- * NOTE: This hook fetches /api/runs for list UI purposes (visible list filtering/pagination).
- * During the migration, useRunControl also fetches /api/runs for runs list ownership.
- * Future consolidation can merge these once the UI list state is migrated to RunControl.
- *
- * Inputs:
+ * Inputs (via UseRunSelectionOptions):
  *   - selectedRunId: string | null - selected run from useRunControl (REQUIRED INPUT)
  *     Used for: highlighting, "show selected" button, following/detached navigation
+ *   - runs: RunsListEntry[] - run list from RunControl model (REQUIRED INPUT)
+ *     Used for: filtering, pagination, computing latestRunId
+ *   - isLoading: boolean - loading state from RunControl (REQUIRED INPUT)
+ *     Used for: showing loading indicator in list
  *
  * Returns:
- *   - runs: RunsListEntry[] - the list of runs (fetched for list UI)
- *   - executionCountsComplete: boolean - whether execution counts are complete
- *     NOTE: When false, "no-executions" filter may be unreliable (counts may be stale/incomplete).
- *     The backend may not have finished computing execution counts for recent runs.
+ *   - runs: RunsListEntry[] - echo of the input (passed-through for convenience)
+ *   - isLoading: boolean - echo of the input (passed-through for convenience)
  *   - selectedRunId: string | null - echo of the input, for convenience
- *   - isLoading: boolean - whether a fetch is in progress
- *   - error: string | null - error message if fetch failed
- *   - refreshRuns: () => Promise<void> - manually trigger a refresh
- *   - latestRunId: string | null - the most recent run ID
+ *   - latestRunId: string | null - the most recent run ID (derived from runs input)
  *   - isLatest: boolean - whether the selected run is the latest
- *   - autoRefreshInterval: number | null - the auto-refresh interval used for runs list polling
+ *   - autoRefreshInterval: number | null - the auto-refresh interval (owned by this hook, read by App.tsx)
  *   - handleAutoRefreshChange: (value: string) => void
  *   - runsFilter: RunsReviewFilter - current filter for runs list
  *   - setRunsFilter: (filter: RunsReviewFilter) => void
@@ -56,10 +51,8 @@
  *   - navigateToPageContainingRun: (runId: string | null) => void - enables following mode
  *   - handleShowSelectedRun: () => void - navigate to and highlight the selected run
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchRunsList } from "../api";
-import type { RunsListEntry, RunsListPayload } from "../types";
-import type { UseRunControlResult } from "../run-control";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { RunsListEntry } from "../types";
 
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
@@ -208,64 +201,105 @@ export const getRunsDisplayStatus = (
 };
 
 export interface UseRunSelectionReturn {
+  /** Run list from RunControl (passed-through for convenience) */
   runs: RunsListEntry[];
-  executionCountsComplete: boolean;
-  selectedRunId: string | null;
+  /** Loading state from RunControl (passed-through for convenience) */
   isLoading: boolean;
+  /** Error state from RunControl (passed-through for convenience) */
   error: string | null;
-  refreshRuns: () => Promise<void>;
+  /** Selected run ID (echo of input) */
+  selectedRunId: string | null;
+  /** Whether execution counts are complete (derived from runs input) */
+  executionCountsComplete: boolean;
+  /** The most recent run ID (derived from runs input) */
   latestRunId: string | null;
+  /** Whether the selected run is the latest */
   isLatest: boolean;
+  /** The auto-refresh interval (owned by this hook, read by App.tsx for timer) */
   autoRefreshInterval: number | null;
+  /** Handler for auto-refresh interval changes */
   handleAutoRefreshChange: (value: string) => void;
+  /** Current filter for runs list */
   runsFilter: RunsReviewFilter;
+  /** Setter for runs filter */
   setRunsFilter: (filter: RunsReviewFilter) => void;
+  /** Number of runs per page */
   runsPageSize: number;
+  /** Setter for page size */
   setRunsPageSize: (size: number) => void;
+  /** Current page number (1-indexed) */
   runsPage: number;
+  /** Setter for page number */
   setRunsPage: (page: number) => void;
+  /** Following vs detached mode */
   isRunsListFollowingSelection: boolean;
+  /** Setter for following mode */
   setIsRunsListFollowingSelection: (following: boolean) => void;
+  /** Runs filtered by runsFilter */
   filteredRunsList: RunsListEntry[];
+  /** Counts per filter */
   runsFilterCounts: Record<RunsReviewFilter, number>;
+  /** Runs for current page */
   paginatedRunsList: RunsListEntry[];
+  /** Total number of pages */
   totalRunsPages: number;
+  /** Whether selected run is visible on current page */
   isSelectedRunVisibleOnCurrentRunsPage: boolean;
+  /** Handler for filter changes */
   handleRunsFilterChange: (filter: RunsReviewFilter) => void;
+  /** Handler for page size changes */
   handleRunsPageSizeChange: (size: number) => void;
+  /** Handler for page changes */
   handleRunsPageChange: (page: number) => void;
+  /** Compute page number for a given run ID */
   computePageForRunId: (runId: string | null) => number;
+  /** Navigate to the page containing the given run ID */
   navigateToPageContainingRun: (runId: string | null) => void;
+  /** Navigate to and highlight the selected run */
   handleShowSelectedRun: () => void;
 }
 
 export interface UseRunSelectionOptions {
   /**
    * Selected run ID from useRunControl.
-   * PHASE 3: useRunSelection no longer owns selectedRunId - useRunControl is the sole owner.
+   * This is an INPUT only. RunControl is the sole owner of selectedRunId.
+   * Used for: highlighting, "show selected" button, following/detached navigation
    * Default: null (no selection)
    */
   selectedRunId?: string | null;
 
   /**
-   * RunControl poll function for auto-refresh.
-   * PHASE 5: Auto-refresh must trigger RunControl's poll to update page freshness state.
-   * Without this, auto-refresh updates useRunSelection's runs state but not RunControl's
-   * model.runs.lastLoadedAtMs, causing the page freshness indicator to never update.
+   * Run list from RunControl model.
+   * REQUIRED INPUT - RunControl owns this data.
+   * useRunSelection derives pagination and filtering from this input.
+   * Default: [] (empty list)
    */
-  runControlPoll?: UseRunControlResult["poll"];
+  runs?: RunsListEntry[];
+
+  /**
+   * Whether the runs list is loading.
+   * REQUIRED INPUT - RunControl owns loading state.
+   * Default: false
+   */
+  isLoading?: boolean;
+
+  /**
+   * Error message if runs list fetch failed.
+   * REQUIRED INPUT - RunControl owns error state.
+   * Default: null
+   */
+  error?: string | null;
 }
 
 export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSelectionReturn => {
-  // PHASE 3: selectedRunId is controlled via props from useRunControl
-  // PHASE 5: runControlPoll for auto-refresh wiring to update page freshness
-  const { selectedRunId = null, runControlPoll } = options;
+  const {
+    selectedRunId = null,
+    runs = [],
+    isLoading = false,
+    error = null,
+  } = options;
 
-  const [runs, setRuns] = useState<RunsListEntry[]>([]);
-  const [executionCountsComplete, setExecutionCountsComplete] = useState<boolean>(true);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  // autoRefreshInterval is owned by this hook; App.tsx reads it for timer management.
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(readStoredAutoRefreshInterval);
   const [runsFilter, setRunsFilter] = useState<RunsReviewFilter>(readStoredRunsReviewFilter);
   const [runsPageSize, setRunsPageSize] = useState<number>(readStoredRunsPageSize);
@@ -299,6 +333,11 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
     setRunsPage(page);
     setIsRunsListFollowingSelection(false);
   }, []);
+
+  // TODO(phase-5): RunControl model.runs should expose executionCountsComplete
+  // if the backend provides it. Currently hardcoded to true which may hide
+  // incomplete-count state in the "no-executions" filter.
+  const executionCountsComplete = true;
 
   const filteredRunsList = useMemo(() => {
     if (runsFilter === "all") {
@@ -358,8 +397,7 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
     return paginatedRunsList.some((r) => r.runId === selectedRunId);
   }, [paginatedRunsList, selectedRunId]);
 
-  const refreshInProgress = useRef(false);
-
+  // latestRunId is derived from the runs input (passed from RunControl)
   const latestRunId = useMemo(() => {
     return runs.length > 0 ? runs[0].runId : null;
   }, [runs]);
@@ -371,67 +409,11 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
     return selectedRunId === latestRunId;
   }, [selectedRunId, latestRunId]);
 
-  const refreshRuns = useCallback(async () => {
-    if (refreshInProgress.current) {
-      return;
-    }
-    refreshInProgress.current = true;
-    let active = true;
-    try {
-      setError(null);
-      const payload: RunsListPayload = await fetchRunsList();
-      if (active) {
-        const sortedRuns = [...payload.runs].sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
-        setRuns(sortedRuns);
-        setExecutionCountsComplete(payload.executionCountsComplete ?? true);
-      }
-    } catch (err) {
-      if (active) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      refreshInProgress.current = false;
-    }
-  }, []);
-
-  // PHASE 5: Unified auto-refresh that goes through RunControl for page freshness updates.
-  // This ensures auto-refresh triggers RunControl's PollTick -> fetchRuns -> RunsLoaded,
-  // which updates model.runs.lastLoadedAtMs and keeps the page freshness indicator in sync.
-  // 
-  // NOTE: We call BOTH runControlPoll AND refreshRuns because:
-  // - runControlPoll updates RunControl's model.runs.lastLoadedAtMs (page freshness)
-  // - refreshRuns updates useRunSelection's local runs state (UI list)
-  // This dual-write is necessary until RunControl and useRunSelection are fully consolidated.
-  const triggerAutoRefresh = useCallback(async () => {
-    // Always update the UI list (this is the runs state that RecentRunsPanel reads)
-    refreshRuns();
-    // Also go through RunControl to update page freshness indicator
-    if (runControlPoll) {
-      runControlPoll();
-    }
-  }, [runControlPoll, refreshRuns]);
-
-  // NOTE: Manual refresh currently uses App's `refresh` callback.
-  // Auto-refresh is bridged here only because useRunSelection owns the timer.
-
-  useEffect(() => {
-    setIsLoading(true);
-    refreshRuns().finally(() => {
-      setIsLoading(false);
-    });
-  }, [refreshRuns]);
-
-  useEffect(() => {
-    if (!autoRefreshInterval) return;
-    const timerId = setInterval(() => {
-      triggerAutoRefresh();
-    }, autoRefreshInterval * 1000);
-    return () => clearInterval(timerId);
-  }, [autoRefreshInterval, triggerAutoRefresh]);
-
-  // Effect: After runs list refresh, navigate to the page containing the selected run.
+  // Keep runs list page synchronized with selected run when:
+  // - selectedRunId is set
+  // - isRunsListFollowingSelection is true (user hasn't manually navigated away)
+  // - filteredRunsList changes (runs arrive from RunControl or filter changes)
+  // - the selected run exists in the filtered list
   useEffect(() => {
     if (!selectedRunId) return;
     if (!isRunsListFollowingSelection) return;
@@ -442,16 +424,19 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
   }, [selectedRunId, filteredRunsList, navigateToPageContainingRun, isRunsListFollowingSelection]);
 
   return {
+    // Pass-through values from inputs
     runs,
-    executionCountsComplete,
-    selectedRunId,
     isLoading,
     error,
-    refreshRuns,
+    selectedRunId,
+    executionCountsComplete,
+    // Derived values
     latestRunId,
     isLatest,
+    // Owned by this hook (read by App.tsx for timer management)
     autoRefreshInterval,
     handleAutoRefreshChange,
+    // Pagination and filter state
     runsFilter,
     setRunsFilter,
     runsPageSize,

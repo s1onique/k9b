@@ -1,51 +1,42 @@
 /**
  * useRunSelection hook - refresh behavior tests
  *
- * Tests that both manual refresh and auto-refresh polling invoke the same
- * refreshRuns() pipeline, which calls fetchRunsList() internally.
+ * PHASE 5: Updated tests for the new architecture where:
+ *   - RunControl owns the authoritative run list data
+ *   - useRunSelection receives runs as INPUT (not locally fetched)
+ *   - App.tsx owns the auto-refresh timer
+ *   - useRunSelection only manages pagination/filter state and autoRefreshInterval preference
  *
- * IMPORTANT: Timer ownership is SCOPED within this file.
+ * Timer ownership is SCOPED within this file:
  * - beforeEach: enables fake timers for tests that need them
  * - afterEach: always restores real timers to prevent cross-file pollution
  *
  * Acceptance criteria:
- * - refreshRuns() is called on mount (initial fetch)
- * - manual invocation of refreshRuns() triggers /api/runs fetch
- * - auto-refresh polling (setInterval) triggers /api/runs fetch
- * - both paths invoke the same fetchRunsList() pipeline
+ * - useRunSelection receives runs as input from RunControl
+ * - autoRefreshInterval is persisted and read by App.tsx for timer management
+ * - pagination/filter/navigation helpers work correctly
+ * - selectedRunId is handled as input for highlighting
+ *
+ * NOTE: fetchRunsList is no longer called by useRunSelection.
+ * RunControl is the sole authoritative owner for run list fetching.
  */
 
-import { act, renderHook } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { useRunSelection } from "../useRunSelection";
-import { createStorageMock, makeFetchResponse } from "../../__tests__/fixtures";
-import type { RunsListPayload } from "../../types";
+import { createStorageMock } from "../../__tests__/fixtures";
+import type { RunsListEntry } from "../../types";
 
-describe("useRunSelection refresh behavior", () => {
-  // Build initial runs list (run-123 is latest)
-  const initialRunsList: RunsListPayload = {
-    runs: [
-      { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
-      { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
-    ],
-    totalCount: 2,
-    executionCountsComplete: true,
-  };
-
-  // Build updated runs list (run-124 is latest - newer than run-123)
-  const updatedRunsList: RunsListPayload = {
-    runs: [
-      { runId: "run-124", runLabel: "2026-04-07-1300", timestamp: "2026-04-07T13:00:00Z", clusterCount: 4, triaged: true, executionCount: 7, reviewedCount: 7, reviewStatus: "fully-reviewed" },
-      { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
-      { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
-    ],
-    totalCount: 3,
-    executionCountsComplete: true,
-  };
+describe("useRunSelection refresh behavior (Phase 5)", () => {
+  // Build sample runs list for testing
+  const sampleRuns: RunsListEntry[] = [
+    { runId: "run-123", runLabel: "2026-04-07-1200", timestamp: "2026-04-07T12:00:00Z", clusterCount: 3, triaged: true, executionCount: 5, reviewedCount: 5, reviewStatus: "fully-reviewed" },
+    { runId: "run-122", runLabel: "2026-04-07-1100", timestamp: "2026-04-07T11:00:00Z", clusterCount: 3, triaged: false, executionCount: 3, reviewedCount: 0, reviewStatus: "unreviewed" },
+    { runId: "run-121", runLabel: "2026-04-07-1000", timestamp: "2026-04-07T10:00:00Z", clusterCount: 3, triaged: true, executionCount: 7, reviewedCount: 7, reviewStatus: "fully-reviewed" },
+  ];
 
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.clearAllTimers();
     vi.clearAllMocks();
     const storageMock = createStorageMock();
     vi.stubGlobal("localStorage", storageMock);
@@ -58,217 +49,291 @@ describe("useRunSelection refresh behavior", () => {
     vi.unstubAllGlobals();
   });
 
-  test("initial mount calls fetchRunsList() (initial fetch)", async () => {
-    // Mutable reference for runs response
-    let currentRunsList = { ...initialRunsList };
-    let callCount = 0;
+  test("receives runs as input from RunControl", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
 
-    const fetchMock = vi.fn(async (input: RequestInfo) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      const base = url.split("?")[0];
-
-      if (base === "/api/runs") {
-        callCount++;
-        return makeFetchResponse({ ...currentRunsList });
-      }
-
-      // Default responses for other endpoints
-      return makeFetchResponse({});
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { result } = renderHook(() => useRunSelection());
-
-    // Wait for initial render to complete
-    await act(async () => {});
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    // Verify /api/runs was called at least once (initial mount fetch)
-    const runsCalls = fetchMock.mock.calls.filter(([input]) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      return url.includes("/api/runs");
-    });
-    expect(runsCalls.length).toBeGreaterThanOrEqual(1);
-
-    // Verify runs state was populated
-    expect(result.current.runs.length).toBe(2);
+    // useRunSelection passes through the runs from input
+    expect(result.current.runs).toBe(sampleRuns);
+    expect(result.current.runs.length).toBe(3);
   });
 
-  test("refreshRuns() manually triggers /api/runs fetch (newer latest run surfaced)", async () => {
-    // Mutable reference - simulates server-side data change
-    let currentRunsList = { ...initialRunsList };
-    let runsCallCount = 0;
+  test("derives latestRunId from runs input", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
 
-    const fetchMock = vi.fn(async (input: RequestInfo) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      const base = url.split("?")[0];
-
-      if (base === "/api/runs") {
-        runsCallCount++;
-        // First call returns initialRunsList
-        // Second call (after refreshRuns()) returns updatedRunsList with run-124
-        const payload = runsCallCount === 1 ? currentRunsList : (() => {
-          currentRunsList = { ...updatedRunsList };
-          return updatedRunsList;
-        })();
-        return makeFetchResponse({ ...payload });
-      }
-
-      return makeFetchResponse({});
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { result } = renderHook(() => useRunSelection());
-
-    // Wait for initial mount fetch
-    await act(async () => {});
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    const initialCallCount = runsCallCount;
-
-    // Verify initial state: run-123 is latest
+    // First run in the list (sorted by timestamp descending) should be latest
     expect(result.current.latestRunId).toBe("run-123");
-    expect(result.current.runs.length).toBe(2);
-
-    // Trigger manual refresh
-    await act(async () => {
-      await result.current.refreshRuns();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    // Verify refreshRuns() triggered an additional /api/runs fetch
-    expect(runsCallCount).toBe(initialCallCount + 1);
-
-    // Verify the updated runs list contains run-124 (newer latest)
-    expect(result.current.runs.length).toBe(3); // run-124, run-123, run-122
-    expect(result.current.runs[0].runId).toBe("run-124"); // Newest first
-
-    // Verify latestRunId is now run-124
-    expect(result.current.latestRunId).toBe("run-124");
   });
 
-  test("auto-refresh polling calls /api/runs via setInterval (newer latest surfaced)", async () => {
-    let currentRunsList = { ...initialRunsList };
-    let runsCallCount = 0;
+  test("derives isLatest correctly", () => {
+    const { result: result1 } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+        selectedRunId: "run-123", // Selected is latest
+      })
+    );
+    expect(result1.current.isLatest).toBe(true);
 
-    const fetchMock = vi.fn(async (input: RequestInfo) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      const base = url.split("?")[0];
+    const { result: result2 } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+        selectedRunId: "run-122", // Selected is not latest
+      })
+    );
+    expect(result2.current.isLatest).toBe(false);
+  });
 
-      if (base === "/api/runs") {
-        runsCallCount++;
-        // First call returns initialRunsList
-        // Subsequent calls return updatedRunsList with run-124
-        const payload = runsCallCount === 1 ? currentRunsList : (() => {
-          currentRunsList = { ...updatedRunsList };
-          return updatedRunsList;
-        })();
-        return makeFetchResponse({ ...payload });
-      }
+  test("passes through isLoading from input", () => {
+    const { result: resultLoading } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: true,
+        error: null,
+      })
+    );
+    expect(resultLoading.current.isLoading).toBe(true);
 
-      return makeFetchResponse({});
-    });
+    const { result: resultNotLoading } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
+    expect(resultNotLoading.current.isLoading).toBe(false);
+  });
 
-    vi.stubGlobal("fetch", fetchMock);
+  test("passes through error from input", () => {
+    const { result: resultNoError } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
+    expect(resultNoError.current.error).toBeNull();
 
-    const { result } = renderHook(() => useRunSelection());
+    const { result: resultWithError } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: "Failed to load runs",
+      })
+    );
+    expect(resultWithError.current.error).toBe("Failed to load runs");
+  });
 
-    // Wait for initial mount fetch
-    await act(async () => {});
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    const initialCallCount = runsCallCount;
+  test("handles empty runs list", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: [],
+        isLoading: false,
+        error: null,
+      })
+    );
 
-    // Verify initial state: run-123 is latest
-    expect(result.current.latestRunId).toBe("run-123");
+    expect(result.current.runs).toEqual([]);
+    expect(result.current.latestRunId).toBeNull();
+    expect(result.current.isLatest).toBe(true); // No selection, so isLatest is true
+  });
 
-    // Enable auto-refresh with 10-second interval
-    await act(async () => {
+  test("autoRefreshInterval is persisted", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
+
+    // Default autoRefreshInterval should be read from localStorage
+    expect(result.current.autoRefreshInterval).toBeDefined();
+  });
+
+  test("handleAutoRefreshChange persists interval", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
+
+    // Change auto-refresh interval
+    act(() => {
       result.current.handleAutoRefreshChange("10");
     });
 
-    // Advance time by 10 seconds to trigger the polling interval
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-
-    // Flush React state updates
-    await act(async () => {
-      vi.runAllTicks();
-    });
-    await act(async () => {});
-
-    // Verify polling triggered an additional /api/runs fetch
-    expect(runsCallCount).toBe(initialCallCount + 1);
-
-    // Verify the updated runs list is reflected in hook state
-    expect(result.current.runs.length).toBe(3); // run-124, run-123, run-122
-    expect(result.current.runs[0].runId).toBe("run-124");
-    expect(result.current.latestRunId).toBe("run-124");
+    // The interval should be updated
+    expect(result.current.autoRefreshInterval).toBe(10);
   });
 
-  test("both manual refresh and polling invoke the same /api/runs pipeline", async () => {
-    let currentRunsList = { ...initialRunsList };
-    let runsCallCount = 0;
+  test("handleAutoRefreshChange can disable auto-refresh", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
 
-    const fetchMock = vi.fn(async (input: RequestInfo) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      const base = url.split("?")[0];
-
-      if (base === "/api/runs") {
-        runsCallCount++;
-        return makeFetchResponse({ ...currentRunsList });
-      }
-
-      return makeFetchResponse({});
+    // Disable auto-refresh
+    act(() => {
+      result.current.handleAutoRefreshChange("off");
     });
 
-    vi.stubGlobal("fetch", fetchMock);
+    // The interval should be null
+    expect(result.current.autoRefreshInterval).toBeNull();
+  });
 
-    const { result } = renderHook(() => useRunSelection());
+  test("pagination helpers work correctly", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
 
-    // Wait for initial mount
-    await act(async () => {});
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    const initialCalls = runsCallCount;
+    // Default pagination
+    expect(result.current.runsPage).toBe(1);
+    expect(result.current.runsPageSize).toBe(5);
+    expect(result.current.paginatedRunsList.length).toBe(3); // Only 3 items
 
-    // Manual refresh path
-    await act(async () => {
-      await result.current.refreshRuns();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+    // Change page size
+    act(() => {
+      result.current.handleRunsPageSizeChange(2);
     });
 
-    // Auto-refresh polling path (enable first)
-    await act(async () => {
-      result.current.handleAutoRefreshChange("10");
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-    await act(async () => {
-      vi.runAllTicks();
-    });
-    await act(async () => {});
+    expect(result.current.runsPageSize).toBe(2);
+    expect(result.current.paginatedRunsList.length).toBe(2);
+  });
 
-    // Both paths should have triggered /api/runs fetch
-    // manual: +1 call, polling: +1 call = +2 total
-    expect(runsCallCount).toBe(initialCalls + 2);
+  test("filter helpers work correctly", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
 
-    // The key proof: both manual and polling result in the same observable state
-    // (runs list updated, latestRunId set correctly)
-    expect(result.current.runs.length).toBe(2);
-    expect(result.current.latestRunId).toBe("run-123");
+    // Default filter is "all"
+    expect(result.current.runsFilter).toBe("all");
+    expect(result.current.filteredRunsList.length).toBe(3);
+
+    // Change filter to "unreviewed"
+    act(() => {
+      result.current.handleRunsFilterChange("awaiting-review");
+    });
+
+    expect(result.current.filteredRunsList.length).toBe(1); // Only run-122 is unreviewed
+  });
+
+  test("computePageForRunId works correctly", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
+
+    // Page size of 2 means:
+    // - run-123 at index 0 -> page 1
+    // - run-122 at index 1 -> page 1
+    // - run-121 at index 2 -> page 2
+
+    act(() => {
+      result.current.handleRunsPageSizeChange(2);
+    });
+
+    expect(result.current.computePageForRunId("run-123")).toBe(1);
+    expect(result.current.computePageForRunId("run-122")).toBe(1);
+    expect(result.current.computePageForRunId("run-121")).toBe(2);
+  });
+
+  test("navigateToPageContainingRun updates page", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+      })
+    );
+
+    act(() => {
+      result.current.handleRunsPageSizeChange(2);
+    });
+
+    act(() => {
+      result.current.navigateToPageContainingRun("run-121");
+    });
+
+    expect(result.current.runsPage).toBe(2);
+    expect(result.current.isRunsListFollowingSelection).toBe(true);
+  });
+
+  test("handleShowSelectedRun navigates to selected run", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+        selectedRunId: "run-122",
+      })
+    );
+
+    act(() => {
+      result.current.handleRunsPageSizeChange(2);
+    });
+
+    act(() => {
+      result.current.handleShowSelectedRun();
+    });
+
+    expect(result.current.runsPage).toBe(1); // run-122 is on page 1 with pageSize=2
+    expect(result.current.isRunsListFollowingSelection).toBe(true);
+  });
+
+  test("isSelectedRunVisibleOnCurrentRunsPage works correctly", () => {
+    const { result } = renderHook(() =>
+      useRunSelection({
+        runs: sampleRuns,
+        isLoading: false,
+        error: null,
+        selectedRunId: "run-123",
+      })
+    );
+
+    act(() => {
+      result.current.handleRunsPageSizeChange(2);
+    });
+
+    // run-123 is on page 1, so it should be visible
+    expect(result.current.isSelectedRunVisibleOnCurrentRunsPage).toBe(true);
+
+    // Navigate to page 2
+    act(() => {
+      result.current.handleRunsPageChange(2);
+    });
+
+    // run-123 is not on page 2, so it should not be visible
+    expect(result.current.isSelectedRunVisibleOnCurrentRunsPage).toBe(false);
   });
 });

@@ -241,13 +241,19 @@ const App = () => {
     slowAfterMs: 10_000,
   });
 
+  // Phase 5: RunControl owns runs list data
+  // Pass runs, isLoading, and error from RunControl model to useRunSelection
+  const runsListFromModel = model.runs.items;
+  const runsListLoadingFromModel = model.runs.status === "loading";
+  const runsListErrorFromModel = model.runs.error;
+
   // Run selection state - extracted to useRunSelection hook
-  // Pagination and filter state (NOT selection - that's now owned by RunControl)
+  // PHASE 5: This hook now receives runs data as INPUT (from RunControl)
+  // It only owns pagination/filter/navigation helpers and autoRefreshInterval preference
   const {
     runs: runsList,
     isLoading: runsListLoading,
     error: runsListError,
-    refreshRuns,
     autoRefreshInterval,
     handleAutoRefreshChange,
     // Pagination and filter state
@@ -272,8 +278,23 @@ const App = () => {
     handleShowSelectedRun,
   } = useRunSelection({
     selectedRunId,
-    runControlPoll: poll,
+    runs: runsListFromModel,
+    isLoading: runsListLoadingFromModel,
+    error: runsListErrorFromModel,
   });
+
+  // Phase 5: App.tsx owns the auto-refresh timer
+  // This timer calls RunControl's poll() which is the single authoritative refresh path
+  // Previously this timer lived in useRunSelection which caused dual-write refresh
+  useEffect(() => {
+    if (!autoRefreshInterval) {
+      return; // Auto-refresh disabled
+    }
+    const timerId = setInterval(() => {
+      poll(); // RunControl's poll() updates model.runs.lastLoadedAtMs for page freshness
+    }, autoRefreshInterval * 1000);
+    return () => clearInterval(timerId);
+  }, [autoRefreshInterval, poll]);
 
   // Run payload from RunControl (now the authoritative source)
   const run = selectedRun;
@@ -302,7 +323,8 @@ const App = () => {
   } = useAppData({
     selectedRunId,
     lastRefreshMs,
-    refreshRuns,
+    // useAppData refreshes fleet/proposals internally; RunControl owns runs refresh.
+    // The runs list is refreshed via RunControl's poll() which is called by the App.tsx timer.
   });
 
   // Derive combined loading and error state (using RunControl for selected run state)
@@ -400,6 +422,7 @@ const App = () => {
   }, [runControlSelectRun, navigateToPageContainingRun]);
 
   // Handle batch execution for a run - refreshes runs list and selected run via hooks
+  // Phase 5: Uses RunControl's poll() to refresh runs after batch execution completes
   const handleBatchExecution = useCallback(async (runId: string) => {
     setExecutingBatchRunId(runId);
     setBatchExecutionError((prev) => {
@@ -411,8 +434,8 @@ const App = () => {
       // Explicitly send dryRun: false for actual execution
       // The backend defaults to False, but being explicit improves clarity and debugging
       await runBatchExecution({ runId, dryRun: false });
-      // Refresh runs list after successful execution
-      await refreshRuns();
+      // Refresh runs list via RunControl's poll() - single authoritative path
+      poll();
       // If the executed run is currently selected, refresh its data through RunControl
       // This ensures the execution history / next-check state is up to date
       if (selectedRunId === runId) {
@@ -427,7 +450,7 @@ const App = () => {
     } finally {
       setExecutingBatchRunId((current) => (current === runId ? null : current));
     }
-  }, [selectedRunId, refreshRuns, retrySelectedRun]);
+  }, [selectedRunId, poll, retrySelectedRun]);
 
   // Derive selectedClusterLabel from hook (with local clusterDetailExpanded handling)
   const selectedClusterLabel = hookSelectedClusterLabel;

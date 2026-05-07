@@ -14,8 +14,9 @@
  * Inputs:
  *   - selectedRunId: string | null - the selected run ID (triggers main refresh)
  *   - lastRefresh: Dayjs - timestamp of last run data refresh (triggers cluster detail refetch)
- *   - refreshRuns: () => Promise<void> - from useRunSelection hook
- *   - refreshRunData: () => Promise<void> - from useRunData hook
+ *   - refreshRuns: () => Promise<void> - from useRunSelection hook (DEPRECATED, Phase 5)
+ *     NOTE: This parameter is optional and no longer used. RunControl owns runs refresh.
+ *   - refreshRunData: () => Promise<void> - from useRunData hook (DEPRECATED)
  *
  * Returns:
  *   - fleet: FleetPayload | null
@@ -54,8 +55,10 @@ import {
 export interface UseAppDataParams {
   selectedRunId: string | null;
   lastRefreshMs: number | null;
-  refreshRuns: () => Promise<void>;
-  refreshRunData: () => Promise<void>;
+  /** Phase 5: Deprecated - RunControl owns runs refresh. This parameter is ignored. */
+  refreshRuns?: () => Promise<void>;
+  /** Phase 5: Deprecated - no longer used. */
+  refreshRunData?: () => Promise<void>;
 }
 
 type PromotionStatus = {
@@ -317,6 +320,8 @@ export const useAppData = ({
   );
 
   // Handle Alertmanager relevance feedback
+  // Phase 5: Now uses refreshAppData() instead of refreshRuns (which is no longer needed)
+  // RunControl owns runs refresh; useAppData owns fleet/proposals refresh
   const handleAlertmanagerRelevanceFeedback = useCallback(
     async (
       artifactPath: string,
@@ -329,9 +334,9 @@ export const useAppData = ({
         alertmanagerRelevanceSummary: summary,
       });
       // Refresh to get updated data
-      await refreshRuns();
+      await refreshAppData();
     },
-    [refreshRuns]
+    [refreshAppData]
   );
 
   // Handle toggle proposal expansion
