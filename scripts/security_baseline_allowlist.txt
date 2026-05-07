@@ -20,8 +20,9 @@ health/loop.py _run_review_enrichment review enrichment LLM call boundary - docs
 health/loop_review_pipeline.py write_review_and_proposals health review build boundary - docs/security-exception-audit.md ~82
 external_analysis/llamacpp_adapter.py _run_http LLM provider failure boundary - docs/security-exception-audit.md ~241
 
+
 # === Subprocess Boundaries ===
-health/loop_alertmanager_port_forward.py stop_alertmanager_port_forward port-forward cleanup boundary - docs/security-exception-audit.md ~222
+health/loop_alertmanager_port_forward.py stop_alertmanager_port_forward port-forward cleanup final containment - docs/security-exception-audit.md ~222
 
 # === Logging/Config Boundaries ===
 health/loop_config_logging.py _sanitize_url URL sanitization fallback - docs/security-exception-audit.md ~39

@@ -219,12 +219,7 @@ def stop_alertmanager_port_forward(
             run_label=run_label,
             local_port=local_port,
         )
-    # REVIEWED: port-forward cleanup subprocess boundary.
-    # Must never propagate exceptions during cleanup -- process termination/kill are best-effort
-    # and may raise OSError (broken pipe), subprocess.SubprocessError, or TimeoutError.
-    # These are all expected during cleanup and must not crash the health loop.
-    # Logged as warning, run continues. No credential exposure.
-    except Exception as exc:
+    except (OSError, subprocess.SubprocessError, TimeoutError) as exc:
         log_event(
             "alertmanager-snapshot",
             "WARNING",
@@ -233,6 +228,21 @@ def stop_alertmanager_port_forward(
             run_id=run_id,
             run_label=run_label,
             local_port=local_port,
-            severity_reason=str(exc),
+            error_type=type(exc).__name__,
+            reason="cleanup-error",
+        )
+    # REVIEWED: final cleanup containment - must never propagate exceptions during cleanup.
+    # Unexpected exceptions during cleanup must not crash the health loop.
+    # Logged as warning, run continues. No credential/path/secret exposure.
+    except Exception as exc:  # pragma: no cover - defensive finalizer
+        log_event(
+            "alertmanager-snapshot",
+            "WARNING",
+            "Error during port-forward cleanup",
+            event="alertmanager-portforward-stopped",
+            run_id=run_id,
+            run_label=run_label,
+            local_port=local_port,
+            error_type=type(exc).__name__,
             reason="cleanup-error",
         )

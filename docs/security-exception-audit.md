@@ -436,7 +436,8 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 | loop_config_logging.py | 36 | `except Exception` | URL sanitization fallback | **reviewed-safe** (logging config, no file I/O) |
 | loop_review_pipeline.py | 79 | `except Exception` | Health review build (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
 | loop_review_pipeline.py | 114 | `except Exception as exc` | Proposal generation (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
-| loop_alertmanager_port_forward.py | 222 | `except Exception as exc` | Port-forward cleanup (subprocess boundary) | **reviewed-safe** (subprocess boundary) |
+| loop_alertmanager_port_forward.py | 222 | `except (OSError, subprocess.SubprocessError, TimeoutError)` | Port-forward cleanup (typed) | **fixed-this-slice** |
+| loop_alertmanager_port_forward.py | 232 | `except Exception` | Port-forward cleanup final containment | **reviewed-safe** (finalizer) |
 | loop.py | 1938 | `except OSError` | UI index artifact write | **fixed-this-slice** |
 | loop.py | 2059 | `except (OSError, RuntimeError, TimeoutError) as exc` | Image pull secret inspection (kubectl boundary) | **fixed-this-slice** |
 | loop.py | ~2426 | `except Exception as exc` | LLM call in auto-drilldown (provider/HTTP/LLM boundary) | **reviewed-safe** (LLM provider boundary) |
@@ -487,7 +488,6 @@ Artifact write failures are the smallest coherent fix batch because:
 | loop_config_logging.py | 39 | URL sanitization | No file I/O, reviewed-safe |
 | loop_review_pipeline.py | 82 | LLM adapter call | Provider boundary |
 | loop_review_pipeline.py | 117 | Proposal LLM call | Provider boundary |
-| loop_alertmanager_port_forward.py | 227 | Subprocess cleanup | **reviewed-safe** (must not crash loop) |
 | loop.py | 2438 | LLM call | Provider boundary |
 | loop.py | 2654 | Review enrichment | Provider boundary |
 
