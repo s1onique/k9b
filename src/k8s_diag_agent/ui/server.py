@@ -1311,6 +1311,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
         try:
             # Import locally to avoid circular import
+            from .server_reads import _get_llm_activity_from_index
             from .server_reads import _load_ui_index_file as _load_index
 
             index = _load_index(self._health_root)
@@ -1437,7 +1438,9 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "notification_count": notification_count,
             "llm_stats": llm_stats,
             "historical_llm_stats": None,  # Historical stats are retained globally, not per-run
-            "llm_activity": {"entries": [], "summary": {"retainedEntries": 0}},
+            # Load llm_activity from ui-index.json (contains deanonymized historical entries)
+            # Fall back to empty if ui-index.json doesn't exist or has no llm_activity for this run
+            "llm_activity": _get_llm_activity_from_index(self._health_root, run_id),
             "llm_policy": None,
             "review_enrichment": review_enrichment,
             "review_enrichment_status": review_enrichment_status,

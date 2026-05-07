@@ -54,6 +54,38 @@ def _load_ui_index_file(health_root: Path) -> dict[str, object]:
     return {}
 
 
+def _get_llm_activity_from_index(health_root: Path, run_id: str) -> dict[str, object]:
+    """Load llm_activity data from ui-index.json for a specific run.
+
+    This is used by load_context_for_run to get the deanonymized historical
+    LLM activity entries from the index, which are already processed with
+    the correct alias_mapping during index regeneration.
+
+    Falls back to empty entries if ui-index.json doesn't exist or the
+    run_id doesn't match.
+
+    Args:
+        health_root: Path to the health directory containing ui-index.json
+        run_id: The run ID to look for
+
+    Returns:
+        A dict with 'entries' and 'summary' keys, or empty fallback
+    """
+    default: dict[str, object] = {"entries": [], "summary": {"retainedEntries": 0}}
+    try:
+        index = _load_ui_index_file(health_root)
+        ui_run = index.get("run", {})
+        if isinstance(ui_run, dict) and str(ui_run.get("run_id") or "") == run_id:
+            la = ui_run.get("llm_activity")
+            if isinstance(la, dict):
+                return la
+    except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError):
+        # Catch expected local failures: missing/malformed file, unexpected structure.
+        # Do NOT catch unrelated programmer errors (e.g. AttributeError, NameError).
+        pass
+    return default
+
+
 def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     """Handle API GET requests (read-only endpoints).
 
@@ -1116,7 +1148,9 @@ def load_context_for_run(
         "notification_count": notification_count,
         "llm_stats": llm_stats,
         "historical_llm_stats": None,
-        "llm_activity": {"entries": [], "summary": {"retainedEntries": 0}},
+        # Load llm_activity from ui-index.json (contains deanonymized historical entries)
+        # Fall back to empty if ui-index.json doesn't exist or has no llm_activity for this run
+        "llm_activity": _get_llm_activity_from_index(handler._health_root, run_id),
         "llm_policy": None,
         "review_enrichment": review_enrichment,
         "review_enrichment_status": review_enrichment_status,
