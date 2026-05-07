@@ -205,8 +205,9 @@ export const RecentRunsPanel = ({
                     <td>
                       {(() => {
                         const displayStatus = getRunsDisplayStatus(runEntry.reviewStatus, executionCountsComplete);
-                        // Show Execute button only for "no-executions" with complete counts
-                        if (displayStatus === "no-executions") {
+                        // Show Execute button if status is "no-executions" with complete counts,
+                        // OR if batchExecutable is true (eligible candidates from batch scan)
+                        if (displayStatus === "no-executions" || runEntry.batchExecutable) {
                           return (
                             <button
                               type="button"
