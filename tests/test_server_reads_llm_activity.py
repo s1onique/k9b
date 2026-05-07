@@ -42,9 +42,18 @@ class TestGetLlmActivityFromIndex:
         result = _get_llm_activity_from_index(health_root, run_id)
 
         assert "entries" in result
-        assert len(result["entries"]) == 2
-        assert result["entries"][0]["content"] == "test"
-        assert result["summary"]["retainedEntries"] == 2
+        entries = result["entries"]
+        assert isinstance(entries, list)
+        assert all(isinstance(entry, dict) for entry in entries)
+
+        assert len(entries) == 2
+        entry = entries[0]
+        assert isinstance(entry, dict)
+        assert entry["content"] == "test"
+
+        summary = result["summary"]
+        assert isinstance(summary, dict)
+        assert summary["retainedEntries"] == 2
 
     def test_different_run_id_returns_empty_fallback(self, tmp_path: Path) -> None:
         """ui-index with different run_id should return empty fallback."""
