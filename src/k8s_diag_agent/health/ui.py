@@ -17,7 +17,7 @@ from ..external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
-from ..security.deanonymization import deanonymize_review_enrichment, safe_alias_mapping
+from ..security.deanonymization import deanonymize_review_enrichment, deanonymize_text, safe_alias_mapping
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
@@ -153,6 +153,12 @@ def write_health_ui_index(
         run_id,
         historical_entries,
     )
+    # Extract alias_mapping from review enrichment for use in other serializers
+    alias_mapping: dict[str, str] = {}
+    if review_enrichment_entry:
+        review_artifact = _find_review_enrichment_artifact(external_analysis, run_id)
+        if review_artifact:
+            alias_mapping = safe_alias_mapping(getattr(review_artifact, "alias_mapping", None))
     plan_entry = _serialize_next_check_plan(external_analysis, output_dir, run_id)
     queue_entry = _build_next_check_queue(plan_entry, cluster_context_map)
     settings = external_analysis_settings or ExternalAnalysisSettings()
@@ -188,7 +194,7 @@ def write_health_ui_index(
         "historical_llm_stats": _build_historical_llm_stats(
             output_dir / "external-analysis", historical_entries
         ),
-        "llm_activity": _serialize_llm_activity(historical_entries, output_dir),
+        "llm_activity": _serialize_llm_activity(historical_entries, output_dir, alias_mapping=alias_mapping),
         "llm_policy": _build_llm_policy(
             settings,
             external_analysis,
@@ -381,7 +387,7 @@ def _serialize_review_enrichment(
         "status": artifact.status.value,
         "provider": artifact.provider,
         "timestamp": artifact.timestamp.isoformat(),
-        "summary": artifact.summary,
+        "summary": deanonymize_text(artifact.summary, alias_mapping) if alias_mapping else artifact.summary,
         "triageOrder": _list_from("triageOrder", "triage_order"),
         "topConcerns": _list_from("topConcerns", "top_concerns"),
         "evidenceGaps": _list_from("evidenceGaps", "evidence_gaps"),

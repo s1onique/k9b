@@ -19,6 +19,7 @@ from ..external_analysis.config import (
     AutoDrilldownPolicy,
     ExternalAnalysisSettings,
 )
+from ..security.deanonymization import deanonymize_text
 from .ui_serialization import _LLM_ACTIVITY_LIMIT  # noqa: E402
 from .ui_shared import _relative_path
 
@@ -152,7 +153,12 @@ def _compute_llm_stats(entries: Sequence[object], scope: str) -> dict[str, objec
         "scope": scope,
     }
 
-def _serialize_llm_activity(entries: Sequence[Mapping[str, object]], root_dir: Path, limit: int = _LLM_ACTIVITY_LIMIT) -> dict[str, object]:
+def _serialize_llm_activity(
+    entries: Sequence[Mapping[str, object]],
+    root_dir: Path,
+    limit: int = _LLM_ACTIVITY_LIMIT,
+    alias_mapping: Mapping[str, str] | None = None,
+) -> dict[str, object]:
     normalized: list[tuple[datetime | None, dict[str, object]]] = []
     for entry in entries:
         if not isinstance(entry, Mapping):
@@ -165,6 +171,18 @@ def _serialize_llm_activity(entries: Sequence[Mapping[str, object]], root_dir: P
             timestamp_str = timestamp.isoformat()
         else:
             timestamp_str = None
+
+        # FIX: De-anonymize text fields to prevent provider aliases from leaking to UI
+        summary = _coerce_optional_str(entry.get("summary"))
+        if summary and alias_mapping:
+            summary = deanonymize_text(summary, alias_mapping)
+        error_summary = _coerce_optional_str(entry.get("error_summary"))
+        if error_summary and alias_mapping:
+            error_summary = deanonymize_text(error_summary, alias_mapping)
+        skip_reason = _coerce_optional_str(entry.get("skip_reason"))
+        if skip_reason and alias_mapping:
+            skip_reason = deanonymize_text(skip_reason, alias_mapping)
+
         activity_entry: dict[str, object] = {
             "timestamp": timestamp_str,
             "run_id": _coerce_optional_str(entry.get("run_id")),
@@ -176,9 +194,9 @@ def _serialize_llm_activity(entries: Sequence[Mapping[str, object]], root_dir: P
             "status": _coerce_optional_str(entry.get("status")),
             "latency_ms": _parse_optional_int(entry.get("duration_ms")),
             "artifact_path": _relative_path(root_dir, entry.get("artifact_path")),
-            "summary": _coerce_optional_str(entry.get("summary")),
-            "error_summary": _coerce_optional_str(entry.get("error_summary")),
-            "skip_reason": _coerce_optional_str(entry.get("skip_reason")),
+            "summary": summary,
+            "error_summary": error_summary,
+            "skip_reason": skip_reason,
         }
         normalized.append((timestamp, activity_entry))
     sorted_entries = sorted(
