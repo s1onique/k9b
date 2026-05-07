@@ -359,7 +359,9 @@ class TestLlamaCppAdapterPromptBoundaries:
         adapter._http_provider = None
         adapter._http_config_error = None
 
-        return adapter._build_prompt(request, context)
+        # Use _ for unused alias_mapping (returned for caller use).
+        prompt, _ = adapter._build_prompt(request, context)
+        return prompt
 
     def test_llamacpp_adapter_prompt_boundary_structure(self) -> None:
         """Verify LlamaCppAdapter prompt follows boundary convention exactly."""

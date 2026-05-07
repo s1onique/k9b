@@ -65,10 +65,12 @@ def _build_review_prompt_for_test(
 ) -> str:
     """Wrapper that casts mock request to ExternalAnalysisRequest for _build_prompt."""
     # The cast() ensures runtime compatibility; mypy sees return as Any due to cast().
-    return adapter._build_prompt(
+    # Use _ for unused alias_mapping (returned for caller use).
+    prompt, _ = adapter._build_prompt(
         cast(ExternalAnalysisRequest, request),
         context,
     )
+    return prompt
 
 
 # Helper dataclasses for building test data

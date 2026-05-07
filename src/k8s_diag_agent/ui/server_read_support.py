@@ -15,8 +15,9 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
+from ..security.deanonymization import deanonymize_next_check_candidate, deanonymize_review_enrichment
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id, validate_safe_path_id
 
 logger = logging.getLogger(__name__)
@@ -902,7 +903,8 @@ def _find_review_enrichment(
     # Take the first (sorted) matching artifact
     artifact_data = artifacts[0]
 
-    payload = artifact_data.get("payload", {})
+    raw_payload = artifact_data.get("payload")
+    payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
 
     def _list_from(*keys: str) -> list[str]:
         """Get a list from payload, checking multiple key variants."""
@@ -918,11 +920,21 @@ def _find_review_enrichment(
         # Need to construct path from artifact data - not available without file scan
         artifact_path = None
 
+    # Get alias mapping from artifact and apply de-anonymization for operator-facing UI
+    # The alias_mapping is set by the llamacpp adapter when processing provider responses
+    alias_mapping = artifact_data.get("alias_mapping")
+    if isinstance(alias_mapping, dict) and alias_mapping:
+        # Build the de-anonymized payload using the mapping
+        # deanonymize_review_enrichment handles all text fields recursively
+        deanon_payload = deanonymize_review_enrichment(dict(payload), alias_mapping)
+        # Re-extract de-anonymized fields from the processed payload
+        payload = deanon_payload
+
     return {
         "status": artifact_data.get("status", "unknown"),
         "provider": artifact_data.get("provider"),
         "timestamp": artifact_data.get("timestamp"),
-        "summary": artifact_data.get("summary"),
+        "summary": payload.get("summary") if isinstance(payload, dict) else artifact_data.get("summary"),
         # Check both camelCase (ui-index format) and snake_case (artifact format)
         "triageOrder": _list_from("triageOrder", "triage_order"),
         "topConcerns": _list_from("topConcerns", "top_concerns"),
@@ -932,7 +944,64 @@ def _find_review_enrichment(
         "artifactPath": artifact_path,
         "errorSummary": artifact_data.get("error_summary"),
         "skipReason": artifact_data.get("skip_reason"),
+        # Preserve alias_mapping for audit/debug if needed, but don't render it as UI text
+        # Only include if present (backward compatibility with existing artifacts)
+        **({"provider_alias_mapping": alias_mapping} if alias_mapping else {}),
     }
+
+
+def _find_alias_mapping_from_review(
+    external_analysis_dir: Path,
+    run_id: str,
+    artifact_index: RunArtifactIndex | None = None,
+) -> dict[str, str] | None:
+    """Find alias_mapping from the review-enrichment artifact for this run.
+
+    This is used as a fallback when a next-check plan artifact doesn't have
+    its own alias_mapping. The review-enrichment artifact captures the mapping
+    from the original drilldown anonymization and can be reused.
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory
+        run_id: The run ID to filter by
+        artifact_index: Pre-built index for O(1) lookup (optional)
+
+    Returns:
+        The alias_mapping dict from the review-enrichment artifact, or None if not found
+    """
+    # Use index for O(1) lookup if available
+    if artifact_index is not None:
+        review_artifacts: Sequence[dict[str, object]] = artifact_index.review_enrichment
+    else:
+        # Fall back to directory scan for backward compatibility
+        if not external_analysis_dir.exists():
+            return None
+
+        try:
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            return None
+
+        _scan_review_artifacts: list[dict[str, object]] = []
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-review-enrichment*.json")
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if isinstance(artifact_data, dict) and artifact_data.get("purpose") == "review-enrichment":
+                    _scan_review_artifacts.append(artifact_data)
+            except (OSError, json.JSONDecodeError):
+                continue
+        review_artifacts = _scan_review_artifacts
+
+    if not review_artifacts:
+        return None
+
+    # Take the first (sorted) matching artifact
+    review_data = review_artifacts[0]
+    alias_mapping = review_data.get("alias_mapping")
+    if isinstance(alias_mapping, dict) and alias_mapping:
+        return alias_mapping
+    return None
 
 
 def _find_next_check_plan(
@@ -997,11 +1066,22 @@ def _find_next_check_plan(
     # Take the first (sorted) matching artifact
     artifact_data = _scan_plan_artifacts[0]
 
-    payload = artifact_data.get("payload", {})
-    candidates = payload.get("candidates", [])
+    raw_payload = artifact_data.get("payload")
+    payload: dict[str, object] = raw_payload if isinstance(raw_payload, dict) else {}
 
     # Get artifact path
     artifact_path = artifact_data.get("artifact_path")
+
+    # Get alias mapping from plan artifact and apply de-anonymization to candidates.
+    # The alias_mapping may be stored in the plan artifact (from planner's anonymized input).
+    # If not present in plan, fall back to the review-enrichment artifact's mapping.
+    _plan_alias: object | None = artifact_data.get("alias_mapping")
+    if isinstance(_plan_alias, dict) and _plan_alias:
+        alias_mapping: dict[str, str] | None = cast("dict[str, str]", _plan_alias)
+    else:
+        # Fall back to review-enrichment artifact for alias mapping
+        alias_mapping = _find_alias_mapping_from_review(external_analysis_dir, run_id, artifact_index)
+    deanon_candidates = _build_queue_from_plan(payload, alias_mapping)
 
     return {
         "status": artifact_data.get("status", "unknown"),
@@ -1009,16 +1089,24 @@ def _find_next_check_plan(
         "artifactPath": artifact_path,
         "reviewPath": payload.get("reviewPath"),
         "enrichmentArtifactPath": payload.get("enrichmentArtifactPath"),
-        "candidateCount": len(candidates) if isinstance(candidates, list) else 0,
-        "candidates": candidates,
+        "candidateCount": len(deanon_candidates),
+        "candidates": deanon_candidates,
         "orphanedApprovals": [],
         "outcomeCounts": [],
         "orphanedApprovalCount": 0,
     }
 
 
-def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, object]]:
-    """Build next-check queue from plan artifact."""
+def _build_queue_from_plan(
+    plan: dict[str, object] | None,
+    alias_mapping: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
+    """Build next-check queue from plan artifact.
+
+    Args:
+        plan: The plan artifact dict containing candidates
+        alias_mapping: Optional alias-to-real mapping for de-anonymization
+    """
     if not plan:
         return []
 
@@ -1045,29 +1133,35 @@ def _build_queue_from_plan(plan: dict[str, object] | None) -> list[dict[str, obj
         elif not safe_to_automate:
             queue_status = "duplicate-or-stale"
 
+        # Apply de-anonymization if alias_mapping provided
+        if alias_mapping:
+            deanon_candidate = deanonymize_next_check_candidate(candidate, alias_mapping)
+        else:
+            deanon_candidate = candidate
+
         queue.append({
-            "candidateId": candidate.get("candidateId"),
-            "candidateIndex": candidate.get("candidateIndex", idx),
-            "description": candidate.get("description", ""),
-            "targetCluster": candidate.get("targetCluster"),
-            "priorityLabel": candidate.get("priorityLabel"),
-            "suggestedCommandFamily": candidate.get("suggestedCommandFamily"),
+            "candidateId": deanon_candidate.get("candidateId"),
+            "candidateIndex": deanon_candidate.get("candidateIndex", idx),
+            "description": deanon_candidate.get("description", ""),
+            "targetCluster": deanon_candidate.get("targetCluster"),
+            "priorityLabel": deanon_candidate.get("priorityLabel"),
+            "suggestedCommandFamily": deanon_candidate.get("suggestedCommandFamily"),
             "safeToAutomate": safe_to_automate,
             "requiresOperatorApproval": requires_approval,
-            "approvalState": candidate.get("approvalState"),
-            "executionState": candidate.get("executionState", "unexecuted"),
-            "outcomeStatus": candidate.get("outcomeStatus"),
-            "latestArtifactPath": candidate.get("latestArtifactPath"),
+            "approvalState": deanon_candidate.get("approvalState"),
+            "executionState": deanon_candidate.get("executionState", "unexecuted"),
+            "outcomeStatus": deanon_candidate.get("outcomeStatus"),
+            "latestArtifactPath": deanon_candidate.get("latestArtifactPath"),
             "queueStatus": queue_status,
-            "sourceReason": candidate.get("sourceReason"),
-            "expectedSignal": candidate.get("expectedSignal"),
-            "normalizationReason": candidate.get("normalizationReason"),
-            "safetyReason": candidate.get("safetyReason"),
-            "approvalReason": candidate.get("approvalReason"),
-            "duplicateReason": candidate.get("duplicateReason"),
-            "blockingReason": candidate.get("blockingReason"),
-            "targetContext": None,
-            "commandPreview": None,
+            "sourceReason": deanon_candidate.get("sourceReason"),
+            "expectedSignal": deanon_candidate.get("expectedSignal"),
+            "normalizationReason": deanon_candidate.get("normalizationReason"),
+            "safetyReason": deanon_candidate.get("safetyReason"),
+            "approvalReason": deanon_candidate.get("approvalReason"),
+            "duplicateReason": deanon_candidate.get("duplicateReason"),
+            "blockingReason": deanon_candidate.get("blockingReason"),
+            "targetContext": deanon_candidate.get("targetContext"),
+            "commandPreview": deanon_candidate.get("commandPreview"),
             "planArtifactPath": plan.get("artifactPath"),
         })
 

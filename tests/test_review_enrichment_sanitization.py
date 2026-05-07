@@ -87,7 +87,9 @@ class ReviewEnrichmentPromptSanitizationTest(unittest.TestCase):
         )
         request = _MockRequest(run_id="test-run", cluster_label="test-cluster")
         # The cast() ensures runtime compatibility; mypy sees return as Any due to cast().
-        return self._adapter._build_prompt(cast(ExternalAnalysisRequest, request), context)
+        # Use _ for unused alias_mapping (returned for caller use).
+        prompt, _ = self._adapter._build_prompt(cast(ExternalAnalysisRequest, request), context)
+        return prompt
 
     def test_review_json_with_bearer_token_is_redacted(self) -> None:
         """Verify bearer token in review JSON is redacted with <scrubbed>."""

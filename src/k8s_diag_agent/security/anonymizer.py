@@ -490,6 +490,41 @@ class MetadataAnonymizer:
 
         return result
 
+    def get_alias_mapping(self, category: str = "cluster") -> dict[str, str]:
+        """Get the alias-to-real-value mapping for a category.
+
+        This exposes the internal mapping so de-anonymization can reverse
+        the aliases after provider response processing.
+
+        Args:
+            category: The category to get mappings for (default: "cluster")
+
+        Returns:
+            Dict mapping alias -> real value (e.g., {"cluster-a": "prod-cluster"})
+
+        Example:
+            >>> anon = MetadataAnonymizer()
+            >>> anon.anonymize({"cluster": "prod-cluster"})
+            {'cluster': 'cluster-a'}
+            >>> anon.get_alias_mapping("cluster")
+            {'cluster-a': 'prod-cluster'}
+        """
+        if category not in self._mappings:
+            return {}
+        # Invert the mapping: alias -> real value
+        return {alias: real for real, alias in self._mappings[category].items()}
+
+    def get_all_alias_mappings(self) -> dict[str, dict[str, str]]:
+        """Get all alias mappings across all categories.
+
+        Returns:
+            Dict mapping category -> {alias -> real_value}
+        """
+        return {
+            category: {alias: real for real, alias in mappings.items()}
+            for category, mappings in self._mappings.items()
+        }
+
 
 def anonymize_metadata(data: Any) -> Any:
     """Convenience function to create an anonymizer and process data.

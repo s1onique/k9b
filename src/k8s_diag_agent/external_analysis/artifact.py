@@ -181,6 +181,9 @@ class ExternalAnalysisArtifact:
     interpretation: dict[str, object] | None = None
     # Failure metadata for failed status - structured information about the failure
     failure_metadata: dict[str, object] | None = None
+    # Cluster/workload alias mapping from provider anonymization (alias -> real value)
+    # This enables de-anonymization at the operator UI boundary
+    alias_mapping: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -234,6 +237,8 @@ class ExternalAnalysisArtifact:
             result["interpretation"] = self.interpretation
         if self.failure_metadata is not None:
             result["failure_metadata"] = self.failure_metadata
+        if self.alias_mapping is not None:
+            result["alias_mapping"] = self.alias_mapping
         return result
 
     @classmethod
@@ -274,6 +279,17 @@ class ExternalAnalysisArtifact:
         interpretation: dict[str, object] | None = dict(raw_interpretation) if isinstance(raw_interpretation, dict) else None
         raw_failure_metadata = raw.get("failure_metadata")
         failure_metadata: dict[str, object] | None = dict(raw_failure_metadata) if isinstance(raw_failure_metadata, dict) else None
+        raw_alias_mapping = raw.get("alias_mapping")
+        # Harden: filter to dict[str, str], drop non-string keys/values
+        _filtered_mapping: dict[str, str] | None = None
+        if isinstance(raw_alias_mapping, dict):
+            _filtered_mapping = {
+                str(k): str(v) for k, v in raw_alias_mapping.items()
+                if isinstance(k, str) and isinstance(v, str)
+            }
+            if not _filtered_mapping:
+                _filtered_mapping = None
+        alias_mapping: dict[str, str] | None = _filtered_mapping
         return cls(
             tool_name=str(raw.get("tool_name") or ""),
             run_id=str(raw.get("run_id") or ""),
@@ -312,6 +328,7 @@ class ExternalAnalysisArtifact:
             alertmanager_provenance=alertmanager_provenance,
             interpretation=interpretation,
             failure_metadata=failure_metadata,
+            alias_mapping=alias_mapping,
         )
 
 

@@ -156,7 +156,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 ExternalAnalysisStatus.FAILED,
                 error_summary="llama.cpp HTTP provider unavailable",
             )
-        prompt, payload = self._prepare_provider_request(request)
+        prompt, payload, alias_mapping = self._prepare_provider_request(request)
         try:
             review_enrichment_max_tokens = (
                 self._http_provider._config.max_tokens_review_enrichment
@@ -173,7 +173,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             )
             parsed = ReviewEnrichmentPayload.from_dict(assessment)
             duration_ms = int((time.perf_counter() - start) * 1000)
-            return self._build_success_artifact(request, assessment, parsed, duration_ms)
+            return self._build_success_artifact(request, assessment, parsed, duration_ms, alias_mapping)
         except ReviewEnrichmentPayloadError as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
             return self._build_failure_artifact(
@@ -345,14 +345,14 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
 
     def _prepare_provider_request(
         self, request: ExternalAnalysisRequest
-    ) -> tuple[str, LLMAssessmentInput]:
+    ) -> tuple[str, LLMAssessmentInput, dict[str, str] | None]:
         if not request.source_artifact:
             raise ValueError("Review artifact path is required for review enrichment")
         review_path = Path(request.source_artifact)
         context = build_review_enrichment_input(review_path, request.run_id)
-        prompt = self._build_prompt(request, context)
+        prompt, alias_mapping = self._build_prompt(request, context)
         payload = self._build_payload_from_context(request, context)
-        return prompt, payload
+        return prompt, payload, alias_mapping
 
     def _extract_prompt_sections(
         self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput
@@ -504,7 +504,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
 
     def _build_prompt(
         self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput
-    ) -> str:
+    ) -> tuple[str, dict[str, str] | None]:
         # Create single anonymizer instance to preserve alias consistency within prompt
         anonymizer = MetadataAnonymizer()
 
@@ -646,7 +646,14 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             + f"\n\n{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
             + f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n"
         )
-        return sanitize_prompt(prompt)
+        # Extract ALL alias mappings for de-anonymization at UI boundary
+        # This includes cluster, namespace, node, and other category aliases
+        all_mappings = anonymizer.get_all_alias_mappings()
+        # Import here to avoid circular import at module level
+        from ..security.deanonymization import flatten_alias_mappings
+
+        alias_mapping = flatten_alias_mappings(all_mappings) if all_mappings else None
+        return sanitize_prompt(prompt), alias_mapping
 
     def _build_payload_from_context(
         self, request: ExternalAnalysisRequest, context: ReviewEnrichmentInput
@@ -722,6 +729,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         payload: dict[str, Any],
         parsed: ReviewEnrichmentPayload,
         duration_ms: int,
+        alias_mapping: dict[str, str] | None = None,
     ) -> ExternalAnalysisArtifact:
         summary = parsed.summary
         if not summary:
@@ -745,6 +753,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             duration_ms=duration_ms,
             payload=payload,
             interpretation=payload if parsed.alertmanager_evidence_references else None,
+            alias_mapping=alias_mapping,
         )
 
     def _build_failure_artifact(
