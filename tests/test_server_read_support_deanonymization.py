@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+from k8s_diag_agent.security.deanonymization import assert_no_provider_aliases
 from k8s_diag_agent.ui.server_read_support import (
     _build_run_artifact_index,
     _find_next_check_plan,
@@ -66,6 +67,265 @@ class TestReviewEnrichmentDeanonymization:
         # Verify aliases do NOT appear in operator-facing fields
         assert "cluster-a" not in triage_order
         assert "cluster-b" not in triage_order
+
+
+class TestCapitalizedAliasLeakage:
+    """Regression tests for capitalized alias leakage (the reported UI bug).
+
+    LLM output often capitalizes aliases in sentences:
+    - "Cluster-a shows issues" instead of "cluster-a shows issues"
+    - "Namespace-f in default" instead of "namespace-f in default"
+
+    These tests verify that capitalized aliases are properly de-anonymized.
+    """
+
+    def test_review_enrichment_deanonymizes_capitalized_cluster_alias(self, tmp_path: Path) -> None:
+        """Review enrichment must de-anonymize capitalized 'Cluster-a'."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-review-enrichment.json").write_text(
+            json.dumps({
+                "purpose": "review-enrichment",
+                "status": "success",
+                "payload": {
+                    "triage_order": ["Cluster-a", "Cluster-b"],
+                    "top_concerns": [
+                        "Cluster-a shows high latency",
+                        "Namespace-f has pod restarts",
+                    ],
+                    "focus_notes": ["Prioritize Cluster-a investigation"],
+                    "summary": "Cluster-a and Cluster-b need attention",
+                },
+                "alias_mapping": {
+                    "cluster-a": "admin@rees46-k8s",
+                    "cluster-b": "prod-cluster",
+                    "namespace-f": "kube-system",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_review_enrichment(ea_dir, "run-test")
+
+        assert result is not None
+        triage_order = cast(list[str], result["triageOrder"])
+        top_concerns = cast(list[str], result["topConcerns"])
+        focus_notes = cast(list[str], result["focusNotes"])
+        summary = cast(str, result.get("summary", ""))
+
+        # Verify de-anonymized values appear
+        assert "admin@rees46-k8s" in triage_order
+        assert "prod-cluster" in triage_order
+        # Verify capitalized aliases do NOT appear
+        assert "Cluster-a" not in triage_order
+        assert "Cluster-b" not in triage_order
+        assert "cluster-a" not in triage_order
+
+        # Check top concerns
+        assert any("admin@rees46-k8s" in c for c in top_concerns)
+        assert "Cluster-a" not in " ".join(top_concerns)
+
+        # Check focus notes
+        assert any("admin@rees46-k8s" in n for n in focus_notes)
+        assert "Cluster-a" not in " ".join(focus_notes)
+
+        # Check summary
+        assert "admin@rees46-k8s" in summary or "Cluster-a" not in summary
+
+    def test_next_check_plan_deanonymizes_capitalized_aliases_in_command(self, tmp_path: Path) -> None:
+        """Next check plan must de-anonymize capitalized aliases in commandPreview."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-next-check-plan.json").write_text(
+            json.dumps({
+                "purpose": "next-check-planning",
+                "status": "success",
+                "payload": {
+                    "candidates": [
+                        {
+                            "candidateId": "capitalized-test-1",
+                            "description": "Check Cluster-a control plane",
+                            "targetCluster": "Cluster-a",
+                            "targetContext": "Cluster-a · default",
+                            "commandPreview": "kubectl get pods --context Cluster-a -n Namespace-f",
+                            "safeToAutomate": True,
+                            "requiresOperatorApproval": False,
+                        },
+                    ],
+                },
+                "alias_mapping": {
+                    "cluster-a": "admin@rees46-k8s",
+                    "namespace-f": "kube-system",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_next_check_plan(ea_dir, "run-test")
+
+        assert result is not None
+        candidates = cast(list[dict[str, object]], result["candidates"])
+        candidate = candidates[0]
+        command_preview = cast(str, candidate["commandPreview"])
+        description = cast(str, candidate.get("description", ""))
+        target_cluster = cast(str, candidate.get("targetCluster", ""))
+
+        # Verify de-anonymized values appear
+        assert "admin@rees46-k8s" in command_preview
+        assert "kube-system" in command_preview
+        # Verify capitalized aliases do NOT appear
+        assert "Cluster-a" not in command_preview
+        assert "Cluster-a" not in description
+        assert "Cluster-a" not in target_cluster
+        assert "Namespace-f" not in command_preview
+
+    def test_next_check_plan_deanonymizes_name_alias(self, tmp_path: Path) -> None:
+        """Next check plan must de-anonymize 'name-a' style aliases for workloads."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        (ea_dir / "run-test-next-check-plan.json").write_text(
+            json.dumps({
+                "purpose": "next-check-planning",
+                "status": "success",
+                "payload": {
+                    "candidates": [
+                        {
+                            "candidateId": "workload-test-1",
+                            "description": "Check Name-a deployment health",
+                            "targetCluster": "cluster-a",
+                            "commandPreview": "kubectl describe deployment name-a --context cluster-a",
+                            "safeToAutomate": True,
+                            "requiresOperatorApproval": False,
+                        },
+                    ],
+                },
+                "alias_mapping": {
+                    "cluster-a": "prod-cluster",
+                    "name-a": "blog-regular-backup",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_next_check_plan(ea_dir, "run-test")
+
+        assert result is not None
+        candidates = cast(list[dict[str, object]], result["candidates"])
+        candidate = candidates[0]
+        description = cast(str, candidate.get("description", ""))
+        command_preview = cast(str, candidate.get("commandPreview", ""))
+
+        # Verify de-anonymized values appear
+        assert "blog-regular-backup" in description
+        assert "blog-regular-backup" in command_preview
+        # Verify name-a alias does NOT appear
+        assert "name-a" not in description
+        assert "name-a" not in command_preview
+        assert "Name-a" not in description
+
+
+class TestNoAliasLeakageInOperatorFacingFields:
+    """Integration tests verifying no alias leakage in operator-facing API fields.
+
+    These tests use the assert_no_provider_aliases helper to verify complete
+    de-anonymization of all text fields.
+    """
+
+    def test_review_enrichment_has_no_alias_leaks(self, tmp_path: Path) -> None:
+        """Operator-facing review enrichment must have no alias leaks."""
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Simulate provider response with all alias types
+        (ea_dir / "run-test-review-enrichment.json").write_text(
+            json.dumps({
+                "purpose": "review-enrichment",
+                "status": "success",
+                "payload": {
+                    "triage_order": ["Cluster-a", "cluster-b", "Cluster-B"],
+                    "top_concerns": [
+                        "Cluster-a has high latency",
+                        "namespace-f namespace has issues",
+                        "Check node-a and pod-b status",
+                    ],
+                    "focus_notes": ["Investigate Cluster-a first", "Check namespace-f"],
+                    "evidence_gaps": ["Missing metrics from Cluster-a"],
+                    "summary": "Cluster-a and Cluster-b issues detected in namespace-f",
+                    "next_checks": [
+                        "kubectl top nodes --context Cluster-a",
+                        "kubectl get pods -n namespace-f --context cluster-b",
+                    ],
+                },
+                "alias_mapping": {
+                    "cluster-a": "admin@rees46-k8s",
+                    "cluster-b": "prod-cluster",
+                    "namespace-f": "kube-system",
+                    "node-a": "node-prod-1",
+                    "pod-b": "nginx-pod",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_review_enrichment(ea_dir, "run-test")
+
+        assert result is not None
+        # This should NOT raise - all aliases should be de-anonymized
+        leaks = assert_no_provider_aliases(result, "review_enrichment")
+        assert leaks == [], f"Found alias leaks: {leaks}"
+
+    def test_next_check_plan_has_no_alias_leaks(self, tmp_path: Path) -> None:
+        """Operator-facing next check plan must have no alias leaks."""
+        from k8s_diag_agent.security.deanonymization import assert_no_provider_aliases
+
+        ea_dir = tmp_path / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        # Simulate provider response with all alias types
+        (ea_dir / "run-test-next-check-plan.json").write_text(
+            json.dumps({
+                "purpose": "next-check-planning",
+                "status": "success",
+                "payload": {
+                    "candidates": [
+                        {
+                            "candidateId": "leak-test-1",
+                            "description": "Check Cluster-a for issues in Namespace-f",
+                            "targetCluster": "Cluster-a",
+                            "targetContext": "cluster-a",
+                            "commandPreview": "kubectl get pods -n Namespace-f --context Cluster-a",
+                            "safeToAutomate": True,
+                            "requiresOperatorApproval": False,
+                        },
+                        {
+                            "candidateId": "leak-test-2",
+                            "description": "Investigate node-a in cluster-b",
+                            "targetCluster": "Cluster-b",
+                            "commandPreview": "kubectl describe node node-a --context cluster-b",
+                            "safeToAutomate": False,
+                            "requiresOperatorApproval": True,
+                        },
+                    ],
+                },
+                "alias_mapping": {
+                    "cluster-a": "admin@rees46-k8s",
+                    "cluster-b": "prod-cluster",
+                    "namespace-f": "kube-system",
+                    "node-a": "prod-node-1",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        result = _find_next_check_plan(ea_dir, "run-test")
+
+        assert result is not None
+        # This should NOT raise - all aliases should be de-anonymized
+        leaks = assert_no_provider_aliases(result, "next_check_plan")
+        assert leaks == [], f"Found alias leaks: {leaks}"
 
     def test_review_enrichment_deanonymizes_top_concerns(self, tmp_path: Path) -> None:
         """Top concerns text should contain real cluster names after de-anonymization."""

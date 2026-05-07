@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from k8s_diag_agent.security.deanonymization import (
+    ALIAS_PATTERN,
+    assert_no_provider_aliases,
     deanonymize_command,
     deanonymize_next_check_candidate,
     deanonymize_payload,
@@ -482,3 +486,220 @@ class TestWordBoundaryRegex:
         mapping = {"cluster-a": "prod"}
         result = deanonymize_text("Issues in cluster-a", mapping)
         assert result == "Issues in prod"
+
+
+class TestCapitalizedAliasReplacement:
+    """Tests for case-insensitive alias replacement.
+
+    LLM output often capitalizes the first letter of aliases in sentences:
+    - "Cluster-a shows issues" instead of "cluster-a shows issues"
+    - "Namespace-b in default" instead of "namespace-b in default"
+
+    The de-anonymization must handle these capitalized variants.
+    """
+
+    def test_capitalized_cluster_alias_replaced(self) -> None:
+        """Test that capitalized 'Cluster-a' is replaced when mapping has 'cluster-a'."""
+        mapping = {"cluster-a": "admin@rees46-k8s"}
+        result = deanonymize_text("Cluster-a shows issues", mapping)
+        assert result == "admin@rees46-k8s shows issues"
+
+    def test_capitalized_cluster_alias_in_sentence(self) -> None:
+        """Test mixed case aliases in a sentence are all replaced."""
+        mapping = {"cluster-a": "prod", "cluster-b": "stage"}
+        result = deanonymize_text("Cluster-a and cluster-b are affected", mapping)
+        assert result == "prod and stage are affected"
+
+    def test_all_capitalized_cluster_alias(self) -> None:
+        """Test all-caps 'CLUSTER-A' is replaced."""
+        mapping = {"cluster-a": "prod"}
+        result = deanonymize_text("CLUSTER-A is primary", mapping)
+        assert result == "prod is primary"
+
+    def test_capitalized_namespace_alias_replaced(self) -> None:
+        """Test capitalized 'Namespace-f' is replaced when mapping has 'namespace-f'."""
+        mapping = {"namespace-f": "kube-system"}
+        result = deanonymize_text("Namespace-f has issues", mapping)
+        assert result == "kube-system has issues"
+
+    def test_capitalized_name_alias_replaced(self) -> None:
+        """Test capitalized 'Name-a' is replaced when mapping has 'name-a'."""
+        mapping = {"name-a": "blog-regular-backup"}
+        result = deanonymize_text("Name-a deployment is failing", mapping)
+        assert result == "blog-regular-backup deployment is failing"
+
+    def test_capitalized_alias_in_command(self) -> None:
+        """Test capitalized aliases in kubectl commands are replaced."""
+        mapping = {"cluster-a": "prod-cluster", "namespace-b": "monitoring"}
+        result = deanonymize_command(
+            "kubectl get pods -n Namespace-b --context Cluster-a", mapping
+        )
+        assert result == "kubectl get pods -n monitoring --context prod-cluster"
+
+    def test_capitalized_alias_with_punctuation(self) -> None:
+        """Test capitalized aliases with punctuation boundaries."""
+        mapping = {"cluster-a": "prod"}
+        result = deanonymize_text("Cluster-a, Cluster-b, and cluster-c", mapping)
+        assert result == "prod, Cluster-b, and cluster-c"
+
+    def test_capitalized_alias_in_list_payload(self) -> None:
+        """Test capitalized aliases in list payloads are replaced."""
+        mapping = {"cluster-a": "prod-cluster"}
+        payload = ["Cluster-a", "cluster-a", "other"]
+        result = deanonymize_payload(payload, mapping)
+        assert result == ["prod-cluster", "prod-cluster", "other"]
+
+    def test_capitalized_alias_in_dict_payload(self) -> None:
+        """Test capitalized aliases in dict payloads are replaced."""
+        mapping = {"cluster-a": "prod", "namespace-b": "default"}
+        payload = {
+            "triageOrder": ["Cluster-a", "namespace-b"],
+            "topConcerns": ["Cluster-a latency", "Namespace-b storage"],
+        }
+        result = deanonymize_payload(payload, mapping)
+        assert result["triageOrder"] == ["prod", "default"]
+        assert result["topConcerns"] == ["prod latency", "default storage"]
+
+
+class TestAssertNoProviderAliases:
+    """Tests for the assert_no_provider_aliases helper."""
+
+    def test_detects_cluster_alias(self) -> None:
+        """Test that cluster-a leak is detected."""
+        payload = {"summary": "cluster-a shows issues"}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_no_provider_aliases(payload)
+        assert "cluster-a" in str(exc_info.value)
+
+    def test_detects_capitalized_cluster_alias(self) -> None:
+        """Test that capitalized Cluster-a leak is detected."""
+        payload = {"summary": "Cluster-a shows issues"}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_no_provider_aliases(payload)
+        # The regex normalizes to lowercase in the match output
+        assert "cluster-a" in str(exc_info.value).lower()
+
+    def test_detects_namespace_alias(self) -> None:
+        """Test that namespace-f leak is detected."""
+        payload = {"command": "kubectl get pods -n namespace-f"}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_no_provider_aliases(payload)
+        assert "namespace-f" in str(exc_info.value)
+
+    def test_detects_name_alias(self) -> None:
+        """Test that name-a leak is detected."""
+        payload = {"description": "Check name-a deployment"}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_no_provider_aliases(payload)
+        assert "name-a" in str(exc_info.value)
+
+    def test_allows_real_cluster_names(self) -> None:
+        """Test that real cluster names are NOT detected as leaks."""
+        payload = {
+            "summary": "Issues in admin@rees46-k8s",
+            "command": "kubectl --context prod-cluster",
+        }
+        # Should NOT raise
+        leaks = assert_no_provider_aliases(payload)
+        assert leaks == []
+
+    def test_allows_real_cluster_with_hyphen(self) -> None:
+        """Test that real cluster names with hyphens are NOT detected."""
+        payload = {
+            "summary": "Issues in my-cluster-prod",
+            "command": "kubectl --context cluster-prod-1",
+        }
+        # Should NOT raise
+        leaks = assert_no_provider_aliases(payload)
+        assert leaks == []
+
+    def test_skips_alias_mapping_fields(self) -> None:
+        """Test that alias_mapping field contents are skipped."""
+        payload = {
+            "summary": "Clean summary",
+            "alias_mapping": {"cluster-a": "real"},  # Should be skipped
+            "provider_alias_mapping": {"cluster-b": "real2"},  # Should be skipped
+        }
+        # Should NOT raise
+        leaks = assert_no_provider_aliases(payload)
+        assert leaks == []
+
+    def test_nested_structure_detection(self) -> None:
+        """Test that aliases in nested structures are detected."""
+        payload = {
+            "topConcerns": [
+                "Cluster-a latency",
+                {"nested": "Namespace-b storage"},
+            ],
+            "nextChecks": [
+                "kubectl --context cluster-c",
+            ],
+        }
+        with pytest.raises(AssertionError) as exc_info:
+            assert_no_provider_aliases(payload)
+        error_msg = str(exc_info.value)
+        # Should detect multiple leaks
+        assert "Cluster-a" in error_msg or "cluster-a" in error_msg.lower()
+
+
+class TestAliasPattern:
+    """Tests for the ALIAS_PATTERN regex exported for external use.
+
+    Note: ALIAS_PATTERN uses standard regex word boundaries (\b), which means it
+    may match aliases inside hyphenated words. This is intentional for detection
+    purposes (better to flag potential leaks), while deanonymize_text uses stricter
+    boundaries to avoid false replacements.
+    """
+
+    def test_matches_cluster_a(self) -> None:
+        """ALIAS_PATTERN matches cluster-a."""
+        matches = ALIAS_PATTERN.findall("cluster-a shows issues")
+        assert matches == ["cluster-a"]
+
+    def test_matches_Cluster_a(self) -> None:
+        """ALIAS_PATTERN matches Cluster-a (case-insensitive)."""
+        matches = ALIAS_PATTERN.findall("Cluster-a shows issues")
+        assert matches == ["Cluster-a"]
+
+    def test_matches_namespace_f(self) -> None:
+        """ALIAS_PATTERN matches namespace-f."""
+        matches = ALIAS_PATTERN.findall("-n namespace-f")
+        assert matches == ["namespace-f"]
+
+    def test_matches_Name_a(self) -> None:
+        """ALIAS_PATTERN matches Name-a (case-insensitive)."""
+        matches = ALIAS_PATTERN.findall("Check Name-a deployment")
+        assert matches == ["Name-a"]
+
+    def test_does_not_match_admin_at_rees(self) -> None:
+        """ALIAS_PATTERN does not match admin@rees46-k8s (no hyphen-letter pattern)."""
+        matches = ALIAS_PATTERN.findall("Issues in admin@rees46-k8s")
+        assert matches == []
+
+    def test_matches_inside_hyphenated_word(self) -> None:
+        """ALIAS_PATTERN matches cluster-a inside my-cluster-a.
+
+        This is by design for detection - better to flag potential leaks.
+        The deanonymize_text() function uses stricter boundaries to avoid
+        false replacements in real usage.
+        """
+        matches = ALIAS_PATTERN.findall("Issues in my-cluster-a node")
+        assert matches == ["cluster-a"]  # Detects the alias inside the word
+
+    def test_does_not_match_cluster_prod_1(self) -> None:
+        """ALIAS_PATTERN does not match cluster-prod-1 (requires -letter suffix)."""
+        matches = ALIAS_PATTERN.findall("--context cluster-prod-1")
+        assert matches == []  # No match - pattern requires -letter at end
+
+    def test_matches_all_categories(self) -> None:
+        """ALIAS_PATTERN matches all known alias categories."""
+        # The pattern matches category-prefixed aliases
+        text = "cluster-a namespace-b node-c pod-d service-e workload-f name-g job-h cronjob-i deployment-j statefulset-k daemonset-l host-m release-n crd-o label-p"
+        matches = ALIAS_PATTERN.findall(text)
+        # Each category-{letter} should match once
+        expected_categories = [
+            "cluster-a", "namespace-b", "node-c", "pod-d", "service-e",
+            "workload-f", "name-g", "job-h", "cronjob-i", "deployment-j",
+            "statefulset-k", "daemonset-l", "host-m", "release-n", "crd-o", "label-p"
+        ]
+        assert matches == expected_categories

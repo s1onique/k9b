@@ -7,6 +7,8 @@ from .anonymizer import (
     anonymize_metadata,
 )
 from .deanonymization import (
+    ALIAS_PATTERN,
+    assert_no_provider_aliases,
     deanonymize_command,
     deanonymize_next_check_candidate,
     deanonymize_payload,
@@ -29,7 +31,9 @@ from .sanitizer import (
 )
 
 __all__ = [
+    "ALIAS_PATTERN",
     "SecurityError",
+    "assert_no_provider_aliases",
     "deanonymize_command",
     "deanonymize_next_check_candidate",
     "deanonymize_payload",

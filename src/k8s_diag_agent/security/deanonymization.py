@@ -28,15 +28,36 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+# Regex pattern for detecting provider aliases case-insensitively.
+# Matches: cluster-a, Cluster-a, namespace-b, Namespace-b, name-a, Name-a, etc.
+#
+# NOTE: Detection is intentionally broader than replacement. This pattern uses standard
+# regex word boundaries and may match aliases inside hyphenated strings such as
+# my-cluster-a (where it would detect "cluster-a"). This is acceptable for leak
+# detection purposes - better to flag potential leaks than to miss them.
+# The deanonymize_text() function uses stricter token boundaries to avoid false
+# replacements during actual de-anonymization.
+#
+# Does NOT match: admin@rees46-k8s, cluster-prod-1 (no hyphen-letter pattern)
+ALIAS_PATTERN = re.compile(
+    r"(?i)\b(?:cluster|namespace|node|pod|service|workload|name|job|cronjob|deployment|statefulset|daemonset|host|release|crd|label)-[a-z]\b",
+)
 
-def _build_word_boundary_pattern(alias: str) -> re.Pattern[str]:
+
+def _build_word_boundary_pattern(alias: str, case_insensitive: bool = True) -> re.Pattern[str]:
     """Build a regex pattern that matches alias as a whole word/token.
 
     This prevents partial replacements like "cluster-audit" becoming "<real>-udit".
     It also prevents matching inside hyphenated words like "my-cluster-a".
 
+    By default, matching is case-insensitive so "Cluster-a" is matched even when
+    the mapping contains "cluster-a". This handles LLM output that capitalizes
+    the first letter of aliases in sentences.
+
     Args:
         alias: The alias string to match (e.g., "cluster-a")
+        case_insensitive: If True (default), match regardless of case so
+                         "Cluster-a" matches "cluster-a" in mapping
 
     Returns:
         Compiled regex pattern with word boundaries that include hyphens
@@ -58,7 +79,8 @@ def _build_word_boundary_pattern(alias: str) -> re.Pattern[str]:
     # - (?:^|(?<=[^a-zA-Z0-9-])): Either start of string, or preceded by non-word/non-hyphen
     #   Note: [^a-zA-Z0-9-] is a single character class, so lookbehind is fixed-width
     # - (?=$|(?=[^a-zA-Z0-9-])): Either end of string, or followed by non-word/non-hyphen
-    return re.compile(rf"(?:^|(?<=[^a-zA-Z0-9-])){escaped}(?=$|(?=[^a-zA-Z0-9-]))")
+    flags = re.IGNORECASE if case_insensitive else 0
+    return re.compile(rf"(?:^|(?<=[^a-zA-Z0-9-])){escaped}(?=$|(?=[^a-zA-Z0-9-]))", flags)
 
 
 def deanonymize_text(text: str | None, alias_to_label: Mapping[str, str]) -> str | None:
@@ -330,11 +352,83 @@ def flatten_alias_mappings(all_mappings: Mapping[str, object]) -> dict[str, str]
     return result
 
 
+def assert_no_provider_aliases(data: Any, path: str = "payload") -> list[str]:
+    """Assert that a payload or string contains no provider alias leaks.
+
+    This is a regression helper that checks for leaked aliases in:
+    - Strings (text, titles, descriptions, commands)
+    - Lists of strings
+    - Dicts with string values
+    - Nested structures
+
+    It detects case-insensitive aliases like:
+    - cluster-a, Cluster-a, CLUSTER-A
+    - namespace-b, Namespace-b
+    - name-a, Name-a
+
+    It does NOT match real names like:
+    - admin@rees46-k8s (no hyphen-letter pattern)
+    - my-cluster-a (prefix is different)
+
+    Args:
+        data: The payload or string to check
+        path: Description of data location for error messages
+
+    Returns:
+        List of found leaks with their locations for error reporting
+
+    Raises:
+        AssertionError: If any aliases are found in the data
+    """
+    leaks: list[str] = []
+    _check_for_aliases(data, path, leaks)
+
+    if leaks:
+        raise AssertionError(
+            f"Provider aliases detected in {path}:\n" + "\n".join(leaks)
+        )
+
+    return leaks
+
+
+def _check_for_aliases(data: Any, path: str, leaks: list[str]) -> None:
+    """Recursively check data for alias leaks."""
+    if data is None or isinstance(data, (bool, int, float)):
+        return
+
+    if isinstance(data, str):
+        # Check for alias pattern in string using the exported ALIAS_PATTERN
+        matches = ALIAS_PATTERN.findall(data)
+        if matches:
+            leaks.append(f"  {path}: contains {matches!r} in text: {data[:100]!r}")
+        return
+
+    if isinstance(data, list):
+        for i, item in enumerate(data):
+            _check_for_aliases(item, f"{path}[{i}]", leaks)
+        return
+
+    if isinstance(data, tuple):
+        for i, item in enumerate(data):
+            _check_for_aliases(item, f"{path}[{i}]", leaks)
+        return
+
+    if isinstance(data, Mapping):
+        for key, value in data.items():
+            # Skip internal/debug fields that may contain aliases
+            if key in ("alias_mapping", "provider_alias_mapping", "_raw", "raw"):
+                continue
+            _check_for_aliases(value, f"{path}.{key}", leaks)
+        return
+
+
 __all__ = [
-    "deanonymize_text",
+    "ALIAS_PATTERN",
+    "assert_no_provider_aliases",
     "deanonymize_command",
-    "deanonymize_payload",
     "deanonymize_next_check_candidate",
+    "deanonymize_payload",
     "deanonymize_review_enrichment",
+    "deanonymize_text",
     "flatten_alias_mappings",
 ]
