@@ -1278,3 +1278,148 @@ After NotificationArtifact, consider:
 
 1. **`HealthAssessmentArtifact`**: Used in review pipeline, has `from_dict()`
 2. No further artifact families identified for typed reader migration at this time
+
+---
+
+## Typed Artifact Reader: HealthAssessmentArtifact (Phase 2 Follow-up)
+
+### Overview
+
+This section documents the HealthAssessmentArtifact typed artifact reader as the final step in the typed reader hardening sequence.
+
+### New Files
+
+- `src/k8s_diag_agent/health/artifact_readers.py` - HealthAssessmentArtifact typed readers (added to existing module)
+- `tests/unit/test_health_assessment_artifact_readers.py` - Reader tests
+
+### HealthAssessmentArtifact Call Site Inventory
+
+| File | Function | Type | Pattern | Classification |
+|------|----------|------|---------|----------------|
+| `health/loop.py` | write path | artifact creation | Health assessment artifact write | **skipped** (write path) |
+| `health/review.py` | `load_assessment` | targeted read | Assessment artifact read for drilldown | **available** (not migrated) |
+| `health/summary.py` | `_load_json` | broad scan | Assessment glob scan | **available** (not migrated) |
+| `health/ui.py` | `_serialize_assessment` | read path | Assessment serialization | **available** (not migrated) |
+| `health/review_feedback.py` | `_extract_assessment_data` | data extraction | Assessment data access | **skipped** (in-memory, not read) |
+
+### Chosen Call Sites and Rationale
+
+**Migrated (0 call sites in this slice)**: No existing call sites currently use raw `json.loads() + from_dict()` pattern for HealthAssessmentArtifact reading. The existing paths use different approaches:
+
+- `health/summary.py::_load_json`: Uses raw dict access for summary building (not typed object operations)
+- `health/review.py::load_assessment`: Reads `AssessorAssessment` from the `assessment` field, not the outer HealthAssessmentArtifact
+- `health/ui.py::_serialize_assessment`: Uses in-memory objects passed directly to serialization
+
+The typed reader helper is provided for future use, but no existing call sites require migration at this time.
+
+### from_dict() Added to HealthAssessmentArtifact
+
+Added `from_dict()` class method to `HealthAssessmentArtifact` in `health/loop.py`:
+
+```python
+@classmethod
+def from_dict(cls, raw: Mapping[str, Any]) -> HealthAssessmentArtifact:
+    """Parse a HealthAssessmentArtifact from a dict (e.g., from JSON).
+
+    Preserves permissive behavior for backward compatibility with
+    legacy artifacts that may have partial data.
+    """
+```
+
+**Key design decisions**:
+
+- `assessment` field: Can be dict or None → becomes `{}` for partial/legacy artifacts
+- `health_rating`: String or HealthRating → attempts enum parse, defaults to `HealthRating.UNKNOWN`
+- `missing_evidence`: Can be list/tuple → converts to tuple
+- All other fields: permissive str() conversion with empty string defaults
+
+### Compatibility Decision
+
+**Permissive from_dict() behavior preserved**: HealthAssessmentArtifact.from_dict() is intentionally permissive to handle legacy artifacts:
+
+- Missing `assessment` field → becomes `{}`
+- Missing/invalid `health_rating` → becomes `HealthRating.UNKNOWN`
+- Missing `timestamp` → becomes current time (for partial artifacts)
+- Missing `notes`/`artifact_path` → becomes `None`
+
+This permissive behavior ensures backward compatibility with partial or older artifacts.
+
+### Error Handling Contract
+
+- **Strict reader raises**:
+  - `OSError`
+  - `json.JSONDecodeError`
+  - `ValueError`
+  - `TypeError`
+  - `KeyError`
+- **Optional reader returns** `None` on those failures
+- **Optional reader logs only when** `log_failures=True`
+
+### Logging Policy
+
+- Safe metadata only:
+  - artifact filename
+  - artifact kind
+  - run_id (if safe)
+  - error type
+- Never log raw assessment content, findings, hypotheses, prompts, responses, kubeconfig, tokens, or full absolute paths
+
+### Preserved Behavior
+
+- Valid assessments still load and render the same
+- Malformed JSON still causes explicit exceptions (from `json.loads`)
+- Non-object JSON (array) raises `ValueError` (from reader's mapping check)
+- Partial/legacy artifacts still load through permissive `from_dict()`
+- No API response shape changes
+- No change to write-path schema
+
+### Tests Added
+
+| Test | Purpose |
+|------|---------|
+| `test_valid_assessment_loads_and_returns_typed_object` | Valid assessment parses into HealthAssessmentArtifact |
+| `test_malformed_json_fails_with_json_decode_error` | Strict reader raises JSONDecodeError |
+| `test_non_object_json_fails` | Strict reader raises ValueError |
+| `test_unreadable_missing_file_raises_os_error` | Strict reader raises OSError |
+| `test_roundtrip_with_all_fields` | Assessment roundtrip preserves all fields |
+| `test_empty_assessment_field_becomes_empty_dict` | Permissive from_dict behavior |
+| `test_invalid_health_rating_defaults_to_unknown` | Default rating for invalid value |
+| `test_valid_assessment_returns_typed_object` | Optional reader returns typed object |
+| `test_malformed_json_returns_none_and_logs` | Optional reader returns None + logs |
+| `test_missing_file_returns_none` | Optional reader returns None |
+| `test_log_failures_false_returns_none_without_logging` | log_failures=False suppresses warnings |
+| `test_log_failures_false_with_valid_assessment` | Valid assessment returns object even with log_failures=False |
+| `test_array_json_returns_none` | Optional reader returns None |
+| `test_log_failures_true_logs_warning_with_safe_message` | Logs only safe metadata |
+| `test_exception_carrying_safe_path` | HealthAssessmentArtifactReadError uses basename only |
+| `test_exception_without_path` | Handles None path |
+| `test_exception_with_cause` | Chains cause properly |
+| `test_roundtrip_preserves_all_fields` | Roundtrip preserves all fields |
+
+### Verification
+
+```bash
+# Run new reader tests
+pytest tests/unit/test_health_assessment_artifact_readers.py -v
+
+# Run ruff check on changed files
+ruff check src/k8s_diag_agent/health/artifact_readers.py
+ruff check tests/unit/test_health_assessment_artifact_readers.py
+
+# Run security baseline
+bash scripts/check_security_baseline.sh --mode baseline
+```
+
+### Summary
+
+**HealthAssessmentArtifact typed reader is complete**.
+
+All typed artifact reader families have been implemented:
+1. ✅ `ExternalAnalysisArtifact` (external_analysis/artifact_readers.py)
+2. ✅ `HealthProposal` (health/artifact_readers.py)
+3. ✅ `DrilldownArtifact` (health/artifact_readers.py)
+4. ✅ `ClusterSnapshot` (health/artifact_readers.py)
+5. ✅ `NotificationArtifact` (health/artifact_readers.py)
+6. ✅ `HealthAssessmentArtifact` (health/artifact_readers.py) - **this slice**
+
+No further artifact families identified for typed reader migration at this time.

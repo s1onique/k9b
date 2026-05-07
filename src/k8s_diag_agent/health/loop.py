@@ -181,6 +181,68 @@ class HealthAssessmentArtifact:
             data["artifact_path"] = self.artifact_path
         return data
 
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> HealthAssessmentArtifact:
+        """Parse a HealthAssessmentArtifact from a dict (e.g., from JSON).
+
+        Preserves permissive behavior for backward compatibility with
+        legacy artifacts that may have partial data.
+        """
+        if not isinstance(raw, Mapping):
+            raise TypeError(f"HealthAssessmentArtifact.from_dict expects a mapping, got {type(raw).__name__}")
+
+        # Parse timestamp
+        timestamp_raw = raw.get("timestamp")
+        parsed_timestamp: datetime
+        if isinstance(timestamp_raw, str):
+            parsed_timestamp = parse_iso_to_utc(timestamp_raw) or datetime.now(UTC)
+        else:
+            parsed_timestamp = datetime.now(UTC)
+
+        # Parse health_rating
+        rating_raw = raw.get("health_rating")
+        parsed_rating: HealthRating
+        if isinstance(rating_raw, HealthRating):
+            parsed_rating = rating_raw
+        elif isinstance(rating_raw, str):
+            try:
+                parsed_rating = HealthRating(rating_raw)
+            except ValueError:
+                parsed_rating = HealthRating.UNKNOWN
+        else:
+            parsed_rating = HealthRating.UNKNOWN
+
+        # Parse missing_evidence
+        missing_raw = raw.get("missing_evidence")
+        parsed_missing: tuple[str, ...]
+        if isinstance(missing_raw, (list, tuple)):
+            parsed_missing = tuple(str(item) for item in missing_raw if item is not None)
+        else:
+            parsed_missing = ()
+
+        # assessment field can be a dict or None (partial/legacy artifacts)
+        assessment_raw = raw.get("assessment")
+        parsed_assessment: dict[str, Any]
+        if isinstance(assessment_raw, dict):
+            parsed_assessment = dict(assessment_raw)
+        else:
+            parsed_assessment = {}
+
+        return cls(
+            run_label=str(raw.get("run_label", "")),
+            run_id=str(raw.get("run_id", "")),
+            timestamp=parsed_timestamp,
+            context=str(raw.get("context", "")),
+            label=str(raw.get("label", "")),
+            cluster_id=str(raw.get("cluster_id", "")),
+            snapshot_path=str(raw.get("snapshot_path", "")),
+            assessment=parsed_assessment,
+            missing_evidence=parsed_missing,
+            health_rating=parsed_rating,
+            notes=str(raw.get("notes")) if raw.get("notes") else None,
+            artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
+        )
+
 
 @dataclass(frozen=True)
 class TriggerDetail:

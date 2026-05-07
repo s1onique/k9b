@@ -124,6 +124,7 @@ class HealthRating(StrEnum):
     """Health rating for a cluster or target."""
     HEALTHY = "healthy"
     DEGRADED = "degraded"
+    UNKNOWN = "unknown"
 
 
 @dataclass
