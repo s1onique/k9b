@@ -1422,3 +1422,146 @@ All typed artifact reader families have been implemented:
 6. ✅ `HealthAssessmentArtifact` (health/artifact_readers.py) - **this slice**
 
 No further artifact families identified for typed reader migration at this time.
+
+---
+
+## LLM/Provider Boundary Cleanup Plan
+
+### Scope
+
+This section documents the LLM/provider exception boundary review as part of Security Hardening Phase 2 follow-up.
+
+**Reviewed date**: 2026-05-07
+
+### Remaining LLM/Provider Broad Handlers
+
+| File | Line | Context | Classification | Exception Surface | Current Handling |
+|------|------|---------|----------------|-------------------|-----------------|
+| `health/loop_review_pipeline.py` | 82 | `build_health_review()` call | **reviewed-safe** (domain boundary) | ValueError, TypeError, AttributeError | `return None, ()` — review not built, no proposals |
+| `health/loop_review_pipeline.py` | 117 | `generate_proposals_from_review()` call | **reviewed-safe** (domain boundary) | Various exceptions from assessment/drilldown processing | Structured log + returns review_path only |
+| `external_analysis/llamacpp_adapter.py` | 249 | HTTP call to LLM provider in `_run_http` | **reviewed-safe** (LLM provider boundary) | Provider HTTP errors, connection errors, timeouts, unexpected SDK errors | Produces structured `ExternalAnalysisArtifact` with `LLMFailureMetadata` |
+| `health/loop.py` | 2500 | LLM call for auto-drilldown in `_run_auto_drilldown_analysis` | **reviewed-safe** (LLM provider boundary) | Provider network/HTTP errors, wrapped exceptions, SDK errors | FAILED status with `failure_metadata` (when available) |
+| `health/loop.py` | 2716 | LLM call for review enrichment in `_run_review_enrichment` | **reviewed-safe** (LLM provider boundary) | Provider network/HTTP errors, wrapped exceptions, SDK errors | FAILED status with bounded `error_summary` |
+| `health/loop_alertmanager_port_forward.py` | 237 | Port-forward cleanup finalizer | **reviewed-safe** (finalizer boundary) | Any unexpected exception during cleanup | Logs error + continues — must not crash loop |
+
+### Why These Are Harder Than File/Parser Boundaries
+
+Unlike file I/O and JSON parsing, LLM/provider boundaries face:
+
+1. **Opaque exception surfaces**: Provider errors may include network failures, protocol errors, rate limiting, authentication failures, malformed responses, schema validation errors, unexpected SDK errors, and wrapped exceptions (via `__cause__`/`__context__`).
+
+2. **Provider-specific behavior**: Each provider (llamacpp, openai, anthropic, etc.) has unique error shapes. Narrowing requires comprehensive testing of each provider's exception surface.
+
+3. **Non-fatal containment requirement**: All LLM provider failures must be non-fatal. The health loop must continue regardless of provider failures. Narrowing must preserve this guarantee.
+
+4. **Structured failure artifacts**: The current implementation already produces typed `ExternalAnalysisArtifact` with structured `failure_metadata`. This is the "right" abstraction — exceptions flow into failure artifacts, not into caller code.
+
+5. **Classified failure metadata**: `classify_llm_failure()` already categorizes exceptions into `LLMFailureClass` (e.g., `TIMEOUT`, `CONNECTION_ERROR`, `RATE_LIMITED`, `AUTH_ERROR`, `SCHEMA_ERROR`, `UNKNOWN`). This is the typed boundary we want.
+
+### Current Design
+
+The LLM/provider boundary already has a well-structured design:
+
+```
+Provider Call → classify_llm_failure() → LLMFailureMetadata → ExternalAnalysisArtifact
+                                            ↓
+                                    failure_metadata dict
+                                    (safe fields only)
+```
+
+**Safe fields in failure_metadata**:
+- `failure_class` — LLMFailureClass enum value (string)
+- `exception_type` — exception class name (string)
+- `timeout_seconds` — configured timeout
+- `elapsed_ms` — call duration
+- `endpoint` — sanitized endpoint (no credentials)
+- `summary` — bounded error message
+- `llm_call`, `llm_call_id`, `llm_provider`, `llm_operation` — call metadata
+
+**What is NOT logged**:
+- Raw prompts
+- Raw responses
+- Tokens
+- Authorization headers
+- Kubeconfig
+- Cluster object payloads
+
+### Why Existing Patterns Are Sufficient
+
+1. **Typed failure artifacts**: `ExternalAnalysisArtifact` with `SKIPPED`/`FAILED` status is the right abstraction for provider failures.
+
+2. **Classified metadata**: `LLMFailureMetadata` with `LLMFailureClass` already provides the taxonomy that a `ProviderBoundaryError` hierarchy would provide — but without the complexity.
+
+3. **Structured logging**: Safe metadata fields are logged, not raw exception content.
+
+4. **Non-fatal behavior**: All handlers produce failure artifacts and continue, preserving the health loop guarantee.
+
+5. **No credential exposure**: Error summaries use bounded extraction, not raw `str(exc)`.
+
+### Recommended Migration Path
+
+**If future work is needed**, consider these in priority order:
+
+1. **Add adapter-level specific exception handling**: If a specific provider (e.g., llamacpp) has known recoverable errors, add specific exception handlers within that adapter's `_run_http` method before the broad catch.
+
+2. **Document the failure artifact contract**: Ensure all consumers of `ExternalAnalysisArtifact` handle `SKIPPED`/`FAILED` status consistently. This is the "error boundary" contract.
+
+3. **Add provider-specific error codes**: If providers return structured error codes (e.g., OpenAI's `error.code`), extract them into `failure_metadata`. Currently only `failure_class` (enum) is used.
+
+4. **Consider typed `ProviderError` hierarchy only if**: Multiple providers need shared error classification logic that `LLMFailureMetadata` can't capture. At that point, a `ProviderError` base class with specific subclasses would reduce duplication.
+
+### Why Not Introduce ProviderBoundaryError Taxonomy Now
+
+Introducing a `ProviderBoundaryError` hierarchy would:
+- Add a new exception hierarchy with multiple subclasses
+- Require changes to all LLM call sites
+- Need comprehensive test coverage for each exception type
+- Risk breaking the non-fatal guarantee if any exception escapes
+
+The current pattern:
+- Uses existing `Exception` catch with `classify_llm_failure()` for categorization
+- Produces typed failure artifacts (not raising exceptions)
+- Preserves non-fatal behavior without exception hierarchies
+
+### First Safe Candidate (for future reference)
+
+The `loop_alertmanager_port_forward.py` port-forward cleanup finalizer (line 237) is the "easiest" boundary — but it should NOT be narrowed because:
+1. It's a finalizer that MUST not propagate exceptions
+2. The subprocess has already been closed by the typed handler above it (line 222)
+3. The broad catch is intentional defensive containment
+
+**Recommendation**: Do not narrow any LLM/provider boundary handlers at this time. The current design is sufficient and well-documented.
+
+### Verification Status
+
+```bash
+# Baseline check (should pass)
+bash scripts/check_security_baseline.sh --mode baseline
+
+# Strict check:
+# - expected to fail while reviewed-safe broad handlers remain
+# - currently reports 27 allowlisted findings overall
+# - 6 of those are LLM/provider/finalizer handlers covered by this section
+bash scripts/check_security_baseline.sh --mode strict
+```
+
+**Allowlist entries for these handlers (6 total — subset of 27 global allowlisted)**:
+- `health/loop.py assess_drilldown_artifact LLM call boundary in auto-drilldown`
+- `health/loop.py _enrich_with_llm_review review enrichment LLM call boundary`
+- `health/loop.py _run_review_enrichment review enrichment LLM call boundary`
+- `health/loop_review_pipeline.py write_review_and_proposals health review build boundary`
+- `external_analysis/llamacpp_adapter.py _run_http LLM provider failure boundary`
+- `health/loop_alertmanager_port_forward.py stop_alertmanager_port_forward port-forward cleanup final containment`
+
+### Summary
+
+All 6 remaining LLM/provider broad handlers are **reviewed-safe**:
+- Current handling is structured and well-documented
+- `LLMFailureMetadata` + `classify_llm_failure()` provides the taxonomy
+- Typed `ExternalAnalysisArtifact` is the right error boundary abstraction
+- Non-fatal behavior is preserved
+- No credential exposure in logging/metadata
+
+**Decision**: Design-only (no code changes). Document the boundary contract and recommend maintaining the current pattern.
+
+**Next recommended boundary**: Continue with other reviewed-safe areas in the allowlist (e.g., UI read loops, batch execution, CLI handlers) or wait for a specific provider exception surface to be identified that warrants narrowing.
