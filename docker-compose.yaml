@@ -4,7 +4,14 @@ services:
       context: .
       dockerfile: Dockerfile.python
     image: localhost/k9b_python:latest
-    command: ["backend"]
+    # The health UI/API exposes mutation endpoints, so the server refuses
+    # non-loopback binds unless the risk is explicitly acknowledged.
+    # In local Compose dev, 0.0.0.0 is required so the frontend container
+    # can reach the backend over the private Compose network.
+    # Do not copy this into exposed production deployments without an
+    # auth/proxy/network boundary.
+    # See: --unsafe-bind.
+    command: ["backend", "--unsafe-bind"]
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
     environment:

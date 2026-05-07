@@ -81,4 +81,4 @@ else
 fi
 
 echo "Starting health UI on $UI_HOST:$UI_PORT watching $UI_RUNS_DIR"
-exec "$PYTHON" -m k8s_diag_agent.cli health-ui --runs-dir "$UI_RUNS_DIR" --host "$UI_HOST" --port "$UI_PORT"
+exec "$PYTHON" -m k8s_diag_agent.cli health-ui --runs-dir "$UI_RUNS_DIR" --host "$UI_HOST" --port "$UI_PORT" "$@"
