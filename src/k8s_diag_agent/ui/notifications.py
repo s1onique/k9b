@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..datetime_utils import parse_iso_to_utc
+from ..health.artifact_readers import try_read_notification_artifact
 from ..health.notifications import NotificationArtifact
 from ..structured_logging import emit_structured_log
 
@@ -243,19 +244,23 @@ def _load_notification_records(
                     continue
         
         # Either no metadata filter, or metadata filter passed - do full parse
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        # Use typed reader for consistent artifact parsing
+        artifact = try_read_notification_artifact(
+            path,
+            run_id="",
+            artifact_kind="notification",
+            log_failures=False,  # Silent scan: skip malformed artifacts without logging
+        )
+        
+        if artifact is None:
+            # Update parse counter for malformed artifacts
+            if counters is not None:
+                counters["notification_files_fully_parsed"] += 1
             continue
         
         # Update parse counter
         if counters is not None:
             counters["notification_files_fully_parsed"] += 1
-        
-        try:
-            artifact = NotificationArtifact.from_dict(raw)
-        except ValueError:
-            continue
         
         # Apply cluster filter if needed (requires full parse since it's in content)
         if normalized_cluster_filter:
@@ -343,19 +348,23 @@ def _load_notification_records_optimized(
                         counters["notification_files_rejected_by_metadata"] += 1
                     continue
         
-        # Full parse required
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        # Full parse required - use typed reader
+        artifact = try_read_notification_artifact(
+            path,
+            run_id="",
+            artifact_kind="notification",
+            log_failures=False,  # Silent scan: skip malformed artifacts without logging
+        )
+        
+        if artifact is None:
+            # Update parse counter for malformed artifacts
+            if counters is not None:
+                counters["notification_files_fully_parsed"] += 1
             continue
         
+        # Update parse counter
         if counters is not None:
             counters["notification_files_fully_parsed"] += 1
-        
-        try:
-            artifact = NotificationArtifact.from_dict(raw)
-        except ValueError:
-            continue
         
         # Apply filters during load
         if kind_filter:
@@ -428,15 +437,15 @@ def _count_matching_records(
             count += 1
             continue
         
-        # Need content-based filtering - do minimal parse
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-            continue
+        # Need content-based filtering - use typed reader
+        artifact = try_read_notification_artifact(
+            path,
+            run_id="",
+            artifact_kind="notification",
+            log_failures=False,  # Silent scan
+        )
         
-        try:
-            artifact = NotificationArtifact.from_dict(raw)
-        except ValueError:
+        if artifact is None:
             continue
         
         # Apply remaining filters

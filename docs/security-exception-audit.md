@@ -1124,3 +1124,157 @@ After ClusterSnapshot, consider:
 
 1. **`NotificationArtifact`**: Uses `from_dict()` in `health/notifications.py`
 2. **`HealthAssessmentArtifact`**: Used in review pipeline, has `from_dict()`
+
+---
+
+## Typed Artifact Reader: NotificationArtifact (Phase 2 Follow-up)
+
+### Overview
+
+This section documents the NotificationArtifact typed artifact reader as the next step after ClusterSnapshot.
+
+### New Files
+
+- `src/k8s_diag_agent/health/artifact_readers.py` - NotificationArtifact typed readers (added to existing module)
+- `tests/unit/test_notification_artifact_readers.py` - Reader tests
+
+### Reader API
+
+```python
+# Strict reader - raises on failure
+def read_notification_artifact(path: Path) -> NotificationArtifact:
+    """Read and parse a NotificationArtifact from disk.
+
+    Raises:
+        OSError: If the file cannot be read
+        json.JSONDecodeError: If the file content is not valid JSON
+        ValueError: If the JSON is valid but not a mapping, or from_dict validation fails
+        TypeError: If from_dict receives unexpected type
+        KeyError: If required fields are missing in from_dict
+    """
+
+# Optional reader - returns None on failure
+def try_read_notification_artifact(
+    path: Path,
+    *,
+    run_id: str = "",
+    artifact_kind: str = "notification",
+    log_failures: bool = True,
+) -> NotificationArtifact | None:
+    """Try to read a NotificationArtifact, returning None on failure.
+
+    Logs a warning with safe metadata on failure when log_failures=True.
+    Never logs raw content.
+    """
+```
+
+### Error Handling Contract
+
+- **Strict reader raises**:
+  - `OSError`
+  - `json.JSONDecodeError`
+  - `ValueError`
+  - `TypeError`
+  - `KeyError`
+- **Optional reader returns** `None` on those failures
+- **Optional reader logs only when** `log_failures=True`
+
+### Logging Policy
+
+- Safe metadata only:
+  - artifact filename
+  - artifact kind
+  - run_id (if safe)
+  - error type
+- Never log raw notification content, notification message text, cluster details, Kubernetes object specs, pod logs, events, kubeconfig, tokens, or full absolute paths
+
+### NotificationArtifact Call Site Inventory
+
+| File | Function | Type | Pattern | Classification |
+|------|----------|------|---------|----------------|
+| `ui/notifications.py` | `_load_notification_records` | broad scan | notification glob scan | **fixed-this-slice** |
+| `ui/notifications.py` | `_load_notification_records_optimized` | broad scan | notification glob scan | **fixed-this-slice** |
+| `ui/notifications.py` | `_count_matching_records` | broad scan | count pass scan | **fixed-this-slice** |
+| `ui/server_read_support.py` | `_load_notifications_for_run` | broad scan | run-specific notification scan | **available** (not migrated) |
+| `health/ui.py` | `_serialize_notifications` | read path | notification serialization | **available** (not migrated) |
+| `health/notifications.py` | write path | write | notification artifact write | **skipped** (write path) |
+
+### Chosen Call Sites and Rationale
+
+**Migrated in this slice**: The three `ui/notifications.py` functions use `try_read_notification_artifact()` with `log_failures=False` for broad scan patterns:
+- `_load_notification_records`: Full glob scan with metadata-first filtering; malformed notifications are silently skipped
+- `_load_notification_records_optimized`: Same pattern, optimized for large directories
+- `_count_matching_records`: Count pass scan; uses kind_filter to force full parse (skips malformed)
+
+These functions preserve the existing behavior: valid notifications load, malformed are silently skipped, and legacy notifications without `artifact_id` load through permissive `from_dict()`.
+
+**Available for future migration**:
+- `ui/server_read_support.py::_load_notifications_for_run`: run-specific notification scan
+- `health/ui.py::_serialize_notifications`: notification serialization
+
+### Compatibility Decision
+
+**Permissive from_dict() behavior preserved**: NotificationArtifact.from_dict() is intentionally permissive:
+- Missing `kind` field → becomes empty string `""`
+- Missing `summary` field → becomes empty string `""`
+- Missing `artifact_id` field → becomes `None` (legacy compatibility)
+
+This permissive behavior is by design to handle legacy notifications and notifications from older schema versions. The typed reader preserves this behavior.
+
+### Preserved Behavior
+
+- Valid notifications still load and render the same
+- Malformed JSON still causes explicit exceptions (from `json.loads`)
+- Non-object JSON (array) raises `ValueError` (from reader's mapping check)
+- Malformed from_dict data still returns object (permissive from_dict)
+- No API response shape changes
+- No change to write-path schema
+- Legacy notifications without `artifact_id` still load correctly
+
+### Tests Added
+
+| Test | Purpose |
+|------|---------|
+| `test_valid_notification_loads_typed_object` | Valid notification parses into NotificationArtifact |
+| `test_malformed_json_raises_json_decode_error` | Strict reader raises JSONDecodeError |
+| `test_missing_file_raises_os_error` | Strict reader raises OSError |
+| `test_non_object_json_raises_value_error` | Strict reader raises ValueError |
+| `test_missing_kind_field_becomes_empty_string` | Permissive from_dict behavior |
+| `test_missing_summary_field_becomes_empty_string` | Permissive from_dict behavior |
+| `test_roundtrip_with_all_fields` | Notification roundtrip preserves all fields |
+| `test_valid_notification_returns_typed_object` | Optional reader returns typed object |
+| `test_malformed_json_returns_none_with_logging` | Optional reader returns None + logs |
+| `test_malformed_json_returns_none_silently_without_logging` | log_failures=False suppresses warnings |
+| `test_missing_file_returns_none` | Optional reader returns None |
+| `test_missing_file_silent_with_log_failures_false` | log_failures=False suppresses warnings |
+| `test_non_object_json_returns_none` | Optional reader returns None |
+| `test_missing_required_field_returns_object_permissively` | Permissive from_dict behavior |
+| `test_log_failures_true_logs_warning_with_safe_message` | Logs only safe metadata |
+| `test_roundtrip_serialization_preserves_fields` | Roundtrip preserves all fields |
+| `test_log_failures_false_does_not_log_raw_content` | Sensitive content never logged |
+| `test_exception_carrying_safe_path` | NotificationArtifactReadError uses basename only |
+| `test_exception_with_cause` | NotificationArtifactReadError chains cause |
+| `test_notification_scan_preserves_valid_skips_invalid` | Call-site behavior preserved |
+| `test_notification_with_artifact_id_loads_correctly` | artifact_id handling verified |
+| `test_legacy_notification_without_artifact_id_loads_correctly` | Legacy compatibility verified |
+
+### Verification
+
+```bash
+# Run new reader tests
+pytest tests/unit/test_notification_artifact_readers.py -v
+
+# Run ruff check on changed files
+ruff check src/k8s_diag_agent/health/artifact_readers.py
+ruff check tests/unit/test_notification_artifact_readers.py
+
+# Run security baseline
+bash scripts/check_security_baseline.sh --mode baseline
+```
+
+### Next Artifact Family Recommendation
+
+After NotificationArtifact, consider:
+
+1. **`HealthAssessmentArtifact`**: Used in review pipeline, has `from_dict()`
+2. No further artifact families identified for typed reader migration at this time
