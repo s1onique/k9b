@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.ui.server_read_support import (
     _build_run_artifact_index,
@@ -57,7 +58,7 @@ class TestReviewEnrichmentDeanonymization:
 
         assert result is not None
         assert isinstance(result, dict)
-        triage_order: list[str] = result["triageOrder"]
+        triage_order = cast(list[str], result["triageOrder"])
         assert isinstance(triage_order, list)
         # Verify de-anonymized values appear
         assert "cluster1" in triage_order
@@ -161,7 +162,7 @@ class TestReviewEnrichmentDeanonymization:
         assert "provider_alias_mapping" in result
         assert result["provider_alias_mapping"] == alias_mapping
         # But it should NOT appear in operator-facing triageOrder
-        triage_order: list[str] = result["triageOrder"]
+        triage_order = cast(list[str], result["triageOrder"])
         assert isinstance(triage_order, list)
         assert "cluster-a" not in triage_order
 
@@ -186,7 +187,8 @@ class TestReviewEnrichmentDeanonymization:
         result = _find_review_enrichment(ea_dir, "run-test")
 
         assert result is not None
-        assert "existing-cluster" in result["triageOrder"]
+        triage_order = cast(list[str], result["triageOrder"])
+        assert "existing-cluster" in triage_order
         # provider_alias_mapping should not be present when no alias_mapping
         assert "provider_alias_mapping" not in result
 
@@ -228,13 +230,15 @@ class TestNextCheckPlanDeanonymization:
         assert result is not None
         assert result["candidateCount"] == 1
 
-        candidate = result["candidates"][0]
+        candidates = cast(list[dict[str, object]], result["candidates"])
+        candidate = candidates[0]
+        command_preview = cast(str, candidate["commandPreview"])
         # Verify de-anonymized values appear in command
-        assert "primary-prod" in candidate["commandPreview"]
-        assert "kube-system" in candidate["commandPreview"]
+        assert "primary-prod" in command_preview
+        assert "kube-system" in command_preview
         # Verify aliases do NOT appear in command
-        assert "cluster-a" not in candidate["commandPreview"]
-        assert "namespace-f" not in candidate["commandPreview"]
+        assert "cluster-a" not in command_preview
+        assert "namespace-f" not in command_preview
 
     def test_next_check_plan_deanonymizes_target_context(self, tmp_path: Path) -> None:
         """targetContext should contain real cluster name, not alias."""
@@ -268,12 +272,15 @@ class TestNextCheckPlanDeanonymization:
         result = _find_next_check_plan(ea_dir, "run-test")
 
         assert result is not None
-        candidate = result["candidates"][0]
+        candidates = cast(list[dict[str, object]], result["candidates"])
+        candidate = candidates[0]
+        target_context = cast(str, candidate["targetContext"])
+        command_preview = cast(str, candidate["commandPreview"])
         # Verify de-anonymized values appear
-        assert "stage-cluster" in candidate["targetContext"]
-        assert "stage-cluster" in candidate["commandPreview"]
+        assert "stage-cluster" in target_context
+        assert "stage-cluster" in command_preview
         # Verify alias does NOT appear
-        assert "cluster-b" not in candidate["targetContext"]
+        assert "cluster-b" not in target_context
 
     def test_next_check_plan_falls_back_to_review_alias_mapping(self, tmp_path: Path) -> None:
         """Should use review-enrichment alias_mapping when plan has none."""
@@ -320,11 +327,13 @@ class TestNextCheckPlanDeanonymization:
         result = _find_next_check_plan(ea_dir, "run-test")
 
         assert result is not None
-        candidate = result["candidates"][0]
+        candidates = cast(list[dict[str, object]], result["candidates"])
+        candidate = candidates[0]
+        command_preview = cast(str, candidate["commandPreview"])
         # Verify fallback de-anonymization worked
-        assert "real-cluster-name" in candidate["commandPreview"]
+        assert "real-cluster-name" in command_preview
         # Verify alias does NOT appear
-        assert "cluster-x" not in candidate["commandPreview"]
+        assert "cluster-x" not in command_preview
 
     def test_next_check_plan_handles_multiple_aliases(self, tmp_path: Path) -> None:
         """Should correctly de-anonymize when multiple alias types are present."""
@@ -360,14 +369,16 @@ class TestNextCheckPlanDeanonymization:
         result = _find_next_check_plan(ea_dir, "run-test")
 
         assert result is not None
-        candidate = result["candidates"][0]
+        candidates = cast(list[dict[str, object]], result["candidates"])
+        candidate = candidates[0]
+        command_preview = cast(str, candidate["commandPreview"])
         # Verify all de-anonymized values appear
-        assert "prod-east" in candidate["commandPreview"]
-        assert "production" in candidate["commandPreview"]
+        assert "prod-east" in command_preview
+        assert "production" in command_preview
         # Verify NO aliases appear
-        assert "cluster-a" not in candidate["commandPreview"]
-        assert "cluster-b" not in candidate["commandPreview"]
-        assert "namespace-f" not in candidate["commandPreview"]
+        assert "cluster-a" not in command_preview
+        assert "cluster-b" not in command_preview
+        assert "namespace-f" not in command_preview
 
 
 class TestDeanonymizationEdgeCases:
@@ -393,7 +404,8 @@ class TestDeanonymizationEdgeCases:
         result = _find_review_enrichment(ea_dir, "run-test")
 
         assert result is not None
-        assert "original-cluster" in result["triageOrder"]
+        triage_order = cast(list[str], result["triageOrder"])
+        assert "original-cluster" in triage_order
         # No provider_alias_mapping when mapping is empty
         assert "provider_alias_mapping" not in result
 
@@ -421,11 +433,12 @@ class TestDeanonymizationEdgeCases:
         result = _find_review_enrichment(ea_dir, "run-test")
 
         assert result is not None
+        triage_order = cast(list[str], result["triageOrder"])
         # cluster-a should be de-anonymized
-        assert "mapped-cluster" in result["triageOrder"]
-        assert "cluster-a" not in result["triageOrder"]
+        assert "mapped-cluster" in triage_order
+        assert "cluster-a" not in triage_order
         # already-real should remain unchanged
-        assert "already-real" in result["triageOrder"]
+        assert "already-real" in triage_order
 
     def test_uses_artifact_index_for_efficient_lookup(self, tmp_path: Path) -> None:
         """Should use artifact_index for O(1) lookup and still de-anonymize."""
@@ -455,9 +468,10 @@ class TestDeanonymizationEdgeCases:
         result = _find_review_enrichment(ea_dir, "run-test", index)
 
         assert result is not None
+        triage_order = cast(list[str], result["triageOrder"])
         # Verify de-anonymized values
-        assert "real-prod" in result["triageOrder"]
-        assert "real-stage" in result["triageOrder"]
+        assert "real-prod" in triage_order
+        assert "real-stage" in triage_order
         # Verify aliases not present
-        assert "cluster-a" not in result["triageOrder"]
-        assert "cluster-b" not in result["triageOrder"]
+        assert "cluster-a" not in triage_order
+        assert "cluster-b" not in triage_order
