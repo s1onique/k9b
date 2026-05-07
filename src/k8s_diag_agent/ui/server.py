@@ -1607,7 +1607,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         payload_build_start = time.perf_counter()
         payload: dict[str, object]
         try:
-            result = build_runs_list(self.runs_dir, _timings=True)
+            result = build_runs_list(self.runs_dir, include_status=True, _timings=True)
             if isinstance(result, tuple):
                 raw_payload, inner_timings = result
                 payload = cast(dict[str, object], raw_payload)
