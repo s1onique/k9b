@@ -433,7 +433,7 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 | loop_alertmanager_discovery.py | 265 | `except (OSError, RuntimeError)` | Alertmanager sources artifact write | **fixed-this-slice** |
 | loop_alertmanager_snapshot.py | 311 | `except (OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc` | Snapshot fetch (HTTP/urllib boundary) | **fixed-this-slice** |
 | loop_alertmanager_snapshot.py | 371 | `except OSError` | Snapshot artifacts write | **fixed-this-slice** |
-| loop_config_logging.py | 36 | `except Exception` | URL sanitization fallback | **reviewed-safe** (logging config, no file I/O) |
+| loop_config_logging.py | 36 | `except (ValueError, TypeError, AttributeError)` | URL sanitization fallback | **fixed-this-slice** |
 | loop_review_pipeline.py | 79 | `except Exception` | Health review build (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
 | loop_review_pipeline.py | 114 | `except Exception as exc` | Proposal generation (LLM/domain boundary) | **reviewed-safe** (LLM adapter boundary) |
 | loop_alertmanager_port_forward.py | 222 | `except (OSError, subprocess.SubprocessError, TimeoutError)` | Port-forward cleanup (typed) | **fixed-this-slice** |
@@ -465,7 +465,7 @@ After `health/loop.py` was split into focused modules, the following broad `exce
 **This slice (Phase 2 Slice 18) narrowed**: 2 handlers
 - `loop.py:~2480`: prompt diagnostics fallback → `(TypeError, AttributeError, KeyError, ValueError)` — **fixed**
 - `loop.py:~2847`: review pipeline write → `(ValueError, TypeError, KeyError, AttributeError, OSError)` — **fixed**
-**Out-of-scope deferred**: 1 handler (loop_config_logging URL sanitization - no file I/O)
+**Out-of-scope deferred**: 0 handlers (loop_config_logging URL sanitization - fixed this slice)
 
 ### Rationale for this slice
 
@@ -485,7 +485,7 @@ Artifact write failures are the smallest coherent fix batch because:
 
 | File | Line | Context | Deferral Reason |
 |------|------|---------|----------------|
-| loop_config_logging.py | 39 | URL sanitization | No file I/O, reviewed-safe |
+| loop_config_logging.py | 39 | URL sanitization | **fixed-this-slice** (narrowed to ValueError, TypeError, AttributeError) |
 | loop_review_pipeline.py | 82 | LLM adapter call | Provider boundary |
 | loop_review_pipeline.py | 117 | Proposal LLM call | Provider boundary |
 | loop.py | 2438 | LLM call | Provider boundary |
@@ -521,7 +521,6 @@ All handlers in scope have been classified:
 - `git diff --check`: no whitespace errors
 
 **Reviewed-safe boundaries** (require architecture review for potential narrowing):
-- `loop_config_logging.py:39`: URL sanitization (no file I/O)
 - `loop_review_pipeline.py:82`: LLM adapter call (provider boundary)
 - `loop_review_pipeline.py:117`: Proposal LLM call (provider boundary)
 - `loop_alertmanager_port_forward.py:227`: Subprocess cleanup (must not crash loop)

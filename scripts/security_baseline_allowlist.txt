@@ -25,7 +25,7 @@ external_analysis/llamacpp_adapter.py _run_http LLM provider failure boundary - 
 health/loop_alertmanager_port_forward.py stop_alertmanager_port_forward port-forward cleanup final containment - docs/security-exception-audit.md ~222
 
 # === Logging/Config Boundaries ===
-health/loop_config_logging.py _sanitize_url URL sanitization fallback - docs/security-exception-audit.md ~39
+# URL sanitization fallback removed from allowlist - narrowed to ValueError, TypeError, AttributeError
 
 # === Security Helpers ===
 security/subprocess_helpers.py _stderr_tail non-UTF8 stderr fallback - inline # REVIEWED comment

@@ -33,18 +33,23 @@ def _sanitize_url_for_logging(url: str | None) -> str | None:
             netloc = f"{netloc}:{parsed.port}"
         sanitized = f"{parsed.scheme}://{netloc}{parsed.path}"
         return sanitized.rstrip("/")
-    # REVIEWED: URL sanitization fallback boundary.
-    # urlparse may raise ValueError or other exceptions for malformed URLs.
-    # Non-fatal fallback: strip credentials and query strings via regex.
-    except Exception:
-        # Fallback: just strip common secret patterns
-        result = url
-        # Remove common credential patterns
-        import re
-        result = re.sub(r"(?://)[^/]*:[^/]*@", "//", result)
-        # Remove query strings
-        result = re.sub(r"\?.*$", "", result)
-        return result
+    except (ValueError, TypeError, AttributeError):
+        # Fallback: strip credentials and query strings via regex.
+        # ValueError: malformed port, invalid IPv6, parsing edge cases.
+        # TypeError: non-string input that bypasses initial check or in regex fallback.
+        # AttributeError: urlparse internal coercion with non-string (e.g., int).
+        try:
+            result = url
+            # Remove common credential patterns (user:pass@)
+            import re
+            result = re.sub(r"(?://)[^/]*:[^/]*@", "//", result)
+            # Remove query strings (may contain tokens)
+            result = re.sub(r"\?.*$", "", result)
+            return result
+        except TypeError:
+            # Non-string input reached regex fallback; return safe empty-ish value
+            # to avoid leaking any non-URL input.
+            return ""
 
 
 def _build_effective_scheduler_config_log(

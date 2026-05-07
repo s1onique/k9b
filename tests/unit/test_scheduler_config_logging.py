@@ -92,6 +92,54 @@ class TestSanitizeUrlForLogging(unittest.TestCase):
         result = _sanitize_url_for_logging(None)
         self.assertIsNone(result)
 
+    def test_sanitize_url_malformed_port_triggers_fallback(self) -> None:
+        """Malformed port in URL triggers regex fallback, credentials still redacted."""
+        # Port out of range (>65535) can trigger ValueError in urlparse
+        url = "http://user:secret123@example.com:99999/path"
+        result = _sanitize_url_for_logging(url)
+        assert result is not None
+        self.assertNotIn("user", result)
+        self.assertNotIn("secret123", result)
+
+    def test_sanitize_url_invalid_ipv6_triggers_fallback(self) -> None:
+        """Invalid bracketed IPv6 in URL triggers regex fallback, credentials still redacted."""
+        url = "http://user:password@[invalid-ipv6]:8080/api"
+        result = _sanitize_url_for_logging(url)
+        assert result is not None
+        self.assertNotIn("user", result)
+        self.assertNotIn("password", result)
+
+    def test_sanitize_url_fallback_catches_non_string(self) -> None:
+        """Non-string input triggers regex fallback without leaking secrets."""
+        # TypeError can occur if non-string reaches urlparse
+        result = _sanitize_url_for_logging(12345)  # type: ignore[arg-type]
+        # Should not crash - fallback returns "" for non-string
+        # Verify the result is a non-leaking empty-ish value
+        assert result == ""
+
+    def test_sanitize_url_fallback_redacts_credential_pattern(self) -> None:
+        """Fallback regex correctly redacts user:pass@ pattern."""
+        # urlparse would parse this, but if it fails, fallback regex should handle it
+        url = "postgres://admin:MySecret!@db.example.com:5432/mydb"
+        result = _sanitize_url_for_logging(url)
+        assert result is not None
+        self.assertNotIn("admin", result)
+        self.assertNotIn("MySecret!", result)
+        # Host and scheme should be preserved
+        self.assertIn("postgres://", result)
+        self.assertIn("db.example.com", result)
+
+    def test_sanitize_url_fallback_removes_query_tokens(self) -> None:
+        """Fallback regex removes query strings that may contain tokens."""
+        url = "http://localhost/api?auth_token=bigg_secret_token&api_key=12345"
+        result = _sanitize_url_for_logging(url)
+        assert result is not None
+        self.assertNotIn("auth_token", result)
+        self.assertNotIn("bigg_secret_token", result)
+        self.assertNotIn("api_key", result)
+        self.assertNotIn("12345", result)
+        self.assertIn("http://localhost/api", result)
+
 
 class TestBuildEffectiveSchedulerConfigLog(unittest.TestCase):
     """Tests for building the effective scheduler config log."""
