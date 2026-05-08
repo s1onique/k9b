@@ -19,6 +19,10 @@ backend:
   # WARNING: The UI/API has mutation endpoints. Requires uiAuth.enabled=true for exposed deployments.
   # Default (false) binds to 127.0.0.1 for safe localhost-only access.
   unsafeBind: false
+  # command: Override container command (entrypoint). Leave empty to use image's default.
+  command: []
+  # args: Override container arguments. Leave empty to use image's default.
+  args: []
   env:
     # HEALTH_SKIP_REFRESH: Set to "0" to enable auto-refresh, "1" to skip.
     HEALTH_SKIP_REFRESH: "1"
@@ -46,6 +50,10 @@ backend:
 
 scheduler:
   replicaCount: 1
+  # command: Override container command (entrypoint). Leave empty to use image's default.
+  command: []
+  # args: Override container arguments. Leave empty to use image's default.
+  args: []
   env:
     # LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible).
     # Override via --set scheduler.env.LLAMA_CPP_BASE_URL=http://your-llm:8080
@@ -69,6 +77,10 @@ frontend:
   replicaCount: 1
   service:
     port: 5173
+  # command: Override container command (entrypoint). Leave empty to use image's default.
+  command: []
+  # args: Override container arguments. Leave empty to use image's default.
+  args: []
   env:
     VITE_BACKEND_HOST: "k9b-backend"
     VITE_BACKEND_PORT: "8080"

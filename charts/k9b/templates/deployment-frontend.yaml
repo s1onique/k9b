@@ -26,6 +26,12 @@ spec:
         - name: frontend
           image: "{{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag }}"
           imagePullPolicy: {{ .Values.image.frontend.pullPolicy }}
+          {{- if .Values.frontend.command }}
+          command: {{ .Values.frontend.command }}
+          {{- end }}
+          {{- if .Values.frontend.args }}
+          args: {{ .Values.frontend.args }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.frontend.service.port }}
