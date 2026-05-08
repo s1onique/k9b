@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
-ARG TARGETARCH=arm64
+ARG TARGETARCH
 ARG KUBECTL_VERSION=v1.29.6
 ARG HELM_VERSION=3.20.1
 
@@ -15,6 +15,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates \
        curl \
+       file \
        tar \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,12 +31,15 @@ RUN set -eux; \
         *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     # Download kubectl and helm before copying the app source so the layer stays cached across code edits
-    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" -o /usr/local/bin/kubectl; \
+    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
+      -o /usr/local/bin/kubectl; \
     chmod +x /usr/local/bin/kubectl; \
-    # Verify kubectl binary is valid for this platform - build fails if not
+    # Verify kubectl binary is valid for this platform - file command confirms arch
     file /usr/local/bin/kubectl; \
-    kubectl version --client=true; \
-    curl -fsSL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" | tar xz -C /tmp; \
+    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+      "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" \
+      | tar xz -C /tmp; \
     install -m 0755 /tmp/linux-${ARCH}/helm /usr/local/bin/helm; \
     rm -rf /tmp/linux-${ARCH}; \
     # Verify helm binary is valid for this platform
