@@ -6,8 +6,11 @@ PYTHON="${HEALTH_PYTHON_BIN:-$ROOT/.venv/bin/python}"
 SRC_PATH="$ROOT/src"
 export PYTHONPATH="$SRC_PATH${PYTHONPATH:+:$PYTHONPATH}"
 
-CONFIG_PATH="runs/health-config.local.json"
-RUNS_DIR_OVERRIDE=""
+# Environment-resolved paths for Kubernetes scheduler runtime.
+# Defaults mirror the values.yaml defaults for local dev when env vars are unset.
+CONFIG_PATH="${HEALTH_CONFIG_PATH:-runs/health-config.local.json}"
+RUNS_DIR="${HEALTH_RUNS_DIR:-}"
+
 GENERATE_DIGEST=0
 DIGEST_OUTPUT=""
 DIGEST_TARGET="none"
@@ -19,7 +22,7 @@ usage() {
 Usage: run_health_once.sh [options]
 
 Options:
-  --config PATH       Health config JSON (default: runs/health-config.local.json)
+  --config PATH       Health config JSON (default: from HEALTH_CONFIG_PATH env or runs/health-config.local.json)
   --runs-dir PATH     Explicit run artifacts directory (defaults to <output_dir>/health from the config)
   --digest            Emit a markdown digest (stdout)
   --digest-output PATH
@@ -58,6 +61,7 @@ is_truthy() {
 }
 
 BUILD_DIAGNOSTIC_PACK="${HEALTH_BUILD_DIAGNOSTIC_PACK:-0}"
+HEALTH_REQUIRE_SUMMARY="${HEALTH_REQUIRE_SUMMARY:-false}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -66,7 +70,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --runs-dir)
-      RUNS_DIR_OVERRIDE="$2"
+      RUNS_DIR="$2"
       shift 2
       ;;
     --digest)
@@ -90,9 +94,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "$RUNS_DIR_OVERRIDE" ]]; then
-  RUNS_DIR="$RUNS_DIR_OVERRIDE"
-else
+# Resolve RUNS_DIR: env override > explicit arg > config-derived default.
+if [[ -z "$RUNS_DIR" ]]; then
   RUNS_DIR="$(resolve_runs_dir "$CONFIG_PATH")"
 fi
 RUNS_BASE_DIR="$(dirname "$RUNS_DIR")"
@@ -106,22 +109,52 @@ if ! mkdir -p "$RUNS_DIR"; then
 fi
 
 echo "Inspecting health config: $CONFIG_PATH"
-if "$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"; then
-  echo "Config inspection result: PASS"
-else
+if ! "$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"; then
   echo "Config inspection failed; aborting health run." >&2
   exit 1
 fi
+echo "Config inspection result: PASS"
+
+# Execute the canonical health loop before summary.
+# Uses --once so it runs a single iteration and exits (one-shot scheduler pattern).
+echo "Running health loop with config: $CONFIG_PATH"
+export HEALTH_RUNS_DIR="$RUNS_DIR"
+if ! "$PYTHON" -m k8s_diag_agent.cli run-health-loop --config "$CONFIG_PATH" --once; then
+  echo "Health loop failed; aborting." >&2
+  exit 1
+fi
+echo "Health loop completed"
 
 SUMMARY_OUTPUT="$RUNS_DIR/health-summary.txt"
 echo "Summarizing artifacts to $SUMMARY_OUTPUT"
-if "$PYTHON" -m k8s_diag_agent.cli health-summary --runs-dir "$RUNS_DIR" > "$SUMMARY_OUTPUT"; then
-  cat "$SUMMARY_OUTPUT"
-  echo "Health summary written to $SUMMARY_OUTPUT"
-else
-  echo "Health summary failed; inspect $RUNS_DIR for artifacts." >&2
-  exit 1
+
+# Capture summary output and exit code.
+_summary_exit=0
+if ! "$PYTHON" -m k8s_diag_agent.cli health-summary --runs-dir "$RUNS_DIR" > "$SUMMARY_OUTPUT" 2>&1; then
+  _summary_stdout=$(cat "$SUMMARY_OUTPUT" 2>/dev/null || echo "")
+  if echo "$_summary_stdout" | grep -q "Unable to discover any health runs"; then
+    echo "WARNING: Health summary found no runs (empty PVC or fresh start)." >&2
+    echo "This is expected on first scheduler startup." >&2
+    if is_truthy "$HEALTH_REQUIRE_SUMMARY"; then
+      echo "HEALTH_REQUIRE_SUMMARY=true; exiting non-zero due to no-runs summary." >&2
+      echo "Summary output:" >&2
+      cat "$SUMMARY_OUTPUT" >&2
+      exit 1
+    fi
+    echo "Continuing anyway (HEALTH_REQUIRE_SUMMARY=false)."
+    # Write a minimal placeholder so downstream tooling sees a file.
+    echo "# No health runs found at $(date -Iseconds)" > "$SUMMARY_OUTPUT"
+    echo "# This is expected on fresh PVC / first scheduler startup." >> "$SUMMARY_OUTPUT"
+  else
+    echo "Health summary failed; inspect $RUNS_DIR for artifacts." >&2
+    echo "Summary output:" >&2
+    cat "$SUMMARY_OUTPUT" >&2
+    exit 1
+  fi
 fi
+
+cat "$SUMMARY_OUTPUT"
+echo "Health summary written to $SUMMARY_OUTPUT"
 
 if is_truthy "$BUILD_DIAGNOSTIC_PACK"; then
   echo "Building diagnostic pack for latest run"

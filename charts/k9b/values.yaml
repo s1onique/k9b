@@ -62,6 +62,9 @@ scheduler:
     PYTHONPATH: "/app/src"
     HEALTH_BUILD_DIAGNOSTIC_PACK: "1"
     LLAMA_CPP_ENABLE_THINKING: "false"
+    # HEALTH_REQUIRE_SUMMARY: When "true", the scheduler script exits non-zero if health-summary
+    # finds no runs (e.g., empty PVC). Default "false" allows fresh-PVC startup without failing.
+    HEALTH_REQUIRE_SUMMARY: "false"
   # initContainer: Optional init container to create /app/runs/health before scheduler starts.
   # Useful as additional hardening, but the scheduler script handles directory creation itself.
   initContainer:
