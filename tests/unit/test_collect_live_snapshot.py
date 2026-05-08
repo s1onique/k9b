@@ -138,6 +138,39 @@ class TimeoutTest(unittest.TestCase):
         self.assertNotIn("--token", error_msg)
         self.assertNotIn("kubeconfig", error_msg)
 
+    @patch("subprocess.run")
+    def test_oserror_raises_runtime_error_with_architecture_hint(self, mock_run: Any) -> None:
+        """Test that OSError (exec format error) is converted to RuntimeError with architecture hint."""
+        mock_run.side_effect = OSError(8, "Exec format error: 'kubectl'")
+
+        from k8s_diag_agent.collect.live_snapshot import list_kube_contexts
+
+        with self.assertRaises(RuntimeError) as ctx:
+            list_kube_contexts()
+
+        error_msg = str(ctx.exception)
+        self.assertIn("Failed to execute command", error_msg)
+        self.assertIn("architecture", error_msg)
+        self.assertNotIn("--token", error_msg)
+        self.assertNotIn("kubeconfig", error_msg)
+
+    @patch("subprocess.run")
+    def test_file_not_found_raises_specific_message(self, mock_run: Any) -> None:
+        """Test that FileNotFoundError returns 'not found' message, not architecture hint."""
+        mock_run.side_effect = FileNotFoundError("kubectl not found")
+
+        from k8s_diag_agent.collect.live_snapshot import list_kube_contexts
+
+        with self.assertRaises(RuntimeError) as ctx:
+            list_kube_contexts()
+
+        error_msg = str(ctx.exception)
+        self.assertIn("not found", error_msg)
+        self.assertIn("kubectl", error_msg)
+        self.assertNotIn("architecture", error_msg)
+        self.assertNotIn("--token", error_msg)
+        self.assertNotIn("kubeconfig", error_msg)
+
 
 class VersionParsingTest(unittest.TestCase):
     def test_parse_server_version_from_json(self) -> None:

@@ -471,7 +471,14 @@ def _run_command(command: Sequence[str]) -> str:
             "Cluster may be unresponsive or under load."
         ) from exc
     except FileNotFoundError as exc:
+        # More specific than OSError; raised when binary is missing from PATH
         raise RuntimeError(f"Command `{command[0]}` not found. Ensure it is on PATH.") from exc
+    except OSError as exc:
+        # Catches exec format errors (wrong CPU architecture) and other OS-level failures
+        raise RuntimeError(
+            f"Failed to execute command {command[0]!r}: {exc}. "
+            "Check that the binary exists and matches the container CPU architecture."
+        ) from exc
     except subprocess.CalledProcessError as exc:
         # Sanitize stderr to prevent credential leakage in error messages
         stderr_output = exc.stderr if exc.stderr else exc.stdout
