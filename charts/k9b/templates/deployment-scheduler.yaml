@@ -50,7 +50,11 @@ spec:
           command: {{ .Values.scheduler.command }}
           {{- end }}
           {{- if .Values.scheduler.args }}
-          args: {{ .Values.scheduler.args }}
+          args:
+            {{- toYaml .Values.scheduler.args | nindent 12 }}
+          {{- else if .Values.scheduler.unsafeBind }}
+          args:
+            - --unsafe-bind
           {{- end }}
           env:
             - name: LLAMA_CPP_BASE_URL

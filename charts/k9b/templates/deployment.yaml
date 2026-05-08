@@ -31,7 +31,8 @@ spec:
           command: {{ .Values.backend.command }}
           {{- end }}
           {{- if .Values.backend.args }}
-          args: {{ .Values.backend.args }}
+          args:
+            {{- toYaml .Values.backend.args | nindent 12 }}
           {{- end }}
           ports:
             - name: http

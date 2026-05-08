@@ -48,9 +48,17 @@ backend:
 
 scheduler:
   replicaCount: 1
+  # unsafeBind: When true, allows binding the health UI/API to non-loopback addresses (0.0.0.0).
+  # WARNING: The scheduler exposes mutation endpoints (POST /api/next-check-approval, etc.).
+  # Required when binding to 0.0.0.0 inside Kubernetes.
+  # Keep the Service as ClusterIP by default and protect access via port-forwarding,
+  # Ingress auth, NetworkPolicy, or equivalent controls.
+  # Set to false only when binding to loopback or when passing custom args manually.
+  unsafeBind: true
   # command: Override container command (entrypoint). Leave empty to use image's default.
   command: []
   # args: Override container arguments. Leave empty to use image's default.
+  # NOTE: If explicitly non-empty, --unsafe-bind is NOT appended automatically.
   args: []
   env:
     # LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible).

@@ -94,8 +94,49 @@ helm uninstall infra-k9b -n k9b
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `scheduler.replicaCount` | Number of scheduler replicas | `1` |
+| `scheduler.unsafeBind` | Allow binding to 0.0.0.0 | `true` |
+| `scheduler.command` | Override container command | `[]` |
+| `scheduler.args` | Override container args | `[]` |
 | `scheduler.env.LLAMA_CPP_BASE_URL` | LLM provider URL | `""` |
 | `scheduler.env.LLAMA_CPP_MODEL` | Model name | `""` |
+
+#### Scheduler Unsafe Bind
+
+The scheduler exposes a health UI/API server that binds to `0.0.0.0:8080` by default. This is intentional for in-cluster access but requires explicit acknowledgement via `--unsafe-bind`.
+
+**Why enabled by default:**
+- The scheduler needs to serve UI/API endpoints for health diagnostics
+- In-cluster pods can access the service via the Kubernetes DNS name
+- Service remains ClusterIP by default (not exposed externally)
+
+**Warning:** The scheduler API exposes mutation endpoints:
+- `POST /api/next-check-approval`
+- `POST /api/next-check-execution`
+- `POST /api/deterministic-next-check/promote`
+
+**Recommended access pattern (port-forwarding):**
+
+```bash
+kubectl port-forward -n k9b deploy/infra-k9b-scheduler 8080:8080
+open http://127.0.0.1:8080
+```
+
+**If exposing via Ingress:** Require auth and consider NetworkPolicy.
+
+**Override behavior:**
+
+```yaml
+# Disable unsafe bind (use loopback or custom args)
+scheduler:
+  unsafeBind: false
+  args: []
+
+# Or pass custom args directly (--unsafe-bind won't be auto-appended)
+scheduler:
+  args: ["--custom-flag"]
+```
+
+**Note:** If you explicitly set `scheduler.args`, the chart will NOT append `--unsafe-bind` automatically. This gives you full control over container arguments.
 
 ### Frontend Configuration
 
@@ -393,9 +434,10 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 | Value | Purpose | Default |
 |-------|---------|---------|
 | `backend.unsafeBind` | Allow non-loopback binding | `false` |
+| `scheduler.unsafeBind` | Allow scheduler binding to 0.0.0.0 | `true` |
 | `uiAuth.enabled` | Enable bearer token auth | `false` |
 | `uiAuth.secretName` | Secret containing `K9B_UI_TOKEN` | `k9b-ui-auth` |
-| `backend.env.HEALTH_UI_HOST` | Bind address | `127.0.0.1` |
+| `backend.env.HEALTH_UI_HOST` | Backend bind address | `127.0.0.1` |
 
 ## Architecture
 
