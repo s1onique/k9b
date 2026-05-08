@@ -1,0 +1,105 @@
+# Helm test assertions for k9b RBAC resources.
+suite: in-cluster authentication - RBAC
+
+templates:
+  - rbac.yaml
+
+tests:
+  # ===== Cluster-wide RBAC =====
+
+  - it: should render ClusterRole and ClusterRoleBinding when clusterWide=true
+    set:
+      rbac.create: true
+      rbac.clusterWide: true
+    asserts:
+      - hasDocumentCount:
+          count: 3  # ServiceAccount + ClusterRole + ClusterRoleBinding
+      - equal:
+          path: items[1].kind
+          value: ClusterRole
+      - equal:
+          path: items[2].kind
+          value: ClusterRoleBinding
+
+  - it: clusterWide=true should have ServiceAccount
+    set:
+      rbac.create: true
+      rbac.clusterWide: true
+    asserts:
+      - equal:
+          path: items[0].kind
+          value: ServiceAccount
+
+  # ===== Namespaced RBAC =====
+
+  - it: should render Role and RoleBinding when clusterWide=false
+    set:
+      rbac.create: true
+      rbac.clusterWide: false
+    asserts:
+      - hasDocumentCount:
+          count: 3  # ServiceAccount + Role + RoleBinding
+      - equal:
+          path: items[1].kind
+          value: Role
+      - equal:
+          path: items[2].kind
+          value: RoleBinding
+
+  - it: clusterWide=false should have ServiceAccount
+    set:
+      rbac.create: true
+      rbac.clusterWide: false
+    asserts:
+      - equal:
+          path: items[0].kind
+          value: ServiceAccount
+
+  # ===== RBAC disabled =====
+
+  - it: should NOT render RBAC when rbac.create=false
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocumentCount:
+          count: 0
+
+  # ===== ServiceAccount name =====
+
+  - it: should render ServiceAccount with default name
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: ""
+    asserts:
+      - equal:
+          path: items[0].metadata.name
+          value: RELEASE-NAME-k9b-sa
+
+  - it: should render ServiceAccount with custom name
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: "my-custom-sa"
+    asserts:
+      - equal:
+          path: items[0].metadata.name
+          value: my-custom-sa
+
+  # ===== RBAC rules verification =====
+
+  - it: clusterWide ClusterRole should have pods resource
+    set:
+      rbac.create: true
+      rbac.clusterWide: true
+    asserts:
+      - matchRegex:
+          path: items[1].rules
+          pattern: "pods"
+
+  - it: namespaced Role should have pods resource
+    set:
+      rbac.create: true
+      rbac.clusterWide: false
+    asserts:
+      - matchRegex:
+          path: items[1].rules
+          pattern: "pods"

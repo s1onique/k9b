@@ -19,6 +19,7 @@ spec:
         {{- include "k9b.scheduler.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "k9b.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -75,9 +76,19 @@ spec:
               value: {{ .Values.scheduler.env.HEALTH_REQUIRE_SUMMARY | quote }}
             - name: HEALTH_REQUIRE_DIAGNOSTIC_PACK
               value: {{ .Values.scheduler.env.HEALTH_REQUIRE_DIAGNOSTIC_PACK | quote }}
-            {{- if .Values.kubeconfig.enabled }}
+            - name: KUBERNETES_AUTH_MODE
+              value: {{ .Values.kubernetes.auth.mode | quote }}
+            - name: KUBERNETES_AUTH_KUBECONFIG_ENABLED
+              value: {{ .Values.kubeconfig.enabled | quote }}
+            {{- if and .Values.kubeconfig.enabled (ne .Values.kubernetes.auth.mode "inCluster") }}
             - name: KUBECONFIG
               value: {{ printf "%s/%s" .Values.kubeconfig.mountPath .Values.kubeconfig.fileName | quote }}
+            {{- end }}
+            {{- if and (eq .Values.kubernetes.auth.mode "inCluster") .Values.serviceAccount.automountServiceAccountToken }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             {{- end }}
           resources:
             {{- toYaml .Values.scheduler.resources | nindent 10 }}
@@ -98,7 +109,7 @@ spec:
               subPath: health-baseline.local.json
               readOnly: true
             {{- end }}
-            {{- if .Values.kubeconfig.enabled }}
+            {{- if and .Values.kubeconfig.enabled (ne .Values.kubernetes.auth.mode "inCluster") }}
             - name: kubeconfig
               mountPath: {{ .Values.kubeconfig.mountPath }}
               readOnly: true
@@ -113,7 +124,7 @@ spec:
           configMap:
             name: {{ include "k9b.healthConfig.fullname" . }}
         {{- end }}
-        {{- if .Values.kubeconfig.enabled }}
+        {{- if and .Values.kubeconfig.enabled (ne .Values.kubernetes.auth.mode "inCluster") }}
         - name: kubeconfig
           secret:
             secretName: {{ .Values.kubeconfig.secretName }}

@@ -11,6 +11,14 @@ image:
     tag: ecacd81
     pullPolicy: IfNotPresent
 
+# Kubernetes authentication mode for kubectl commands.
+# - auto: Prefer explicit kubeconfig if present, otherwise use in-cluster service account (default)
+# - inCluster: Use Pod ServiceAccount token at /var/run/secrets/kubernetes.io/serviceaccount/token
+# - kubeconfig: Use explicit kubeconfig file (requires kubeconfig.enabled=true)
+kubernetes:
+  auth:
+    mode: auto
+
 backend:
   replicaCount: 1
   service:
@@ -119,6 +127,10 @@ serviceAccount:
   create: true
   # name: If empty, defaults to <fullname>-sa
   name: ""
+  # automountServiceAccountToken: Mount the service account token into the pods.
+  # Set to false only if you want to disable automatic token mounting (e.g., to use
+  # a custom credential mechanism). When using inCluster auth mode, this must be true.
+  automountServiceAccountToken: true
 
 # RBAC configuration for diagnostics.
 # When rbac.create=true, ClusterRole and ClusterRoleBinding are created for read-only diagnostics.

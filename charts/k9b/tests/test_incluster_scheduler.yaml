@@ -1,0 +1,74 @@
+# Helm test assertions for k9b scheduler deployment in-cluster authentication mode.
+suite: in-cluster authentication - scheduler deployment
+
+templates:
+  - deployment-scheduler.yaml
+
+tests:
+  # ===== inCluster mode: no kubeconfig =====
+
+  - it: scheduler should NOT render KUBECONFIG env when mode is inCluster
+    set:
+      kubernetes.auth.mode: inCluster
+      kubeconfig.enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: KUBECONFIG
+
+  - it: scheduler should NOT render kubeconfig volume mount when mode is inCluster
+    set:
+      kubernetes.auth.mode: inCluster
+      kubeconfig.enabled: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes[name=kubeconfig]
+
+  # ===== serviceAccountName and automountServiceAccountToken =====
+
+  - it: scheduler should render serviceAccountName
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-k9b-sa
+
+  - it: scheduler should render automountServiceAccountToken true
+    set:
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  # ===== POD_NAMESPACE in inCluster mode =====
+
+  - it: scheduler should render POD_NAMESPACE env from fieldRef in inCluster mode
+    set:
+      kubernetes.auth.mode: inCluster
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: POD_NAMESPACE"
+
+  # ===== kubeconfig mode: kubeconfig IS rendered =====
+
+  - it: scheduler should render KUBECONFIG env when mode is kubeconfig
+    set:
+      kubernetes.auth.mode: kubeconfig
+      kubeconfig.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: KUBECONFIG"
+
+  - it: scheduler should render kubeconfig volume when mode is kubeconfig
+    set:
+      kubernetes.auth.mode: kubeconfig
+      kubeconfig.enabled: true
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.volumes[name=kubeconfig]

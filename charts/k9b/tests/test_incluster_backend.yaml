@@ -1,0 +1,108 @@
+# Helm test assertions for k9b backend deployment in-cluster authentication mode.
+suite: in-cluster authentication - backend deployment
+
+templates:
+  - deployment.yaml
+
+tests:
+  # ===== inCluster mode: no kubeconfig =====
+
+  - it: backend should NOT render KUBECONFIG env when mode is inCluster
+    set:
+      kubernetes.auth.mode: inCluster
+      kubeconfig.enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: KUBECONFIG
+
+  - it: backend should NOT render kubeconfig volume mount when mode is inCluster
+    set:
+      kubernetes.auth.mode: inCluster
+      kubeconfig.enabled: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes[name=kubeconfig]
+
+  - it: backend should NOT render kubeconfig secret volume when mode is inCluster
+    set:
+      kubernetes.auth.mode: inCluster
+      kubeconfig.enabled: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes[name=kubeconfig]
+
+  # ===== serviceAccountName and automountServiceAccountToken =====
+
+  - it: backend should render serviceAccountName
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-k9b-sa
+
+  - it: backend should render automountServiceAccountToken true
+    set:
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: backend should render automountServiceAccountToken false
+    set:
+      serviceAccount.automountServiceAccountToken: false
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  # ===== POD_NAMESPACE in inCluster mode =====
+
+  - it: backend should render POD_NAMESPACE env from fieldRef in inCluster mode
+    set:
+      kubernetes.auth.mode: inCluster
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: POD_NAMESPACE"
+
+  - it: backend should NOT render POD_NAMESPACE when not inCluster mode
+    set:
+      kubernetes.auth.mode: auto
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: POD_NAMESPACE"
+
+  - it: backend should NOT render POD_NAMESPACE when automountServiceAccountToken is false
+    set:
+      kubernetes.auth.mode: inCluster
+      serviceAccount.automountServiceAccountToken: false
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: POD_NAMESPACE"
+
+  # ===== kubeconfig mode: kubeconfig IS rendered =====
+
+  - it: backend should render KUBECONFIG env when mode is kubeconfig
+    set:
+      kubernetes.auth.mode: kubeconfig
+      kubeconfig.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: KUBECONFIG"
+
+  - it: backend should render kubeconfig volume mount when mode is kubeconfig
+    set:
+      kubernetes.auth.mode: kubeconfig
+      kubeconfig.enabled: true
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.volumes[name=kubeconfig]

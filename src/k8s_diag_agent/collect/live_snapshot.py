@@ -2,15 +2,22 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from ..identity.artifact import new_artifact_id
 from ..identity.cluster import derive_cluster_uid
+from ..kubernetes_auth import (
+    AuthMode,
+    build_kubectl_env,
+    is_in_cluster,
+    log_auth_mode,
+    resolve_auth_mode,
+)
 from ..security.path_validation import (
     validate_kube_context_name,
 )
@@ -29,28 +36,50 @@ from .cluster_snapshot import (
     WarningEventSummary,
 )
 
+# Re-export is_in_cluster as _is_in_cluster for backward compatibility with test mocks
+# that mock k8s_diag_agent.collect.live_snapshot._is_in_cluster
+_is_in_cluster = is_in_cluster
+
 # Subprocess timeout for kubectl/helm commands (60s)
 KUBECTL_COMMAND_TIMEOUT_SECONDS = 60
 
-# In-cluster auth detection
-_IN_CLUSTER_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-_IN_CLUSTER_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+_logger = logging.getLogger(__name__)
+
+# Module-level resolved auth mode (set once per process)
+_resolved_auth_mode: AuthMode | None = None
 
 
-def _is_in_cluster() -> bool:
-    """Detect if running inside a Kubernetes pod using service account.
-    
-    Returns True if:
-    - KUBECONFIG is not set
-    - Service account token file exists
-    - Service account CA file exists
+def _get_auth_mode() -> AuthMode:
+    """Get or resolve the Kubernetes auth mode for this process.
+
+    Resolves once on first call and caches the result for subsequent calls.
+    The resolved mode is used to construct subprocess environment variables.
+
+    Returns:
+        Resolved AuthMode (never AUTO - it resolves to IN_CLUSTER or KUBECONFIG).
+
     """
-    if os.environ.get("KUBECONFIG"):
-        return False
-    return (
-        Path(_IN_CLUSTER_TOKEN_PATH).exists()
-        and Path(_IN_CLUSTER_CA_PATH).exists()
+    global _resolved_auth_mode
+    if _resolved_auth_mode is not None:
+        return _resolved_auth_mode
+
+    # Check if kubeconfig is enabled (mounted via Helm chart)
+    kubeconfig_enabled = os.environ.get("KUBERNETES_AUTH_KUBECONFIG_ENABLED", "").lower() in ("true", "1", "yes")
+    # Also check for KUBECONFIG env var as a fallback indicator
+    if os.environ.get("KUBECONFIG") and not kubeconfig_enabled:
+        kubeconfig_enabled = True
+
+    # Resolve auth mode with config-based fallback
+    configured_mode = os.environ.get("KUBERNETES_AUTH_MODE")
+    _resolved_auth_mode = resolve_auth_mode(
+        configured_mode,
+        kubeconfig_enabled=kubeconfig_enabled,
     )
+
+    # Log selected auth mode (once, without exposing paths)
+    log_auth_mode(_resolved_auth_mode, logger=_logger)
+
+    return _resolved_auth_mode
 
 
 def list_kube_contexts() -> list[str]:
@@ -60,7 +89,7 @@ def list_kube_contexts() -> list[str]:
         - ["in-cluster"] when running inside a pod with service account
         - kubeconfig contexts when KUBECONFIG is set or in-cluster auth not detected
     """
-    if _is_in_cluster():
+    if is_in_cluster():
         return ["in-cluster"]
     output = _run_command(["kubectl", "config", "get-contexts", "-o", "name"])
     return [line.strip() for line in output.splitlines() if line.strip()]
@@ -410,6 +439,23 @@ def _run_helm_command(context: str, *args: str) -> str:
 
 
 def _run_command(command: Sequence[str]) -> str:
+    """Execute a command with auth-mode-aware environment.
+
+    Ensures that inCluster mode unsets KUBECONFIG to prevent inherited
+    kubeconfig from overriding the in-cluster service account credentials.
+    """
+    # Get resolved auth mode (resolves once per process)
+    auth_mode = _get_auth_mode()
+
+    # Build subprocess environment based on auth mode
+    env = os.environ.copy()
+    env_updates = build_kubectl_env(auth_mode)
+    for key, value in env_updates.items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+
     try:
         result = subprocess.run(
             command,
@@ -417,6 +463,7 @@ def _run_command(command: Sequence[str]) -> str:
             capture_output=True,
             text=True,
             timeout=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
