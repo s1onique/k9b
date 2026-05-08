@@ -39,6 +39,10 @@ from ..identity.artifact import new_artifact_id
 _logger = logging.getLogger(__name__)
 
 
+# In-cluster context sentinel (matches live_snapshot.py behavior)
+_IN_CLUSTER_CONTEXT = "in-cluster"
+
+
 class AlertmanagerSourceOrigin(StrEnum):
     """Origin of an Alertmanager source.
 
@@ -430,6 +434,22 @@ class DiscoveryStrategy:
         raise NotImplementedError
 
 
+def _should_add_context_flag(context: str | None) -> bool:
+    """Determine if kubectl should use --context flag.
+    
+    In-cluster mode (context == "in-cluster") must NOT pass --context because:
+    - kubectl uses service account token automatically in-cluster
+    - Passing "--context in-cluster" fails with "context was not found for specified context"
+    
+    Kubeconfig contexts (any other non-None value) should use --context.
+    """
+    if context is None:
+        return False
+    # In-cluster mode: rely on service account auth without --context
+    # Kubeconfig mode: pass --context to select the named context
+    return context != _IN_CLUSTER_CONTEXT
+
+
 class CRDDiscoveryStrategy(DiscoveryStrategy):
     """Discover Alertmanagers via monitoring.coreos.com/v1 Alertmanager CRDs.
 
@@ -447,6 +467,9 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
 
         The -A flag is required because kube contexts may default to namespace
         'default' while Alertmanager resources typically live in 'monitoring'.
+        
+        Note: When context is "in-cluster", --context is NOT passed to kubectl
+        because in-cluster mode uses service account authentication automatically.
         """
         import subprocess
 
@@ -456,7 +479,7 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
         try:
             # Use -A to search ALL namespaces (required for cross-namespace discovery)
             cmd = ["kubectl", "get", "alertmanagers", "-A", "-o", "json"]
-            if context:
+            if _should_add_context_flag(context):
                 cmd.extend(["--context", context])
 
             _logger.debug(
@@ -568,6 +591,9 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
         """Look for Prometheus resources and their Alertmanager configurations.
 
         Uses `kubectl get prometheuses -A` to search all namespaces.
+        
+        Note: When context is "in-cluster", --context is NOT passed to kubectl
+        because in-cluster mode uses service account authentication automatically.
         """
         import subprocess
 
@@ -577,7 +603,7 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
         try:
             # Use -A to search ALL namespaces
             cmd = ["kubectl", "get", "prometheuses", "-A", "-o", "json"]
-            if context:
+            if _should_add_context_flag(context):
                 cmd.extend(["--context", context])
 
             _logger.debug(
@@ -693,6 +719,9 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
         to search all namespaces. This is required because kube contexts may
         default to namespace 'default' while Alertmanager resources typically
         live in 'monitoring'.
+        
+        Note: When context is "in-cluster", --context is NOT passed to kubectl
+        because in-cluster mode uses service account authentication automatically.
         """
         import subprocess
 
@@ -704,7 +733,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
         try:
             # Use -A to search ALL namespaces for services
             cmd = ["kubectl", "get", "svc", "-A", "-o", "json"]
-            if context:
+            if _should_add_context_flag(context):
                 cmd.extend(["--context", context])
 
             _logger.debug(
@@ -747,7 +776,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
 
             # Use -A to search ALL namespaces for pods with app=alertmanager label
             pod_cmd = ["kubectl", "get", "pods", "-A", "-o", "json", "-l", "app=alertmanager"]
-            if context:
+            if _should_add_context_flag(context):
                 pod_cmd.extend(["--context", context])
 
             _logger.debug(
