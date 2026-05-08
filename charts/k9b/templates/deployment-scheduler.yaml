@@ -69,6 +69,8 @@ spec:
               value: {{ .Values.scheduler.env.LLAMA_CPP_ENABLE_THINKING | quote }}
             - name: HEALTH_REQUIRE_SUMMARY
               value: {{ .Values.scheduler.env.HEALTH_REQUIRE_SUMMARY | quote }}
+            - name: HEALTH_REQUIRE_DIAGNOSTIC_PACK
+              value: {{ .Values.scheduler.env.HEALTH_REQUIRE_DIAGNOSTIC_PACK | quote }}
             {{- if .Values.kubeconfig.enabled }}
             - name: KUBECONFIG
               value: {{ printf "%s/%s" .Values.kubeconfig.mountPath .Values.kubeconfig.fileName | quote }}

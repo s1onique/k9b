@@ -65,6 +65,9 @@ scheduler:
     # HEALTH_REQUIRE_SUMMARY: When "true", the scheduler script exits non-zero if health-summary
     # finds no runs (e.g., empty PVC). Default "false" allows fresh-PVC startup without failing.
     HEALTH_REQUIRE_SUMMARY: "false"
+    # HEALTH_REQUIRE_DIAGNOSTIC_PACK: When "true", diagnostic pack failure causes non-zero exit.
+    # Default "false" makes pack failures non-fatal (WARNING logged, script continues).
+    HEALTH_REQUIRE_DIAGNOSTIC_PACK: "false"
   # initContainer: Optional init container to create /app/runs/health before scheduler starts.
   # Useful as additional hardening, but the scheduler script handles directory creation itself.
   initContainer:

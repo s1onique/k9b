@@ -204,6 +204,173 @@ esac
             )
             self.assertEqual(result.returncode, 0)
 
+    # ------------------------------------------------------------------
+    # Test: HEALTH_REQUIRE_DIAGNOSTIC_PACK env var is used.
+    # ------------------------------------------------------------------
+    def test_run_health_once_script_uses_health_require_diagnostic_pack(self) -> None:
+        """Verify the script references HEALTH_REQUIRE_DIAGNOSTIC_PACK."""
+        script = self._get_script_path("run_health_once.sh")
+        content = script.read_text()
+        self.assertIn("HEALTH_REQUIRE_DIAGNOSTIC_PACK", content)
+
+    # ------------------------------------------------------------------
+    # Test: UI_INDEX_PATH is exported for Python heredoc.
+    # ------------------------------------------------------------------
+    def test_run_health_once_script_exports_ui_index_path(self) -> None:
+        """Verify the script exports UI_INDEX_PATH for embedded Python."""
+        script = self._get_script_path("run_health_once.sh")
+        content = script.read_text()
+        # UI_INDEX_PATH must be exported so Python heredoc can read it from os.environ.
+        self.assertIn("export UI_INDEX_PATH", content)
+        # Python heredoc must read from os.environ, not receive a literal path.
+        self.assertIn('os.environ["UI_INDEX_PATH"]', content)
+        # Must NOT have the broken pattern of Path("$UI_INDEX_PATH") inside quoted heredoc.
+        self.assertNotIn('Path("$UI_INDEX_PATH")', content)
+
+    # ------------------------------------------------------------------
+    # Test: Missing ui-index.json is non-fatal by default.
+    # ------------------------------------------------------------------
+    def test_run_health_once_missing_ui_index_nonfatal_by_default(self) -> None:
+        """Test that missing ui-index.json logs WARNING but continues when HEALTH_REQUIRE_DIAGNOSTIC_PACK=false."""
+        script = self._get_script_path("run_health_once.sh")
+        env = self._base_env()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_parent = Path(tmpdir)
+            health_dir = runs_parent / "health"
+            health_dir.mkdir(parents=True)
+
+            config_path = runs_parent / "health-config.json"
+            config_path.write_text('{"output_dir": "' + str(runs_parent) + '", "targets": []}')
+
+            # Fake CLI that returns 0 for health-loop and health-summary (no runs).
+            fake_cli = runs_parent / "fake_ok.py"
+            fake_cli.write_text(
+                """#!/usr/bin/env python3
+import sys
+print("Unable to discover any health runs", file=sys.stdout)
+sys.exit(0)
+"""
+            )
+            fake_cli.chmod(0o755)
+
+            fake_bin = runs_parent / "fake_bin3"
+            fake_bin.mkdir()
+            fake_python = fake_bin / "python"
+            fake_python.write_text(
+                f"""#!/bin/sh
+case "$*" in
+    *run-health-loop*|*health-summary*)
+        exec {fake_cli} "$@"
+        ;;
+    *inspect_health_config*)
+        exit 0
+        ;;
+    *)
+        exec {sys.executable} "$@"
+        ;;
+esac
+"""
+            )
+            fake_python.chmod(0o755)
+
+            env_fake = env.copy()
+            env_fake["HEALTH_PYTHON_BIN"] = str(fake_python)
+            env_fake["HEALTH_BUILD_DIAGNOSTIC_PACK"] = "1"
+            # Default: HEALTH_REQUIRE_DIAGNOSTIC_PACK is not set (defaults to false).
+
+            result = subprocess.run(
+                [str(script), "--runs-dir", str(health_dir), "--config", str(config_path)],
+                env=env_fake,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            # Script must succeed (non-fatal by default).
+            self.assertEqual(
+                result.returncode, 0,
+                f"Expected zero exit when ui-index missing and HEALTH_REQUIRE_DIAGNOSTIC_PACK=false.\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+            # Must log the warning about missing UI index.
+            self.assertIn(
+                "WARNING",
+                result.stdout + result.stderr
+            )
+
+    # ------------------------------------------------------------------
+    # Test: Missing ui-index.json is fatal when HEALTH_REQUIRE_DIAGNOSTIC_PACK=true.
+    # ------------------------------------------------------------------
+    def test_run_health_once_missing_ui_index_fatal_when_required(self) -> None:
+        """Test that missing ui-index.json causes non-zero exit when HEALTH_REQUIRE_DIAGNOSTIC_PACK=true."""
+        script = self._get_script_path("run_health_once.sh")
+        env = self._base_env()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_parent = Path(tmpdir)
+            health_dir = runs_parent / "health"
+            health_dir.mkdir(parents=True)
+
+            config_path = runs_parent / "health-config.json"
+            config_path.write_text('{"output_dir": "' + str(runs_parent) + '", "targets": []}')
+
+            # Fake CLI that returns 0 for health-loop and health-summary (no runs).
+            fake_cli = runs_parent / "fake_ok2.py"
+            fake_cli.write_text(
+                """#!/usr/bin/env python3
+import sys
+print("Unable to discover any health runs", file=sys.stdout)
+sys.exit(0)
+"""
+            )
+            fake_cli.chmod(0o755)
+
+            fake_bin = runs_parent / "fake_bin4"
+            fake_bin.mkdir()
+            fake_python = fake_bin / "python"
+            fake_python.write_text(
+                f"""#!/bin/sh
+case "$*" in
+    *run-health-loop*|*health-summary*)
+        exec {fake_cli} "$@"
+        ;;
+    *inspect_health_config*)
+        exit 0
+        ;;
+    *)
+        exec {sys.executable} "$@"
+        ;;
+esac
+"""
+            )
+            fake_python.chmod(0o755)
+
+            env_fake = env.copy()
+            env_fake["HEALTH_PYTHON_BIN"] = str(fake_python)
+            env_fake["HEALTH_BUILD_DIAGNOSTIC_PACK"] = "1"
+            env_fake["HEALTH_REQUIRE_DIAGNOSTIC_PACK"] = "true"
+
+            result = subprocess.run(
+                [str(script), "--runs-dir", str(health_dir), "--config", str(config_path)],
+                env=env_fake,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            # Script must fail (fatal when required).
+            self.assertNotEqual(
+                result.returncode, 0,
+                f"Expected non-zero exit when ui-index missing and HEALTH_REQUIRE_DIAGNOSTIC_PACK=true.\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+            # Must mention the strict flag in output.
+            self.assertIn(
+                "HEALTH_REQUIRE_DIAGNOSTIC_PACK=true",
+                result.stdout + result.stderr
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

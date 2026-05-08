@@ -158,30 +158,46 @@ echo "Health summary written to $SUMMARY_OUTPUT"
 
 if is_truthy "$BUILD_DIAGNOSTIC_PACK"; then
   echo "Building diagnostic pack for latest run"
-  UI_INDEX_PATH="$RUNS_DIR/ui-index.json"
+  HEALTH_REQUIRE_DIAGNOSTIC_PACK="${HEALTH_REQUIRE_DIAGNOSTIC_PACK:-false}"
+  UI_INDEX_PATH="${RUNS_DIR%/}/ui-index.json"
+  export UI_INDEX_PATH
   RUN_ID=""
   if [[ -f "$UI_INDEX_PATH" ]]; then
     RUN_ID="$($PYTHON - <<'PY'
 import json
+import os
 from pathlib import Path
 
-path = Path("$UI_INDEX_PATH")
-data = json.loads(path.read_text(encoding="utf-8"))
+ui_index_path = Path(os.environ["UI_INDEX_PATH"])
+data = json.loads(ui_index_path.read_text(encoding="utf-8"))
 run_entry = data.get("run", {})
 run_id = run_entry.get("run_id")
 print(run_id or "")
 PY
     )"
   else
-    echo "UI index missing; cannot determine run_id" >&2
+    echo "WARNING: UI index missing at $UI_INDEX_PATH; cannot determine run_id" >&2
   fi
   if [[ -n "$RUN_ID" ]]; then
-    "$PYTHON" "$ROOT/scripts/build_diagnostic_pack.py" --run-id "$RUN_ID" --runs-dir "$RUNS_BASE_DIR"
-    if ! "$PYTHON" "$ROOT/scripts/update_ui_index.py" --runs-dir "$RUNS_BASE_DIR" --run-id "$RUN_ID"; then
-      echo "Warning: unable to refresh UI index after pack creation" >&2
+    if "$PYTHON" "$ROOT/scripts/build_diagnostic_pack.py" --run-id "$RUN_ID" --runs-dir "$RUNS_BASE_DIR"; then
+      if ! "$PYTHON" "$ROOT/scripts/update_ui_index.py" --runs-dir "$RUNS_BASE_DIR" --run-id "$RUN_ID"; then
+        echo "Warning: unable to refresh UI index after pack creation" >&2
+      fi
+    else
+      echo "ERROR: Diagnostic pack build failed for run_id=$RUN_ID" >&2
+      if is_truthy "$HEALTH_REQUIRE_DIAGNOSTIC_PACK"; then
+        echo "HEALTH_REQUIRE_DIAGNOSTIC_PACK=true; exiting non-zero due to pack build failure." >&2
+        exit 1
+      fi
+      echo "Continuing anyway (HEALTH_REQUIRE_DIAGNOSTIC_PACK=false)."
     fi
   else
-    echo "Unable to read run_id from UI index" >&2
+    echo "ERROR: Unable to read run_id from UI index" >&2
+    if is_truthy "$HEALTH_REQUIRE_DIAGNOSTIC_PACK"; then
+      echo "HEALTH_REQUIRE_DIAGNOSTIC_PACK=true; exiting non-zero due to missing run_id." >&2
+      exit 1
+    fi
+    echo "Continuing anyway (HEALTH_REQUIRE_DIAGNOSTIC_PACK=false)."
   fi
 fi
 
