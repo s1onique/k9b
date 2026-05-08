@@ -86,6 +86,42 @@ def _get_llm_activity_from_index(health_root: Path, run_id: str) -> dict[str, ob
     return default
 
 
+def _has_batch_eligibility_index(ui_index_path: Path) -> bool:
+    """Check if ui-index.json has v2+ with batch eligibility fields.
+
+    This is a cheap validator to ensure the index is usable for the
+    batch eligibility fast path before using its mtime for cache freshness.
+
+    Args:
+        ui_index_path: Path to ui-index.json
+
+    Returns:
+        True if the index has version >= 2 and entries have batch eligibility fields
+    """
+    try:
+        raw_index = json.loads(ui_index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return False
+
+    recent_summary = raw_index.get("recent_runs_summary")
+    if not isinstance(recent_summary, dict):
+        return False
+
+    if recent_summary.get("version", 1) < 2:
+        return False
+
+    runs = recent_summary.get("runs")
+    if not isinstance(runs, list):
+        return False
+
+    if not runs:
+        # Empty runs list is valid - just means no runs yet
+        return True
+
+    first = runs[0]
+    return isinstance(first, dict) and "batchEligibility" in first and "batchExecutable" in first and "batchEligibleCount" in first
+
+
 def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     """Handle API GET requests (read-only endpoints).
 
@@ -117,6 +153,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     if route == "/api/runs":
         # Parse query parameters for limit, include_status, and include_expensive
         from urllib.parse import parse_qs
+
         params = parse_qs(query)
         limit_param = params.get("limit", [None])[0]
         include_status_param = params.get("include_status", ["false"])[0]
@@ -168,23 +205,36 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
         health_root = handler.runs_dir / "health"
         cache_mtime = 0.0
+
+        # Check if we can use the fast index path for batch eligibility
+        # When this path is used, we use ui-index.json mtime instead of external-analysis mtime
+        # because batch eligibility is pre-computed in the index, not derived from external-analysis files.
+        use_batch_eligibility_index = include_batch_eligibility and not include_status and not include_expensive
+
         if health_root.exists():
             try:
-                reviews_dir = health_root / "reviews"
-                diagnostic_packs_dir = health_root / "diagnostic-packs"
-                mtimes = []
-                for d in [reviews_dir, diagnostic_packs_dir]:
-                    if d.exists():
-                        mtimes.append(d.stat().st_mtime)
-                # Only include external-analysis freshness when actually needed.
-                # This avoids a ~7s directory scan on the default /api/runs path.
-                # Align with build_runs_list_payload() - all three flags need external-analysis freshness.
-                if include_status or include_expensive or include_batch_eligibility:
-                    external_analysis_dir = health_root / "external-analysis"
-                    if external_analysis_dir.exists():
-                        mtimes.append(external_analysis_dir.stat().st_mtime)
-                if mtimes:
-                    cache_mtime = max(mtimes)
+                ui_index_path = health_root / "ui-index.json"
+
+                if use_batch_eligibility_index and ui_index_path.exists() and _has_batch_eligibility_index(ui_index_path):
+                    # FAST PATH: Use ui-index.json mtime for cache freshness.
+                    # Batch eligibility comes from the index, not from external-analysis files.
+                    # Only use this path if the index is v2+ with batch eligibility fields.
+                    cache_mtime = ui_index_path.stat().st_mtime
+                else:
+                    # STANDARD PATH: Use directory mtimes for cache correctness.
+                    mtimes = []
+                    reviews_dir = health_root / "reviews"
+                    diagnostic_packs_dir = health_root / "diagnostic-packs"
+                    for d in [reviews_dir, diagnostic_packs_dir]:
+                        if d.exists():
+                            mtimes.append(d.stat().st_mtime)
+                    # external-analysis mtime is needed for batch eligibility derivation
+                    if include_status or include_expensive or include_batch_eligibility:
+                        external_analysis_dir = health_root / "external-analysis"
+                        if external_analysis_dir.exists():
+                            mtimes.append(external_analysis_dir.stat().st_mtime)
+                    if mtimes:
+                        cache_mtime = max(mtimes)
             except OSError:
                 pass
 
@@ -406,11 +456,14 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             # Filtered request - cannot use index path yet
             path_strategy = "notification_file_fallback_path"
             fallback_reason = "unsupported_filter:" + ":".join(
-                filter(None, [
-                    "kind" if kind_filter else None,
-                    "cluster_label" if cluster_filter else None,
-                    "search" if search_filter else None,
-                ])
+                filter(
+                    None,
+                    [
+                        "kind" if kind_filter else None,
+                        "cluster_label" if cluster_filter else None,
+                        "search" if search_filter else None,
+                    ],
+                )
             )
 
         # Fallback: use file scan
@@ -485,6 +538,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
     # All other endpoints need the context from the current (possibly selected) run
     from urllib.parse import parse_qs
+
     params = parse_qs(query)
     selected_run_id = params.get("run_id", [None])[0]
 
@@ -496,7 +550,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         # Full request lifecycle instrumentation
         request_received = time.perf_counter()
         request_id = f"{id(handler)}-{int(request_received * 1000000)}"
-        
+
         # Read client-generated request correlation ID from request headers
         client_request_id = handler.headers.get("X-K9B-Client-Request-Id", "")
 
@@ -667,7 +721,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             # Return empty promotions with explicit reason so operator can regenerate index
             if promotions_fallback_reason is None:
                 promotions_fallback_reason = "missing_promotions_index"
-            
+
             promotions = []
             promotions_source = "skipped_missing_index"
             timings["promoted_glob_ms"] = 0.0
@@ -786,6 +840,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
     if route == "/api/cluster-detail":
         from urllib.parse import parse_qs
+
         params = parse_qs(query)
         label = params.get("cluster_label", [None])[0]
         handler._send_json(build_cluster_detail_payload(context, cluster_label=label))
@@ -837,22 +892,42 @@ def build_runs_list_payload(
 
     health_root = handler.runs_dir / "health"
     cache_mtime = 0.0
+
+    # Check if we can use the fast index path for batch eligibility (requires v2 index with batch fields)
+    # When this path is used, we use ui-index.json mtime instead of external-analysis mtime
+    # because batch eligibility is pre-computed in the index, not derived from external-analysis files.
+    use_batch_eligibility_index = include_batch_eligibility and not include_status and not include_expensive
+
     if health_root.exists():
         try:
-            reviews_dir = health_root / "reviews"
-            diagnostic_packs_dir = health_root / "diagnostic-packs"
-            mtimes = []
-            for d in [reviews_dir, diagnostic_packs_dir]:
-                if d.exists():
-                    mtimes.append(d.stat().st_mtime)
-            # Only include external-analysis freshness when needed for cache correctness
-            # This avoids a ~7s directory scan on the default /api/runs path
-            if include_status or include_expensive or include_batch_eligibility:
-                external_analysis_dir = health_root / "external-analysis"
-                if external_analysis_dir.exists():
-                    mtimes.append(external_analysis_dir.stat().st_mtime)
-            if mtimes:
-                cache_mtime = max(mtimes)
+            ui_index_path = health_root / "ui-index.json"
+
+            if use_batch_eligibility_index and ui_index_path.exists() and _has_batch_eligibility_index(ui_index_path):
+                # FAST PATH: Use ui-index.json mtime for cache freshness.
+                # Batch eligibility comes from the index, not from external-analysis files.
+                # Only use this path if the index is v2+ with batch eligibility fields.
+                cache_mtime = ui_index_path.stat().st_mtime
+                timings["cache_freshness_source"] = "ui_index"
+                timings["cache_freshness_path"] = "batch_eligibility_index"
+            else:
+                # STANDARD PATH: Use external-analysis mtime for cache correctness.
+                # This is needed when batch eligibility is derived from plan/execution files.
+                mtimes = []
+                reviews_dir = health_root / "reviews"
+                diagnostic_packs_dir = health_root / "diagnostic-packs"
+                for d in [reviews_dir, diagnostic_packs_dir]:
+                    if d.exists():
+                        mtimes.append(d.stat().st_mtime)
+                # external-analysis mtime is needed for batch eligibility derivation
+                # (include_status and include_expensive both need it)
+                if include_status or include_expensive or include_batch_eligibility:
+                    external_analysis_dir = health_root / "external-analysis"
+                    if external_analysis_dir.exists():
+                        mtimes.append(external_analysis_dir.stat().st_mtime)
+                if mtimes:
+                    cache_mtime = max(mtimes)
+                timings["cache_freshness_source"] = "directory_mtimes" if mtimes else "none"
+                timings["cache_freshness_path"] = "standard"
         except OSError:
             pass
     timings["index_read_ms"] = (time.perf_counter() - total_start) * 1000
@@ -862,6 +937,7 @@ def build_runs_list_payload(
     cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit}:status={include_status}:expensive={include_expensive}:batch_eligibility={include_batch_eligibility}"
 
     from .server import _runs_list_cache, _runs_list_cache_lock
+
     with _runs_list_cache_lock:
         cached = _runs_list_cache.get(cache_key)
         if cached is not None:
@@ -1026,9 +1102,7 @@ def build_runs_list_payload(
     return payload
 
 
-def load_context_for_run(
-    handler: HealthUIRequestHandler, run_id: str
-) -> Any:
+def load_context_for_run(handler: HealthUIRequestHandler, run_id: str) -> Any:
     """Load UI context for a specific run from its durable artifacts.
 
     This allows browsing non-latest runs by reading their artifacts
@@ -1095,13 +1169,9 @@ def load_context_for_run(
     external_analysis_data = _scan_external_analysis(external_analysis_dir, run_id)
     external_analysis_count = external_analysis_data.get("count", 0)
 
-    notification_history, notification_count = _load_notifications_for_run(
-        handler.runs_dir / "health" / "notifications", run_id
-    )
+    notification_history, notification_count = _load_notifications_for_run(handler.runs_dir / "health" / "notifications", run_id)
 
-    drilldown_availability = _build_drilldown_availability_from_review(
-        review_data, handler.runs_dir / "health" / "drilldowns", run_id
-    )
+    drilldown_availability = _build_drilldown_availability_from_review(review_data, handler.runs_dir / "health" / "drilldowns", run_id)
 
     review_enrichment = _find_review_enrichment(external_analysis_dir, run_id)
 
@@ -1151,6 +1221,7 @@ def load_context_for_run(
     sources_path = handler._health_root / f"{run_id}-alertmanager-sources.json"
     if sources_path.exists():
         from ..health.ui import _serialize_alertmanager_sources as _serialize_am_sources
+
         try:
             alertmanager_sources_entry = _serialize_am_sources(handler._health_root, run_id)
         except Exception:

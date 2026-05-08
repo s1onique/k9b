@@ -1105,8 +1105,83 @@ def build_runs_list(
                             if _timings:
                                 return payload, timings_index
                             return payload
-            except (OSError, json.JSONDecodeError, ValueError):
-                pass
+                        else:
+                            # Missing batch eligibility fields in entries
+                            timings_index["path_strategy"] = "index_batch_eligibility_fallback"
+                            timings_index["fallback_reason"] = "missing_batch_fields"
+                            timings_index["index_version"] = index_version
+                            timings_index["entries_checked"] = len(runs_from_index)
+                            timings_index["entries_with_fields"] = sum(1 for e in runs_from_index[:5] if "batchEligibility" in e and "batchExecutable" in e)
+                            timings_index["index_rejected_reason"] = "entries_missing_batch_fields"
+                            logger.debug(
+                                "Batch eligibility index path rejected: entries missing batch fields",
+                                extra={
+                                    "path_strategy": timings_index["path_strategy"],
+                                    "fallback_reason": timings_index["fallback_reason"],
+                                    "index_version": index_version,
+                                },
+                            )
+                    else:
+                        # Version < 2 or missing required fields
+                        timings_index["path_strategy"] = "index_batch_eligibility_fallback"
+                        timings_index["fallback_reason"] = "version_lt_2" if index_version < 2 else "invalid_index_structure"
+                        timings_index["index_version"] = index_version
+                        timings_index["has_runs_list"] = isinstance(runs_from_index, list)
+                        timings_index["has_total_count"] = isinstance(total_count, int)
+                        timings_index["index_rejected_reason"] = f"version={index_version}, runs_is_list={isinstance(runs_from_index, list)}, total_is_int={isinstance(total_count, int)}"
+                        logger.debug(
+                            "Batch eligibility index path rejected: version or structure issue",
+                            extra={
+                                "path_strategy": timings_index["path_strategy"],
+                                "fallback_reason": timings_index["fallback_reason"],
+                                "index_version": index_version,
+                                "has_runs_list": isinstance(runs_from_index, list),
+                                "has_total_count": isinstance(total_count, int),
+                            },
+                        )
+                else:
+                    # recent_summary is not a dict
+                    timings_index["path_strategy"] = "index_batch_eligibility_fallback"
+                    timings_index["fallback_reason"] = "missing_recent_runs_summary"
+                    timings_index["index_rejected_reason"] = "recent_runs_summary_not_dict"
+                    logger.debug(
+                        "Batch eligibility index path rejected: missing recent_runs_summary",
+                        extra={
+                            "path_strategy": timings_index["path_strategy"],
+                            "fallback_reason": timings_index["fallback_reason"],
+                        },
+                    )
+            except (OSError, json.JSONDecodeError, ValueError) as exc:
+                timings_index["path_strategy"] = "index_batch_eligibility_fallback"
+                timings_index["fallback_reason"] = "invalid_json"
+                timings_index["index_rejected_reason"] = str(exc)
+                logger.debug(
+                    "Batch eligibility index path rejected: invalid JSON",
+                    extra={
+                        "path_strategy": timings_index["path_strategy"],
+                        "fallback_reason": timings_index["fallback_reason"],
+                        "error": str(exc),
+                    },
+                )
+        else:
+            # ui-index.json doesn't exist
+            timings_index["path_strategy"] = "index_batch_eligibility_fallback"
+            timings_index["fallback_reason"] = "index_missing"
+            timings_index["index_rejected_reason"] = "ui_index_file_not_found"
+            logger.debug(
+                "Batch eligibility index path rejected: ui-index.json not found",
+                extra={
+                    "path_strategy": timings_index["path_strategy"],
+                    "fallback_reason": timings_index["fallback_reason"],
+                },
+            )
+
+        # Propagate fallback_reason from index path rejection to main timings
+        # This runs after all index path rejection cases (version_lt_2, missing_batch_fields, etc.)
+        if timings_index.get("fallback_reason"):
+            timings["fallback_reason"] = timings_index["fallback_reason"]
+            timings["path_strategy"] = timings_index["path_strategy"]
+            timings["index_rejected_reason"] = timings_index.get("index_rejected_reason", "")
 
         # Fall through to scan path if index is missing/incomplete/stale
 
