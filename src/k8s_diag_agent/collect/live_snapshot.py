@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from ..identity.artifact import new_artifact_id
@@ -30,8 +32,36 @@ from .cluster_snapshot import (
 # Subprocess timeout for kubectl/helm commands (60s)
 KUBECTL_COMMAND_TIMEOUT_SECONDS = 60
 
+# In-cluster auth detection
+_IN_CLUSTER_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+_IN_CLUSTER_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+
+def _is_in_cluster() -> bool:
+    """Detect if running inside a Kubernetes pod using service account.
+    
+    Returns True if:
+    - KUBECONFIG is not set
+    - Service account token file exists
+    - Service account CA file exists
+    """
+    if os.environ.get("KUBECONFIG"):
+        return False
+    return (
+        Path(_IN_CLUSTER_TOKEN_PATH).exists()
+        and Path(_IN_CLUSTER_CA_PATH).exists()
+    )
+
 
 def list_kube_contexts() -> list[str]:
+    """List available Kubernetes contexts.
+    
+    Returns:
+        - ["in-cluster"] when running inside a pod with service account
+        - kubeconfig contexts when KUBECONFIG is set or in-cluster auth not detected
+    """
+    if _is_in_cluster():
+        return ["in-cluster"]
     output = _run_command(["kubectl", "config", "get-contexts", "-o", "name"])
     return [line.strip() for line in output.splitlines() if line.strip()]
 
@@ -344,7 +374,7 @@ def _kubectl(context: str, *args: str) -> str:
     """Build and execute a kubectl command with validated context.
 
     Args:
-        context: Kubernetes context name (validated)
+        context: Kubernetes context name (validated), or "in-cluster" for service account auth
         *args: kubectl arguments
 
     Returns:
@@ -353,6 +383,9 @@ def _kubectl(context: str, *args: str) -> str:
     Raises:
         SecurityError: If context name is invalid
     """
+    # In-cluster mode: rely on service account auth without --context
+    if context == "in-cluster":
+        return _run_command(["kubectl", *args])
     # Validate context before constructing command
     validated_context = validate_kube_context_name(context)
     return _run_command(["kubectl", *args, "--context", validated_context])

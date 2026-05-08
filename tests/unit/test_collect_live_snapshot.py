@@ -1,10 +1,17 @@
 import json
+import os
 import unittest
 from collections.abc import Callable, Sequence
 from typing import Any
 from unittest.mock import patch
 
-from k8s_diag_agent.collect.live_snapshot import _parse_server_version, collect_cluster_snapshot
+from k8s_diag_agent.collect.live_snapshot import (
+    _is_in_cluster,
+    _kubectl,
+    _parse_server_version,
+    collect_cluster_snapshot,
+    list_kube_contexts,
+)
 
 
 def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Callable[[Sequence[str]], str]:
@@ -148,3 +155,68 @@ class VersionParsingTest(unittest.TestCase):
         with self.assertRaises(RuntimeError) as ctx:
             _parse_server_version("not-json")
         self.assertIn("version output could not be parsed", str(ctx.exception))
+
+
+class InClusterAuthTest(unittest.TestCase):
+    """Tests for in-cluster authentication mode."""
+
+    def test_is_in_cluster_returns_false_when_kubeconfig_set(self) -> None:
+        """When KUBECONFIG is set, in-cluster detection should return False."""
+        with patch.dict(os.environ, {"KUBECONFIG": "/some/path"}, clear=False):
+            # Also mock the file checks to return False
+            with patch("pathlib.Path.exists", return_value=False):
+                result = _is_in_cluster()
+                self.assertFalse(result)
+
+    def test_is_in_cluster_returns_false_when_no_service_account(self) -> None:
+        """When service account files don't exist, should return False."""
+        # Ensure KUBECONFIG is not set
+        env_without_kubeconfig = {k: v for k, v in os.environ.items() if k != "KUBECONFIG"}
+        with patch.dict(os.environ, env_without_kubeconfig, clear=True):
+            with patch("pathlib.Path.exists", return_value=False):
+                result = _is_in_cluster()
+                self.assertFalse(result)
+
+    def test_is_in_cluster_returns_true_when_service_account_present(self) -> None:
+        """When service account files exist and KUBECONFIG is not set, should return True."""
+        env_without_kubeconfig = {k: v for k, v in os.environ.items() if k != "KUBECONFIG"}
+        with patch.dict(os.environ, env_without_kubeconfig, clear=True):
+            with patch("pathlib.Path.exists", return_value=True):
+                result = _is_in_cluster()
+                self.assertTrue(result)
+
+    @patch("k8s_diag_agent.collect.live_snapshot._run_command")
+    def test_list_kube_contexts_returns_in_cluster_in_cluster_mode(self, run_command: Any) -> None:
+        """When in-cluster, list_kube_contexts should return ['in-cluster']."""
+        # Mock in-cluster detection
+        with patch("k8s_diag_agent.collect.live_snapshot._is_in_cluster", return_value=True):
+            contexts = list_kube_contexts()
+            self.assertEqual(contexts, ["in-cluster"])
+            # Should NOT call kubectl config get-contexts
+            run_command.assert_not_called()
+
+    @patch("k8s_diag_agent.collect.live_snapshot._run_command")
+    def test_list_kube_contexts_uses_kubeconfig_when_not_in_cluster(self, run_command: Any) -> None:
+        """When not in-cluster, should use kubeconfig context discovery."""
+        run_command.return_value = "context1\ncontext2\n"
+        
+        with patch("k8s_diag_agent.collect.live_snapshot._is_in_cluster", return_value=False):
+            contexts = list_kube_contexts()
+            self.assertEqual(contexts, ["context1", "context2"])
+            run_command.assert_called_once_with(["kubectl", "config", "get-contexts", "-o", "name"])
+
+    def test_kubectl_in_cluster_mode_skips_context_flag(self) -> None:
+        """When context is 'in-cluster', kubectl should not use --context."""
+        with patch("k8s_diag_agent.collect.live_snapshot._run_command") as run_command:
+            run_command.return_value = '{"items": []}'
+            _kubectl("in-cluster", "get", "pods", "-o", "json")
+            run_command.assert_called_once_with(["kubectl", "get", "pods", "-o", "json"])
+
+    def test_kubectl_normal_context_uses_context_flag(self) -> None:
+        """When context is a kubeconfig name, kubectl should use --context."""
+        with patch("k8s_diag_agent.collect.live_snapshot._run_command") as run_command:
+            run_command.return_value = '{"items": []}'
+            _kubectl("my-cluster", "get", "pods", "-o", "json")
+            run_command.assert_called_once_with(
+                ["kubectl", "get", "pods", "-o", "json", "--context", "my-cluster"]
+            )
