@@ -92,8 +92,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [verify, package]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    env:
-      DOCKERHUB_ORG: ${{ vars.DOCKERHUB_ORG || 'your-org' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,6 +100,39 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: '3.14.0'
+
+      - name: Validate DockerHub configuration
+        run: |
+          echo "Validating DockerHub configuration..."
+          
+          # Check DOCKERHUB_ORG is set and not placeholder
+          if [[ -z "${{ vars.DOCKERHUB_ORG }}" ]]; then
+            echo "ERROR: DOCKERHUB_ORG GitHub variable is not set."
+            echo "Please set DOCKERHUB_ORG in repository settings -> Variables and secrets -> Variables"
+            exit 1
+          fi
+          
+          if [[ "${{ vars.DOCKERHUB_ORG }}" == "your-org" ]]; then
+            echo "ERROR: DOCKERHUB_ORG is set to placeholder 'your-org'."
+            echo "Please set DOCKERHUB_ORG to your actual Docker Hub organization name."
+            exit 1
+          fi
+          
+          # Check required secrets
+          if [[ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]]; then
+            echo "ERROR: DOCKERHUB_USERNAME secret is not set."
+            echo "Please add DOCKERHUB_USERNAME in repository settings -> Variables and secrets -> Secrets"
+            exit 1
+          fi
+          
+          if [[ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]]; then
+            echo "ERROR: DOCKERHUB_TOKEN secret is not set."
+            echo "Please add DOCKERHUB_TOKEN in repository settings -> Variables and secrets -> Secrets"
+            exit 1
+          fi
+          
+          echo "✓ DOCKERHUB_ORG=${{ vars.DOCKERHUB_ORG }}"
+          echo "✓ Docker Hub secrets configured"
 
       - name: Log in to DockerHub
         uses: docker/login-action@v3
@@ -118,6 +149,13 @@ jobs:
       - name: Push chart to DockerHub OCI
         run: |
           PACKAGE_FILE=$(ls dist/*.tgz)
-          echo "Pushing chart: $PACKAGE_FILE"
-          echo "Target: oci://registry-1.docker.io/${DOCKERHUB_ORG}/k9b:${{ needs.package.outputs.chart_version }}"
-          helm push "$PACKAGE_FILE" "oci://registry-1.docker.io/${DOCKERHUB_ORG}/k9b"
+          CHART_VERSION=${{ needs.package.outputs.chart_version }}
+          DOCKERHUB_ORG="${{ vars.DOCKERHUB_ORG }}"
+          PUSH_TARGET="oci://registry-1.docker.io/${DOCKERHUB_ORG}"
+          RESOLVED_IMAGE="registry-1.docker.io/${DOCKERHUB_ORG}/k9b:${CHART_VERSION}"
+          
+          echo "Pushing Helm chart package: $PACKAGE_FILE"
+          echo "Resolved push target: ${PUSH_TARGET}"
+          echo "Chart will be published as: ${RESOLVED_IMAGE}"
+          
+          helm push "$PACKAGE_FILE" "${PUSH_TARGET}"
