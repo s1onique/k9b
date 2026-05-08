@@ -14,10 +14,12 @@ This Helm chart deploys k9b, an LLM-based Kubernetes monitoring and diagnostics 
 
 - Deploys three components: backend, scheduler, and frontend
 - Supports ingress configuration for external access
-- External secrets for kubeconfig (no embedded secrets)
-- External ConfigMap for health configuration
+- Embedded health configuration as ConfigMap (no external resources required)
+- Embedded service account and read-only RBAC for diagnostics
+- Persistent storage for health run artifacts
 - Configurable resource limits and replica counts
 - Security contexts for Pod and container level
+- In-cluster service account authentication by default
 
 ## Quick Start
 
@@ -27,71 +29,42 @@ This Helm chart deploys k9b, an LLM-based Kubernetes monitoring and diagnostics 
 - Helm v3
 - kubectl configured with cluster access
 
-### Create Required Resources
-
-Before installing, create the required Secret for kubeconfig:
-
-```bash
-kubectl create secret generic k9b-kubeconfig \
-  --from-file=config=/path/to/kubeconfig
-```
-
 ### Install the Chart
 
 ```bash
-# Render locally first
-helm template k9b ./charts/k9b
+# Install with default public Docker Hub images
+helm install infra-k9b ./charts/k9b -n k9b --create-namespace
 
-# Install with default values
-helm install k9b ./charts/k9b
+# Or render locally first
+helm template infra-k9b ./charts/k9b
+```
 
-# Install with custom registry
-helm install k9b ./charts/k9b \
-  --set image.backend.repository=ghcr.io/your-org/k9b \
-  --set image.backend.tag=v1.0.0 \
-  --set image.frontend.repository=ghcr.io/your-org/k9b-frontend \
-  --set image.frontend.tag=v1.0.0
+### Upgrade the Chart
+
+```bash
+# Upgrade with new image tags
+helm upgrade infra-k9b ./charts/k9b -n k9b \
+  --set image.backend.tag=<new-tag> \
+  --set image.frontend.tag=<new-tag>
 ```
 
 ### Verify Installation
 
 ```bash
 # Check deployment status
-kubectl get deployments -l app.kubernetes.io/name=k9b
+kubectl get pods -n k9b
 
-# Check pod status
-kubectl get pods -l app.kubernetes.io/name=k9b
+# View scheduler logs
+kubectl logs -n k9b deploy/infra-k9b-scheduler
 
-# View pod logs
-kubectl logs -l app.kubernetes.io/component=backend
+# Check scheduler mounts
+kubectl exec -n k9b deploy/infra-k9b-scheduler -- sh -lc 'ls -la /app/runs /app/runs/health-config.json'
 ```
-
-### Install from OCI Registry
-
-When published, you can install directly from the OCI registry:
-
-```bash
-# Log in to DockerHub (if using private charts)
-helm registry login registry-1.docker.io
-
-# Install the latest version
-helm install k9b oci://registry-1.docker.io/<org>/k9b
-
-# Install a specific version
-helm install k9b oci://registry-1.docker.io/<org>/k9b --version 0.1.0
-
-# Install with custom values
-helm install k9b oci://registry-1.docker.io/<org>/k9b \
-  --set image.backend.repository=your-registry/k9b \
-  --set image.backend.tag=v1.0.0
-```
-
-Replace `<org>` with your DockerHub organization name.
 
 ### Uninstall
 
 ```bash
-helm uninstall k9b
+helm uninstall infra-k9b -n k9b
 ```
 
 ## Configuration
@@ -99,26 +72,27 @@ helm uninstall k9b
 ### Image Configuration
 
 | Parameter | Description | Default |
-|----------|-------------|---------|
-| `image.backend.repository` | Backend image repository | `localhost/k9b_python` |
-| `image.backend.tag` | Backend image tag | `latest` |
-| `image.frontend.repository` | Frontend image repository | `localhost/k9b_frontend` |
-| `image.frontend.tag` | Frontend image tag | `latest` |
+|-----------|-------------|---------|
+| `image.backend.repository` | Backend/scheduler image repository | `docker.io/gitinsky/k9b-backend` |
+| `image.backend.tag` | Backend/scheduler image tag | `ecacd81` |
+| `image.frontend.repository` | Frontend image repository | `docker.io/gitinsky/k9b-frontend` |
+| `image.frontend.tag` | Frontend image tag | `ecacd81` |
 | `image.*.pullPolicy` | Image pull policy | `IfNotPresent` |
 
 ### Backend Configuration
 
 | Parameter | Description | Default |
-|----------|-------------|---------|
+|-----------|-------------|---------|
 | `backend.replicaCount` | Number of backend replicas | `1` |
 | `backend.service.port` | Backend service port | `8080` |
 | `backend.env.HEALTH_SKIP_REFRESH` | Skip auto-refresh | `"1"` |
+| `backend.env.HEALTH_UI_HOST` | UI bind address | `127.0.0.1` |
 | `backend.resources.*` | CPU/memory limits | See values.yaml |
 
 ### Scheduler Configuration
 
 | Parameter | Description | Default |
-|----------|-------------|---------|
+|-----------|-------------|---------|
 | `scheduler.replicaCount` | Number of scheduler replicas | `1` |
 | `scheduler.env.LLAMA_CPP_BASE_URL` | LLM provider URL | `""` |
 | `scheduler.env.LLAMA_CPP_MODEL` | Model name | `""` |
@@ -126,45 +100,89 @@ helm uninstall k9b
 ### Frontend Configuration
 
 | Parameter | Description | Default |
-|----------|-------------|---------|
+|-----------|-------------|---------|
 | `frontend.replicaCount` | Number of frontend replicas | `1` |
 | `frontend.service.port` | Frontend service port | `5173` |
+
+### Health Configuration
+
+The chart embeds health configuration as a ConfigMap. Customise via `healthConfig.data`:
+
+```yaml
+healthConfig:
+  enabled: true
+  data:
+    targets:
+      - name: "prod-cluster"
+        kubeContext: "prod"
+```
+
+This maps to `/app/runs/health-config.json` inside the scheduler container.
+
+### Runs Storage
+
+Persistent storage for health run artifacts:
+
+```yaml
+runs:
+  persistence:
+    enabled: true
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""  # Use cluster default
+    mountPath: /app/runs
+```
+
+Mounted into both scheduler and backend for artifact sharing.
+
+### Service Account and RBAC
+
+By default, the chart creates a ServiceAccount and read-only ClusterRole for diagnostics:
+
+```yaml
+serviceAccount:
+  create: true
+  name: ""  # Defaults to <fullname>-sa
+
+rbac:
+  create: true
+  clusterWide: true  # ClusterRole; false for namespaced Role
+```
+
+ClusterRole includes read access to:
+- Core: pods, services, endpoints, events, namespaces, nodes, configmaps, persistentvolumeclaims, persistentvolumes
+- Apps: deployments, replicasets, statefulsets, daemonsets
+- Batch: jobs, cronjobs
+- Networking: ingresses, networkpolicies
+- Autoscaling: horizontalpodautoscalers
+- Metrics: pods, nodes (metrics.k8s.io)
+
+### External Kubeconfig (Optional)
+
+By default, uses in-cluster service account authentication. For external cluster access:
+
+```yaml
+kubeconfig:
+  enabled: true
+  secretName: "k9b-kubeconfig"
+  mountPath: "/app/kubeconfig"
+```
+
+Create the secret before enabling:
+
+```bash
+kubectl create secret generic k9b-kubeconfig --from-file=config=/path/to/kubeconfig
+```
 
 ### Ingress Configuration
 
 | Parameter | Description | Default |
-|----------|-------------|---------|
+|-----------|-------------|---------|
 | `ingress.enabled` | Enable ingress | `false` |
 | `ingress.className` | Ingress class name | `""` |
 | `ingress.host` | Hostname for ingress | `""` |
 | `ingress.annotations` | Ingress annotations | `{}` |
-
-### External Resources
-
-External resources are **optional** and must be explicitly enabled:
-
-| Parameter | Description | Default |
-|----------|-------------|---------|
-| `kubeconfig.enabled` | Enable kubeconfig Secret mount | `false` |
-| `kubeconfig.secretName` | Kubeconfig Secret name | `k9b-kubeconfig` |
-| `kubeconfig.mountPath` | Mount path for kubeconfig | `/app/kubeconfig` |
-| `healthConfig.enabled` | Enable health config ConfigMap mount | `false` |
-| `healthConfig.configMapName` | Health config ConfigMap name | `k9b-health-config` |
-| `healthConfig.mountPath` | Mount path for health config | `/app/runs` |
-
-When `kubeconfig.enabled=true`, create the Secret before installing:
-
-```bash
-kubectl create secret generic k9b-kubeconfig --from-file=config=/path/to/kubeconfig
-helm install k9b ./charts/k9b --set kubeconfig.enabled=true
-```
-
-When `healthConfig.enabled=true`, create the ConfigMap before installing:
-
-```bash
-kubectl create configmap k9b-health-config --from-file=health-config.json=/path/to/health-config.json
-helm install k9b ./charts/k9b --set healthConfig.enabled=true
-```
 
 ## Linting and Testing
 
@@ -177,15 +195,14 @@ helm lint charts/k9b
 ### Render Templates
 
 ```bash
-helm template k9b charts/k9b
+helm template infra-k9b charts/k9b
 ```
 
 ### Render with Custom Values
 
 ```bash
-helm template k9b charts/k9b \
+helm template infra-k9b charts/k9b \
   --values charts/k9b/values.yaml \
-  --set image.backend.repository=gcr.io/your-project/k9b \
   --set ingress.enabled=true \
   --set ingress.host=k9b.example.com
 ```
@@ -195,10 +212,10 @@ helm template k9b charts/k9b \
 ### General Security
 
 - No secrets are embedded in chart defaults
-- Kubeconfig is expected to be provided via an external Secret
-- Health configuration is expected to be provided via an external ConfigMap
+- Service account authentication used by default (no kubeconfig required)
 - Container runs as non-root by default (uid 1000)
 - Capability dropping is enabled by default
+- Read-only ClusterRole for diagnostics (no write access)
 - Use `containerSecurityContext` to further restrict privileges
 
 ### UI/API Authentication (AUTH-07, AUTH-10)
@@ -227,7 +244,7 @@ If you need cluster-wide access (binding to `0.0.0.0` or external IPs), you MUST
 kubectl create secret generic k9b-ui-auth --from-literal=K9B_UI_TOKEN=<your-secure-token>
 
 # Step 2: Install with exposed bind + auth
-helm install k9b ./charts/k9b \
+helm install infra-k9b ./charts/k9b -n k9b \
   --set backend.env.HEALTH_UI_HOST=0.0.0.0 \
   --set backend.unsafeBind=true \
   --set uiAuth.enabled=true \
@@ -267,7 +284,7 @@ kubectl create secret generic k9b-ui-auth --from-literal=K9B_UI_TOKEN=<your-secu
 **Step 2: Install/upgrade the chart with auth enabled**
 
 ```bash
-helm install k9b ./charts/k9b \
+helm install infra-k9b ./charts/k9b -n k9b \
   --set uiAuth.enabled=true \
   --set uiAuth.secretName=k9b-ui-auth
 ```
@@ -383,6 +400,7 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 │  └──────┬──────┘    └──────┬──────┘    └──────────┬──────────┘   │
 │         │                  │                       │              │
 │         │                  │                       │              │
+│         │                  │                       │              │
 │         └──────────────────┴───────────────────────┘              │
 │                            │                                      │
 │                   ┌────────▼────────┐                            │
@@ -391,9 +409,14 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 │                   └────────────────┘                            │
 │                                                                 │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
-│  │  Kubeconfig │    │   Health    │    │   UI Auth Secret    │   │
-│  │   Secret    │    │  ConfigMap  │    │  (K9B_UI_TOKEN)     │   │
+│  │ ServiceAcct │    │   Health    │    │   UI Auth Secret    │   │
+│  │   + RBAC    │    │  ConfigMap  │    │  (K9B_UI_TOKEN)     │   │
 │  └─────────────┘    └─────────────┘    └─────────────────────┘   │
+│                                                                 │
+│  ┌─────────────┐                                               │
+│  │    Runs     │                                               │
+│  │    PVC      │                                               │
+│  └─────────────┘                                               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -410,8 +433,8 @@ This chart follows [semantic versioning](https://semver.org/).
 |-------|-------------|---------|
 | `version` (Chart.yaml) | Chart version, follows semver | `0.1.0`, `1.0.0` |
 | `appVersion` (Chart.yaml) | Application version (k9b release) | `0.1.0` |
-| `image.backend.tag` (values) | Backend Docker image tag | `latest`, `v1.0.0` |
-| `image.frontend.tag` (values) | Frontend Docker image tag | `latest`, `v1.0.0` |
+| `image.backend.tag` (values) | Backend Docker image tag | `ecacd81`, `v1.0.0` |
+| `image.frontend.tag` (values) | Frontend Docker image tag | `ecacd81`, `v1.0.0` |
 
 ### Versioning Policy
 
@@ -423,10 +446,10 @@ This chart follows [semantic versioning](https://semver.org/).
 
 ```bash
 # Upgrade to a new chart version
-helm upgrade k9b oci://registry-1.docker.io/<org>/k9b --version 1.0.0
+helm upgrade infra-k9b ./charts/k9b -n k9b --version 1.0.0
 
 # Upgrade with new image tags
-helm upgrade k9b oci://registry-1.docker.io/<org>/k9b \
+helm upgrade infra-k9b ./charts/k9b -n k9b \
   --set image.backend.tag=v1.0.0 \
   --set image.frontend.tag=v1.0.0
 ```

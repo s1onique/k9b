@@ -3,12 +3,12 @@
 
 image:
   backend:
-    repository: localhost/k9b_python
-    tag: latest
+    repository: docker.io/gitinsky/k9b-backend
+    tag: ecacd81
     pullPolicy: IfNotPresent
   frontend:
-    repository: localhost/k9b_frontend
-    tag: latest
+    repository: docker.io/gitinsky/k9b-frontend
+    tag: ecacd81
     pullPolicy: IfNotPresent
 
 backend:
@@ -36,8 +36,6 @@ backend:
     # HEALTH_RUNS_DIR: Directory for health run artifacts.
     HEALTH_RUNS_DIR: "/app/runs"
     HEALTH_UI_RUNS_DIR: "/app/runs"
-    # KUBECONFIG: Path to kubeconfig inside the container.
-    KUBECONFIG: "/app/kubeconfig/config"
     # PYTHONPATH: Python module search path.
     PYTHONPATH: "/app/src"
   resources:
@@ -61,7 +59,6 @@ scheduler:
     LLAMA_CPP_MODEL: ""
     HEALTH_CONFIG_PATH: "/app/runs/health-config.json"
     HEALTH_RUNS_DIR: "/app/runs/health"
-    KUBECONFIG: "/app/kubeconfig/config"
     PYTHONPATH: "/app/src"
     HEALTH_BUILD_DIAGNOSTIC_PACK: "1"
     LLAMA_CPP_ENABLE_THINKING: "false"
@@ -99,21 +96,49 @@ ingress:
   host: ""
   annotations: {}
 
-# Reference to external kubeconfig secret.
-# Create a Secret named "k9b-kubeconfig" in the release namespace with your kubeconfig content.
+# Service account configuration.
+# When serviceAccount.create=true, a ServiceAccount is created and used by all pods.
+serviceAccount:
+  create: true
+  # name: If empty, defaults to <fullname>-sa
+  name: ""
+
+# RBAC configuration for diagnostics.
+# When rbac.create=true, ClusterRole and ClusterRoleBinding are created for read-only diagnostics.
+rbac:
+  create: true
+  # clusterWide: When true, creates ClusterRole with cluster-wide read access.
+  # When false, creates Role with namespaced read access (use with backend.unsafeBind=false).
+  clusterWide: true
+
+# Runs storage persistence.
+# PVC stores health run artifacts for scheduler and backend access.
+runs:
+  persistence:
+    enabled: true
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+    # storageClassName: Leave empty to use cluster default.
+    storageClassName: ""
+    mountPath: /app/runs
+
+# Health configuration (embedded in chart as ConfigMap).
+# The healthConfig.data content is written to the health-config.json ConfigMap key.
+healthConfig:
+  enabled: true
+  mountPath: /app/runs/health-config.json
+  data:
+    targets: []
+
+# Reference to external kubeconfig secret (for external cluster access).
+# By default, uses in-cluster service account authentication.
+# Enable this only if you need to access a different cluster than where k9b is deployed.
 kubeconfig:
   enabled: false
   secretName: "k9b-kubeconfig"
   mountPath: "/app/kubeconfig"
   fileName: "config"
-
-# Reference to external health config configmap.
-# Create a ConfigMap named "k9b-health-config" in the release namespace.
-healthConfig:
-  enabled: false
-  configMapName: "k9b-health-config"
-  mountPath: "/app/runs"
-  fileName: "health-config.json"
 
 # Authentication token for UI/API mutation endpoints.
 # Strongly recommended when HEALTH_UI_HOST is set to a non-loopback address

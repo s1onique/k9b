@@ -1,0 +1,23 @@
+{{/*
+PersistentVolumeClaim for runs storage.
+Stores health run artifacts for scheduler and backend access.
+*/}}
+{{- if and .Values.runs.persistence.enabled .Values.rbac.clusterWide }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "k9b.runs.fullname" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- range .Values.runs.persistence.accessModes }}
+    - {{ . }}
+    {{- end }}
+  {{- if .Values.runs.persistence.storageClassName }}
+  storageClassName: {{ .Values.runs.persistence.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.runs.persistence.size }}
+{{- end }}

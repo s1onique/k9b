@@ -16,8 +16,9 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "k9b.backend.labels" . | nindent 8 }}
+        {{- include "k9b.backend.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "k9b.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -49,10 +50,12 @@ spec:
               value: {{ .Values.backend.env.HEALTH_RUNS_DIR | quote }}
             - name: HEALTH_UI_RUNS_DIR
               value: {{ .Values.backend.env.HEALTH_UI_RUNS_DIR | quote }}
-            - name: KUBECONFIG
-              value: {{ .Values.backend.env.KUBECONFIG | quote }}
             - name: PYTHONPATH
               value: {{ .Values.backend.env.PYTHONPATH | quote }}
+            {{- if .Values.kubeconfig.enabled }}
+            - name: KUBECONFIG
+              value: {{ printf "%s/%s" .Values.kubeconfig.mountPath .Values.kubeconfig.fileName | quote }}
+            {{- end }}
             {{- if .Values.uiAuth.enabled }}
             - name: K9B_UI_TOKEN
               valueFrom:
@@ -70,6 +73,7 @@ spec:
             {{- if .Values.healthConfig.enabled }}
             - name: health-config
               mountPath: {{ .Values.healthConfig.mountPath }}
+              subPath: health-config.json
               readOnly: true
             {{- end }}
             {{- if .Values.kubeconfig.enabled }}
@@ -77,16 +81,25 @@ spec:
               mountPath: {{ .Values.kubeconfig.mountPath }}
               readOnly: true
             {{- end }}
+            {{- if and .Values.runs.persistence.enabled .Values.rbac.clusterWide }}
+            - name: runs
+              mountPath: {{ .Values.runs.persistence.mountPath }}
+            {{- end }}
       volumes:
         {{- if .Values.healthConfig.enabled }}
         - name: health-config
           configMap:
-            name: {{ .Values.healthConfig.configMapName }}
+            name: {{ include "k9b.healthConfig.fullname" . }}
         {{- end }}
         {{- if .Values.kubeconfig.enabled }}
         - name: kubeconfig
           secret:
             secretName: {{ .Values.kubeconfig.secretName }}
+        {{- end }}
+        {{- if and .Values.runs.persistence.enabled .Values.rbac.clusterWide }}
+        - name: runs
+          persistentVolumeClaim:
+            claimName: {{ include "k9b.runs.fullname" . }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

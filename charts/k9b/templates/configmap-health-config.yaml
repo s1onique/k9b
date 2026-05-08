@@ -1,0 +1,14 @@
+{{/*
+ConfigMap for health configuration.
+Embedded in chart; content generated from healthConfig.data values.
+*/}}
+{{- if .Values.healthConfig.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k9b.healthConfig.fullname" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+data:
+  health-config.json: {{ .Values.healthConfig.data | toPrettyJson | quote }}
+{{- end }}

@@ -48,6 +48,31 @@ Create the frontend deployment name.
 {{- end }}
 
 {{/*
+Create the service account name.
+*/}}
+{{- define "k9b.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- .Values.serviceAccount.name | default (printf "%s-sa" (include "k9b.fullname" .)) }}
+{{- else }}
+{{- .Values.serviceAccount.name | default "default" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the health config ConfigMap name.
+*/}}
+{{- define "k9b.healthConfig.fullname" -}}
+{{- printf "%s-health-config" (include "k9b.fullname" .) }}
+{{- end }}
+
+{{/*
+Create the runs PVC name.
+*/}}
+{{- define "k9b.runs.fullname" -}}
+{{- printf "%s-runs" (include "k9b.fullname" .) }}
+{{- end }}
+
+{{/*
 Create chart labels.
 */}}
 {{- define "k9b.labels" -}}

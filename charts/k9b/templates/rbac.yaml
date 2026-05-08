@@ -1,0 +1,193 @@
+{{/*
+ServiceAccount, ClusterRole and ClusterRoleBinding for k9b diagnostics.
+Creates read-only cluster-wide RBAC for accessing Kubernetes resources.
+*/}}
+{{- if .Values.rbac.create }}
+{{- if .Values.rbac.clusterWide }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "k9b.serviceAccountName" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "k9b.fullname" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+rules:
+  # Core resources
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - events
+      - namespaces
+      - nodes
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+    verbs:
+      - get
+      - list
+      - watch
+  # Apps resources
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - controllerrevisions
+    verbs:
+      - get
+      - list
+      - watch
+  # Batch resources
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  # Networking resources
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  # Autoscaling resources
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+  # Metrics resources (read-only)
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - pods
+      - nodes
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "k9b.fullname" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "k9b.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "k9b.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- else }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "k9b.serviceAccountName" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "k9b.fullname" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+rules:
+  # Core resources
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - events
+      - configmaps
+      - persistentvolumeclaims
+    verbs:
+      - get
+      - list
+      - watch
+  # Apps resources
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs:
+      - get
+      - list
+      - watch
+  # Batch resources
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  # Networking resources
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  # Autoscaling resources
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+  # Metrics resources (read-only)
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - pods
+      - nodes
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "k9b.fullname" . }}
+  labels:
+    {{- include "k9b.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "k9b.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "k9b.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
