@@ -120,10 +120,7 @@ def write_health_ui_index(
 ) -> Path:
     assessment_map = {artifact.label: artifact for artifact in assessments}
     drilldown_map = _latest_drilldown_map(drilldowns)
-    clusters = [
-        _serialize_cluster(record, assessment_map, drilldown_map, output_dir)
-        for record in records
-    ]
+    clusters = [_serialize_cluster(record, assessment_map, drilldown_map, output_dir) for record in records]
     deterministic_next_checks = _build_deterministic_next_checks_projection(
         clusters,
         assessment_map,
@@ -131,10 +128,7 @@ def write_health_ui_index(
         output_dir,
     )
     cluster_context_map = {record.target.label: record.target.context for record in records}
-    drilldown_entries = [
-        _serialize_drilldown(artifact, output_dir)
-        for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True)
-    ]
+    drilldown_entries = [_serialize_drilldown(artifact, output_dir) for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True)]
     latest_drilldown = drilldown_entries[0] if drilldown_entries else None
     # Wire transitions_dir for current-state derivation from event artifacts
     transitions_dir = output_dir / "proposals" / "transitions"
@@ -142,9 +136,7 @@ def write_health_ui_index(
     drilldown_availability = _serialize_drilldown_availability(records, drilldown_map, output_dir)
     external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
     historical_entries = _collect_historical_external_analysis_entries(output_dir / "external-analysis")
-    auto_drilldown_data = _serialize_auto_drilldown_interpretations(
-        external_analysis_data.get("artifacts"), output_dir
-    )
+    auto_drilldown_data = _serialize_auto_drilldown_interpretations(external_analysis_data.get("artifacts"), output_dir)
     notification_history = _serialize_notification_history(notifications, output_dir)
     latest_assessment = _serialize_latest_assessment(assessments, output_dir)
     review_enrichment_entry = _serialize_review_enrichment(
@@ -169,13 +161,9 @@ def write_health_ui_index(
         bool(review_enrichment_entry),
         review_config,
     )
-    planner_availability_entry = _build_next_check_planner_availability(
-        plan_entry, review_enrichment_entry, review_status
-    )
+    planner_availability_entry = _build_next_check_planner_availability(plan_entry, review_enrichment_entry, review_status)
     auto_config = _serialize_auto_drilldown_policy(settings.auto_drilldown)
-    diagnostic_pack_review_entry = _serialize_diagnostic_pack_review(
-        external_analysis, output_dir, run_id
-    )
+    diagnostic_pack_review_entry = _serialize_diagnostic_pack_review(external_analysis, output_dir, run_id)
     # Read Alertmanager compact artifact if available
     alertmanager_compact_entry = _serialize_alertmanager_compact(output_dir, run_id)
     # Read Alertmanager sources inventory if available
@@ -191,9 +179,7 @@ def write_health_ui_index(
         "external_analysis_count": external_analysis_data.get("count", 0),
         "notification_count": len(notifications),
         "llm_stats": _build_llm_stats(external_analysis_data),
-        "historical_llm_stats": _build_historical_llm_stats(
-            output_dir / "external-analysis", historical_entries
-        ),
+        "historical_llm_stats": _build_historical_llm_stats(output_dir / "external-analysis", historical_entries),
         "llm_activity": _serialize_llm_activity(historical_entries, output_dir, alias_mapping=alias_mapping),
         "llm_policy": _build_llm_policy(
             settings,
@@ -225,9 +211,7 @@ def write_health_ui_index(
         "deterministic_next_checks": deterministic_next_checks,
         "diagnostic_pack_review": diagnostic_pack_review_entry,
         "diagnostic_pack": _serialize_diagnostic_pack(output_dir, run_id, run_label),
-        "next_check_execution_history": _build_next_check_execution_history(
-            external_analysis, output_dir, run_id
-        ),
+        "next_check_execution_history": _build_next_check_execution_history(external_analysis, output_dir, run_id),
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
         "alertmanager_compact": alertmanager_compact_entry,
         "alertmanager_sources": alertmanager_sources_entry,
@@ -257,15 +241,17 @@ def write_health_ui_index(
     index["run_stats"] = _build_run_stats(output_dir / "reviews")
     # Build recent_runs_summary for fast /api/runs default path
     # This is the key optimization: avoid scanning all review files on each request
-    index["recent_runs_summary"] = _build_recent_runs_summary(output_dir / "reviews")
+    # Pass external_analysis_dir to compute batch eligibility during index generation
+    index["recent_runs_summary"] = _build_recent_runs_summary(
+        output_dir / "reviews",
+        external_analysis_dir=output_dir / "external-analysis",
+    )
     # Build notification_index for fast /api/notifications default path
     # This is the key optimization: avoid scanning all notification files on each request
     index["notification_index"] = _build_notification_index(notifications, output_dir)
     # Build promotions_index for fast /api/run promotions loading
     # This is the key optimization: avoid globbing all external-analysis files on each request
-    index["promotions_index"] = _build_promotions_index(
-        output_dir / "external-analysis", run_id
-    )
+    index["promotions_index"] = _build_promotions_index(output_dir / "external-analysis", run_id)
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -350,9 +336,7 @@ def _serialize_review_enrichment(
                 continue
             fallback_entries.append(candidate)
         if fallback_entries:
-            artifact = sorted(
-                fallback_entries, key=lambda item: item.timestamp, reverse=True
-            )[0]
+            artifact = sorted(fallback_entries, key=lambda item: item.timestamp, reverse=True)[0]
     if not artifact:
         return None
     payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
@@ -402,15 +386,11 @@ def _serialize_review_enrichment(
     return result
 
 
-def _find_review_enrichment_artifact(
-    artifacts: Sequence[ExternalAnalysisArtifact], run_id: str
-) -> ExternalAnalysisArtifact | None:
+def _find_review_enrichment_artifact(artifacts: Sequence[ExternalAnalysisArtifact], run_id: str) -> ExternalAnalysisArtifact | None:
     from ..external_analysis.utils import artifact_matches_run
+
     for artifact in sorted(artifacts, key=lambda item: item.timestamp, reverse=True):
-        if (
-            artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT
-            and artifact_matches_run(artifact, run_id)
-        ):
+        if artifact.purpose == ExternalAnalysisPurpose.REVIEW_ENRICHMENT and artifact_matches_run(artifact, run_id):
             return artifact
     return None
 
@@ -453,19 +433,13 @@ def _build_review_enrichment_status(
     elif run_enabled is False or not run_provider:
         status = "awaiting-next-run"
         if run_provider:
-            reason = (
-                "Review enrichment is enabled now, but the latest run was produced before "
-                f"'{run_provider}' was active."
-            )
+            reason = f"Review enrichment is enabled now, but the latest run was produced before '{run_provider}' was active."
         else:
             reason = "Review enrichment is enabled now, but the latest run predates this setting."
     else:
         status = "not-attempted"
         if run_provider:
-            reason = (
-                f"Review enrichment was enabled for '{run_provider}' in this run, "
-                "but no artifact was recorded."
-            )
+            reason = f"Review enrichment was enabled for '{run_provider}' in this run, but no artifact was recorded."
         else:
             reason = "Review enrichment was enabled for this run, but no artifact was recorded."
     return {
@@ -490,9 +464,7 @@ def _adapter_registered(provider: str, adapters: Iterable[str] | None) -> bool |
     return False
 
 
-def _serialize_auto_drilldown_interpretations(
-    artifacts: object | None, root_dir: Path
-) -> dict[str, dict[str, object]]:
+def _serialize_auto_drilldown_interpretations(artifacts: object | None, root_dir: Path) -> dict[str, dict[str, object]]:
     interpretations: dict[str, dict[str, object]] = {}
     if not isinstance(artifacts, Sequence):
         return interpretations
@@ -584,27 +556,74 @@ def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
     return timestamps
 
 
-def _build_recent_runs_summary(reviews_dir: Path, max_runs: int = 500) -> dict[str, object]:
+def _build_recent_runs_summary(
+    reviews_dir: Path,
+    max_runs: int = 500,
+    *,
+    external_analysis_dir: Path | None = None,
+) -> dict[str, object]:
     """Build a compact summary of recent runs for fast /api/runs default path.
 
     This is the key optimization to avoid scanning all review files on each request.
-    Each entry contains only the fields needed for initial Recent Runs list:
+    Each entry contains fields needed for Recent Runs list including batch eligibility:
     - run_id, run_label, timestamp, cluster_count
+    - batchEligibility, batchExecutable, batchEligibleCount
+    - reviewStatus, executionCount, reviewedCount, triaged (if available from external-analysis)
 
-    Expensive fields (execution_count, reviewed_count, batch eligibility) are
-    NOT included - they must be derived on-demand or for explicit include_expensive paths.
+    The batch eligibility and review status fields are computed during index generation
+    (where the external-analysis directory is already being scanned), so this function
+    can include them without additional cost.
 
     Args:
         reviews_dir: Path to the reviews directory
         max_runs: Maximum number of run summaries to store (default 500 for most UIs)
+        external_analysis_dir: Path to external-analysis directory for batch eligibility computation
 
     Returns:
-        Dict with 'runs' list and 'total_count' (total discovered across all runs)
+        Dict with 'runs' list, 'total_count', and 'version' (total discovered across all runs)
     """
     if not reviews_dir.is_dir():
-        return {"runs": [], "total_count": 0, "generated_at": datetime.now(UTC).isoformat()}
+        return {"runs": [], "total_count": 0, "generated_at": datetime.now(UTC).isoformat(), "version": 2}
 
-    # Collect all run summaries
+    # Pre-scan external-analysis directory for batch eligibility computation
+    # This is done once during index generation, not on each API request
+    plan_data: dict[str, dict[str, object]] = {}
+    execution_indices: dict[str, set[int]] = {}
+
+    if external_analysis_dir is not None and external_analysis_dir.is_dir():
+        # Load plan files for all runs
+        for plan_path in external_analysis_dir.glob("*-next-check-plan*.json"):
+            try:
+                raw = json.loads(plan_path.read_text(encoding="utf-8"))
+                if raw.get("purpose") == "next-check-planning":
+                    # Extract run_id from filename: {run_id}-next-check-plan*.json
+                    filename = plan_path.stem
+                    for candidate_run_id in _extract_run_ids_from_filename(filename, "-next-check-plan"):
+                        if candidate_run_id:
+                            plan_data[candidate_run_id] = raw
+                            execution_indices.setdefault(candidate_run_id, set())
+                            break
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        # Load execution indices for all runs
+        for exec_path in external_analysis_dir.glob("*-next-check-execution*.json"):
+            try:
+                raw = json.loads(exec_path.read_text(encoding="utf-8"))
+                if raw.get("purpose") == "next-check-execution":
+                    filename = exec_path.stem
+                    exec_payload = raw.get("payload", {})
+                    candidate_index = exec_payload.get("candidateIndex")
+                    for candidate_run_id in _extract_run_ids_from_filename(filename, "-next-check-execution"):
+                        if candidate_run_id:
+                            execution_indices.setdefault(candidate_run_id, set())
+                            if isinstance(candidate_index, int):
+                                execution_indices[candidate_run_id].add(candidate_index)
+                            break
+            except (OSError, json.JSONDecodeError):
+                continue
+
+    # Collect all run summaries with batch eligibility
     run_summaries: list[dict[str, object]] = []
     for path in reviews_dir.glob("*-review.json"):
         try:
@@ -618,13 +637,33 @@ def _build_recent_runs_summary(reviews_dir: Path, max_runs: int = 500) -> dict[s
         if not isinstance(run_id, str) or not isinstance(timestamp, str):
             continue
 
-        # Only include minimal fields needed for initial load
-        run_summaries.append({
-            "run_id": run_id,
-            "run_label": raw.get("run_label", run_id) if isinstance(raw.get("run_label"), str) else run_id,
-            "timestamp": timestamp,
-            "cluster_count": raw.get("cluster_count", 0) if isinstance(raw.get("cluster_count"), int) else 0,
-        })
+        # Compute batch eligibility for this run if we have plan data
+        batch_executable = False
+        batch_eligible_count = 0
+        batch_eligibility = "unknown"
+
+        if run_id in plan_data:
+            batch_executable, batch_eligible_count = _compute_batch_eligibility_indexed(
+                plan_data[run_id],
+                execution_indices.get(run_id, set()),
+            )
+            batch_eligibility = "computed"
+            if batch_executable and batch_eligible_count > 0:
+                batch_eligible_count = batch_eligible_count
+            else:
+                batch_eligible_count = 0
+
+        run_summaries.append(
+            {
+                "run_id": run_id,
+                "run_label": raw.get("run_label", run_id) if isinstance(raw.get("run_label"), str) else run_id,
+                "timestamp": timestamp,
+                "cluster_count": raw.get("cluster_count", 0) if isinstance(raw.get("cluster_count"), int) else 0,
+                "batchEligibility": batch_eligibility,
+                "batchExecutable": batch_executable,
+                "batchEligibleCount": batch_eligible_count,
+            }
+        )
 
     # Sort by timestamp descending (newest first)
     # Parse timestamps for sorting
@@ -643,8 +682,114 @@ def _build_recent_runs_summary(reviews_dir: Path, max_runs: int = 500) -> dict[s
         "runs": recent_runs,
         "total_count": total_count,
         "generated_at": datetime.now(UTC).isoformat(),
-        "version": 1,  # Schema version for future compatibility
+        "version": 2,  # Schema version 2: includes batch eligibility fields
     }
+
+
+def _extract_run_ids_from_filename(filename: str, marker: str) -> list[str]:
+    """Extract run_id from a filename by finding the marker and stripping everything after.
+
+    Args:
+        filename: The filename (without extension) to extract run_id from
+        marker: The marker to find (e.g., "-next-check-plan", "-next-check-execution")
+
+    Returns:
+        List containing the run_id (extracted by finding marker anywhere in filename)
+    """
+    if not filename or not marker:
+        return []
+
+    # Find marker anywhere in filename (not just at end)
+    marker_index = filename.find(marker)
+    if marker_index < 0:
+        return []
+
+    base = filename[:marker_index]
+    if not base:
+        return []
+
+    return [base]
+
+
+def _compute_batch_eligibility_indexed(
+    plan_data: dict[str, object],
+    execution_indices: set[int],
+) -> tuple[bool, int]:
+    """Compute batch eligibility using pre-loaded plan data (no filesystem access).
+
+    This is used during index generation where plan data is already in memory.
+
+    Args:
+        plan_data: The next-check-plan artifact data
+        execution_indices: Set of already-executed candidate indices
+
+    Returns:
+        Tuple of (batchExecutable: bool, batchEligibleCount: int)
+    """
+    from typing import cast
+
+    # Get candidates from plan
+    candidates_data: list[dict[str, object]] = []
+    if "candidates" in plan_data and isinstance(plan_data["candidates"], list):
+        candidates_data = cast(list[dict[str, object]], plan_data["candidates"])
+    elif "payload" in plan_data and isinstance(plan_data["payload"], dict):
+        payload = cast(dict[str, object], plan_data["payload"])
+        if "candidates" in payload and isinstance(payload["candidates"], list):
+            candidates_data = cast(list[dict[str, object]], payload["candidates"])
+
+    if not candidates_data:
+        return False, 0
+
+    # Count eligible candidates using the same logic as run_batch_next_checks.py
+    # IMPORTANT: Use candidateIndex from plan artifact if present (for non-contiguous cases),
+    # fall back to enumerate index for backward compatibility
+    eligible_count = 0
+    for idx, candidate in enumerate(candidates_data):
+        # Get the actual candidate index from the plan artifact if present
+        # This handles non-contiguous candidateIndex values
+        plan_candidate_index = candidate.get("candidateIndex")
+        if isinstance(plan_candidate_index, int):
+            actual_idx = plan_candidate_index
+        else:
+            actual_idx = idx
+
+        # Already executed? (check against the actual index)
+        if actual_idx in execution_indices:
+            continue
+
+        # Must be safe to automate
+        if not candidate.get("safeToAutomate"):
+            continue
+
+        # Must have a valid command family
+        family = candidate.get("suggestedCommandFamily")
+        if not family or not isinstance(family, str):
+            continue
+
+        # Must have a description
+        description = candidate.get("description")
+        if not description or not isinstance(description, str):
+            continue
+
+        # Must have target context info
+        target_context = candidate.get("targetContext")
+        if not target_context or not isinstance(target_context, str):
+            continue
+
+        # Check approval requirement
+        requires_approval = candidate.get("requiresOperatorApproval")
+        if requires_approval:
+            approval_status = str(candidate.get("approvalStatus") or "").lower()
+            if approval_status != "approved":
+                continue
+
+        # Check for duplicates
+        if candidate.get("duplicateOfExistingEvidence"):
+            continue
+
+        eligible_count += 1
+
+    return eligible_count > 0, eligible_count
 
 
 def _parse_run_start(run_id: str) -> datetime | None:
@@ -704,10 +849,7 @@ def _build_notification_index(
     entries: list[dict[str, object]] = []
     for artifact, path in sorted_notifications:
         # Build minimal detail entries for the list view
-        detail_entries = [
-            {"label": str(key), "value": _stringify_notification_value(value)}
-            for key, value in sorted(artifact.details.items())
-        ]
+        detail_entries = [{"label": str(key), "value": _stringify_notification_value(value)} for key, value in sorted(artifact.details.items())]
 
         entry: dict[str, object] = {
             "kind": artifact.kind,
@@ -808,9 +950,7 @@ def _build_promotions_index(
             "description": payload.get("description", "Deterministic next check"),
             "targetCluster": payload.get("clusterLabel", ""),
             "targetContext": payload.get("targetContext"),
-            "sourceReason": (
-                payload.get("whyNow") or payload.get("topProblem") or "Deterministic next check"
-            ),
+            "sourceReason": (payload.get("whyNow") or payload.get("topProblem") or "Deterministic next check"),
             "workstream": payload.get("workstream"),
             "urgency": payload.get("urgency"),
             "priorityScore": payload.get("priorityScore"),
@@ -849,7 +989,7 @@ def _write_proposal_status_summary_to_review(
     This is derived read-model metadata (underscore-prefixed to mark as internal
     indexing data), NOT source evidence. It provides a fast path to skip proposals/
     directory scanning when loading historical runs via /api/run?run_id=.
-    
+
     Fallback behavior: If a review artifact lacks _proposal_status_summary (e.g., from
     an older run created before this optimization), _load_context_for_run() will fall
     back to scanning the proposals/ directory and building the summary on-demand.

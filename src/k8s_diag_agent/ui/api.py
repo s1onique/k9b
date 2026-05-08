@@ -195,9 +195,7 @@ def build_run_payload(
     *,
     promotions: Sequence[dict[str, object]] | None = None,
 ) -> RunPayload:
-    freshness = _build_freshness_payload(
-        context.run.timestamp, context.run.scheduler_interval_seconds
-    )
+    freshness = _build_freshness_payload(context.run.timestamp, context.run.scheduler_interval_seconds)
     return {
         "runId": context.run.run_id,
         "label": context.run.run_label,
@@ -211,17 +209,11 @@ def build_run_payload(
         "artifacts": _collect_run_artifacts(context),
         "runStats": _serialize_run_stats(context.run.run_stats),
         "llmStats": _serialize_llm_stats(context.run.llm_stats),
-        "historicalLlmStats": (
-            _serialize_llm_stats(context.run.historical_llm_stats)
-            if context.run.historical_llm_stats
-            else None
-        ),
+        "historicalLlmStats": (_serialize_llm_stats(context.run.historical_llm_stats) if context.run.historical_llm_stats else None),
         "llmActivity": _serialize_llm_activity(context.run.llm_activity),
         "llmPolicy": _serialize_llm_policy(context.run.llm_policy),
         "reviewEnrichment": _serialize_review_enrichment(context.run.review_enrichment),
-        "reviewEnrichmentStatus": _serialize_review_enrichment_status(
-            context.run.review_enrichment_status
-        ),
+        "reviewEnrichmentStatus": _serialize_review_enrichment_status(context.run.review_enrichment_status),
         "providerExecution": _serialize_provider_execution(context.run.provider_execution),
         "freshness": freshness,
         "nextCheckPlan": _serialize_next_check_plan(context.run.next_check_plan),
@@ -229,22 +221,12 @@ def build_run_payload(
             context.run.next_check_queue,
             promotions,
         ),
-        "nextCheckQueueExplanation": _serialize_queue_explanation(
-            context.run.next_check_queue_explanation
-        ),
-        "deterministicNextChecks": _serialize_deterministic_next_checks(
-            context.run.deterministic_next_checks
-        ),
-        "plannerAvailability": _serialize_planner_availability(
-            context.run.planner_availability
-        ),
-        "diagnosticPackReview": _serialize_diagnostic_pack_review(
-            context.run.diagnostic_pack_review
-        ),
+        "nextCheckQueueExplanation": _serialize_queue_explanation(context.run.next_check_queue_explanation),
+        "deterministicNextChecks": _serialize_deterministic_next_checks(context.run.deterministic_next_checks),
+        "plannerAvailability": _serialize_planner_availability(context.run.planner_availability),
+        "diagnosticPackReview": _serialize_diagnostic_pack_review(context.run.diagnostic_pack_review),
         "diagnosticPack": _serialize_diagnostic_pack(context.run.diagnostic_pack),
-        "nextCheckExecutionHistory": _serialize_execution_history(
-            context.run.next_check_execution_history
-        ),
+        "nextCheckExecutionHistory": _serialize_execution_history(context.run.next_check_execution_history),
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
         "incidentReport": _build_incident_report_payload(context, freshness),
@@ -697,6 +679,103 @@ def _build_runs_list_from_index(
     return payload
 
 
+def _build_runs_list_with_batch_eligibility_index(
+    runs_dir: Path,
+    runs_from_index: list[dict[str, object]],
+    recent_summary: dict[str, object],
+    limit: int | None,
+    timings: RunsListTimings,
+    start_time: float,
+) -> RunsListPayload:
+    """Build runs list from ui-index.json's recent_runs_summary with batch eligibility.
+
+    This is the index-backed path for include_batch_eligibility=true.
+    It reads batch eligibility from the pre-computed index without scanning files.
+
+    Args:
+        runs_dir: Path to the runs directory
+        runs_from_index: List of run summaries from index (with batch eligibility fields)
+        recent_summary: The full recent_runs_summary dict from index
+        limit: Maximum number of runs to return
+        timings: Timings dict (modified in place)
+        start_time: Start time from perf_counter
+
+    Returns:
+        RunsListPayload (caller wraps with timings if needed)
+    """
+    import time as time_module
+    from typing import cast
+
+    # Get total count from index (may be larger than runs_from_index if truncated)
+    total_count = cast(int, recent_summary.get("total_count", len(runs_from_index)))
+
+    # Apply limit if specified
+    runs_to_return = runs_from_index
+    if limit is not None:
+        runs_to_return = runs_from_index[:limit]
+
+    # Build runs list using index-computed batch eligibility
+    runs_list: list[RunsListEntry] = []
+    for entry in runs_to_return:
+        run_id = cast(str, entry.get("run_id", ""))
+        run_label = cast(str, entry.get("run_label", run_id))
+        timestamp = cast(str, entry.get("timestamp", ""))
+        cluster_count = cast(int, entry.get("cluster_count", 0))
+
+        # Read batch eligibility from index (pre-computed during index generation)
+        batch_eligibility = cast(Literal["computed", "unknown"], entry.get("batchEligibility", "unknown"))
+        batch_executable = cast(bool, entry.get("batchExecutable", False))
+        batch_eligible_count = cast(int, entry.get("batchEligibleCount", 0))
+
+        runs_list.append(
+            RunsListEntry(
+                runId=run_id,
+                runLabel=run_label,
+                timestamp=timestamp,
+                clusterCount=cluster_count,
+                triaged=False,  # Deferred - requires execution scan
+                executionCount=0,  # Deferred - requires execution scan
+                reviewedCount=0,  # Deferred - requires execution scan
+                reviewStatus="unknown",  # Deferred - requires execution scan
+                reviewDownloadPath=None,  # Deferred - requires prescan
+                batchEligibility=batch_eligibility,
+                batchExecutable=batch_executable,
+                batchEligibleCount=batch_eligible_count,
+            )
+        )
+
+    # Index path: skip all batch eligibility computation - data is pre-computed
+    timings["batch_plan_files_found"] = 0
+    timings["batch_exec_files_found"] = 0
+    timings["batch_eligibility_prescan_ms"] = 0.0
+    timings["batch_plan_glob_ms"] = 0.0
+    timings["batch_exec_glob_ms"] = 0.0
+    timings["batch_eligibility_row_ms"] = 0.0
+
+    timings["row_assembly_ms"] = (time_module.perf_counter() - start_time) * 1000
+    timings["rows_built"] = len(runs_list)
+    timings["rows_considered"] = len(runs_from_index)
+    timings["rows_returned"] = len(runs_list)
+    timings["batch_eligibility_runs_computed"] = len(runs_list)
+    timings["batch_eligible_runs"] = sum(1 for entry in runs_to_return if entry.get("batchExecutable", False))
+
+    # Build payload
+    returned_count = len(runs_list)
+    has_more = total_count > returned_count
+
+    payload = RunsListPayload(
+        runs=runs_list,
+        totalCount=total_count,
+        returnedCount=returned_count,
+        hasMore=has_more,
+        executionCountsComplete=False,  # Execution counts deferred, but batch eligibility is complete
+    )
+
+    timings["total_duration_ms"] = (time_module.perf_counter() - start_time) * 1000
+
+    return payload
+
+
 def _build_runs_list_review_streaming(
     runs_dir: Path,
     limit: int | None,
@@ -788,11 +867,7 @@ def _build_runs_list_review_streaming(
     timings["reviews_parsed"] = reviews_parsed
 
     # Sort all entries by timestamp descending
-    sorted_entries = sorted(
-        run_entries.values(),
-        key=lambda e: cast(datetime, e["parsed_time"]),
-        reverse=True
-    )
+    sorted_entries = sorted(run_entries.values(), key=lambda e: cast(datetime, e["parsed_time"]), reverse=True)
     timings["sort_ms"] = (time_module.perf_counter() - start_time) * 1000
     timings["rows_considered"] = len(sorted_entries)
 
@@ -900,9 +975,7 @@ def _build_runs_list_super_fast(
                     timings["path_strategy"] = "index_super_fast_path"
                     timings["reviews_parsed"] = 0
                     timings["reviews_files_found"] = 0
-                    payload = _build_runs_list_from_index(
-                        runs_dir, runs_from_index, recent_summary, limit, timings, start_time
-                    )
+                    payload = _build_runs_list_from_index(runs_dir, runs_from_index, recent_summary, limit, timings, start_time)
                     if _timings:
                         return payload, timings
                     return payload
@@ -927,6 +1000,7 @@ def build_runs_list(
     include_batch_eligibility: bool = False,
     _timings: Literal[False] = False,
 ) -> RunsListPayload: ...
+
 
 @overload
 def build_runs_list(
@@ -999,6 +1073,42 @@ def build_runs_list(
     # Just return a minimal list from review files with batch eligibility deferred.
     if not include_expensive and not include_status and not include_batch_eligibility:
         return _build_runs_list_super_fast(runs_dir, limit=limit, _timings=_timings)
+
+    # === INDEX-BACKED BATCH ELIGIBILITY PATH ===
+    # When include_batch_eligibility=True and the index has pre-computed batch eligibility,
+    # use the index directly without scanning any files.
+    # This is the key optimization: batch eligibility is computed once during index generation.
+    if include_batch_eligibility and not include_status and not include_expensive:
+        timings_index: RunsListTimings = {}
+        start_time_index = time_module.perf_counter()
+        run_health_dir_index = runs_dir / "health"
+
+        ui_index_path = run_health_dir_index / "ui-index.json"
+        if ui_index_path.is_file():
+            try:
+                raw_index = json.loads(ui_index_path.read_text(encoding="utf-8"))
+                recent_summary = raw_index.get("recent_runs_summary")
+                if isinstance(recent_summary, dict):
+                    runs_from_index = recent_summary.get("runs")
+                    total_count = recent_summary.get("total_count")
+                    index_version = recent_summary.get("version", 1)
+                    # Check if index has batch eligibility fields (version 2+)
+                    if isinstance(runs_from_index, list) and isinstance(total_count, int) and index_version >= 2:
+                        # Verify first entry has batch eligibility fields
+                        if runs_from_index and all("batchEligibility" in entry and "batchExecutable" in entry for entry in runs_from_index[:1]):
+                            timings_index["path_strategy"] = "index_recent_runs_with_batch_eligibility"
+                            timings_index["reviews_parsed"] = 0
+                            timings_index["reviews_files_found"] = 0
+                            timings_index["batch_plan_glob_ms"] = 0.0
+                            timings_index["batch_exec_glob_ms"] = 0.0
+                            payload = _build_runs_list_with_batch_eligibility_index(runs_dir, runs_from_index, recent_summary, limit, timings_index, start_time_index)
+                            if _timings:
+                                return payload, timings_index
+                            return payload
+            except (OSError, json.JSONDecodeError, ValueError):
+                pass
+
+        # Fall through to scan path if index is missing/incomplete/stale
 
     # Stage 1: Collect runs from review artifacts
     reviews_scan_start = time_module.perf_counter()
@@ -1113,11 +1223,7 @@ def build_runs_list(
 
     # Sort all entries by timestamp descending (most recent first)
     sort_start = time_module.perf_counter()
-    sorted_entries = sorted(
-        run_entries.values(),
-        key=lambda e: cast(datetime, e["parsed_time"]),
-        reverse=True
-    )
+    sorted_entries = sorted(run_entries.values(), key=lambda e: cast(datetime, e["parsed_time"]), reverse=True)
     timings["sort_ms"] = (time_module.perf_counter() - sort_start) * 1000
 
     # Track total runs considered vs returned
@@ -1367,9 +1473,7 @@ def build_runs_list(
         row_start = time_module.perf_counter()
         if run_id in batch_eligibility_run_ids:
             # Compute batch eligibility using pre-scanned data (no per-row filesystem access)
-            batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(
-                run_id, plan_data, execution_indices
-            )
+            batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(run_id, plan_data, execution_indices)
             batch_eligibility = "computed"
             if batch_executable:
                 batch_eligible_runs += 1
@@ -1449,7 +1553,7 @@ def build_runs_list(
         hasMore=has_more,
         # Flag indicating whether execution counts are complete for the returned runs.
         # When include_status=True or include_expensive=True, counts are computed for the
-        # returned window. When False (fast path or include_batch_eligibility only), 
+        # returned window. When False (fast path or include_batch_eligibility only),
         # counts are 0 because derivation was skipped.
         # UI should render "Execution status not loaded" instead of "No executions" when False.
         # Note: include_batch_eligibility=True does NOT set this to True - it only computes
