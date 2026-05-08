@@ -97,6 +97,14 @@ else
 fi
 RUNS_BASE_DIR="$(dirname "$RUNS_DIR")"
 
+# Ensure the health runs directory exists before writing artifacts.
+# This handles fresh PVC scenarios where the subdirectory may not exist yet.
+echo "Ensuring runs directory exists: $RUNS_DIR"
+if ! mkdir -p "$RUNS_DIR"; then
+  echo "Failed to create runs directory: $RUNS_DIR" >&2
+  exit 1
+fi
+
 echo "Inspecting health config: $CONFIG_PATH"
 if "$PYTHON" "$ROOT/scripts/inspect_health_config.py" "$CONFIG_PATH"; then
   echo "Config inspection result: PASS"
@@ -143,19 +151,9 @@ PY
     echo "Unable to read run_id from UI index" >&2
   fi
 fi
-    echo "Unable to read run_id from UI index" >&2
-  fi
-fi
-    echo "Unable to read run_id from UI index" >&2
-  fi
-fi
-    else
-      echo "Unable to read run_id from UI index" >&2
-    fi
-fi
 
-  if [[ $GENERATE_DIGEST -eq 1 ]]; then
-    DIGEST_TARGET="stdout"
+if [[ $GENERATE_DIGEST -eq 1 ]]; then
+  DIGEST_TARGET="stdout"
   if [[ -n "$DIGEST_OUTPUT" ]]; then
     DIGEST_TARGET="$DIGEST_OUTPUT"
   fi

@@ -62,6 +62,14 @@ scheduler:
     PYTHONPATH: "/app/src"
     HEALTH_BUILD_DIAGNOSTIC_PACK: "1"
     LLAMA_CPP_ENABLE_THINKING: "false"
+  # initContainer: Optional init container to create /app/runs/health before scheduler starts.
+  # Useful as additional hardening, but the scheduler script handles directory creation itself.
+  initContainer:
+    enabled: false
+    # image: Override the init container image. Defaults to same as scheduler image if empty.
+    image: ""
+    # command: Override the init container command. Defaults to ["mkdir", "-p", "/app/runs/health"].
+    command: []
   resources:
     requests:
       cpu: 100m

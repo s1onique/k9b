@@ -23,6 +23,25 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.scheduler.initContainer.enabled }}
+      initContainers:
+        - name: scheduler-init
+          image: {{ .Values.scheduler.initContainer.image | default .Values.image.backend.repository }}
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command:
+            {{- if .Values.scheduler.initContainer.command }}
+              {{- toYaml .Values.scheduler.initContainer.command | nindent 12 }}
+            {{- else }}
+              - sh
+              - -c
+              - mkdir -p /app/runs/health
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.runs.persistence.enabled }}
+            - name: runs
+              mountPath: /app/runs
+            {{- end }}
+      {{- end }}
       containers:
         - name: scheduler
           image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
