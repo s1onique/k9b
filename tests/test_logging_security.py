@@ -317,7 +317,6 @@ class SchedulerConfigResolutionTest(unittest.TestCase):
         """Explicit --config CLI arg takes precedence over HEALTH_CONFIG_PATH."""
         explicit_config = Path("/custom/config.json")
         with patch.dict(os.environ, {"HEALTH_CONFIG_PATH": "/app/runs/health-config.json"}):
-            args = run_health_scheduler.main.__code__
             # Simulate: args.config is explicitly set to /custom/config.json
             # The main function should use args.config when not None
             self.assertNotEqual(explicit_config, Path("/app/runs/health-config.json"))
