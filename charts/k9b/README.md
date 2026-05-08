@@ -119,6 +119,17 @@ healthConfig:
 
 This maps to `/app/runs/health-config.json` inside the scheduler container.
 
+The scheduler also requires a baseline configuration file mounted at `/app/runs/health-baseline.local.json`:
+
+```yaml
+healthConfig:
+  baseline:
+    enabled: true
+    data: {}
+```
+
+The baseline file stores cluster health state snapshots used for comparison during health runs. Customize via `healthConfig.baseline.data`.
+
 ### Runs Storage
 
 Persistent storage for health run artifacts:

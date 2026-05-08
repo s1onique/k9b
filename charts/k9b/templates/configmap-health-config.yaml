@@ -1,8 +1,9 @@
 {{/*
 ConfigMap for health configuration.
 Embedded in chart; content generated from healthConfig.data values.
+Includes health-config.json and health-baseline.local.json.
 */}}
-{{- if .Values.healthConfig.enabled }}
+{{- if or .Values.healthConfig.enabled .Values.healthConfig.baseline.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,5 +11,10 @@ metadata:
   labels:
     {{- include "k9b.labels" . | nindent 4 }}
 data:
+  {{- if .Values.healthConfig.enabled }}
   health-config.json: {{ .Values.healthConfig.data | toPrettyJson | quote }}
+  {{- end }}
+  {{- if .Values.healthConfig.baseline.enabled }}
+  health-baseline.local.json: {{ .Values.healthConfig.baseline.data | toPrettyJson | quote }}
+  {{- end }}
 {{- end }}

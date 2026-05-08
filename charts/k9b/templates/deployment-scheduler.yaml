@@ -65,6 +65,12 @@ spec:
               subPath: health-config.json
               readOnly: true
             {{- end }}
+            {{- if .Values.healthConfig.baseline.enabled }}
+            - name: health-config
+              mountPath: /app/runs/health-baseline.local.json
+              subPath: health-baseline.local.json
+              readOnly: true
+            {{- end }}
             {{- if .Values.kubeconfig.enabled }}
             - name: kubeconfig
               mountPath: {{ .Values.kubeconfig.mountPath }}
@@ -75,7 +81,7 @@ spec:
               mountPath: {{ .Values.runs.persistence.mountPath }}
             {{- end }}
       volumes:
-        {{- if .Values.healthConfig.enabled }}
+        {{- if or .Values.healthConfig.enabled .Values.healthConfig.baseline.enabled }}
         - name: health-config
           configMap:
             name: {{ include "k9b.healthConfig.fullname" . }}

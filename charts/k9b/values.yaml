@@ -125,11 +125,15 @@ runs:
 
 # Health configuration (embedded in chart as ConfigMap).
 # The healthConfig.data content is written to the health-config.json ConfigMap key.
+# The healthConfig.baseline.data content is written to the health-baseline.local.json ConfigMap key.
 healthConfig:
   enabled: true
   mountPath: /app/runs/health-config.json
   data:
     targets: []
+  baseline:
+    enabled: true
+    data: {}
 
 # Reference to external kubeconfig secret (for external cluster access).
 # By default, uses in-cluster service account authentication.
