@@ -91,11 +91,11 @@ class TestBatchExecutableRegression:
         # NOTE: The frontend now uses include_batch_eligibility=true which computes
         # batchExecutable without triggering the slow execution count derivation.
         # We test include_status=True here to verify batch eligibility still works.
-        result = build_runs_list(tmp_path, include_batch_eligibility=True)
-        result = cast(dict[str, object], result)
+        payload_raw = build_runs_list(tmp_path, include_batch_eligibility=True)
+        payload = cast(dict[str, object], payload_raw)
 
         # Assert: Find the run and verify batchExecutable is true
-        runs = cast(list[dict[str, object]], result.get("runs", []))
+        runs = cast(list[dict[str, object]], payload.get("runs", []))
         run_eligible = next((r for r in runs if r["runId"] == "run-eligible-001"), None)
 
         assert run_eligible is not None, "run-eligible-001 should be in runs list"
@@ -121,11 +121,11 @@ class TestBatchExecutableRegression:
         review_path.write_text(json.dumps(review_data), encoding="utf-8")
 
         # Act
-        result = build_runs_list(tmp_path, include_status=True)
-        result = cast(dict[str, object], result)
+        payload_raw = build_runs_list(tmp_path, include_status=True)
+        payload = cast(dict[str, object], payload_raw)
 
         # Assert
-        runs = cast(list[dict[str, object]], result.get("runs", []))
+        runs = cast(list[dict[str, object]], payload.get("runs", []))
         run_no_plan = next((r for r in runs if r["runId"] == "run-no-plan-001"), None)
 
         assert run_no_plan is not None, "run-no-plan-001 should be in runs list"
@@ -185,11 +185,11 @@ class TestBatchExecutableRegression:
         review_path.write_text(json.dumps(review_data), encoding="utf-8")
 
         # Act
-        result = build_runs_list(tmp_path, include_status=True)
-        result = cast(dict[str, object], result)
+        payload_raw = build_runs_list(tmp_path, include_status=True)
+        payload = cast(dict[str, object], payload_raw)
 
         # Assert
-        runs = cast(list[dict[str, object]], result.get("runs", []))
+        runs = cast(list[dict[str, object]], payload.get("runs", []))
         run_not_eligible = next((r for r in runs if r["runId"] == "run-not-eligible-001"), None)
 
         assert run_not_eligible is not None, "run-not-eligible-001 should be in runs list"
@@ -264,11 +264,11 @@ class TestBatchExecutableRegression:
         review_path.write_text(json.dumps(review_data), encoding="utf-8")
 
         # Act
-        result = build_runs_list(tmp_path, include_status=True)
-        result = cast(dict[str, object], result)
+        payload_raw = build_runs_list(tmp_path, include_status=True)
+        payload = cast(dict[str, object], payload_raw)
 
         # Assert: 2 eligible candidates (c0 and c2 not executed, c1 is executed)
-        runs = cast(list[dict[str, object]], result.get("runs", []))
+        runs = cast(list[dict[str, object]], payload.get("runs", []))
         run_pe = next((r for r in runs if r["runId"] == "run-partially-executed-001"), None)
 
         assert run_pe is not None, "run-partially-executed-001 should be in runs list"
@@ -319,11 +319,11 @@ class TestBatchExecutableRegression:
         review_path.write_text(json.dumps(review_data), encoding="utf-8")
 
         # Act: Call WITHOUT include_status (super fast path - same as old fetchRunsList)
-        result = build_runs_list(tmp_path, include_status=False)
-        result = cast(dict[str, object], result)
+        payload_raw = build_runs_list(tmp_path, include_status=False)
+        payload = cast(dict[str, object], payload_raw)
 
         # Assert: batchEligibility should be "unknown" (deferred), batchExecutable should be False
-        runs = cast(list[dict[str, object]], result.get("runs", []))
+        runs = cast(list[dict[str, object]], payload.get("runs", []))
         run_sf = next((r for r in runs if r["runId"] == "run-super-fast-001"), None)
 
         assert run_sf is not None, "run-super-fast-001 should be in runs list"
@@ -381,11 +381,11 @@ class TestBatchExecutableRegression:
         review_path.write_text(json.dumps(review_data), encoding="utf-8")
 
         # Act: Call with include_batch_eligibility=True (NEW optimized path)
-        result = build_runs_list(tmp_path, include_batch_eligibility=True)
-        result = cast(dict[str, object], result)
+        payload_raw = build_runs_list(tmp_path, include_batch_eligibility=True)
+        payload = cast(dict[str, object], payload_raw)
 
         # Assert: batchEligibility should be "computed", batchExecutable should be True
-        runs = cast(list[dict[str, object]], result.get("runs", []))
+        runs = cast(list[dict[str, object]], payload.get("runs", []))
         run_be = next((r for r in runs if r["runId"] == "run-batch-eligible-001"), None)
 
         assert run_be is not None, "run-batch-eligible-001 should be in runs list"
@@ -397,7 +397,7 @@ class TestBatchExecutableRegression:
             f"batchEligibleCount should be 1, got {run_be.get('batchEligibleCount')}"
 
         # Verify execution counts are NOT computed (executionCountsComplete should be False)
-        assert result.get("executionCountsComplete") is False, \
+        assert payload.get("executionCountsComplete") is False, \
             "executionCountsComplete should be False when using include_batch_eligibility (not include_status)"
 
     def test_include_batch_eligibility_vs_include_status_timing(self, tmp_path: Path) -> None:
@@ -470,6 +470,8 @@ class TestBatchExecutableRegression:
         runs_batch = cast(list[dict[str, object]], payload_batch.get("runs", []))
         run_timing_batch = next((r for r in runs_batch if r["runId"] == "run-timing-001"), None)
 
+        assert run_timing_batch is not None, "run-timing-001 should be in runs list"
+
         # batchEligibility should be computed
         assert run_timing_batch["batchExecutable"] is True, \
             "batchExecutable should be True with include_batch_eligibility"
@@ -486,6 +488,8 @@ class TestBatchExecutableRegression:
 
         runs_status = cast(list[dict[str, object]], payload_status.get("runs", []))
         run_timing_status = next((r for r in runs_status if r["runId"] == "run-timing-001"), None)
+
+        assert run_timing_status is not None, "run-timing-001 should be in runs list"
 
         # execution counts should BE computed
         assert run_timing_status["executionCount"] == 1, \

@@ -18,6 +18,13 @@ from k8s_diag_agent.ui.api import build_runs_list
 from k8s_diag_agent.ui.api_payloads import RunsListPayload
 
 
+def _summary_runs(summary: dict[str, object]) -> list[dict[str, object]]:
+    runs = summary.get("runs")
+    assert isinstance(runs, list)
+    assert all(isinstance(run, dict) for run in runs)
+    return cast(list[dict[str, object]], runs)
+
+
 class TestIndexBatchEligibility:
     """Tests for index-backed batch eligibility path."""
 
@@ -403,10 +410,11 @@ class TestBuildRecentRunsSummaryWithExternalAnalysis:
 
         # Verify summary structure
         assert summary["version"] == 2
-        assert len(summary["runs"]) == 1
+        runs = _summary_runs(summary)
+        assert len(runs) == 1
 
         # Verify batch eligibility was computed
-        run = summary["runs"][0]
+        run = runs[0]
         assert run["run_id"] == run_id
         assert run["batchEligibility"] == "computed"
         assert run["batchExecutable"] is True
@@ -485,7 +493,8 @@ class TestBuildRecentRunsSummaryWithExternalAnalysis:
         )
 
         # Verify batch eligibility was computed with execution subtracted
-        run = summary["runs"][0]
+        runs = _summary_runs(summary)
+        run = runs[0]
         assert run["batchEligibility"] == "computed"
         assert run["batchExecutable"] is True
         assert run["batchEligibleCount"] == 2  # 3 total - 1 executed = 2
@@ -520,10 +529,11 @@ class TestBuildRecentRunsSummaryWithExternalAnalysis:
 
         # Verify summary structure - version 2 even without external-analysis (schema is consistent)
         assert summary["version"] == 2
-        assert len(summary["runs"]) == 1
+        runs = _summary_runs(summary)
+        assert len(runs) == 1
 
         # Verify batch eligibility is unknown (no plan to compute from)
-        run = summary["runs"][0]
+        run = runs[0]
         assert run["run_id"] == run_id
         assert run["batchEligibility"] == "unknown"
         assert run["batchExecutable"] is False
@@ -585,8 +595,9 @@ class TestExtractRunIdsFromFilename:
 
         # Verify batch eligibility was computed despite numbered artifact
         assert summary["version"] == 2
-        assert len(summary["runs"]) == 1
-        run = summary["runs"][0]
+        runs = _summary_runs(summary)
+        assert len(runs) == 1
+        run = runs[0]
         assert run["run_id"] == run_id
         # Should detect the plan despite the -001 suffix
         assert run["batchEligibility"] == "computed"
@@ -674,7 +685,8 @@ class TestNonContiguousCandidateIndex:
         )
 
         # Verify batch eligibility was computed with execution subtracted
-        run = summary["runs"][0]
+        runs = _summary_runs(summary)
+        run = runs[0]
         assert run["batchEligibility"] == "computed"
         assert run["batchExecutable"] is True
         # Only 2 eligible (candidates at indices 10 and 30 remain, 20 was executed)
@@ -745,7 +757,8 @@ class TestNonContiguousCandidateIndex:
         )
 
         # Verify batch eligibility was computed with execution subtracted
-        run = summary["runs"][0]
+        runs = _summary_runs(summary)
+        run = runs[0]
         assert run["batchEligibility"] == "computed"
         assert run["batchExecutable"] is True
         # Only 1 eligible (first candidate was executed by enumerate index 0)
