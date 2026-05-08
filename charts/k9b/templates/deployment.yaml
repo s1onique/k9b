@@ -33,6 +33,15 @@ spec:
           {{- if .Values.backend.args }}
           args:
             {{- toYaml .Values.backend.args | nindent 12 }}
+          {{- else }}
+          args:
+            - python
+            - -m
+            - k8s_diag_agent.cli
+            - health-ui
+            {{- if .Values.backend.unsafeBind }}
+            - --unsafe-bind
+            {{- end }}
           {{- end }}
           ports:
             - name: http

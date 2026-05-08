@@ -55,9 +55,6 @@ spec:
           {{- else }}
           args:
             - scheduler
-            {{- if .Values.scheduler.unsafeBind }}
-            - --unsafe-bind
-            {{- end }}
           {{- end }}
           env:
             - name: LLAMA_CPP_BASE_URL
