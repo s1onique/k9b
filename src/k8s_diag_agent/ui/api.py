@@ -924,6 +924,7 @@ def build_runs_list(
     limit: int | None = 100,
     include_status: bool = False,
     include_expensive: bool = False,
+    include_batch_eligibility: bool = False,
     _timings: Literal[False] = False,
 ) -> RunsListPayload: ...
 
@@ -934,6 +935,7 @@ def build_runs_list(
     limit: int | None = 100,
     include_status: bool = False,
     include_expensive: bool = False,
+    include_batch_eligibility: bool = False,
     _timings: Literal[True] = True,
 ) -> tuple[RunsListPayload, RunsListTimings]: ...
 
@@ -944,6 +946,7 @@ def build_runs_list(
     limit: int | None = 100,
     include_status: bool = False,
     include_expensive: bool = False,
+    include_batch_eligibility: bool = False,
     _timings: bool = False,
 ) -> RunsListPayload | tuple[RunsListPayload, RunsListTimings]:
     """Build a list of available runs with their review coverage status.
@@ -961,6 +964,8 @@ def build_runs_list(
     - By default (limit=100), only computes batch eligibility for the returned window.
     - Set include_expensive=True to compute batch eligibility for all runs.
     - Set limit=None to return all runs without batch eligibility computation.
+    - Set include_batch_eligibility=True to compute batch eligibility only (no status counts).
+      This is the fastest path for initial UI load with actionable Execute buttons.
 
     Args:
         runs_dir: Path to the runs directory
@@ -970,6 +975,10 @@ def build_runs_list(
         include_expensive: If True, compute batch eligibility for all runs (expensive).
             If False (default), only compute for returned window.
             Note: include_expensive=True implies include_status=True.
+        include_batch_eligibility: If True, compute batch eligibility only for returned
+            window (no execution counts). This is faster than include_status as it
+            skips execution artifact scanning. Use this for initial UI load when
+            Execute buttons are needed but full status isn't.
         _timings: If True, return tuple of (payload, timings) with detailed metrics
 
     Returns:
@@ -982,13 +991,13 @@ def build_runs_list(
     timings: RunsListTimings = {}
 
     # === SUPER FAST PATH: No expensive operations needed ===
-    # When include_expensive=False AND include_status=False (default for initial UI load),
+    # When include_expensive=False AND include_status=False AND include_batch_eligibility=False,
     # we don't need:
     # - Batch eligibility computation
     # - Execution count derivation
     # - Plan/execution file scanning
     # Just return a minimal list from review files with batch eligibility deferred.
-    if not include_expensive and not include_status:
+    if not include_expensive and not include_status and not include_batch_eligibility:
         return _build_runs_list_super_fast(runs_dir, limit=limit, _timings=_timings)
 
     # Stage 1: Collect runs from review artifacts
@@ -1440,8 +1449,11 @@ def build_runs_list(
         hasMore=has_more,
         # Flag indicating whether execution counts are complete for the returned runs.
         # When include_status=True or include_expensive=True, counts are computed for the
-        # returned window. When False (fast path), counts are 0 because derivation was skipped.
+        # returned window. When False (fast path or include_batch_eligibility only), 
+        # counts are 0 because derivation was skipped.
         # UI should render "Execution status not loaded" instead of "No executions" when False.
+        # Note: include_batch_eligibility=True does NOT set this to True - it only computes
+        # batch eligibility, not execution counts.
         executionCountsComplete=include_expensive or include_status,
     )
 

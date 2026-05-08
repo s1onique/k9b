@@ -303,33 +303,37 @@ describe("fetchProposals", () => {
 // ---------------------------------------------------------------------------
 
 describe("fetchRunsList", () => {
-  test("calls /api/runs (fast path) and returns payload", async () => {
+  test("calls /api/runs with include_batch_eligibility=true for fast batch eligibility", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({ "/api/runs": mockResponse(SUCCESS_PAYLOADS["/api/runs"]) })
     );
     const result = await fetchRunsList();
     expect(result).toEqual({ runs: [] });
+    // OPTIMIZED: Use include_batch_eligibility=true for fast batch eligibility computation
+    // (instead of include_status=true which is slower due to execution count derivation)
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/runs?include_status=true",
+      "/api/runs?include_batch_eligibility=true",
       expect.objectContaining({ cache: "no-store" })
     );
   });
 
-  test("calls /api/runs?include_status=true for batch eligibility", async () => {
-    // include_status=true is REQUIRED for batch eligibility computation.
-    // Without it, batchExecutable will always be false and the Execute button
-    // will not show for runs with eligible next-check candidates.
+  test("calls /api/runs?include_batch_eligibility=true for Execute button eligibility", async () => {
+    // include_batch_eligibility=true computes batchExecutable without full execution counts.
+    // This is faster than include_status=true while still enabling Execute buttons for
+    // runs with eligible next-check candidates.
     const fetchMock = vi.fn(() => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await fetchRunsList();
-    // Assert the call includes include_status=true
+    // Assert the call includes include_batch_eligibility=true
     const calls = vi.mocked(globalThis.fetch).mock.calls;
     expect(calls.length).toBe(1);
     const [url] = calls[0];
     const urlStr = typeof url === "string" ? url : String(url);
     expect(urlStr).toContain("/api/runs");
-    expect(urlStr).toContain("include_status=true");
+    expect(urlStr).toContain("include_batch_eligibility=true");
+    // Should NOT have include_status=true (that would be slower)
+    expect(urlStr).not.toContain("include_status=true");
   });
 });
 

@@ -135,10 +135,12 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
         include_status = str(include_status_param).lower() == "true"
         include_expensive = str(include_expensive_param).lower() == "true"
+        include_batch_eligibility_param = params.get("include_batch_eligibility", ["false"])[0]
+        include_batch_eligibility = str(include_batch_eligibility_param).lower() == "true"
 
         # CRITICAL: Acquire single-flight FIRST, then compute cache key inside critical section
-        # Include limit, include_status, and include_expensive in cache key for proper cache isolation
-        provisional_key = f"/api/runs:{handler.runs_dir}:limit={limit_value}:status={include_status}:expensive={include_expensive}"
+        # Include limit, include_status, include_expensive, and include_batch_eligibility in cache key for proper cache isolation
+        provisional_key = f"/api/runs:{handler.runs_dir}:limit={limit_value}:status={include_status}:expensive={include_expensive}:batch_eligibility={include_batch_eligibility}"
         should_build, sf_result, sf_wait_start = _single_flight_acquire(provisional_key)
 
         if not should_build and sf_result is not None:
@@ -169,18 +171,24 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         if health_root.exists():
             try:
                 reviews_dir = health_root / "reviews"
-                external_analysis_dir = health_root / "external-analysis"
                 diagnostic_packs_dir = health_root / "diagnostic-packs"
                 mtimes = []
-                for d in [reviews_dir, external_analysis_dir, diagnostic_packs_dir]:
+                for d in [reviews_dir, diagnostic_packs_dir]:
                     if d.exists():
                         mtimes.append(d.stat().st_mtime)
+                # Only include external-analysis freshness when actually needed.
+                # This avoids a ~7s directory scan on the default /api/runs path.
+                # Align with build_runs_list_payload() - all three flags need external-analysis freshness.
+                if include_status or include_expensive or include_batch_eligibility:
+                    external_analysis_dir = health_root / "external-analysis"
+                    if external_analysis_dir.exists():
+                        mtimes.append(external_analysis_dir.stat().st_mtime)
                 if mtimes:
                     cache_mtime = max(mtimes)
             except OSError:
                 pass
 
-        runs_cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit_value}:status={include_status}:expensive={include_expensive}"
+        runs_cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit_value}:status={include_status}:expensive={include_expensive}:batch_eligibility={include_batch_eligibility}"
 
         with _runs_list_cache_lock:
             cached = _runs_list_cache.get(runs_cache_key)
@@ -203,12 +211,13 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                             "limit": limit_value,
                             "include_status": include_status,
                             "include_expensive": include_expensive,
+                            "include_batch_eligibility": include_batch_eligibility,
                         },
                     )
                     handler._send_json(cached_payload)
                     return
 
-        runs_payload = build_runs_list_payload(handler, limit=limit_value, include_status=include_status, include_expensive=include_expensive)
+        runs_payload = build_runs_list_payload(handler, limit=limit_value, include_status=include_status, include_expensive=include_expensive, include_batch_eligibility=include_batch_eligibility)
 
         _single_flight_release(provisional_key, runs_payload, success=True, result_type="built")
 
@@ -791,6 +800,7 @@ def build_runs_list_payload(
     limit: int | None = 100,
     include_status: bool = False,
     include_expensive: bool = False,
+    include_batch_eligibility: bool = False,
 ) -> dict[str, object]:
     """Build the list of available runs with their triage state.
 
@@ -801,6 +811,8 @@ def build_runs_list_payload(
     - By default (limit=100), only computes batch eligibility for the returned window.
     - Set include_expensive=True to compute batch eligibility for all runs.
     - Set limit=None to return all runs without batch eligibility computation.
+    - Set include_batch_eligibility=True to compute batch eligibility only (no status counts).
+      This is the fastest path for initial UI load with actionable Execute buttons.
 
     Args:
         handler: The HealthUIRequestHandler instance
@@ -809,6 +821,10 @@ def build_runs_list_payload(
             window. This is a bounded, cheaper operation than include_expensive.
         include_expensive: If True, compute batch eligibility for all runs (expensive).
             Note: include_expensive=True implies include_status=True.
+        include_batch_eligibility: If True, compute batch eligibility only for returned
+            window (no execution counts). This is faster than include_status as it
+            skips execution artifact scanning. Use this for initial UI load when
+            Execute buttons are needed but full status isn't.
 
     Returns:
         The runs list payload dict
@@ -824,14 +840,17 @@ def build_runs_list_payload(
     if health_root.exists():
         try:
             reviews_dir = health_root / "reviews"
-            external_analysis_dir = health_root / "external-analysis"
             diagnostic_packs_dir = health_root / "diagnostic-packs"
-
             mtimes = []
-            for d in [reviews_dir, external_analysis_dir, diagnostic_packs_dir]:
+            for d in [reviews_dir, diagnostic_packs_dir]:
                 if d.exists():
                     mtimes.append(d.stat().st_mtime)
-
+            # Only include external-analysis freshness when needed for cache correctness
+            # This avoids a ~7s directory scan on the default /api/runs path
+            if include_status or include_expensive or include_batch_eligibility:
+                external_analysis_dir = health_root / "external-analysis"
+                if external_analysis_dir.exists():
+                    mtimes.append(external_analysis_dir.stat().st_mtime)
             if mtimes:
                 cache_mtime = max(mtimes)
         except OSError:
@@ -840,7 +859,7 @@ def build_runs_list_payload(
 
     # Include cache_mtime for filesystem freshness. Without it, a new run or execution
     # artifact would cause stale cache hits for the same parameter combination.
-    cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit}:status={include_status}:expensive={include_expensive}"
+    cache_key = f"{handler.runs_dir}:{cache_mtime}:limit={limit}:status={include_status}:expensive={include_expensive}:batch_eligibility={include_batch_eligibility}"
 
     from .server import _runs_list_cache, _runs_list_cache_lock
     with _runs_list_cache_lock:
@@ -889,6 +908,7 @@ def build_runs_list_payload(
             limit=limit,
             include_status=include_status,
             include_expensive=include_expensive,
+            include_batch_eligibility=include_batch_eligibility,
             _timings=True,
         )
         if isinstance(result, tuple):

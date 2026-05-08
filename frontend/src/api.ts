@@ -355,10 +355,13 @@ export const submitUsefulnessFeedback = async (
 export type RunsListPayload = import("./types").RunsListPayload;
 
 export const fetchRunsList = (): Promise<RunsListPayload> =>
-  // NOTE: include_status=true is REQUIRED for batch eligibility computation.
-  // Without it, batchExecutable will always be false and the Execute button
-  // will not show for runs with eligible next-check candidates.
-  fetchJson<RunsListPayload>("/api/runs?include_status=true");
+  // OPTIMIZED: Use include_batch_eligibility=true instead of include_status=true.
+  // This computes only batch eligibility (batchExecutable) without triggering execution count
+  // derivation via the super-fast path, making the initial load much faster.
+  // The distinction:
+  // - include_status=true: triggers execution_count_derivation_ms (~360s on large dirs)
+  // - include_batch_eligibility=true: computes batchExecutable via batch eligibility scan only
+  fetchJson<RunsListPayload>("/api/runs?include_batch_eligibility=true");
 
 // Batch execution API
 export type BatchExecutionRequest = import("./types").BatchExecutionRequest;

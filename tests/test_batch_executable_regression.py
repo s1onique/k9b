@@ -3,15 +3,16 @@
 This test verifies that the Recent Runs Execute button works correctly by ensuring
 the backend computes batchExecutable=true when:
 1. A next-check plan exists with eligible candidates (safeToAutomate=true, etc.)
-2. include_status=true is passed to /api/runs
+2. include_batch_eligibility=true is passed to /api/runs
 
 This was previously broken because:
-- Frontend fetchRunsList() called /api/runs WITHOUT include_status=true
+- Frontend fetchRunsList() called /api/runs WITHOUT include_batch_eligibility=true
 - Backend only computes batch eligibility when include_status=True or include_expensive=True
 - Without this flag, batchExecutable was always False
 
-Fix: fetchRunsList() now passes include_status=true so the backend computes
-batch eligibility for runs in the visible window.
+Fix: fetchRunsList() now passes include_batch_eligibility=true so the backend computes
+batch eligibility for runs in the visible window WITHOUT triggering execution count derivation.
+This is the optimized path that avoids the slow execution count derivation observed on large artifact directories.
 """
 
 from __future__ import annotations
@@ -86,8 +87,11 @@ class TestBatchExecutableRegression:
         review_path = reviews_dir / "run-eligible-001-review.json"
         review_path.write_text(json.dumps(review_data), encoding="utf-8")
 
-        # Act: Call build_runs_list with include_status=True (simulates fetchRunsList fix)
-        result = build_runs_list(tmp_path, include_status=True)
+        # Act: Call build_runs_list with include_batch_eligibility=True (optimized path)
+        # NOTE: The frontend now uses include_batch_eligibility=true which computes
+        # batchExecutable without triggering the slow execution count derivation.
+        # We test include_status=True here to verify batch eligibility still works.
+        result = build_runs_list(tmp_path, include_batch_eligibility=True)
         result = cast(dict[str, object], result)
 
         # Assert: Find the run and verify batchExecutable is true
@@ -327,3 +331,165 @@ class TestBatchExecutableRegression:
             f"batchEligibility should be 'unknown' (deferred) without include_status, got {run_sf.get('batchEligibility')}"
         assert run_sf["batchExecutable"] is False, \
             "batchExecutable is False when eligibility is deferred"
+
+    def test_include_batch_eligibility_flag_computes_eligibility_only(self, tmp_path: Path) -> None:
+        """Verify include_batch_eligibility=True computes batch eligibility without full status.
+
+        This is the new optimized path for initial UI load:
+        - include_batch_eligibility=True: computes batchExecutable only (fast)
+        - include_status=True: computes full execution/review counts (slower)
+
+        The include_batch_eligibility flag should:
+        - Compute batchExecutable for visible runs
+        - NOT compute full execution/review counts
+        - Return batchEligibility="computed" for runs with eligible candidates
+        """
+        # Arrange: Create plan with eligible candidates
+        ea_dir = tmp_path / "health" / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        plan_data = {
+            "purpose": "next-check-planning",
+            "payload": {
+                "candidates": [
+                    {
+                        "candidateId": "c1",
+                        "safeToAutomate": True,
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "description": "kubectl logs test",
+                        "targetContext": "admin@cluster-a",
+                        "requiresOperatorApproval": False,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateIndex": 0,
+                    }
+                ]
+            }
+        }
+        plan_path = ea_dir / "run-batch-eligible-001-next-check-plan-001.json"
+        plan_path.write_text(json.dumps(plan_data), encoding="utf-8")
+
+        # Create review
+        reviews_dir = tmp_path / "health" / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_data = {
+            "run_id": "run-batch-eligible-001",
+            "timestamp": "2026-05-07T21:00:00Z",
+            "run_label": "batch-eligible-run",
+            "cluster_count": 1,
+        }
+        review_path = reviews_dir / "run-batch-eligible-001-review.json"
+        review_path.write_text(json.dumps(review_data), encoding="utf-8")
+
+        # Act: Call with include_batch_eligibility=True (NEW optimized path)
+        result = build_runs_list(tmp_path, include_batch_eligibility=True)
+        result = cast(dict[str, object], result)
+
+        # Assert: batchEligibility should be "computed", batchExecutable should be True
+        runs = cast(list[dict[str, object]], result.get("runs", []))
+        run_be = next((r for r in runs if r["runId"] == "run-batch-eligible-001"), None)
+
+        assert run_be is not None, "run-batch-eligible-001 should be in runs list"
+        assert run_be["batchEligibility"] == "computed", \
+            f"batchEligibility should be 'computed' with include_batch_eligibility=True, got {run_be.get('batchEligibility')}"
+        assert run_be["batchExecutable"] is True, \
+            f"batchExecutable should be True with include_batch_eligibility=True, got {run_be.get('batchExecutable')}"
+        assert run_be["batchEligibleCount"] == 1, \
+            f"batchEligibleCount should be 1, got {run_be.get('batchEligibleCount')}"
+
+        # Verify execution counts are NOT computed (executionCountsComplete should be False)
+        assert result.get("executionCountsComplete") is False, \
+            "executionCountsComplete should be False when using include_batch_eligibility (not include_status)"
+
+    def test_include_batch_eligibility_vs_include_status_timing(self, tmp_path: Path) -> None:
+        """Verify include_batch_eligibility skips execution count derivation that include_status does.
+
+        Both should compute batchEligibility, but include_batch_eligibility should be faster
+        because it skips the execution artifact scanning for counts.
+        """
+        # Arrange: Create plan with eligible candidates and execution artifact
+        ea_dir = tmp_path / "health" / "external-analysis"
+        ea_dir.mkdir(parents=True, exist_ok=True)
+
+        plan_data = {
+            "purpose": "next-check-planning",
+            "payload": {
+                "candidates": [
+                    {
+                        "candidateId": "c1",
+                        "safeToAutomate": True,
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "description": "kubectl logs test",
+                        "targetContext": "admin@cluster-a",
+                        "requiresOperatorApproval": False,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateIndex": 0,
+                    },
+                    {
+                        "candidateId": "c2",
+                        "safeToAutomate": True,
+                        "suggestedCommandFamily": "kubectl-get",
+                        "description": "kubectl get test",
+                        "targetContext": "admin@cluster-a",
+                        "requiresOperatorApproval": False,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateIndex": 1,
+                    }
+                ]
+            }
+        }
+        plan_path = ea_dir / "run-timing-001-next-check-plan-001.json"
+        plan_path.write_text(json.dumps(plan_data), encoding="utf-8")
+
+        # Create execution artifact for candidate index 0
+        exec_data = {
+            "purpose": "next-check-execution",
+            "payload": {"candidateIndex": 0}
+        }
+        exec_path = ea_dir / "run-timing-001-next-check-execution-001.json"
+        exec_path.write_text(json.dumps(exec_data), encoding="utf-8")
+
+        # Create review
+        reviews_dir = tmp_path / "health" / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        review_data = {
+            "run_id": "run-timing-001",
+            "timestamp": "2026-05-07T21:00:00Z",
+            "run_label": "timing-test-run",
+            "cluster_count": 1,
+        }
+        review_path = reviews_dir / "run-timing-001-review.json"
+        review_path.write_text(json.dumps(review_data), encoding="utf-8")
+
+        # Test 1: include_batch_eligibility only
+        result_batch = build_runs_list(tmp_path, include_batch_eligibility=True, _timings=True)
+        if isinstance(result_batch, tuple):
+            payload_batch, timings_batch = result_batch
+        else:
+            payload_batch = result_batch
+
+        runs_batch = cast(list[dict[str, object]], payload_batch.get("runs", []))
+        run_timing_batch = next((r for r in runs_batch if r["runId"] == "run-timing-001"), None)
+
+        # batchEligibility should be computed
+        assert run_timing_batch["batchExecutable"] is True, \
+            "batchExecutable should be True with include_batch_eligibility"
+        # execution counts should NOT be computed
+        assert run_timing_batch["executionCount"] == 0, \
+            f"executionCount should be 0 (not computed) with include_batch_eligibility, got {run_timing_batch.get('executionCount')}"
+
+        # Test 2: include_status computes full counts
+        result_status = build_runs_list(tmp_path, include_status=True, _timings=True)
+        if isinstance(result_status, tuple):
+            payload_status, timings_status = result_status
+        else:
+            payload_status = result_status
+
+        runs_status = cast(list[dict[str, object]], payload_status.get("runs", []))
+        run_timing_status = next((r for r in runs_status if r["runId"] == "run-timing-001"), None)
+
+        # execution counts should BE computed
+        assert run_timing_status["executionCount"] == 1, \
+            f"executionCount should be 1 (computed) with include_status, got {run_timing_status.get('executionCount')}"
+        # batchEligibility should also be computed
+        assert run_timing_status["batchExecutable"] is True, \
+            "batchExecutable should be True with include_status"
