@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+from k8s_diag_agent.ui.server import HealthUIRequestHandler
 from k8s_diag_agent.ui.server_reads import build_runs_list_payload
 
 
@@ -69,7 +70,7 @@ class TestCacheFreshnessIndexPath:
         ui_index_path = health_dir / "ui-index.json"
         ui_index_path.touch()
 
-        handler = MockHandler(tmp_path)
+        handler = cast(HealthUIRequestHandler, MockHandler(tmp_path))
         payload = build_runs_list_payload(
             handler,
             include_batch_eligibility=True,
@@ -102,7 +103,7 @@ class TestCacheFreshnessIndexPath:
             encoding="utf-8",
         )
 
-        handler = MockHandler(tmp_path)
+        handler = cast(HealthUIRequestHandler, MockHandler(tmp_path))
         payload = build_runs_list_payload(
             handler,
             include_batch_eligibility=True,  # This will trigger scan path
@@ -137,7 +138,7 @@ class TestCacheFreshnessIndexPath:
         }
         (health_dir / "ui-index.json").write_text(json.dumps(ui_index), encoding="utf-8")
 
-        handler = MockHandler(tmp_path)
+        handler = cast(HealthUIRequestHandler, MockHandler(tmp_path))
         payload = build_runs_list_payload(
             handler,
             include_batch_eligibility=True,
@@ -179,7 +180,7 @@ class TestCacheFreshnessTimings:
         }
         (health_dir / "ui-index.json").write_text(json.dumps(ui_index), encoding="utf-8")
 
-        handler = MockHandler(tmp_path)
+        handler = cast(HealthUIRequestHandler, MockHandler(tmp_path))
         payload = build_runs_list_payload(
             handler,
             include_batch_eligibility=True,

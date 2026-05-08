@@ -1156,3 +1156,13 @@ class RunsListTimings(TypedDict, total=False):
     # Super fast path optimization markers
     path_strategy: str  # "super_fast_path" when super fast path is used
     total_duration_ms: float  # Total elapsed time
+    # Index batch eligibility cache freshness diagnostics
+    fallback_reason: str
+    index_rejected_reason: str
+    index_version: int
+    entries_checked: int
+    entries_with_fields: int
+    has_runs_list: bool
+    has_total_count: bool
+    cache_freshness_source: str
+    cache_freshness_path: str
