@@ -2,7 +2,7 @@
 PersistentVolumeClaim for runs storage.
 Stores health run artifacts for scheduler and backend access.
 */}}
-{{- if and .Values.runs.persistence.enabled .Values.rbac.clusterWide }}
+{{- if .Values.runs.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

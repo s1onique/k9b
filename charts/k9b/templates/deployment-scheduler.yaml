@@ -70,7 +70,7 @@ spec:
               mountPath: {{ .Values.kubeconfig.mountPath }}
               readOnly: true
             {{- end }}
-            {{- if and .Values.runs.persistence.enabled .Values.rbac.clusterWide }}
+            {{- if .Values.runs.persistence.enabled }}
             - name: runs
               mountPath: {{ .Values.runs.persistence.mountPath }}
             {{- end }}
@@ -85,7 +85,7 @@ spec:
           secret:
             secretName: {{ .Values.kubeconfig.secretName }}
         {{- end }}
-        {{- if and .Values.runs.persistence.enabled .Values.rbac.clusterWide }}
+        {{- if .Values.runs.persistence.enabled }}
         - name: runs
           persistentVolumeClaim:
             claimName: {{ include "k9b.runs.fullname" . }}
