@@ -11,7 +11,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_BIN = ROOT / ".venv" / "bin" / "python"
-DEFAULT_CONFIG = Path("runs/health-config.local.json")
+LOCAL_DEV_CONFIG = Path("runs/health-config.local.json")
+
+
+def default_config_path() -> Path:
+    """Resolve the default health config path.
+
+    Priority order:
+    1. HEALTH_CONFIG_PATH environment variable (production/Helm)
+    2. runs/health-config.local.json (local dev fallback)
+    """
+    return Path(os.environ.get("HEALTH_CONFIG_PATH", str(LOCAL_DEV_CONFIG)))
 SCHEDULER_LOG_ENV = "K9B_HEALTH_SCHEDULER_LOG_PATH"
 
 
@@ -90,8 +100,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        default=DEFAULT_CONFIG,
-        help="health config file (default: runs/health-config.local.json)",
+        default=None,
+        help="health config file (defaults to HEALTH_CONFIG_PATH env or runs/health-config.local.json)",
     )
     parser.add_argument(
         "--every-seconds",
@@ -116,15 +126,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Resolve config path: explicit CLI arg wins, else HEALTH_CONFIG_PATH env, else local dev fallback
+    config_path = args.config if args.config is not None else default_config_path()
+
     python = _ensure_python()
-    config_metadata = _load_config_metadata(args.config)
+    config_metadata = _load_config_metadata(config_path)
     command = [
         str(python),
         "-m",
         "k8s_diag_agent.cli",
         "run-health-loop",
         "--config",
-        str(args.config),
+        str(config_path),
     ]
     if args.once:
         command.append("--once")

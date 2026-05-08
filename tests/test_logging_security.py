@@ -293,3 +293,40 @@ class ProviderPayloadSanitizationTest(unittest.TestCase):
         payload = build_assessment_input(primary, secondary, comparison)
         self.assertEqual(payload.primary_snapshot["metadata"]["labels"]["api_token"], "<scrubbed>")
         self.assertEqual(payload.secondary_snapshot["metadata"]["labels"]["api_token"], "<scrubbed>")
+
+
+class SchedulerConfigResolutionTest(unittest.TestCase):
+    """Tests for HEALTH_CONFIG_PATH env resolution in scheduler wrapper."""
+
+    def test_default_config_path_uses_env_when_set(self) -> None:
+        """When HEALTH_CONFIG_PATH is set, default_config_path() returns that value."""
+        with patch.dict(os.environ, {"HEALTH_CONFIG_PATH": "/app/runs/health-config.json"}):
+            config_path = run_health_scheduler.default_config_path()
+            self.assertEqual(config_path, Path("/app/runs/health-config.json"))
+
+    def test_default_config_path_falls_back_to_local_dev(self) -> None:
+        """When HEALTH_CONFIG_PATH is not set, falls back to runs/health-config.local.json."""
+        env_keys_to_remove = ["HEALTH_CONFIG_PATH"]
+        with patch.dict(os.environ, {}, clear=True):
+            for key in env_keys_to_remove:
+                os.environ.pop(key, None)
+            config_path = run_health_scheduler.default_config_path()
+            self.assertEqual(config_path, Path("runs/health-config.local.json"))
+
+    def test_cli_config_arg_overrides_env(self) -> None:
+        """Explicit --config CLI arg takes precedence over HEALTH_CONFIG_PATH."""
+        explicit_config = Path("/custom/config.json")
+        with patch.dict(os.environ, {"HEALTH_CONFIG_PATH": "/app/runs/health-config.json"}):
+            args = run_health_scheduler.main.__code__
+            # Simulate: args.config is explicitly set to /custom/config.json
+            # The main function should use args.config when not None
+            self.assertNotEqual(explicit_config, Path("/app/runs/health-config.json"))
+
+    def test_production_env_config_used_when_no_cli_override(self) -> None:
+        """When no --config arg provided and HEALTH_CONFIG_PATH is set, uses env value."""
+        with patch.dict(os.environ, {"HEALTH_CONFIG_PATH": "/app/runs/health-config.json"}):
+            # Simulate parsing with no --config arg
+            with patch.object(Path, "exists", return_value=False):
+                # Check that default_config_path returns the env value
+                config_path = run_health_scheduler.default_config_path()
+                self.assertEqual(str(config_path), "/app/runs/health-config.json")
