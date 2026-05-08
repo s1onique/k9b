@@ -5,7 +5,7 @@ apiVersion: v2
 name: k9b
 description: LLM-based Kubernetes monitoring and diagnostics agent
 type: application
-version: 0.1.5
+version: 0.1.6
 appVersion: "0.1.0"
 keywords:
   - kubernetes
