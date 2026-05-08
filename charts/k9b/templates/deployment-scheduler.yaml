@@ -52,9 +52,12 @@ spec:
           {{- if .Values.scheduler.args }}
           args:
             {{- toYaml .Values.scheduler.args | nindent 12 }}
-          {{- else if .Values.scheduler.unsafeBind }}
+          {{- else }}
           args:
+            - scheduler
+            {{- if .Values.scheduler.unsafeBind }}
             - --unsafe-bind
+            {{- end }}
           {{- end }}
           env:
             - name: LLAMA_CPP_BASE_URL

@@ -57,8 +57,10 @@ scheduler:
   unsafeBind: true
   # command: Override container command (entrypoint). Leave empty to use image's default.
   command: []
-  # args: Override container arguments. Leave empty to use image's default.
-  # NOTE: If explicitly non-empty, --unsafe-bind is NOT appended automatically.
+  # args: Override container arguments. When empty, defaults to ["scheduler"] or
+  # ["scheduler", "--unsafe-bind"] based on scheduler.unsafeBind. When explicitly
+  # set, args are used as-is without modification (you must include "scheduler"
+  # as the first element if using the default image entrypoint).
   args: []
   env:
     # LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible).

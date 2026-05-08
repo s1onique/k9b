@@ -100,6 +100,29 @@ helm uninstall infra-k9b -n k9b
 | `scheduler.env.LLAMA_CPP_BASE_URL` | LLM provider URL | `""` |
 | `scheduler.env.LLAMA_CPP_MODEL` | Model name | `""` |
 
+#### Image Entrypoint Dispatch
+
+The published backend image (`docker.io/gitinsky/k9b-backend`) uses an entrypoint dispatcher script (`/app/docker-entrypoint.sh`) that expects the first argument to be a service name (`backend` or `scheduler`). The script dispatches to the appropriate startup script based on the first argument.
+
+**Default scheduler invocation:**
+
+When `scheduler.args` is empty (the default), the chart renders:
+```yaml
+args:
+  - scheduler
+  - --unsafe-bind   # if scheduler.unsafeBind=true (default)
+```
+
+This invokes the entrypoint as:
+```bash
+/app/docker-entrypoint.sh scheduler --unsafe-bind
+```
+
+Which dispatches to:
+```bash
+exec ./scripts/run_health_scheduler.py --unsafe-bind
+```
+
 #### Scheduler Unsafe Bind
 
 The scheduler exposes a health UI/API server that binds to `0.0.0.0:8080` by default. This is intentional for in-cluster access but requires explicit acknowledgement via `--unsafe-bind`.
@@ -129,14 +152,33 @@ open http://127.0.0.1:8080
 # Disable unsafe bind (use loopback or custom args)
 scheduler:
   unsafeBind: false
-  args: []
-
-# Or pass custom args directly (--unsafe-bind won't be auto-appended)
-scheduler:
-  args: ["--custom-flag"]
 ```
 
-**Note:** If you explicitly set `scheduler.args`, the chart will NOT append `--unsafe-bind` automatically. This gives you full control over container arguments.
+When `scheduler.unsafeBind=false` and `scheduler.args` is empty, the chart renders:
+```yaml
+args:
+  - scheduler
+```
+
+**Custom args:**
+
+When `scheduler.args` is explicitly set, it replaces the default args entirely. You must include `scheduler` as the first element to use the entrypoint dispatcher:
+
+```yaml
+# Custom args with full control
+scheduler:
+  args:
+    - scheduler
+    - --custom-flag
+
+# Or bypass the dispatcher entirely (not recommended for production)
+scheduler:
+  command: ["./scripts/run_health_scheduler.py"]
+  args:
+    - --unsafe-bind
+```
+
+**Important:** If you set `scheduler.args` without `scheduler` as the first element, the entrypoint script will fail with "exec: --: invalid option" because it interprets the first arg as a command to exec directly.
 
 ### Frontend Configuration
 
