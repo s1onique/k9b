@@ -1107,6 +1107,7 @@ const App = () => {
         filteredRunsList={filteredRunsList}
         runsListLoading={runsListLoading}
         runsListError={runsListError}
+        runsListRefreshing={runsListLoading && runsList.length > 0}
         runsPage={runsPage}
         totalRunsPages={totalRunsPages}
         runsPageSize={runsPageSize}

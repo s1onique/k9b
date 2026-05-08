@@ -53,6 +53,8 @@ export type RecentRunsPanelProps = {
   filteredRunsList: RunsListEntry[];
   runsListLoading: boolean;
   runsListError: string | null;
+  /** True when a refresh is in flight AND we have existing rows (stale-while-refresh) */
+  runsListRefreshing?: boolean;
   runsPage: number;
   totalRunsPages: number;
   runsPageSize: number;
@@ -79,6 +81,7 @@ export const RecentRunsPanel = ({
   filteredRunsList,
   runsListLoading,
   runsListError,
+  runsListRefreshing,
   runsPage,
   totalRunsPages,
   runsPageSize,
@@ -93,11 +96,26 @@ export const RecentRunsPanel = ({
   onBatchExecution,
   onShowSelectedRun,
 }: RecentRunsPanelProps) => {
+  // Stale-while-refresh: only show "Loading runs..." when loading AND no rows exist
+  // Use runsList.length (not filteredRunsList) so that stale-while-refresh preserves
+  // the table even when a filter returns zero results but the underlying list has rows.
+  const hasExistingRows = runsList.length > 0;
+  const showInitialLoading = runsListLoading && !hasExistingRows;
+  const showStaleRows = runsListRefreshing && hasExistingRows;
+
   return (
     <section className="panel recent-runs" id="recent-runs">
       <div className="section-head">
         <div>
-          <h2>Recent runs</h2>
+          <h2>
+            Recent runs
+            {showStaleRows && (
+              <span className="runs-refreshing-indicator" aria-live="polite">
+                {" "}
+                <span className="muted small">Refreshing…</span>
+              </span>
+            )}
+          </h2>
           <p className="muted small">Historical runs with triage status for review tracking.</p>
         </div>
       </div>
@@ -125,11 +143,11 @@ export const RecentRunsPanel = ({
           Showing {filteredRunsList.length} of {runsList.length} runs
         </p>
       )}
-      {runsListLoading ? (
+      {showInitialLoading ? (
         <p className="muted">Loading runs...</p>
       ) : runsListError ? (
         <div className="alert alert-inline">{runsListError}</div>
-      ) : filteredRunsList.length === 0 ? (
+      ) : filteredRunsList.length === 0 && !showStaleRows ? (
         <p className="muted">No runs match the current filter.</p>
       ) : (
         <div className="runs-table-wrapper">
