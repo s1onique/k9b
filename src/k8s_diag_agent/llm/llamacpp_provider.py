@@ -108,7 +108,8 @@ _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
     " NEVER suggest mutations: do not include apply, patch, scale, edit, upgrade, delete, restart, rollout."
     " If Alertmanager data is present, you MAY include alertmanagerEvidenceReferences."
     " alertmanagerEvidenceReferences format: [{\"cluster\": \"<string>\", \"matchedDimensions\": [\"<dim>\"], \"reason\": \"<string>\", \"usedFor\": \"top_concern\"}]"
-    " usedFor values: EXACTLY one of: top_concern, next_check, summary, triage_order, focus_note. Never use plural forms."
+    " usedFor values: EXACTLY one of: top_concern, next_check, summary, triage_order, focus_note. Do NOT derive usedFor from field names."
+    " Do NOT use plural forms. Invalid plural usedFor examples include: top_concerns, next_checks, triage_order_items, focus_notes, evidence_gaps."
 )
 
 
