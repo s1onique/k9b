@@ -26,6 +26,18 @@ from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..identity.artifact import new_artifact_id
 from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
+from ..llm.provider import OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME
+
+
+def _is_openai_compatible_provider(provider_name: str) -> bool:
+    """Check if provider name resolves to the OpenAI-compatible provider.
+
+    This handles both canonical (openai_compatible) and legacy (llamacpp)
+    provider names during the migration period.
+    """
+    return provider_name in (OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME)
+
+
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
@@ -2366,7 +2378,7 @@ class HealthLoopRunner:
             start_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
             # Resolve max_tokens for llama.cpp provider
             start_max_tokens: int | None = None
-            if provider_name == "llamacpp":
+            if _is_openai_compatible_provider(provider_name):
                 from .drilldown_assessor import resolve_drilldown_max_tokens
                 start_max_tokens = resolve_drilldown_max_tokens(provider_name)
             # Log LLM call start
@@ -2417,7 +2429,7 @@ class HealthLoopRunner:
                     # Build structured top-level failure metadata
                     exc_diags = exc.to_diagnostics()
                     max_toks: int | None = None
-                    if provider_name == "llamacpp":
+                    if _is_openai_compatible_provider(provider_name):
                         from .drilldown_assessor import resolve_drilldown_max_tokens
                         max_toks = resolve_drilldown_max_tokens(provider_name)
                     prompt_diags = build_drilldown_prompt_diagnostics(
@@ -2511,7 +2523,7 @@ class HealthLoopRunner:
                     classified_failure_class, classified_exc_type = classify_llm_failure(exc)
                     # Resolve max_tokens for diagnostics using the drilldown_assessor helper
                     diagnostic_max_tokens: int | None = None
-                    if provider_name == "llamacpp":
+                    if _is_openai_compatible_provider(provider_name):
                         from .drilldown_assessor import resolve_drilldown_max_tokens
                         diagnostic_max_tokens = resolve_drilldown_max_tokens(provider_name)
                     prompt_diags = build_drilldown_prompt_diagnostics(
@@ -2619,9 +2631,9 @@ class HealthLoopRunner:
                     result_skip_reason = str(nested_diags.get("skip_reason")) if nested_diags.get("skip_reason") else None
             if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
                 result_skip_reason = skip_reason
-            # Resolve max_tokens for llama.cpp provider
+            # Resolve max_tokens for openai-compatible provider
             result_max_tokens: int | None = None
-            if provider_name == "llamacpp":
+            if _is_openai_compatible_provider(provider_name):
                 from .drilldown_assessor import resolve_drilldown_max_tokens
                 result_max_tokens = resolve_drilldown_max_tokens(provider_name)
             self._log_event(

@@ -12,6 +12,16 @@ from ..security import sanitize_payload
 from .drilldown import DrilldownArtifact
 
 
+def _is_openai_compatible_provider(provider_name: str) -> bool:
+    """Check if provider name resolves to the OpenAI-compatible provider.
+
+    This handles both canonical (openai_compatible) and legacy (llamacpp)
+    provider names during the migration period.
+    """
+    from ..llm.provider import OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME
+    return provider_name in (OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME)
+
+
 def resolve_drilldown_max_tokens(
     provider_name: str,
     explicit_max_tokens: int | None = None,
@@ -24,7 +34,7 @@ def resolve_drilldown_max_tokens(
 
 
     Args:
-        provider_name: The LLM provider name (e.g., "llamacpp").
+        provider_name: The LLM provider name (e.g., "llamacpp", "openai_compatible").
         explicit_max_tokens: Explicit max_tokens value if provided by caller.
 
 
@@ -35,7 +45,7 @@ def resolve_drilldown_max_tokens(
     """
     if explicit_max_tokens is not None:
         return explicit_max_tokens
-    if provider_name != "llamacpp":
+    if not _is_openai_compatible_provider(provider_name):
         return None
     from ..llm.llamacpp_provider import LlamaCppProvider
     from ..llm.provider import get_provider
