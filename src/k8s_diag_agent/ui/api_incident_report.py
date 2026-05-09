@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+from ..security.kubectl_context import sanitize_kubectl_display_command
 from .api_payloads import (
     ArtifactLink,
     FreshnessPayload,
@@ -301,7 +302,8 @@ def _build_operator_worklist_payload(
                 "id": item_id,
                 "rank": len(items) + 1,
                 "workstream": queue_item.workstream,
-                "title": queue_item.description,
+                # Sanitize title to prevent internal context markers from leaking to operator UI
+                "title": sanitize_kubectl_display_command(queue_item.description) or queue_item.description,
                 "description": queue_item.source_reason,
                 "command": queue_item.command_preview,
                 "targetCluster": queue_item.target_cluster,

@@ -68,3 +68,79 @@ def render_kubectl_context_args(context: str | None) -> list[str]:
     if context is not None and is_real_kube_context(context):
         return ["--context", context]
     return []
+
+
+def sanitize_kubectl_display_command(command: str | None) -> str | None:
+    """Sanitize a kubectl command string intended for operator display.
+
+    Removes internal context markers (--context in-cluster, --context=in-cluster,
+    --context in_cluster, --context=in_cluster) from the command string.
+    This prevents internal execution mode markers from leaking into operator-facing
+    UI fields like worklist titles.
+
+    Preserves real --context values like --context prod-cluster.
+    Uses is_real_kube_context() for consistent handling of padded/whitespace values.
+
+    Args:
+        command: The kubectl command string to sanitize, or None.
+
+    Returns:
+        The sanitized command string, or None if input is None/empty.
+
+    Examples:
+        >>> sanitize_kubectl_display_command("kubectl get pods --context in-cluster")
+        'kubectl get pods'
+        >>> sanitize_kubectl_display_command("kubectl get pods --context=in-cluster")
+        'kubectl get pods'
+        >>> sanitize_kubectl_display_command("kubectl get pods -n in-cluster")
+        'kubectl get pods -n in-cluster'
+        >>> sanitize_kubectl_display_command("kubectl get pods --context prod-cluster")
+        'kubectl get pods --context prod-cluster'
+        >>> sanitize_kubectl_display_command(None)
+    """
+    if command is None:
+        return None
+    if not isinstance(command, str) or not command.strip():
+        return None
+    import shlex
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.strip().split()
+    if not tokens:
+        return None
+    # Pre-check: if no kubectl at start, it's not a kubectl command we manage
+    if tokens[0] != "kubectl":
+        return command.strip()
+    # Strip only INTERNAL context markers (--context in-cluster, etc.)
+    # Preserve real --context values like --context prod-cluster
+    # Use is_real_kube_context() for consistent handling of padded/whitespace values
+    sanitized: list[str] = []
+    iterator = iter(tokens)
+    for token in iterator:
+        if token in ("--context", "-c"):
+            next_token = next(iterator, None)
+            # Only skip if the next token is NOT a real kube context
+            if next_token is not None and not is_real_kube_context(next_token):
+                continue  # skip both the flag and the internal value
+            # Otherwise, keep both the flag and the real context value
+            sanitized.append(token)
+            if next_token is not None:
+                sanitized.append(next_token)
+            continue
+        if token.startswith("--context="):
+            # Extract context value from --context=value format
+            context_value = token.split("=", 1)[1]
+            if not is_real_kube_context(context_value):
+                continue  # skip this internal context
+            sanitized.append(token)
+            continue
+        if token.startswith("-c="):
+            # Extract context value from -c=value format
+            context_value = token.split("=", 1)[1]
+            if not is_real_kube_context(context_value):
+                continue  # skip this internal context
+            sanitized.append(token)
+            continue
+        sanitized.append(token)
+    return " ".join(sanitized)
