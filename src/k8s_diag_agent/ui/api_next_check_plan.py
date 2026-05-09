@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from ..security.kubectl_context import sanitize_kubectl_display_command
 from .api_payloads import (
     AlertmanagerProvenancePayload,
     FeedbackAdaptationProvenancePayload,
@@ -90,8 +91,10 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
                 "servicesWithFeedback": list(fs.services_with_feedback),
             }
 
+    # Sanitize title to prevent internal context markers from leaking to operator UI
+    sanitized_description = sanitize_kubectl_display_command(view.description) or view.description
     payload: NextCheckCandidatePayload = {
-        "description": view.description,
+        "description": sanitized_description,
         "targetCluster": view.target_cluster,
         "sourceReason": view.source_reason,
         "expectedSignal": view.expected_signal,
@@ -133,11 +136,15 @@ def _serialize_next_check_candidate(view: NextCheckCandidateView) -> NextCheckCa
 
 
 def _serialize_orphaned_approval(view: NextCheckOrphanedApprovalView) -> NextCheckOrphanedApprovalPayload:
+    # Sanitize candidate description to prevent internal context markers from leaking to operator UI
+    sanitized_description = (
+        sanitize_kubectl_display_command(view.candidate_description) or view.candidate_description
+    )
     payload: NextCheckOrphanedApprovalPayload = {
         "approvalStatus": view.approval_status,
         "candidateId": view.candidate_id,
         "candidateIndex": view.candidate_index,
-        "candidateDescription": view.candidate_description,
+        "candidateDescription": sanitized_description,
         "targetCluster": view.target_cluster,
         "planArtifactPath": view.plan_artifact_path,
         "approvalArtifactPath": view.approval_artifact_path,

@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import cast
 
+from ..security.kubectl_context import sanitize_kubectl_display_command
 from .api_payloads import (
     AlertmanagerProvenancePayload,
     FeedbackAdaptationProvenancePayload,
@@ -82,7 +83,8 @@ def _serialize_next_check_queue(
         entry: NextCheckQueueItemPayload = {
             "candidateId": item.candidate_id,
             "candidateIndex": item.candidate_index,
-            "description": item.description,
+            # Sanitize title to prevent internal context markers from leaking to operator UI
+            "description": sanitize_kubectl_display_command(item.description) or item.description,
             "targetCluster": item.target_cluster,
             "priorityLabel": item.priority_label,
             "suggestedCommandFamily": item.suggested_command_family,
