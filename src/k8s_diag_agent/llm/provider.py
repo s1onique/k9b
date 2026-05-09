@@ -1,6 +1,7 @@
 """Provider-agnostic seam for LLM assessments."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
@@ -17,6 +18,33 @@ from .assessor_schema import (
 )
 from .base import LLMAssessmentInput, LLMProvider
 from .llamacpp_provider import LlamaCppProvider
+
+# Canonical and legacy provider name constants
+OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
+LEGACY_LLAMACPP_PROVIDER_NAME = "llamacpp"
+
+logger = logging.getLogger(__name__)
+
+
+def normalize_provider_name(name: str) -> str:
+    """Normalize a provider name to its canonical form.
+
+    Args:
+        name: The provider name to normalize.
+
+    Returns:
+        The canonical provider name. Legacy names are mapped to their canonical
+        equivalents with a deprecation warning. Unknown names pass through unchanged.
+    """
+    normalized = name.lower()
+    if normalized == LEGACY_LLAMACPP_PROVIDER_NAME:
+        logger.warning(
+            "Provider name %r is deprecated. Use %r instead.",
+            LEGACY_LLAMACPP_PROVIDER_NAME,
+            OPENAI_COMPATIBLE_PROVIDER_NAME,
+        )
+        return OPENAI_COMPATIBLE_PROVIDER_NAME
+    return normalized
 
 
 class DefaultLLMProvider(LLMProvider):
@@ -105,16 +133,27 @@ class DefaultLLMProvider(LLMProvider):
         )
         return assessment.to_dict()
 
-PROVIDERS: dict[str, LLMProvider] = {"default": DefaultLLMProvider()}
-PROVIDERS["llamacpp"] = LlamaCppProvider()
+
+# Build the provider registry
+_llama_cpp_provider = LlamaCppProvider()
+
+PROVIDERS: dict[str, LLMProvider] = {
+    "default": DefaultLLMProvider(),
+    # Canonical name
+    OPENAI_COMPATIBLE_PROVIDER_NAME: _llama_cpp_provider,
+    # Legacy alias (temporary compatibility fallback during migration)
+    LEGACY_LLAMACPP_PROVIDER_NAME: _llama_cpp_provider,
+}
+
 DEFAULT_PROVIDER_NAME = "default"
-AVAILABLE_PROVIDERS = tuple(PROVIDERS.keys())
+AVAILABLE_PROVIDERS = tuple(sorted(PROVIDERS.keys()))
 
 
 def get_provider(name: str | None = None) -> LLMProvider:
-    key = (name or DEFAULT_PROVIDER_NAME).lower()
+    key = normalize_provider_name(name or DEFAULT_PROVIDER_NAME)
     if key not in PROVIDERS:
-        raise ValueError(f"Unknown provider '{name}'. Available: {', '.join(PROVIDERS)}")
+        available = ", ".join(sorted(PROVIDERS.keys()))
+        raise ValueError(f"Unknown provider '{name}'. Available: {available}")
     return PROVIDERS[key]
 
 

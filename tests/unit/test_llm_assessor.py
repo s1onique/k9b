@@ -764,9 +764,10 @@ class LLMCLIWiringTest(unittest.TestCase):
             secondary_path.write_text(json.dumps(secondary_data), encoding="utf-8")
             with patch.dict(
                 "k8s_diag_agent.llm.provider.PROVIDERS",
-                {"llamacpp": provider},
+                {"llamacpp": provider, "openai_compatible": provider},
                 clear=False,
             ):
+
                 with patch("sys.stdout", new_callable=io.StringIO) as fake_out:
                     exit_code = main([
                         "assess-snapshots",
