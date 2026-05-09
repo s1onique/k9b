@@ -40,25 +40,33 @@ class TestSanitizeKubectlDisplayCommand:
         assert "in_cluster" not in result
         assert "kubectl get deployment metrics-server -n kube-system" in result
 
-    def test_namespace_in_cluster_preserved(self) -> None:
-        """Namespace 'in-cluster' must be preserved (only --context flag is removed)."""
+    def test_namespace_in_cluster_removed(self) -> None:
+        """Internal namespace 'in-cluster' must be removed from display commands.
+
+        In K9b-generated commands, 'in-cluster' as a namespace is an internal
+        marker leak, not a real Kubernetes namespace. It must be removed from
+        operator-facing display.
+        """
         result = sanitize_kubectl_display_command(
             "kubectl get pods -n in-cluster"
         )
         assert result is not None
-        assert "-n in-cluster" in result
-        assert "--context" not in result
+        # Namespace -n in-cluster should be removed
+        assert "-n" not in result
+        assert "in-cluster" not in result
+        assert result == "kubectl get pods"
 
-    def test_both_namespace_and_context_in_cluster(self) -> None:
-        """Both namespace and context with 'in-cluster' must keep namespace."""
+    def test_both_namespace_and_context_in_cluster_removed(self) -> None:
+        """Both namespace and context 'in-cluster' must be removed."""
         result = sanitize_kubectl_display_command(
             "kubectl get pods -n in-cluster --context in-cluster"
         )
         assert result is not None
-        # Namespace -n in-cluster should be preserved
-        assert "-n in-cluster" in result
-        # --context flag should be removed (not the namespace)
+        # Both -n in-cluster and --context in-cluster should be removed
+        assert "-n" not in result
+        assert "in-cluster" not in result
         assert "--context" not in result
+        assert result == "kubectl get pods"
 
     def test_real_context_preserved_in_title(self) -> None:
         """Real kubeconfig context should be preserved in title."""
@@ -146,3 +154,103 @@ class TestSanitizeKubectlDisplayCommand:
         assert "--context" not in result
         assert "in-cluster" not in result
         assert result == "kubectl get deployment metrics-server -n kube-system"
+
+    def test_namespace_in_cluster_short_form_removed(self) -> None:
+        """Short form -n with internal namespace should be removed."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods -n in-cluster"
+        )
+        assert result is not None
+        assert "-n" not in result
+        assert "in-cluster" not in result
+        assert result == "kubectl get pods"
+
+    def test_namespace_in_cluster_equals_format_removed(self) -> None:
+        """Namespace -n=value format with internal namespace should be removed."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods -n=in-cluster"
+        )
+        assert result is not None
+        assert "-n" not in result
+        assert "in-cluster" not in result
+        assert result == "kubectl get pods"
+
+    def test_namespace_in_cluster_long_form_removed(self) -> None:
+        """Long form --namespace with internal namespace should be removed."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods --namespace in-cluster"
+        )
+        assert result is not None
+        assert "--namespace" not in result
+        assert "in-cluster" not in result
+        assert result == "kubectl get pods"
+
+    def test_namespace_in_cluster_equals_long_form_removed(self) -> None:
+        """Long form --namespace=value format with internal namespace should be removed."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods --namespace=in-cluster"
+        )
+        assert result is not None
+        assert "--namespace" not in result
+        assert "in-cluster" not in result
+        assert result == "kubectl get pods"
+
+    def test_namespace_in_cluster_underscore_removed(self) -> None:
+        """Namespace with in_cluster (underscore) should be removed."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get jobs -n in_cluster"
+        )
+        assert result is not None
+        assert "-n" not in result
+        assert "in_cluster" not in result
+        assert result == "kubectl get jobs"
+
+    def test_real_namespace_preserved(self) -> None:
+        """Real Kubernetes namespaces should be preserved."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods -n kube-system"
+        )
+        assert result is not None
+        assert "-n kube-system" in result
+        assert result == "kubectl get pods -n kube-system"
+
+    def test_real_namespace_long_form_preserved(self) -> None:
+        """Real Kubernetes namespaces with --namespace should be preserved."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods --namespace monitoring"
+        )
+        assert result is not None
+        assert "--namespace monitoring" in result
+        assert result == "kubectl get pods --namespace monitoring"
+
+    def test_mixed_internal_context_real_namespace_removed(self) -> None:
+        """When both internal context and real namespace present, both internal markers removed."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods -n in-cluster --context in-cluster"
+        )
+        assert result is not None
+        assert "-n" not in result
+        assert "--context" not in result
+        assert "in-cluster" not in result
+        assert result == "kubectl get pods"
+
+    def test_mixed_real_context_real_namespace_preserved(self) -> None:
+        """Real context and real namespace should both be preserved."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods -n kube-system --context prod-cluster"
+        )
+        assert result is not None
+        assert "-n kube-system" in result
+        assert "--context prod-cluster" in result
+        assert result == "kubectl get pods -n kube-system --context prod-cluster"
+
+    def test_mixed_real_context_internal_namespace_removed(self) -> None:
+        """Real context with internal namespace should remove namespace only."""
+        result = sanitize_kubectl_display_command(
+            "kubectl get pods -n in-cluster --context prod-cluster"
+        )
+        assert result is not None
+        assert "-n" not in result
+        assert "in-cluster" not in result
+        assert "--context prod-cluster" in result
+        assert result == "kubectl get pods --context prod-cluster"

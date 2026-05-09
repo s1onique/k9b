@@ -9,7 +9,10 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..security.kubectl_context import render_kubectl_context_args
+from ..security.kubectl_context import (
+    is_internal_kube_marker,
+    render_kubectl_context_args,
+)
 from ..security.path_validation import (
     SecurityError,
     validate_kube_context_name,
@@ -79,13 +82,45 @@ def _capture_output(value: str | bytes | None, limit: int = _OUTPUT_LIMIT) -> tu
 
 
 def _strip_context_arguments(tokens: Sequence[str]) -> tuple[str, ...]:
+    """Strip context and internal namespace markers from tokens.
+
+    This function removes:
+    - --context and -c flags with their values (when internal marker)
+    - -n and --namespace flags with internal marker values (like "in-cluster")
+    """
     sanitized: list[str] = []
     iterator = iter(tokens)
     for token in iterator:
+        # Handle --context and -c flags
         if token in ("--context", "-c"):
             next(iterator, None)
             continue
         if token.startswith("--context=") or token.startswith("-c="):
+            continue
+        # Handle -n and --namespace flags with internal marker values
+        if token in ("-n", "--namespace"):
+            next_token = next(iterator, None)
+            # Skip namespace flag and value if it's an internal marker
+            if next_token is not None and is_internal_kube_marker(next_token):
+                continue
+            # Keep both flag and namespace for real namespaces
+            sanitized.append(token)
+            if next_token is not None:
+                sanitized.append(next_token)
+            continue
+        if token.startswith("-n="):
+            # Extract namespace value from -n=value format
+            namespace_value = token.split("=", 1)[1]
+            if is_internal_kube_marker(namespace_value):
+                continue  # skip this internal marker namespace
+            sanitized.append(token)
+            continue
+        if token.startswith("--namespace="):
+            # Extract namespace value from --namespace=value format
+            namespace_value = token.split("=", 1)[1]
+            if is_internal_kube_marker(namespace_value):
+                continue  # skip this internal marker namespace
+            sanitized.append(token)
             continue
         sanitized.append(token)
     return tuple(sanitized)

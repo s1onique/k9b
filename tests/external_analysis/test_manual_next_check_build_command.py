@@ -95,32 +95,56 @@ class TestBuildCommandContextFiltering:
 class TestBuildCommandNamespaceValidation:
     """Tests for namespace validation to prevent -n in-cluster leakage."""
 
-    def test_in_cluster_namespace_passes_validation_but_no_context(self) -> None:
-        """Namespace 'in-cluster' is valid (DNS label) but must not get --context in-cluster.
+    def test_in_cluster_namespace_removed_from_command(self) -> None:
+        """Internal namespace '-n in-cluster' must be removed from executed command.
 
-        Note: 'in-cluster' is a valid Kubernetes namespace name per DNS label rules.
-        The fix ensures '--context in-cluster' is NOT added to commands.
-        The namespace in the command description is preserved as-is.
+        In K9b-generated commands, 'in-cluster' as a namespace is an internal
+        marker leak, not a real Kubernetes namespace. Both -n in-cluster and
+        --context in-cluster are removed.
         """
         command = _build_command(
             description="kubectl get pods -n in-cluster",
             target_context="in-cluster",
             family=CommandFamily.KUBECTL_GET
         )
-        # Namespace 'in-cluster' passes validation (valid DNS label)
-        assert "in-cluster" in command
+        # Namespace -n in-cluster must be removed from command
+        assert "-n" not in command
+        assert "in-cluster" not in command
         # But --context in-cluster must NOT be added
         assert "--context" not in command
         assert command.count("--context") == 0
+        # Command should be just kubectl get pods
+        assert command == ["kubectl", "get", "pods"]
 
-    def test_in_cluster_underscore_namespace_rejected(self) -> None:
-        """Namespace 'in_cluster' should be rejected as invalid."""
-        with pytest.raises(ManualNextCheckError, match="invalid namespace"):
-            _build_command(
-                description="kubectl get pods -n in_cluster",
-                target_context="prod-context",
-                family=CommandFamily.KUBECTL_GET
-            )
+    def test_in_cluster_namespace_with_real_context_removed(self) -> None:
+        """Internal namespace '-n in-cluster' removed even with real context."""
+        command = _build_command(
+            description="kubectl get pods -n in-cluster",
+            target_context="prod-context",
+            family=CommandFamily.KUBECTL_GET
+        )
+        # Namespace -n in-cluster should be removed
+        assert "-n" not in command
+        assert "in-cluster" not in command
+        # But real context should be preserved
+        assert "--context prod-context" in " ".join(command)
+
+    def test_in_cluster_underscore_namespace_removed(self) -> None:
+        """Namespace 'in_cluster' (underscore) is treated as internal marker and removed.
+
+        Both in-cluster and in_cluster are internal K9b markers that should be
+        stripped from operator-facing commands before reaching validation.
+        """
+        command = _build_command(
+            description="kubectl get pods -n in_cluster",
+            target_context="prod-context",
+            family=CommandFamily.KUBECTL_GET
+        )
+        # Namespace -n in_cluster is stripped as internal marker
+        assert "-n" not in command
+        assert "in_cluster" not in command
+        # Real context should be preserved
+        assert "--context prod-context" in " ".join(command)
 
     def test_valid_namespace_accepted(self) -> None:
         """Valid namespace should be accepted."""

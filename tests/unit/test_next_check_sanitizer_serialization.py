@@ -123,17 +123,23 @@ class TestNextCheckCandidateSanitization(unittest.TestCase):
         self.assertIn("--context prod-cluster", result["description"])
         self.assertIn("prod-cluster", result["description"])
 
-    def test_candidate_description_preserves_namespace_in_cluster(self) -> None:
-        """Namespace '-n in-cluster' must be preserved (only --context flag is removed)."""
+    def test_candidate_description_removes_internal_namespace(self) -> None:
+        """Internal namespace '-n in-cluster' must be removed from operator-facing display.
+
+        In K9b-generated commands, 'in-cluster' as a namespace is an internal marker
+        leak, not a real Kubernetes namespace. Both -n in-cluster and --context
+        in-cluster must be removed.
+        """
         view = self._make_candidate_view(
             description="kubectl get pods -n in-cluster --context in-cluster",
             target_cluster="cluster-a",
         )
         result = _serialize_next_check_candidate(view)
-        # Namespace -n in-cluster should be preserved
-        self.assertIn("-n in-cluster", result["description"])
-        # --context flag should be removed
+        # Both -n in-cluster and --context in-cluster should be removed
+        self.assertNotIn("-n", result["description"])
+        self.assertNotIn("in-cluster", result["description"])
         self.assertNotIn("--context", result["description"])
+        self.assertEqual(result["description"], "kubectl get pods")
 
 
 class TestNextCheckQueueSanitization(unittest.TestCase):
@@ -234,15 +240,22 @@ class TestNextCheckQueueSanitization(unittest.TestCase):
         self.assertIn("--context prod-cluster", result[0]["description"])
         self.assertIn("prod-cluster", result[0]["description"])
 
-    def test_queue_item_description_preserves_namespace_in_cluster(self) -> None:
-        """Namespace '-n in-cluster' must be preserved in queue item."""
+    def test_queue_item_description_removes_internal_namespace(self) -> None:
+        """Internal namespace '-n in-cluster' must be removed from queue item.
+
+        In K9b-generated commands, 'in-cluster' as a namespace is an internal marker
+        leak, not a real Kubernetes namespace. Both -n in-cluster and --context
+        in-cluster must be removed.
+        """
         view = self._make_queue_item_view(
             description="kubectl get pods -n in-cluster --context in-cluster",
         )
         result = _serialize_next_check_queue((view,))
         self.assertEqual(len(result), 1)
-        self.assertIn("-n in-cluster", result[0]["description"])
+        self.assertNotIn("-n", result[0]["description"])
+        self.assertNotIn("in-cluster", result[0]["description"])
         self.assertNotIn("--context", result[0]["description"])
+        self.assertEqual(result[0]["description"], "kubectl get pods")
 
 
 class TestOrphanedApprovalSanitization(unittest.TestCase):
