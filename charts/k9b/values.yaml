@@ -25,8 +25,8 @@ backend:
     port: 8080
   # unsafeBind: When true, allows binding to non-loopback addresses (0.0.0.0, external IPs).
   # WARNING: The UI/API has mutation endpoints. Requires uiAuth.enabled=true for exposed deployments.
-  # Default (false) binds to 127.0.0.1 for safe localhost-only access.
-  unsafeBind: false
+  # Default (true) enables cluster-wide access via Kubernetes Service.
+  unsafeBind: true
   # command: Override container command (entrypoint). Leave empty to use image's default.
   command: []
   # args: Override container arguments. Leave empty to use image's default.
@@ -35,9 +35,9 @@ backend:
     # HEALTH_SKIP_REFRESH: Set to "0" to enable auto-refresh, "1" to skip.
     HEALTH_SKIP_REFRESH: "1"
     # HEALTH_UI_HOST: Bind address for the UI/API server.
-    # Default is 127.0.0.1 (localhost-only). Set to 0.0.0.0 for cluster-wide access
-    # and ensure backend.unsafeBind=true and uiAuth.enabled=true.
-    HEALTH_UI_HOST: "127.0.0.1"
+    # Set to 0.0.0.0 for cluster-wide access via Kubernetes Service.
+    # Requires backend.unsafeBind=true.
+    HEALTH_UI_HOST: "0.0.0.0"
     HEALTH_UI_PORT: "8080"
     # HEALTH_CONFIG_PATH: Path to health config inside the container.
     HEALTH_CONFIG_PATH: "/app/runs/health-config.json"

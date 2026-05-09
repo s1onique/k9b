@@ -106,3 +106,118 @@ tests:
     asserts:
       - isNotNull:
           path: spec.template.spec.volumes[name=kubeconfig]
+
+  # ===== Kubernetes-safe bind configuration =====
+
+  - it: backend should render --unsafe-bind flag by default (Kubernetes-safe bind)
+    # Default unsafeBind=true enables cluster-wide access via Service
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args
+          pattern: "--unsafe-bind"
+
+  - it: backend should render HEALTH_UI_HOST=0.0.0.0 by default
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: HEALTH_UI_HOST"
+          value: "0.0.0.0"
+
+  - it: backend should render HEALTH_UI_PORT=8080
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: HEALTH_UI_PORT"
+          value: "8080"
+
+  - it: backend container should expose port 8080
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].protocol
+          value: TCP
+
+  - it: backend should NOT render --unsafe-bind when unsafeBind is false (localhost-only)
+    set:
+      backend.unsafeBind: false
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args
+          pattern: "--unsafe-bind"
+
+  - it: backend should render localhost HEALTH_UI_HOST when unsafeBind is false
+    set:
+      backend.unsafeBind: false
+      backend.env.HEALTH_UI_HOST: "127.0.0.1"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: "name: HEALTH_UI_HOST"
+          value: "127.0.0.1"
+
+  # ===== Backend Service port =====
+
+  - it: backend service should expose port 8080
+    template: service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+      - equal:
+          path: spec.ports[0].targetPort
+          value: http
+      - equal:
+          path: spec.ports[0].protocol
+          value: TCP
+      - equal:
+          path: spec.ports[0].name
+          value: http
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: frontend service should expose port 8080
+    template: service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+      - equal:
+          path: spec.ports[0].targetPort
+          value: http
+
+  # ===== nginx proxy_pass points to backend Service on port 8080 =====
+
+  - it: nginx ConfigMap should proxy /api/ to backend service on port 8080
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'proxy_pass http://\{\{.*k9b\.backend\.fullname.*\}\}:8080/api/'
+
+  - it: nginx ConfigMap should NOT contain hardcoded backend address
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: 'proxy_pass http://k9b-backend:'
+
+  # ===== Frontend nginx backend service uses consistent port 8080 =====
+
+  - it: frontend nginx should listen on port 8080
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'listen 8080;'
