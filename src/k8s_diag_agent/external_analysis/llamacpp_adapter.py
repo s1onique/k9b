@@ -786,9 +786,27 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         )
 
 
+@register_external_analysis_adapter("openai_compatible")
+def _build_openai_compatible_adapter(
+    config: ExternalAnalysisAdapterConfig,
+    settings: ExternalAnalysisSettings,
+) -> ExternalAnalysisAdapter:
+    """Build adapter registered under canonical 'openai_compatible' name.
+
+    This is the primary adapter registration during Phase 2 of the
+    llamacpp → openai_compatible rename epic.
+    """
+    return LlamaCppAdapter(command=config.command)
+
+
 @register_external_analysis_adapter("llamacpp")
 def _build_llamacpp_adapter(
     config: ExternalAnalysisAdapterConfig,
     settings: ExternalAnalysisSettings,
 ) -> ExternalAnalysisAdapter:
+    """Build adapter registered under legacy 'llamacpp' name.
+
+    This alias ensures backward compatibility during the migration period.
+    Both registrations point to the same LlamaCppAdapter class.
+    """
     return LlamaCppAdapter(command=config.command)

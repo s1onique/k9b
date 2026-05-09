@@ -100,6 +100,11 @@ def test_build_adapters_and_skip(monkeypatch: Any) -> None:
     artifact = llama_adapter.run(req)
     assert artifact.status == ExternalAnalysisStatus.SKIPPED
 
+    # Test with canonical name 'openai_compatible'
+    cfgs_canonical = [ExternalAnalysisAdapterConfig(name="openai_compatible", enabled=True, command=())]
+    adapters_canonical = build_external_analysis_adapters(cfgs_canonical)
+    assert "llamacpp" in adapters_canonical  # Instance name is still "llamacpp"
+
 
 def test_k8sgpt_adapter_success(monkeypatch: Any) -> None:
     adapter = K8sGptAdapter(command=("echo", "line1\nline2"))

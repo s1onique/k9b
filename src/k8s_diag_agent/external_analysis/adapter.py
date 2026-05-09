@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -53,6 +54,46 @@ _BLOCKED_COMMAND_FAMILIES = frozenset((
 # Shell metacharacters that must not appear in command[0]
 # These patterns indicate potential shell injection or misuse.
 _SHELL_METACHAR_PATTERN = re.compile(r"[;|&$`<>\n\r]")
+
+# Canonical and legacy adapter name constants for external analysis
+# Phase 2 of llamacpp → openai_compatible rename epic
+OPENAI_COMPATIBLE_ADAPTER_NAME = "openai_compatible"
+LEGACY_LLAMACPP_ADAPTER_NAME = "llamacpp"
+
+# Registry of deprecated adapter names that have already been warned about
+# Used to avoid repeated deprecation warnings in tight loops
+_DEPRECATION_WARNING_LOGGED: set[str] = set()
+
+
+def normalize_adapter_name(name: str) -> str:
+    """Normalize an external analysis adapter name to its canonical form.
+
+    Args:
+        name: The adapter name to normalize.
+
+    Returns:
+        The canonical adapter name. Legacy names are mapped to their canonical
+        equivalents with a deprecation warning. Unknown names pass through unchanged.
+
+    Canonical names:
+        - "openai_compatible" (canonical)
+
+    Legacy names:
+        - "llamacpp" → "openai_compatible" (with deprecation warning)
+    """
+    normalized = name.lower()
+    if normalized == LEGACY_LLAMACPP_ADAPTER_NAME:
+        # Only warn once per adapter name to avoid noisy repeated warnings
+        if normalized not in _DEPRECATION_WARNING_LOGGED:
+            warnings.warn(
+                f"Adapter name '{LEGACY_LLAMACPP_ADAPTER_NAME}' is deprecated. "
+                f"Use '{OPENAI_COMPATIBLE_ADAPTER_NAME}' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _DEPRECATION_WARNING_LOGGED.add(normalized)
+        return OPENAI_COMPATIBLE_ADAPTER_NAME
+    return normalized
 
 
 def _validate_command_for_execution(command: Sequence[str]) -> None:
@@ -150,6 +191,19 @@ _ADAPTER_BUILDERS: dict[str, AdapterBuilder] = {}
 
 
 def register_external_analysis_adapter(name: str) -> Callable[[AdapterBuilder], AdapterBuilder]:
+    """Register an external analysis adapter builder.
+
+    This decorator registers adapter builders under their normalized name
+    (lowercased). During Phase 2 of the llamacpp → openai_compatible rename,
+    adapters may be registered under both canonical and legacy names for
+    backward compatibility.
+
+    Args:
+        name: The adapter name to register (will be lowercased).
+
+    Returns:
+        Decorator that registers the builder function.
+    """
     def decorator(builder: AdapterBuilder) -> AdapterBuilder:
         _ADAPTER_BUILDERS[name.lower()] = builder
         return builder
@@ -161,19 +215,42 @@ def build_external_analysis_adapters(
     configs: Sequence[ExternalAnalysisAdapterConfig],
     settings: ExternalAnalysisSettings | None = None,
 ) -> dict[str, ExternalAnalysisAdapter]:
+    """Build external analysis adapters from configurations.
+
+    Adapter names are normalized using normalize_adapter_name() before lookup.
+    This allows both canonical names (openai_compatible) and legacy names (llamacpp)
+    to work during the migration period.
+
+    Args:
+        configs: Adapter configurations to build.
+        settings: Global external analysis settings.
+
+    Returns:
+        Dictionary mapping adapter instance names to adapter instances.
+    """
     if settings is None:
         settings = ExternalAnalysisSettings()
     adapters: dict[str, ExternalAnalysisAdapter] = {}
     for entry in configs:
         if not entry.enabled:
             continue
-        builder = _ADAPTER_BUILDERS.get(entry.name.lower())
+        normalized_name = normalize_adapter_name(entry.name)
+        builder = _ADAPTER_BUILDERS.get(normalized_name)
         if not builder:
             continue
         adapter = builder(entry, settings)
         if adapter:
             adapters[adapter.name] = adapter
     return adapters
+
+
+def get_available_adapter_names() -> tuple[str, ...]:
+    """Get sorted tuple of available adapter names.
+
+    Returns:
+        Sorted tuple of registered adapter names (canonical form).
+    """
+    return tuple(sorted(_ADAPTER_BUILDERS.keys()))
 
 
 def _run_subprocess(command: Sequence[str]) -> str:

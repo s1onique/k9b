@@ -9,10 +9,14 @@ from . import (
     llamacpp_adapter,  # noqa: F401
 )
 from .adapter import (
+    LEGACY_LLAMACPP_ADAPTER_NAME,
+    OPENAI_COMPATIBLE_ADAPTER_NAME,
     ExternalAnalysisAdapter,
     ExternalAnalysisExecutionError,
     ExternalAnalysisRequest,
     build_external_analysis_adapters,
+    get_available_adapter_names,
+    normalize_adapter_name,
     register_external_analysis_adapter,
 )
 from .alertmanager_artifact import (
