@@ -95,39 +95,20 @@ _SYSTEM_INSTRUCTIONS = (
 )
 
 # System instructions for review-enrichment use case (bounded advisory payload)
+# NOTE: These instructions are authoritative. The prompt builder in llamacpp_adapter.py
+# adds additional guidance that complements but does not replace these instructions.
 _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
     "You are a Kubernetes diagnostics review advisor."
-    " Provide a concise JSON advisory payload that includes summary, triageOrder, topConcerns,"
-    " evidenceGaps, nextChecks, focusNotes, and optionally alertmanagerEvidenceReferences."  # noqa: E501
-    " Use arrays of non-empty strings for list entries and highlight missing data explicitly."  # noqa: E501
-    " Do not include markdown, XML, or explanatory text outside the JSON payload."  # noqa: E501
-    " When Alertmanager data is available in the input, you may optionally reference it in alertmanagerEvidenceReferences."
-    " Each reference MUST cite evidence that was present in the provided Alertmanager compact artifact."
-    " You MUST NOT cite alert names, severities, namespaces, or clusters that do NOT appear in the supplied artifacts."
-    " alertmanagerEvidenceReferences format: [{\"cluster\": \"<string>\", \"matchedDimensions\": [\"<dim>\",...], \"reason\": \"<string>\", \"usedFor\": \"<top_concern|next_check|summary|triage_order|focus_note>\"}]"  # noqa: E501
-    " CRITICAL - usedFor values: Use EXACTLY one of these literals: top_concern, next_check, summary, triage_order, focus_note."
-    " Do NOT use plural forms like 'top_concerns', 'next_checks', or 'focus_notes'."
-    " Do NOT derive usedFor from field names like topConcerns, nextChecks, or focusNotes."
-    " CRITICAL for nextChecks: each entry MUST be an explicit kubectl command in one of these formats:"  # noqa: E501
-    " - 'kubectl describe <resource> -n <namespace>'"
-    " - 'kubectl logs <pod> -n <namespace>'"
-    " - 'kubectl get <resource> -n <namespace>'"
-    " - 'kubectl get crd --context <cluster>'"
-    " - 'kubectl top <resource> -n <namespace>' (if metrics-server available)"
-    " REQUIREMENTS:"
-    " - Every nextChecks entry must START with one of: kubectl describe, kubectl logs, kubectl get, kubectl top"  # noqa: E501
-    " - Each command must target exactly ONE cluster (use --context flag)"
-    " - NEVER use phrases like: validate, review, check status, confirm, investigate, verify, plan upgrade"  # noqa: E501
-    " - NEVER suggest 'all clusters', 'across clusters', or multi-cluster commands"
-    " - NEVER suggest mutations: do not include apply, patch, scale, edit, upgrade, delete, restart, rollout"  # noqa: E501
-    " Examples of CORRECT nextChecks:"
-    " - 'kubectl describe pod -n default myapp-abc123 --context cluster1'"
-    " - 'kubectl logs deployment/myapp -n production --context admin@prod'"
-    " - 'kubectl get crd --context cluster2'"
-    " Examples of WRONG nextChecks (will be rejected by planner):"
-    " - 'Validate image pull secrets in cluster1' (has 'validate')"
-    " - 'Check all clusters for CRDs' (has 'all clusters')"
-    " - 'Verify cluster2 version and upgrade to v1.33' (has 'upgrade')"
+    " CRITICAL: Return ONLY a valid JSON object. Do NOT use markdown fences, XML, or any text outside the JSON."
+    " The JSON must contain at minimum a 'summary' field with a non-empty string value."
+    " Include these fields: summary (required), triageOrder, topConcerns, evidenceGaps, nextChecks, focusNotes."
+    " Each array field must contain non-empty strings. Highlight missing data explicitly in arrays."
+    " nextChecks entries MUST be kubectl commands starting with: kubectl describe, kubectl logs, kubectl get, or kubectl top."
+    " NEVER include phrases like: validate, confirm, investigate, verify, plan upgrade in nextChecks."
+    " NEVER suggest mutations: do not include apply, patch, scale, edit, upgrade, delete, restart, rollout."
+    " If Alertmanager data is present, you MAY include alertmanagerEvidenceReferences."
+    " alertmanagerEvidenceReferences format: [{\"cluster\": \"<string>\", \"matchedDimensions\": [\"<dim>\"], \"reason\": \"<string>\", \"usedFor\": \"top_concern\"}]"
+    " usedFor values: EXACTLY one of: top_concern, next_check, summary, triage_order, focus_note. Never use plural forms."
 )
 
 
@@ -587,6 +568,12 @@ class LlamaCppProvider(LLMProvider):
                 raise_shape_error("'choices[0]['text']'", "a string", text_field)
             content = text_field
 
+        # Handle empty content explicitly - this is a distinct failure mode from invalid JSON
+        if not content:
+            raise ValueError(
+                f"llama.cpp response content is empty; response snippet: {payload_snippet}"
+            )
+
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
@@ -798,6 +785,7 @@ class LLMFailureClass(StrEnum):
     LLM_RESPONSE_PARSE_ERROR_LENGTH_CAPPED = "llm_response_parse_error_length_capped"
     LLM_RESPONSE_INVALID_JSON = "llm_response_invalid_json"
     LLM_RESPONSE_UNRECOGNIZED_PAYLOAD = "llm_response_unrecognized_payload"
+    LLM_EMPTY_RESPONSE = "llm_empty_response"
 
 
 def classify_llm_failure(

@@ -390,5 +390,110 @@ class TestLLMFailureMetadataStructuredOutput(unittest.TestCase):
         self.assertEqual(result["finish_reason"], "length")
 
 
+class TestEmptyContentHandling(unittest.TestCase):
+    """Test that empty LLM response content is handled as a distinct failure mode."""
+
+    def test_empty_content_raises_value_error(self) -> None:
+        """Test that empty content in message raises ValueError, not LLMResponseParseError."""
+        response = _FakeResponse({"choices": [{"message": {"content": ""}}]})
+        session = _CapturingSession(response)
+        config = LlamaCppProviderConfig(
+            base_url="http://example.com/api",
+            model="test-model",
+        )
+        provider = LlamaCppProvider(
+            config=config,
+            session_factory=lambda: cast(requests.Session, session),
+        )
+        with self.assertRaises(ValueError) as ctx:
+            provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
+        # Error message should mention "empty" for clear diagnostics
+        self.assertIn("empty", str(ctx.exception).lower())
+
+    def test_null_content_raises_value_error(self) -> None:
+        """Test that null content in message raises ValueError."""
+        response = _FakeResponse({"choices": [{"message": {"content": None}}]})
+        session = _CapturingSession(response)
+        config = LlamaCppProviderConfig(
+            base_url="http://example.com/api",
+            model="test-model",
+        )
+        provider = LlamaCppProvider(
+            config=config,
+            session_factory=lambda: cast(requests.Session, session),
+        )
+        with self.assertRaises(ValueError) as ctx:
+            provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
+        # Should raise plain ValueError, not LLMResponseParseError
+        self.assertNotIsInstance(ctx.exception, LLMResponseParseError)
+
+    def test_whitespace_only_content_raises_value_error(self) -> None:
+        """Test that whitespace-only content raises ValueError."""
+        response = _FakeResponse({"choices": [{"message": {"content": "   \n\t  "}}]})
+        session = _CapturingSession(response)
+        config = LlamaCppProviderConfig(
+            base_url="http://example.com/api",
+            model="test-model",
+        )
+        provider = LlamaCppProvider(
+            config=config,
+            session_factory=lambda: cast(requests.Session, session),
+        )
+        with self.assertRaises(ValueError):
+            provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
+
+    def test_empty_content_distinct_from_invalid_json(self) -> None:
+        """Test that empty content error is distinct from invalid JSON error.
+
+        Empty content should raise ValueError with "empty" in the message.
+        Invalid JSON should raise LLMResponseParseError (a ValueError subclass).
+        These are distinguishable failure modes for better diagnostics.
+        """
+        # Empty content - plain ValueError
+        empty_response = _FakeResponse({"choices": [{"message": {"content": ""}}]})
+        empty_session = _CapturingSession(empty_response)
+        empty_provider = LlamaCppProvider(
+            config=LlamaCppProviderConfig(base_url="http://example.com/api", model="test-model"),
+            session_factory=lambda: cast(requests.Session, empty_session),
+        )
+        with self.assertRaises(ValueError) as empty_ctx:
+            empty_provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
+        empty_msg = str(empty_ctx.exception)
+        self.assertIn("empty", empty_msg.lower())
+
+        # Invalid JSON - LLMResponseParseError
+        invalid_json_response = _FakeResponse({"choices": [{"message": {"content": "not valid json {"}}]})
+        invalid_session = _CapturingSession(invalid_json_response)
+        invalid_provider = LlamaCppProvider(
+            config=LlamaCppProviderConfig(base_url="http://example.com/api", model="test-model"),
+            session_factory=lambda: cast(requests.Session, invalid_session),
+        )
+        with self.assertRaises(LLMResponseParseError) as invalid_ctx:
+            invalid_provider.assess("prompt", _dummy_payload(), validate_schema=False)  # type: ignore[arg-type]
+        invalid_msg = str(invalid_ctx.exception)
+        self.assertIn("not valid JSON", invalid_msg)
+
+
+class TestLLMEmptyResponseFailureClass(unittest.TestCase):
+    """Test LLM_EMPTY_RESPONSE failure class for empty content handling."""
+
+    def test_empty_response_failure_class_exists(self) -> None:
+        """Test that LLM_EMPTY_RESPONSE failure class is defined."""
+        from k8s_diag_agent.llm.llamacpp_provider import LLMFailureClass
+        self.assertTrue(hasattr(LLMFailureClass, "LLM_EMPTY_RESPONSE"))
+        self.assertEqual(LLMFailureClass.LLM_EMPTY_RESPONSE.value, "llm_empty_response")
+
+    def test_empty_response_classified_correctly(self) -> None:
+        """Test that ValueError from empty content is classified appropriately."""
+        from k8s_diag_agent.llm.llamacpp_provider import LLMFailureClass, classify_llm_failure
+
+        # ValueError from empty content should be classified as LLM_RESPONSE_PARSE_ERROR
+        # (since it's a ValueError subclass of parse error path)
+        exc = ValueError("llama.cpp response content is empty; response snippet: {}")
+        failure_class, exc_name = classify_llm_failure(exc)
+        # ValueError falls through to _classify_request_exception which returns LLM_RESPONSE_PARSE_ERROR
+        self.assertEqual(failure_class, LLMFailureClass.LLM_RESPONSE_PARSE_ERROR)
+
+
 if __name__ == "__main__":
     unittest.main()
