@@ -87,6 +87,12 @@ scheduler:
     # HEALTH_REQUIRE_DIAGNOSTIC_PACK: When "true", diagnostic pack failure causes non-zero exit.
     # Default "false" makes pack failures non-fatal (WARNING logged, script continues).
     HEALTH_REQUIRE_DIAGNOSTIC_PACK: "false"
+  # envFrom: Inject env vars from Secret/ConfigMap refs (env vars from env: above are still set).
+  # Example: Use a Secret to inject LLM credentials without hardcoding them in values.
+  #   envFrom:
+  #     - secretRef:
+  #         name: k9b-external-analysis-credentials
+  envFrom: []
   # initContainer: Optional init container to create /app/runs/health before scheduler starts.
   # Useful as additional hardening, but the scheduler script handles directory creation itself.
   initContainer:

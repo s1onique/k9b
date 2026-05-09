@@ -57,6 +57,10 @@ spec:
           args:
             - scheduler
           {{- end }}
+          {{- with .Values.scheduler.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
           env:
             - name: K9B_REVIEW_ENRICHMENT_ENABLED
               value: {{ .Values.scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED | quote }}
