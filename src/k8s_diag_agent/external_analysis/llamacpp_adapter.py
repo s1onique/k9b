@@ -74,35 +74,53 @@ class ExternalAnalysisPreflightResult:
 class LlamaCppAdapter(ExternalAnalysisAdapter):
     name = "llamacpp"
 
-    def __init__(self, command: Sequence[str] | None = None) -> None:
+    def __init__(self, command: Sequence[str] | None = None, http_only: bool = False) -> None:
+        """Initialize the LlamaCpp adapter.
+
+        Args:
+            command: Explicit command to execute. If None, attempts HTTP provider config.
+            http_only: When True, never fall back to CLI even if HTTP config is missing.
+                      This is set to True for the openai_compatible adapter to ensure
+                      HTTP-only behavior (no subprocess llamacpp binary execution).
+        """
         self._use_http = False
         self._http_provider: LlamaCppProvider | None = None
         self._http_config_error: Exception | None = None
+        self._http_only = http_only
         default_command = ("llamacpp", "analysis")
-        http_config: LlamaCppProviderConfig | None = None
-        http_intent = False
-        if command is None:
+
+        # For http_only mode, always attempt HTTP config regardless of command
+        if http_only or command is None:
+            http_config: LlamaCppProviderConfig | None = None
+            http_intent = False
             try:
                 http_config = LlamaCppProviderConfig.from_env()
                 http_intent = True
-            except RuntimeError:
-                http_intent = False
+            except RuntimeError as exc:
+                # Config is missing - this is expected for unconfigured deployments
+                # Store the error so run() can produce a proper failure artifact
+                self._http_config_error = exc
+                http_intent = True  # Still mark as HTTP intent so we go through _run_http
             except (ValueError, TypeError) as exc:
                 # REVIEWED: Intentional broad catch for provider config boundary.
                 # Catches config-related value/type errors without leaking internal details.
                 # Behavior: config error is stored and triggers HTTP path with failure artifact.
                 http_intent = True
                 self._http_config_error = exc
-        if http_intent:
-            self._use_http = True
-            if http_config:
-                self._http_provider = LlamaCppProvider(config=http_config)
-            super().__init__(command=None)
-            return
-        if command is None:
-            super().__init__(command=default_command)
-        else:
-            super().__init__(command=tuple(command) if command else None)
+
+            if http_intent:
+                self._use_http = True
+                if http_config:
+                    self._http_provider = LlamaCppProvider(config=http_config)
+                super().__init__(command=None)
+                return
+
+        # For non-http_only mode with explicit command, use CLI
+        if not http_only:
+            if command is None:
+                super().__init__(command=default_command)
+            else:
+                super().__init__(command=tuple(command) if command else None)
 
     def preflight_check(self, provider_requested: str | None = None) -> ExternalAnalysisPreflightResult:
         """Check if the adapter is properly configured and ready for external analysis.
@@ -232,6 +250,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         if self._use_http:
             return self._run_http(request)
         if not self._command:
+            # No command configured and not HTTP mode - this is a misconfiguration
             artifact = ExternalAnalysisArtifact(
                 tool_name=self.name,
                 run_id=request.run_id,
@@ -240,6 +259,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
                 summary="Adapter is not configured",
                 status=ExternalAnalysisStatus.SKIPPED,
                 provider=self.name,
+                skip_reason="No command configured and HTTP provider not available",
             )
             return artifact
 
@@ -944,8 +964,13 @@ def _build_openai_compatible_adapter(
 
     This is the primary adapter registration during Phase 2 of the
     llamacpp → openai_compatible rename epic.
+
+    The openai_compatible adapter is HTTP-only: it will NOT fall back to
+    subprocess llamacpp binary execution. If HTTP config is missing, the
+    preflight check will fail with explicit missing_base_url/missing_model
+    reason codes.
     """
-    return LlamaCppAdapter(command=config.command)
+    return LlamaCppAdapter(command=config.command, http_only=True)
 
 
 @register_external_analysis_adapter("llamacpp")
@@ -956,6 +981,8 @@ def _build_llamacpp_adapter(
     """Build adapter registered under legacy 'llamacpp' name.
 
     This alias ensures backward compatibility during the migration period.
-    Both registrations point to the same LlamaCppAdapter class.
+    The legacy llamacpp adapter may fall back to subprocess execution if
+    HTTP config is not available (for backward compatibility with existing
+    deployments that have a local llamacpp binary).
     """
     return LlamaCppAdapter(command=config.command)

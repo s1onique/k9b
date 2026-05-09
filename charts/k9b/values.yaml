@@ -64,8 +64,16 @@ scheduler:
   # Do NOT pass --unsafe-bind to scheduler; that flag belongs to the UI/API server.
   args: []
   env:
-    # LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible).
-    # Override via --set scheduler.env.LLAMA_CPP_BASE_URL=http://your-llm:8080
+    # K9B_EXTERNAL_ANALYSIS_*: Canonical env vars for OpenAI-compatible review enrichment.
+    # Override via --set scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=http://your-llm:8080
+    K9B_REVIEW_ENRICHMENT_ENABLED: "false"
+    K9B_EXTERNAL_ANALYSIS_PROVIDER: ""
+    K9B_EXTERNAL_ANALYSIS_BASE_URL: ""
+    K9B_EXTERNAL_ANALYSIS_MODEL: ""
+    K9B_EXTERNAL_ANALYSIS_TIMEOUT_SECONDS: "120"
+    K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT: "1200"
+    K9B_EXTERNAL_ANALYSIS_TEMPERATURE: "0.0"
+    # Legacy LLAMA_CPP_* vars are still accepted but deprecated.
     LLAMA_CPP_BASE_URL: ""
     LLAMA_CPP_MODEL: ""
     HEALTH_CONFIG_PATH: "/app/runs/health-config.json"
