@@ -1,4 +1,5 @@
 """Evaluate a drilldown artifact with the shared LLM seam."""
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,8 @@ def _is_openai_compatible_provider(provider_name: str) -> bool:
     This handles both canonical (openai_compatible) and legacy (llamacpp)
     provider names during the migration period.
     """
-    from ..llm.provider import OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME
+    from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
+
     return provider_name in (OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME)
 
 
@@ -49,13 +51,11 @@ def resolve_drilldown_max_tokens(
         return None
     from ..llm.llamacpp_provider import LlamaCppProvider
     from ..llm.provider import get_provider
+
     prov = get_provider(provider_name)
     if isinstance(prov, LlamaCppProvider):
         return prov.max_tokens_for_operation("auto-drilldown")
     return None
-
-
-
 
 
 def assess_drilldown_artifact(
@@ -68,19 +68,19 @@ def assess_drilldown_artifact(
     prompt = build_drilldown_prompt(artifact)
     provider = get_provider(provider_name)
 
-    differences: dict[str, object] = {
-        reason: artifact.evidence_summary for reason in artifact.trigger_reasons
-    }
+    differences: dict[str, object] = {reason: artifact.evidence_summary for reason in artifact.trigger_reasons}
     if not differences:
         differences = {"drilldown": artifact.evidence_summary}
     sanitized_differences = sanitize_payload({"differences": differences})["differences"]
     payload = LLMAssessmentInput(
-        primary_snapshot=sanitize_payload({
-            "context": artifact.context,
-            "cluster_id": artifact.cluster_id,
-            "trigger_reasons": list(artifact.trigger_reasons),
-            "missing_evidence": list(artifact.missing_evidence),
-        }),
+        primary_snapshot=sanitize_payload(
+            {
+                "context": artifact.context,
+                "cluster_id": artifact.cluster_id,
+                "trigger_reasons": list(artifact.trigger_reasons),
+                "missing_evidence": list(artifact.missing_evidence),
+            }
+        ),
         secondary_snapshot={},
         comparison={"differences": sanitized_differences},
         comparison_metadata=None,
@@ -90,12 +90,11 @@ def assess_drilldown_artifact(
     effective_max_tokens = max_tokens
     if effective_max_tokens is None and provider_name == "llamacpp":
         from ..llm.llamacpp_provider import LlamaCppProvider
+
         if isinstance(provider, LlamaCppProvider):
             effective_max_tokens = provider.max_tokens_for_operation("auto-drilldown")
     # Let provider config control response_format_json (defaults to False)
-    raw_assessment = provider.assess(
-        prompt, payload, max_tokens=effective_max_tokens
-    )
+    raw_assessment = provider.assess(prompt, payload, max_tokens=effective_max_tokens)
     return AssessorAssessment.from_dict(raw_assessment)
 
 
@@ -115,84 +114,94 @@ def extract_drilldown_prompt_sections(artifact: DrilldownArtifact) -> list[Promp
     sections: list[PromptSection] = []
 
     # Section 1: Artifact metadata
-    sections.append(PromptSection(
-        name="artifact_metadata",
-        text=f"run_label={artifact.run_label}\nrun_id={artifact.run_id}\n"
-             f"context={artifact.context}\nlabel={artifact.label}\n"
-             f"cluster_id={artifact.cluster_id}\n"
-             f"snapshot_timestamp={artifact.snapshot_timestamp.isoformat()}\n"
-             f"artifact_timestamp={artifact.timestamp.isoformat()}",
-    ))
+    sections.append(
+        PromptSection(
+            name="artifact_metadata",
+            text=f"run_label={artifact.run_label}\nrun_id={artifact.run_id}\n"
+            f"context={artifact.context}\nlabel={artifact.label}\n"
+            f"cluster_id={artifact.cluster_id}\n"
+            f"snapshot_timestamp={artifact.snapshot_timestamp.isoformat()}\n"
+            f"artifact_timestamp={artifact.timestamp.isoformat()}",
+        )
+    )
 
     # Section 2: Trigger reasons
-    sections.append(PromptSection(
-        name="trigger_reasons",
-        text="; ".join(artifact.trigger_reasons) or "none",
-    ))
+    sections.append(
+        PromptSection(
+            name="trigger_reasons",
+            text="; ".join(artifact.trigger_reasons) or "none",
+        )
+    )
 
     # Section 3: Evidence summary
-    sections.append(PromptSection(
-        name="evidence_summary",
-        text=json.dumps(artifact.evidence_summary, indent=2),
-    ))
+    sections.append(
+        PromptSection(
+            name="evidence_summary",
+            text=json.dumps(artifact.evidence_summary, indent=2),
+        )
+    )
 
     # Section 4: Warning events
     event_lines = [json.dumps(event.to_dict(), indent=2) for event in artifact.warning_events]
-    sections.append(PromptSection(
-        name="warning_events",
-        text="\n".join(event for event in event_lines) if event_lines else "none",
-    ))
+    sections.append(
+        PromptSection(
+            name="warning_events",
+            text="\n".join(event for event in event_lines) if event_lines else "none",
+        )
+    )
 
     # Section 5: Non-running pods
-    pod_lines = [f"{pod.namespace}/{pod.name} ({pod.phase}) reason={pod.reason}"
-                 for pod in artifact.non_running_pods]
-    sections.append(PromptSection(
-        name="non_running_pods",
-        text="\n".join(pod_lines) if pod_lines else "none",
-    ))
+    pod_lines = [f"{pod.namespace}/{pod.name} ({pod.phase}) reason={pod.reason}" for pod in artifact.non_running_pods]
+    sections.append(
+        PromptSection(
+            name="non_running_pods",
+            text="\n".join(pod_lines) if pod_lines else "none",
+        )
+    )
 
     # Section 6: Rollout status
-    rollout_lines = [
-        f"{entry.kind} {entry.namespace}/{entry.name}: "
-        f"desired={entry.desired_replicas}, available={entry.available_replicas}, "
-        f"unavailable={entry.unavailable_replicas}"
-        for entry in artifact.rollout_status
-    ]
-    sections.append(PromptSection(
-        name="rollout_status",
-        text="\n".join(rollout_lines) if rollout_lines else "none",
-    ))
+    rollout_lines = [f"{entry.kind} {entry.namespace}/{entry.name}: desired={entry.desired_replicas}, available={entry.available_replicas}, unavailable={entry.unavailable_replicas}" for entry in artifact.rollout_status]
+    sections.append(
+        PromptSection(
+            name="rollout_status",
+            text="\n".join(rollout_lines) if rollout_lines else "none",
+        )
+    )
 
     # Section 7: Affected namespaces
-    sections.append(PromptSection(
-        name="affected_namespaces",
-        text=", ".join(artifact.affected_namespaces) or "none",
-    ))
+    sections.append(
+        PromptSection(
+            name="affected_namespaces",
+            text=", ".join(artifact.affected_namespaces) or "none",
+        )
+    )
 
     # Section 8: Collection timestamps
-    sections.append(PromptSection(
-        name="collection_timestamps",
-        text=json.dumps(artifact.collection_timestamps, indent=2),
-    ))
+    sections.append(
+        PromptSection(
+            name="collection_timestamps",
+            text=json.dumps(artifact.collection_timestamps, indent=2),
+        )
+    )
 
     # Section 9: Pod descriptions (exact measurement, no summarization)
     pod_desc_lines: list[str] = []
     for key, value in artifact.pod_descriptions.items():
         pod_desc_lines.append(f"{key}: {value}")
-    sections.append(PromptSection(
-        name="pod_descriptions",
-        text="\n---\n".join(pod_desc_lines) if pod_desc_lines else "No pod descriptions were captured.",
-    ))
+    sections.append(
+        PromptSection(
+            name="pod_descriptions",
+            text="\n---\n".join(pod_desc_lines) if pod_desc_lines else "No pod descriptions were captured.",
+        )
+    )
 
     # Section 10: Output schema (fixed text)
-    sections.append(PromptSection(
-        name="output_schema",
-        text=(
-            'Provide a concise structured JSON assessment that follows the schema exactly. '
-            'Constraint: max 3 items each for observed_signals, findings, hypotheses, next_evidence_to_collect. '
-            'Keep descriptions under 80 characters.'
-        ),
-    ))
+    sections.append(
+        PromptSection(
+            name="output_schema",
+            text=("Provide a concise structured JSON assessment that follows the schema exactly. Constraint: max 3 items each for observed_signals, findings, hypotheses, next_evidence_to_collect. Keep descriptions under 80 characters."),
+        )
+    )
 
     return sections
 

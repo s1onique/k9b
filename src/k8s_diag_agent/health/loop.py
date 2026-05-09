@@ -1,4 +1,5 @@
 """Per-cluster health assessment loop with trigger-aware comparisons."""
+
 from __future__ import annotations
 
 import json
@@ -26,18 +27,7 @@ from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..identity.artifact import new_artifact_id
 from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
-from ..llm.provider import OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME
-
-
-def _is_openai_compatible_provider(provider_name: str) -> bool:
-    """Check if provider name resolves to the OpenAI-compatible provider.
-
-    This handles both canonical (openai_compatible) and legacy (llamacpp)
-    provider names during the migration period.
-    """
-    return provider_name in (OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME)
-
-
+from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
@@ -80,6 +70,16 @@ from .notifications import NotificationArtifact, build_degraded_health_notificat
 from .ui import write_health_ui_index
 from .utils import normalize_ref
 from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator, HealthAssessmentValidator
+
+
+def _is_openai_compatible_provider(provider_name: str) -> bool:
+    """Check if provider name resolves to the OpenAI-compatible provider.
+
+    This handles both canonical (openai_compatible) and legacy (llamacpp)
+    provider names during the migration period.
+    """
+    return provider_name in (OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME)
+
 
 _HISTORY_FILENAME = loop_history._HISTORY_FILENAME
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -144,8 +144,6 @@ class TriggerPolicy:
     missing_evidence: bool
     manual: bool
     warning_event_threshold: int = 3
-
-
 
 
 @dataclass
@@ -352,17 +350,19 @@ class ComparisonTriggerArtifact:
         if isinstance(trigger_details_raw, list):
             for detail_raw in trigger_details_raw:
                 if isinstance(detail_raw, Mapping):
-                    parsed_trigger_details.append(TriggerDetail(
-                        type=str(detail_raw.get("type", "")),
-                        reason=str(detail_raw.get("reason", "")),
-                        baseline_expectation=str(detail_raw.get("baseline_expectation")) if detail_raw.get("baseline_expectation") else None,
-                        actual_value=str(detail_raw.get("actual_value", "")),
-                        previous_run_value=str(detail_raw.get("previous_run_value")) if detail_raw.get("previous_run_value") else None,
-                        why=str(detail_raw.get("why", "")),
-                        next_check=str(detail_raw.get("next_check")) if detail_raw.get("next_check") else None,
-                        peer_roles=str(detail_raw.get("peer_roles")) if detail_raw.get("peer_roles") else None,
-                        classification=str(detail_raw.get("classification")) if detail_raw.get("classification") else None,
-                    ))
+                    parsed_trigger_details.append(
+                        TriggerDetail(
+                            type=str(detail_raw.get("type", "")),
+                            reason=str(detail_raw.get("reason", "")),
+                            baseline_expectation=str(detail_raw.get("baseline_expectation")) if detail_raw.get("baseline_expectation") else None,
+                            actual_value=str(detail_raw.get("actual_value", "")),
+                            previous_run_value=str(detail_raw.get("previous_run_value")) if detail_raw.get("previous_run_value") else None,
+                            why=str(detail_raw.get("why", "")),
+                            next_check=str(detail_raw.get("next_check")) if detail_raw.get("next_check") else None,
+                            peer_roles=str(detail_raw.get("peer_roles")) if detail_raw.get("peer_roles") else None,
+                            classification=str(detail_raw.get("classification")) if detail_raw.get("classification") else None,
+                        )
+                    )
 
         # Parse trigger_reasons
         trigger_reasons_raw = raw.get("trigger_reasons") or []
@@ -462,8 +462,7 @@ class HealthRunConfig:
         elif legacy_run_id is not None:
             label_source = str(legacy_run_id)
             warnings.warn(
-                "The health config key 'run_id' is deprecated. "
-                "Provide 'run_label' instead; the legacy value will be used as the stable label while each execution generates a unique run_id.",
+                "The health config key 'run_id' is deprecated. Provide 'run_label' instead; the legacy value will be used as the stable label while each execution generates a unique run_id.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -502,16 +501,8 @@ class HealthRunConfig:
                 continue
             label = _safe_label(str(entry.get("label") or context))
             monitor_health = bool(entry.get("monitor_health", True))
-            watched_helm = tuple(
-                str(item).strip()
-                for item in entry.get("watched_helm_releases") or []
-                if str(item).strip()
-            )
-            watched_crd = tuple(
-                str(item).strip()
-                for item in entry.get("watched_crd_families") or []
-                if str(item).strip()
-            )
+            watched_helm = tuple(str(item).strip() for item in entry.get("watched_helm_releases") or [] if str(item).strip())
+            watched_crd = tuple(str(item).strip() for item in entry.get("watched_crd_families") or [] if str(item).strip())
             cluster_class = _str_or_none(entry.get("cluster_class"))
             cluster_role = _str_or_none(entry.get("cluster_role"))
             cohort_value = entry.get("baseline_cohort") or entry.get("platform_generation")
@@ -524,9 +515,7 @@ class HealthRunConfig:
             if not baseline_cohort:
                 missing_metadata.append("baseline_cohort/platform_generation")
             if missing_metadata:
-                raise ValueError(
-                    f"Target '{label}' missing required metadata: {', '.join(missing_metadata)}"
-                )
+                raise ValueError(f"Target '{label}' missing required metadata: {', '.join(missing_metadata)}")
             baseline_override = _str_or_none(entry.get("baseline_policy_path"))
             try:
                 resolved_path = _resolve_target_baseline_path(
@@ -537,13 +526,9 @@ class HealthRunConfig:
                     baseline_policy_path,
                 )
             except FileNotFoundError as exc:
-                raise ValueError(
-                    f"Unable to locate baseline policy for target '{label}': {exc}"
-                )
+                raise ValueError(f"Unable to locate baseline policy for target '{label}': {exc}")
             if resolved_path is None:
-                raise ValueError(
-                    f"Target '{label}' cannot resolve a baseline policy; declare baseline_policy_path or register its cohort in baseline_policies."
-                )
+                raise ValueError(f"Target '{label}' cannot resolve a baseline policy; declare baseline_policy_path or register its cohort in baseline_policies.")
             targets.append(
                 HealthTarget(
                     context=str(context),
@@ -579,9 +564,7 @@ class HealthRunConfig:
             normalized_secondary = normalize_ref(str(secondary))
             if normalized_primary not in references or normalized_secondary not in references:
                 raise ValueError("Manual pair references unknown cluster")
-            manual_pairs.append(
-                ManualComparison(primary=normalized_primary, secondary=normalized_secondary)
-            )
+            manual_pairs.append(ManualComparison(primary=normalized_primary, secondary=normalized_secondary))
 
         peers_raw = raw.get("peer_mappings")
         if peers_raw is None:
@@ -671,9 +654,7 @@ class HealthRunConfig:
         )
 
     def baseline_for_target(self, target: HealthTarget) -> tuple[BaselinePolicy, Path | None]:
-        return self.target_baselines.get(
-            target.label, (self.baseline_policy, self.baseline_policy_path)
-        )
+        return self.target_baselines.get(target.label, (self.baseline_policy, self.baseline_policy_path))
 
 
 def build_health_assessment(
@@ -791,12 +772,7 @@ def build_health_assessment(
             [signal.id],
         )
     control_plane_expectation = baseline.control_plane_expectation
-    if (
-        control_plane_expectation
-        and has_control_plane_version
-        and not baseline.is_drift_allowed(BaselineDriftCategory.CONTROL_PLANE_VERSION)
-        and not control_plane_expectation.allows(control_plane_version)
-    ):
+    if control_plane_expectation and has_control_plane_version and not baseline.is_drift_allowed(BaselineDriftCategory.CONTROL_PLANE_VERSION) and not control_plane_expectation.allows(control_plane_version):
         issues_detected = True
         expectation_desc = control_plane_expectation.describe()
         signal = add_signal(
@@ -805,10 +781,7 @@ def build_health_assessment(
             Layer.ROLLOUT,
         )
         record_finding(
-            (
-                f"Control plane version {control_plane_version} violates the baseline expectation ({expectation_desc}). "
-                f"{control_plane_expectation.why}"
-            ),
+            (f"Control plane version {control_plane_version} violates the baseline expectation ({expectation_desc}). {control_plane_expectation.why}"),
             Layer.ROLLOUT,
             [signal.id],
         )
@@ -833,9 +806,9 @@ def build_health_assessment(
         )
         record_finding(
             f"Control plane version changed since last run ({previous_version} -> {control_plane_version}).",
-                Layer.ROLLOUT,
-                [signal.id],
-            )
+            Layer.ROLLOUT,
+            [signal.id],
+        )
     if previous and snapshot.metadata.node_count != previous.node_count:
         issues_detected = True
         signal = add_signal(
@@ -850,14 +823,8 @@ def build_health_assessment(
         )
     if previous and snapshot.metadata.pod_count != previous.pod_count:
         issues_detected = True
-        prev_label = (
-            str(previous.pod_count) if previous.pod_count is not None else "unknown"
-        )
-        curr_label = (
-            str(snapshot.metadata.pod_count)
-            if snapshot.metadata.pod_count is not None
-            else "unknown"
-        )
+        prev_label = str(previous.pod_count) if previous.pod_count is not None else "unknown"
+        curr_label = str(snapshot.metadata.pod_count) if snapshot.metadata.pod_count is not None else "unknown"
         signal = add_signal(
             f"Pod count changed since last run ({prev_label} -> {curr_label}).",
             "medium",
@@ -869,16 +836,9 @@ def build_health_assessment(
             [signal.id],
         )
 
-    watched_release_versions = _watched_release_versions(
-        snapshot, target.watched_helm_releases
-    )
-    watched_crd_versions = _watched_crd_versions(
-        snapshot, target.watched_crd_families
-    )
-    if (
-        baseline.release_policies
-        and not baseline.is_drift_allowed(BaselineDriftCategory.WATCHED_HELM_RELEASE)
-    ):
+    watched_release_versions = _watched_release_versions(snapshot, target.watched_helm_releases)
+    watched_crd_versions = _watched_crd_versions(snapshot, target.watched_crd_families)
+    if baseline.release_policies and not baseline.is_drift_allowed(BaselineDriftCategory.WATCHED_HELM_RELEASE):
         for release_key in sorted(target.watched_helm_releases):
             policy = baseline.release_policy(release_key)
             if not policy:
@@ -890,18 +850,12 @@ def build_health_assessment(
             actual_label = current_version if current_version is not None else "missing"
             expectation_desc = policy.describe()
             signal = add_signal(
-                (
-                    f"Watched Helm release {release_key} ({actual_label}) "
-                    f"violates baseline policy ({expectation_desc})."
-                ),
+                (f"Watched Helm release {release_key} ({actual_label}) violates baseline policy ({expectation_desc})."),
                 "medium",
                 Layer.ROLLOUT,
             )
             record_finding(
-                (
-                    f"Watched Helm release {release_key} reported {actual_label} but baseline requires {expectation_desc}. "
-                    f"{policy.why}"
-                ),
+                (f"Watched Helm release {release_key} reported {actual_label} but baseline requires {expectation_desc}. {policy.why}"),
                 Layer.ROLLOUT,
                 [signal.id],
             )
@@ -915,10 +869,7 @@ def build_health_assessment(
             )
             baseline_reasons.append(policy.why)
             references.append(f"baseline release {release_key}")
-    if (
-        baseline.required_crds
-        and not baseline.is_drift_allowed(BaselineDriftCategory.WATCHED_CRD)
-    ):
+    if baseline.required_crds and not baseline.is_drift_allowed(BaselineDriftCategory.WATCHED_CRD):
         for family, crd_policy in baseline.required_crds.items():
             if snapshot.crds.get(family):
                 continue
@@ -929,9 +880,7 @@ def build_health_assessment(
                 Layer.STORAGE,
             )
             record_finding(
-                (
-                    f"Baseline expects CRD family {family} to exist. {crd_policy.why}"
-                ),
+                (f"Baseline expects CRD family {family} to exist. {crd_policy.why}"),
                 Layer.STORAGE,
                 [signal.id],
             )
@@ -947,20 +896,14 @@ def build_health_assessment(
             references.append(f"baseline CRD {family}")
     if previous:
         previous_release_versions = previous.watched_helm_releases
-        for release_key in sorted(
-            set(watched_release_versions) | set(previous_release_versions)
-        ):
+        for release_key in sorted(set(watched_release_versions) | set(previous_release_versions)):
             release_current_version: str | None = watched_release_versions.get(release_key)
             release_previous_version: str | None = previous_release_versions.get(release_key)
             if release_current_version == release_previous_version:
                 continue
             issues_detected = True
-            release_prev_label: str = (
-                release_previous_version if release_previous_version is not None else "missing"
-            )
-            release_curr_label: str = (
-                release_current_version if release_current_version is not None else "missing"
-            )
+            release_prev_label: str = release_previous_version if release_previous_version is not None else "missing"
+            release_curr_label: str = release_current_version if release_current_version is not None else "missing"
             signal = add_signal(
                 f"Watched Helm release {release_key} changed since last run ({release_prev_label} -> {release_curr_label}).",
                 "medium",
@@ -972,20 +915,14 @@ def build_health_assessment(
                 [signal.id],
             )
         previous_crd_versions = previous.watched_crd_families
-        for crd_key in sorted(
-            set(watched_crd_versions) | set(previous_crd_versions)
-        ):
+        for crd_key in sorted(set(watched_crd_versions) | set(previous_crd_versions)):
             crd_current_version: str | None = watched_crd_versions.get(crd_key)
             crd_previous_version: str | None = previous_crd_versions.get(crd_key)
             if crd_current_version == crd_previous_version:
                 continue
             issues_detected = True
-            crd_prev_label: str = (
-                crd_previous_version if crd_previous_version is not None else "missing"
-            )
-            crd_curr_label: str = (
-                crd_current_version if crd_current_version is not None else "missing"
-            )
+            crd_prev_label: str = crd_previous_version if crd_previous_version is not None else "missing"
+            crd_curr_label: str = crd_current_version if crd_current_version is not None else "missing"
             signal = add_signal(
                 f"Watched CRD {crd_key} storage version changed since last run ({crd_prev_label} -> {crd_curr_label}).",
                 "medium",
@@ -1001,11 +938,7 @@ def build_health_assessment(
     node_issue_present = False
     warning_event_count = len(warning_events)
     warning_threshold = warning_event_threshold
-    warning_triggered = (
-        warning_event_count > 0
-        if warning_threshold <= 0
-        else warning_event_count >= warning_threshold
-    )
+    warning_triggered = warning_event_count > 0 if warning_threshold <= 0 else warning_event_count >= warning_threshold
     node_components: list[str] = []
     node_severity = "medium"
     if node_conditions.not_ready > 0:
@@ -1070,18 +1003,12 @@ def build_health_assessment(
             primary_external = details.external_secrets[0]
             issues_detected = True
             signal = add_signal(
-                (
-                    f"Registry image pull secret {details.secret_name} supply chain is broken in "
-                    f"{details.namespace}."
-                ),
+                (f"Registry image pull secret {details.secret_name} supply chain is broken in {details.namespace}."),
                 "high",
                 Layer.WORKLOAD,
             )
             record_finding(
-                (
-                    f"ExternalSecret {primary_external.name} reports {primary_external.status_reason}: "
-                    f"{primary_external.status_message or 'missing secret'} for {details.secret_name}."
-                ),
+                (f"ExternalSecret {primary_external.name} reports {primary_external.status_reason}: {primary_external.status_message or 'missing secret'} for {details.secret_name}."),
                 Layer.WORKLOAD,
                 [signal.id],
             )
@@ -1098,14 +1025,10 @@ def build_health_assessment(
             )
             insight_hypothesis = Hypothesis(
                 id=generator.next_id(),
-                description=(
-                    f"Image pull secret {details.secret_name} is missing because ExternalSecret {primary_external.name} failed to update the secret ({primary_external.status_reason})."
-                ),
+                description=(f"Image pull secret {details.secret_name} is missing because ExternalSecret {primary_external.name} failed to update the secret ({primary_external.status_reason})."),
                 confidence=ConfidenceLevel.MEDIUM,
                 probable_layer=Layer.WORKLOAD,
-                what_would_falsify=(
-                    f"ExternalSecret {primary_external.name} reports Ready and secret {target_status.name or details.secret_name} exists."
-                ),
+                what_would_falsify=(f"ExternalSecret {primary_external.name} reports Ready and secret {target_status.name or details.secret_name} exists."),
             )
     if job_failures > 0:
         workload_issue_present = True
@@ -1120,15 +1043,9 @@ def build_health_assessment(
         workload_issue_present = True
         issues_detected = True
         latest_warning = warning_events[0]
-        warning_desc = (
-            f" {latest_warning.reason} in {latest_warning.namespace}"
-            if latest_warning.namespace and latest_warning.reason
-            else ""
-        )
+        warning_desc = f" {latest_warning.reason} in {latest_warning.namespace}" if latest_warning.namespace and latest_warning.reason else ""
         references.append("warning events")
-        threshold_note = (
-            f" (threshold {warning_threshold})" if warning_threshold > 0 else ""
-        )
+        threshold_note = f" (threshold {warning_threshold})" if warning_threshold > 0 else ""
         _record_issue(
             f"{warning_event_count} warning events recorded{threshold_note}{warning_desc}.",
             "low",
@@ -1138,6 +1055,7 @@ def build_health_assessment(
     previous_pod_metrics = previous.pod_counts if previous else {}
     previous_job_failures = previous.job_failures if previous else 0
     previous_warning_count = previous.warning_event_count if previous else 0
+
     def _check_regression(current: int, previous_value: int, description: str, layer: Layer) -> None:
         nonlocal issues_detected, workload_issue_present, node_issue_present
         if current > previous_value:
@@ -1148,6 +1066,7 @@ def build_health_assessment(
                 node_issue_present = True
             references.append("regression")
             _record_issue(description, "medium", layer)
+
     _check_regression(
         node_conditions.not_ready,
         previous_node_conditions.get("not_ready", 0),
@@ -1264,9 +1183,7 @@ def build_health_assessment(
             signal_desc=signal_desc,
             severity="medium",
             layer=Layer.WORKLOAD,
-            hypothesis_desc=(
-                "A recent rollout or configuration change is likely hitting the probe endpoint before readiness/liveness succeeds; pods stay unready."
-            ),
+            hypothesis_desc=("A recent rollout or configuration change is likely hitting the probe endpoint before readiness/liveness succeeds; pods stay unready."),
             hypothesis_confidence=ConfidenceLevel.MEDIUM,
             probable_layer=Layer.WORKLOAD,
             falsify="Pods start reporting Ready and probe failures stop appearing.",
@@ -1311,9 +1228,7 @@ def build_health_assessment(
             signal_desc=signal_desc,
             severity="medium",
             layer=Layer.WORKLOAD,
-            hypothesis_desc=(
-                f"Scheduling is prevented by {cause_label}, so pods cannot land on nodes; node taints, affinity, or capacity must be rechecked."
-            ),
+            hypothesis_desc=(f"Scheduling is prevented by {cause_label}, so pods cannot land on nodes; node taints, affinity, or capacity must be rechecked."),
             hypothesis_confidence=ConfidenceLevel.MEDIUM,
             probable_layer=Layer.NODE,
             falsify="Pods eventually schedule once nodes match the requested taints/affinity and available resources.",
@@ -1338,9 +1253,7 @@ def build_health_assessment(
             signal_desc=signal_desc,
             severity="medium",
             layer=Layer.OBSERVABILITY,
-            hypothesis_desc=(
-                "The metrics-server endpoint or HPA resource metric API is unreachable, so scaling decisions cannot proceed."
-            ),
+            hypothesis_desc=("The metrics-server endpoint or HPA resource metric API is unreachable, so scaling decisions cannot proceed."),
             hypothesis_confidence=ConfidenceLevel.MEDIUM,
             probable_layer=Layer.OBSERVABILITY,
             falsify="Metrics-server becomes healthy and resource metrics are present for the HPA.",
@@ -1365,9 +1278,7 @@ def build_health_assessment(
             signal_desc=signal_desc,
             severity="medium",
             layer=Layer.STORAGE,
-            hypothesis_desc=(
-                "The storage class or provisioner cannot satisfy the PVC request, leaving volumes unbound."
-            ),
+            hypothesis_desc=("The storage class or provisioner cannot satisfy the PVC request, leaving volumes unbound."),
             hypothesis_confidence=ConfidenceLevel.MEDIUM,
             probable_layer=Layer.STORAGE,
             falsify="PVCs bind and PVs attach without provisioning errors.",
@@ -1394,9 +1305,7 @@ def build_health_assessment(
             signal_desc=signal_desc,
             severity="medium",
             layer=Layer.NETWORK,
-            hypothesis_desc=(
-                "Ingress or service endpoints are missing/unhealthy, leading to backend timeouts at the gateway."
-            ),
+            hypothesis_desc=("Ingress or service endpoints are missing/unhealthy, leading to backend timeouts at the gateway."),
             hypothesis_confidence=ConfidenceLevel.MEDIUM,
             probable_layer=Layer.NETWORK,
             falsify="Endpoints report Ready and timeouts disappear when traffic reaches backends.",
@@ -1437,22 +1346,14 @@ def build_health_assessment(
         description = (
             f"Baseline policy violation: {baseline_note}"
             if baseline_note
-            else (
-                "Node/workload health signals or regressions suggest the cluster may be unstable."
-                if node_issue_present or workload_issue_present
-                else "Missing telemetry or version drift suggests the cluster may be unstable."
-            )
+            else ("Node/workload health signals or regressions suggest the cluster may be unstable." if node_issue_present or workload_issue_present else "Missing telemetry or version drift suggests the cluster may be unstable.")
         )
         base_hypothesis = Hypothesis(
             id=generator.next_id(),
             description=description,
             confidence=ConfidenceLevel.MEDIUM,
             probable_layer=dominant_layer,
-            what_would_falsify=(
-                "Nodes become ready, pods stay running, warning events quiet down, and Helm errors stay absent."
-                if node_issue_present or workload_issue_present
-                else "Telemetry gaps close and node/pod counts stabilize without Helm errors."
-            ),
+            what_would_falsify=("Nodes become ready, pods stay running, warning events quiet down, and Helm errors stay absent." if node_issue_present or workload_issue_present else "Telemetry gaps close and node/pod counts stabilize without Helm errors."),
         )
         detailed_hypotheses: list[Hypothesis] = []
         detailed_hypotheses.extend(pattern_hypotheses)
@@ -1586,34 +1487,26 @@ def determine_pair_trigger_reasons(
         if not primary_role and not secondary_role:
             return None
         summary_parts: list[str] = []
-        summary_parts.append(
-            f"{primary.target.label} ({primary_role})" if primary_role else primary.target.label
-        )
-        summary_parts.append(
-            f"{secondary.target.label} ({secondary_role})" if secondary_role else secondary.target.label
-        )
+        summary_parts.append(f"{primary.target.label} ({primary_role})" if primary_role else primary.target.label)
+        summary_parts.append(f"{secondary.target.label} ({secondary_role})" if secondary_role else secondary.target.label)
         return " vs ".join(summary_parts)
 
     role_summary = _peer_role_summary()
+
     def _path_label(record: HealthSnapshotRecord) -> str:
         return record.baseline_policy_path or "<default>"
+
     primary_path = _path_label(primary)
     secondary_path = _path_label(secondary)
     if primary_path != secondary_path:
         details.append(
             TriggerDetail(
                 type="baseline_mismatch",
-                reason=(
-                    f"baseline mismatch ({primary_path} vs {secondary_path})"
-                    if primary_path and secondary_path
-                    else "baseline mismatch"
-                ),
+                reason=(f"baseline mismatch ({primary_path} vs {secondary_path})" if primary_path and secondary_path else "baseline mismatch"),
                 baseline_expectation=None,
                 actual_value=f"{primary_path} vs {secondary_path}",
                 previous_run_value=None,
-                why=(
-                    "Targets rely on different baseline policies, so expected parity between them may not hold."
-                ),
+                why=("Targets rely on different baseline policies, so expected parity between them may not hold."),
                 next_check="Confirm the cohorts and baseline policies align before treating drift as actionable.",
                 peer_roles=role_summary,
                 classification=classification,
@@ -1652,19 +1545,14 @@ def determine_pair_trigger_reasons(
                 classification=classification,
             )
         )
-    if policy.control_plane_version and not baseline_policy.is_drift_allowed(
-        BaselineDriftCategory.CONTROL_PLANE_VERSION
-    ):
+    if policy.control_plane_version and not baseline_policy.is_drift_allowed(BaselineDriftCategory.CONTROL_PLANE_VERSION):
         primary_version = primary.snapshot.metadata.control_plane_version or "unknown"
         secondary_version = secondary.snapshot.metadata.control_plane_version or "unknown"
         if primary_version != secondary_version:
             expectation = baseline_policy.control_plane_expectation
             expectation_desc = expectation.describe() if expectation else None
             reason = f"control plane version drift ({primary_version} vs {secondary_version})"
-            previous_value = (
-                f"{primary.target.label}: {_format_previous_control_plane(primary.snapshot.metadata.cluster_id)} | "
-                f"{secondary.target.label}: {_format_previous_control_plane(secondary.snapshot.metadata.cluster_id)}"
-            )
+            previous_value = f"{primary.target.label}: {_format_previous_control_plane(primary.snapshot.metadata.cluster_id)} | {secondary.target.label}: {_format_previous_control_plane(secondary.snapshot.metadata.cluster_id)}"
             why_parts = []
             if expectation and expectation.why:
                 why_parts.append(expectation.why)
@@ -1685,12 +1573,8 @@ def determine_pair_trigger_reasons(
                     classification=classification,
                 )
             )
-    if policy.watched_helm_release and not baseline_policy.is_drift_allowed(
-        BaselineDriftCategory.WATCHED_HELM_RELEASE
-    ):
-        watched_releases = (
-            set(primary.target.watched_helm_releases) | set(secondary.target.watched_helm_releases)
-        )
+    if policy.watched_helm_release and not baseline_policy.is_drift_allowed(BaselineDriftCategory.WATCHED_HELM_RELEASE):
+        watched_releases = set(primary.target.watched_helm_releases) | set(secondary.target.watched_helm_releases)
         for release_key in sorted(watched_releases):
             primary_release = primary.snapshot.helm_releases.get(release_key)
             secondary_release = secondary.snapshot.helm_releases.get(release_key)
@@ -1704,18 +1588,13 @@ def determine_pair_trigger_reasons(
             expectation_desc = release_policy.describe() if release_policy else None
             next_check_value = release_policy.next_check if release_policy else None
             reason = f"watched Helm release {release_key} drift ({primary_version} vs {secondary_version})"
-            previous_value = (
-                f"{primary.target.label}: {_format_previous_release(primary.snapshot.metadata.cluster_id, release_key)} | "
-                f"{secondary.target.label}: {_format_previous_release(secondary.snapshot.metadata.cluster_id, release_key)}"
-            )
+            previous_value = f"{primary.target.label}: {_format_previous_release(primary.snapshot.metadata.cluster_id, release_key)} | {secondary.target.label}: {_format_previous_release(secondary.snapshot.metadata.cluster_id, release_key)}"
             why_parts = []
             if release_policy:
                 if release_policy.why:
                     why_parts.append(release_policy.why)
             else:
-                why_parts.append(
-                    f"Watched Helm release {release_key} drift can cause workload unpredictability."
-                )
+                why_parts.append(f"Watched Helm release {release_key} drift can cause workload unpredictability.")
             if role_summary:
                 why_parts.append(role_summary)
             details.append(
@@ -1731,9 +1610,7 @@ def determine_pair_trigger_reasons(
                     classification=classification,
                 )
             )
-    if policy.watched_crd and not baseline_policy.is_drift_allowed(
-        BaselineDriftCategory.WATCHED_CRD
-    ):
+    if policy.watched_crd and not baseline_policy.is_drift_allowed(BaselineDriftCategory.WATCHED_CRD):
         watched_crds = set(primary.target.watched_crd_families) | set(secondary.target.watched_crd_families)
         for crd_name in sorted(watched_crds):
             primary_crd = primary.snapshot.crds.get(crd_name)
@@ -1748,10 +1625,7 @@ def determine_pair_trigger_reasons(
             expectation_desc = f"CRD {crd_name} must exist" if crd_policy else None
             next_crd_check = crd_policy.next_check if crd_policy else None
             reason = f"watched CRD {crd_name} storage drift ({primary_storage} vs {secondary_storage})"
-            previous_value = (
-                f"{primary.target.label}: {_format_previous_crd(primary.snapshot.metadata.cluster_id, crd_name)} | "
-                f"{secondary.target.label}: {_format_previous_crd(secondary.snapshot.metadata.cluster_id, crd_name)}"
-            )
+            previous_value = f"{primary.target.label}: {_format_previous_crd(primary.snapshot.metadata.cluster_id, crd_name)} | {secondary.target.label}: {_format_previous_crd(secondary.snapshot.metadata.cluster_id, crd_name)}"
             why_parts = []
             if crd_policy:
                 if crd_policy.why:
@@ -1775,11 +1649,7 @@ def determine_pair_trigger_reasons(
             )
     if policy.health_regression:
         primary_prev = history.get(primary.snapshot.metadata.cluster_id)
-        if (
-            primary_prev
-            and primary_prev.health_rating == HealthRating.HEALTHY
-            and (primary.assessment and primary.assessment.rating == HealthRating.DEGRADED)
-        ):
+        if primary_prev and primary_prev.health_rating == HealthRating.HEALTHY and (primary.assessment and primary.assessment.rating == HealthRating.DEGRADED):
             details.append(
                 TriggerDetail(
                     type="health_regression",
@@ -1794,11 +1664,7 @@ def determine_pair_trigger_reasons(
                 )
             )
         secondary_prev = history.get(secondary.snapshot.metadata.cluster_id)
-        if (
-            secondary_prev
-            and secondary_prev.health_rating == HealthRating.HEALTHY
-            and (secondary.assessment and secondary.assessment.rating == HealthRating.DEGRADED)
-        ):
+        if secondary_prev and secondary_prev.health_rating == HealthRating.HEALTHY and (secondary.assessment and secondary.assessment.rating == HealthRating.DEGRADED):
             details.append(
                 TriggerDetail(
                     type="health_regression",
@@ -1813,6 +1679,7 @@ def determine_pair_trigger_reasons(
                 )
             )
     if policy.missing_evidence:
+
         def _missing_delta(entry: HealthSnapshotRecord) -> None:
             prev = history.get(entry.snapshot.metadata.cluster_id)
             prev_missing = set(prev.missing_evidence) if prev else set()
@@ -1822,9 +1689,7 @@ def determine_pair_trigger_reasons(
                 details.append(
                     TriggerDetail(
                         type="missing_evidence",
-                        reason=(
-                            f"missing evidence anomaly for {entry.target.label}: {', '.join(sorted(new_missing))}"
-                        ),
+                        reason=(f"missing evidence anomaly for {entry.target.label}: {', '.join(sorted(new_missing))}"),
                         baseline_expectation=None,
                         actual_value=", ".join(sorted(new_missing)),
                         previous_run_value=None,
@@ -1864,12 +1729,8 @@ class HealthLoopRunner:
         manual_items = list(config.manual_pairs)
         if manual_overrides:
             manual_items.extend(manual_overrides)
-        self._manual_keys: set[tuple[str, str]] = {
-            (item.primary, item.secondary) for item in manual_items
-        }
-        self._manual_drilldown_contexts: set[str] = {
-            normalize_ref(value) for value in (manual_drilldown_contexts or []) if value
-        }
+        self._manual_keys: set[tuple[str, str]] = {(item.primary, item.secondary) for item in manual_items}
+        self._manual_drilldown_contexts: set[str] = {normalize_ref(value) for value in (manual_drilldown_contexts or []) if value}
         self.run_label = config.run_label
         self.run_id = run_id or _build_runtime_run_id(self.run_label)
         self.baseline_policy = config.baseline_policy
@@ -1955,18 +1816,11 @@ class HealthLoopRunner:
         if enrichment_artifact:
             external_artifacts.append(enrichment_artifact)
         # Filter to execution artifacts for run-scoped feedback
-        execution_artifacts = tuple(
-            a for a in external_artifacts
-            if a.purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION
-        )
-        plan_artifact = self._run_next_check_planning(
-            review_path, enrichment_artifact, directories, execution_artifacts
-        )
+        execution_artifacts = tuple(a for a in external_artifacts if a.purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION)
+        plan_artifact = self._run_next_check_planning(review_path, enrichment_artifact, directories, execution_artifacts)
         if plan_artifact:
             external_artifacts.append(plan_artifact)
-        healthy_count = sum(
-            1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY
-        )
+        healthy_count = sum(1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY)
         degraded_count = len(assessments) - healthy_count
         self._log_event(
             "health-loop",
@@ -2076,9 +1930,7 @@ class HealthLoopRunner:
                     reason="collection-error",
                 )
                 continue
-            filename = _format_snapshot_filename(
-                self.run_id, target.label, snapshot.metadata.captured_at
-            )
+            filename = _format_snapshot_filename(self.run_id, target.label, snapshot.metadata.captured_at)
             path = directory / filename
             _write_json(snapshot.to_dict(), path)
             self._log_event(
@@ -2114,12 +1966,8 @@ class HealthLoopRunner:
         for record in records:
             cluster_id = record.snapshot.metadata.cluster_id
             previous = history.get(cluster_id)
-            watched_release_versions = _watched_release_versions(
-                record.snapshot, record.target.watched_helm_releases
-            )
-            watched_crd_versions = _watched_crd_versions(
-                record.snapshot, record.target.watched_crd_families
-            )
+            watched_release_versions = _watched_release_versions(record.snapshot, record.target.watched_helm_releases)
+            watched_crd_versions = _watched_crd_versions(record.snapshot, record.target.watched_crd_families)
             assessment_result: HealthAssessmentResult | None = None
             insight: ImagePullSecretInsight | None = None
             pod_counts = record.snapshot.health_signals.pod_counts
@@ -2175,9 +2023,7 @@ class HealthLoopRunner:
                 _write_json(artifact.to_dict(), assessment_path)
                 artifacts.append(artifact)
                 if artifact.health_rating == HealthRating.DEGRADED:
-                    notification = build_degraded_health_notification(
-                        self.run_id, record, artifact
-                    )
+                    notification = build_degraded_health_notification(self.run_id, record, artifact)
                     self._record_notification(notification_dir, notification)
             history[cluster_id] = HealthHistoryEntry(
                 cluster_id=cluster_id,
@@ -2267,9 +2113,7 @@ class HealthLoopRunner:
             )
         return artifacts
 
-    def _run_external_analysis(
-        self, records: list[HealthSnapshotRecord], directories: dict[str, Path]
-    ) -> list[ExternalAnalysisArtifact]:
+    def _run_external_analysis(self, records: list[HealthSnapshotRecord], directories: dict[str, Path]) -> list[ExternalAnalysisArtifact]:
         artifacts: list[ExternalAnalysisArtifact] = []
         if not self._analysis_adapters:
             return artifacts
@@ -2284,9 +2128,7 @@ class HealthLoopRunner:
                 manual_request_count=len(self._manual_external_analysis_requests),
             )
             return artifacts
-        record_lookup = {
-            normalize_ref(record.target.label): record for record in records
-        }
+        record_lookup = {normalize_ref(record.target.label): record for record in records}
         for request in self._manual_external_analysis_requests:
             adapter = self._analysis_adapters.get(request.tool)
             if not adapter:
@@ -2308,18 +2150,14 @@ class HealthLoopRunner:
                     cluster_label=request.target,
                 )
                 continue
-            source_artifact = (
-                record.assessment.artifact_path if record.assessment else str(record.path)
-            )
+            source_artifact = record.assessment.artifact_path if record.assessment else str(record.path)
             analysis_request = ExternalAnalysisRequest(
                 run_id=self.run_id,
                 cluster_label=record.target.label,
                 source_artifact=source_artifact,
             )
             artifact = adapter.run(analysis_request)
-            artifact_path = directories["external_analysis"] / (
-                f"{self.run_id}-{record.target.label}-{adapter.name}.json"
-            )
+            artifact_path = directories["external_analysis"] / (f"{self.run_id}-{record.target.label}-{adapter.name}.json")
             artifact_with_path = replace(artifact, artifact_path=str(artifact_path))
             write_external_analysis_artifact(artifact_path, artifact_with_path)
             if artifact_with_path.status == ExternalAnalysisStatus.SUCCESS:
@@ -2342,9 +2180,7 @@ class HealthLoopRunner:
             artifacts.append(artifact_with_path)
         return artifacts
 
-    def _run_auto_drilldown_analysis(
-        self, drilldowns: list[DrilldownArtifact], directories: dict[str, Path]
-    ) -> list[ExternalAnalysisArtifact]:
+    def _run_auto_drilldown_analysis(self, drilldowns: list[DrilldownArtifact], directories: dict[str, Path]) -> list[ExternalAnalysisArtifact]:
         policy = self.config.external_analysis.auto_drilldown
         if not policy.enabled or policy.max_per_run <= 0 or not drilldowns:
             return []
@@ -2355,9 +2191,7 @@ class HealthLoopRunner:
             if attempts >= policy.max_per_run:
                 break
             attempts += 1
-            artifact_path = directories["external_analysis"] / (
-                f"{self.run_id}-{drilldown.label}-auto-{provider_name}.json"
-            )
+            artifact_path = directories["external_analysis"] / (f"{self.run_id}-{drilldown.label}-auto-{provider_name}.json")
             start = time.perf_counter()
             status = ExternalAnalysisStatus.FAILED
             summary: str | None = None
@@ -2372,6 +2206,7 @@ class HealthLoopRunner:
             # Since build_drilldown_prompt() is deterministic, the measured chars
             # should match the actual prompt sent to the LLM.
             from ..llm.drilldown_prompts import build_drilldown_prompt
+
             actual_prompt = build_drilldown_prompt(drilldown)
             actual_prompt_chars = len(actual_prompt) if actual_prompt else 0
             # Build deterministic call ID for start log
@@ -2380,6 +2215,7 @@ class HealthLoopRunner:
             start_max_tokens: int | None = None
             if _is_openai_compatible_provider(provider_name):
                 from .drilldown_assessor import resolve_drilldown_max_tokens
+
                 start_max_tokens = resolve_drilldown_max_tokens(provider_name)
             # Log LLM call start
             self._log_event(
@@ -2402,11 +2238,7 @@ class HealthLoopRunner:
                 # max_tokens will be resolved by assess_drilldown_artifact using provider config
                 assessment = assess_drilldown_artifact(drilldown, provider_name=provider_name)
                 payload = assessment.to_dict()
-                summary = (
-                    assessment.recommended_action.description
-                    if assessment.recommended_action
-                    else (assessment.hypotheses[0].description if assessment.hypotheses else "Auto drilldown interpretation")
-                )
+                summary = assessment.recommended_action.description if assessment.recommended_action else (assessment.hypotheses[0].description if assessment.hypotheses else "Auto drilldown interpretation")
                 findings = tuple(entry.description for entry in assessment.findings)
                 next_checks = tuple(entry.description for entry in assessment.next_evidence_to_collect)
                 status = ExternalAnalysisStatus.SUCCESS
@@ -2414,6 +2246,7 @@ class HealthLoopRunner:
                 # LLMResponseParseError is a ValueError subclass: handle it with structured failure metadata
                 from ..llm.llamacpp_provider import LLMResponseParseError
                 from .drilldown_assessor import build_drilldown_prompt_diagnostics
+
                 if isinstance(exc, LLMResponseParseError):
                     status = ExternalAnalysisStatus.FAILED
                     summary = str(exc)
@@ -2431,6 +2264,7 @@ class HealthLoopRunner:
                     max_toks: int | None = None
                     if _is_openai_compatible_provider(provider_name):
                         from .drilldown_assessor import resolve_drilldown_max_tokens
+
                         max_toks = resolve_drilldown_max_tokens(provider_name)
                     prompt_diags = build_drilldown_prompt_diagnostics(
                         drilldown,
@@ -2441,9 +2275,7 @@ class HealthLoopRunner:
                         failure_class=failure_class_value,
                         exception_type="LLMResponseParseError",
                     )
-                    llm_call_id_val = build_llm_call_id(
-                        self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label
-                    )
+                    llm_call_id_val = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
                     failure_metadata = {
                         "failure_class": failure_class_value,
                         "exception_type": "LLMResponseParseError",
@@ -2475,9 +2307,7 @@ class HealthLoopRunner:
                         actual_prompt_tokens_estimate=prompt_diags.get("actual_prompt_tokens_estimate"),
                         section_coverage_ratio=prompt_diags.get("section_coverage_ratio"),
                         prompt_section_count=prompt_diags.get("prompt_section_count"),
-                        top_prompt_sections=[
-                            s.get("name") for s in prompt_diags.get("top_prompt_sections", [])
-                        ],
+                        top_prompt_sections=[s.get("name") for s in prompt_diags.get("top_prompt_sections", [])],
                         elapsed_ms=elapsed_ms,
                         failure_class=failure_class_value,
                         exception_type="LLMResponseParseError",
@@ -2495,9 +2325,7 @@ class HealthLoopRunner:
                         "exception_type": "ValueError",
                         "provider": provider_name,
                         "operation": "auto-drilldown",
-                        "llm_call_id": build_llm_call_id(
-                            self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label
-                        ),
+                        "llm_call_id": build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label),
                         "llm_call": True,
                         "max_tokens": start_max_tokens,
                         "actual_prompt_chars": actual_prompt_chars,
@@ -2518,6 +2346,7 @@ class HealthLoopRunner:
                 failure_metadata = None
                 elapsed_ms = int((time.perf_counter() - start) * 1000)
                 from .drilldown_assessor import build_drilldown_prompt_diagnostics
+
                 try:
                     # Classify the exception properly - check __cause__ and __context__ for wrapped exceptions
                     classified_failure_class, classified_exc_type = classify_llm_failure(exc)
@@ -2525,6 +2354,7 @@ class HealthLoopRunner:
                     diagnostic_max_tokens: int | None = None
                     if _is_openai_compatible_provider(provider_name):
                         from .drilldown_assessor import resolve_drilldown_max_tokens
+
                         diagnostic_max_tokens = resolve_drilldown_max_tokens(provider_name)
                     prompt_diags = build_drilldown_prompt_diagnostics(
                         drilldown,
@@ -2555,9 +2385,7 @@ class HealthLoopRunner:
                         actual_prompt_tokens_estimate=prompt_diags.get("actual_prompt_tokens_estimate"),
                         section_coverage_ratio=prompt_diags.get("section_coverage_ratio"),
                         prompt_section_count=prompt_diags.get("prompt_section_count"),
-                        top_prompt_sections=[
-                            s.get("name") for s in prompt_diags.get("top_prompt_sections", [])
-                        ],
+                        top_prompt_sections=[s.get("name") for s in prompt_diags.get("top_prompt_sections", [])],
                         elapsed_ms=elapsed_ms,
                         failure_class=classified_failure_class.value,
                         exception_type=classified_exc_type,
@@ -2592,21 +2420,9 @@ class HealthLoopRunner:
                 failure_metadata=failure_metadata,
             )
             write_external_analysis_artifact(artifact_path, artifact)
-            severity = (
-                "INFO"
-                if status == ExternalAnalysisStatus.SUCCESS
-                else "WARNING"
-                if status == ExternalAnalysisStatus.SKIPPED
-                else "ERROR"
-            )
+            severity = "INFO" if status == ExternalAnalysisStatus.SUCCESS else "WARNING" if status == ExternalAnalysisStatus.SKIPPED else "ERROR"
             # Build status-appropriate log message
-            _interp_label = (
-                "Auto drilldown interpretation failed"
-                if status == ExternalAnalysisStatus.FAILED
-                else "Auto drilldown interpretation skipped"
-                if status == ExternalAnalysisStatus.SKIPPED
-                else "Auto drilldown interpretation recorded"
-            )
+            _interp_label = "Auto drilldown interpretation failed" if status == ExternalAnalysisStatus.FAILED else "Auto drilldown interpretation skipped" if status == ExternalAnalysisStatus.SKIPPED else "Auto drilldown interpretation recorded"
             self._log_event(
                 "external-analysis",
                 severity,
@@ -2635,6 +2451,7 @@ class HealthLoopRunner:
             result_max_tokens: int | None = None
             if _is_openai_compatible_provider(provider_name):
                 from .drilldown_assessor import resolve_drilldown_max_tokens
+
                 result_max_tokens = resolve_drilldown_max_tokens(provider_name)
             self._log_event(
                 "llm-call",
@@ -2666,24 +2483,18 @@ class HealthLoopRunner:
                 break
         return artifacts
 
-    def _run_review_enrichment(
-        self, review_path: Path | None, directories: dict[str, Path]
-    ) -> ExternalAnalysisArtifact | None:
+    def _run_review_enrichment(self, review_path: Path | None, directories: dict[str, Path]) -> ExternalAnalysisArtifact | None:
         policy = self.config.external_analysis.review_enrichment
         if not policy.enabled or not review_path:
             return None
         provider = (policy.provider or "").strip()
         provider_segment = _safe_label(provider) if provider else "review-enrichment"
-        artifact_path = directories["external_analysis"] / (
-            f"{self.run_id}-review-enrichment-{provider_segment}.json"
-        )
+        artifact_path = directories["external_analysis"] / (f"{self.run_id}-review-enrichment-{provider_segment}.json")
         start = time.perf_counter()
         try:
             if not provider:
                 raise ValueError("No review enrichment provider configured")
-            adapter = self._analysis_adapters.get(provider) or self._analysis_adapters.get(
-                provider.lower()
-            )
+            adapter = self._analysis_adapters.get(provider) or self._analysis_adapters.get(provider.lower())
             if not adapter:
                 raise ValueError(f"Adapter '{provider}' is not registered for review enrichment")
             request = ExternalAnalysisRequest(
@@ -2743,20 +2554,8 @@ class HealthLoopRunner:
                 error_summary=str(exc),
             )
         write_external_analysis_artifact(artifact_path, artifact)
-        severity = (
-            "INFO"
-            if artifact.status == ExternalAnalysisStatus.SUCCESS
-            else "WARNING"
-            if artifact.status == ExternalAnalysisStatus.SKIPPED
-            else "ERROR"
-        )
-        message = (
-            "Review enrichment recorded"
-            if artifact.status == ExternalAnalysisStatus.SUCCESS
-            else "Review enrichment skipped"
-            if artifact.status == ExternalAnalysisStatus.SKIPPED
-            else "Review enrichment failed"
-        )
+        severity = "INFO" if artifact.status == ExternalAnalysisStatus.SUCCESS else "WARNING" if artifact.status == ExternalAnalysisStatus.SKIPPED else "ERROR"
+        message = "Review enrichment recorded" if artifact.status == ExternalAnalysisStatus.SUCCESS else "Review enrichment skipped" if artifact.status == ExternalAnalysisStatus.SKIPPED else "Review enrichment failed"
         # Extract nextChecks from the enrichment payload for structured logging
         next_checks_count = 0
         enrichment_payload = artifact.payload if isinstance(artifact.payload, dict) else {}
@@ -2775,6 +2574,7 @@ class HealthLoopRunner:
             if "llm_response_parse_error" in failure_class or "LLMResponseParseError" in exception_type:
                 # Create an INVALID_JSON classification with structured output diagnostics
                 from ..external_analysis.review_schema import ReviewEnrichmentShapeAnalysis, ReviewEnrichmentShapeClassification
+
                 shape_analysis = ReviewEnrichmentShapeAnalysis(
                     classification=ReviewEnrichmentShapeClassification.INVALID_JSON,
                     reason="LLM response parse error - invalid JSON or length capped",
@@ -2876,15 +2676,9 @@ class HealthLoopRunner:
                 event="next-check-planning-no-candidates",
             )
             return None
-        artifact_path = directories["external_analysis"] / (
-            f"{self.run_id}-next-check-plan.json"
-        )
+        artifact_path = directories["external_analysis"] / (f"{self.run_id}-next-check-plan.json")
         candidate_count = len(plan.candidates)
-        summary = (
-            f"Planned {candidate_count} next-check candidate(s)"
-            if candidate_count
-            else "No actionable next checks"
-        )
+        summary = f"Planned {candidate_count} next-check candidate(s)" if candidate_count else "No actionable next checks"
         artifact = ExternalAnalysisArtifact(
             tool_name="next-check-planner",
             run_id=self.run_id,
@@ -3028,12 +2822,7 @@ class HealthLoopRunner:
             if not secondary_record:
                 continue
             expected_categories = tuple(sorted(peer.expected_drift_categories))
-            ignored_categories = tuple(
-                sorted(
-                    set(primary_record.baseline_policy.ignored_drift_categories)
-                    | set(secondary_record.baseline_policy.ignored_drift_categories)
-                )
-            )
+            ignored_categories = tuple(sorted(set(primary_record.baseline_policy.ignored_drift_categories) | set(secondary_record.baseline_policy.ignored_drift_categories)))
             peer_notes = peer.notes
             (
                 policy_eligible,
@@ -3084,11 +2873,7 @@ class HealthLoopRunner:
                     ignored_drift_categories=list(ignored_categories),
                     event="comparison-skip",
                 )
-            decision_reason = (
-                policy_reason
-                if not policy_eligible
-                else "; ".join(detail.reason for detail in trigger_details) if triggered else "policy compatible but no triggers fired"
-            )
+            decision_reason = policy_reason if not policy_eligible else "; ".join(detail.reason for detail in trigger_details) if triggered else "policy compatible but no triggers fired"
             decisions.append(
                 ComparisonDecision(
                     primary_label=primary_record.target.label,
@@ -3216,14 +3001,15 @@ class HealthLoopRunner:
         directories: dict[str, Path],
     ) -> None:
         """Run Alertmanager discovery for each cluster target and persist the inventory.
-        
+
         Delegates to loop_alertmanager_discovery module for the actual discovery logic.
         Stores the verified inventory in self._alertmanager_inventory for downstream
         snapshot collection.
         """
+
         def log_callback(component: str, severity: str, message: str, **metadata: Any) -> None:
             self._log_event(component, severity, message, **metadata)
-        
+
         self._alertmanager_inventory = _run_alertmanager_discovery_impl(
             records=records,
             directories=directories,
@@ -3242,6 +3028,7 @@ class HealthLoopRunner:
 
         This is non-fatal: fetch failures are logged but do not stop the run.
         """
+
         def log_callback(component: str, severity: str, message: str, **metadata: Any) -> None:
             self._log_event(component, severity, message, **metadata)
 
@@ -3257,7 +3044,7 @@ class HealthLoopRunner:
 
     def _choose_free_local_port(self) -> int:
         """Choose a free local TCP port for port-forward.
-        
+
         Delegates to the extracted port-forward helpers module.
         """
         return _choose_free_local_port()
@@ -3270,7 +3057,7 @@ class HealthLoopRunner:
         poll_interval: float = 0.1,
     ) -> bool:
         """Wait for a TCP port to become accepting connections.
-        
+
         Delegates to the extracted port-forward helpers module.
         """
         return _wait_for_port_ready(host, port, timeout_seconds, poll_interval)
@@ -3282,7 +3069,7 @@ class HealthLoopRunner:
         context: str | None,
     ) -> tuple[subprocess.Popen[str], int]:
         """Start kubectl port-forward to an Alertmanager service.
-        
+
         Delegates to start_alertmanager_port_forward from loop_alertmanager_port_forward module.
         Kept as a wrapper for backward compatibility.
         """
@@ -3303,7 +3090,7 @@ class HealthLoopRunner:
         local_port: int | None,
     ) -> None:
         """Stop the port-forward process and log the event.
-        
+
         Delegates to stop_alertmanager_port_forward from loop_alertmanager_port_forward module.
         Kept as a wrapper for backward compatibility.
         """
@@ -3314,6 +3101,7 @@ class HealthLoopRunner:
             run_label=self.run_label,
             log_event=self._log_event,
         )
+
 
 def run_health_loop(
     config_path: Path,
@@ -3357,9 +3145,7 @@ def run_health_loop(
         )
         return 1, [], [], [], [], ExternalAnalysisSettings()
     manual_overrides = _parse_manual_triggers(manual_triggers or [])
-    manual_analysis_requests = _parse_manual_external_analysis_requests(
-        manual_external_analysis or []
-    )
+    manual_analysis_requests = _parse_manual_external_analysis_requests(manual_external_analysis or [])
     runner = HealthLoopRunner(
         config,
         contexts,
@@ -3373,6 +3159,3 @@ def run_health_loop(
     assessments, triggers, drilldowns = runner.execute()
     external_artifacts = runner.latest_external_artifacts
     return 0, assessments, triggers, drilldowns, external_artifacts, runner.config.external_analysis
-
-
-
