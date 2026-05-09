@@ -19,6 +19,7 @@ from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnaly
 from ..external_analysis.next_check_approval import NextCheckApprovalRecord, collect_next_check_approvals
 from ..external_analysis.utils import artifact_matches_run
 from ..security.deanonymization import deanonymize_next_check_candidate, safe_alias_mapping
+from ..security.kubectl_context import is_real_kube_context
 from ..structured_logging import emit_structured_log
 from .ui_next_check_execution import (
     NextCheckExecutionRecord,
@@ -272,7 +273,7 @@ def _build_command_preview(description: object | None, target_context: str | Non
     if tokens[0] != "kubectl":
         tokens = ["kubectl", *tokens]
     remainder = _strip_context_tokens(tokens[1:])
-    if target_context:
+    if is_real_kube_context(target_context) and target_context is not None:
         remainder = (*remainder, "--context", target_context)
     preview_tokens = ("kubectl", *remainder)
     return " ".join(shlex.quote(token) for token in preview_tokens)

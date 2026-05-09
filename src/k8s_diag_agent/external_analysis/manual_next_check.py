@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..security.kubectl_context import render_kubectl_context_args
 from ..security.path_validation import (
     SecurityError,
     validate_kube_context_name,
@@ -246,7 +247,8 @@ def _build_command(description: str, target_context: str, family: CommandFamily)
             validated_remainder.append(token)
         i += 1
 
-    return ["kubectl", *validated_remainder, "--context", validated_context]
+    context_args = render_kubectl_context_args(validated_context)
+    return ["kubectl", *validated_remainder, *context_args]
 
 
 def _extract_alertmanager_provenance(
