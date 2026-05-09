@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND_DIR="$ROOT/frontend"
 
+# Validate npm is available
 if ! command -v npm >/dev/null 2>&1; then
   echo "Error: npm is not available in PATH" >&2
   exit 1
@@ -11,27 +12,12 @@ fi
 
 cd "$FRONTEND_DIR"
 
-# Compute package-lock.json hash for sentinel
-LOCK_HASH=""
-if command -v sha256sum >/dev/null 2>&1; then
-  LOCK_HASH="$(sha256sum package-lock.json | awk '{print $1}')"
-elif command -v shasum >/dev/null 2>&1; then
-  LOCK_HASH="$(shasum -a 256 package-lock.json | awk '{print $1}')"
-else
-  echo "Error: Neither sha256sum nor shasum is available" >&2
+# Fail loudly if dependencies are missing (they should be baked into the image)
+if [ ! -d node_modules ]; then
+  echo "Error: node_modules not found." >&2
+  echo "Dependencies are installed at image build time." >&2
+  echo "Rebuild the frontend image and ensure compose does not bind-mount ./frontend over /app/frontend." >&2
   exit 1
-fi
-
-SENTINEL_FILE="node_modules/.package-lock.sha256"
-
-# Check if we need to run npm ci
-if [ ! -d node_modules ] || [ ! -f "$SENTINEL_FILE" ] || [ "$(cat "$SENTINEL_FILE" 2>/dev/null)" != "$LOCK_HASH" ]; then
-  echo "Installing frontend dependencies via npm ci"
-  npm ci
-  mkdir -p node_modules
-  echo "$LOCK_HASH" > "$SENTINEL_FILE"
-else
-  echo "Frontend dependencies already match package-lock.json; skipping npm ci"
 fi
 
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"

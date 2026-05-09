@@ -7,9 +7,10 @@ WORKDIR /app
 RUN mkdir -p /app/scripts
 
 # Copy package metadata before source so npm ci layer stays cached when code changes
-COPY frontend/package*.json ./frontend/
-COPY frontend/package-lock.json ./frontend/
+COPY frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd /app/frontend && npm ci
+
+# Copy source code and startup script
 COPY frontend ./frontend
 COPY scripts/start_frontend.sh /app/scripts/start_frontend.sh
 

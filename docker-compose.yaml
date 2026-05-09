@@ -60,9 +60,3 @@ services:
       FRONTEND_HOST: "0.0.0.0"
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app/frontend:Z
-      - frontend_node_modules:/app/frontend/node_modules
-
-volumes:
-  frontend_node_modules:
