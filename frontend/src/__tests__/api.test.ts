@@ -141,6 +141,50 @@ describe("fetchJson (via fetchRun)", () => {
     );
     await expect(fetchRun()).rejects.toThrow("Network error");
   });
+
+  test("REGRESSION: throws descriptive error on HTML response (SPA fallback detection)", async () => {
+    // Simulates the bug: nginx misroutes /api/* to SPA index.html.
+    // The fetch helper should detect text/html and throw a clear error
+    // instead of failing with JSON parse error.
+    const htmlBody = "<!DOCTYPE html><html><head><title>K9b</title></head><body><div id=\"root\"></div></body></html>";
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/fleet": new Response(htmlBody, {
+          status: 200,
+          statusText: "OK",
+          headers: { "Content-Type": "text/html" },
+        }),
+      })
+    );
+    await expect(fetchFleet()).rejects.toThrow("Expected JSON from /api/fleet but received text/html");
+    await expect(fetchFleet()).rejects.toThrow("API route may be falling through to SPA index.html");
+  });
+
+  test("REGRESSION: throws descriptive error on application/html response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/proposals": new Response("<html>not json</html>", {
+          status: 200,
+          statusText: "OK",
+          headers: { "Content-Type": "application/html" },
+        }),
+      })
+    );
+    await expect(fetchProposals()).rejects.toThrow("Expected JSON from /api/proposals but received text/html");
+  });
+
+  test("HTML guard does not affect normal JSON responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/fleet": mockResponse(SUCCESS_PAYLOADS["/api/fleet"]),
+      })
+    );
+    const result = await fetchFleet();
+    expect(result).toEqual({ runId: "run-123", clusters: [] });
+  });
 });
 
 // ---------------------------------------------------------------------------

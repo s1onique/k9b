@@ -132,6 +132,28 @@ const fetchJson = async <T>(
     logFetchPhase({ path, runId, clientRequestId, requestKind, phase: "non-ok-response", elapsedMs: elapsed, status: response.status, aborted: false });
     throw new Error(`Failed to fetch ${path}: ${response.statusText}`);
   }
+
+  // Guard: detect HTML response (likely SPA index.html fallback) instead of JSON.
+  // This catches routing misconfiguration where API requests fall through to the SPA.
+  // Reuse contentType already captured above for logging.
+  const htmlContentType = contentType || response.headers.get("Content-Type") || "";
+  const isHtmlResponse = htmlContentType.startsWith("text/html") || htmlContentType.startsWith("application/html");
+  if (isHtmlResponse) {
+    // Read a preview of the body for debugging, capped at 200 chars to avoid noisy logs
+    let bodyPreview = "<not captured>";
+    try {
+      const text = await response.text();
+      bodyPreview = text.slice(0, 200).replace(/\n/g, " ");
+      if (text.length > 200) bodyPreview += "...";
+    } catch {
+      // ignore
+    }
+    throw new Error(
+      `Expected JSON from ${path} but received text/html. ` +
+      `API route may be falling through to SPA index.html. ` +
+      `Content-Type: ${contentType}, body preview: ${bodyPreview}`
+    );
+  }
   
   // Use response.text() + JSON.parse() to distinguish phases
   // This helps identify whether the delay is in body download or JSON parsing
