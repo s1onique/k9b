@@ -7,6 +7,8 @@ import logging
 import subprocess
 from typing import Any
 
+from ..security.kubectl_context import render_kubectl_context_args
+
 _logger = logging.getLogger(__name__)
 
 
@@ -35,8 +37,8 @@ def derive_cluster_uid(
     """
     try:
         cmd = ["kubectl", "get", "namespace", "kube-system", "-o", "json"]
-        if kube_context:
-            cmd.extend(["--context", kube_context])
+        # Use render_kubectl_context_args() to safely handle in-cluster mode
+        cmd.extend(render_kubectl_context_args(kube_context))
 
         result = subprocess.run(
             cmd,

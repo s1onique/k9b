@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..collect.cluster_snapshot import WarningEventSummary
+from ..security.kubectl_context import render_kubectl_context_args
 from ..security.path_validation import (
-    validate_kube_context_name,
     validate_kubernetes_namespace,
     validate_kubernetes_resource_name,
 )
@@ -58,7 +58,7 @@ def _kubectl(context: str, *args: str, runner: CommandRunner) -> str:
     """Build and execute a kubectl command with validated arguments.
 
     Args:
-        context: Kubernetes context name (validated)
+        context: Kubernetes context name (validated), or "in-cluster" for service account auth
         *args: kubectl arguments
         runner: Command runner function
 
@@ -68,9 +68,9 @@ def _kubectl(context: str, *args: str, runner: CommandRunner) -> str:
     Raises:
         SecurityError: If context/namespace/resource names are invalid
     """
-    # Validate context before constructing command
-    validated_context = validate_kube_context_name(context)
-    return runner(("kubectl", *args, "--context", validated_context))
+    # Use render_kubectl_context_args() to safely handle in-cluster mode
+    context_args = render_kubectl_context_args(context)
+    return runner(("kubectl", *args, *context_args))
 
 
 def _kubectl_with_namespace(
@@ -79,7 +79,7 @@ def _kubectl_with_namespace(
     """Build and execute a kubectl command with validated context and namespace.
 
     Args:
-        context: Kubernetes context name (validated)
+        context: Kubernetes context name (validated), or "in-cluster" for service account auth
         namespace: Kubernetes namespace name (validated)
         *args: kubectl arguments
         runner: Command runner function
@@ -90,10 +90,11 @@ def _kubectl_with_namespace(
     Raises:
         SecurityError: If context/namespace/resource names are invalid
     """
-    # Validate both context and namespace before constructing command
-    validated_context = validate_kube_context_name(context)
+    # Validate namespace before constructing command
     validated_namespace = validate_kubernetes_namespace(namespace)
-    return runner(("kubectl", *args, "--context", validated_context, "-n", validated_namespace))
+    # Use render_kubectl_context_args() to safely handle in-cluster mode
+    context_args = render_kubectl_context_args(context)
+    return runner(("kubectl", *args, *context_args, "-n", validated_namespace))
 
 
 def _kubectl_with_resource(
@@ -102,7 +103,7 @@ def _kubectl_with_resource(
     """Build and execute a kubectl command with validated context, namespace, and resource.
 
     Args:
-        context: Kubernetes context name (validated)
+        context: Kubernetes context name (validated), or "in-cluster" for service account auth
         namespace: Kubernetes namespace name (validated)
         resource: Kubernetes resource name (validated)
         *args: kubectl arguments
@@ -114,12 +115,13 @@ def _kubectl_with_resource(
     Raises:
         SecurityError: If context/namespace/resource names are invalid
     """
-    # Validate all identifiers before constructing command
-    validated_context = validate_kube_context_name(context)
+    # Validate namespace and resource before constructing command
     validated_namespace = validate_kubernetes_namespace(namespace)
     validated_resource = validate_kubernetes_resource_name(resource)
+    # Use render_kubectl_context_args() to safely handle in-cluster mode
+    context_args = render_kubectl_context_args(context)
     return runner(
-        ("kubectl", *args, "--context", validated_context, "-n", validated_namespace, validated_resource)
+        ("kubectl", *args, *context_args, "-n", validated_namespace, validated_resource)
     )
 
 

@@ -11,9 +11,7 @@ from typing import Any, ClassVar
 
 from ..collect.cluster_snapshot import WarningEventSummary
 from ..datetime_utils import parse_iso_to_utc
-from ..security.path_validation import (
-    validate_kube_context_name,
-)
+from ..security.kubectl_context import render_kubectl_context_args
 from ..security.subprocess_helpers import (
     sanitize_subprocess_error,
 )
@@ -262,7 +260,7 @@ class DrilldownCollector:
         """Build and execute a kubectl command with validated context.
 
         Args:
-            context: Kubernetes context name (validated)
+            context: Kubernetes context name (validated), or "in-cluster" for service account auth
             *args: kubectl arguments
 
         Returns:
@@ -271,9 +269,9 @@ class DrilldownCollector:
         Raises:
             SecurityError: If context name is invalid
         """
-        # Validate context before constructing command
-        validated_context = validate_kube_context_name(context)
-        return self._runner(["kubectl", *args, "--context", validated_context])
+        # Use render_kubectl_context_args() to safely handle in-cluster mode
+        context_args = render_kubectl_context_args(context)
+        return self._runner(["kubectl", *args, *context_args])
 
     def _collect_warning_events(
         self, context: str, limit: int

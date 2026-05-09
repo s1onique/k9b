@@ -8,6 +8,8 @@ in kubectl commands, distinguishing between:
 
 from __future__ import annotations
 
+from .path_validation import validate_kube_context_name
+
 # Internal context markers that should NEVER be passed to kubectl
 # These are internal execution/discovery modes, not real kubeconfig contexts
 _INTERNAL_CONTEXT_MARKERS: frozenset[str] = frozenset({
@@ -82,11 +84,17 @@ def render_kubectl_context_args(context: str | None) -> list[str]:
     - In-cluster mode: returns [] (no --context flag needed, kubectl uses service account)
     - Real kubeconfig context: returns ["--context", "<name>"]
 
+    For real kubeconfig contexts, the context name is validated via validate_kube_context_name()
+    to ensure shell metacharacters and other security-sensitive values are rejected.
+
     Args:
         context: The context value, or None for in-cluster mode.
 
     Returns:
         A list suitable for concatenating into kubectl command arguments.
+
+    Raises:
+        SecurityError: If a real kubeconfig context name contains invalid characters.
 
     Examples:
         >>> render_kubectl_context_args("my-prod-cluster")
@@ -97,7 +105,9 @@ def render_kubectl_context_args(context: str | None) -> list[str]:
         []
     """
     if context is not None and is_real_kube_context(context):
-        return ["--context", context]
+        # Validate the context name to prevent shell injection
+        validated_context = validate_kube_context_name(context.strip())
+        return ["--context", validated_context]
     return []
 
 

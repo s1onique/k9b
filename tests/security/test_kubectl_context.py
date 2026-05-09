@@ -1,9 +1,12 @@
 """Tests for kubectl_context module - regression tests for internal context leakage."""
 
+import pytest
+
 from k8s_diag_agent.security.kubectl_context import (
     is_real_kube_context,
     render_kubectl_context_args,
 )
+from k8s_diag_agent.security.path_validation import SecurityError
 
 
 class TestIsRealKubeContext:
@@ -88,3 +91,14 @@ class TestRenderKubectlContextArgs:
         assert render_kubectl_context_args("  in_cluster  ") == []
         assert render_kubectl_context_args("  in-cluster") == []
         assert render_kubectl_context_args("in-cluster  ") == []
+
+    def test_invalid_context_rejected(self) -> None:
+        """Invalid context names with shell metacharacters should raise SecurityError."""
+        with pytest.raises(SecurityError):
+            render_kubectl_context_args("bad;context")
+        with pytest.raises(SecurityError):
+            render_kubectl_context_args("bad context")
+        with pytest.raises(SecurityError):
+            render_kubectl_context_args("context$(whoami)")
+        with pytest.raises(SecurityError):
+            render_kubectl_context_args("../etc")
