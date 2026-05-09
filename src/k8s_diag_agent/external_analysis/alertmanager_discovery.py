@@ -450,6 +450,20 @@ def _should_add_context_flag(context: str | None) -> bool:
     return context != _IN_CLUSTER_CONTEXT
 
 
+def _kubectl_context_args(context: str | None) -> list[str]:
+    """Return kubectl --context args based on context value.
+
+    - None -> []
+    - "in-cluster" -> []
+    - "real-context" -> ["--context", "real-context"]
+
+    This helper avoids mypy list-item errors when adding context to kubectl commands.
+    """
+    if context is None or context == _IN_CLUSTER_CONTEXT:
+        return []
+    return ["--context", context]
+
+
 class CRDDiscoveryStrategy(DiscoveryStrategy):
     """Discover Alertmanagers via monitoring.coreos.com/v1 Alertmanager CRDs.
 
@@ -479,8 +493,7 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
         try:
             # Use -A to search ALL namespaces (required for cross-namespace discovery)
             cmd = ["kubectl", "get", "alertmanagers", "-A", "-o", "json"]
-            if _should_add_context_flag(context):
-                cmd.extend(["--context", context])
+            cmd.extend(_kubectl_context_args(context))
 
             _logger.debug(
                 "Alertmanager CRD discovery: searching all namespaces with command: %s",
@@ -603,8 +616,7 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
         try:
             # Use -A to search ALL namespaces
             cmd = ["kubectl", "get", "prometheuses", "-A", "-o", "json"]
-            if _should_add_context_flag(context):
-                cmd.extend(["--context", context])
+            cmd.extend(_kubectl_context_args(context))
 
             _logger.debug(
                 "Prometheus CRD config discovery: searching all namespaces with command: %s",
@@ -733,8 +745,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
         try:
             # Use -A to search ALL namespaces for services
             cmd = ["kubectl", "get", "svc", "-A", "-o", "json"]
-            if _should_add_context_flag(context):
-                cmd.extend(["--context", context])
+            cmd.extend(_kubectl_context_args(context))
 
             _logger.debug(
                 "Service heuristic discovery: searching all namespaces with command: %s",
@@ -776,8 +787,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
 
             # Use -A to search ALL namespaces for pods with app=alertmanager label
             pod_cmd = ["kubectl", "get", "pods", "-A", "-o", "json", "-l", "app=alertmanager"]
-            if _should_add_context_flag(context):
-                pod_cmd.extend(["--context", context])
+            pod_cmd.extend(_kubectl_context_args(context))
 
             _logger.debug(
                 "Service heuristic discovery: searching all namespaces for pods with command: %s",

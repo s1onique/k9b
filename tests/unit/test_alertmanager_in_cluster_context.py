@@ -20,6 +20,7 @@ from k8s_diag_agent.external_analysis.alertmanager_discovery import (
     CRDDiscoveryStrategy,
     PrometheusCRDConfigDiscoveryStrategy,
     ServiceHeuristicDiscoveryStrategy,
+    _kubectl_context_args,
     _should_add_context_flag,
 )
 
@@ -347,3 +348,33 @@ class TestDiscoveryWithNoneContext:
 
         for cmd in captured_commands:
             assert "--context" not in cmd, f"Expected no --context for None context, got: {cmd}"
+
+
+class TestKubectlContextArgs:
+    """Tests for the _kubectl_context_args helper function."""
+
+    def test_returns_empty_for_none_context(self) -> None:
+        """When context is None, should return empty list."""
+        assert _kubectl_context_args(None) == []
+
+    def test_returns_empty_for_in_cluster_context(self) -> None:
+        """When context is 'in-cluster', should return empty list."""
+        assert _kubectl_context_args(_IN_CLUSTER_CONTEXT) == []
+        assert _kubectl_context_args("in-cluster") == []
+
+    def test_returns_context_args_for_named_context(self) -> None:
+        """When context is a named kubeconfig context, should return --context args."""
+        assert _kubectl_context_args("my-cluster") == ["--context", "my-cluster"]
+        assert _kubectl_context_args("prod") == ["--context", "prod"]
+        assert _kubectl_context_args("minikube") == ["--context", "minikube"]
+
+    def test_returns_context_args_for_context_with_hyphen(self) -> None:
+        """Named contexts with hyphens should return correct --context args."""
+        assert _kubectl_context_args("gke-project-123") == ["--context", "gke-project-123"]
+
+    def test_return_type_is_list(self) -> None:
+        """Verify the return type is list[str] for mypy compatibility."""
+        result = _kubectl_context_args("test-context")
+        # This test ensures the helper returns a list, not a tuple or other iterable
+        assert isinstance(result, list)
+        assert result == ["--context", "test-context"]
