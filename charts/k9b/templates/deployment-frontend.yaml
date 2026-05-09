@@ -51,7 +51,7 @@ spec:
           {{- end }}
           volumeMounts:
             - name: nginx-tmp
-              mountPath: /tmp
+              mountPath: /tmp/nginx
           readinessProbe:
             httpGet:
               path: /healthz
