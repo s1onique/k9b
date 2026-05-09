@@ -1135,6 +1135,82 @@ class ContentQualityReportStructureTests(unittest.TestCase):
         )
 
 
+class ClusterLabelSanitizationRegressionTests(unittest.TestCase):
+    """Regression tests for internal marker sanitization in operator-facing output.
+
+    These tests verify that internal execution markers like "in-cluster" do not
+    leak into user-facing prose or LLM prompt headers.
+    """
+
+    def test_derived_statement_does_not_show_cluster_in_cluster(self) -> None:
+        """Incident report derived statement must not contain 'Cluster in-cluster' or 'Cluster the cluster'."""
+        # Build an index where the latest assessment has cluster_label="in-cluster"
+        index = sample_ui_index()
+        la = cast(dict[str, object], index["latest_assessment"])
+        la["cluster_label"] = "in-cluster"
+        la["health_rating"] = "HEALTHY"
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        # Verify derived statements don't contain bad phrasing
+        derived_statements = [d["statement"] for d in report.get("derived", [])]
+        self.assertTrue(derived_statements, "Expected at least one derived statement")
+        for statement in derived_statements:
+            self.assertNotIn(
+                "Cluster in-cluster",
+                statement,
+                f"Internal marker leaked into derived statement: {statement}",
+            )
+            self.assertNotIn(
+                "Cluster the cluster",
+                statement,
+                f"Awkward 'Cluster the cluster' phrasing: {statement}",
+            )
+
+    def test_derived_statement_uses_the_cluster_fallback(self) -> None:
+        """When cluster_label is an internal marker with no fallback, use 'The cluster' prefix."""
+        index = sample_ui_index()
+        la = cast(dict[str, object], index["latest_assessment"])
+        la["cluster_label"] = "in-cluster"
+        la["health_rating"] = "DEGRADED"
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        derived_statements = [d["statement"] for d in report.get("derived", [])]
+        self.assertTrue(derived_statements)
+        # When no real cluster name is available, should produce "The cluster health rating is DEGRADED."
+        health_rating_statements = [s for s in derived_statements if "health rating is" in s]
+        self.assertTrue(health_rating_statements)
+        # Verify it starts with "The cluster" not "Cluster"
+        for statement in health_rating_statements:
+            self.assertTrue(
+                statement.startswith("The cluster"),
+                f"Expected 'The cluster' prefix, got: {statement}",
+            )
+
+    def test_derived_statement_uses_real_cluster_name(self) -> None:
+        """When cluster_label is a real cluster name, use 'Cluster <name>' prefix."""
+        index = sample_ui_index()
+        la = cast(dict[str, object], index["latest_assessment"])
+        la["cluster_label"] = "prod-cluster"
+        la["health_rating"] = "HEALTHY"
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        derived_statements = [d["statement"] for d in report.get("derived", [])]
+        self.assertTrue(derived_statements)
+        health_rating_statements = [s for s in derived_statements if "health rating is" in s]
+        self.assertTrue(health_rating_statements)
+        for statement in health_rating_statements:
+            self.assertTrue(
+                statement.startswith("Cluster prod-cluster"),
+                f"Expected 'Cluster prod-cluster' prefix, got: {statement}",
+            )
+
+
 def _sample_freshness(status: str) -> dict[str, Any]:
     return {
         "ageSeconds": 600,

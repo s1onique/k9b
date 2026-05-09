@@ -148,6 +148,8 @@ def sanitize_kubectl_display_command(command: str | None) -> str | None:
         >>> sanitize_kubectl_display_command("kubectl get pods --context prod-cluster")
         'kubectl get pods --context prod-cluster'
         >>> sanitize_kubectl_display_command(None)
+
+    Returns None for empty command strings (not empty string).
     """
     if command is None:
         return None
@@ -223,3 +225,80 @@ def sanitize_kubectl_display_command(command: str | None) -> str | None:
             continue
         sanitized.append(token)
     return " ".join(sanitized)
+
+
+def display_kube_cluster_label(cluster_name: str | None, context: str | None = None) -> str | None:
+    """Get a display label for a cluster that is safe for user-facing text.
+
+    This function ensures internal execution markers like "in-cluster" are not
+    used as cluster names in operator-facing prose, LLM prompts, or UI text.
+
+    When the cluster name is an internal marker (e.g., "in-cluster"), this
+    function returns None to signal that no valid cluster identity is available.
+    Callers should substitute "the cluster" or another neutral fallback.
+
+    Args:
+        cluster_name: The cluster name/label, or None.
+        context: The Kubernetes execution context (optional). When cluster_name
+            is an internal marker, context may be the real cluster identity.
+
+    Returns:
+        A safe cluster label for display, or None if the cluster name is
+        an internal marker and no real cluster identity is available.
+
+    Examples:
+        >>> display_kube_cluster_label("rc-runity-test-msk1-c02", "in-cluster")
+        'rc-runity-test-msk1-c02'
+        >>> display_kube_cluster_label("in-cluster", "in-cluster")  # No real identity
+        >>> display_kube_cluster_label("prod-cluster", "prod-cluster")
+        'prod-cluster'
+        >>> display_kube_cluster_label(None, None)
+        >>> display_kube_cluster_label("in-cluster", "real-context")
+        'real-context'
+    """
+    if cluster_name is None:
+        return None
+
+    # If cluster_name is NOT an internal marker, use it directly
+    if not is_internal_kube_marker(cluster_name):
+        return cluster_name
+
+    # cluster_name IS an internal marker - try context as fallback
+    if context is not None and not is_internal_kube_marker(context):
+        return context
+
+    # Neither cluster_name nor context provides a real cluster identity
+    return None
+
+
+def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None) -> str:
+    """Sanitize cluster references in prose text for user-facing display.
+
+    Replaces internal execution markers like "in-cluster" with neutral
+    fallback text ("the cluster") in prose contexts where cluster identity
+    appears as a noun phrase.
+
+    This is a defensive fallback for when cluster identity has already
+    leaked into prose text that needs to be rendered safely.
+
+    Args:
+        cluster_name: The cluster name as it appears in prose, or None.
+        context: The Kubernetes execution context (optional).
+
+    Returns:
+        A safe cluster reference for prose display.
+
+    Examples:
+        >>> sanitize_cluster_prose("rc-runity-test-msk1-c02", "in-cluster")
+        'rc-runity-test-msk1-c02'
+        >>> sanitize_cluster_prose("in-cluster", "in-cluster")
+        'the cluster'
+        >>> sanitize_cluster_prose("in-cluster", "real-context")
+        'real-context'
+        >>> sanitize_cluster_prose(None, None)
+        'the cluster'
+    """
+    display_label = display_kube_cluster_label(cluster_name, context)
+    if display_label is None:
+        return "the cluster"
+    return display_label

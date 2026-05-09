@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
-from ..security.kubectl_context import sanitize_kubectl_display_command
+from ..security.kubectl_context import display_kube_cluster_label, sanitize_kubectl_display_command
 from .api_payloads import (
     ArtifactLink,
     FreshnessPayload,
@@ -78,10 +78,18 @@ def _build_incident_report_payload(
     assessment = context.latest_assessment
     if assessment is not None:
         if assessment.health_rating:
+            # Sanitize cluster_label to prevent internal markers like "in-cluster"
+            # from appearing in operator-facing prose
+            safe_cluster_name = display_kube_cluster_label(assessment.cluster_label)
+            # Avoid awkward "Cluster the cluster..." phrasing
+            if safe_cluster_name:
+                statement = f"Cluster {safe_cluster_name} health rating is {assessment.health_rating}."
+            else:
+                statement = f"The cluster health rating is {assessment.health_rating}."
             derived.append(
                 {
                     "claimType": "derived",
-                    "statement": f"Cluster {assessment.cluster_label} health rating is {assessment.health_rating}.",
+                    "statement": statement,
                     "sourceFields": ["health_rating"],
                     "sourceArtifactRefs": _assessment_refs(),
                     "confidence": "high",

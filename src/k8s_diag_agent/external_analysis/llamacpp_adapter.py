@@ -34,6 +34,7 @@ from ..llm.prompt_diagnostics import (
 )
 from ..security import sanitize_prompt
 from ..security.anonymizer import MetadataAnonymizer
+from ..security.kubectl_context import display_kube_cluster_label
 from .adapter import (
     ExternalAnalysisAdapter,
     ExternalAnalysisExecutionError,
@@ -681,10 +682,14 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         anon_review = anonymizer.anonymize(dict(context.review))
 
         # Anonymize cluster_label for header (it's a cluster identifier)
-        anon_cluster_label_data = anonymizer.anonymize({"cluster_label": request.cluster_label})
-        anon_cluster_label = anon_cluster_label_data.get("cluster_label", request.cluster_label)
+        # First sanitize internal markers like "in-cluster" before anonymization
+        safe_cluster_label = display_kube_cluster_label(request.cluster_label)
+        anon_cluster_label_data = anonymizer.anonymize({"cluster_label": safe_cluster_label})
+        anon_cluster_label = anon_cluster_label_data.get("cluster_label", safe_cluster_label)
 
         # === TRUSTED INSTRUCTION HEADER (outside untrusted markers) ===
+        # cluster_label here is a cluster identifier, sanitized to prevent internal markers
+        # like "in-cluster" from leaking into LLM prompts as cluster names
         instruction_header = (
             f"LLM external analysis request\nrun_id={request.run_id}\ncluster_label={anon_cluster_label}"
         )
@@ -876,7 +881,9 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             comparison=comparison,
             comparison_metadata={
                 "run_id": request.run_id,
-                "cluster_label": request.cluster_label,
+                # Sanitize cluster_label to prevent internal markers like "in-cluster"
+                # from appearing in LLM prompts as cluster names
+                "cluster_label": display_kube_cluster_label(request.cluster_label),
                 "review_run_id": context.review.get("run_id"),
                 "alertmanager_context": {
                     "available": context.alertmanager_context.available,

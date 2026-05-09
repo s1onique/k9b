@@ -392,6 +392,63 @@ class TestLlamaCppAdapterPromptBoundaries:
             "Untrusted data (review content) should not appear before BEGIN_UNTRUSTED_CLUSTER_DATA"
         )
 
+    def test_llamacpp_adapter_cluster_label_sanitization(self) -> None:
+        """LlamaCppAdapter instruction header must not contain 'cluster_label=in-cluster'.
+
+        Regression test for in-cluster marker leak into LLM prompts.
+        When request.cluster_label is an internal marker, display_kube_cluster_label()
+        should return None, and the prompt header should not contain 'cluster_label=in-cluster'.
+        """
+        from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
+        from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+        from k8s_diag_agent.external_analysis.review_input import (
+            AlertmanagerContext,
+            ReviewEnrichmentInput,
+        )
+
+        # Build a minimal context
+        context = ReviewEnrichmentInput(
+            run_id="test-run-001",
+            review_path=Path("/tmp/test.json"),
+            review={"run_id": "review-run-001", "review_version": "1.0"},
+            alertmanager_context=AlertmanagerContext(
+                available=False,
+                source="test",
+                status="active",
+                compact=None,
+            ),
+            selections=(),
+            missing_drilldowns=(),
+            missing_assessments=(),
+            missing_snapshots=(),
+        )
+
+        # Create request with internal marker as cluster_label
+        request = MagicMock(spec=ExternalAnalysisRequest)
+        request.run_id = "adapter-run-001"
+        request.cluster_label = "in-cluster"  # Internal marker - should be sanitized
+        request.source_artifact = "/tmp/test.json"
+
+        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter._use_http = False
+        adapter._command = None
+        adapter._http_provider = None
+        adapter._http_config_error = None
+
+        prompt, _ = adapter._build_prompt(request, context)
+
+        # Verify the trusted instruction header does NOT contain raw "in-cluster" as cluster_label
+        # Extract everything before BEGIN_UNTRUSTED_CLUSTER_DATA as the trusted header
+        trusted_header = prompt.split(BEGIN_UNTRUSTED_CLUSTER_DATA, 1)[0]
+
+        # Internal markers should NOT appear in the trusted header as cluster_label values
+        assert "cluster_label=in-cluster" not in trusted_header, (
+            f"Internal marker leaked into trusted instruction header: {trusted_header}"
+        )
+        assert "cluster_label=in_cluster" not in trusted_header, (
+            f"Internal marker leaked into trusted instruction header: {trusted_header}"
+        )
+
 
 class TestBoundaryMarkerConstants:
     """Tests for boundary marker constants."""

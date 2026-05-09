@@ -3,8 +3,10 @@
 import pytest
 
 from k8s_diag_agent.security.kubectl_context import (
+    display_kube_cluster_label,
     is_real_kube_context,
     render_kubectl_context_args,
+    sanitize_cluster_prose,
 )
 from k8s_diag_agent.security.path_validation import SecurityError
 
@@ -102,3 +104,42 @@ class TestRenderKubectlContextArgs:
             render_kubectl_context_args("context$(whoami)")
         with pytest.raises(SecurityError):
             render_kubectl_context_args("../etc")
+
+
+class TestDisplayKubeClusterLabel:
+    """Tests for display_kube_cluster_label function."""
+
+    def test_real_cluster_name_returned(self) -> None:
+        """Real cluster names should be returned as-is."""
+        assert display_kube_cluster_label("rc-runity-test-msk1-c02", "in-cluster") == "rc-runity-test-msk1-c02"
+        assert display_kube_cluster_label("prod-cluster", "in-cluster") == "prod-cluster"
+
+    def test_in_cluster_name_with_context_fallback(self) -> None:
+        """When cluster_name is internal marker, use context as fallback if real."""
+        assert display_kube_cluster_label("in-cluster", "real-context") == "real-context"
+        assert display_kube_cluster_label("in_cluster", "admin@prod") == "admin@prod"
+
+    def test_in_cluster_name_both_internal_returns_none(self) -> None:
+        """When both cluster_name and context are internal markers, return None."""
+        assert display_kube_cluster_label("in-cluster", "in-cluster") is None
+
+    def test_none_cluster_returns_none(self) -> None:
+        """None cluster_name returns None."""
+        assert display_kube_cluster_label(None, None) is None
+
+
+class TestSanitizeClusterProse:
+    """Tests for sanitize_cluster_prose function."""
+
+    def test_real_cluster_returned(self) -> None:
+        """Real cluster names are returned unchanged."""
+        assert sanitize_cluster_prose("rc-runity-test-msk1-c02", "in-cluster") == "rc-runity-test-msk1-c02"
+
+    def test_in_cluster_falls_back_to_context(self) -> None:
+        """Internal marker falls back to real context."""
+        assert sanitize_cluster_prose("in-cluster", "real-context") == "real-context"
+
+    def test_in_cluster_falls_back_to_neutral(self) -> None:
+        """Internal marker with no fallback returns neutral fallback."""
+        assert sanitize_cluster_prose("in-cluster", "in-cluster") == "the cluster"
+        assert sanitize_cluster_prose("in-cluster", None) == "the cluster"
