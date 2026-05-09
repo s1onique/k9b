@@ -111,9 +111,9 @@ const AdvisoryExecutiveSummary = ({
         </span>
       </div>
       <div className="provider-metrics">
-        <div className="provider-metric provider-metric--clusters">
+        <div className="provider-metric provider-metric--signals">
           <span className="provider-metric__value">{clusterCount}</span>
-          <span className="provider-metric__label">Cluster{clusterCount !== 1 ? "s" : ""}</span>
+          <span className="provider-metric__label">Signal{clusterCount !== 1 ? "s" : ""}</span>
         </div>
         <div className="provider-metric provider-metric--concerns">
           <span className="provider-metric__value">{concernCount}</span>

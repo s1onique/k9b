@@ -226,15 +226,15 @@ describe("Advisory Panel Components", () => {
       render(<App />);
 
       await waitFor(() => {
-        expect(document.querySelector(".provider-metric--clusters")).toBeTruthy();
+        expect(document.querySelector(".provider-metric--signals")).toBeTruthy();
         expect(document.querySelector(".provider-metric--concerns")).toBeTruthy();
         expect(document.querySelector(".provider-metric--checks")).toBeTruthy();
         expect(document.querySelector(".provider-metric--gaps")).toBeTruthy();
       });
 
       // Verify metric values
-      const clusters = document.querySelector(".provider-metric--clusters");
-      expect(clusters?.textContent).toContain("2");
+      const signals = document.querySelector(".provider-metric--signals");
+      expect(signals?.textContent).toContain("2");
 
       const concerns = document.querySelector(".provider-metric--concerns");
       expect(concerns?.textContent).toContain("2");
@@ -250,6 +250,7 @@ describe("Advisory Panel Components", () => {
       const runPayload = {
         ...sampleRun,
         reviewEnrichment: createMockEnrichment({
+          triageOrder: ["cluster-a"], // Need at least one to show metrics
           evidenceGaps: ["Missing edge logs", "Incomplete metrics"],
         }),
         reviewEnrichmentStatus: createMockEnrichmentStatus(),
@@ -588,6 +589,119 @@ describe("Advisory Panel Components", () => {
         const collapsible = document.querySelector(".advisory-summary-collapsible");
         expect(collapsible).toBeTruthy();
         expect(collapsible?.textContent).toContain("View provider summary");
+      });
+    });
+  });
+
+  describe("Triage Order Labeling (Signals, not Clusters)", () => {
+    it("renders triageOrder length as SIGNALS, not CLUSTERS", async () => {
+      const runPayload = {
+        ...sampleRun,
+        reviewEnrichment: createMockEnrichment({
+          triageOrder: ["cluster-a", "cluster-b", "cluster-c", "cluster-d"],
+          topConcerns: ["Concern A"],
+          nextChecks: ["Check A"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runPayload,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        // Should show "4 Signals" (from triageOrder length)
+        expect(document.querySelector(".provider-metric--signals")).toBeTruthy();
+        const signalsMetric = document.querySelector(".provider-metric--signals");
+        expect(signalsMetric?.textContent).toContain("4");
+        expect(signalsMetric?.textContent).toContain("Signals");
+      });
+
+      // Should NOT show "Cluster" label in the provider advisory panel
+      const signalsMetric = document.querySelector(".provider-metric--signals");
+      expect(signalsMetric?.textContent).not.toContain("Cluster");
+    });
+
+    it("provider triageOrder with 4 items does not imply topology cluster count", async () => {
+      // This test verifies that even when the run has clusterCount: 1,
+      // the provider advisory shows signals from triageOrder, not topology
+      const runWithSingleCluster = {
+        ...sampleRun,
+        clusterCount: 1, // Actual topology has 1 cluster
+        reviewEnrichment: createMockEnrichment({
+          triageOrder: ["cluster-a", "cluster-b", "cluster-c", "cluster-d"], // Provider says 4 signals
+          topConcerns: ["Concern A"],
+          nextChecks: ["Check A"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runWithSingleCluster,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        // Provider advisory shows "4 Signals" from triageOrder
+        const signalsMetric = document.querySelector(".provider-metric--signals");
+        expect(signalsMetric?.textContent).toContain("4");
+        expect(signalsMetric?.textContent).toContain("Signals");
+      });
+
+      // The label should be "Signals" not "Clusters" to avoid confusion
+      const signalsMetric = document.querySelector(".provider-metric--signals");
+      expect(signalsMetric?.textContent).not.toContain("Cluster");
+    });
+
+    it("single configured cluster + provider payload with 4 triageOrder items renders correctly", async () => {
+      const runPayload = {
+        ...sampleRun,
+        clusterCount: 1, // Single configured cluster
+        reviewEnrichment: createMockEnrichment({
+          triageOrder: ["cluster-a", "cluster-b", "cluster-c", "cluster-d"],
+          topConcerns: ["Ingress latency", "Storage delays"],
+          nextChecks: ["Validate ingress", "Collect metrics"],
+          evidenceGaps: ["Edge logs"],
+        }),
+        reviewEnrichmentStatus: createMockEnrichmentStatus(),
+      };
+
+      const payloads = {
+        "/api/run": runPayload,
+        "/api/runs": sampleRunsList,
+        "/api/fleet": sampleFleet,
+        "/api/proposals": sampleProposals,
+        "/api/notifications": sampleNotifications,
+      };
+      vi.stubGlobal("fetch", createFetchMock(payloads));
+      render(<App />);
+
+      await waitFor(() => {
+        // Verify the signals metric shows 4 (from triageOrder)
+        const signalsMetric = document.querySelector(".provider-metric--signals");
+        expect(signalsMetric?.textContent).toContain("4");
+        expect(signalsMetric?.textContent).toContain("Signals");
+
+        // Verify other metrics are also present
+        const concernsMetric = document.querySelector(".provider-metric--concerns");
+        expect(concernsMetric?.textContent).toContain("2");
+
+        const checksMetric = document.querySelector(".provider-metric--checks");
+        expect(checksMetric?.textContent).toContain("2");
+
+        const gapsMetric = document.querySelector(".provider-metric--gaps");
+        expect(gapsMetric?.textContent).toContain("1");
       });
     });
   });
