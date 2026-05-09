@@ -98,7 +98,7 @@ scheduler:
 frontend:
   replicaCount: 1
   service:
-    port: 5173
+    port: 8080
   # command: Override container command (entrypoint). Leave empty to use image's default.
   command: []
   # args: Override container arguments. Leave empty to use image's default.
@@ -106,7 +106,6 @@ frontend:
   env:
     VITE_BACKEND_HOST: "k9b-backend"
     VITE_BACKEND_PORT: "8080"
-    FRONTEND_HOST: "0.0.0.0"
   resources:
     requests:
       cpu: 50m

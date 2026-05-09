@@ -148,6 +148,59 @@ if [[ "$MODE" == "all" ]] || [[ "$MODE" == "selector" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Frontend production regression checks
+# ---------------------------------------------------------------------------
+
+if [[ "$MODE" == "all" ]] || [[ "$MODE" == "render" ]]; then
+    echo "=== Frontend production regression checks ==="
+    
+    # Render default values (already computed above as $rendered if selector mode ran)
+    if [[ "$MODE" == "all" ]]; then
+        frontend_rendered=$(helm template k9b "$CHART_DIR" 2>&1)
+    else
+        frontend_rendered=$(helm template k9b "$CHART_DIR" 2>&1)
+    fi
+    
+    # Extract frontend container spec
+    frontend_container=$(echo "$frontend_rendered" | sed -n '/^# Source: k9b\/templates\/deployment-frontend.yaml$/,/^---$/p')
+    
+    if [[ -z "$frontend_container" ]]; then
+        # Try alternative extraction
+        frontend_container=$(echo "$frontend_rendered" | awk '/kind: Deployment/,/^---$/')
+    fi
+    
+    # Check 1: Frontend container must not contain npm run dev
+    if echo "$frontend_container" | grep -q "npm run dev"; then
+        _fail "Frontend container must not contain 'npm run dev' in production"
+    else
+        _info "Frontend 'npm run dev' check: PASS"
+    fi
+    
+    # Check 2: Frontend container must not contain vite --host
+    if echo "$frontend_container" | grep -q "vite --host"; then
+        _fail "Frontend container must not contain 'vite --host' in production"
+    else
+        _info "Frontend 'vite --host' check: PASS"
+    fi
+    
+    # Check 3: Frontend container must not contain npm ci
+    if echo "$frontend_container" | grep -q "npm ci"; then
+        _fail "Frontend container must not contain 'npm ci' in production"
+    else
+        _info "Frontend 'npm ci' check: PASS"
+    fi
+    
+    # Check 4: Frontend container must not contain npm install
+    if echo "$frontend_container" | grep -q "npm install"; then
+        _fail "Frontend container must not contain 'npm install' in production"
+    else
+        _info "Frontend 'npm install' check: PASS"
+    fi
+    
+    echo
+fi
+
+# ---------------------------------------------------------------------------
 # Finalize
 # ---------------------------------------------------------------------------
 
