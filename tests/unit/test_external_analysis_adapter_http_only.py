@@ -169,7 +169,7 @@ class TestLegacyLlamacppAdapter:
         self, monkeypatch: Any, tmp_path: Path
     ) -> None:
         """Legacy llamacpp with explicit command should use subprocess."""
-        subprocess_called: list[str] = []
+        subprocess_called: list[list[str]] = []
 
         def fake_run_subprocess(command: Any) -> str:
             subprocess_called.append(list(command))
