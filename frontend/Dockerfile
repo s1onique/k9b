@@ -16,19 +16,19 @@ COPY frontend/ ./
 RUN npm run build
 
 # =============================================================================
-# Stage 2: Production runtime with nginx
+# Stage 2: Production runtime with unprivileged nginx
+# Uses nginx-unprivileged image for Kubernetes readOnlyRootFilesystem compatibility.
+# All nginx temp/runtime paths are moved to /tmp (mounted as writable emptyDir).
 # =============================================================================
-FROM nginx:1.25-alpine
+FROM nginxinc/nginx-unprivileged:stable-alpine AS runtime
+
+# Copy custom nginx config with writable paths in /tmp
+COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
 # Copy the built frontend assets into nginx's html directory
 COPY --from=builder /app/dist/ /usr/share/nginx/html/
 
-# Configure nginx for SPA routing with fallback to index.html
-COPY --from=builder /app/dist/ /usr/share/nginx/html/
-RUN echo 'server { listen 8080; server_name _; root /usr/share/nginx/html; index index.html; location / { try_files $uri $uri/ /index.html; } }' > /etc/nginx/conf.d/default.conf
-
-# Nginx runs as non-root by default in this image
-# Container listens on 8080 (unprivileged)
+# Unprivileged nginx listens on 8080 (configured in nginx.conf)
 EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

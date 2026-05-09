@@ -103,6 +103,14 @@ frontend:
   command: []
   # args: Override container arguments. Leave empty to use image's default.
   args: []
+  # securityContext: Frontend container security context (for nginx-unprivileged).
+  # Must keep readOnlyRootFilesystem: true with nginx-tmp emptyDir volume.
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
   env:
     VITE_BACKEND_HOST: "k9b-backend"
     VITE_BACKEND_PORT: "8080"

@@ -45,10 +45,25 @@ spec:
               value: {{ .Values.frontend.env.FRONTEND_HOST | quote }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 10 }}
-          {{- with .Values.containerSecurityContext }}
+          {{- if .Values.frontend.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml .Values.frontend.securityContext | nindent 10 }}
           {{- end }}
+          volumeMounts:
+            - name: nginx-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -61,3 +76,6 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: nginx-tmp
+          emptyDir: {}

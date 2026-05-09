@@ -1,0 +1,105 @@
+# Helm test assertions for k9b frontend nginx deployment.
+# Ensures nginx runs unprivileged with readOnlyRootFilesystem + writable /tmp.
+suite: frontend nginx deployment
+
+templates:
+  - deployment-frontend.yaml
+
+tests:
+  # ===== Security context with readOnlyRootFilesystem =====
+
+  - it: frontend should render readOnlyRootFilesystem: true
+    set:
+      frontend.securityContext.readOnlyRootFilesystem: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: frontend should render allowPrivilegeEscalation: false
+    set:
+      frontend.securityContext.allowPrivilegeEscalation: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: frontend should drop all capabilities
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value:
+            - ALL
+
+  # ===== Writable /tmp volume mount =====
+
+  - it: frontend should mount emptyDir at /tmp for nginx temp paths
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.volumes[name=nginx-tmp]
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: nginx-tmp
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /tmp
+
+  # ===== Health probes =====
+
+  - it: frontend should have readinessProbe on /healthz
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: http
+
+  - it: frontend should have livenessProbe on /healthz
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: http
+
+  # ===== No forbidden runtime commands =====
+
+  - it: frontend should NOT render npm run dev
+    set:
+      frontend.command:
+        - npm
+        - run
+        - dev
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command
+          pattern: "npm.*dev"
+
+  - it: frontend should NOT render vite at runtime
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0]
+          pattern: "vite"
+
+  - it: frontend should NOT render npm ci at runtime
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0]
+          pattern: "npm ci"
+
+  - it: frontend should NOT render npm install at runtime
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0]
+          pattern: "npm install"
+
+  # ===== Default command should be empty (use image CMD) =====
+
+  - it: frontend should use image default CMD when command is empty
+    set:
+      frontend.command: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
