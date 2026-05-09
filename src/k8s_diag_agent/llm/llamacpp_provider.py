@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, cast
@@ -62,7 +62,7 @@ _DEPRECATION_WARNING_LOGGED: set[str] = set()
 def _get_env_with_fallback(
     canonical_name: str,
     legacy_name: str,
-    source: dict[str, str],
+    source: Mapping[str, str],
 ) -> tuple[str | None, str | None, bool]:
     """Get environment variable value with canonical/legacy fallback.
 
@@ -190,7 +190,7 @@ class LlamaCppProviderConfig:
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> LlamaCppProviderConfig:
-        source = env or os.environ
+        source: Mapping[str, str] = env if env is not None else os.environ
         missing: list[str] = []
         used_legacy: set[str] = set()
 
@@ -218,6 +218,10 @@ class LlamaCppProviderConfig:
                 f"Use K9B_EXTERNAL_ANALYSIS_BASE_URL and K9B_EXTERNAL_ANALYSIS_MODEL (legacy LLAMA_CPP_* vars accepted)."
             )
 
+        # After this point, base_url and model are guaranteed to be str (not None)
+        assert base_url is not None
+        assert model is not None
+
         # Emit deprecation warning once for legacy env usage
         if used_legacy and "env_deprecation" not in _DEPRECATION_WARNING_LOGGED:
             warnings.warn(
@@ -233,60 +237,60 @@ class LlamaCppProviderConfig:
         )
 
         # Get generation settings with fallback
-        timeout_seconds, _, _ = _get_env_with_fallback(
+        timeout_seconds_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_TIMEOUT, _LEGACY_ENV_TIMEOUT, source
         )
-        timeout_seconds = cls._parse_timeout(timeout_seconds)
+        timeout_seconds = cls._parse_timeout(timeout_seconds_raw)
 
-        max_tokens_auto_drilldown, _, _ = _get_env_with_fallback(
+        max_tokens_auto_drilldown_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_MAX_TOKENS_AUTO_DRILLDOWN, _LEGACY_ENV_MAX_TOKENS_AUTO_DRILLDOWN, source
         )
-        max_tokens_auto_drilldown = cls._parse_max_tokens(max_tokens_auto_drilldown, DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
+        max_tokens_auto_drilldown = cls._parse_max_tokens(max_tokens_auto_drilldown_raw, DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
 
-        max_tokens_review_enrichment, _, _ = _get_env_with_fallback(
+        max_tokens_review_enrichment_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_MAX_TOKENS_REVIEW_ENRICHMENT, _LEGACY_ENV_MAX_TOKENS_REVIEW_ENRICHMENT, source
         )
-        max_tokens_review_enrichment = cls._parse_max_tokens(max_tokens_review_enrichment, DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
+        max_tokens_review_enrichment = cls._parse_max_tokens(max_tokens_review_enrichment_raw, DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
 
-        response_format_json, _, _ = _get_env_with_fallback(
+        response_format_json_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_RESPONSE_FORMAT_JSON, _LEGACY_ENV_RESPONSE_FORMAT_JSON, source
         )
-        response_format_json = cls._parse_response_format_json(response_format_json)
+        response_format_json = cls._parse_response_format_json(response_format_json_raw)
 
-        temperature, _, _ = _get_env_with_fallback(
+        temperature_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_TEMPERATURE, _LEGACY_ENV_TEMPERATURE, source
         )
-        temperature = cls._parse_temperature(temperature)
+        temperature = cls._parse_temperature(temperature_raw)
 
-        top_p, _, _ = _get_env_with_fallback(
+        top_p_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_TOP_P, _LEGACY_ENV_TOP_P, source
         )
-        top_p = cls._parse_top_p(top_p)
+        top_p = cls._parse_top_p(top_p_raw)
 
-        top_k, _, _ = _get_env_with_fallback(
+        top_k_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_TOP_K, _LEGACY_ENV_TOP_K, source
         )
-        top_k = cls._parse_top_k(top_k)
+        top_k = cls._parse_top_k(top_k_raw)
 
-        repeat_penalty, _, _ = _get_env_with_fallback(
+        repeat_penalty_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_REPEAT_PENALTY, _LEGACY_ENV_REPEAT_PENALTY, source
         )
-        repeat_penalty = cls._parse_repeat_penalty(repeat_penalty)
+        repeat_penalty = cls._parse_repeat_penalty(repeat_penalty_raw)
 
-        seed, _, _ = _get_env_with_fallback(
+        seed_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_SEED, _LEGACY_ENV_SEED, source
         )
-        seed = cls._parse_seed(seed)
+        seed = cls._parse_seed(seed_raw)
 
-        stop, _, _ = _get_env_with_fallback(
+        stop_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_STOP, _LEGACY_ENV_STOP, source
         )
-        stop = cls._parse_stop(stop)
+        stop = cls._parse_stop(stop_raw)
 
-        enable_thinking, _, _ = _get_env_with_fallback(
+        enable_thinking_raw, _, _ = _get_env_with_fallback(
             _CANONICAL_ENV_ENABLE_THINKING, _LEGACY_ENV_ENABLE_THINKING, source
         )
-        enable_thinking = cls._parse_enable_thinking(enable_thinking)
+        enable_thinking = cls._parse_enable_thinking(enable_thinking_raw)
 
         return cls(
             base_url=base_url,
