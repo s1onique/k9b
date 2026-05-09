@@ -103,6 +103,11 @@ frontend:
   command: []
   # args: Override container arguments. Leave empty to use image's default.
   args: []
+  # configmapNginx: When true, mounts a Helm-templated nginx ConfigMap that resolves
+  # the backend service name dynamically (e.g. infra-k9b-backend). This is required
+  # for the /api/ proxy to work correctly with release-prefixed Helm deployments.
+  # The nginx config uses {{ include "k9b.backend.fullname" . }} for the upstream.
+  configmapNginx: true
   # securityContext: Frontend container security context (for nginx-unprivileged).
   # Must keep readOnlyRootFilesystem: true with nginx-tmp emptyDir volume.
   securityContext:
@@ -112,7 +117,10 @@ frontend:
       drop:
         - ALL
   env:
-    VITE_BACKEND_HOST: "k9b-backend"
+    # VITE_BACKEND_HOST: Backend service DNS name for Vite dev server (if used).
+    # Note: The /api/ location proxy is configured via configmapNginx (nginx.conf),
+    # which uses the Helm templated backend fullname (e.g. infra-k9b-backend).
+    VITE_BACKEND_HOST: "{{ .Release.Name }}-k9b-backend"
     VITE_BACKEND_PORT: "8080"
   resources:
     requests:

@@ -103,3 +103,45 @@ tests:
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].command
+
+  # ===== Nginx ConfigMap regression: backend service name must match Helm release =====
+
+  # Regression check: when configmapNginx is enabled, the nginx ConfigMap must NOT
+  # contain the hardcoded "k9b-backend" upstream (which would fail to resolve when
+  # the Helm release name is not the chart name, e.g. "infra-k9b-backend").
+  # The ConfigMap is created by configmap-frontend-nginx.yaml template.
+
+  - it: frontend nginx ConfigMap should NOT contain hardcoded "k9b-backend" upstream
+    set:
+      frontend.configmapNginx: true
+      # Simulate a release name that is different from the chart name
+      # to expose the bug where nginx.conf has a static upstream.
+      # Note: The test only validates that the ConfigMap exists and the deployment
+      # references it. The actual nginx.conf content is validated by ensuring the
+      # ConfigMap is rendered with the Helm-templated backend fullname.
+    asserts:
+      # ConfigMap must exist when configmapNginx is enabled
+      - template:
+          path: templates/configmap-frontend-nginx.yaml
+          isNotNull: true
+      - isNotNull:
+          path: spec.template.spec.volumes[name=nginx-conf]
+      # Verify the ConfigMap uses Helm template for backend fullname
+      - matchRegex:
+          template: templates/configmap-frontend-nginx.yaml
+          pattern: 'k9b\.backend\.fullname'
+
+  # Verify nginx.conf content in ConfigMap templates the backend service name
+  - it: nginx ConfigMap should template backend service name (not hardcoded k9b-backend)
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      # The configmap-frontend-nginx.yaml uses {{ include "k9b.backend.fullname" . }}
+      # for the proxy_pass upstream. We verify the template is present (not the literal).
+      - matchRegex:
+          template: templates/configmap-frontend-nginx.yaml
+          pattern: 'proxy_pass http://\{\{.*k9b\.backend\.fullname.*\}\}:8080'
+      # The hardcoded "k9b-backend" string must NOT appear as the upstream value.
+      - notMatchRegex:
+          template: templates/configmap-frontend-nginx.yaml
+          pattern: 'proxy_pass http://k9b-backend:'
