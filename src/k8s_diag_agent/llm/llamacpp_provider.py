@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -21,6 +22,69 @@ if TYPE_CHECKING:
     from .base import LLMAssessmentInput
 
 SessionFactory = Callable[[], requests.Session]
+
+# Canonical and legacy environment variable names for OpenAI-compatible provider
+# Canonical names (K9B_EXTERNAL_ANALYSIS_*) are preferred; legacy names (LLAMA_CPP_*) are accepted for backward compatibility
+_CANONICAL_ENV_BASE_URL = "K9B_EXTERNAL_ANALYSIS_BASE_URL"
+_CANONICAL_ENV_MODEL = "K9B_EXTERNAL_ANALYSIS_MODEL"
+_CANONICAL_ENV_API_KEY = "K9B_EXTERNAL_ANALYSIS_API_KEY"
+_CANONICAL_ENV_TIMEOUT = "K9B_EXTERNAL_ANALYSIS_TIMEOUT_SECONDS"
+_CANONICAL_ENV_MAX_TOKENS_AUTO_DRILLDOWN = "K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN"
+_CANONICAL_ENV_MAX_TOKENS_REVIEW_ENRICHMENT = "K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT"
+_CANONICAL_ENV_RESPONSE_FORMAT_JSON = "K9B_EXTERNAL_ANALYSIS_RESPONSE_FORMAT_JSON"
+_CANONICAL_ENV_TEMPERATURE = "K9B_EXTERNAL_ANALYSIS_TEMPERATURE"
+_CANONICAL_ENV_TOP_P = "K9B_EXTERNAL_ANALYSIS_TOP_P"
+_CANONICAL_ENV_TOP_K = "K9B_EXTERNAL_ANALYSIS_TOP_K"
+_CANONICAL_ENV_REPEAT_PENALTY = "K9B_EXTERNAL_ANALYSIS_REPEAT_PENALTY"
+_CANONICAL_ENV_SEED = "K9B_EXTERNAL_ANALYSIS_SEED"
+_CANONICAL_ENV_STOP = "K9B_EXTERNAL_ANALYSIS_STOP"
+_CANONICAL_ENV_ENABLE_THINKING = "K9B_EXTERNAL_ANALYSIS_ENABLE_THINKING"
+
+_LEGACY_ENV_BASE_URL = "LLAMA_CPP_BASE_URL"
+_LEGACY_ENV_MODEL = "LLAMA_CPP_MODEL"
+_LEGACY_ENV_API_KEY = "LLAMA_CPP_API_KEY"
+_LEGACY_ENV_TIMEOUT = "LLAMA_CPP_TIMEOUT_SECONDS"
+_LEGACY_ENV_MAX_TOKENS_AUTO_DRILLDOWN = "LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN"
+_LEGACY_ENV_MAX_TOKENS_REVIEW_ENRICHMENT = "LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT"
+_LEGACY_ENV_RESPONSE_FORMAT_JSON = "LLAMA_CPP_RESPONSE_FORMAT_JSON"
+_LEGACY_ENV_TEMPERATURE = "LLAMA_CPP_TEMPERATURE"
+_LEGACY_ENV_TOP_P = "LLAMA_CPP_TOP_P"
+_LEGACY_ENV_TOP_K = "LLAMA_CPP_TOP_K"
+_LEGACY_ENV_REPEAT_PENALTY = "LLAMA_CPP_REPEAT_PENALTY"
+_LEGACY_ENV_SEED = "LLAMA_CPP_SEED"
+_LEGACY_ENV_STOP = "LLAMA_CPP_STOP"
+_LEGACY_ENV_ENABLE_THINKING = "LLAMA_CPP_ENABLE_THINKING"
+
+# Track deprecation warnings to emit only once per process
+_DEPRECATION_WARNING_LOGGED: set[str] = set()
+
+
+def _get_env_with_fallback(
+    canonical_name: str,
+    legacy_name: str,
+    source: dict[str, str],
+) -> tuple[str | None, str | None, bool]:
+    """Get environment variable value with canonical/legacy fallback.
+
+    Args:
+        canonical_name: The canonical env var name (e.g., K9B_EXTERNAL_ANALYSIS_BASE_URL)
+        legacy_name: The legacy env var name (e.g., LLAMA_CPP_BASE_URL)
+        source: The environment dict to read from
+
+    Returns:
+        Tuple of (value, used_var_name, used_legacy). If neither is set, returns (None, None, False).
+    """
+    # Try canonical first
+    canonical_value = source.get(canonical_name)
+    if canonical_value is not None and str(canonical_value).strip():
+        return canonical_value.strip(), canonical_name, False
+
+    # Fall back to legacy
+    legacy_value = source.get(legacy_name)
+    if legacy_value is not None and str(legacy_value).strip():
+        return legacy_value.strip(), legacy_name, True
+
+    return None, None, False
 
 _SYSTEM_INSTRUCTIONS = (
     "You are a Kubernetes diagnostics assistant."
@@ -128,34 +192,102 @@ class LlamaCppProviderConfig:
     def from_env(cls, env: dict[str, str] | None = None) -> LlamaCppProviderConfig:
         source = env or os.environ
         missing: list[str] = []
-        base_raw = source.get("LLAMA_CPP_BASE_URL")
-        base_url = base_raw.strip() if base_raw is not None else ""
+        used_legacy: set[str] = set()
+
+        # Get base_url with fallback from canonical to legacy
+        base_url, _, used_legacy_base = _get_env_with_fallback(
+            _CANONICAL_ENV_BASE_URL, _LEGACY_ENV_BASE_URL, source
+        )
         if not base_url:
-            missing.append("LLAMA_CPP_BASE_URL")
-        model_raw = source.get("LLAMA_CPP_MODEL")
-        model = model_raw.strip() if model_raw is not None else ""
+            missing.append(_CANONICAL_ENV_BASE_URL)
+        elif used_legacy_base:
+            used_legacy.add("base_url")
+
+        # Get model with fallback from canonical to legacy
+        model, _, used_legacy_model = _get_env_with_fallback(
+            _CANONICAL_ENV_MODEL, _LEGACY_ENV_MODEL, source
+        )
         if not model:
-            missing.append("LLAMA_CPP_MODEL")
+            missing.append(_CANONICAL_ENV_MODEL)
+        elif used_legacy_model:
+            used_legacy.add("model")
+
         if missing:
-            raise RuntimeError(f"Missing environment variables for llamacpp provider: {', '.join(missing)}")
-        api_key_raw = source.get("LLAMA_CPP_API_KEY")
-        api_key: str | None = None
-        if api_key_raw is not None:
-            stripped = api_key_raw.strip()
-            if stripped:
-                api_key = stripped
-        timeout_seconds = cls._parse_timeout(source.get("LLAMA_CPP_TIMEOUT_SECONDS"))
-        max_tokens_auto_drilldown = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN"), DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
-        max_tokens_review_enrichment = cls._parse_max_tokens(source.get("LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT"), DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
-        response_format_json = cls._parse_response_format_json(source.get("LLAMA_CPP_RESPONSE_FORMAT_JSON"))
-        # Generation settings
-        temperature = cls._parse_temperature(source.get("LLAMA_CPP_TEMPERATURE"))
-        top_p = cls._parse_top_p(source.get("LLAMA_CPP_TOP_P"))
-        top_k = cls._parse_top_k(source.get("LLAMA_CPP_TOP_K"))
-        repeat_penalty = cls._parse_repeat_penalty(source.get("LLAMA_CPP_REPEAT_PENALTY"))
-        seed = cls._parse_seed(source.get("LLAMA_CPP_SEED"))
-        stop = cls._parse_stop(source.get("LLAMA_CPP_STOP"))
-        enable_thinking = cls._parse_enable_thinking(source.get("LLAMA_CPP_ENABLE_THINKING"))
+            raise RuntimeError(
+                f"Missing environment variables for OpenAI-compatible provider: {', '.join(missing)}. "
+                f"Use K9B_EXTERNAL_ANALYSIS_BASE_URL and K9B_EXTERNAL_ANALYSIS_MODEL (legacy LLAMA_CPP_* vars accepted)."
+            )
+
+        # Emit deprecation warning once for legacy env usage
+        if used_legacy and "env_deprecation" not in _DEPRECATION_WARNING_LOGGED:
+            warnings.warn(
+                "LLAMA_CPP_* environment variables are deprecated. Use K9B_EXTERNAL_ANALYSIS_* variables instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _DEPRECATION_WARNING_LOGGED.add("env_deprecation")
+
+        # Get api_key with fallback
+        api_key, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_API_KEY, _LEGACY_ENV_API_KEY, source
+        )
+
+        # Get generation settings with fallback
+        timeout_seconds, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_TIMEOUT, _LEGACY_ENV_TIMEOUT, source
+        )
+        timeout_seconds = cls._parse_timeout(timeout_seconds)
+
+        max_tokens_auto_drilldown, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_MAX_TOKENS_AUTO_DRILLDOWN, _LEGACY_ENV_MAX_TOKENS_AUTO_DRILLDOWN, source
+        )
+        max_tokens_auto_drilldown = cls._parse_max_tokens(max_tokens_auto_drilldown, DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
+
+        max_tokens_review_enrichment, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_MAX_TOKENS_REVIEW_ENRICHMENT, _LEGACY_ENV_MAX_TOKENS_REVIEW_ENRICHMENT, source
+        )
+        max_tokens_review_enrichment = cls._parse_max_tokens(max_tokens_review_enrichment, DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
+
+        response_format_json, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_RESPONSE_FORMAT_JSON, _LEGACY_ENV_RESPONSE_FORMAT_JSON, source
+        )
+        response_format_json = cls._parse_response_format_json(response_format_json)
+
+        temperature, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_TEMPERATURE, _LEGACY_ENV_TEMPERATURE, source
+        )
+        temperature = cls._parse_temperature(temperature)
+
+        top_p, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_TOP_P, _LEGACY_ENV_TOP_P, source
+        )
+        top_p = cls._parse_top_p(top_p)
+
+        top_k, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_TOP_K, _LEGACY_ENV_TOP_K, source
+        )
+        top_k = cls._parse_top_k(top_k)
+
+        repeat_penalty, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_REPEAT_PENALTY, _LEGACY_ENV_REPEAT_PENALTY, source
+        )
+        repeat_penalty = cls._parse_repeat_penalty(repeat_penalty)
+
+        seed, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_SEED, _LEGACY_ENV_SEED, source
+        )
+        seed = cls._parse_seed(seed)
+
+        stop, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_STOP, _LEGACY_ENV_STOP, source
+        )
+        stop = cls._parse_stop(stop)
+
+        enable_thinking, _, _ = _get_env_with_fallback(
+            _CANONICAL_ENV_ENABLE_THINKING, _LEGACY_ENV_ENABLE_THINKING, source
+        )
+        enable_thinking = cls._parse_enable_thinking(enable_thinking)
+
         return cls(
             base_url=base_url,
             model=model,

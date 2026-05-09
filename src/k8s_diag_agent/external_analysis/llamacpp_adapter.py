@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,12 +39,36 @@ from .adapter import (
     ExternalAnalysisExecutionError,
     ExternalAnalysisRequest,
     _run_subprocess,
+    normalize_adapter_name,
     register_external_analysis_adapter,
 )
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 from .review_input import ReviewEnrichmentInput, build_review_enrichment_input
 from .review_schema import ReviewEnrichmentPayload, ReviewEnrichmentPayloadError
+
+
+@dataclass(frozen=True)
+class ExternalAnalysisPreflightResult:
+    """Result of an external analysis provider preflight check.
+
+    This dataclass captures the result of validating whether an LLM provider
+    is properly configured and ready for use. It includes operator-grade
+    messages for troubleshooting configuration issues.
+    """
+
+    ok: bool
+    provider_requested: str
+    provider_normalized: str
+    model: str | None = None
+    base_url: str | None = None
+    reason: str | None = None
+    operator_message: str | None = None
+
+    @property
+    def legacy_provider_used(self) -> bool:
+        """True if the legacy 'llamacpp' name was used instead of canonical 'openai_compatible'."""
+        return self.provider_normalized != self.provider_requested
 
 
 class LlamaCppAdapter(ExternalAnalysisAdapter):
@@ -78,6 +103,130 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             super().__init__(command=default_command)
         else:
             super().__init__(command=tuple(command) if command else None)
+
+    def preflight_check(self, provider_requested: str | None = None) -> ExternalAnalysisPreflightResult:
+        """Check if the adapter is properly configured and ready for external analysis.
+
+        This method validates that required configuration is present and returns
+        operator-grade diagnostic information for troubleshooting.
+
+        Args:
+            provider_requested: The provider name as configured in policy (may differ from self.name
+                               due to legacy aliases like 'llamacpp' -> 'openai_compatible').
+
+        Returns:
+            ExternalAnalysisPreflightResult with ok=True if configured, ok=False with
+            reason and operator_message if misconfigured.
+        """
+        # Use requested name if provided, otherwise fall back to self.name
+        requested = provider_requested or self.name
+        # Normalize the requested name to canonical form
+        provider_normalized = normalize_adapter_name(requested)
+
+        # Case 1: HTTP path not intended (command-based adapter)
+        if not self._use_http and self._command:
+            return ExternalAnalysisPreflightResult(
+                ok=True,
+                provider_requested=requested,
+                provider_normalized=provider_normalized,
+                operator_message=(
+                    f"External analysis adapter '{provider_normalized}' is configured for "
+                    f"command-based execution (not HTTP)."
+                ),
+            )
+
+        # Case 2: Config error stored during initialization
+        if self._http_config_error:
+            error_msg = str(self._http_config_error)
+            # Parse the error to determine specific reason
+            if "K9B_EXTERNAL_ANALYSIS_BASE_URL" in error_msg or "base_url" in error_msg.lower():
+                reason = "missing_base_url"
+                operator_message = (
+                    "Review enrichment is enabled but no OpenAI-compatible base URL is configured. "
+                    "Set K9B_EXTERNAL_ANALYSIS_BASE_URL, for example http://llm.k9b.svc.cluster.local:8080/v1, "
+                    "or disable review enrichment. Legacy LLAMA_CPP_BASE_URL is still accepted but deprecated."
+                )
+            elif "K9B_EXTERNAL_ANALYSIS_MODEL" in error_msg or "model" in error_msg.lower():
+                reason = "missing_model"
+                operator_message = (
+                    "Review enrichment is enabled but no model is configured. "
+                    "Set K9B_EXTERNAL_ANALYSIS_MODEL to the model name, for example Qwen/Qwen2.5-Coder-7B-Instruct. "
+                    "Legacy LLAMA_CPP_MODEL is still accepted but deprecated."
+                )
+            else:
+                reason = "config_error"
+                operator_message = (
+                    f"Review enrichment provider configuration failed: {error_msg}. "
+                    "Check K9B_EXTERNAL_ANALYSIS_BASE_URL and K9B_EXTERNAL_ANALYSIS_MODEL settings. "
+                    "Health run will continue without LLM enrichment."
+                )
+            return ExternalAnalysisPreflightResult(
+                ok=False,
+                provider_requested=requested,
+                provider_normalized=provider_normalized,
+                reason=reason,
+                operator_message=operator_message,
+            )
+
+        # Case 3: HTTP intent but no provider
+        if self._use_http and not self._http_provider:
+            return ExternalAnalysisPreflightResult(
+                ok=False,
+                provider_requested=requested,
+                provider_normalized=provider_normalized,
+                reason="provider_unavailable",
+                operator_message=(
+                    "Review enrichment is enabled but the OpenAI-compatible provider could not be initialized. "
+                    "Check K9B_EXTERNAL_ANALYSIS_BASE_URL and ensure the model server is reachable. "
+                    "Health run will continue without LLM enrichment."
+                ),
+            )
+
+        # Case 4: Provider available - return success with config details
+        if self._http_provider and self._http_provider._config:
+            config = self._http_provider._config
+            return ExternalAnalysisPreflightResult(
+                ok=True,
+                provider_requested=requested,
+                provider_normalized=provider_normalized,
+                model=config.model,
+                base_url=config.base_url,
+                operator_message=(
+                    f"OpenAI-compatible provider configured: {config.base_url} with model {config.model}."
+                ),
+            )
+
+        # Case 5: HTTP intended but config not loaded yet - try to load
+        if self._use_http:
+            try:
+                config = LlamaCppProviderConfig.from_env()
+                return ExternalAnalysisPreflightResult(
+                    ok=True,
+                    provider_requested=requested,
+                    provider_normalized=provider_normalized,
+                    model=config.model,
+                    base_url=config.base_url,
+                    operator_message=(
+                        f"OpenAI-compatible provider configured: {config.base_url} with model {config.model}."
+                    ),
+                )
+            except RuntimeError as exc:
+                return ExternalAnalysisPreflightResult(
+                    ok=False,
+                    provider_requested=requested,
+                    provider_normalized=provider_normalized,
+                    reason="missing_config",
+                    operator_message=str(exc),
+                )
+
+        # Fallback - should not reach here
+        return ExternalAnalysisPreflightResult(
+            ok=False,
+            provider_requested=requested,
+            provider_normalized=provider_normalized,
+            reason="unknown",
+            operator_message="External analysis adapter state is ambiguous.",
+        )
 
     def run(self, request: ExternalAnalysisRequest) -> ExternalAnalysisArtifact:
         if self._use_http:

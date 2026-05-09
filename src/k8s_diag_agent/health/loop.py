@@ -18,7 +18,7 @@ from ..collect.cluster_snapshot import ClusterSnapshot, WarningEventSummary
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..datetime_utils import parse_iso_to_utc
-from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters
+from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters, normalize_adapter_name
 from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInventory
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose, ExternalAnalysisStatus, write_external_analysis_artifact
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
@@ -2487,16 +2487,94 @@ class HealthLoopRunner:
         policy = self.config.external_analysis.review_enrichment
         if not policy.enabled or not review_path:
             return None
-        provider = (policy.provider or "").strip()
-        provider_segment = _safe_label(provider) if provider else "review-enrichment"
+        provider_requested = (policy.provider or "").strip()
+        # Normalize provider name to canonical form for artifact naming and adapter lookup
+        provider_normalized = normalize_adapter_name(provider_requested) if provider_requested else "review-enrichment"
+        provider_segment = _safe_label(provider_normalized) if provider_normalized else "review-enrichment"
         artifact_path = directories["external_analysis"] / (f"{self.run_id}-review-enrichment-{provider_segment}.json")
         start = time.perf_counter()
         try:
-            if not provider:
+            if not provider_requested:
                 raise ValueError("No review enrichment provider configured")
-            adapter = self._analysis_adapters.get(provider) or self._analysis_adapters.get(provider.lower())
+            # Use normalized name first for adapter lookup, then requested as fallback
+            adapter = (
+                self._analysis_adapters.get(provider_normalized)
+                or self._analysis_adapters.get(provider_normalized.lower())
+                or self._analysis_adapters.get(provider_requested)
+                or self._analysis_adapters.get(provider_requested.lower())
+            )
             if not adapter:
-                raise ValueError(f"Adapter '{provider}' is not registered for review enrichment")
+                raise ValueError(f"Adapter '{provider_requested}' (normalized: '{provider_normalized}') is not registered for review enrichment")
+            # Run preflight check to validate provider configuration before execution
+            # Pass the originally requested provider name so preflight can report it accurately
+            preflight_result = None
+            if hasattr(adapter, "preflight_check"):
+                try:
+                    preflight_result = adapter.preflight_check(provider_requested=provider_requested)
+                except TypeError:
+                    # Fallback for adapters that don't accept provider_requested parameter
+                    preflight_result = adapter.preflight_check()
+                if not preflight_result.ok:
+                    # Emit ERROR log for provider misconfiguration
+                    self._log_event(
+                        "review-enrichment",
+                        "ERROR",
+                        "Review enrichment preflight check failed",
+                        run_label=self.run_label,
+                        run_id=self.run_id,
+                        provider_requested=preflight_result.provider_requested,
+                        provider_normalized=preflight_result.provider_normalized,
+                        reason=preflight_result.reason or "unknown",
+                        operator_message=preflight_result.operator_message or "Provider configuration check failed",
+                        artifact_path=str(artifact_path),
+                        status="failed",
+                        event="review-enrichment-preflight-failed",
+                    )
+                    # Build failure artifact with provider metadata
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    failure_metadata: dict[str, object] = {
+                        "preflight_failed": True,
+                        "provider_requested": preflight_result.provider_requested,
+                        "provider_normalized": preflight_result.provider_normalized,
+                        "reason": preflight_result.reason or "unknown",
+                        "operator_message": preflight_result.operator_message or "Provider configuration check failed",
+                    }
+                    artifact = ExternalAnalysisArtifact(
+                        tool_name=adapter.name,
+                        run_id=self.run_id,
+                        cluster_label=self.run_label,
+                        run_label=self.run_label,
+                        source_artifact=str(review_path),
+                        summary=f"Provider preflight failed: {preflight_result.reason or 'configuration error'}",
+                        findings=(),
+                        suggested_next_checks=(),
+                        status=ExternalAnalysisStatus.FAILED,
+                        raw_output=None,
+                        timestamp=datetime.now(UTC),
+                        artifact_path=str(artifact_path),
+                        provider=preflight_result.provider_normalized,
+                        duration_ms=duration_ms,
+                        purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
+                        error_summary=preflight_result.operator_message,
+                        failure_metadata=failure_metadata,
+                    )
+                    write_external_analysis_artifact(artifact_path, artifact)
+                    # Log final result with preflight failure info
+                    self._log_event(
+                        "review-enrichment",
+                        "ERROR",
+                        "Review enrichment failed",
+                        run_label=self.run_label,
+                        run_id=self.run_id,
+                        provider_requested=preflight_result.provider_requested,
+                        provider_normalized=preflight_result.provider_normalized,
+                        provider_legacy_alias_used=preflight_result.legacy_provider_used,
+                        artifact_path=str(artifact_path),
+                        status="failed",
+                        elapsed_ms=duration_ms,
+                        event="review-enrichment-result",
+                    )
+                    return artifact
             request = ExternalAnalysisRequest(
                 run_id=self.run_id,
                 cluster_label=self.run_label,
@@ -2508,26 +2586,35 @@ class HealthLoopRunner:
                 artifact,
                 run_id=self.run_id,
                 artifact_path=str(artifact_path),
-                provider=provider,
+                provider=provider_normalized,
                 duration_ms=duration_ms,
                 purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
             )
         except ValueError as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
+            # Distinguish between unconfigured (SKIPPED) and misconfigured (FAILED).
+            # - "no provider configured": operator did not set a provider → SKIP (intent to skip)
+            # - "adapter not registered": provider set but adapter missing → SKIP (graceful degradation)
+            # - "missing base_url" / "invalid config": provider set with structural problem → FAIL
+            exc_str = str(exc)
+            is_unconfigured = not provider_requested or "No review enrichment provider configured" in exc_str
+            is_adapter_missing = "is not registered for review enrichment" in exc_str
+            artifact_status = ExternalAnalysisStatus.SKIPPED if (is_unconfigured or is_adapter_missing) else ExternalAnalysisStatus.FAILED
             artifact = ExternalAnalysisArtifact(
-                tool_name=provider or "review-enrichment",
+                tool_name=provider_requested or "review-enrichment",
                 run_id=self.run_id,
                 cluster_label=self.run_label,
                 run_label=self.run_label,
                 source_artifact=str(review_path),
                 summary=str(exc),
-                status=ExternalAnalysisStatus.SKIPPED,
+                status=artifact_status,
                 timestamp=datetime.now(UTC),
                 artifact_path=str(artifact_path),
-                provider=provider or None,
+                provider=provider_normalized if provider_requested else None,
                 duration_ms=duration_ms,
                 purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
-                skip_reason=str(exc),
+                skip_reason=str(exc) if (is_unconfigured or is_adapter_missing) else None,
+                error_summary=str(exc) if not (is_unconfigured or is_adapter_missing) else None,
             )
         # REVIEWED: review enrichment LLM call boundary.
         # adapter.run() calls the provider and may raise exceptions from:
@@ -2539,7 +2626,7 @@ class HealthLoopRunner:
         except Exception as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
             artifact = ExternalAnalysisArtifact(
-                tool_name=provider or "review-enrichment",
+                tool_name=provider_requested or "review-enrichment",
                 run_id=self.run_id,
                 cluster_label=self.run_label,
                 run_label=self.run_label,
@@ -2548,7 +2635,7 @@ class HealthLoopRunner:
                 status=ExternalAnalysisStatus.FAILED,
                 timestamp=datetime.now(UTC),
                 artifact_path=str(artifact_path),
-                provider=provider,
+                provider=provider_normalized if provider_requested else None,
                 duration_ms=duration_ms,
                 purpose=ExternalAnalysisPurpose.REVIEW_ENRICHMENT,
                 error_summary=str(exc),
@@ -2598,7 +2685,7 @@ class HealthLoopRunner:
             f"Review enrichment payload shape: {shape_analysis.classification.value}",
             run_label=self.run_label,
             run_id=self.run_id,
-            provider=provider or "unspecified",
+            provider=provider_normalized if provider_requested else "unspecified",
             artifact_path=str(artifact_path),
             status=artifact.status.value,
             shape_classification=shape_analysis.classification.value,
@@ -2617,11 +2704,19 @@ class HealthLoopRunner:
         error_summary = artifact.error_summary
         skip_reason = artifact.skip_reason
 
+        # Extract reason/operator_message from artifact failure_metadata for ERROR logging
+        reason: str | None = None
+        operator_message: str | None = None
+        if artifact.status == ExternalAnalysisStatus.FAILED and artifact.failure_metadata:
+            failure_meta = cast(dict[str, Any], artifact.failure_metadata)
+            reason = str(failure_meta.get("reason")) if failure_meta.get("reason") else None
+            operator_message = str(failure_meta.get("operator_message")) if failure_meta.get("operator_message") else None
+
         # Additional failure metadata for failed status
         log_kwargs: dict[str, Any] = {
             "run_label": self.run_label,
             "run_id": self.run_id,
-            "provider": provider or "unspecified",
+            "provider": provider_normalized if provider_requested else "unspecified",
             "artifact_path": str(artifact_path),
             "status": artifact.status.value,
             "next_checks_count": next_checks_count,
@@ -2630,8 +2725,13 @@ class HealthLoopRunner:
             "event": "review-enrichment-result",
         }
         # Include failure metadata for FAILED status if available
-        if artifact.status == ExternalAnalysisStatus.FAILED and artifact.duration_ms is not None:
-            log_kwargs["elapsed_ms"] = artifact.duration_ms
+        if artifact.status == ExternalAnalysisStatus.FAILED:
+            if artifact.duration_ms is not None:
+                log_kwargs["elapsed_ms"] = artifact.duration_ms
+            if reason:
+                log_kwargs["reason"] = reason
+            if operator_message:
+                log_kwargs["operator_message"] = operator_message
         self._log_event(
             "review-enrichment",
             severity,
