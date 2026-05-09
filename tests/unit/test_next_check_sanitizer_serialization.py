@@ -270,9 +270,14 @@ class TestOrphanedApprovalSanitization(unittest.TestCase):
             candidate_description="kubectl get deployment metrics-server -n kube-system --context in-cluster",
         )
         result = _serialize_orphaned_approval(view)
-        self.assertNotIn("--context", result["candidateDescription"])
-        self.assertNotIn("in-cluster", result["candidateDescription"])
-        self.assertIn("kubectl get deployment metrics-server -n kube-system", result["candidateDescription"])
+
+        candidate_description = result["candidateDescription"]
+        self.assertIsNotNone(candidate_description)
+        assert candidate_description is not None
+
+        self.assertNotIn("--context", candidate_description)
+        self.assertNotIn("in-cluster", candidate_description)
+        self.assertIn("kubectl get deployment metrics-server -n kube-system", candidate_description)
 
     def test_orphaned_approval_description_preserves_real_context(self) -> None:
         """Real cluster contexts in orphaned approvals must be preserved."""
@@ -280,7 +285,12 @@ class TestOrphanedApprovalSanitization(unittest.TestCase):
             candidate_description="kubectl get pods --context prod-cluster",
         )
         result = _serialize_orphaned_approval(view)
-        self.assertIn("--context prod-cluster", result["candidateDescription"])
+
+        candidate_description = result["candidateDescription"]
+        self.assertIsNotNone(candidate_description)
+        assert candidate_description is not None
+
+        self.assertIn("--context prod-cluster", candidate_description)
 
 
 if __name__ == "__main__":
