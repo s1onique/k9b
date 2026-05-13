@@ -33,6 +33,10 @@ from ..security.kubectl_context import (
     sanitize_kubectl_display_command,
     sanitize_operator_text,
 )
+from .api_incident_report_filtering import (
+    filter_artifact_links,
+    filter_artifact_refs_preserving_minimum,
+)
 from .api_incident_report_ownership import (
     derive_evidence_ownership,
     format_ownership_fields,
@@ -315,13 +319,18 @@ def _build_incident_report_payload(
             seen_refs.add(path)
             deduped_refs.append(ref)
 
+    # Apply artifact filtering to improve provenance quality
+    # Filter skipped/placeholder artifacts from source refs to avoid noise
+    # Use preserving-minimum to ensure claims don't lose all provenance
+    filtered_refs = filter_artifact_refs_preserving_minimum(deduped_refs)
+
     # A healthy run with no evidence should still produce an honest empty report
     if status == "healthy" and not facts and not inferences and not unknowns:
         facts.append(
             {
                 "claimType": "observed",
                 "statement": "No degraded clusters or incidents detected in this run.",
-                "sourceArtifactRefs": deduped_refs or [],
+                "sourceArtifactRefs": filtered_refs or [],
                 "confidence": "high",
             }
         )
@@ -345,7 +354,7 @@ def _build_incident_report_payload(
         "confidence": "high" if (facts or derived) else "low",
         "freshness": cast(FreshnessPayload | None, freshness),
         "recommendedActions": recommended_actions,
-        "sourceArtifactRefs": deduped_refs,
+        "sourceArtifactRefs": filtered_refs,
         "crossClusterFindings": cross_cluster_findings,
     }
 
@@ -1224,6 +1233,13 @@ def _build_operator_worklist_payload(
 
     if not items:
         return None
+
+    # Apply artifact filtering to worklist item provenance
+    # Filter skipped/placeholder artifacts from sourceArtifactRefs to improve quality
+    for item in items:
+        refs = item.get("sourceArtifactRefs") or []
+        filtered_refs = filter_artifact_refs_preserving_minimum(refs)
+        item["sourceArtifactRefs"] = filtered_refs
 
     # Compute counts based on canonical itemState
     completed = sum(
