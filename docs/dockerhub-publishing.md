@@ -28,12 +28,21 @@ To create a DockerHub access token:
 
 ## Image Names
 
-| Image | DockerHub URL |
-|-------|---------------|
-| Backend | `docker.io/gitinsky/k9b-backend` |
-| Frontend (Node) | `docker.io/gitinsky/k9b-frontend` |
+| Image | DockerHub URL | Status |
+|-------|---------------|--------|
+| Backend | `docker.io/gitinsky/k9b-backend` | **Requires secrets to publish** |
+| Frontend (Node) | `docker.io/gitinsky/k9b-frontend` | **Requires secrets to publish** |
 
 **Namespace:** `gitinsky`
+
+**Note:** Images are not currently published. The DockerHub workflow requires:
+- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets to be configured in GitHub
+- Image tags are derived from Git commit SHA (e.g., `4344ab1`)
+
+Before publishing images:
+1. Configure GitHub secrets (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`)
+2. Trigger the workflow via `workflow_dispatch` or push to `main`
+3. Verify images are accessible: `docker pull docker.io/gitinsky/k9b-backend:<tag>`
 
 ## Trigger Events
 

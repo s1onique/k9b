@@ -25,8 +25,8 @@ Two release blockers were identified for beta package publication/distribution r
 
 | Item | Owner/Area | Evidence | Impact | Recommended Next Action |
 |------|-----------|----------|--------|------------------------|
-| ~~GitLab CI verify lane missing~~ | CI/deploy | ~~`.gitlab/ci/` directory does not exist~~ | ~~No CI gate for merge requests~~ | **RESOLVED:** GitHub Actions `.github/workflows/verify.yml` added (2026-05-13). Runs on PRs to all branches and main. No secrets required. |
-| Image publish verification | Packaging | `docs/dockerhub-publishing.md` exists but image tags (`ecacd81`) may not be publicly accessible | Beta package consumers may not be able to pull images | Confirm image tags are publicly accessible; add `helm template` smoke test to CI |
+| | ~~GitLab CI verify lane missing~~ | CI/deploy | ~~`.gitlab/ci/` directory does not exist~~ | ~~No CI gate for merge requests~~ | **RESOLVED:** GitHub Actions `.github/workflows/verify.yml` added (2026-05-13). Runs on PRs to all branches and main. No secrets required. |
+| Image publish verification | Packaging | Images reference `docker.io/gitinsky/k9b-*` but workflow requires secrets to publish | Beta package consumers cannot pull images until secrets are configured | **RESOLVED:** Documentation corrected to state images are local/build-only until secrets configured. Helm chart installable from local checkout. |
 
 ---
 
@@ -107,9 +107,9 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | Item | Status | Action |
 |------|--------|--------|
 | **Full gate CI timeouts** | Implemented | `scripts/verify_all.sh` runs all lanes; no documented full-gate timeout; parallel lane execution may cause long runs |
-| **Image tag public accessibility** | Not verified | Confirm `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81` are publicly pullable; document in `docs/dockerhub-publishing.md` |
+| **Image tag public accessibility** | **Resolved** | Images (`docker.io/gitinsky/k9b-backend:ecacd81`, `docker.io/gitinsky/k9b-frontend:ecacd81`) require GitHub secrets to publish. Documentation corrected: images are build-only until secrets configured. Local docker-compose works for development. Helm chart installable from local checkout. |
 | **Public tag/version check** | Not verified | Confirm whether a public versioned tag (e.g., `v0.1.0-beta`) exists on GitHub |
-| **Chart/package publishing** | Not verified | Confirm Helm chart `charts/k9b/` is published to a chart registry or if only local `helm install` is supported |
+| **Chart/package publishing** | Documented | Helm chart is installable from local checkout. Publication to DockerHub OCI registry requires `DOCKERHUB_ORG` variable and `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets. |
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
 | **GitHub release creation** | Not verified | Confirm whether a GitHub release is expected for beta or if distribution is via chart + image only |
 | **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
@@ -127,7 +127,7 @@ After beta packaging closes, the next parent epic should focus on one of the fol
 
 **Scope:**
 1. ~~Add GitLab CI verify lane (or equivalent CI pipeline)~~ — **DONE:** GitHub Actions verify.yml added
-2. Verify image tag public accessibility
+2. ~~Verify image tag public accessibility~~ — **DONE:** Images require secrets; docs corrected to reflect local-only state until secrets configured
 3. Add coverage thresholds to the verification gate
 4. Close Phase 1b LLM anonymization (label/annotation values, Helm release names)
 5. Review beta operator feedback and triage into next increment

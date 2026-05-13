@@ -185,6 +185,40 @@ The scheduler writes structured JSON events to stdout/stderr and maintains `runs
 2. Place kubeconfig bundle under `podman/kubeconfig/config` (symlink or copy from `~/.kube/config`).
 3. `podman compose up --build -d` (or `docker compose up --build -d`) to start scheduler, backend, and frontend.
 
+### Docker Image Access
+
+**Important:** The Helm chart defaults reference `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`. These images must be available in your registry before Helm deployment.
+
+**For local development:**
+```bash
+# Build and run locally with docker-compose
+cd /path/to/k9b
+docker compose up --build -d
+```
+
+**For Helm deployment with custom registry:**
+```bash
+# Override image repository and tag
+helm install infra-k9b ./charts/k9b -n k9b --create-namespace \
+  --set image.backend.repository=your-registry/k9b-backend \
+  --set image.backend.tag=ecacd81 \
+  --set image.frontend.repository=your-registry/k9b-frontend \
+  --set image.frontend.tag=ecacd81
+```
+
+**To publish images to DockerHub:**
+1. Configure GitHub secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
+2. See [docs/dockerhub-publishing.md](dockerhub-publishing.md) for workflow details
+
+### Helm Chart Installation
+
+The Helm chart is installable from local checkout:
+```bash
+helm install infra-k9b ./charts/k9b -n k9b --create-namespace
+```
+
+Chart publication to DockerHub OCI registry requires `DOCKERHUB_ORG` variable and secrets. See [charts/k9b/README.md](../charts/k9b/README.md) for details.
+
 ---
 
 ## Related Documentation

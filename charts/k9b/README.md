@@ -32,12 +32,21 @@ This Helm chart deploys k9b, an LLM-based Kubernetes monitoring and diagnostics 
 ### Install the Chart
 
 ```bash
-# Install with default public Docker Hub images
+# Install from local chart (images must be available in your registry)
 helm install infra-k9b ./charts/k9b -n k9b --create-namespace
+
+# With explicit image overrides (recommended for production)
+helm install infra-k9b ./charts/k9b -n k9b \
+  --set image.backend.repository=your-registry/gitinsky/k9b-backend \
+  --set image.backend.tag=ecacd81 \
+  --set image.frontend.repository=your-registry/gitinsky/k9b-frontend \
+  --set image.frontend.tag=ecacd81
 
 # Or render locally first
 helm template infra-k9b ./charts/k9b
 ```
+
+**Note:** The default `values.yaml` references `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`. These images must be available in your registry before deployment. Override using `--set` flags as shown above.
 
 ### Upgrade the Chart
 
