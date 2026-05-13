@@ -100,10 +100,37 @@ Note: `src/App.tsx` is **included** in coverage because it contains substantial 
 - `api.ts` - API communication
 - `src/components/` - Component logic
 
-## Notes
+## Coverage Policy
 
-- No coverage thresholds are enforced (fail_under = 0)
-- Coverage is informational only at this stage
-- Future work may add thresholds once baseline is established
-- The goal is visibility into coverage, not enforcement
+### Current Status: Report-Only (Non-Blocking)
+
+Coverage reporting is implemented for visibility, not enforcement:
+
+- **No thresholds enforced**: `fail_under = 0` in pyproject.toml
+- **CI artifacts uploaded**: Coverage reports are generated and uploaded as CI artifacts
+- **Non-blocking**: Coverage job runs independently and does not affect the verification gate
+- **Future consideration**: Threshold enforcement may be added once baseline coverage is stable
+
+### CI Integration
+
+Coverage runs as a separate job in `.github/workflows/verify.yml`:
+
+- Runs on all PRs, main push, and manual dispatch
+- Uploads coverage artifacts (XML, JSON, Lcov, HTML) to CI artifacts
+- Displays coverage summary in CI logs
+- Does NOT block merge on low coverage (report-only policy)
+
+### Manual vs CI Coverage
+
+| Aspect | Manual | CI |
+|--------|--------|-----|
+| Trigger | `scripts/run_coverage.sh` | Every PR/push |
+| Artifacts | `coverage/` directory | CI artifacts (7-day retention) |
+| Blocking | No | No |
+| Display | Terminal output | CI logs |
+
+### Notes
+
 - The `coverage/` directory is gitignored to avoid committing large artifacts
+- Coverage artifacts are stored in CI for 7 days
+- Current baseline: ~82% line coverage, ~67% branch coverage

@@ -36,7 +36,7 @@ Items worth doing shortly after beta or before wider rollout. These improve poli
 
 | Item | Owner/Area | Evidence | Impact | Priority |
 |------|-----------|----------|--------|----------|
-| **Add coverage thresholds to verification gate** | Testing/coverage | `docs/coverage.md` notes "informational only at this stage; no thresholds enforced" | No automated coverage regression detection | Medium |
+| **Add coverage thresholds to verification gate** | Testing/coverage | Report-only CI job added; thresholds remain informational (fail_under=0) | No automated coverage regression detection | Medium (deferred) |
 | **Expand deterministic next-check fixture coverage** | Testing/diagnostics | Regression coverage only covers incident report claim taxonomy; next-check planning behavior has limited fixture coverage | Harder to detect next-check regressions | Medium |
 | **AUTH-08: GET endpoint protection** | Security/deployment | `charts/k9b/README.md` documents "GET endpoint protection **Deferred** (use reverse proxy)" | Mutation endpoints protected but reads are not | Low (reverse proxy is recommended pattern) |
 | **AUTH-09: Full CSRF token** | Security/API | `docs/security/operator-auth-design.md` defers "Full CSRF token (API-R2 sufficient)" | Standard CORS headers used | Low (API-R2 Origin/Referer deemed sufficient) |
@@ -113,7 +113,7 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
 | **GitHub release creation** | Not required | Rolling beta does not require a GitHub release. Distribution is via repository + local Helm chart. |
 | **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
-| **Coverage gate in CI** | Deferred | `scripts/coverage_all.sh` exists but is not part of the canonical gate |
+| **Coverage gate in CI** | Report-only | Non-blocking coverage job added to CI; artifacts uploaded; thresholds remain informational (fail_under=0) |
 
 ---
 
