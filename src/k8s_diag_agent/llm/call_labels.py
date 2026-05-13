@@ -7,6 +7,7 @@ Call ID format:
 - auto-drilldown: {run_id}:{cluster_label}:auto-drilldown:{provider}
 - review-enrichment: {run_id}:review-enrichment:{provider}
 """
+
 from __future__ import annotations
 
 
@@ -22,7 +23,7 @@ def build_llm_call_id(
     Args:
         run_id: The run identifier
         operation: The operation type ("auto-drilldown" or "review-enrichment")
-        provider: The LLM provider name (e.g., "llamacpp")
+        provider: The LLM provider name (e.g., "openai_compatible")
         cluster_label: The cluster label for auto-drilldown (required for that operation)
 
     Returns:

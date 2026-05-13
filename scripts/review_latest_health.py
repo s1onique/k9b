@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Daily operator review flow that surfaces the most actionable health drilldown."""
+
 from __future__ import annotations
 
 import argparse
@@ -95,9 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def _python_executable() -> Path:
     python_binary = _root_path() / ".venv" / "bin" / "python"
     if not python_binary.exists():
-        raise RuntimeError(
-            f"Python executable {python_binary} not found; activate or create .venv before running."
-        )
+        raise RuntimeError(f"Python executable {python_binary} not found; activate or create .venv before running.")
     return python_binary
 
 
@@ -105,15 +104,11 @@ def _resolve_health_config(path: Path) -> Path:
     if path.exists():
         return path
     if path == DEFAULT_HEALTH_CONFIG and HEALTH_CONFIG_FALLBACK.exists():
-        raise RuntimeError(
-            f"Local config {path} is missing; copy {HEALTH_CONFIG_FALLBACK} → {path} before running."
-        )
+        raise RuntimeError(f"Local config {path} is missing; copy {HEALTH_CONFIG_FALLBACK} → {path} before running.")
     raise RuntimeError(f"Health config {path} not found; pass a valid --health-config.")
 
 
-def _run_health_loop_once(
-    config_path: Path, python_bin: Path | None = None, env: Mapping[str, str] | None = None
-) -> int:
+def _run_health_loop_once(config_path: Path, python_bin: Path | None = None, env: Mapping[str, str] | None = None) -> int:
     python = python_bin or _python_executable()
     executable_env = dict(env) if env is not None else os.environ
     result = subprocess.run(
@@ -157,9 +152,7 @@ def _print_summary(
 
     if assessment and assessment.hypotheses:
         hypothesis = assessment.hypotheses[0]
-        print(
-            f"Top hypothesis: {hypothesis.description} (confidence: {hypothesis.confidence.value}, layer: {hypothesis.probable_layer})"
-        )
+        print(f"Top hypothesis: {hypothesis.description} (confidence: {hypothesis.confidence.value}, layer: {hypothesis.probable_layer})")
     else:
         print("Top hypothesis: unavailable")
 
@@ -167,9 +160,7 @@ def _print_summary(
         print("Next low-risk checks:")
         for check in assessment.next_evidence_to_collect[:3]:
             evidence = ", ".join(check.evidence_needed) or "none"
-            print(
-                f"  - {check.description} (method: {check.method}, owner: {check.owner}, evidence: {evidence})"
-            )
+            print(f"  - {check.description} (method: {check.method}, owner: {check.owner}, evidence: {evidence})")
     else:
         print("Next low-risk checks: none")
 
@@ -211,20 +202,18 @@ def run_operator_review(
     assessment = load_assessment(assessment_path)
 
     if _has_llama_config(env_source):
-        print("LLAMA_CPP config detected; running LLM drilldown assessment.")
+        print("OpenAI-compatible LLM config detected; running drilldown assessment.")
         try:
             assessor = _ensure_assess_drilldown_artifact()
-            assessment = assessor(candidate.artifact, provider_name="llamacpp")
+            assessment = assessor(candidate.artifact, provider_name="openai_compatible")
         except Exception as exc:
             print(f"LLM assessment failed: {exc}", file=sys.stderr)
         else:
             assessments_dir.mkdir(parents=True, exist_ok=True)
-            assessment_path.write_text(
-                json.dumps(assessment.to_dict(), indent=2), encoding="utf-8"
-            )
+            assessment_path.write_text(json.dumps(assessment.to_dict(), indent=2), encoding="utf-8")
             print(f"Updated assessment artifact: {assessment_path}")
     else:
-        print("LLAMA_CPP env vars not set; skipping automated assessment.")
+        print("OpenAI-compatible LLM env vars not set; skipping automated assessment.")
 
     _print_summary(latest, assessment, assessment_path)
     return 0

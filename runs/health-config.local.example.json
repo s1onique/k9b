@@ -60,16 +60,16 @@
       "suspicious_comparison": false
     },
     "adapters": [
-      { "name": "llamacpp", "enabled": true }
+      { "name": "openai_compatible", "enabled": true }
     ],
     "auto_drilldown": {
       "enabled": false,
-      "provider": "llamacpp",
+      "provider": "openai_compatible",
       "max_per_run": 3
     },
     "review_enrichment": {
       "enabled": false,
-      "provider": "llamacpp"
+      "provider": "openai_compatible"
     }
   },
   "baseline_policy_path": "health-baseline.example.json"

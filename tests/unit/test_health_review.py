@@ -87,8 +87,10 @@ class HealthReviewLogicTest(unittest.TestCase):
 
     def test_top_drilldown_ranking_prefers_severity(self) -> None:
         ts = datetime.now(UTC)
+
         def pods(phase: str, reason: str) -> list[DrilldownPod]:
             return [DrilldownPod(namespace="ns", name="pod", phase=phase, reason=reason)]
+
         candidates = [
             DrilldownCandidate(Path("image.json"), _make_artifact("run", ts, "image", ("ImagePullBackOff",), pods("pending", "ImagePullBackOff"))),
             DrilldownCandidate(Path("crash.json"), _make_artifact("run", ts, "crash", ("CrashLoopBackOff",), pods("running", "CrashLoopBackOff"))),
@@ -121,7 +123,7 @@ class HealthReviewScriptTest(unittest.TestCase):
             assess_mock.assert_not_called()
             text = output.getvalue()
             self.assertIn("Selected cluster: cluster", text)
-            self.assertIn("LLAMA_CPP env vars not set; skipping automated assessment.", text)
+            self.assertIn("OpenAI-compatible LLM env vars not set; skipping automated assessment.", text)
             self.assertIn("Top findings: none", text)
             self.assertIn("Next low-risk checks: none", text)
 
@@ -181,14 +183,12 @@ class HealthReviewScriptTest(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
             assess_mock.assert_called_once()
             latest = select_latest_run(drilldown_dir)
-            assessment_path = module.assessment_path_for_drilldown(
-                latest.candidates[0].path, health_dir / "assessments"
-            )
+            assessment_path = module.assessment_path_for_drilldown(latest.candidates[0].path, health_dir / "assessments")
             self.assertTrue(assessment_path.exists())
             stored = json.loads(assessment_path.read_text(encoding="utf-8"))
             self.assertEqual(stored, assessment.to_dict())
             text = output.getvalue()
-            self.assertIn("LLAMA_CPP config detected", text)
+            self.assertIn("OpenAI-compatible LLM config detected", text)
             self.assertIn("Top findings:", text)
             self.assertIn("Top hypothesis:", text)
             self.assertIn("Next low-risk checks:", text)

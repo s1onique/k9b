@@ -34,18 +34,20 @@ _SENSITIVE_KEYWORDS = (
 
 # Known-safe token-count field names that should NOT be scrubbed.
 # These are numeric budget/observability fields, not credentials.
-_SAFE_TOKEN_COUNT_FIELDS = frozenset((
-    "max_tokens",
-    "prompt_tokens",
-    "prompt_tokens_estimate",
-    "actual_prompt_tokens_estimate",
-    "completion_tokens",
-    "total_tokens",
-    "token_count",
-    "n_tokens",
-    "timeout_seconds",
-    "response_content_chars",
-))
+_SAFE_TOKEN_COUNT_FIELDS = frozenset(
+    (
+        "max_tokens",
+        "prompt_tokens",
+        "prompt_tokens_estimate",
+        "actual_prompt_tokens_estimate",
+        "completion_tokens",
+        "total_tokens",
+        "token_count",
+        "n_tokens",
+        "timeout_seconds",
+        "response_content_chars",
+    )
+)
 
 
 def _is_safe_token_count_field(key: str) -> bool:
@@ -58,10 +60,10 @@ def _is_safe_token_count_field(key: str) -> bool:
     # Allow fields containing tokens_estimate (prompt token estimation)
     if "tokens_estimate" in key:
         return True
-    # Allow fields containing _max_tokens_ (e.g., llamacpp_max_tokens_auto_drilldown)
+    # Allow fields containing _max_tokens_ (e.g., openai_compatible_max_tokens_auto_drilldown)
     if "_max_tokens_" in key:
         return True
-    # Allow fields ending with _max_tokens (e.g., llamacpp_max_tokens)
+    # Allow fields ending with _max_tokens (e.g., openai_compatible_max_tokens)
     if key.endswith("_max_tokens"):
         return True
     return False

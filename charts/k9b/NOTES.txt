@@ -76,7 +76,7 @@ Backend:
   KUBECONFIG: Path to kubeconfig inside container
 
 Scheduler:
-  LLAMA_CPP_BASE_URL: LLM provider endpoint (llama.cpp compatible)
+  LLAMA_CPP_BASE_URL: LLM provider endpoint (OpenAI-compatible)
   LLAMA_CPP_MODEL: Model name for LLM provider
   HEALTH_BUILD_DIAGNOSTIC_PACK: Enable diagnostic pack building (default: "1")
 

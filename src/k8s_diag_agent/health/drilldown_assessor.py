@@ -88,7 +88,7 @@ def assess_drilldown_artifact(
     )
     # Use provider-specific max_tokens if not explicitly provided
     effective_max_tokens = max_tokens
-    if effective_max_tokens is None and provider_name == "llamacpp":
+    if effective_max_tokens is None and _is_openai_compatible_provider(provider_name):
         from ..llm.llamacpp_provider import LlamaCppProvider
 
         if isinstance(provider, LlamaCppProvider):
@@ -208,7 +208,7 @@ def extract_drilldown_prompt_sections(artifact: DrilldownArtifact) -> list[Promp
 
 def build_drilldown_prompt_diagnostics(
     artifact: DrilldownArtifact,
-    provider_name: str = "llamacpp",
+    provider_name: str = "openai_compatible",
     *,
     actual_prompt_chars: int | None = None,
     max_tokens: int | None = None,

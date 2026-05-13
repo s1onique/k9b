@@ -1,12 +1,13 @@
 """Prompt diagnostics for LLM call accounting and observability.
 
-This module provides structured tracking of prompt composition for llama.cpp
-scheduler-time calls. The goal is to make the next timeout self-explanatory
+This module provides structured tracking of prompt composition for OpenAI-compatible
+LLM scheduler-time calls. The goal is to make the next timeout self-explanatory
 by recording which prompt sections contribute most to token bloat.
 
 Measurement-only: this module does NOT compact, truncate, omit, or rewrite
 prompt content. It only measures what is already there.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -168,7 +169,7 @@ def build_prompt_diagnostics(
     4. Computes top 5 sections by estimated token count
 
     Args:
-        provider: The LLM provider name (e.g., "llamacpp")
+        provider: The LLM provider name (e.g., "openai_compatible")
         operation: The operation/purpose (e.g., "review-enrichment", "auto-drilldown")
         sections: Sequence of PromptSection or (name, text) tuples
         actual_prompt_chars: Exact character count of the actual prompt sent to LLM.
@@ -254,7 +255,7 @@ def build_full_prompt_diagnostics(
     additional breakdown.
 
     Args:
-        provider: The LLM provider name (e.g., "llamacpp")
+        provider: The LLM provider name (e.g., "openai_compatible")
         operation: The operation/purpose (e.g., "review-enrichment", "auto-drilldown")
         actual_prompt: The exact prompt string sent to the LLM
         max_tokens: The max_tokens completion budget if any
