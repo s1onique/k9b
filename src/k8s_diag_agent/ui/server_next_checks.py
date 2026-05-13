@@ -466,6 +466,11 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
                 exc_info=True,
             )
 
+    # Invalidate the runs list cache so Recent Runs reflects the new execution state
+    from .server import _invalidate_runs_list_cache
+
+    _invalidate_runs_list_cache()
+
     handler._send_json(response_payload)
 
 

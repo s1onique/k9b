@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shlex
 import subprocess
 import time
@@ -471,6 +472,67 @@ def _artifact_path_for_run(health_root: Path, run_id: str, candidate_index: int)
     return directory / filename
 
 
+def check_existing_execution_artifact(
+    health_root: Path,
+    run_id: str,
+    candidate_index: int,
+    candidate: Mapping[str, object],
+) -> ExternalAnalysisArtifact | None:
+    """Check if an execution artifact already exists for this candidate.
+
+    If the artifact exists and matches the same run/candidate/tool/cluster/command,
+    returns it as already-executed (idempotent success).
+    If the artifact exists but has mismatched content, returns None to signal
+    that a true collision occurred (immutability violation should be raised).
+
+    Args:
+        health_root: The health root directory
+        run_id: The run ID
+        candidate_index: The candidate index
+        candidate: The candidate dictionary for comparison
+
+    Returns:
+        Existing artifact if found and matching, None otherwise
+    """
+    artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
+    if not artifact_path.exists():
+        return None
+
+    try:
+        from .artifact_readers import try_read_external_analysis_artifact
+        artifact = try_read_external_analysis_artifact(
+            artifact_path,
+            run_id=run_id,
+            artifact_kind="next-check-execution",
+            log_failures=False,
+        )
+        if artifact is None:
+            return None
+
+        # Verify this is the same execution by comparing key fields
+        # Check run_id, candidate_index, and command family match
+        payload = artifact.payload if isinstance(artifact.payload, Mapping) else {}
+        artifact_candidate_index = payload.get("candidateIndex")
+        artifact_command_family = payload.get("commandFamily")
+        artifact_target_cluster = payload.get("targetCluster")
+
+        candidate_command_family = str(candidate.get("suggestedCommandFamily") or "")
+        candidate_target_cluster = str(candidate.get("targetCluster") or "")
+
+        # If key fields match, this is the same execution - return as idempotent
+        if (
+            artifact_candidate_index == candidate_index
+            and artifact_command_family == candidate_command_family
+            and artifact_target_cluster == candidate_target_cluster
+        ):
+            return artifact
+
+        # Key fields don't match - this is a true collision
+        return None
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+
+
 def _log_artifact_write(
     *,
     run_id: str,
@@ -642,6 +704,32 @@ def execute_manual_next_check(
             command_family=family.value,
             blocking_reason=BlockingReason.MISSING_CONTEXT,
         )
+
+    # IDEMPOTENCY CHECK: If artifact already exists for this candidate, return it
+    # This makes re-running candidates idempotent instead of raising immutability violation
+    existing_artifact = check_existing_execution_artifact(
+        health_root, run_id, candidate_index, candidate
+    )
+    if existing_artifact is not None:
+        _log_execution_event(
+            message="Manual next-check execution already exists, returning existing artifact",
+            severity="INFO",
+            run_label=run_label,
+            run_id=run_id,
+            plan_artifact_path=str(plan_artifact_path),
+            candidate_index=candidate_index,
+            target_cluster=target_cluster,
+            target_context=target_context,
+            candidate_description=description,
+            candidate_id=candidate_id_value,
+            command=None,
+            command_family=family.value,
+            status=existing_artifact.status.value,
+            artifact_path=existing_artifact.artifact_path,
+            event="already-executed",
+        )
+        return existing_artifact
+
     runner = command_runner or _default_runner
     command = _build_command(description, target_context, family)
     _log_execution_event(

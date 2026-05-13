@@ -1170,6 +1170,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         if not dry_run and result.executed_count > 0:
             _refresh_diagnostic_pack_latest(run_id, self.runs_dir)
             _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
+            # Invalidate the runs list cache so Recent Runs reflects the new execution state
+            _invalidate_runs_list_cache()
 
         self._send_json(response)
 
@@ -1810,6 +1812,31 @@ def _relative_path(base: Path, target: object | None) -> str | None:
         return str(candidate.relative_to(base))
     except ValueError:
         return str(candidate)
+
+
+def _invalidate_runs_list_cache() -> None:
+    """Invalidate the in-memory runs list cache.
+
+    Called after mutations (batch execution, single execution, etc.) to ensure
+    that subsequent /api/runs requests reflect the new state.
+
+    This is necessary because the runs list is cached by directory mtime,
+    but mutations may update files that don't change the mtime of the
+    cached directories (e.g., writing new execution artifacts).
+    """
+    with _runs_list_cache_lock:
+        _runs_list_cache.clear()
+    emit_structured_log(
+        component="ui-runs-list",
+        message="Runs list cache invalidated",
+        run_id="",
+        run_label="",
+        severity="DEBUG",
+        metadata={
+            "action": "cache_invalidation",
+            "reason": "mutation_aftermath",
+        },
+    )
 
 
 def _persist_batch_execution_history_to_ui_index(runs_dir: Path, run_id: str) -> None:
