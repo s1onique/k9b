@@ -300,14 +300,99 @@ def _build_incident_report_payload(
     }
 
 
+# =============================================================================
+# Worklist Item State Constants
+# =============================================================================
+
+
+# Canonical item states for the unified worklist projection
+# State transition: advisory -> approval-needed -> approved -> queued -> executed -> reviewed
+_ITEM_STATE_ADVISORY = "advisory"
+_ITEM_STATE_APPROVAL_NEEDED = "approval-needed"
+_ITEM_STATE_APPROVED = "approved"
+_ITEM_STATE_QUEUED = "queued"
+_ITEM_STATE_EXECUTED = "executed"
+_ITEM_STATE_REVIEWED = "reviewed"
+
+
+# Source type constants for provenance tracking
+_SOURCE_TYPE_DETERMINISTIC = "deterministic"
+_SOURCE_TYPE_PLANNER = "planner"
+_SOURCE_TYPE_PROMOTION = "promotion"
+_SOURCE_TYPE_EXECUTION = "execution"
+
+
+def _derive_item_state(
+    queue_item: object,
+) -> str | None:
+    """Derive canonical itemState from queue item state fields.
+
+    State transition rules:
+    - Deterministic items (no queue state): advisory
+    - Queue items with requiresOperatorApproval + not approved: approval-needed
+    - Queue items with requiresOperatorApproval + approved: approved
+    - Queue items safeToAutomate + not executed: queued
+    - Queue items executed + not reviewed: executed
+    - Queue items with usefulness_class: reviewed
+
+    Returns None for deterministic items that have no queue state.
+    """
+    if not hasattr(queue_item, "requires_operator_approval"):
+        return None
+
+    requires_approval = getattr(queue_item, "requires_operator_approval", False)
+    approval_state = getattr(queue_item, "approval_state", None) or ""
+    execution_state = getattr(queue_item, "execution_state", None) or ""
+    usefulness_class = getattr(queue_item, "usefulness_class", None)
+
+    # Usefulness review indicates reviewed state
+    if usefulness_class:
+        return _ITEM_STATE_REVIEWED
+
+    # Execution states
+    if execution_state in ("executed-success", "executed-failed", "timed-out"):
+        return _ITEM_STATE_EXECUTED
+
+    # Approved state (requires approval but is approved)
+    if requires_approval and approval_state == "approved":
+        return _ITEM_STATE_APPROVED
+
+    # Approval needed (requires approval but not yet approved)
+    if requires_approval and approval_state != "approved":
+        return _ITEM_STATE_APPROVAL_NEEDED
+
+    # Executable but not yet executed (safe to automate)
+    safe_to_automate = getattr(queue_item, "safe_to_automate", False)
+    if safe_to_automate and execution_state == "unexecuted":
+        return _ITEM_STATE_QUEUED
+
+    # Default to queued for queue items
+    if execution_state == "unexecuted":
+        return _ITEM_STATE_QUEUED
+
+    return None
+
+
 def _build_operator_worklist_payload(
     context: UIIndexContext,
 ) -> OperatorWorklistPayload | None:
     """Derive a ranked operator worklist from deterministic next checks and queue state.
 
-    Returns None when there are no actionable items.
+    Unified projection from deterministic next checks, planner candidates,
+    and execution history. This is a read-only projection; there is no new
+    persistence layer.
+
+    Truthfulness rules:
+    - command is None for deterministic/advisory items (they have method, not executable cmd)
+    - command is a concrete string for executable queue items
+    - itemState reflects canonical state: advisory | approval-needed | approved | queued | executed | reviewed
+    - sourceType distinguishes origin for provenance: deterministic | planner | promotion | execution
+    - mergedSources preserves all contributing origins when multiple sources refer to the same logical action
     """
     items: list[OperatorWorklistItemPayload] = []
+
+    # Track deterministic IDs for dedupe with queue items
+    deterministic_ids: set[str] = set()
 
     # Prefer deterministic next checks as the primary workstream source
     deterministic = context.run.deterministic_next_checks
@@ -329,16 +414,18 @@ def _build_operator_worklist_payload(
                 # when input is non-None str (input type is str for summary.description)
                 title_str = sanitize_operator_text(summary.description)
                 title_str = title_str if title_str is not None else summary.description
+                item_id = f"deterministic-{safe_cluster}-{rank}"
+                deterministic_ids.add(item_id)
                 items.append(
                     {
-                        "id": f"deterministic-{safe_cluster}-{rank}",
+                        "id": item_id,
                         "rank": rank,
                         "workstream": summary.workstream,
                         "title": title_str,
                         "description": sanitize_operator_text(
                             f"Owner: {summary.owner}; method: {summary.method}; evidence needed: {', '.join(summary.evidence_needed)}"
                         ),
-                        "command": None,
+                        "command": None,  # Deterministic items: no executable command
                         "targetCluster": safe_cluster,
                         "targetContext": safe_context,
                         "reason": sanitize_operator_text(summary.why_now),
@@ -346,9 +433,12 @@ def _build_operator_worklist_payload(
                         "safetyNote": sanitize_operator_text(
                             f"Urgency: {summary.urgency}; primary triage: {summary.is_primary_triage}"
                         ),
+                        "itemState": _ITEM_STATE_ADVISORY,  # Deterministic = advisory
                         "approvalState": None,
                         "executionState": None,
                         "feedbackState": None,
+                        "sourceType": _SOURCE_TYPE_DETERMINISTIC,
+                        "mergedSources": None,
                         "sourceArtifactRefs": [
                             {"label": "Assessment", "path": path}
                             for path in [cluster.assessment_artifact_path, cluster.drilldown_artifact_path]
@@ -358,21 +448,29 @@ def _build_operator_worklist_payload(
                 )
                 rank += 1
 
-    # Append next-check queue items for execution/approval state enrichment.
-    # Queue items are appended rather than merged when there is no shared stable candidate ID,
-    # because deterministic checks and planner candidates originate from different artifacts
-    # and may describe the same intent with different IDs.
+    # Process next-check queue items for execution/approval state enrichment.
+    # Queue items are merged when IDs match (deduplication with provenance preservation).
+    # For items without matching IDs, we also check by description to catch duplicates
+    # where deterministic and planner refer to the same logical action.
     queue_items = context.run.next_check_queue
     for queue_item in queue_items:
-        existing_ids = {cast(str | None, item.get("id")) for item in items}
         item_id = queue_item.candidate_id or f"queue-{queue_item.description}"
-        if item_id in existing_ids:
-            # Enrich existing item with queue state when IDs match
+        item_description = queue_item.description
+
+        # Check if this queue item corresponds to an existing deterministic item by ID
+        matched_deterministic = False
+        if item_id in deterministic_ids:
+            # Merge queue state into existing deterministic item
             for existing in items:
                 if existing.get("id") == item_id:
+                    # Preserve deterministic provenance, add planner provenance
                     existing["approvalState"] = queue_item.approval_state
                     existing["executionState"] = queue_item.execution_state
                     existing["feedbackState"] = queue_item.outcome_status
+                    # Update itemState to reflect queue state (not advisory anymore)
+                    existing["itemState"] = _derive_item_state(queue_item) or _ITEM_STATE_ADVISORY
+                    existing["sourceType"] = _SOURCE_TYPE_PLANNER
+                    existing["mergedSources"] = [_SOURCE_TYPE_DETERMINISTIC, _SOURCE_TYPE_PLANNER]
                     if queue_item.plan_artifact_path:
                         refs = list(existing.get("sourceArtifactRefs") or [])
                         refs.append(
@@ -382,11 +480,83 @@ def _build_operator_worklist_payload(
                             }
                         )
                         existing["sourceArtifactRefs"] = refs
+                    matched_deterministic = True
+                    break
+            if matched_deterministic:
+                continue
+
+        # Fallback: check for matching deterministic item by description
+        # This handles cases where deterministic and planner items describe the same action
+        # but have different ID schemes
+        if not matched_deterministic and item_description:
+            for existing in items:
+                if (
+                    existing.get("sourceType") == _SOURCE_TYPE_DETERMINISTIC
+                    and existing.get("title") == item_description
+                ):
+                    # Found a deterministic item with same description - merge
+                    existing["approvalState"] = queue_item.approval_state
+                    existing["executionState"] = queue_item.execution_state
+                    existing["feedbackState"] = queue_item.outcome_status
+                    existing["itemState"] = _derive_item_state(queue_item) or _ITEM_STATE_ADVISORY
+                    existing["sourceType"] = _SOURCE_TYPE_PLANNER
+                    existing["mergedSources"] = [_SOURCE_TYPE_DETERMINISTIC, _SOURCE_TYPE_PLANNER]
+                    if queue_item.plan_artifact_path:
+                        refs = list(existing.get("sourceArtifactRefs") or [])
+                        refs.append(
+                            {"label": "Next-Check Plan", "path": queue_item.plan_artifact_path}
+                        )
+                        existing["sourceArtifactRefs"] = refs
+                    matched_deterministic = True
+                    break
+            if matched_deterministic:
+                continue
+
+        # Check if this queue item matches an existing queue item (by candidate_id)
+        existing_queue_ids = {
+            cast(str | None, item.get("id")) for item in items
+            if cast(str | None, item.get("sourceType")) == _SOURCE_TYPE_PLANNER
+        }
+        if item_id in existing_queue_ids:
+            # Enrich existing queue item with additional provenance
+            for existing in items:
+                if existing.get("id") == item_id:
+                    existing["executionState"] = queue_item.execution_state
+                    existing["feedbackState"] = queue_item.outcome_status
+                    existing["itemState"] = _derive_item_state(queue_item) or _ITEM_STATE_QUEUED
+                    # Add execution provenance
+                    if queue_item.latest_artifact_path:
+                        refs = list(existing.get("sourceArtifactRefs") or [])
+                        refs.append(
+                            {
+                                "label": "Next-Check Execution",
+                                "path": queue_item.latest_artifact_path,
+                            }
+                        )
+                        existing["sourceArtifactRefs"] = refs
             continue
-        # sanitize_operator_text returns str | None but always returns str
-        # when input is non-None str
+
+        # New queue item: add as a separate entry
         queue_title = sanitize_operator_text(queue_item.description)
         queue_title = queue_title if queue_title is not None else queue_item.description
+
+        # Determine source type from queue item characteristics
+        source_type = _SOURCE_TYPE_PLANNER
+        if queue_item.source_type == "deterministic":
+            source_type = _SOURCE_TYPE_PROMOTION
+
+        # Build sourceArtifactRefs: include both plan and execution artifacts
+        # for complete provenance traceability
+        artifact_refs: list[ArtifactLink] = []
+        if queue_item.plan_artifact_path:
+            artifact_refs.append(
+                {"label": "Next-Check Plan", "path": queue_item.plan_artifact_path}
+            )
+        if queue_item.latest_artifact_path:
+            artifact_refs.append(
+                {"label": "Next-Check Execution", "path": queue_item.latest_artifact_path}
+            )
+
         items.append(
             {
                 "id": item_id,
@@ -395,6 +565,7 @@ def _build_operator_worklist_payload(
                 # Sanitize all text fields to prevent internal markers from leaking
                 "title": queue_title,
                 "description": sanitize_operator_text(queue_item.source_reason),
+                # Command semantics: sanitized command for executable queue items
                 "command": sanitize_kubectl_display_command(queue_item.command_preview) if queue_item.command_preview else None,
                 # Sanitize targetCluster and targetContext to prevent "in-cluster" leaks
                 "targetCluster": _sanitize_target_cluster(queue_item.target_cluster, queue_item.target_context),
@@ -402,29 +573,31 @@ def _build_operator_worklist_payload(
                 "reason": sanitize_operator_text(queue_item.source_reason),
                 "expectedEvidence": sanitize_operator_text(queue_item.expected_signal),
                 "safetyNote": sanitize_operator_text(queue_item.safety_reason),
+                "itemState": _derive_item_state(queue_item) or _ITEM_STATE_QUEUED,
                 "approvalState": queue_item.approval_state,
                 "executionState": queue_item.execution_state,
                 "feedbackState": queue_item.outcome_status,
-                "sourceArtifactRefs": [
-                    {"label": "Next-Check Plan", "path": path}
-                    for path in [queue_item.plan_artifact_path]
-                    if path
-                ],
+                "sourceType": source_type,
+                "mergedSources": None,
+                "sourceArtifactRefs": artifact_refs,
             }
         )
 
     if not items:
         return None
 
+    # Compute counts based on canonical itemState
     completed = sum(
         1
         for item in items
-        if item.get("executionState") in ("executed-success", "completed")
+        if item.get("itemState") in (_ITEM_STATE_EXECUTED, _ITEM_STATE_REVIEWED)
+        or item.get("executionState") in ("executed-success", "completed")
     )
     blocked = sum(
         1
         for item in items
-        if item.get("approvalState") == "approval-required"
+        if item.get("itemState") == _ITEM_STATE_APPROVAL_NEEDED
+        or item.get("approvalState") == "approval-required"
         or item.get("executionState") == "blocked"
     )
     return {

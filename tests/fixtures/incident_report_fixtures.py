@@ -740,6 +740,655 @@ def _fixture_deterministic_only_no_command() -> dict[str, object]:
     }
 
 
+def _fixture_approval_needed_item() -> dict[str, object]:
+    """Build a UI index with a queue item requiring operator approval.
+
+    Expected outcomes:
+    - worklist: non-empty with at least one approval-needed item
+    - itemState: approval-needed
+    - approvalState: approval-required
+    - executionState: unexecuted
+    - command is present (executable but blocked by approval)
+    - sourceType: planner
+
+    Protects against: approval gating not reflected in itemState.
+    """
+    return {
+        "run": {
+            "run_id": "run-approval-needed",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 0,
+                "successfulCalls": 0,
+                "failedCalls": 0,
+                "lastCallTimestamp": None,
+                "p50LatencyMs": None,
+                "p95LatencyMs": None,
+                "p99LatencyMs": None,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-approval-next-check-plan.json",
+                "summary": "1 candidate requiring approval.",
+                "candidateCount": 1,
+                "candidates": [
+                    {
+                        "description": "Delete the failing pod to trigger restart",
+                        "targetCluster": "cluster-approval",
+                        "sourceReason": "Pod stuck in CrashLoopBackOff",
+                        "expectedSignal": "Pod restarts successfully",
+                        "suggestedCommandFamily": "kubectl-delete",
+                        "safeToAutomate": False,
+                        "requiresOperatorApproval": True,
+                        "riskLevel": "medium",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": "mutation-detected",
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-delete",
+                        "candidateIndex": 0,
+                        "approvalStatus": "approval-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "approval-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "approval-required",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-approval · default",
+                        "commandPreview": "kubectl delete pod my-pod --context cluster-approval",
+                    }
+                ],
+                "outcomeCounts": [{"status": "approval-required", "count": 1}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "1 candidate requiring approval.",
+                "artifactPath": "runs/health/external-analysis/run-approval-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-delete",
+                    "candidateIndex": 0,
+                    "description": "Delete the failing pod to trigger restart",
+                    "targetCluster": "cluster-approval",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-delete",
+                    "safeToAutomate": False,
+                    "requiresOperatorApproval": True,
+                    "approvalState": "approval-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "approval-required",
+                    "latestArtifactPath": None,
+                    "sourceReason": "Pod stuck in CrashLoopBackOff",
+                    "expectedSignal": "Pod restarts successfully",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "mutation-detected",
+                    "approvalReason": "mutation-detected",
+                    "duplicateReason": None,
+                    "blockingReason": "awaiting-approval",
+                    "targetContext": "cluster-approval · default",
+                    "commandPreview": "kubectl delete pod my-pod --context cluster-approval",
+                    "planArtifactPath": "runs/health/external-analysis/run-approval-next-check-plan.json",
+                    "queueStatus": "approval-needed",
+                }
+            ],
+            "next_check_execution_history": [],
+            "deterministic_next_checks": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 1,
+            "p50_run_duration_seconds": 45,
+            "p95_run_duration_seconds": 45,
+            "p99_run_duration_seconds": 45,
+        },
+        "clusters": [
+            {
+                "label": "cluster-approval",
+                "context": "cluster-approval",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-approval.json",
+                    "assessment": "assessments/cluster-approval.json",
+                    "drilldown": "drilldowns/cluster-approval.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-approval"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-approval",
+            "context": "cluster-approval",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {},
+            "artifact_path": "drilldowns/cluster-approval.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-approval",
+            "context": "cluster-approval",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate failing pod",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-approval.json",
+            "snapshot_path": "snapshots/cluster-approval.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-approval",
+                    "context": "cluster-approval",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-approval.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
+def _fixture_executed_with_usefulness() -> dict[str, object]:
+    """Build a UI index with an executed item that has usefulness feedback.
+
+    Expected outcomes:
+    - worklist: non-empty with executed item
+    - itemState: executed or reviewed
+    - executionState: executed-success
+    - usefulnessClass is present
+    - sourceArtifactRefs includes execution artifact
+
+    Protects against: usefulness feedback linkage not preserved.
+    """
+    return {
+        "run": {
+            "run_id": "run-executed-useful",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 0,
+                "successfulCalls": 0,
+                "failedCalls": 0,
+                "lastCallTimestamp": None,
+                "p50LatencyMs": None,
+                "p95LatencyMs": None,
+                "p99LatencyMs": None,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-exec-next-check-plan.json",
+                "summary": "1 executed candidate.",
+                "candidateCount": 1,
+                "candidates": [
+                    {
+                        "description": "Check pod events for CrashLoopBackOff",
+                        "targetCluster": "cluster-exec",
+                        "sourceReason": "CrashLoopBackOff investigation",
+                        "expectedSignal": "Recent crash events",
+                        "suggestedCommandFamily": "kubectl-get",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-events",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "executed-success",
+                        "outcomeStatus": "executed-success",
+                        "latestArtifactPath": "runs/health/external-analysis/run-exec-next-check-execution-0.json",
+                        "latestTimestamp": "2026-01-01T00:10:00Z",
+                        "targetContext": "cluster-exec · default",
+                        "commandPreview": "kubectl get events --context cluster-exec",
+                    }
+                ],
+                "outcomeCounts": [{"status": "executed-success", "count": 1}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "1 executed candidate.",
+                "artifactPath": "runs/health/external-analysis/run-exec-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-events",
+                    "candidateIndex": 0,
+                    "description": "Check pod events for CrashLoopBackOff",
+                    "targetCluster": "cluster-exec",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-get",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "executed-success",
+                    "outcomeStatus": "executed-success",
+                    "latestArtifactPath": "runs/health/external-analysis/run-exec-next-check-execution-0.json",
+                    "sourceReason": "CrashLoopBackOff investigation",
+                    "expectedSignal": "Recent crash events",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-exec · default",
+                    "commandPreview": "kubectl get events --context cluster-exec",
+                    "planArtifactPath": "runs/health/external-analysis/run-exec-next-check-plan.json",
+                    "queueStatus": "completed",
+                }
+            ],
+            "next_check_execution_history": [
+                {
+                    "timestamp": "2026-01-01T00:10:00Z",
+                    "clusterLabel": "cluster-exec",
+                    "candidateDescription": "Check pod events for CrashLoopBackOff",
+                    "commandFamily": "kubectl-get",
+                    "status": "success",
+                    "durationMs": 840,
+                    "artifactPath": "runs/health/external-analysis/run-exec-next-check-execution-0.json",
+                    "timedOut": False,
+                    "stdoutTruncated": False,
+                    "stderrTruncated": False,
+                    "outputBytesCaptured": 2048,
+                    "resultClass": "useful-signal",
+                    "resultSummary": "Captured pod events showing repeated crash restarts.",
+                    "usefulnessClass": "useful",
+                    "usefulnessSummary": "Found key crash events",
+                    "suggestedNextOperatorMove": "Correlate with pod logs to identify root cause.",
+                }
+            ],
+            "deterministic_next_checks": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 1,
+            "p50_run_duration_seconds": 45,
+            "p95_run_duration_seconds": 45,
+            "p99_run_duration_seconds": 45,
+        },
+        "clusters": [
+            {
+                "label": "cluster-exec",
+                "context": "cluster-exec",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-exec.json",
+                    "assessment": "assessments/cluster-exec.json",
+                    "drilldown": "drilldowns/cluster-exec.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-exec"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-exec",
+            "context": "cluster-exec",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {},
+            "artifact_path": "drilldowns/cluster-exec.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-exec",
+            "context": "cluster-exec",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate failing pod",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-exec.json",
+            "snapshot_path": "snapshots/cluster-exec.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-exec",
+                    "context": "cluster-exec",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-exec.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
+def _fixture_duplicate_candidates() -> dict[str, object]:
+    """Build a UI index with duplicate candidates from multiple sources.
+
+    Expected outcomes:
+    - worklist: items with mergedSources when duplicates detected
+    - deterministic item enriched with planner provenance when IDs match
+    - sourceType reflects merged provenance
+
+    Protects against: duplicate handling losing provenance.
+    """
+    return {
+        "run": {
+            "run_id": "run-duplicate",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 0,
+                "successfulCalls": 0,
+                "failedCalls": 0,
+                "lastCallTimestamp": None,
+                "p50LatencyMs": None,
+                "p95LatencyMs": None,
+                "p99LatencyMs": None,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-dup-next-check-plan.json",
+                "summary": "1 candidate.",
+                "candidateCount": 1,
+                "candidates": [
+                    {
+                        "description": "Check pod events for CrashLoopBackOff",
+                        "targetCluster": "cluster-dup",
+                        "sourceReason": "CrashLoopBackOff investigation",
+                        "expectedSignal": "Recent crash events",
+                        "suggestedCommandFamily": "kubectl-get",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        # Use candidate ID that matches deterministic ID pattern
+                        "candidateId": "candidate-logs",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "unexecuted",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-dup · default",
+                        "commandPreview": "kubectl get events --context cluster-dup",
+                    }
+                ],
+                "outcomeCounts": [{"status": "unexecuted", "count": 1}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "1 candidate.",
+                "artifactPath": "runs/health/external-analysis/run-dup-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-logs",
+                    "candidateIndex": 0,
+                    "description": "Check pod events for CrashLoopBackOff",
+                    "targetCluster": "cluster-dup",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-get",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "unexecuted",
+                    "latestArtifactPath": None,
+                    "sourceReason": "CrashLoopBackOff investigation",
+                    "expectedSignal": "Recent crash events",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-dup · default",
+                    "commandPreview": "kubectl get events --context cluster-dup",
+                    "planArtifactPath": "runs/health/external-analysis/run-dup-next-check-plan.json",
+                    "queueStatus": "pending",
+                }
+            ],
+            "next_check_execution_history": [],
+            # Deterministic next checks with same description (duplicate candidate)
+            "deterministic_next_checks": {
+                "clusterCount": 1,
+                "totalNextCheckCount": 1,
+                "clusters": [
+                    {
+                        "label": "cluster-dup",
+                        "context": "cluster-dup",
+                        "topProblem": "crashloop",
+                        "deterministicNextCheckCount": 1,
+                        "deterministicNextCheckSummaries": [
+                            {
+                                "description": "Check pod events for CrashLoopBackOff",
+                                "owner": "platform",
+                                "method": "kubectl get events",
+                                "evidenceNeeded": ["pod events", "restart count"],
+                                "workstream": "incident",
+                                "urgency": "high",
+                                "isPrimaryTriage": True,
+                                "whyNow": "CrashLoopBackOff detected on pod my-pod",
+                            }
+                        ],
+                        "drilldownAvailable": True,
+                        "assessmentArtifactPath": "assessments/cluster-dup.json",
+                        "drilldownArtifactPath": "drilldowns/cluster-dup.json",
+                    }
+                ],
+            },
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 1,
+            "p50_run_duration_seconds": 45,
+            "p95_run_duration_seconds": 45,
+            "p99_run_duration_seconds": 45,
+        },
+        "clusters": [
+            {
+                "label": "cluster-dup",
+                "context": "cluster-dup",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-dup.json",
+                    "assessment": "assessments/cluster-dup.json",
+                    "drilldown": "drilldowns/cluster-dup.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-dup"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-dup",
+            "context": "cluster-dup",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {},
+            "artifact_path": "drilldowns/cluster-dup.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-dup",
+            "context": "cluster-dup",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate failing pod",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-dup.json",
+            "snapshot_path": "snapshots/cluster-dup.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-dup",
+                    "context": "cluster-dup",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-dup.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
 def _fixture_queue_with_command() -> dict[str, object]:
     """Build a UI index with a queue item that has an executable command.
 
@@ -749,6 +1398,7 @@ def _fixture_queue_with_command() -> dict[str, object]:
     - queue item: targetCluster, targetContext, reason, expectedEvidence,
       safetyNote, approvalState, executionState, feedbackState all present
     - queue item: sourceArtifactRefs non-empty
+    - queue item: itemState is queued, sourceType is planner
 
     Protects against: queue items missing required metadata fields.
     """

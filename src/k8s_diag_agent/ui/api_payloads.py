@@ -978,22 +978,59 @@ class IncidentReportPayload(TypedDict, total=False):
 
 
 class OperatorWorklistItemPayload(TypedDict, total=False):
-    """A single ranked, actionable item in the operator worklist."""
+    """A single ranked, actionable item in the operator worklist.
 
+    Unified projection derived from deterministic next checks, planner candidates,
+    and execution history. This is a read-only projection; there is no new
+    persistence layer.
+
+    Contract invariants:
+    - command is None for deterministic/advisory items (they have method, not executable cmd)
+    - command is a concrete string for executable queue items
+    - sourceArtifactRefs always uses real paths; no fabricated "unknown" references
+    - itemState reflects the canonical state: advisory | approval-needed | approved |
+      queued | executed | reviewed
+    - provenance is preserved when items from multiple sources are deduplicated
+    """
+
+    # Identity and ranking
     id: str
     rank: int
     workstream: str | None
+
+    # Content
     title: str
     description: str | None
+
+    # Command semantics: None for deterministic/advisory, concrete string for executable
+    # Consumers must NOT treat null command as a runnable string
     command: str | None
+
+    # Target context
     targetCluster: str | None
     targetContext: str | None
+
+    # Rationale
     reason: str | None
     expectedEvidence: str | None
     safetyNote: str | None
+
+    # Explicit state (canonical itemState for UI consistency)
+    # None for deterministic items, concrete state for queue items
+    itemState: str | None  # advisory | approval-needed | approved | queued | executed | reviewed
     approvalState: str | None
     executionState: str | None
     feedbackState: str | None
+
+    # Source provenance
+    # sourceType distinguishes origin: deterministic | planner | promotion | execution
+    sourceType: str | None
+
+    # Deduplication provenance: when multiple sources contribute to one logical action,
+    # mergedSources preserves all contributing origins for traceability
+    mergedSources: list[str] | None
+
+    # Artifact provenance: real paths only, no fabricated "unknown" refs
     sourceArtifactRefs: list[ArtifactLink]
 
 

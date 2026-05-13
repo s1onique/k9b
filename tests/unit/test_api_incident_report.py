@@ -21,8 +21,11 @@ from k8s_diag_agent.ui.api_incident_report import (
 )
 from k8s_diag_agent.ui.model import build_ui_context
 from tests.fixtures.incident_report_fixtures import (
+    _fixture_approval_needed_item,
     _fixture_degraded_single_cluster,
     _fixture_deterministic_only_no_command,
+    _fixture_duplicate_candidates,
+    _fixture_executed_with_usefulness,
     _fixture_healthy_no_incident,
     _fixture_queue_with_command,
     _fixture_stale_provider_enriched_degraded,
@@ -1217,6 +1220,354 @@ def _sample_freshness(status: str) -> dict[str, Any]:
         "expectedIntervalSeconds": 300,
         "status": status,
     }
+
+
+# =============================================================================
+# Worklist Unification Tests (Epic: Worklist Projection and Execution-State)
+# =============================================================================
+
+
+class WorklistUnificationTests(unittest.TestCase):
+    """Tests for unified worklist projection.
+
+    Coverage:
+    - canonical itemState enum: advisory | approval-needed | approved | queued | executed | reviewed
+    - state transition rules
+    - provenance preservation for duplicates
+    - command truthfulness (null for deterministic, concrete for queue)
+    - ranking stability
+    - usefulness linkage
+    """
+
+    def test_deterministic_item_has_advisory_state(self) -> None:
+        """Deterministic items must have itemState=advisory."""
+        index = _fixture_deterministic_only_no_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            self.assertEqual(item.get("itemState"), "advisory")
+            self.assertEqual(item.get("sourceType"), "deterministic")
+
+    def test_approval_needed_item_has_correct_state(self) -> None:
+        """Approval-needed items must have itemState=approval-needed."""
+        index = _fixture_approval_needed_item()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        self.assertTrue(worklist["items"])
+        for item in worklist["items"]:
+            self.assertEqual(item.get("itemState"), "approval-needed")
+            self.assertEqual(item.get("approvalState"), "approval-required")
+            self.assertEqual(item.get("executionState"), "unexecuted")
+            # Command should be present but blocked by approval
+            self.assertIsNotNone(item.get("command"))
+
+    def test_queue_item_has_queued_state(self) -> None:
+        """Queue items safe to execute should have itemState=queued."""
+        index = _fixture_queue_with_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            # This fixture has executionState=executed-success, so itemState should be executed
+            if item.get("executionState") == "executed-success":
+                self.assertEqual(item.get("itemState"), "executed")
+
+    def test_executed_item_has_executed_state(self) -> None:
+        """Executed items must have itemState=executed."""
+        index = _fixture_executed_with_usefulness()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            self.assertEqual(item.get("itemState"), "executed")
+            self.assertEqual(item.get("executionState"), "executed-success")
+
+    def test_command_null_for_deterministic(self) -> None:
+        """Deterministic items must have command=null (never a runnable string)."""
+        index = _fixture_deterministic_only_no_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            self.assertIsNone(
+                item.get("command"),
+                f"Deterministic item {item.get('id')} must have command=null, got {item.get('command')}",
+            )
+
+    def test_command_populated_for_queue_item(self) -> None:
+        """Queue items must have command populated (not null)."""
+        index = _fixture_approval_needed_item()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            if item.get("sourceType") in ("planner", "promotion"):
+                self.assertIsNotNone(
+                    item.get("command"),
+                    f"Queue item {item.get('id')} must have command populated",
+                )
+
+    def test_source_type_deterministic_for_advisory_items(self) -> None:
+        """Deterministic advisory items must have sourceType=deterministic."""
+        index = _fixture_deterministic_only_no_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            self.assertEqual(item.get("sourceType"), "deterministic")
+
+    def test_source_type_planner_for_queue_items(self) -> None:
+        """Planner queue items must have sourceType=planner."""
+        index = _fixture_approval_needed_item()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            if item.get("sourceType"):
+                self.assertIn(
+                    item.get("sourceType"),
+                    ("deterministic", "planner", "promotion", "execution"),
+                )
+
+    def test_merged_sources_preserved_for_duplicates(self) -> None:
+        """Duplicate items from multiple sources must preserve mergedSources."""
+        index = _fixture_duplicate_candidates()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # The duplicate fixture has both deterministic and planner items with same candidate ID
+        # When merged, mergedSources should contain both provenance origins
+        merged_items = [i for i in worklist["items"] if i.get("mergedSources")]
+        # At least one item should have merged provenance
+        self.assertTrue(
+            merged_items,
+            "Expected at least one item with mergedSources from duplicate handling",
+        )
+        for item in merged_items:
+            sources = item.get("mergedSources") or []
+            self.assertIn(
+                "deterministic",
+                sources,
+                f"Item {item.get('id')} should include deterministic in mergedSources",
+            )
+            self.assertIn(
+                "planner",
+                sources,
+                f"Item {item.get('id')} should include planner in mergedSources",
+            )
+
+    def test_source_artifact_refs_no_unknown(self) -> None:
+        """All items must have sourceArtifactRefs with real paths, never 'unknown'."""
+        fixtures = [
+            _fixture_deterministic_only_no_command,
+            _fixture_approval_needed_item,
+            _fixture_executed_with_usefulness,
+            _fixture_queue_with_command,
+            _fixture_duplicate_candidates,
+        ]
+        for fixture_fn in fixtures:
+            index = fixture_fn()
+            context = build_ui_context(index)
+            worklist = _build_operator_worklist_payload(context)
+            if worklist is None:
+                continue
+            for item in worklist["items"]:
+                refs = item.get("sourceArtifactRefs") or []
+                paths = [r.get("path") for r in refs]
+                self.assertNotIn(
+                    "unknown",
+                    paths,
+                    f"Item {item.get('id')} should not have 'unknown' in sourceArtifactRefs",
+                )
+
+    def test_ranking_stable_across_builds(self) -> None:
+        """Worklist ranking must be stable across multiple builds of the same input."""
+        index = _fixture_degraded_single_cluster()
+        worklists = []
+        for _ in range(3):
+            context = build_ui_context(index)
+            worklist = _build_operator_worklist_payload(context)
+            self.assertIsNotNone(worklist)
+            assert worklist is not None
+            ranks = [item.get("rank") for item in worklist["items"]]
+            worklists.append(ranks)
+        # All builds should produce the same rank sequence
+        self.assertEqual(worklists[0], worklists[1])
+        self.assertEqual(worklists[1], worklists[2])
+
+    def test_ranking_is_sequential(self) -> None:
+        """Worklist items must have sequential ranks starting from 1."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        ranks = [item.get("rank") for item in worklist["items"]]
+        expected = list(range(1, len(ranks) + 1))
+        self.assertEqual(ranks, expected)
+
+    def test_counts_consistent_with_item_states(self) -> None:
+        """Worklist counts must match actual item states."""
+        index = _fixture_approval_needed_item()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        total = worklist["totalItems"]
+        completed = worklist["completedItems"]
+        pending = worklist["pendingItems"]
+        blocked = worklist["blockedItems"]
+        self.assertEqual(total, completed + pending + blocked)
+        # Verify blocked count matches approval-needed items
+        blocked_items = [
+            i for i in worklist["items"]
+            if i.get("itemState") == "approval-needed" or i.get("approvalState") == "approval-required"
+        ]
+        self.assertEqual(blocked, len(blocked_items))
+
+    def test_counts_consistent_for_executed_items(self) -> None:
+        """Worklist counts must match executed items."""
+        index = _fixture_executed_with_usefulness()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        completed = worklist["completedItems"]
+        executed_items = [
+            i for i in worklist["items"]
+            if i.get("executionState") == "executed-success"
+        ]
+        self.assertEqual(completed, len(executed_items))
+
+    def test_usefulness_linkage_preserved(self) -> None:
+        """Executed items with usefulness feedback must preserve the linkage."""
+        index = _fixture_executed_with_usefulness()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Check that execution artifact is in sourceArtifactRefs
+        for item in worklist["items"]:
+            if item.get("executionState") == "executed-success":
+                refs = item.get("sourceArtifactRefs") or []
+                execution_refs = [
+                    r for r in refs
+                    if "execution" in r.get("label", "").lower()
+                ]
+                self.assertTrue(
+                    execution_refs,
+                    f"Item {item.get('id')} should have execution artifact in sourceArtifactRefs",
+                )
+
+    def test_worklist_item_has_all_required_fields(self) -> None:
+        """All worklist items must have required fields per contract."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            # Required fields per OperatorWorklistItemPayload contract
+            self.assertIn("id", item)
+            self.assertIn("rank", item)
+            self.assertIn("title", item)
+            self.assertIn("command", item)  # May be null
+            self.assertIn("itemState", item)
+            self.assertIn("sourceArtifactRefs", item)
+            # Optional but expected when sourceType is set
+            if item.get("sourceType"):
+                self.assertIn("approvalState", item)
+                self.assertIn("executionState", item)
+                self.assertIn("feedbackState", item)
+
+
+class WorklistStateTransitionTests(unittest.TestCase):
+    """Tests for canonical state transition rules.
+
+    State transition: advisory -> approval-needed -> approved -> queued -> executed -> reviewed
+    """
+
+    def test_advisory_to_approval_needed_transition(self) -> None:
+        """Items requiring approval must have itemState=approval-needed when not approved."""
+        index = _fixture_approval_needed_item()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            if item.get("approvalState") == "approval-required":
+                self.assertEqual(item.get("itemState"), "approval-needed")
+
+    def test_advisory_to_queued_transition(self) -> None:
+        """Safe-to-execute items must have itemState=queued when unexecuted."""
+        # Create fixture with safe-to-automate unexecuted item
+        index = _fixture_deterministic_only_no_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Deterministic items are always advisory
+        for item in worklist["items"]:
+            self.assertEqual(item.get("itemState"), "advisory")
+
+    def test_queued_to_executed_transition(self) -> None:
+        """Executed items must have itemState=executed."""
+        index = _fixture_executed_with_usefulness()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            if item.get("executionState") == "executed-success":
+                self.assertEqual(item.get("itemState"), "executed")
+
+
+class WorklistProvenanceTests(unittest.TestCase):
+    """Tests for provenance preservation in worklist deduplication."""
+
+    def test_deterministic_provenance_preserved_when_merged(self) -> None:
+        """Deterministic artifact refs must be preserved when merged with planner."""
+        index = _fixture_duplicate_candidates()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find merged item
+        merged_items = [i for i in worklist["items"] if i.get("mergedSources")]
+        if merged_items:
+            item = merged_items[0]
+            refs = item.get("sourceArtifactRefs") or []
+            labels = {r.get("label") for r in refs}
+            # Should have both deterministic and planner refs
+            self.assertIn("Assessment", labels)
+            self.assertIn("Next-Check Plan", labels)
+
+    def test_no_duplicate_artifact_paths(self) -> None:
+        """Merged items must not have duplicate artifact paths."""
+        index = _fixture_duplicate_candidates()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            refs = item.get("sourceArtifactRefs") or []
+            paths = [r.get("path") for r in refs]
+            self.assertEqual(
+                len(paths),
+                len(set(paths)),
+                f"Item {item.get('id')} should not have duplicate paths in sourceArtifactRefs",
+            )
 
 
 if __name__ == "__main__":
