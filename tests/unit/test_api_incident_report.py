@@ -1888,7 +1888,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         # Facts are per-cluster observations
         fact_statements = [f["statement"] for f in report["facts"]]
         # Cross-cluster findings should NOT appear in facts
-        for finding in report["crossClusterFindings"]:
+        findings = _require_cross_cluster_findings(report)
+        for finding in findings:
             # Trigger reasons and drift counts should not be in facts
             for reason in finding.get("triggerReasons", []):
                 self.assertNotIn(
@@ -1989,9 +1990,10 @@ class WorklistRankingRationaleTests(unittest.TestCase):
                         item.get("rankingReason"),
                         f"Primary triage item should have rankingReason: {item.get('id')}",
                     )
+                    ranking_reason = _require_str(item.get("rankingReason"))
                     self.assertIn(
                         "Primary triage",
-                        item["rankingReason"],
+                        ranking_reason,
                         f"Primary triage rationale should mention triage: {item.get('rankingReason')}",
                     )
 
@@ -2016,9 +2018,10 @@ class WorklistRankingRationaleTests(unittest.TestCase):
                 item.get("rankingReason"),
                 f"Executed item should have rankingReason: {item.get('id')}",
             )
+            ranking_reason = _require_str(item.get("rankingReason"))
             self.assertIn(
                 "executed",
-                item["rankingReason"].lower(),
+                ranking_reason.lower(),
                 f"Executed rationale should mention execution: {item.get('rankingReason')}",
             )
 
@@ -2043,9 +2046,10 @@ class WorklistRankingRationaleTests(unittest.TestCase):
                 item.get("rankingReason"),
                 f"Approval-needed item should have rankingReason: {item.get('id')}",
             )
+            ranking_reason = _require_str(item.get("rankingReason"))
             self.assertIn(
                 "approval",
-                item["rankingReason"].lower(),
+                ranking_reason.lower(),
                 f"Approval rationale should mention approval: {item.get('rankingReason')}",
             )
 
@@ -2070,10 +2074,11 @@ class WorklistRankingRationaleTests(unittest.TestCase):
                 item.get("rankingReason"),
                 f"Executable queue item should have rankingReason: {item.get('id')}",
             )
+            ranking_reason = _require_str(item.get("rankingReason"))
             # Should not claim primary triage for non-triage items
             self.assertNotIn(
                 "Primary triage",
-                item["rankingReason"],
+                ranking_reason,
                 f"Non-primary-triage item should not claim primary triage: {item.get('rankingReason')}",
             )
 
@@ -2102,6 +2107,7 @@ class WorklistRankingRationaleTests(unittest.TestCase):
                     ranking_reason,
                     f"Advisory item should not claim executable: {ranking_reason}",
                 )
+                # Should not claim "confirmed" (past tense = overconfident)
                 self.assertNotIn(
                     "confirmed the leading hypothesis",
                     ranking_reason,
@@ -2245,9 +2251,10 @@ class WorklistRankingRationaleTests(unittest.TestCase):
                 item.get("rankingReason"),
                 f"Drift item should have rankingReason: {item.get('id')}",
             )
+            ranking_reason = _require_str(item.get("rankingReason"))
             self.assertIn(
                 "fleet",
-                item["rankingReason"].lower(),
+                ranking_reason.lower(),
                 f"Drift rationale should mention fleet: {item.get('rankingReason')}",
             )
 
