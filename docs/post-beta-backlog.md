@@ -19,7 +19,7 @@ This document classifies items surfaced during the beta hardening epic. It does 
 
 ## 1. Release Blockers
 
-No release blockers identified. The beta verification gate is green (`scripts/verify_all.sh` exits 0 with `VERIFICATION GATE: PASSED`). Known limits are documented in [docs/beta-release-notes.md](beta-release-notes.md) and are consistent with the beta contract.
+Two release blockers were identified for beta package publication/distribution readiness. They do not invalidate the local beta verification gate, but they should be resolved before tagging or announcing a consumable external beta package.
 
 **Note:** If any of the items below are later found to contradict the beta contract, they should be reclassified as blockers.
 
@@ -188,11 +188,11 @@ scripts/verify_all.sh --python-only
 ## Exit Criteria (This Epic)
 
 - [x] `docs/beta-stakeholder-demo-script.md` committed (53c0c61)
-- [ ] Post-beta backlog document created (`docs/post-beta-backlog.md`)
-- [ ] Release blockers explicitly identified (2 items: CI missing, image publish)
-- [ ] Near-term improvements classified (11 items)
-- [ ] Later product bets separated (8 items)
-- [ ] Explicitly deferred beta limits carried forward (15 items)
-- [ ] Verification/packaging follow-ups documented (6 items)
-- [ ] Recommended next epic(s) named
-- [ ] Verification gate passes
+- [x] Post-beta backlog document created (`docs/post-beta-backlog.md`)
+- [x] Release blockers explicitly identified (2 items: CI missing, image publish)
+- [x] Near-term improvements classified (11 items)
+- [x] Later product bets separated (8 items)
+- [x] Explicitly deferred beta limits carried forward (15 items)
+- [x] Verification/packaging follow-ups documented (6 items)
+- [x] Recommended next epic(s) named
+- [x] Verification gate passes
