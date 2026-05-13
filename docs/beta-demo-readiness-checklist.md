@@ -213,7 +213,7 @@ This document defines representative beta scenarios, inspection steps, expected 
 **How to inspect:**
 
 ```bash
-.venv/bin python -m pytest tests/unit/test_api_incident_report.py::CrossClusterFindingsTests::test_control_plane_drift -v
+.venv/bin/python -m pytest tests/unit/test_api_incident_report.py::CrossClusterFindingsTests::test_control_plane_drift -v
 ```
 
 **Expected incident report behavior:**
@@ -237,7 +237,7 @@ This document defines representative beta scenarios, inspection steps, expected 
 **How to inspect:**
 
 ```bash
-.venv/bin python -m pytest tests/unit/test_api_incident_report.py::CrossClusterFindingsTests::test_mixed_degraded_and_cross_cluster -v
+.venv/bin/python -m pytest tests/unit/test_api_incident_report.py::CrossClusterFindingsTests::test_mixed_degraded_and_cross_cluster -v
 ```
 
 **Expected incident report behavior:**
@@ -262,7 +262,7 @@ This document defines representative beta scenarios, inspection steps, expected 
 **How to inspect:**
 
 ```bash
-.venv/bin python -m pytest tests/unit/test_api_incident_report.py::GoldenFixtureStaleProviderEnrichedDegradedTests -v
+.venv/bin/python -m pytest tests/unit/test_api_incident_report.py::GoldenFixtureStaleProviderEnrichedDegradedTests -v
 ```
 
 **Expected incident report behavior:**
@@ -286,7 +286,7 @@ This document defines representative beta scenarios, inspection steps, expected 
 **How to inspect:**
 
 ```bash
-.venv/bin python -m pytest tests/unit/test_api_incident_report.py::WorklistRankingRationaleTests -v
+.venv/bin/python -m pytest tests/unit/test_api_incident_report.py::WorklistRankingRationaleTests -v
 ```
 
 **Expected worklist behavior:**
