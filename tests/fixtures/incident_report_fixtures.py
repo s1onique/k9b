@@ -1609,3 +1609,836 @@ def _fixture_queue_with_command() -> dict[str, object]:
         "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
         "auto_drilldown_interpretations": {},
     }
+
+
+# =============================================================================
+# MULTI-SIGNAL FIXTURES (BETA-G1)
+# =============================================================================
+
+
+def _fixture_multi_signal_warnings_pods_missing() -> dict[str, object]:
+    """Build a UI index combining warning events + non-running pods + missing evidence.
+
+    This fixture tests the incident report's ability to handle multiple simultaneous
+    signals that would commonly occur in a real operational scenario.
+
+    Expected outcomes:
+    - status: degraded
+    - facts: non-empty (trigger_reasons includes both warning_event_threshold AND non_running_pods)
+    - facts: non-empty (warning_events count, non_running_pods count)
+    - unknowns: non-empty (events missing)
+    - derived: non-empty (health rating)
+    - inferences: non-empty (hypothesis with basis)
+    - recommendations: non-empty
+    - worklist: non-empty (deterministic + queue items)
+    - staleEvidenceWarnings: empty (fresh freshness)
+
+    Protects against: multi-signal scenarios breaking claim separation or unknown surfacing.
+    """
+    return {
+        "run": {
+            "run_id": "run-multi-signal",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 1,
+            "external_analysis_count": 1,
+            "notification_count": 1,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:30Z",
+                "p50LatencyMs": 450,
+                "p95LatencyMs": 890,
+                "p99LatencyMs": 1200,
+                "providerBreakdown": [{"provider": "llamacpp", "calls": 1}],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-multi-next-check-plan.json",
+                "summary": "2 next check candidates.",
+                "candidateCount": 2,
+                "candidates": [
+                    {
+                        "description": "Inspect pod logs for crashed container",
+                        "targetCluster": "cluster-multi",
+                        "sourceReason": "CrashLoopBackOff + OOMKilled detected",
+                        "expectedSignal": "Recent crash logs with exit codes",
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-logs",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "unexecuted",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-multi · default",
+                        "commandPreview": "kubectl logs pod/my-pod --container main --context cluster-multi",
+                    },
+                    {
+                        "description": "Check node resource pressure",
+                        "targetCluster": "cluster-multi",
+                        "sourceReason": "Multiple pods affected, possible node pressure",
+                        "expectedSignal": "Node allocatable resources, current usage",
+                        "suggestedCommandFamily": "kubectl-top",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "medium",
+                        "priorityLabel": "secondary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-nodes",
+                        "candidateIndex": 1,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "unexecuted",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-multi",
+                        "commandPreview": "kubectl top nodes --context cluster-multi",
+                    },
+                ],
+                "outcomeCounts": [{"status": "unexecuted", "count": 2}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "2 next check candidates.",
+                "artifactPath": "runs/health/external-analysis/run-multi-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-logs",
+                    "candidateIndex": 0,
+                    "description": "Inspect pod logs for crashed container",
+                    "targetCluster": "cluster-multi",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "unexecuted",
+                    "latestArtifactPath": None,
+                    "sourceReason": "CrashLoopBackOff + OOMKilled detected",
+                    "expectedSignal": "Recent crash logs with exit codes",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-multi · default",
+                    "commandPreview": "kubectl logs pod/my-pod --container main --context cluster-multi",
+                    "planArtifactPath": "runs/health/external-analysis/run-multi-next-check-plan.json",
+                    "queueStatus": "pending",
+                },
+                {
+                    "candidateId": "candidate-nodes",
+                    "candidateIndex": 1,
+                    "description": "Check node resource pressure",
+                    "targetCluster": "cluster-multi",
+                    "priorityLabel": "secondary",
+                    "suggestedCommandFamily": "kubectl-top",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "unexecuted",
+                    "latestArtifactPath": None,
+                    "sourceReason": "Multiple pods affected, possible node pressure",
+                    "expectedSignal": "Node allocatable resources, current usage",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-multi",
+                    "commandPreview": "kubectl top nodes --context cluster-multi",
+                    "planArtifactPath": "runs/health/external-analysis/run-multi-next-check-plan.json",
+                    "queueStatus": "pending",
+                },
+            ],
+            "next_check_execution_history": [],
+            "deterministic_next_checks": {
+                "clusterCount": 1,
+                "totalNextCheckCount": 2,
+                "clusters": [
+                    {
+                        "label": "cluster-multi",
+                        "context": "cluster-multi",
+                        "topProblem": "crashloop",
+                        "deterministicNextCheckCount": 2,
+                        "deterministicNextCheckSummaries": [
+                            {
+                                "description": "Check pod events for CrashLoopBackOff",
+                                "owner": "platform",
+                                "method": "kubectl get events",
+                                "evidenceNeeded": ["pod events", "restart count", "exit codes"],
+                                "workstream": "incident",
+                                "urgency": "high",
+                                "isPrimaryTriage": True,
+                                "whyNow": "CrashLoopBackOff detected on 2 pods, OOMKilled on 1",
+                            },
+                            {
+                                "description": "Check node resource availability",
+                                "owner": "platform",
+                                "method": "kubectl describe nodes",
+                                "evidenceNeeded": ["allocatable resources", "memory pressure", "disk pressure"],
+                                "workstream": "incident",
+                                "urgency": "medium",
+                                "isPrimaryTriage": False,
+                                "whyNow": "Multiple pods affected simultaneously",
+                            },
+                        ],
+                        "drilldownAvailable": True,
+                        "assessmentArtifactPath": "assessments/cluster-multi.json",
+                        "drilldownArtifactPath": "drilldowns/cluster-multi.json",
+                    }
+                ],
+            },
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 60,
+            "total_runs": 5,
+            "p50_run_duration_seconds": 55,
+            "p95_run_duration_seconds": 70,
+            "p99_run_duration_seconds": 85,
+        },
+        "clusters": [
+            {
+                "label": "cluster-multi",
+                "context": "cluster-multi",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 5,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 8,
+                "non_running_pods": 3,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": ["events", "pod_logs"],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-multi.json",
+                    "assessment": "assessments/cluster-multi.json",
+                    "drilldown": "drilldowns/cluster-multi.json",
+                },
+            }
+        ],
+        "proposals": [
+            {
+                "proposal_id": "p-multi-1",
+                "target": "health.trigger_policy.warning_event_threshold",
+                "status": "pending",
+                "confidence": "medium",
+                "rationale": "threshold may be too sensitive for baseline warnings",
+                "expected_benefit": "reduce noise from non-critical warnings",
+                "source_run_id": "run-multi-signal",
+                "artifact_path": "proposals/p-multi-1.json",
+                "review_artifact": "reviews/run-multi-review.json",
+                "lifecycle_history": [
+                    {"status": "pending", "timestamp": "2026-01-01T00:00:00Z"}
+                ],
+            },
+            {
+                "proposal_id": "p-multi-2",
+                "target": "health.trigger_policy.non_running_pod_threshold",
+                "status": "pending",
+                "confidence": "medium",
+                "rationale": "threshold too low for production workload",
+                "expected_benefit": "focus on actionable pod failures",
+                "source_run_id": "run-multi-signal",
+                "artifact_path": "proposals/p-multi-2.json",
+                "review_artifact": "reviews/run-multi-review.json",
+                "lifecycle_history": [
+                    {"status": "pending", "timestamp": "2026-01-01T00:00:00Z"}
+                ],
+            },
+        ],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-multi"],
+        },
+        "proposal_status_summary": {
+            "status_counts": [{"status": "pending", "count": 2}]
+        },
+        "latest_drilldown": {
+            "label": "cluster-multi",
+            "context": "cluster-multi",
+            "trigger_reasons": ["non_running_pods", "warning_event_threshold"],
+            "warning_events": 8,
+            "non_running_pods": 3,
+            "summary": {"pods_affected": ["pod-a", "pod-b", "pod-c"], "patterns": ["crashloop", "oomkilled"]},
+            "rollout_status": ["stable"],
+            "pattern_details": {"pattern": "crashloop", "confidence": "high"},
+            "artifact_path": "drilldowns/cluster-multi.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-multi",
+            "context": "cluster-multi",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": ["events", "pod_logs"],
+            "findings": [
+                {
+                    "description": "Multiple pods in CrashLoopBackOff or terminated state",
+                    "layer": "workload",
+                    "supporting_signals": ["sig-1", "sig-2"],
+                },
+                {
+                    "description": "Elevated warning event rate indicates systemic issue",
+                    "layer": "control-plane",
+                    "supporting_signals": ["sig-3"],
+                },
+            ],
+            "hypotheses": [
+                {
+                    "description": "Resource pressure on nodes causing OOM kills and restarts",
+                    "confidence": "medium",
+                    "probable_layer": "infrastructure",
+                    "what_would_falsify": "Node metrics show sufficient allocatable resources",
+                },
+                {
+                    "description": "Application misconfiguration with incorrect resource limits",
+                    "confidence": "medium",
+                    "probable_layer": "workload",
+                    "what_would_falsify": "Resource limits are appropriately sized",
+                },
+            ],
+            "next_evidence_to_collect": [
+                {
+                    "description": "Check pod events for CrashLoopBackOff details",
+                    "owner": "platform",
+                    "method": "kubectl get events",
+                    "evidence_needed": ["pod events", "restart count", "exit codes"],
+                },
+                {
+                    "description": "Describe nodes to check allocatable resources",
+                    "owner": "platform",
+                    "method": "kubectl describe nodes",
+                    "evidence_needed": ["allocatable", "memory", "conditions"],
+                },
+            ],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate pod events and node resources; check for memory pressure",
+                "references": ["assessments/cluster-multi.json", "drilldowns/cluster-multi.json"],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-multi.json",
+            "snapshot_path": "snapshots/cluster-multi.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-multi",
+                    "context": "cluster-multi",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-multi.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [
+            {
+                "kind": "degraded-health",
+                "summary": "cluster multi-signal degraded",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "run_id": "run-multi-signal",
+                "cluster_label": "cluster-multi",
+                "context": "cluster-multi",
+                "details": [
+                    {"label": "warnings", "value": 8},
+                    {"label": "non_running_pods", "value": 3},
+                ],
+                "artifact_path": "notifications/multi-signal.json",
+            }
+        ],
+        "external_analysis": {
+            "count": 1,
+            "status_counts": [{"status": "success", "count": 1}],
+            "artifacts": ["runs/health/external-analysis/run-multi-llamacpp.json"],
+        },
+        "auto_drilldown_interpretations": {},
+    }
+
+
+def _fixture_multi_signal_stale_with_enrichment() -> dict[str, object]:
+    """Build a UI index combining degraded workload + stale freshness + provider enrichment.
+
+    This fixture tests the incident report's ability to correctly handle:
+    - Stale evidence warnings
+    - Provider-assisted content in inferences (not facts)
+    - Multiple signals (workload + enrichment)
+
+    Expected outcomes:
+    - status: degraded
+    - staleEvidenceWarnings: non-empty ("Run freshness is stale")
+    - facts: non-empty (deterministic drilldown facts only)
+    - inferences: non-empty (provider enrichment AND assessment hypotheses)
+    - enrichment in inferences NOT facts (critical invariant)
+    - unknowns: non-empty
+    - recommendations: non-empty
+
+    Protects against: stale evidence being silently hidden or enrichment leaking to facts.
+    """
+    index = _fixture_multi_signal_warnings_pods_missing()
+    run_entry = cast(JsonObject, index["run"])
+
+    # Mark run data as stale
+    run_entry["timestamp"] = "2026-01-01T00:20:00Z"  # 20 minutes ago
+    run_entry["collector_version"] = "1.0"
+
+    # Add provider-assisted review enrichment
+    run_entry["review_enrichment"] = {
+        "status": "success",
+        "provider": "llamacpp",
+        "timestamp": "2026-01-01T00:15:00Z",
+        "summary": "High ingress latency detected; consider scaling the gateway. Pod crash patterns suggest memory misconfiguration.",
+        "triageOrder": ["cluster-multi"],
+        "topConcerns": ["ingress latency", "memory misconfiguration"],
+        "evidenceGaps": ["CDN metrics", "memory profiling data"],
+        "nextChecks": ["Collect ingress logs", "Check memory limits"],
+        "focusNotes": ["Prioritize ingress investigation and memory configuration review"],
+        "artifactPath": "external-analysis/run-multi-review-enrichment-llamacpp.json",
+        "errorSummary": None,
+        "skipReason": None,
+    }
+    run_entry["review_enrichment_config"] = {"enabled": True, "provider": "llamacpp"}
+
+    # Update run stats to reflect longer interval
+    run_stats = cast(dict[str, object], index["run_stats"])
+    run_stats["last_run_duration_seconds"] = 1200  # 20 minutes
+    run_stats["total_runs"] = 10
+
+    # Update cluster missing evidence to include more signals
+    clusters = cast(list[dict[str, object]], index["clusters"])
+    if clusters:
+        clusters[0]["missing_evidence"] = ["events", "pod_logs", "node_metrics"]
+
+    # Update assessment to have more hypotheses
+    assessment = cast(dict[str, object], index["latest_assessment"])
+    assessment["missing_evidence"] = ["events", "pod_logs", "node_metrics"]
+    assessment["hypotheses"] = [
+        {
+            "description": "Resource pressure on nodes causing OOM kills and restarts",
+            "confidence": "medium",
+            "probable_layer": "infrastructure",
+            "what_would_falsify": "Node metrics show sufficient allocatable resources",
+        },
+        {
+            "description": "Application misconfiguration with incorrect resource limits",
+            "confidence": "medium",
+            "probable_layer": "workload",
+            "what_would_falsify": "Resource limits are appropriately sized",
+        },
+    ]
+
+    return index
+
+
+def _fixture_multi_signal_executed_with_pending() -> dict[str, object]:
+    """Build a UI index with executed/reviewed items coexisting with pending items.
+
+    This fixture tests the worklist's ability to handle mixed execution states:
+    - Some items executed and reviewed
+    - Some items pending execution
+    - Deterministic items present alongside queue items
+
+    Expected outcomes:
+    - worklist: non-empty with mixed itemStates
+    - at least one item with itemState=executed or reviewed
+    - at least one item with itemState=queued or advisory
+    - executed items have usefulness feedback preserved
+    - pending items have appropriate state tracking
+
+    Protects against: execution state not being preserved or mixed states confusing ranking.
+    """
+    return {
+        "run": {
+            "run_id": "run-mixed-exec",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 2,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:30Z",
+                "p50LatencyMs": 450,
+                "p95LatencyMs": 890,
+                "p99LatencyMs": 1200,
+                "providerBreakdown": [{"provider": "llamacpp", "calls": 1}],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-mixed-next-check-plan.json",
+                "summary": "3 next check candidates (1 executed, 2 pending).",
+                "candidateCount": 3,
+                "candidates": [
+                    {
+                        "description": "Check pod events for CrashLoopBackOff",
+                        "targetCluster": "cluster-mixed",
+                        "sourceReason": "CrashLoopBackOff detected on primary pod",
+                        "expectedSignal": "Recent crash events with exit codes",
+                        "suggestedCommandFamily": "kubectl-get",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-events",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "executed-success",
+                        "outcomeStatus": "executed-success",
+                        "latestArtifactPath": "runs/health/external-analysis/run-mixed-exec-0.json",
+                        "latestTimestamp": "2026-01-01T00:05:00Z",
+                        "targetContext": "cluster-mixed · default",
+                        "commandPreview": "kubectl get events --context cluster-mixed",
+                    },
+                    {
+                        "description": "Inspect pod logs for detailed crash information",
+                        "targetCluster": "cluster-mixed",
+                        "sourceReason": "Events show crash, need logs for exit code",
+                        "expectedSignal": "Crash logs with OOM or signal exit codes",
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-logs",
+                        "candidateIndex": 1,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "unexecuted",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-mixed · default",
+                        "commandPreview": "kubectl logs pod/my-pod --context cluster-mixed",
+                    },
+                    {
+                        "description": "Check node resource pressure",
+                        "targetCluster": "cluster-mixed",
+                        "sourceReason": "Multiple pods affected, possible node pressure",
+                        "expectedSignal": "Node allocatable and current usage",
+                        "suggestedCommandFamily": "kubectl-top",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "medium",
+                        "priorityLabel": "secondary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-nodes",
+                        "candidateIndex": 2,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "unexecuted",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-mixed",
+                        "commandPreview": "kubectl top nodes --context cluster-mixed",
+                    },
+                ],
+                "outcomeCounts": [
+                    {"status": "executed-success", "count": 1},
+                    {"status": "unexecuted", "count": 2},
+                ],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "3 candidates (1 executed, 2 pending).",
+                "artifactPath": "runs/health/external-analysis/run-mixed-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-events",
+                    "candidateIndex": 0,
+                    "description": "Check pod events for CrashLoopBackOff",
+                    "targetCluster": "cluster-mixed",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-get",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "executed-success",
+                    "outcomeStatus": "executed-success",
+                    "latestArtifactPath": "runs/health/external-analysis/run-mixed-exec-0.json",
+                    "sourceReason": "CrashLoopBackOff detected on primary pod",
+                    "expectedSignal": "Recent crash events with exit codes",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-mixed · default",
+                    "commandPreview": "kubectl get events --context cluster-mixed",
+                    "planArtifactPath": "runs/health/external-analysis/run-mixed-next-check-plan.json",
+                    "queueStatus": "completed",
+                    "usefulnessClass": "useful",
+                    "usefulnessSummary": "Found crash events showing OOMKilled",
+                    "suggestedNextOperatorMove": "Check pod logs for detailed exit information",
+                },
+                {
+                    "candidateId": "candidate-logs",
+                    "candidateIndex": 1,
+                    "description": "Inspect pod logs for detailed crash information",
+                    "targetCluster": "cluster-mixed",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "unexecuted",
+                    "latestArtifactPath": None,
+                    "sourceReason": "Events show crash, need logs for exit code",
+                    "expectedSignal": "Crash logs with OOM or signal exit codes",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-mixed · default",
+                    "commandPreview": "kubectl logs pod/my-pod --context cluster-mixed",
+                    "planArtifactPath": "runs/health/external-analysis/run-mixed-next-check-plan.json",
+                    "queueStatus": "pending",
+                },
+                {
+                    "candidateId": "candidate-nodes",
+                    "candidateIndex": 2,
+                    "description": "Check node resource pressure",
+                    "targetCluster": "cluster-mixed",
+                    "priorityLabel": "secondary",
+                    "suggestedCommandFamily": "kubectl-top",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "unexecuted",
+                    "latestArtifactPath": None,
+                    "sourceReason": "Multiple pods affected, possible node pressure",
+                    "expectedSignal": "Node allocatable and current usage",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-mixed",
+                    "commandPreview": "kubectl top nodes --context cluster-mixed",
+                    "planArtifactPath": "runs/health/external-analysis/run-mixed-next-check-plan.json",
+                    "queueStatus": "pending",
+                },
+            ],
+            "next_check_execution_history": [
+                {
+                    "timestamp": "2026-01-01T00:05:00Z",
+                    "clusterLabel": "cluster-mixed",
+                    "candidateDescription": "Check pod events for CrashLoopBackOff",
+                    "commandFamily": "kubectl-get",
+                    "status": "success",
+                    "durationMs": 620,
+                    "artifactPath": "runs/health/external-analysis/run-mixed-exec-0.json",
+                    "timedOut": False,
+                    "stdoutTruncated": False,
+                    "stderrTruncated": False,
+                    "outputBytesCaptured": 1840,
+                    "resultClass": "useful-signal",
+                    "resultSummary": "Captured pod events showing OOMKilled exit codes.",
+                    "usefulnessClass": "useful",
+                    "usefulnessSummary": "Found crash events showing OOMKilled",
+                    "suggestedNextOperatorMove": "Check pod logs for detailed exit information",
+                }
+            ],
+            "deterministic_next_checks": {
+                "clusterCount": 1,
+                "totalNextCheckCount": 2,
+                "clusters": [
+                    {
+                        "label": "cluster-mixed",
+                        "context": "cluster-mixed",
+                        "topProblem": "crashloop",
+                        "deterministicNextCheckCount": 2,
+                        "deterministicNextCheckSummaries": [
+                            {
+                                "description": "Check pod events for CrashLoopBackOff",
+                                "owner": "platform",
+                                "method": "kubectl get events",
+                                "evidenceNeeded": ["pod events", "restart count", "exit codes"],
+                                "workstream": "incident",
+                                "urgency": "high",
+                                "isPrimaryTriage": True,
+                                "whyNow": "CrashLoopBackOff detected on primary pod",
+                            },
+                            {
+                                "description": "Check node resource availability",
+                                "owner": "platform",
+                                "method": "kubectl describe nodes",
+                                "evidenceNeeded": ["allocatable resources", "memory pressure"],
+                                "workstream": "incident",
+                                "urgency": "medium",
+                                "isPrimaryTriage": False,
+                                "whyNow": "Multiple pods affected, potential node pressure",
+                            },
+                        ],
+                        "drilldownAvailable": True,
+                        "assessmentArtifactPath": "assessments/cluster-mixed.json",
+                        "drilldownArtifactPath": "drilldowns/cluster-mixed.json",
+                    }
+                ],
+            },
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 5,
+            "p50_run_duration_seconds": 40,
+            "p95_run_duration_seconds": 50,
+            "p99_run_duration_seconds": 55,
+        },
+        "clusters": [
+            {
+                "label": "cluster-mixed",
+                "context": "cluster-mixed",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 3,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-mixed.json",
+                    "assessment": "assessments/cluster-mixed.json",
+                    "drilldown": "drilldowns/cluster-mixed.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-mixed"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-mixed",
+            "context": "cluster-mixed",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 3,
+            "non_running_pods": 1,
+            "summary": {"pods_affected": ["pod-a"], "patterns": ["crashloop"]},
+            "rollout_status": [],
+            "pattern_details": {"pattern": "crashloop"},
+            "artifact_path": "drilldowns/cluster-mixed.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-mixed",
+            "context": "cluster-mixed",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate pod crash logs and node resources",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-mixed.json",
+            "snapshot_path": "snapshots/cluster-mixed.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-mixed",
+                    "context": "cluster-mixed",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-mixed.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {
+            "count": 2,
+            "status_counts": [{"status": "success", "count": 2}],
+            "artifacts": [],
+        },
+        "auto_drilldown_interpretations": {},
+    }
