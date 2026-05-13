@@ -28,7 +28,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus

@@ -32,7 +32,6 @@ from pathlib import Path
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from .api_payloads import ArtifactLink
 
-
 # Known placeholder patterns that indicate non-informative artifacts
 # These are summaries/error messages that provide no operator insight
 _PLACEHOLDER_PATTERNS: tuple[str, ...] = (
