@@ -35,6 +35,7 @@ from ..security.kubectl_context import (
 from .api_payloads import (
     ArtifactLink,
     CrossClusterFindingPayload,
+    FeedbackAdaptationProvenancePayload,
     FreshnessPayload,
     IncidentReportDerivedPayload,
     IncidentReportFactPayload,
@@ -528,6 +529,92 @@ _SOURCE_TYPE_EXECUTION = "execution"
 
 
 # =============================================================================
+# Adaptation Effect Taxonomy
+# =============================================================================
+
+
+# Adaptation effect constants for feedback provenance
+# These describe what changed in the diagnosis or worklist because of execution feedback
+_ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED = "hypothesis_strengthened"
+_ADAPTATION_EFFECT_HYPOTHESIS_WEAKENED = "hypothesis_weakened"
+_ADAPTATION_EFFECT_UNKNOWN_RESOLVED = "unknown_resolved"
+_ADAPTATION_EFFECT_RECOMMENDATION_PROMOTED = "recommendation_promoted"
+_ADAPTATION_EFFECT_RECOMMENDATION_DEPRIORITIZED = "recommendation_deprioritized"
+_ADAPTATION_EFFECT_NO_MATERIAL_CHANGE = "no_material_change"
+
+# Mapping from usefulness class to default adaptation effect
+_USE_TO_ADAPTATION_MAP: dict[str, str] = {
+    "useful": _ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED,
+    "partial": _ADAPTATION_EFFECT_UNKNOWN_RESOLVED,
+    "noisy": _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE,
+    "empty": _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE,
+}
+
+
+def _derive_adaptation_provenance(
+    usefulness_class: str | None,
+    usefulness_summary: str | None,
+    execution_result_summary: str | None,
+) -> dict[str, object] | None:
+    """Derive adaptation provenance from execution feedback.
+
+    Produces a feedbackAdaptationProvenance dict for worklist items when
+    execution feedback exists. This is derived-only (stateless) from execution
+    history and usefulness feedback; no new persistence is introduced.
+
+    Adaptation effect derivation rules:
+    - useful result -> hypothesis_strengthened (confirms leading hypothesis)
+    - partial result -> unknown_resolved (fills evidence gap but leaves unknowns)
+    - noisy result -> no_material_change (inconclusive, doesn't change diagnosis)
+    - empty result -> no_material_change (no signal captured)
+
+    Args:
+        usefulness_class: The usefulness class from operator feedback (useful/partial/noisy/empty)
+        usefulness_summary: Human-readable summary from operator feedback
+        execution_result_summary: Computed result summary from execution classification
+
+    Returns:
+        Dict with adaptation provenance fields, or None if no feedback exists
+    """
+    if not usefulness_class:
+        return None
+
+    effect = _USE_TO_ADAPTATION_MAP.get(usefulness_class)
+    if not effect:
+        return None
+
+    # Generate adaptation summary based on effect
+    if effect == _ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED:
+        if usefulness_summary:
+            summary = f"Strengthened leading hypothesis: {usefulness_summary[:100]}"
+        else:
+            summary = "Strengthened leading workload hypothesis"
+    elif effect == _ADAPTATION_EFFECT_UNKNOWN_RESOLVED:
+        if usefulness_summary:
+            summary = f"Resolved evidence gap: {usefulness_summary[:100]}"
+        else:
+            summary = "Resolved missing evidence gap"
+    elif effect == _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE:
+        if usefulness_summary:
+            summary = f"No material change: {usefulness_summary[:100]}"
+        else:
+            summary = "No material change to diagnosis"
+    else:
+        summary = None
+
+    return {
+        "feedbackAdaptation": True,
+        "adaptationReason": f"usefulness:{usefulness_class}",
+        "adaptationEffect": effect,
+        "adaptationSummary": summary,
+        "originalBonus": 0,
+        "suppressedBonus": 0,
+        "penaltyApplied": 0,
+        "explanation": execution_result_summary,
+    }
+
+
+# =============================================================================
 # Ranking Rationale Derivation
 # =============================================================================
 
@@ -881,6 +968,44 @@ def _build_operator_worklist_payload(
             workstream=queue_item.workstream,
         )
 
+        # Derive adaptation provenance for executed/reviewed items with usefulness feedback
+        # Extract usefulness fields from queue item view model
+        usefulness_class: str | None = None
+        usefulness_summary: str | None = None
+        result_summary: str | None = None
+
+        # Access queue item attributes (may be from the view model)
+        if hasattr(queue_item, "usefulness_class"):
+            usefulness_class = getattr(queue_item, "usefulness_class", None)
+        if hasattr(queue_item, "usefulness_summary"):
+            usefulness_summary = getattr(queue_item, "usefulness_summary", None)
+        if hasattr(queue_item, "result_summary"):
+            result_summary = getattr(queue_item, "result_summary", None)
+
+        # Also check for feedback_adaptation_provenance from planner/feedback pipeline
+        feedback_adaptation_provenance: dict[str, object] | None = None
+        if hasattr(queue_item, "feedback_adaptation_provenance") and queue_item.feedback_adaptation_provenance:
+            fp = queue_item.feedback_adaptation_provenance
+            if hasattr(fp, "feedback_adaptation") and fp.feedback_adaptation:
+                feedback_adaptation_provenance = {
+                    "feedbackAdaptation": fp.feedback_adaptation,
+                    "adaptationReason": fp.adaptation_reason,
+                    "adaptationEffect": getattr(fp, "adaptation_effect", None),
+                    "adaptationSummary": getattr(fp, "adaptation_summary", None),
+                    "originalBonus": fp.original_bonus,
+                    "suppressedBonus": fp.suppressed_bonus,
+                    "penaltyApplied": fp.penalty_applied,
+                    "explanation": fp.explanation,
+                }
+
+        # If no provenance from view model, derive from usefulness class
+        if not feedback_adaptation_provenance and usefulness_class:
+            feedback_adaptation_provenance = _derive_adaptation_provenance(
+                usefulness_class=usefulness_class,
+                usefulness_summary=usefulness_summary,
+                execution_result_summary=result_summary,
+            )
+
         items.append(
             {
                 "id": item_id,
@@ -905,6 +1030,10 @@ def _build_operator_worklist_payload(
                 "mergedSources": None,
                 "sourceArtifactRefs": artifact_refs,
                 "rankingReason": ranking_reason,
+                # Cast to TypedDict-compatible type (derived provenance matches payload shape)
+                "feedbackAdaptationProvenance": cast(
+                    "FeedbackAdaptationProvenancePayload | None", feedback_adaptation_provenance
+                ),
             }
         )
 

@@ -64,6 +64,9 @@ class NextCheckQueueItemView:
     suggested_next_operator_move: str | None = None
     result_class: str | None = None
     result_summary: str | None = None
+    # Usefulness feedback from operator review
+    usefulness_class: str | None = None
+    usefulness_summary: str | None = None
     workstream: str | None = None
     # Alertmanager provenance snapshot from ranking phase
     alertmanager_provenance: AlertmanagerProvenanceView | None = None
@@ -152,6 +155,9 @@ def _build_queue_item_view(
         suggested_next_operator_move=_coerce_optional_str(raw.get("suggestedNextOperatorMove")),
         result_class=_coerce_optional_str(raw.get("resultClass")),
         result_summary=_coerce_optional_str(raw.get("resultSummary")),
+        # Usefulness feedback fields from operator review
+        usefulness_class=_coerce_optional_str(raw.get("usefulnessClass")),
+        usefulness_summary=_coerce_optional_str(raw.get("usefulnessSummary")),
         workstream=_coerce_optional_str(raw.get("workstream")),
         alertmanager_provenance=provenance,
         feedback_adaptation_provenance=feedback_provenance,

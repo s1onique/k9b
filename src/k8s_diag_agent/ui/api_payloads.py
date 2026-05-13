@@ -37,6 +37,7 @@ __all__ = [
     "AlertmanagerEvidenceReferencePayload",
     "ReviewEnrichmentPayload",
     "FeedbackSummaryPayload",
+    "AdaptationEffect",
     "FeedbackAdaptationProvenancePayload",
     "AlertmanagerProvenancePayload",
     "NextCheckCandidatePayload",
@@ -278,11 +279,40 @@ class FeedbackSummaryPayload(TypedDict):
     servicesWithFeedback: list[str]
 
 
+# Adaptation effect taxonomy for feedback provenance
+# These describe what changed in the diagnosis or worklist because of execution feedback
+AdaptationEffect = Literal[
+    "hypothesis_strengthened",
+    "hypothesis_weakened",
+    "unknown_resolved",
+    "recommendation_promoted",
+    "recommendation_deprioritized",
+    "no_material_change",
+]
+
+
 class FeedbackAdaptationProvenancePayload(TypedDict, total=False):
-    """Payload for feedback adaptation provenance data on next-check candidates/queue items."""
+    """Payload for feedback adaptation provenance data on next-check candidates/queue items.
+
+    Surfaces what execution feedback changed in the diagnosis and operator worklist,
+    so operators can understand how completed checks affected the system's current
+    understanding and next recommendations.
+
+    Adaptation effects are derived-only (stateless) from execution results and
+    usefulness feedback. They do not introduce new persistence; they are projections
+    from existing execution history and usefulness feedback artifacts.
+
+    Contract invariants:
+    - adaptationEffect is present when feedbackAdaptation is True
+    - adaptationSummary is concise and operator-readable
+    - no_material_change is used for noisy/inconclusive executions
+    - adaptation does not overclaim causality from execution feedback
+    """
 
     feedbackAdaptation: bool
     adaptationReason: str | None
+    adaptationEffect: AdaptationEffect | None
+    adaptationSummary: str | None  # Concise operator-readable description of what changed
     originalBonus: int
     suppressedBonus: int
     penaltyApplied: int
@@ -1080,6 +1110,11 @@ class OperatorWorklistItemPayload(TypedDict, total=False):
     # has its current rank in the worklist. Derived from source signals and state.
     # Rationale is None when no ranking basis is determinable.
     rankingReason: str | None
+
+    # Feedback adaptation provenance: surfaces what execution feedback changed
+    # in the diagnosis and operator worklist. Present when feedback exists.
+    # None for items without execution feedback.
+    feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
 
 
 class OperatorWorklistPayload(TypedDict, total=False):

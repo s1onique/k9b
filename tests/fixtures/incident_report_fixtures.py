@@ -244,6 +244,999 @@ def _fixture_healthy_no_incident() -> dict[str, object]:
     }
 
 
+# =============================================================================
+# Adaptation Effect Regression Fixtures (Epic: BETA-G5 Feedback Adaptation Provenance)
+# =============================================================================
+
+
+def _fixture_useful_result_hypothesis_strengthened() -> dict[str, object]:
+    """Build a UI index with useful feedback that strengthens the leading hypothesis.
+
+    Expected outcomes:
+    - worklist: non-empty with executed/reviewed item
+    - executed item has usefulnessClass: useful
+    - adaptationEffect: hypothesis_strengthened
+    - adaptationSummary includes hypothesis strengthening context
+    - itemState: reviewed
+
+    Protects against: useful feedback not being linked to adaptation provenance.
+    """
+    index = _fixture_executed_with_usefulness()
+    run_entry = cast(JsonObject, index["run"])
+
+    # The executed-with-usefulness fixture already has usefulnessClass: useful
+    # Update execution history to have strong useful signal
+    history = cast(list[dict[str, object]], run_entry["next_check_execution_history"])
+    if history:
+        history[0]["usefulnessClass"] = "useful"
+        history[0]["usefulnessSummary"] = "Found key crash events confirming CrashLoopBackOff pattern"
+        history[0]["resultClass"] = "useful-signal"
+        history[0]["resultSummary"] = "Captured pod events showing repeated crash restarts."
+
+    # Update queue item to have the usefulness fields
+    queue = cast(list[dict[str, object]], run_entry["next_check_queue"])
+    if queue:
+        queue[0]["usefulnessClass"] = "useful"
+        queue[0]["usefulnessSummary"] = "Found key crash events"
+        queue[0]["resultClass"] = "useful-signal"
+        queue[0]["resultSummary"] = "Captured pod events showing repeated crash restarts."
+        queue[0]["executionState"] = "executed-success"
+        queue[0]["queueStatus"] = "completed"
+
+    return index
+
+
+def _fixture_noisy_result_no_material_change() -> dict[str, object]:
+    """Build a UI index with noisy feedback that has no material change.
+
+    Expected outcomes:
+    - worklist: non-empty with executed/reviewed item
+    - executed item has usefulnessClass: noisy
+    - adaptationEffect: no_material_change
+    - adaptationSummary honestly represents no diagnostic impact
+    - itemState: reviewed
+    - feedback doesn't silently rewrite facts
+
+    Protects against: noisy feedback being treated as useful or changing diagnosis.
+    """
+    return {
+        "run": {
+            "run_id": "run-noisy",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:30Z",
+                "p50LatencyMs": 450,
+                "p95LatencyMs": 890,
+                "p99LatencyMs": 1200,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-noisy-next-check-plan.json",
+                "summary": "1 candidate.",
+                "candidateCount": 1,
+                "candidates": [
+                    {
+                        "description": "Collect detailed pod logs",
+                        "targetCluster": "cluster-noisy",
+                        "sourceReason": "CrashLoopBackOff investigation",
+                        "expectedSignal": "Crash logs with stack traces",
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-logs",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "executed-success",
+                        "outcomeStatus": "executed-success",
+                        "latestArtifactPath": "runs/health/external-analysis/run-noisy-exec-0.json",
+                        "latestTimestamp": "2026-01-01T00:05:00Z",
+                        "targetContext": "cluster-noisy · default",
+                        "commandPreview": "kubectl logs pod/my-pod --context cluster-noisy",
+                    }
+                ],
+                "outcomeCounts": [{"status": "executed-success", "count": 1}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "1 candidate.",
+                "artifactPath": "runs/health/external-analysis/run-noisy-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-logs",
+                    "candidateIndex": 0,
+                    "description": "Collect detailed pod logs",
+                    "targetCluster": "cluster-noisy",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "executed-success",
+                    "outcomeStatus": "executed-success",
+                    "latestArtifactPath": "runs/health/external-analysis/run-noisy-exec-0.json",
+                    "sourceReason": "CrashLoopBackOff investigation",
+                    "expectedSignal": "Crash logs with stack traces",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-noisy · default",
+                    "commandPreview": "kubectl logs pod/my-pod --context cluster-noisy",
+                    "planArtifactPath": "runs/health/external-analysis/run-noisy-next-check-plan.json",
+                    "queueStatus": "completed",
+                    "usefulnessClass": "noisy",
+                    "usefulnessSummary": "Logs contained only routine startup messages, no crash details",
+                    "resultClass": "noisy-signal",
+                    "resultSummary": "Captured routine logs without crash details.",
+                }
+            ],
+            "next_check_execution_history": [
+                {
+                    "timestamp": "2026-01-01T00:05:00Z",
+                    "clusterLabel": "cluster-noisy",
+                    "candidateDescription": "Collect detailed pod logs",
+                    "commandFamily": "kubectl-logs",
+                    "status": "success",
+                    "durationMs": 620,
+                    "artifactPath": "runs/health/external-analysis/run-noisy-exec-0.json",
+                    "timedOut": False,
+                    "stdoutTruncated": False,
+                    "stderrTruncated": False,
+                    "outputBytesCaptured": 840,
+                    "resultClass": "noisy-signal",
+                    "resultSummary": "Captured routine logs without crash details.",
+                    "usefulnessClass": "noisy",
+                    "usefulnessSummary": "Logs contained only routine startup messages, no crash details",
+                    "suggestedNextOperatorMove": "Try collecting events instead.",
+                }
+            ],
+            "deterministic_next_checks": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 5,
+            "p50_run_duration_seconds": 40,
+            "p95_run_duration_seconds": 50,
+            "p99_run_duration_seconds": 55,
+        },
+        "clusters": [
+            {
+                "label": "cluster-noisy",
+                "context": "cluster-noisy",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-noisy.json",
+                    "assessment": "assessments/cluster-noisy.json",
+                    "drilldown": "drilldowns/cluster-noisy.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-noisy"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-noisy",
+            "context": "cluster-noisy",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {"pattern": "crashloop"},
+            "artifact_path": "drilldowns/cluster-noisy.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-noisy",
+            "context": "cluster-noisy",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate pod crash",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-noisy.json",
+            "snapshot_path": "snapshots/cluster-noisy.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-noisy",
+                    "context": "cluster-noisy",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-noisy.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
+def _fixture_partial_result_unknown_resolved() -> dict[str, object]:
+    """Build a UI index with partial feedback that resolves one unknown.
+
+    Expected outcomes:
+    - worklist: non-empty with executed/reviewed item
+    - executed item has usefulnessClass: partial
+    - adaptationEffect: unknown_resolved
+    - adaptationSummary indicates evidence gap was partially filled
+    - itemState: reviewed
+
+    Protects against: partial feedback being treated as fully conclusive.
+    """
+    return {
+        "run": {
+            "run_id": "run-partial",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:30Z",
+                "p50LatencyMs": 450,
+                "p95LatencyMs": 890,
+                "p99LatencyMs": 1200,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-partial-next-check-plan.json",
+                "summary": "1 candidate.",
+                "candidateCount": 1,
+                "candidates": [
+                    {
+                        "description": "Check pod events for CrashLoopBackOff",
+                        "targetCluster": "cluster-partial",
+                        "sourceReason": "CrashLoopBackOff investigation",
+                        "expectedSignal": "Recent crash events",
+                        "suggestedCommandFamily": "kubectl-get",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "high",
+                        "priorityLabel": "primary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-events",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "executed-success",
+                        "outcomeStatus": "executed-success",
+                        "latestArtifactPath": "runs/health/external-analysis/run-partial-exec-0.json",
+                        "latestTimestamp": "2026-01-01T00:05:00Z",
+                        "targetContext": "cluster-partial · default",
+                        "commandPreview": "kubectl get events --context cluster-partial",
+                    }
+                ],
+                "outcomeCounts": [{"status": "executed-success", "count": 1}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "1 candidate.",
+                "artifactPath": "runs/health/external-analysis/run-partial-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-events",
+                    "candidateIndex": 0,
+                    "description": "Check pod events for CrashLoopBackOff",
+                    "targetCluster": "cluster-partial",
+                    "priorityLabel": "primary",
+                    "suggestedCommandFamily": "kubectl-get",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "executed-success",
+                    "outcomeStatus": "executed-success",
+                    "latestArtifactPath": "runs/health/external-analysis/run-partial-exec-0.json",
+                    "sourceReason": "CrashLoopBackOff investigation",
+                    "expectedSignal": "Recent crash events",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-partial · default",
+                    "commandPreview": "kubectl get events --context cluster-partial",
+                    "planArtifactPath": "runs/health/external-analysis/run-partial-next-check-plan.json",
+                    "queueStatus": "completed",
+                    "usefulnessClass": "partial",
+                    "usefulnessSummary": "Found crash events but exit code missing from logs",
+                    "resultClass": "partial-signal",
+                    "resultSummary": "Captured pod events showing restarts but exit codes incomplete.",
+                }
+            ],
+            "next_check_execution_history": [
+                {
+                    "timestamp": "2026-01-01T00:05:00Z",
+                    "clusterLabel": "cluster-partial",
+                    "candidateDescription": "Check pod events for CrashLoopBackOff",
+                    "commandFamily": "kubectl-get",
+                    "status": "success",
+                    "durationMs": 620,
+                    "artifactPath": "runs/health/external-analysis/run-partial-exec-0.json",
+                    "timedOut": False,
+                    "stdoutTruncated": False,
+                    "stderrTruncated": False,
+                    "outputBytesCaptured": 1240,
+                    "resultClass": "partial-signal",
+                    "resultSummary": "Captured pod events showing restarts but exit codes incomplete.",
+                    "usefulnessClass": "partial",
+                    "usefulnessSummary": "Found crash events but exit code missing from logs",
+                    "suggestedNextOperatorMove": "Collect logs to get exit codes.",
+                }
+            ],
+            "deterministic_next_checks": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 5,
+            "p50_run_duration_seconds": 40,
+            "p95_run_duration_seconds": 50,
+            "p99_run_duration_seconds": 55,
+        },
+        "clusters": [
+            {
+                "label": "cluster-partial",
+                "context": "cluster-partial",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": ["exit_code"],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-partial.json",
+                    "assessment": "assessments/cluster-partial.json",
+                    "drilldown": "drilldowns/cluster-partial.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-partial"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-partial",
+            "context": "cluster-partial",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {"pattern": "crashloop"},
+            "artifact_path": "drilldowns/cluster-partial.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-partial",
+            "context": "cluster-partial",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": ["exit_code"],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate pod crash",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-partial.json",
+            "snapshot_path": "snapshots/cluster-partial.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-partial",
+                    "context": "cluster-partial",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-partial.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
+def _fixture_executed_result_promotes_action() -> dict[str, object]:
+    """Build a UI index with executed feedback that promotes a new action.
+
+    Expected outcomes:
+    - worklist: non-empty with executed/reviewed item
+    - executed item has usefulnessClass: useful
+    - adaptationEffect: recommendation_promoted
+    - adaptationSummary indicates a new recommended action was surfaced
+    - itemState: reviewed
+
+    Protects against: useful execution not leading to action promotion.
+    """
+    return {
+        "run": {
+            "run_id": "run-promote",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:30Z",
+                "p50LatencyMs": 450,
+                "p95LatencyMs": 890,
+                "p99LatencyMs": 1200,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-promote-next-check-plan.json",
+                "summary": "2 candidates.",
+                "candidateCount": 2,
+                "candidates": [
+                    {
+                        "description": "Check node resource pressure",
+                        "targetCluster": "cluster-promote",
+                        "sourceReason": "Multiple pods affected",
+                        "expectedSignal": "Node allocatable and current usage",
+                        "suggestedCommandFamily": "kubectl-top",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "medium",
+                        "priorityLabel": "secondary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-nodes",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "executed-success",
+                        "outcomeStatus": "executed-success",
+                        "latestArtifactPath": "runs/health/external-analysis/run-promote-exec-0.json",
+                        "latestTimestamp": "2026-01-01T00:05:00Z",
+                        "targetContext": "cluster-promote",
+                        "commandPreview": "kubectl top nodes --context cluster-promote",
+                    },
+                    {
+                        "description": "Collect kubelet logs",
+                        "targetCluster": "cluster-promote",
+                        "sourceReason": "Node pressure detected from events",
+                        "expectedSignal": "Kubelet error messages",
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "medium",
+                        "priorityLabel": "secondary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-kubelet",
+                        "candidateIndex": 1,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "unexecuted",
+                        "outcomeStatus": "unexecuted",
+                        "latestArtifactPath": None,
+                        "latestTimestamp": None,
+                        "targetContext": "cluster-promote",
+                        "commandPreview": "kubectl logs -n kube-system -l k8s-app=kubelet --context cluster-promote",
+                    },
+                ],
+                "outcomeCounts": [
+                    {"status": "executed-success", "count": 1},
+                    {"status": "unexecuted", "count": 1},
+                ],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "2 candidates.",
+                "artifactPath": "runs/health/external-analysis/run-promote-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-nodes",
+                    "candidateIndex": 0,
+                    "description": "Check node resource pressure",
+                    "targetCluster": "cluster-promote",
+                    "priorityLabel": "secondary",
+                    "suggestedCommandFamily": "kubectl-top",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "executed-success",
+                    "outcomeStatus": "executed-success",
+                    "latestArtifactPath": "runs/health/external-analysis/run-promote-exec-0.json",
+                    "sourceReason": "Multiple pods affected",
+                    "expectedSignal": "Node allocatable and current usage",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-promote",
+                    "commandPreview": "kubectl top nodes --context cluster-promote",
+                    "planArtifactPath": "runs/health/external-analysis/run-promote-next-check-plan.json",
+                    "queueStatus": "completed",
+                    "usefulnessClass": "useful",
+                    "usefulnessSummary": "Found high memory pressure on node-1, elevated risk of OOM",
+                    "resultClass": "useful-signal",
+                    "resultSummary": "Captured node metrics showing memory pressure on node-1.",
+                },
+                {
+                    "candidateId": "candidate-kubelet",
+                    "candidateIndex": 1,
+                    "description": "Collect kubelet logs",
+                    "targetCluster": "cluster-promote",
+                    "priorityLabel": "secondary",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "unexecuted",
+                    "outcomeStatus": "unexecuted",
+                    "latestArtifactPath": None,
+                    "sourceReason": "Node pressure detected from events",
+                    "expectedSignal": "Kubelet error messages",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-promote",
+                    "commandPreview": "kubectl logs -n kube-system -l k8s-app=kubelet --context cluster-promote",
+                    "planArtifactPath": "runs/health/external-analysis/run-promote-next-check-plan.json",
+                    "queueStatus": "pending",
+                },
+            ],
+            "next_check_execution_history": [
+                {
+                    "timestamp": "2026-01-01T00:05:00Z",
+                    "clusterLabel": "cluster-promote",
+                    "candidateDescription": "Check node resource pressure",
+                    "commandFamily": "kubectl-top",
+                    "status": "success",
+                    "durationMs": 620,
+                    "artifactPath": "runs/health/external-analysis/run-promote-exec-0.json",
+                    "timedOut": False,
+                    "stdoutTruncated": False,
+                    "stderrTruncated": False,
+                    "outputBytesCaptured": 1840,
+                    "resultClass": "useful-signal",
+                    "resultSummary": "Captured node metrics showing memory pressure on node-1.",
+                    "usefulnessClass": "useful",
+                    "usefulnessSummary": "Found high memory pressure on node-1, elevated risk of OOM",
+                    "suggestedNextOperatorMove": "Check kubelet logs for error details.",
+                }
+            ],
+            "deterministic_next_checks": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 5,
+            "p50_run_duration_seconds": 40,
+            "p95_run_duration_seconds": 50,
+            "p99_run_duration_seconds": 55,
+        },
+        "clusters": [
+            {
+                "label": "cluster-promote",
+                "context": "cluster-promote",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-promote.json",
+                    "assessment": "assessments/cluster-promote.json",
+                    "drilldown": "drilldowns/cluster-promote.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-promote"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-promote",
+            "context": "cluster-promote",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {"pattern": "crashloop"},
+            "artifact_path": "drilldowns/cluster-promote.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-promote",
+            "context": "cluster-promote",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate node resources and kubelet logs",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-promote.json",
+            "snapshot_path": "snapshots/cluster-promote.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-promote",
+                    "context": "cluster-promote",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-promote.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
+def _fixture_executed_result_deprioritizes_action() -> dict[str, object]:
+    """Build a UI index with executed feedback that deprioritizes a prior action.
+
+    Expected outcomes:
+    - worklist: non-empty with executed/reviewed item
+    - executed item has usefulnessClass: noisy (indicates deprioritization signal)
+    - adaptationEffect: recommendation_deprioritized
+    - adaptationSummary indicates a prior action was downgraded
+    - itemState: reviewed
+
+    Protects against: deprioritization signals not being surfaced honestly.
+    """
+    return {
+        "run": {
+            "run_id": "run-deprioritize",
+            "run_label": "health-run",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "collector_version": "1.0",
+            "cluster_count": 1,
+            "drilldown_count": 1,
+            "proposal_count": 0,
+            "external_analysis_count": 1,
+            "notification_count": 0,
+            "scheduler_interval_seconds": 300,
+            "llm_stats": {
+                "totalCalls": 1,
+                "successfulCalls": 1,
+                "failedCalls": 0,
+                "lastCallTimestamp": "2026-01-01T00:00:30Z",
+                "p50LatencyMs": 450,
+                "p95LatencyMs": 890,
+                "p99LatencyMs": 1200,
+                "providerBreakdown": [],
+                "scope": "current_run",
+            },
+            "llm_activity": {"entries": [], "summary": {"retained_entries": 0}},
+            "llm_policy": None,
+            "review_enrichment": None,
+            "review_enrichment_status": None,
+            "provider_execution": None,
+            "auto_drilldown_config": None,
+            "review_enrichment_config": None,
+            "next_check_plan": {
+                "artifactPath": "runs/health/external-analysis/run-deprioritize-next-check-plan.json",
+                "summary": "1 candidate.",
+                "candidateCount": 1,
+                "candidates": [
+                    {
+                        "description": "Check CNI errors",
+                        "targetCluster": "cluster-deprioritize",
+                        "sourceReason": "Network connectivity issues",
+                        "expectedSignal": "CNI error messages",
+                        "suggestedCommandFamily": "kubectl-logs",
+                        "safeToAutomate": True,
+                        "requiresOperatorApproval": False,
+                        "riskLevel": "low",
+                        "estimatedCost": "low",
+                        "confidence": "low",
+                        "priorityLabel": "secondary",
+                        "gatingReason": None,
+                        "duplicateOfExistingEvidence": False,
+                        "candidateId": "candidate-cni",
+                        "candidateIndex": 0,
+                        "approvalStatus": "not-required",
+                        "approvalArtifactPath": None,
+                        "approvalState": "not-required",
+                        "executionState": "executed-success",
+                        "outcomeStatus": "executed-success",
+                        "latestArtifactPath": "runs/health/external-analysis/run-deprioritize-exec-0.json",
+                        "latestTimestamp": "2026-01-01T00:05:00Z",
+                        "targetContext": "cluster-deprioritize",
+                        "commandPreview": "kubectl logs -n kube-system -l k8s-app=kube-cni --context cluster-deprioritize",
+                    }
+                ],
+                "outcomeCounts": [{"status": "executed-success", "count": 1}],
+                "orphanedApprovalCount": 0,
+                "orphanedApprovals": [],
+            },
+            "planner_availability": {
+                "status": "planner-present",
+                "reason": "1 candidate.",
+                "artifactPath": "runs/health/external-analysis/run-deprioritize-next-check-plan.json",
+            },
+            "next_check_queue": [
+                {
+                    "candidateId": "candidate-cni",
+                    "candidateIndex": 0,
+                    "description": "Check CNI errors",
+                    "targetCluster": "cluster-deprioritize",
+                    "priorityLabel": "secondary",
+                    "suggestedCommandFamily": "kubectl-logs",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "approvalState": "not-required",
+                    "executionState": "executed-success",
+                    "outcomeStatus": "executed-success",
+                    "latestArtifactPath": "runs/health/external-analysis/run-deprioritize-exec-0.json",
+                    "sourceReason": "Network connectivity issues",
+                    "expectedSignal": "CNI error messages",
+                    "normalizationReason": "selection_label",
+                    "safetyReason": "known_command",
+                    "approvalReason": None,
+                    "duplicateReason": None,
+                    "blockingReason": None,
+                    "targetContext": "cluster-deprioritize",
+                    "commandPreview": "kubectl logs -n kube-system -l k8s-app=kube-cni --context cluster-deprioritize",
+                    "planArtifactPath": "runs/health/external-analysis/run-deprioritize-next-check-plan.json",
+                    "queueStatus": "completed",
+                    "usefulnessClass": "noisy",
+                    "usefulnessSummary": "CNI logs show no errors; network issue not related to CNI",
+                    "resultClass": "noisy-signal",
+                    "resultSummary": "No CNI errors found; network issue may be elsewhere.",
+                }
+            ],
+            "next_check_execution_history": [
+                {
+                    "timestamp": "2026-01-01T00:05:00Z",
+                    "clusterLabel": "cluster-deprioritize",
+                    "candidateDescription": "Check CNI errors",
+                    "commandFamily": "kubectl-logs",
+                    "status": "success",
+                    "durationMs": 620,
+                    "artifactPath": "runs/health/external-analysis/run-deprioritize-exec-0.json",
+                    "timedOut": False,
+                    "stdoutTruncated": False,
+                    "stderrTruncated": False,
+                    "outputBytesCaptured": 640,
+                    "resultClass": "noisy-signal",
+                    "resultSummary": "No CNI errors found; network issue may be elsewhere.",
+                    "usefulnessClass": "noisy",
+                    "usefulnessSummary": "CNI logs show no errors; network issue not related to CNI",
+                    "suggestedNextOperatorMove": "Focus on pod-level network policies instead.",
+                }
+            ],
+            "deterministic_next_checks": None,
+            "diagnostic_pack_review": None,
+            "diagnostic_pack": None,
+        },
+        "run_stats": {
+            "last_run_duration_seconds": 45,
+            "total_runs": 5,
+            "p50_run_duration_seconds": 40,
+            "p95_run_duration_seconds": 50,
+            "p99_run_duration_seconds": 55,
+        },
+        "clusters": [
+            {
+                "label": "cluster-deprioritize",
+                "context": "cluster-deprioritize",
+                "cluster_class": "prod",
+                "cluster_role": "primary",
+                "baseline_cohort": "fleet",
+                "node_count": 3,
+                "control_plane_version": "v1.28.0",
+                "health_rating": "degraded",
+                "warnings": 2,
+                "non_running_pods": 1,
+                "baseline_policy_path": "policy.json",
+                "missing_evidence": [],
+                "artifact_paths": {
+                    "snapshot": "snapshots/cluster-deprioritize.json",
+                    "assessment": "assessments/cluster-deprioritize.json",
+                    "drilldown": "drilldowns/cluster-deprioritize.json",
+                },
+            }
+        ],
+        "proposals": [],
+        "fleet_status": {
+            "rating_counts": [{"rating": "degraded", "count": 1}],
+            "degraded_clusters": ["cluster-deprioritize"],
+        },
+        "proposal_status_summary": {"status_counts": []},
+        "latest_drilldown": {
+            "label": "cluster-deprioritize",
+            "context": "cluster-deprioritize",
+            "trigger_reasons": ["non_running_pods"],
+            "warning_events": 2,
+            "non_running_pods": 1,
+            "summary": {},
+            "rollout_status": [],
+            "pattern_details": {"pattern": "crashloop"},
+            "artifact_path": "drilldowns/cluster-deprioritize.json",
+        },
+        "latest_assessment": {
+            "cluster_label": "cluster-deprioritize",
+            "context": "cluster-deprioritize",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "health_rating": "degraded",
+            "missing_evidence": [],
+            "findings": [],
+            "hypotheses": [],
+            "next_evidence_to_collect": [],
+            "recommended_action": {
+                "type": "observation",
+                "description": "Investigate pod crash and network",
+                "references": [],
+                "safety_level": "low-risk",
+            },
+            "overall_confidence": "medium",
+            "probable_layer_of_origin": "workload",
+            "artifact_path": "assessments/cluster-deprioritize.json",
+            "snapshot_path": "snapshots/cluster-deprioritize.json",
+        },
+        "drilldown_availability": {
+            "total_clusters": 1,
+            "available": 1,
+            "missing": 0,
+            "coverage": [
+                {
+                    "label": "cluster-deprioritize",
+                    "context": "cluster-deprioritize",
+                    "available": True,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "artifact_path": "drilldowns/cluster-deprioritize.json",
+                }
+            ],
+            "missing_clusters": [],
+        },
+        "notification_history": [],
+        "external_analysis": {"count": 1, "status_counts": [], "artifacts": []},
+        "auto_drilldown_interpretations": {},
+    }
+
+
 def _fixture_degraded_single_cluster() -> dict[str, object]:
     """Build a UI index for a degraded single-cluster run with missing evidence and worklist items.
 
