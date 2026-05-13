@@ -38,11 +38,41 @@
 - No beta product guarantees weakened
 
 ## Task Progress
-- [ ] Check repository status
-- [ ] Inspect scripts/verify_all.sh
-- [ ] Run local verification to reproduce failure
-- [ ] Identify first concrete blocker
-- [ ] Fix syntax/runtime issues
-- [ ] Verify fix
-- [ ] Run full gate again
-- [ ] Document results and remaining issues
+- [x] Check repository status
+- [x] Inspect scripts/verify_all.sh
+- [x] Run local verification to reproduce failure
+- [x] Identify first concrete blocker (coverage policy ambiguity)
+- [x] Fix syntax/runtime issues (added CI coverage job, documented policy)
+- [x] Verify fix (gate passes: ruff OK, unit-tests OK, mypy OK)
+- [x] Run full gate again
+- [x] Document results and remaining issues
+
+## Coverage Hardening Results (2026-05-13)
+
+### Policy Decision: Report-Only (Non-Blocking)
+
+Coverage reporting is now integrated into CI as a separate non-blocking job:
+
+**Changes made:**
+- `.github/workflows/verify.yml`: Added `coverage` job that runs `scripts/run_coverage.sh` and uploads artifacts
+- `docs/coverage.md`: Added "Coverage Policy" section documenting the report-only status
+- `docs/post-beta-backlog.md`: Updated "Coverage gate in CI" status from "Deferred" to "Report-only"
+
+**Current baseline metrics:**
+- Line coverage: ~82% (13,700/16,745 lines)
+- Branch coverage: ~67% (3,657/5,452 branches)
+
+**Verification gate status:**
+- ruff-lint: PASS (All checks passed!)
+- unit-tests: PASS (OK, skipped=20)
+- mypy: PASS (Success: no issues found in 375 source files)
+
+**CI changes:**
+- New job `coverage` runs independently from `verify` gate
+- Does NOT block merge on low coverage
+- Artifacts uploaded with 7-day retention
+- Coverage summary displayed in CI logs
+
+**Remaining:**
+- Threshold enforcement deferred (fail_under=0 in pyproject.toml)
+- Next check: add thresholds after baseline coverage stabilizes
