@@ -16,6 +16,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from k8s_diag_agent.ui.api_incident_report_filtering import (
@@ -25,6 +26,7 @@ from k8s_diag_agent.ui.api_incident_report_filtering import (
     filter_artifact_links,
     filter_artifact_refs_preserving_minimum,
 )
+from k8s_diag_agent.ui.api_payloads import ArtifactLink
 
 
 class SkippedArtifactFilteringTests(unittest.TestCase):
@@ -82,7 +84,7 @@ class SkippedArtifactFilteringTests(unittest.TestCase):
             skipped_path.parent.mkdir(parents=True, exist_ok=True)
             skipped_path.write_text(json.dumps(skipped_artifact.to_dict()))
 
-            links = [
+            links: list[ArtifactLink] = [
                 {"label": "Success Ref", "path": str(success_path.relative_to(runs_dir))},
                 {"label": "Skipped Ref", "path": str(skipped_path.relative_to(runs_dir))},
             ]
@@ -303,7 +305,7 @@ class MixedRefsFilteringTests(unittest.TestCase):
             placeholder_path.parent.mkdir(parents=True, exist_ok=True)
             placeholder_path.write_text(json.dumps(placeholder_artifact.to_dict()))
 
-            links = [
+            links: list[ArtifactLink] = [
                 {"label": "Useful Logs", "path": str(success_path.relative_to(runs_dir))},
                 {"label": "Skipped K8sGPT", "path": str(skipped_path.relative_to(runs_dir))},
                 {"label": "Placeholder Enrichment", "path": str(placeholder_path.relative_to(runs_dir))},
@@ -336,7 +338,7 @@ class MixedRefsFilteringTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps(artifact.to_dict()))
 
-            links = [
+            links: list[ArtifactLink] = [
                 {"label": "Assessment", "path": "runs/run-1/assessment.json"},
                 {"label": "Drilldown", "path": "runs/run-1/drilldown.json"},
             ]
@@ -353,7 +355,7 @@ class PreservingMinimumTests(unittest.TestCase):
 
     def test_filtering_all_would_remove_preserves_original(self) -> None:
         """When filtering would remove all refs, original list is preserved."""
-        links = [
+        links: list[ArtifactLink] = [
             {"label": "Unknown Ref", "path": "runs/run-1/unknown.json"},
         ]
 
@@ -379,7 +381,7 @@ class PreservingMinimumTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(artifact.to_dict()))
 
-            links = [
+            links: list[ArtifactLink] = [
                 {"label": "Useful", "path": "runs/run-1/useful.json"},
             ]
 
@@ -393,7 +395,7 @@ class NoFakeUnknownTests(unittest.TestCase):
 
     def test_no_unknown_label_in_filtered(self) -> None:
         """Filtered results should not contain 'unknown' labels."""
-        links = [
+        links: list[ArtifactLink] = [
             {"label": "Assessment", "path": "runs/run-1/assessment.json"},
             {"label": "Skipped", "path": "runs/run-1/skipped.json"},
         ]
@@ -405,7 +407,7 @@ class NoFakeUnknownTests(unittest.TestCase):
 
     def test_no_unknown_path_in_filtered(self) -> None:
         """Filtered results should not contain 'unknown' paths."""
-        links = [
+        links: list[ArtifactLink] = [
             {"label": "Assessment", "path": "assessments/cluster-a.json"},
             {"label": "Skipped", "path": "runs/run-1/skipped.json"},
         ]
@@ -427,10 +429,13 @@ class EmptyLinksTests(unittest.TestCase):
 
     def test_none_path_skipped(self) -> None:
         """Links with None path are skipped during filtering."""
-        links = [
-            {"label": "Valid Ref", "path": "runs/run-1/valid.json"},
-            {"label": "Missing Path", "path": None},  # type: ignore
-        ]
+        links = cast(
+            list[ArtifactLink],
+            [
+                {"label": "Valid Ref", "path": "runs/run-1/valid.json"},
+                {"label": "Missing Path", "path": None},
+            ],
+        )
 
         result = filter_artifact_links(links)
         # Should not crash, should return valid ref
