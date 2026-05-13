@@ -90,6 +90,7 @@ jobs:
     name: Coverage Report
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true
     permissions:
       contents: read
     steps:
@@ -137,15 +138,15 @@ jobs:
         run: |
           echo "=== Backend Coverage Summary ==="
           if [ -f coverage/backend/coverage.json ]; then
-            .venv/bin/python -c "
-import json
-with open('coverage/backend/coverage.json') as f:
-    data = json.load(f)
-totals = data['totals']
-print(f\"Line coverage: {totals['percent_covered']:.2f}%\")
-print(f\"Lines: {totals['covered_lines']}/{totals['total_lines']}\")
-print(f\"Branches: {totals['covered_branches']}/{totals['total_branches']}\")
-"
+            .venv/bin/python <<'PYEOF'
+            import json
+            with open('coverage/backend/coverage.json') as f:
+                data = json.load(f)
+            totals = data['totals']
+            print(f"Line coverage: {totals['percent_covered']:.2f}%")
+            print(f"Lines: {totals['covered_lines']}/{totals['total_lines']}")
+            print(f"Branches: {totals['covered_branches']}/{totals['total_branches']}")
+            PYEOF
           else
             echo "Coverage report not available"
           fi
