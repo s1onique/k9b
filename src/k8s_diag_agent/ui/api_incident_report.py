@@ -25,13 +25,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import cast
+from typing import Literal, cast
 
 from ..security.kubectl_context import (
     display_kube_cluster_label,
     is_internal_kube_marker,
     sanitize_kubectl_display_command,
     sanitize_operator_text,
+)
+from .api_incident_report_ownership import (
+    derive_evidence_ownership,
+    format_ownership_fields,
 )
 from .api_payloads import (
     ArtifactLink,
@@ -152,16 +156,53 @@ def _build_incident_report_payload(
                     "confidence": "high",
                 }
             )
-        # Missing evidence is an explicit unknown claim
+        # Missing evidence is an explicit unknown claim with ownership derivation
+        # Derive ownership hints from available signals: method, evidence_needed,
+        # probable_layer, existing owner field, and workstream
         for missing in assessment.missing_evidence:
-            unknowns.append(
-                {
-                    "claimType": "unknown",
-                    "statement": f"Missing evidence: {missing}",
-                    "whyMissing": "Not collected in this run",
-                    "sourceArtifactRefs": _assessment_refs(),
-                }
+            # Extract signals from assessment for ownership derivation
+            # Use the first next_check as a representative signal source
+            method: str | None = None
+            evidence_needed: tuple[str, ...] = ()
+            owner: str | None = None
+            workstream: str | None = None
+            if assessment.next_checks:
+                first_check = assessment.next_checks[0]
+                method = first_check.method
+                evidence_needed = first_check.evidence_needed
+                owner = first_check.owner
+                workstream = getattr(first_check, "workstream", None)
+            
+            # Derive ownership from available signals
+            probable_layer = assessment.probable_layer
+            evidence_owner, routing_hint, confidence = derive_evidence_ownership(
+                method=method,
+                evidence_needed=evidence_needed,
+                probable_layer=probable_layer,
+                owner=owner,
+                workstream=workstream,
+                is_cross_cluster=cluster_count > 1,
             )
+            
+            # Format ownership fields for the unknown payload
+            ownership_fields = format_ownership_fields(evidence_owner, routing_hint, confidence)
+            
+            # Build unknown payload with ownership context
+            unknown_entry: IncidentReportUnknownPayload = {
+                "claimType": "unknown",
+                "statement": f"Missing evidence: {missing}",
+                "whyMissing": "Not collected in this run",
+                "sourceArtifactRefs": _assessment_refs(),
+            }
+            # Merge ownership fields if derivable (format_ownership_fields returns dict compatible with TypedDict)
+            # Each field is explicitly typed to match the TypedDict signature
+            if "evidenceOwner" in ownership_fields:
+                unknown_entry["evidenceOwner"] = cast("str | None", ownership_fields["evidenceOwner"])
+            if "routingHint" in ownership_fields:
+                unknown_entry["routingHint"] = cast("str | None", ownership_fields["routingHint"])
+            if "ownershipConfidence" in ownership_fields:
+                unknown_entry["ownershipConfidence"] = cast("Literal['high', 'medium', 'low', 'unknown'] | None", ownership_fields["ownershipConfidence"])
+            unknowns.append(unknown_entry)
         # Hypotheses are inference/hypothesis claims
         # Sanitize description to prevent internal markers from leaking
         for hypothesis in assessment.hypotheses:

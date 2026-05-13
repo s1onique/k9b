@@ -979,17 +979,32 @@ class IncidentReportRecommendationPayload(TypedDict, total=False):
     sourceArtifactRefs: list[ArtifactLink]
 
 
+# Ownership confidence levels for missing-evidence items
+EvidenceOwnershipConfidence = Literal["high", "medium", "low", "unknown"]
+
+
 class IncidentReportUnknownPayload(TypedDict, total=False):
     """An explicitly acknowledged unknown or missing-evidence item.
 
     Corresponds to the "unknown" claim type: data gaps and missing evidence
     that must NOT be rendered as confident prose or omitted silently.
+
+    Ownership fields (evidenceOwner, routingHint, ownershipConfidence) are
+    derived-only from available signals: method, evidence_needed, probable_layer,
+    existing owner field, workstream, and cluster-vs-fleet scope. When no signal
+    is available, evidenceOwner remains "unknown" and routingHint is omitted.
     """
 
     claimType: ClaimType  # Always "unknown"
     statement: str
     whyMissing: str | None
     sourceArtifactRefs: list[ArtifactLink]
+    # Ownership/routing context: which team likely owns collecting this signal
+    # Derived from: method patterns, evidence_needed labels, probable_layer,
+    # existing owner field, workstream, cross-cluster scope
+    evidenceOwner: str | None  # platform | application | networking | storage | security | observability | unknown
+    routingHint: str | None  # Concise operator-readable routing instruction
+    ownershipConfidence: EvidenceOwnershipConfidence | None  # high | medium | low | unknown
 
 
 class CrossClusterFindingPayload(TypedDict, total=False):
