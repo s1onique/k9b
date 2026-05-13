@@ -239,10 +239,15 @@ _record_step_result() {
     
     # Append to lane state file (simple JSON array append simulation)
     local tmp_file="${_LANE_STATE_FILE}.tmp"
-    # Use Python to properly update JSON (more reliable than bash for JSON)
+    # Use Python to properly update JSON with file locking for concurrent access
     "$PYTHON" -c "
 import json
+import fcntl
+import os
+import time
+
 state_file = '$_LANE_STATE_FILE'
+lock_file = state_file + '.lock'
 step = {
     'id': '$step_id',
     'status': '$result',
@@ -250,14 +255,38 @@ step = {
     'exit_code': $exit_code,
     'log_file': '$log_file'
 }
-try:
-    with open(state_file, 'r') as f:
-        state = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    state = {'python': [], 'frontend': []}
-state['$lane'].append(step)
-with open(state_file, 'w') as f:
-    json.dump(state, f)
+
+# Retry loop for lock acquisition (handles concurrent access)
+for attempt in range(10):
+    try:
+        with open(lock_file, 'w') as lf:
+            fcntl.flock(lf.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                try:
+                    with open(state_file, 'r') as f:
+                        state = json.load(f)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    # Include all three lanes in default state
+                    state = {'python': [], 'frontend': [], 'helm': []}
+                state['$lane'].append(step)
+                with open(state_file, 'w') as f:
+                    json.dump(state, f)
+            finally:
+                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+            break
+    except (IOError, OSError):
+        if attempt < 9:
+            time.sleep(0.05)  # Brief backoff before retry
+        else:
+            # Last attempt - try without locking as fallback
+            try:
+                with open(state_file, 'r') as f:
+                    state = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                state = {'python': [], 'frontend': [], 'helm': []}
+            state['$lane'].append(step)
+            with open(state_file, 'w') as f:
+                json.dump(state, f)
 "
 }
 
