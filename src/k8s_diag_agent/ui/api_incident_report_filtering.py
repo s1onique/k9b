@@ -26,10 +26,12 @@ Preserved artifacts:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
+from ..external_analysis.artifact_readers import try_read_external_analysis_artifact
 from .api_payloads import ArtifactLink
 
 # Known placeholder patterns that indicate non-informative artifacts
@@ -209,15 +211,13 @@ def filter_artifact_links(
 
         # Try to read as external analysis artifact
         try:
-            from ..external_analysis.artifact_readers import try_read_external_analysis_artifact
-
             artifact = try_read_external_analysis_artifact(
                 artifact_path,
                 log_failures=False,  # Silent for filtering
             )
-        except Exception:
-            # If we can't read the artifact, preserve the link
-            # This is safer than filtering without evidence
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            # If we can't read or parse the artifact, preserve the link.
+            # This is safer than filtering without evidence.
             filtered.append(link)
             continue
 
