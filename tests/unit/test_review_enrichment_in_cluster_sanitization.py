@@ -9,6 +9,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
+from k8s_diag_agent.ui.api_payloads import ReviewEnrichmentPayload
 from k8s_diag_agent.ui.api_review_enrichment import (
     _is_safe_cluster_label,
     _sanitize_command_list,
@@ -131,6 +132,15 @@ class TestSanitizeCommandList(unittest.TestCase):
 class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
     """Tests that _serialize_review_enrichment sanitizes operator-facing fields."""
 
+    def _require_payload(
+        self,
+        payload: ReviewEnrichmentPayload | None,
+    ) -> ReviewEnrichmentPayload:
+        """Narrow Optional payload for mypy."""
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        return payload
+
     def _make_review_enrichment_view(
         self,
         summary: str | None = None,
@@ -139,6 +149,8 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
         top_concerns: tuple[str, ...] = (),
         evidence_gaps: tuple[str, ...] = (),
         focus_notes: tuple[str, ...] = (),
+        error_summary: str | None = None,
+        skip_reason: str | None = None,
     ) -> ReviewEnrichmentView:
         """Create a ReviewEnrichmentView with test data."""
         return MagicMock(
@@ -154,8 +166,8 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
             focus_notes=focus_notes,
             alertmanager_evidence_references=(),
             artifact_path="test-artifact.json",
-            error_summary=None,
-            skip_reason=None,
+            error_summary=error_summary,
+            skip_reason=skip_reason,
         )
 
     def test_summary_with_in_cluster_sanitized(self) -> None:
@@ -163,27 +175,28 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
         view = self._make_review_enrichment_view(
             summary="in-cluster is in a degraded state"
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
-        self.assertNotIn("in-cluster", result["summary"])
-        self.assertIn("the cluster", result["summary"])
+        result = self._require_payload(_serialize_review_enrichment(view))
+        summary = result["summary"]
+        assert summary is not None
+        self.assertNotIn("in-cluster", summary)
+        self.assertIn("the cluster", summary)
 
     def test_summary_with_in_cluster_underscore_sanitized(self) -> None:
         """Summary containing 'in_cluster' is sanitized."""
         view = self._make_review_enrichment_view(
             summary="in_cluster needs attention"
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
-        self.assertNotIn("in_cluster", result["summary"])
+        result = self._require_payload(_serialize_review_enrichment(view))
+        summary = result["summary"]
+        assert summary is not None
+        self.assertNotIn("in_cluster", summary)
 
     def test_triage_order_with_in_cluster_sanitized(self) -> None:
         """TriageOrder containing 'in-cluster' is sanitized."""
         view = self._make_review_enrichment_view(
             triage_order=("in-cluster", "prod-cluster")
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
+        result = self._require_payload(_serialize_review_enrichment(view))
         self.assertEqual(len(result["triageOrder"]), 1)
         self.assertEqual(result["triageOrder"][0], "prod-cluster")
 
@@ -196,8 +209,7 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
                 "kubectl get pods --context prod-cluster",
             )
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
+        result = self._require_payload(_serialize_review_enrichment(view))
         # All 3 commands are preserved, but internal contexts are removed
         self.assertEqual(len(result["nextChecks"]), 3)
         for cmd in result["nextChecks"]:
@@ -213,12 +225,13 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
                 "kubectl get crd --context=in-cluster",
             )
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
+        result = self._require_payload(_serialize_review_enrichment(view))
         # Command is preserved but internal context is removed
         self.assertEqual(len(result["nextChecks"]), 1)
-        self.assertNotIn("--context", result["nextChecks"][0])
-        self.assertIn("kubectl get crd", result["nextChecks"][0])
+        cmd = result["nextChecks"][0]
+        assert cmd is not None
+        self.assertNotIn("--context", cmd)
+        self.assertIn("kubectl get crd", cmd)
 
     def test_top_concerns_with_in_cluster_sanitized(self) -> None:
         """topConcerns containing 'in-cluster' are sanitized."""
@@ -228,12 +241,13 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
                 "Memory pressure in prod-cluster",
             )
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
+        result = self._require_payload(_serialize_review_enrichment(view))
         self.assertEqual(len(result["topConcerns"]), 2)
         # in-cluster reference should be replaced
-        self.assertNotIn("in-cluster", result["topConcerns"][0])
-        self.assertIn("the cluster", result["topConcerns"][0])
+        concern0 = result["topConcerns"][0]
+        assert concern0 is not None
+        self.assertNotIn("in-cluster", concern0)
+        self.assertIn("the cluster", concern0)
         # prod-cluster should be preserved
         self.assertIn("prod-cluster", result["topConcerns"][1])
 
@@ -242,9 +256,10 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
         view = self._make_review_enrichment_view(
             summary="prod-eu-1 is in a degraded state"
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
-        self.assertEqual(result["summary"], "prod-eu-1 is in a degraded state")
+        result = self._require_payload(_serialize_review_enrichment(view))
+        summary = result["summary"]
+        assert summary is not None
+        self.assertEqual(summary, "prod-eu-1 is in a degraded state")
 
     def test_real_context_in_next_checks_preserved(self) -> None:
         """Real --context values in nextChecks are preserved."""
@@ -254,8 +269,7 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
                 "kubectl get crd --context=staging-cluster",
             )
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
+        result = self._require_payload(_serialize_review_enrichment(view))
         self.assertEqual(len(result["nextChecks"]), 2)
         self.assertIn("prod-cluster", result["nextChecks"][0])
         self.assertIn("staging-cluster", result["nextChecks"][1])
@@ -271,8 +285,7 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
             top_concerns=("Run kubectl get pods --context in-cluster",),
             focus_notes=("Check kubectl describe event --context=in-cluster",),
         )
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
+        result = self._require_payload(_serialize_review_enrichment(view))
         # Check entire payload for any leaked markers
         payload_str = str(result)
         self.assertNotIn("in-cluster", payload_str)
@@ -282,20 +295,26 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
 
     def test_error_summary_with_in_cluster_sanitized(self) -> None:
         """errorSummary containing 'in-cluster' is sanitized."""
-        view = self._make_review_enrichment_view()
-        view.error_summary = "Failed to connect to in-cluster"
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
-        self.assertNotIn("in-cluster", result["errorSummary"])
-        self.assertIn("the cluster", result["errorSummary"])
+        view = self._make_review_enrichment_view(
+            error_summary="Failed to connect to in-cluster"
+        )
+        result = self._require_payload(_serialize_review_enrichment(view))
+        error_summary = result["errorSummary"]
+        self.assertIsNotNone(error_summary)
+        assert error_summary is not None
+        self.assertNotIn("in-cluster", error_summary)
+        self.assertIn("the cluster", error_summary)
 
     def test_skip_reason_with_in_cluster_sanitized(self) -> None:
         """skipReason containing 'in-cluster' is sanitized."""
-        view = self._make_review_enrichment_view()
-        view.skip_reason = "Skipped in-cluster check"
-        result = _serialize_review_enrichment(view)
-        self.assertIsNotNone(result)
-        self.assertNotIn("in-cluster", result["skipReason"])
+        view = self._make_review_enrichment_view(
+            skip_reason="Skipped in-cluster check"
+        )
+        result = self._require_payload(_serialize_review_enrichment(view))
+        skip_reason = result["skipReason"]
+        self.assertIsNotNone(skip_reason)
+        assert skip_reason is not None
+        self.assertNotIn("in-cluster", skip_reason)
 
 
 if __name__ == "__main__":

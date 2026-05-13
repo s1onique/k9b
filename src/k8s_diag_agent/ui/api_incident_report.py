@@ -325,12 +325,16 @@ def _build_operator_worklist_payload(
                 # Deterministic next checks carry a method name, not an executable command.
                 # Leave command None so consumers do not misinterpret it as a runnable string.
                 # Sanitize all text fields to prevent internal markers from leaking
+                # sanitize_operator_text returns str | None but always returns str
+                # when input is non-None str (input type is str for summary.description)
+                title_str = sanitize_operator_text(summary.description)
+                title_str = title_str if title_str is not None else summary.description
                 items.append(
                     {
                         "id": f"deterministic-{safe_cluster}-{rank}",
                         "rank": rank,
                         "workstream": summary.workstream,
-                        "title": sanitize_operator_text(summary.description),
+                        "title": title_str,
                         "description": sanitize_operator_text(
                             f"Owner: {summary.owner}; method: {summary.method}; evidence needed: {', '.join(summary.evidence_needed)}"
                         ),
@@ -379,13 +383,17 @@ def _build_operator_worklist_payload(
                         )
                         existing["sourceArtifactRefs"] = refs
             continue
+        # sanitize_operator_text returns str | None but always returns str
+        # when input is non-None str
+        queue_title = sanitize_operator_text(queue_item.description)
+        queue_title = queue_title if queue_title is not None else queue_item.description
         items.append(
             {
                 "id": item_id,
                 "rank": len(items) + 1,
                 "workstream": queue_item.workstream,
                 # Sanitize all text fields to prevent internal markers from leaking
-                "title": sanitize_operator_text(queue_item.description),
+                "title": queue_title,
                 "description": sanitize_operator_text(queue_item.source_reason),
                 "command": sanitize_kubectl_display_command(queue_item.command_preview) if queue_item.command_preview else None,
                 # Sanitize targetCluster and targetContext to prevent "in-cluster" leaks

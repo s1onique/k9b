@@ -21,6 +21,8 @@ Security note:
 
 from __future__ import annotations
 
+from typing import cast
+
 from ..security.kubectl_context import (
     is_internal_kube_marker,
     sanitize_kubectl_display_command,
@@ -103,16 +105,23 @@ def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnr
     # Serialize alertmanager evidence references if present
     alertmanager_refs: list[AlertmanagerEvidenceReferencePayload] | None = None
     if view.alertmanager_evidence_references:
-        alertmanager_refs = [
-            {
-                "cluster": _sanitize_text_field(ref.cluster),
+        refs_list: list[AlertmanagerEvidenceReferencePayload] = []
+        for ref in view.alertmanager_evidence_references:
+            # _sanitize_text_field preserves str values from non-None inputs
+            # The view model has cluster: str and reason: str (non-optional)
+            sanitized_cluster = _sanitize_text_field(ref.cluster)
+            sanitized_reason = _sanitize_text_field(ref.reason)
+            # Both should be non-None str since inputs are non-None str
+            assert sanitized_cluster is not None, "sanitize_text_field returned None for non-None str cluster"
+            assert sanitized_reason is not None, "sanitize_text_field returned None for non-None str reason"
+            refs_list.append({
+                "cluster": sanitized_cluster,
                 "matchedDimensions": list(ref.matched_dimensions),
-                "reason": _sanitize_text_field(ref.reason),
+                "reason": sanitized_reason,
                 "usedFor": ref.used_for,
-            }
-            for ref in view.alertmanager_evidence_references
-        ]
-    return {
+            })
+        alertmanager_refs = refs_list
+    return cast(ReviewEnrichmentPayload, {
         "status": view.status,
         "provider": view.provider,
         "timestamp": view.timestamp,
@@ -133,7 +142,7 @@ def _serialize_review_enrichment(view: ReviewEnrichmentView | None) -> ReviewEnr
         # Sanitize errorSummary and skipReason to prevent internal markers from leaking
         "errorSummary": _sanitize_text_field(view.error_summary),
         "skipReason": _sanitize_text_field(view.skip_reason),
-    }
+    })
 
 
 def _serialize_review_enrichment_status(

@@ -308,7 +308,11 @@ def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None)
     # If cluster_name is NOT an internal marker, check for embedded markers
     if cluster_name is not None and not is_internal_kube_marker(cluster_name):
         # Check for embedded markers in the text and replace them
-        return sanitize_text_with_embedded_markers(cluster_name, context)
+        result = sanitize_text_with_embedded_markers(cluster_name, context)
+        # sanitize_text_with_embedded_markers returns None only for None input;
+        # at this point cluster_name is a non-None str, so result is a str
+        assert result is not None, "sanitize_text_with_embedded_markers returned None for non-None input"
+        return result
 
     # cluster_name is an internal marker - use display_label logic
     display_label = display_kube_cluster_label(cluster_name, context)

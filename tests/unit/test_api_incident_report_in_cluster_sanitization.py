@@ -124,6 +124,7 @@ class TestReviewEnrichmentNextChecksSanitization(unittest.TestCase):
         cmd = "kubectl get pods --context in-cluster"
         result = sanitize_kubectl_display_command(cmd)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertNotIn("--context", result)
         self.assertNotIn("in-cluster", result)
 
@@ -132,6 +133,7 @@ class TestReviewEnrichmentNextChecksSanitization(unittest.TestCase):
         cmd = "kubectl get crd --context=in-cluster"
         result = sanitize_kubectl_display_command(cmd)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertNotIn("--context", result)
         self.assertNotIn("in-cluster", result)
 
@@ -140,6 +142,7 @@ class TestReviewEnrichmentNextChecksSanitization(unittest.TestCase):
         cmd = "kubectl get pods --context prod-cluster"
         result = sanitize_kubectl_display_command(cmd)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("--context prod-cluster", result)
 
 
