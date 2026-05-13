@@ -84,7 +84,7 @@ def test_build_adapters_and_skip(monkeypatch: Any) -> None:
     adapters = build_external_analysis_adapters(cfgs)
     assert adapters == {}
 
-    # empty command yields adapter but skip status
+    # empty command yields adapter but skip status (k8sgpt has default command)
     cfgs = [ExternalAnalysisAdapterConfig(name="k8sgpt", enabled=True, command=())]
     adapters = build_external_analysis_adapters(cfgs)
     assert "k8sgpt" in adapters
@@ -93,12 +93,14 @@ def test_build_adapters_and_skip(monkeypatch: Any) -> None:
     artifact = adapter.run(req)
     assert artifact.status == ExternalAnalysisStatus.SKIPPED
 
+    # llamacpp adapter with empty command enters HTTP-only mode
+    # Without HTTP config, it returns FAILED (not SKIPPED)
     cfgs = [ExternalAnalysisAdapterConfig(name="llamacpp", enabled=True, command=())]
     adapters = build_external_analysis_adapters(cfgs)
     assert "llamacpp" in adapters
     llama_adapter = adapters["llamacpp"]
     artifact = llama_adapter.run(req)
-    assert artifact.status == ExternalAnalysisStatus.SKIPPED
+    assert artifact.status == ExternalAnalysisStatus.FAILED
 
     # Test with canonical name 'openai_compatible'
     cfgs_canonical = [ExternalAnalysisAdapterConfig(name="openai_compatible", enabled=True, command=())]
@@ -107,7 +109,8 @@ def test_build_adapters_and_skip(monkeypatch: Any) -> None:
 
 
 def test_k8sgpt_adapter_success(monkeypatch: Any) -> None:
-    adapter = K8sGptAdapter(command=("echo", "line1\nline2"))
+    # Use k8sgpt which is in the allowed command families
+    adapter = K8sGptAdapter(command=("k8sgpt", "analysis"))
     class FakeResult:
         def __init__(self) -> None:
             self.stdout = "line1\nline2"
@@ -540,7 +543,8 @@ def test_k8sgpt_adapter_failure(monkeypatch: Any) -> None:
     art = adapter.run(req)
     assert art.status == ExternalAnalysisStatus.FAILED
     raw_output = art.raw_output or ""
-    assert "exited 2" in raw_output or "Command not found" in raw_output
+    # Command validation happens before subprocess - unlisted commands fail with validation error
+    assert "not a recognized external analysis tool" in raw_output or "not allowed" in raw_output
     assert art.provider == "k8sgpt"
     assert isinstance(art.duration_ms, int)
 
@@ -553,7 +557,8 @@ def test_external_analysis_adapter_persists_artifact(tmp_path: Path, monkeypatch
             self.returncode = 0
 
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
-    adapter = K8sGptAdapter(command=("echo", "analysis"))
+    # Use k8sgpt which is in the allowed command families
+    adapter = K8sGptAdapter(command=("k8sgpt", "analysis"))
     req = ExternalAnalysisRequest(run_id="run-1", cluster_label="cluster-a", source_artifact="assessments/cluster-a.json")
     artifact = adapter.run(req)
     output_path = tmp_path / "analysis.json"

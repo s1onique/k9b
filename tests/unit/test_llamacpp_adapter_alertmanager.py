@@ -62,7 +62,8 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
             cluster_label="test-cluster",
             source_artifact=str(review_path),
         )
-        prompt = adapter._build_prompt(request, context)
+        # _build_prompt returns tuple[str, dict] - unpack the prompt text
+        prompt, _alias_mapping = adapter._build_prompt(request, context)
         
         # Verify prompt contains full structured Alertmanager context
         assert "Alertmanager operational context:" in prompt
@@ -94,7 +95,8 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
             cluster_label="test-cluster",
             source_artifact=str(review_path),
         )
-        prompt = adapter._build_prompt(request, context)
+        # _build_prompt returns tuple[str, dict] - unpack the prompt text
+        prompt, _alias_mapping = adapter._build_prompt(request, context)
         
         # Verify prompt marks Alertmanager as unavailable with structured JSON
         assert "Alertmanager operational context:" in prompt
@@ -193,7 +195,8 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
             cluster_label="test-cluster",
             source_artifact=str(review_path),
         )
-        prompt = adapter._build_prompt(request, context)
+        # _build_prompt returns tuple[str, dict] - unpack the prompt text
+        prompt, _alias_mapping = adapter._build_prompt(request, context)
         
         # The prompt construction should not have made any network calls
         # This is verified by the fact that:

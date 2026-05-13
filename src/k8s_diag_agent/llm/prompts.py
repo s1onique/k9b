@@ -24,18 +24,21 @@ def _metadata_summary(snapshot: ClusterSnapshot, anonymizer: MetadataAnonymizer 
     meta = snapshot.metadata
     # Build base metadata dict including labels
     # Phase 1b: labels may contain sensitive values (name-like data)
+    # Guard with isinstance to prevent MagicMock from leaking into JSON (tests run under coverage)
+    labels = meta.labels if isinstance(meta.labels, dict) else {}
     result: dict[str, object] = {
         "cluster_id": meta.cluster_id,
         "control_plane_version": meta.control_plane_version,
         "node_count": meta.node_count,
         "pod_count": meta.pod_count,
         "region": meta.region,
-        "labels": meta.labels,
+        "labels": labels,
     }
     # Phase 1b: annotations may contain sensitive values (name-like data)
     # Use getattr to handle metadata types that don't have annotations field
+    # Guard with isinstance to prevent MagicMock from leaking into JSON (tests run under coverage)
     annotations = getattr(meta, "annotations", None)
-    if annotations is not None:
+    if isinstance(annotations, dict):
         result["annotations"] = annotations
         # Phase 1b: Anonymize label/annotation values that contain name-like data
         if anonymizer is not None:
