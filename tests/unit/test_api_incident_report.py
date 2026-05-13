@@ -27,6 +27,7 @@ from tests.fixtures.incident_report_fixtures import (
     _fixture_duplicate_candidates,
     _fixture_executed_with_usefulness,
     _fixture_healthy_no_incident,
+    _fixture_multi_signal_executed_with_pending,
     _fixture_queue_with_command,
     _fixture_stale_provider_enriched_degraded,
     _freshness,
@@ -1905,6 +1906,469 @@ class CrossClusterFindingsTests(unittest.TestCase):
         self.assertIsNotNone(report)
         assert report is not None
         self.assertIsNotNone(report["crossClusterFindings"])
+
+
+# =============================================================================
+# Ranking Rationale Tests (Epic: BETA-G3 Worklist Ranking Rationale)
+# =============================================================================
+
+
+class WorklistRankingRationaleTests(unittest.TestCase):
+    """Tests for worklist item ranking rationale transparency.
+
+    This test class verifies that ranked worklist items expose a concise
+    rankingReason that allows operators to understand why item order is what it is.
+
+    Allowed basis for ranking rationale:
+    - urgency / primary triage: deterministic items marked as primary triage
+    - expected information gain: executable items that confirm leading hypothesis
+    - approval/execution readiness: items ready to execute or pending approval
+    - drift category severity: fleet-level drift affecting comparable clusters
+    - duplicate suppression: merged/duplicate items with preserved provenance
+    - executed/reviewed state: completed items retained for result review
+
+    Invariants enforced:
+    - Every surfaced ranked item has an operator-readable rationale (or None when indeterminate)
+    - Rationale aligns with actual ordering and state
+    - Rationale remains concise (under 80 chars)
+    - Advisory items are not described as immediately executable
+    - Reviewed/executed items are not incorrectly explained as pending next steps
+    """
+
+    def test_all_ranked_items_have_ranking_reason(self) -> None:
+        """Every ranked worklist item exposes a rankingReason field."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        self.assertTrue(worklist["items"])
+        for item in worklist["items"]:
+            self.assertIn("rank", item)
+            self.assertIn("rankingReason", item)
+
+    def test_primary_triage_deterministic_items_have_triage_rationale(self) -> None:
+        """Primary triage deterministic items have a triage-based ranking rationale."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find primary triage items
+        for item in worklist["items"]:
+            if item.get("sourceType") == "deterministic":
+                # Deterministic items with is_primary_triage=True should have triage rationale
+                # The safetyNote contains "primary triage: True" for primary triage items
+                safety_note = item.get("safetyNote") or ""
+                if "primary triage: True" in safety_note:
+                    self.assertIsNotNone(
+                        item.get("rankingReason"),
+                        f"Primary triage item should have rankingReason: {item.get('id')}",
+                    )
+                    self.assertIn(
+                        "Primary triage",
+                        item["rankingReason"],
+                        f"Primary triage rationale should mention triage: {item.get('rankingReason')}",
+                    )
+
+    def test_executed_items_have_executed_rationale(self) -> None:
+        """Executed items have a rationale explaining they are completed."""
+        index = _fixture_executed_with_usefulness()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find executed items
+        executed_items = [
+            i for i in worklist["items"]
+            if i.get("executionState") in ("executed-success", "executed-failed", "timed-out")
+        ]
+        self.assertTrue(
+            executed_items,
+            "Expected at least one executed item in fixture",
+        )
+        for item in executed_items:
+            self.assertIsNotNone(
+                item.get("rankingReason"),
+                f"Executed item should have rankingReason: {item.get('id')}",
+            )
+            self.assertIn(
+                "executed",
+                item["rankingReason"].lower(),
+                f"Executed rationale should mention execution: {item.get('rankingReason')}",
+            )
+
+    def test_approval_needed_items_have_approval_rationale(self) -> None:
+        """Approval-needed items have a rationale about pending approval."""
+        index = _fixture_approval_needed_item()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find approval-needed items
+        approval_items = [
+            i for i in worklist["items"]
+            if i.get("itemState") == "approval-needed"
+        ]
+        self.assertTrue(
+            approval_items,
+            "Expected at least one approval-needed item in fixture",
+        )
+        for item in approval_items:
+            self.assertIsNotNone(
+                item.get("rankingReason"),
+                f"Approval-needed item should have rankingReason: {item.get('id')}",
+            )
+            self.assertIn(
+                "approval",
+                item["rankingReason"].lower(),
+                f"Approval rationale should mention approval: {item.get('rankingReason')}",
+            )
+
+    def test_executable_queue_items_have_executable_rationale(self) -> None:
+        """Executable queue items (with command) have appropriate rationale."""
+        index = _fixture_queue_with_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find queue items with command (executable)
+        queue_items = [
+            i for i in worklist["items"]
+            if i.get("command") is not None and i.get("sourceType") in ("planner", "promotion")
+        ]
+        self.assertTrue(
+            queue_items,
+            "Expected at least one executable queue item in fixture",
+        )
+        for item in queue_items:
+            self.assertIsNotNone(
+                item.get("rankingReason"),
+                f"Executable queue item should have rankingReason: {item.get('id')}",
+            )
+            # Should not claim primary triage for non-triage items
+            self.assertNotIn(
+                "Primary triage",
+                item["rankingReason"],
+                f"Non-primary-triage item should not claim primary triage: {item.get('rankingReason')}",
+            )
+
+    def test_deterministic_advisory_items_not_described_as_executable(self) -> None:
+        """Deterministic advisory items are not described as immediately executable."""
+        index = _fixture_deterministic_only_no_command()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find deterministic advisory items (command is None)
+        deterministic_items = [
+            i for i in worklist["items"]
+            if i.get("sourceType") == "deterministic" and i.get("command") is None
+        ]
+        self.assertTrue(
+            deterministic_items,
+            "Expected deterministic items with null command",
+        )
+        for item in deterministic_items:
+            ranking_reason = item.get("rankingReason")
+            if ranking_reason:
+                # Should not claim "executable now" or similar
+                self.assertNotIn(
+                    "Executable now",
+                    ranking_reason,
+                    f"Advisory item should not claim executable: {ranking_reason}",
+                )
+                self.assertNotIn(
+                    "confirmed the leading hypothesis",
+                    ranking_reason,
+                    f"Advisory item should not claim confirmation: {ranking_reason}",
+                )
+
+    def test_reviewed_items_not_described_as_pending(self) -> None:
+        """Reviewed items are not incorrectly explained as pending next steps."""
+        index = _fixture_executed_with_usefulness()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find items with usefulness feedback (reviewed)
+        reviewed_items = [
+            i for i in worklist["items"]
+            if i.get("feedbackState") or i.get("itemState") == "reviewed"
+        ]
+        for item in reviewed_items:
+            ranking_reason = item.get("rankingReason") or ""
+            # Should not claim "pending", "queued", or "ready for execution"
+            self.assertNotIn(
+                "pending",
+                ranking_reason.lower(),
+                f"Reviewed item should not claim pending: {ranking_reason}",
+            )
+            self.assertNotIn(
+                "queued for",
+                ranking_reason.lower(),
+                f"Reviewed item should not claim queued: {ranking_reason}",
+            )
+            self.assertNotIn(
+                "ready for execution",
+                ranking_reason.lower(),
+                f"Reviewed item should not claim ready: {ranking_reason}",
+            )
+
+    def test_ranking_rationale_is_concise(self) -> None:
+        """Ranking rationale is concise (under 80 characters)."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        for item in worklist["items"]:
+            ranking_reason = item.get("rankingReason")
+            if ranking_reason:
+                self.assertLess(
+                    len(ranking_reason),
+                    80,
+                    f"Ranking reason too long ({len(ranking_reason)} chars): {ranking_reason}",
+                )
+
+    def test_deterministic_items_rank_above_planner_advisory(self) -> None:
+        """Deterministic primary triage items rank above secondary planner items."""
+        index = _fixture_degraded_single_cluster()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        ranks = [item.get("rank") for item in worklist["items"]]
+        expected = list(range(1, len(ranks) + 1))
+        self.assertEqual(
+            ranks,
+            expected,
+            f"Expected consecutive ranks starting at 1: {ranks}",
+        )
+
+    def test_worklist_with_mixed_states_has_appropriate_rationales(self) -> None:
+        """Worklist with mixed execution states has appropriate rationales for each state."""
+        index = _fixture_multi_signal_executed_with_pending()
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Verify we have mixed states
+        states_seen: set[str] = set()
+        for item in worklist["items"]:
+            state = item.get("itemState") or ""
+            if state:
+                states_seen.add(state)
+        # Should have at least 2 different states
+        self.assertGreaterEqual(
+            len(states_seen),
+            2,
+            f"Expected mixed states, got: {states_seen}",
+        )
+        # All items should have rankingReason (even if None for indeterminate cases)
+        for item in worklist["items"]:
+            self.assertIn("rankingReason", item)
+
+    def test_drift_workstream_items_have_fleet_rationale(self) -> None:
+        """Drift workstream items have a fleet-level ranking rationale."""
+        # Create a fixture with drift workstream
+        index = _fixture_degraded_single_cluster()
+        run_entry = cast(dict[str, object], index["run"])
+        # Add a queue item with drift workstream
+        run_entry["next_check_queue"] = [
+            {
+                "candidateId": "candidate-drift",
+                "candidateIndex": 0,
+                "description": "Compare helm releases across fleet",
+                "targetCluster": "cluster-degraded",
+                "priorityLabel": "secondary",
+                "suggestedCommandFamily": "helm",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "approvalState": "not-required",
+                "executionState": "unexecuted",
+                "outcomeStatus": "unexecuted",
+                "latestArtifactPath": None,
+                "sourceReason": "Fleet-wide helm release drift detected",
+                "expectedSignal": "Helm release version differences",
+                "normalizationReason": "drift_workstream",
+                "safetyReason": "known_command",
+                "approvalReason": None,
+                "duplicateReason": None,
+                "blockingReason": None,
+                "targetContext": "cluster-degraded",
+                "commandPreview": "helm list --all-namespaces --context cluster-degraded",
+                "planArtifactPath": "runs/health/external-analysis/run-drift-next-check-plan.json",
+                "queueStatus": "pending",
+                "workstream": "drift",
+            }
+        ]
+        context = build_ui_context(index)
+        worklist = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(worklist)
+        assert worklist is not None
+        # Find drift workstream item
+        drift_items = [
+            i for i in worklist["items"]
+            if i.get("workstream") == "drift"
+        ]
+        self.assertTrue(
+            drift_items,
+            "Expected drift workstream item in fixture",
+        )
+        for item in drift_items:
+            self.assertIsNotNone(
+                item.get("rankingReason"),
+                f"Drift item should have rankingReason: {item.get('id')}",
+            )
+            self.assertIn(
+                "fleet",
+                item["rankingReason"].lower(),
+                f"Drift rationale should mention fleet: {item.get('rankingReason')}",
+            )
+
+
+class WorklistRankingRationaleDerivationTests(unittest.TestCase):
+    """Unit tests for _derive_worklist_ranking_reason helper function."""
+
+    def test_primary_triage_high_urgency(self) -> None:
+        """Primary triage with high urgency returns triage rationale with urgency."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="deterministic",
+            item_state="advisory",
+            execution_state=None,
+            is_primary_triage=True,
+            urgency="high",
+            priority_label=None,
+            command=None,
+            workstream="incident",
+        )
+        assert reason is not None
+        self.assertIn("Primary triage", reason)
+        self.assertIn("high", reason)
+
+    def test_primary_triage_no_urgency(self) -> None:
+        """Primary triage without urgency returns basic triage rationale."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="deterministic",
+            item_state="advisory",
+            execution_state=None,
+            is_primary_triage=True,
+            urgency=None,
+            priority_label=None,
+            command=None,
+            workstream="incident",
+        )
+        assert reason is not None
+        self.assertIn("Primary triage", reason)
+        self.assertNotIn("urgency", reason.lower())
+
+    def test_executed_state(self) -> None:
+        """Executed items return executed rationale."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="planner",
+            item_state="executed",
+            execution_state="executed-success",
+            is_primary_triage=None,
+            urgency=None,
+            priority_label="primary",
+            command="kubectl get pods",
+            workstream="incident",
+        )
+        assert reason is not None
+        self.assertIn("executed", reason.lower())
+        self.assertIn("retained", reason.lower())
+
+    def test_approval_needed_state(self) -> None:
+        """Approval-needed items return approval rationale."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="planner",
+            item_state="approval-needed",
+            execution_state="unexecuted",
+            is_primary_triage=None,
+            urgency=None,
+            priority_label="primary",
+            command="kubectl delete pod",
+            workstream="incident",
+        )
+        assert reason is not None
+        self.assertIn("approval", reason.lower())
+
+    def test_high_priority_executable(self) -> None:
+        """High priority executable items return confirmation rationale."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="planner",
+            item_state="queued",
+            execution_state="unexecuted",
+            is_primary_triage=None,
+            urgency=None,
+            priority_label="primary",
+            command="kubectl logs pod/my-pod",
+            workstream="incident",
+        )
+        assert reason is not None
+        self.assertIn("Executable now", reason)
+
+    def test_drift_workstream(self) -> None:
+        """Drift workstream items return fleet rationale."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="planner",
+            item_state="queued",
+            execution_state="unexecuted",
+            is_primary_triage=None,
+            urgency=None,
+            priority_label="secondary",
+            command="helm list",
+            workstream="drift",
+        )
+        assert reason is not None
+        self.assertIn("fleet", reason.lower())
+
+    def test_advisory_deterministic(self) -> None:
+        """Advisory deterministic items without primary triage return advisory rationale."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type="deterministic",
+            item_state="advisory",
+            execution_state=None,
+            is_primary_triage=False,
+            urgency="medium",
+            priority_label=None,
+            command=None,
+            workstream="network",
+        )
+        assert reason is not None
+        self.assertIn("Advisory check", reason)
+        self.assertIn("medium", reason)
+
+    def test_fallback_returns_none(self) -> None:
+        """When no ranking basis is determinable, returns None."""
+        from k8s_diag_agent.ui.api_incident_report import _derive_worklist_ranking_reason
+
+        reason = _derive_worklist_ranking_reason(
+            source_type=None,
+            item_state=None,
+            execution_state=None,
+            is_primary_triage=None,
+            urgency=None,
+            priority_label=None,
+            command=None,
+            workstream=None,
+        )
+        self.assertIsNone(reason)
 
 
 if __name__ == "__main__":

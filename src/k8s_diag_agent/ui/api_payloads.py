@@ -1076,6 +1076,11 @@ class OperatorWorklistItemPayload(TypedDict, total=False):
     # Artifact provenance: real paths only, no fabricated "unknown" refs
     sourceArtifactRefs: list[ArtifactLink]
 
+    # Ranking rationale: concise, operator-readable explanation for why this item
+    # has its current rank in the worklist. Derived from source signals and state.
+    # Rationale is None when no ranking basis is determinable.
+    rankingReason: str | None
+
 
 class OperatorWorklistPayload(TypedDict, total=False):
     """Ranked operator worklist projection for a selected health run.

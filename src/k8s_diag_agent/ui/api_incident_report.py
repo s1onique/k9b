@@ -527,6 +527,97 @@ _SOURCE_TYPE_PROMOTION = "promotion"
 _SOURCE_TYPE_EXECUTION = "execution"
 
 
+# =============================================================================
+# Ranking Rationale Derivation
+# =============================================================================
+
+
+def _derive_worklist_ranking_reason(
+    source_type: str | None,
+    item_state: str | None,
+    execution_state: str | None,
+    is_primary_triage: bool | None,
+    urgency: str | None,
+    priority_label: str | None,
+    command: str | None,
+    workstream: str | None,
+) -> str | None:
+    """Derive a concise ranking rationale for a worklist item.
+
+    The rationale explains why this item has its current rank in the worklist.
+    It is derived-only (stateless) from available item signals and state.
+
+    Allowed basis for ranking rationale:
+    - urgency / primary triage: deterministic items marked as primary triage
+    - approval/execution readiness: items ready to execute or pending approval
+    - expected information gain: executable items that confirm leading hypothesis
+    - drift category severity: fleet-level drift affecting comparable clusters
+    - executed/reviewed state: completed items retained for result review
+
+    Priority order for queue items:
+    1. Executed/reviewed state
+    2. Primary triage deterministic
+    3. Approval-needed state (before high-priority executable)
+    4. Drift workstream
+    5. High priority executable
+    6. Generic executable
+    7. Advisory deterministic
+    8. Fallback
+
+    Args:
+        source_type: Origin source (deterministic | planner | promotion | execution)
+        item_state: Canonical item state (advisory | approval-needed | approved | queued | executed | reviewed)
+        execution_state: Execution state from queue item
+        is_primary_triage: Whether deterministic item is primary triage
+        urgency: Urgency level from deterministic next check
+        priority_label: Priority label from planner candidate
+        command: Executable command (None for advisory/deterministic items)
+        workstream: Workstream context (incident | drift | network | etc)
+
+    Returns:
+        Concise operator-readable ranking rationale, or None if no basis is determinable.
+    """
+    # 1. Executed/reviewed items: retained for result review
+    if item_state in (_ITEM_STATE_EXECUTED, _ITEM_STATE_REVIEWED):
+        return "Already executed; retained for result review"
+
+    # 2. Primary triage deterministic items
+    if is_primary_triage and source_type == _SOURCE_TYPE_DETERMINISTIC:
+        # Include urgency when available
+        if urgency and urgency != "unknown":
+            return f"Primary triage for current degraded workload ({urgency} urgency)"
+        return "Primary triage for current degraded workload"
+
+    # 3. Drift workstream items (cross-cluster) - prioritized before state-based rationale
+    if workstream == "drift":
+        return "Fleet-level drift affects comparable clusters"
+
+    # 4. Planner items with command - state-based and priority-based rationale
+    if source_type in (_SOURCE_TYPE_PLANNER, _SOURCE_TYPE_PROMOTION) and command is not None:
+        if item_state == _ITEM_STATE_APPROVAL_NEEDED:
+            return "Pending operator approval before execution"
+        if item_state == _ITEM_STATE_APPROVED:
+            return "Approved and ready for execution"
+        if item_state == _ITEM_STATE_QUEUED:
+            # Check high priority first
+            if priority_label in ("primary", "critical"):
+                return "Executable now; likely to confirm the leading hypothesis"
+            return "Queued for automated execution"
+        # Default executable rationale for planner items with command
+        if priority_label in ("primary", "critical"):
+            return "Executable now; likely to confirm the leading hypothesis"
+        return "Planner-selected check; executable now"
+
+    # 5. Advisory deterministic items without executable command
+    if source_type == _SOURCE_TYPE_DETERMINISTIC:
+        if urgency and urgency != "unknown":
+            return f"Advisory check; {urgency} urgency for evidence collection"
+        return "Advisory check; method-based diagnostics"
+
+    # 6. Fallback: no specific ranking basis determinable
+    return None
+
+
 def _derive_item_state(
     queue_item: object,
 ) -> str | None:
@@ -621,6 +712,19 @@ def _build_operator_worklist_payload(
                 title_str = title_str if title_str is not None else summary.description
                 item_id = f"deterministic-{safe_cluster}-{rank}"
                 deterministic_ids.add(item_id)
+                # Derive item state for ranking rationale
+                item_state = _ITEM_STATE_ADVISORY
+                # Derive ranking reason for deterministic item
+                ranking_reason = _derive_worklist_ranking_reason(
+                    source_type=_SOURCE_TYPE_DETERMINISTIC,
+                    item_state=item_state,
+                    execution_state=None,
+                    is_primary_triage=summary.is_primary_triage,
+                    urgency=summary.urgency,
+                    priority_label=None,
+                    command=None,  # Deterministic items have no executable command
+                    workstream=summary.workstream,
+                )
                 items.append(
                     {
                         "id": item_id,
@@ -638,7 +742,7 @@ def _build_operator_worklist_payload(
                         "safetyNote": sanitize_operator_text(
                             f"Urgency: {summary.urgency}; primary triage: {summary.is_primary_triage}"
                         ),
-                        "itemState": _ITEM_STATE_ADVISORY,  # Deterministic = advisory
+                        "itemState": item_state,
                         "approvalState": None,
                         "executionState": None,
                         "feedbackState": None,
@@ -649,6 +753,7 @@ def _build_operator_worklist_payload(
                             for path in [cluster.assessment_artifact_path, cluster.drilldown_artifact_path]
                             if path
                         ],
+                        "rankingReason": ranking_reason,
                     }
                 )
                 rank += 1
@@ -762,6 +867,20 @@ def _build_operator_worklist_payload(
                 {"label": "Next-Check Execution", "path": queue_item.latest_artifact_path}
             )
 
+        # Derive item state and ranking reason for queue item
+        queue_item_state = _derive_item_state(queue_item) or _ITEM_STATE_QUEUED
+        command = sanitize_kubectl_display_command(queue_item.command_preview) if queue_item.command_preview else None
+        ranking_reason = _derive_worklist_ranking_reason(
+            source_type=source_type,
+            item_state=queue_item_state,
+            execution_state=queue_item.execution_state,
+            is_primary_triage=None,
+            urgency=None,
+            priority_label=queue_item.priority_label,
+            command=command,
+            workstream=queue_item.workstream,
+        )
+
         items.append(
             {
                 "id": item_id,
@@ -771,20 +890,21 @@ def _build_operator_worklist_payload(
                 "title": queue_title,
                 "description": sanitize_operator_text(queue_item.source_reason),
                 # Command semantics: sanitized command for executable queue items
-                "command": sanitize_kubectl_display_command(queue_item.command_preview) if queue_item.command_preview else None,
+                "command": command,
                 # Sanitize targetCluster and targetContext to prevent "in-cluster" leaks
                 "targetCluster": _sanitize_target_cluster(queue_item.target_cluster, queue_item.target_context),
                 "targetContext": _sanitize_target_context(queue_item.target_context),
                 "reason": sanitize_operator_text(queue_item.source_reason),
                 "expectedEvidence": sanitize_operator_text(queue_item.expected_signal),
                 "safetyNote": sanitize_operator_text(queue_item.safety_reason),
-                "itemState": _derive_item_state(queue_item) or _ITEM_STATE_QUEUED,
+                "itemState": queue_item_state,
                 "approvalState": queue_item.approval_state,
                 "executionState": queue_item.execution_state,
                 "feedbackState": queue_item.outcome_status,
                 "sourceType": source_type,
                 "mergedSources": None,
                 "sourceArtifactRefs": artifact_refs,
+                "rankingReason": ranking_reason,
             }
         )
 
