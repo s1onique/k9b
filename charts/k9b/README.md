@@ -86,7 +86,7 @@ helm uninstall infra-k9b -n k9b
 | `backend.replicaCount` | Number of backend replicas | `1` |
 | `backend.service.port` | Backend service port | `8080` |
 | `backend.env.HEALTH_SKIP_REFRESH` | Skip auto-refresh | `"1"` |
-| `backend.env.HEALTH_UI_HOST` | UI bind address | `127.0.0.1` |
+| `backend.env.HEALTH_UI_HOST` | UI bind address | `0.0.0.0` (cluster-wide) |
 | `backend.resources.*` | CPU/memory limits | See values.yaml |
 
 ### Scheduler Configuration
@@ -402,11 +402,7 @@ The k9b backend exposes a REST API and UI server with mutation endpoints that ca
 
 #### Default Security Posture
 
-By default, the backend binds to `127.0.0.1` (localhost-only) which provides safe access without additional configuration. This is suitable for:
-
-- Local development with `kubectl port-forward`
-- Standalone operator workstation deployments
-- CI/CD pipelines with local access
+By default, the backend binds to `0.0.0.0` (cluster-wide) for in-cluster Kubernetes Service access. This requires `uiAuth.enabled=true` when exposed externally. For localhost-only access, set `backend.env.HEALTH_UI_HOST=127.0.0.1`.
 
 #### Exposed Deployment Pattern (AUTH-10)
 
@@ -548,7 +544,7 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 
 | Aspect | Status |
 |--------|--------|
-| Default bind address | `127.0.0.1` (localhost-only) **DONE** (AUTH-10) |
+| Default bind address | `0.0.0.0` (cluster-wide, requires uiAuth for external exposure) |
 | Non-loopback requires unsafeBind | **Enforced** via `--unsafe-bind` flag **DONE** (AUTH-10) |
 | Bearer token auth for POST endpoints | **Implemented** (AUTH-04/05/06) |
 | GET endpoint protection | **Deferred** (use reverse proxy) |
@@ -559,11 +555,11 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 
 | Value | Purpose | Default |
 |-------|---------|---------|
-| `backend.unsafeBind` | Allow non-loopback binding | `false` |
+| `backend.unsafeBind` | Allow non-loopback binding (required for HEALTH_UI_HOST=0.0.0.0) | `true` |
 | `scheduler.unsafeBind` | Allow scheduler binding to 0.0.0.0 | `true` |
 | `uiAuth.enabled` | Enable bearer token auth | `false` |
 | `uiAuth.secretName` | Secret containing `K9B_UI_TOKEN` | `k9b-ui-auth` |
-| `backend.env.HEALTH_UI_HOST` | Backend bind address | `127.0.0.1` |
+| `backend.env.HEALTH_UI_HOST` | Backend bind address | `0.0.0.0` |
 
 ## Architecture
 
