@@ -39,6 +39,7 @@ __all__ = [
     "FeedbackSummaryPayload",
     "AdaptationEffect",
     "FeedbackAdaptationProvenancePayload",
+    "StalenessClass",
     "AlertmanagerProvenancePayload",
     "NextCheckCandidatePayload",
     "NextCheckQueueItemPayload",
@@ -289,6 +290,15 @@ AdaptationEffect = Literal[
     "recommendation_deprioritized",
     "no_material_change",
 ]
+
+
+# Staleness class taxonomy for temporal context
+# Derivation rules:
+# - fresh: < 5 minutes since first recommendation
+# - aging: 5-30 minutes since first recommendation
+# - stale: > 30 minutes since first recommendation
+# - unknown: timing data insufficient
+StalenessClass = Literal["fresh", "aging", "stale", "unknown"]
 
 
 class FeedbackAdaptationProvenancePayload(TypedDict, total=False):
@@ -1115,6 +1125,27 @@ class OperatorWorklistItemPayload(TypedDict, total=False):
     # in the diagnosis and operator worklist. Present when feedback exists.
     # None for items without execution feedback.
     feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
+
+    # Temporal context: when timestamps are available from artifacts
+    # firstRecommendedAt: earliest known timestamp tied to this logical recommendation
+    #   - deterministic items: assessment/drilldown artifact timestamp
+    #   - queue items: plan artifact timestamp or earliest candidate timestamp
+    #   - None when no timing data is available
+    firstRecommendedAt: str | None
+    # lastStateChangedAt: most recent meaningful state transition timestamp
+    #   - approval, execution, or review timestamp
+    #   - None when no state change timestamp is available
+    lastStateChangedAt: str | None
+    # recommendationAgeSeconds: age in seconds from first recommendation to current run
+    #   - Derived from firstRecommendedAt and run timestamp when both are known
+    #   - None when timing data is insufficient
+    recommendationAgeSeconds: int | None
+    # stalenessClass: honest staleness category
+    #   - fresh: < 5 minutes since first recommendation
+    #   - aging: 5-30 minutes since first recommendation
+    #   - stale: > 30 minutes since first recommendation
+    #   - unknown: timing data insufficient
+    stalenessClass: StalenessClass | None
 
 
 class OperatorWorklistPayload(TypedDict, total=False):

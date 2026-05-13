@@ -24,6 +24,7 @@ Security note:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import cast
 
 from ..security.kubectl_context import (
@@ -45,6 +46,7 @@ from .api_payloads import (
     IncidentReportUnknownPayload,
     OperatorWorklistItemPayload,
     OperatorWorklistPayload,
+    StalenessClass,
 )
 from .model import UIIndexContext
 
@@ -705,6 +707,105 @@ def _derive_worklist_ranking_reason(
     return None
 
 
+# =============================================================================
+# Temporal Context Derivation (Epic: BETA-G4 Temporal Context in Worklist)
+# =============================================================================
+
+
+# Staleness thresholds in seconds
+_STALENESS_FRESH_SECONDS = 5 * 60  # < 5 minutes
+_STALENESS_AGING_SECONDS = 30 * 60  # 5-30 minutes
+# > 30 minutes = stale
+
+
+def _parse_timestamp(timestamp_str: str | None) -> datetime | None:
+    """Parse an ISO 8601 timestamp string to datetime.
+
+    Args:
+        timestamp_str: ISO 8601 formatted timestamp or None
+
+    Returns:
+        datetime in UTC or None if parsing fails
+    """
+    if not timestamp_str:
+        return None
+    try:
+        # Try parsing with timezone
+        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        return dt.replace(tzinfo=UTC)
+    except (ValueError, TypeError):
+        pass
+    try:
+        # Fallback: try parsing without timezone (assume UTC)
+        dt = datetime.fromisoformat(timestamp_str)
+        return dt.replace(tzinfo=UTC)
+    except (ValueError, TypeError):
+        return None
+
+
+def _derive_temporal_context(
+    first_recommended_at: str | None,
+    last_state_changed_at: str | None,
+    current_run_timestamp: str | None,
+) -> tuple[str | None, str | None, int | None, StalenessClass | None]:
+    """Derive temporal context fields for a worklist item.
+
+    Temporal context is derived-only (stateless) from existing timestamps in
+    queue items, execution history, plan artifacts, and run metadata. No new
+    timestamps are fabricated.
+
+    Derivation rules:
+    - firstRecommendedAt: earliest known timestamp tied to the logical recommendation
+      * deterministic items: assessment/drilldown artifact timestamp
+      * queue items: plan artifact timestamp or earliest candidate timestamp
+      * None when no timing data is available
+    - lastStateChangedAt: most recent meaningful state transition timestamp
+      * approval, execution, or review timestamp
+      * None when no state change timestamp is available
+    - recommendationAgeSeconds: age from first recommendation to current run
+      * Derived from firstRecommendedAt and current_run_timestamp when both are known
+      * None when timing data is insufficient
+    - stalenessClass: honest staleness category
+      * fresh: < 5 minutes since first recommendation
+      * aging: 5-30 minutes since first recommendation
+      * stale: > 30 minutes since first recommendation
+      * unknown: timing data insufficient
+
+    Args:
+        first_recommended_at: Earliest known recommendation timestamp
+        last_state_changed_at: Most recent state change timestamp
+        current_run_timestamp: Current run timestamp for age calculation
+
+    Returns:
+        Tuple of (firstRecommendedAt, lastStateChangedAt, recommendationAgeSeconds, stalenessClass)
+    """
+    # Determine staleness based on available timestamps
+    staleness: StalenessClass = "unknown"
+    age_seconds: int | None = None
+
+    if first_recommended_at and current_run_timestamp:
+        first_dt = _parse_timestamp(first_recommended_at)
+        current_dt = _parse_timestamp(current_run_timestamp)
+        if first_dt and current_dt:
+            # Calculate age in seconds
+            delta = current_dt - first_dt
+            age_seconds = int(delta.total_seconds())
+            if age_seconds >= 0:
+                if age_seconds < _STALENESS_FRESH_SECONDS:
+                    staleness = "fresh"
+                elif age_seconds < _STALENESS_AGING_SECONDS:
+                    staleness = "aging"
+                else:
+                    staleness = "stale"
+            else:
+                # Negative age means first recommendation was after current run
+                # This is honest - mark as unknown rather than fabricate
+                staleness = "unknown"
+                age_seconds = None
+
+    return first_recommended_at, last_state_changed_at, age_seconds, staleness
+
+
 def _derive_item_state(
     queue_item: object,
 ) -> str | None:
@@ -779,6 +880,9 @@ def _build_operator_worklist_payload(
 
     # Prefer deterministic next checks as the primary workstream source
     deterministic = context.run.deterministic_next_checks
+    # Get run timestamp for temporal context derivation
+    run_timestamp = context.run.timestamp if hasattr(context.run, "timestamp") else None
+
     if deterministic is not None:
         rank = 1
         for cluster in deterministic.clusters:
@@ -812,6 +916,20 @@ def _build_operator_worklist_payload(
                     command=None,  # Deterministic items have no executable command
                     workstream=summary.workstream,
                 )
+                # Derive temporal context for deterministic items
+                # firstRecommendedAt: assessment artifact timestamp for deterministic items
+                assessment_timestamp = None
+                if cluster.assessment_artifact_path:
+                    # Use the assessment timestamp from the cluster's assessment
+                    assessment_timestamp = context.latest_assessment.timestamp if context.latest_assessment else None
+                first_recommended_at = assessment_timestamp
+                # lastStateChangedAt: None for advisory deterministic items (no state transition yet)
+                last_state_changed_at: str | None = None
+                first_rec, last_change, age_sec, staleness = _derive_temporal_context(
+                    first_recommended_at=first_recommended_at,
+                    last_state_changed_at=last_state_changed_at,
+                    current_run_timestamp=run_timestamp,
+                )
                 items.append(
                     {
                         "id": item_id,
@@ -841,6 +959,11 @@ def _build_operator_worklist_payload(
                             if path
                         ],
                         "rankingReason": ranking_reason,
+                        # Temporal context (BETA-G4)
+                        "firstRecommendedAt": first_rec,
+                        "lastStateChangedAt": last_change,
+                        "recommendationAgeSeconds": age_sec,
+                        "stalenessClass": staleness,
                     }
                 )
                 rank += 1
@@ -911,7 +1034,8 @@ def _build_operator_worklist_payload(
 
         # Check if this queue item matches an existing queue item (by candidate_id)
         existing_queue_ids = {
-            cast(str | None, item.get("id")) for item in items
+            cast(str | None, item.get("id"))
+            for item in items
             if cast(str | None, item.get("sourceType")) == _SOURCE_TYPE_PLANNER
         }
         if item_id in existing_queue_ids:
@@ -1006,6 +1130,21 @@ def _build_operator_worklist_payload(
                 execution_result_summary=result_summary,
             )
 
+        # Derive temporal context for queue items
+        # firstRecommendedAt: plan artifact timestamp or latest execution timestamp
+        # Use plan artifact timestamp as first recommendation time
+        first_recommended_at = queue_item.plan_artifact_timestamp if hasattr(queue_item, "plan_artifact_timestamp") and queue_item.plan_artifact_timestamp else None
+        if not first_recommended_at and queue_item.plan_artifact_path:
+            # Fallback: use plan artifact path as a proxy (no exact timestamp)
+            first_recommended_at = None
+        # lastStateChangedAt: most recent execution or approval timestamp
+        last_state_changed_at = queue_item.latest_timestamp if hasattr(queue_item, "latest_timestamp") and queue_item.latest_timestamp else None
+        first_rec, last_change, age_sec, staleness = _derive_temporal_context(
+            first_recommended_at=first_recommended_at,
+            last_state_changed_at=last_state_changed_at,
+            current_run_timestamp=run_timestamp,
+        )
+
         items.append(
             {
                 "id": item_id,
@@ -1034,6 +1173,11 @@ def _build_operator_worklist_payload(
                 "feedbackAdaptationProvenance": cast(
                     "FeedbackAdaptationProvenancePayload | None", feedback_adaptation_provenance
                 ),
+                # Temporal context (BETA-G4)
+                "firstRecommendedAt": first_rec,
+                "lastStateChangedAt": last_change,
+                "recommendationAgeSeconds": age_sec,
+                "stalenessClass": staleness,
             }
         )
 
