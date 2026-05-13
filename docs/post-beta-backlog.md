@@ -25,7 +25,7 @@ Two release blockers were identified for beta package publication/distribution r
 
 | Item | Owner/Area | Evidence | Impact | Recommended Next Action |
 |------|-----------|----------|--------|------------------------|
-| GitLab CI verify lane missing | CI/deploy | `.gitlab/ci/` directory does not exist | No CI gate for merge requests | Create `.gitlab/ci/verify.yml` mirroring `scripts/verify_all.sh` steps; requires GitLab runner access |
+| ~~GitLab CI verify lane missing~~ | CI/deploy | ~~`.gitlab/ci/` directory does not exist~~ | ~~No CI gate for merge requests~~ | **RESOLVED:** GitHub Actions `.github/workflows/verify.yml` added (2026-05-13). Runs on PRs to all branches and main. No secrets required. |
 | Image publish verification | Packaging | `docs/dockerhub-publishing.md` exists but image tags (`ecacd81`) may not be publicly accessible | Beta package consumers may not be able to pull images | Confirm image tags are publicly accessible; add `helm template` smoke test to CI |
 
 ---
@@ -112,7 +112,8 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | **Chart/package publishing** | Not verified | Confirm Helm chart `charts/k9b/` is published to a chart registry or if only local `helm install` is supported |
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
 | **GitHub release creation** | Not verified | Confirm whether a GitHub release is expected for beta or if distribution is via chart + image only |
-| **Coverage gate in CI** | Implemented | `scripts/coverage_all.sh` exists but is not part of the canonical gate |
+| **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
+| **Coverage gate in CI** | Deferred | `scripts/coverage_all.sh` exists but is not part of the canonical gate |
 
 ---
 
@@ -125,7 +126,7 @@ After beta packaging closes, the next parent epic should focus on one of the fol
 **Goal:** Consolidate beta feedback, close near-term security/deployment gaps, and scope the first post-beta product increment.
 
 **Scope:**
-1. Add GitLab CI verify lane (or equivalent CI pipeline)
+1. ~~Add GitLab CI verify lane (or equivalent CI pipeline)~~ — **DONE:** GitHub Actions verify.yml added
 2. Verify image tag public accessibility
 3. Add coverage thresholds to the verification gate
 4. Close Phase 1b LLM anonymization (label/annotation values, Helm release names)

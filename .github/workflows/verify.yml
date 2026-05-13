@@ -1,0 +1,87 @@
+name: Verify
+
+# Canonical verification gate for the k9b repository.
+# Mirrors scripts/verify_all.sh for CI environments.
+#
+# Runs on:
+#   - All pull requests (all branches)
+#   - Push to main (for post-merge verification)
+#   - Manual workflow dispatch for ad-hoc verification
+#
+# No secrets required - this is a read-only verification lane.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Verification scope'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - python-only
+          - frontend-only
+          - helm-only
+
+env:
+  # Force color output for better CI logs
+  FORCE_COLOR: '1'
+
+jobs:
+  verify:
+    name: Verify (CI Gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run verification gate
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.scope }}" != "all" ]]; then
+            ./scripts/verify_all.sh --"${{ inputs.scope }}"
+          else
+            ./scripts/verify_all.sh
+          fi
+
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-logs-${{ github.run_id }}
+          path: runs/verification/
+          retention-days: 7
+          compression-level: 9
