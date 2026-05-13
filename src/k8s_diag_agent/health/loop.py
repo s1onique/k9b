@@ -20,6 +20,7 @@ from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters, normalize_adapter_name
 from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInventory
+from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose, ExternalAnalysisStatus, write_external_analysis_artifact
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..external_analysis.next_check_planner import plan_next_checks
@@ -1835,6 +1836,37 @@ class HealthLoopRunner:
             external_analysis_count=len(external_artifacts),
         )
         self._prune_external_analysis_history(directories["external_analysis"])
+        # Scan for durable Alertmanager proposal candidates from aggregated patterns
+        try:
+            durable_candidates = scan_and_propose(directories["root"])
+            durable_proposals: tuple[HealthProposal, ...] = ()
+            if durable_candidates:
+                durable_proposals = tuple(
+                    HealthProposal.from_durable_proposal_candidate(
+                        candidate=candidate,
+                        source_run_id=self.run_id,
+                        source_artifact_path=str(directories["root"] / "alertmanager-durable-proposals" / f"{candidate.proposal_id}.json"),
+                    )
+                    for candidate in durable_candidates
+                )
+                self._log_event(
+                    "health-loop",
+                    "INFO",
+                    "Durable Alertmanager proposals generated",
+                    durable_proposal_count=len(durable_proposals),
+                    event="durable-proposals-generated",
+                )
+            # Merge durable proposals with run-scoped proposals
+            all_proposals = (*proposals, *durable_proposals)
+        except OSError as exc:
+            self._log_event(
+                "health-loop",
+                "WARNING",
+                "Durable proposal scan failed",
+                severity_reason=str(exc),
+                event="durable-proposals-failed",
+            )
+            all_proposals = proposals
         try:
             ui_index_path = write_health_ui_index(
                 directories["root"],
@@ -1844,7 +1876,7 @@ class HealthLoopRunner:
                 records,
                 assessments,
                 drilldowns,
-                proposals,
+                all_proposals,
                 external_artifacts,
                 self._notification_records,
                 external_analysis_settings=self.config.external_analysis,
@@ -1859,7 +1891,8 @@ class HealthLoopRunner:
                 assessment_count=len(assessments),
                 trigger_count=len(triggers),
                 drilldown_count=len(drilldowns),
-                proposal_count=len(proposals),
+                proposal_count=len(all_proposals),
+                durable_proposal_count=len(durable_proposals) if "durable_proposals" in dir() else 0,
                 external_analysis_count=len(external_artifacts),
                 event="ui-index-generated",
             )

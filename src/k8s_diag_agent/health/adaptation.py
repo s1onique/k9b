@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..identity.artifact import new_artifact_id
 from ..models import ConfidenceLevel
@@ -23,6 +23,9 @@ from .baseline import (
     resolve_baseline_policy_path,
 )
 from .review_feedback import DrilldownSelection, HealthReviewArtifact, QualityMetric
+
+if TYPE_CHECKING:
+    from ..external_analysis.alertmanager_durable_learning import DurableProposalCandidate
 
 _RELEASE_DRIFT_RE = re.compile(r"watched Helm release (?P<release>[^\s]+) drift", re.IGNORECASE)
 _CRD_DRIFT_RE = re.compile(r"watched CRD (?P<family>[^\s]+) storage drift", re.IGNORECASE)
@@ -88,6 +91,8 @@ class HealthProposal:
     promotion_evaluation: ProposalEvaluation | None = None
     artifact_path: str | None = None
     artifact_id: str | None = None  # None for legacy, auto-generated for new proposals via factory functions
+    # Tag for durable-learning proposals to distinguish from regular proposals
+    durable_learning_source: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "promotion_payload", _freeze_payload(self.promotion_payload))
@@ -115,6 +120,9 @@ class HealthProposal:
         # Include artifact_id when present (backward compat: legacy artifacts without it)
         if self.artifact_id is not None:
             data["artifact_id"] = self.artifact_id
+        # Thread durable_learning_source for UI surfacing (optional)
+        if self.durable_learning_source is not None:
+            data["durable_learning_source"] = self.durable_learning_source
         return data
 
     def __hash__(self) -> int:
@@ -163,6 +171,11 @@ class HealthProposal:
         parsed_artifact_id: str | None = None
         if artifact_id_value is not None and isinstance(artifact_id_value, str) and artifact_id_value:
             parsed_artifact_id = artifact_id_value
+        # Parse durable_learning_source for durable-learning proposals
+        durable_source = raw.get("durable_learning_source")
+        parsed_durable_source: str | None = None
+        if durable_source is not None and isinstance(durable_source, str) and durable_source:
+            parsed_durable_source = durable_source
         return cls(
             proposal_id=str(raw.get("proposal_id") or ""),
             source_run_id=str(raw.get("source_run_id") or ""),
@@ -178,6 +191,48 @@ class HealthProposal:
             promotion_evaluation=evaluation,
             artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
             artifact_id=parsed_artifact_id,
+            durable_learning_source=parsed_durable_source,
+        )
+
+    @classmethod
+    def from_durable_proposal_candidate(
+        cls,
+        candidate: DurableProposalCandidate,
+        source_run_id: str,
+        source_artifact_path: str,
+    ) -> HealthProposal:
+        """Convert a DurableProposalCandidate to a HealthProposal for UI integration.
+
+        This enables durable Alertmanager proposals to appear in the existing
+        proposal pipeline without creating a parallel proposal system.
+        """
+        pattern = candidate.pattern
+        # Map confidence string to ConfidenceLevel
+        confidence_map = {
+            "high": ConfidenceLevel.HIGH,
+            "medium": ConfidenceLevel.MEDIUM,
+            "low": ConfidenceLevel.LOW,
+        }
+        confidence = confidence_map.get(candidate._compute_confidence(), ConfidenceLevel.MEDIUM)
+        values_str = ", ".join(sorted(pattern.values))
+
+        return cls(
+            proposal_id=candidate.proposal_id,
+            source_run_id=source_run_id,
+            source_artifact_path=source_artifact_path,
+            target=f"health.durable_learning.{pattern.dimension}",
+            proposed_change=f"Suppress {pattern.dimension} '{values_str}' "
+                           f"from Alertmanager scoring (signal: {pattern.signal}).",
+            rationale=pattern.proposal_rationale,
+            confidence=confidence,
+            expected_benefit=candidate.to_dict().get("expected_benefit", ""),
+            rollback_note=f"Remove suppression for {pattern.dimension} '{values_str}' if signal re-emerges.",
+            promotion_payload=dict(candidate._build_promotion_payload()),
+            lifecycle_history=_default_lifecycle_history(),
+            promotion_evaluation=None,
+            artifact_path=None,
+            artifact_id=new_artifact_id(),
+            durable_learning_source="alertmanager_durable_learning",
         )
 
 
@@ -582,6 +637,12 @@ _BASELINE_TARGETS = {
     "health.baseline_policy.ignored_drift",
 }
 
+_DURABLE_LEARNING_TARGETS = {
+    "health.durable_learning.namespace",
+    "health.durable_learning.cluster",
+    "health.durable_learning.service",
+}
+
 
 def render_proposal_patch(
     proposal: HealthProposal,
@@ -594,6 +655,11 @@ def render_proposal_patch(
         target_path = health_config_path
     elif target in _BASELINE_TARGETS:
         target_path = baseline_path or _resolve_baseline_path(health_config_path)
+    elif target in _DURABLE_LEARNING_TARGETS:
+        # Durable learning proposals are advisory-only, not auto-applicable
+        raise PromotionNotApplicable(
+            f"Durable learning proposals require explicit operator review: {target}"
+        )
     else:
         raise UnsupportedProposalTarget(f"Unsupported proposal target: {target}")
     original_text = target_path.read_text(encoding="utf-8")
