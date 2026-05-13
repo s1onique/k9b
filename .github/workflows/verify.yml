@@ -138,15 +138,7 @@ jobs:
         run: |
           echo "=== Backend Coverage Summary ==="
           if [ -f coverage/backend/coverage.json ]; then
-            .venv/bin/python <<'PYEOF'
-            import json
-            with open('coverage/backend/coverage.json') as f:
-                data = json.load(f)
-            totals = data['totals']
-            print(f"Line coverage: {totals['percent_covered']:.2f}%")
-            print(f"Lines: {totals['covered_lines']}/{totals['total_lines']}")
-            print(f"Branches: {totals['covered_branches']}/{totals['total_branches']}")
-            PYEOF
+              .venv/bin/python -c 'import json; f=open("coverage/backend/coverage.json"); d=json.load(f); t=d["totals"]; print(f"Line coverage: {t[\"percent_covered\"]:.2f}%"); print(f"Lines: {t[\"covered_lines\"]}/{t[\"total_lines\"]}"); print(f"Branches: {t[\"covered_branches\"]}/{t[\"total_branches\"]}")'
           else
-            echo "Coverage report not available"
+              echo "Coverage report not available"
           fi
