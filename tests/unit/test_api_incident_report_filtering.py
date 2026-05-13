@@ -15,13 +15,12 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import UTC, datetime
 from pathlib import Path
 
 from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from k8s_diag_agent.ui.api_incident_report_filtering import (
-    _is_placeholder_artifact,
     _has_useful_evidence,
+    _is_placeholder_artifact,
     _should_filter_artifact,
     filter_artifact_links,
     filter_artifact_refs_preserving_minimum,

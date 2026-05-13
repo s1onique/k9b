@@ -34,7 +34,6 @@ from ..security.kubectl_context import (
     sanitize_operator_text,
 )
 from .api_incident_report_filtering import (
-    filter_artifact_links,
     filter_artifact_refs_preserving_minimum,
 )
 from .api_incident_report_ownership import (
