@@ -19,6 +19,7 @@ from k8s_diag_agent.ui.api_incident_report import (
     _build_incident_report_payload,
     _build_operator_worklist_payload,
 )
+from k8s_diag_agent.ui.api_payloads import CrossClusterFindingPayload
 from k8s_diag_agent.ui.model import build_ui_context
 from tests.fixtures.incident_report_fixtures import (
     _fixture_approval_needed_item,
@@ -1230,7 +1231,22 @@ def _get_cross_cluster_findings(
     findings = report.get("crossClusterFindings")
     if findings is None:
         return []
-    return findings
+    return cast(list[dict[str, Any]], findings)
+
+
+def _require_cross_cluster_findings(
+    report: dict[str, Any] | Any,
+) -> list[CrossClusterFindingPayload]:
+    """Helper to require crossClusterFindings list, asserting presence."""
+    findings = report.get("crossClusterFindings")
+    assert findings is not None
+    return cast(list[CrossClusterFindingPayload], findings)
+
+
+def _require_str(value: str | None) -> str:
+    """Helper to require a non-None string value."""
+    assert value is not None
+    return value
 
 
 # =============================================================================
@@ -1605,9 +1621,9 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        self.assertIsNotNone(report["crossClusterFindings"])
-        self.assertTrue(len(report["crossClusterFindings"]) > 0)
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        self.assertTrue(len(findings) > 0)
+        finding = findings[0]
         self.assertIn("helm_releases", finding.get("driftCounts", {}))
         self.assertGreater(finding["driftCounts"]["helm_releases"], 0)
 
@@ -1623,7 +1639,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         recs = finding.get("recommendedNextChecks", [])
         helm_recs = [r for r in recs if "helm" in r.lower()]
         self.assertTrue(helm_recs, f"Expected helm recommendation, got: {recs}")
@@ -1641,9 +1658,9 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        self.assertIsNotNone(report["crossClusterFindings"])
-        self.assertTrue(len(report["crossClusterFindings"]) > 0)
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        self.assertTrue(len(findings) > 0)
+        finding = findings[0]
         self.assertIn("metadata", finding.get("driftCounts", {}))
         self.assertGreater(finding["driftCounts"]["metadata"], 0)
 
@@ -1659,7 +1676,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         recs = finding.get("recommendedNextChecks", [])
         cp_recs = [r for r in recs if "control plane" in r.lower() or "version" in r.lower()]
         self.assertTrue(cp_recs, f"Expected control plane recommendation, got: {recs}")
@@ -1676,9 +1694,9 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        self.assertIsNotNone(report["crossClusterFindings"])
-        self.assertTrue(len(report["crossClusterFindings"]) > 0)
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        self.assertTrue(len(findings) > 0)
+        finding = findings[0]
         self.assertIn("crds", finding.get("driftCounts", {}))
         self.assertGreater(finding["driftCounts"]["crds"], 0)
 
@@ -1694,7 +1712,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         recs = finding.get("recommendedNextChecks", [])
         crd_recs = [r for r in recs if "crd" in r.lower() or "api" in r.lower()]
         self.assertTrue(crd_recs, f"Expected CRD recommendation, got: {recs}")
@@ -1715,8 +1734,9 @@ class CrossClusterFindingsTests(unittest.TestCase):
         self.assertEqual(report["status"], "healthy")
         # But cross-cluster findings should still be present
         self.assertIsNotNone(report["crossClusterFindings"])
-        self.assertTrue(len(report["crossClusterFindings"]) > 0)
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        self.assertTrue(len(findings) > 0)
+        finding = findings[0]
         self.assertEqual(finding.get("intent"), "suspicious-comparison")
 
     def test_cross_cluster_drift_with_degraded_workload_has_both(self) -> None:
@@ -1736,8 +1756,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         # Facts should be non-empty (per-cluster findings)
         self.assertTrue(report["facts"])
         # Cross-cluster findings should also be present
-        self.assertIsNotNone(report["crossClusterFindings"])
-        self.assertTrue(len(report["crossClusterFindings"]) > 0)
+        findings = _require_cross_cluster_findings(report)
+        self.assertTrue(len(findings) > 0)
 
     def test_cross_cluster_findings_sorted_by_timestamp(self) -> None:
         """Multiple cross-cluster findings are sorted by timestamp descending."""
@@ -1781,7 +1801,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         self.assertIn("primaryCluster", finding)
         self.assertIn("secondaryCluster", finding)
         self.assertIsNotNone(finding["primaryCluster"])
@@ -1799,7 +1820,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         self.assertIn("triggerReasons", finding)
         self.assertTrue(len(finding["triggerReasons"]) > 0)
 
@@ -1815,7 +1837,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         self.assertIn("artifactPath", finding)
         # Artifact path should be a real path, not "unknown"
         self.assertIsNotNone(finding["artifactPath"])
@@ -1833,7 +1856,8 @@ class CrossClusterFindingsTests(unittest.TestCase):
         report = _build_incident_report_payload(context, _freshness("fresh"))
         self.assertIsNotNone(report)
         assert report is not None
-        finding = report["crossClusterFindings"][0]
+        findings = _require_cross_cluster_findings(report)
+        finding = findings[0]
         self.assertIn("recommendedNextChecks", finding)
         self.assertTrue(len(finding["recommendedNextChecks"]) > 0)
         # Should have at most 3 recommendations
