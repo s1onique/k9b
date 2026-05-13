@@ -8,6 +8,8 @@ in kubectl commands, distinguishing between:
 
 from __future__ import annotations
 
+import re
+
 from .path_validation import validate_kube_context_name
 
 # Internal context markers that should NEVER be passed to kubectl
@@ -274,12 +276,13 @@ def display_kube_cluster_label(cluster_name: str | None, context: str | None = N
 def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None) -> str:
     """Sanitize cluster references in prose text for user-facing display.
 
-    Replaces internal execution markers like "in-cluster" with neutral
-    fallback text ("the cluster") in prose contexts where cluster identity
-    appears as a noun phrase.
+    Replaces internal execution markers like "in-cluster" with either:
+    - The cluster_context if it's a real cluster identity
+    - Neutral fallback text ("the cluster") if no real context is available
 
-    This is a defensive fallback for when cluster identity has already
-    leaked into prose text that needs to be rendered safely.
+    This handles both:
+    1. Standalone cluster names (e.g., cluster_name="in-cluster" → "the cluster")
+    2. Embedded markers in prose text (e.g., "in-cluster is degraded" → "the cluster is degraded")
 
     Args:
         cluster_name: The cluster name as it appears in prose, or None.
@@ -297,8 +300,113 @@ def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None)
         'real-context'
         >>> sanitize_cluster_prose(None, None)
         'the cluster'
+        >>> sanitize_cluster_prose("in-cluster is in a degraded state")
+        'the cluster is in a degraded state'
+        >>> sanitize_cluster_prose("in-cluster is in a degraded state", "prod-cluster")
+        'prod-cluster is in a degraded state'
     """
+    # If cluster_name is NOT an internal marker, check for embedded markers
+    if cluster_name is not None and not is_internal_kube_marker(cluster_name):
+        # Check for embedded markers in the text and replace them
+        return sanitize_text_with_embedded_markers(cluster_name, context)
+
+    # cluster_name is an internal marker - use display_label logic
     display_label = display_kube_cluster_label(cluster_name, context)
     if display_label is None:
         return "the cluster"
     return display_label
+
+
+# Pattern to match internal markers as whole words/tokens in prose
+_INTERNAL_MARKER_PATTERN = re.compile(
+    r"(?<![a-zA-Z0-9])(in-cluster|in_cluster)(?![a-zA-Z0-9-])",
+    re.IGNORECASE,
+)
+
+
+def sanitize_text_with_embedded_markers(
+    text: str | None,
+    cluster_context: str | None = None,
+    fallback: str = "the cluster",
+) -> str | None:
+    """Sanitize text containing embedded internal markers.
+
+    This function handles the case where internal markers like "in-cluster"
+    appear embedded within prose text (e.g., "in-cluster is in a degraded state").
+    It replaces the markers with either the cluster_context if available,
+    or the fallback string.
+
+    Args:
+        text: The text containing embedded markers, or None.
+        cluster_context: Optional real cluster context to use as replacement.
+        fallback: Fallback string if no context is available (default: "the cluster").
+
+    Returns:
+        Sanitized text with internal markers replaced, or None if input is None.
+
+    Examples:
+        >>> sanitize_text_with_embedded_markers("in-cluster is degraded", "prod-cluster")
+        'prod-cluster is degraded'
+        >>> sanitize_text_with_embedded_markers("in-cluster is degraded", None)
+        'the cluster is degraded'
+        >>> sanitize_text_with_embedded_markers("in_cluster needs attention", "prod-cluster")
+        'prod-cluster needs attention'
+        >>> sanitize_text_with_embedded_markers("prod-cluster is healthy", None)
+        'prod-cluster is healthy'
+    """
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        return None
+
+    # Determine the replacement value
+    if cluster_context and not is_internal_kube_marker(cluster_context):
+        replacement = cluster_context
+    else:
+        replacement = fallback
+
+    # Replace all occurrences of internal markers
+    result = _INTERNAL_MARKER_PATTERN.sub(replacement, text)
+    return result
+
+
+def sanitize_operator_text(
+    value: str | None,
+    cluster_context: str | None = None,
+) -> str | None:
+    """Sanitize operator-facing text fields for safe display.
+
+    This function applies comprehensive sanitization to prevent internal
+    markers from leaking into operator-facing UI fields. It handles:
+    1. Command-like strings (kubectl --context in-cluster) → context removed
+    2. Embedded markers in prose (in-cluster is degraded) → "the cluster"
+
+    Args:
+        value: The text to sanitize, or None.
+        cluster_context: Optional real cluster context to use as replacement.
+
+    Returns:
+        Sanitized text safe for operator display, or None if input is None.
+
+    Examples:
+        >>> sanitize_operator_text("in-cluster is in a degraded state")
+        'the cluster is in a degraded state'
+        >>> sanitize_operator_text("kubectl get pods --context in-cluster")
+        'kubectl get pods'
+        >>> sanitize_operator_text("kubectl get pods --context prod-cluster")
+        'kubectl get pods --context prod-cluster'
+        >>> sanitize_operator_text("in-cluster is in a degraded state", "prod-cluster")
+        'prod-cluster is in a degraded state'
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+
+    # First pass: sanitize any kubectl command-like patterns
+    command_sanitized = sanitize_kubectl_display_command(value)
+    if command_sanitized:
+        value = command_sanitized
+
+    # Second pass: sanitize any embedded markers in the resulting text
+    return sanitize_text_with_embedded_markers(value, cluster_context)

@@ -13,6 +13,12 @@ Truthfulness rules enforced by the builders:
 - Provider-assisted content is never classified as deterministic fact.
 - Source artifact refs are preserved where available; absent provenance is left
   empty/unknown rather than fabricated.
+
+Security note:
+    All operator-facing text fields are sanitized at serialization boundary
+    to prevent internal context markers like "in-cluster" from leaking to
+    the operator UI. This includes cluster labels, context values, hypotheses,
+    and worklist target fields.
 """
 
 from __future__ import annotations
@@ -20,7 +26,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
-from ..security.kubectl_context import display_kube_cluster_label, sanitize_kubectl_display_command
+from ..security.kubectl_context import (
+    display_kube_cluster_label,
+    is_internal_kube_marker,
+    sanitize_kubectl_display_command,
+    sanitize_operator_text,
+)
 from .api_payloads import (
     ArtifactLink,
     FreshnessPayload,
@@ -34,6 +45,48 @@ from .api_payloads import (
     OperatorWorklistPayload,
 )
 from .model import UIIndexContext
+
+
+def _sanitize_target_cluster(cluster: str | None, context: str | None = None) -> str | None:
+    """Sanitize a cluster label for operator-facing display.
+
+    Removes internal context markers like "in-cluster" and "in_cluster" from
+    cluster labels, returning None if the label is only an internal marker.
+
+    Args:
+        cluster: The cluster label to sanitize.
+        context: Optional context for fallback if cluster is internal marker.
+
+    Returns:
+        Sanitized cluster label, or None if the label is only an internal marker.
+    """
+    if cluster is None:
+        return None
+    # If cluster is an internal marker, try to use context as fallback
+    if is_internal_kube_marker(cluster):
+        if context and not is_internal_kube_marker(context):
+            return context
+        return None
+    return cluster
+
+
+def _sanitize_target_context(context: str | None) -> str | None:
+    """Sanitize a context value for operator-facing display.
+
+    Removes internal context markers like "in-cluster" and "in_cluster".
+    Returns None if the context is only an internal marker.
+
+    Args:
+        context: The context value to sanitize.
+
+    Returns:
+        Sanitized context, or None if the context is an internal marker.
+    """
+    if context is None:
+        return None
+    if is_internal_kube_marker(context):
+        return None
+    return context
 
 
 def _build_incident_report_payload(
@@ -106,28 +159,34 @@ def _build_incident_report_payload(
                 }
             )
         # Hypotheses are inference/hypothesis claims
+        # Sanitize description to prevent internal markers from leaking
         for hypothesis in assessment.hypotheses:
-            inferences.append(
-                {
-                    "claimType": "hypothesis",
-                    "statement": hypothesis.description,
-                    "basis": [hypothesis.probable_layer],
-                    "confidence": hypothesis.confidence,
-                    "sourceArtifactRefs": _assessment_refs(),
-                }
-            )
+            safe_hypothesis_description = sanitize_operator_text(hypothesis.description)
+            if safe_hypothesis_description:
+                inferences.append(
+                    {
+                        "claimType": "hypothesis",
+                        "statement": safe_hypothesis_description,
+                        "basis": [hypothesis.probable_layer],
+                        "confidence": hypothesis.confidence,
+                        "sourceArtifactRefs": _assessment_refs(),
+                    }
+                )
         # Recommended action is a separate recommendation claim (not mixed with facts)
         if assessment.recommended_action is not None:
             action = assessment.recommended_action
-            recommendations.append(
-                {
-                    "claimType": "recommendation",
-                    "statement": action.description,
-                    "safetyLevel": action.safety_level or "unknown",
-                    "sourceArtifactRefs": _assessment_refs(),
-                }
-            )
-            recommended_actions.append(action.description)
+            # Sanitize action description to prevent internal markers from leaking
+            safe_action_description = sanitize_operator_text(action.description)
+            if safe_action_description:
+                recommendations.append(
+                    {
+                        "claimType": "recommendation",
+                        "statement": safe_action_description,
+                        "safetyLevel": action.safety_level or "unknown",
+                        "sourceArtifactRefs": _assessment_refs(),
+                    }
+                )
+                recommended_actions.append(safe_action_description)
         if assessment.artifact_path:
             source_refs.append({"label": "Assessment", "path": assessment.artifact_path})
         if assessment.snapshot_path:
@@ -185,15 +244,18 @@ def _build_incident_report_payload(
             path = review_enrichment.artifact_path if review_enrichment else None
             return [{"label": "Review Enrichment", "path": path}] if path else []
 
-        inferences.append(
-            {
-                "claimType": "hypothesis",
-                "statement": review_enrichment.summary,
-                "basis": ["review-enrichment"],
-                "confidence": "medium",
-                "sourceArtifactRefs": _enrichment_refs(),
-            }
-        )
+        # Sanitize summary to prevent internal markers from leaking
+        safe_summary = sanitize_operator_text(review_enrichment.summary)
+        if safe_summary:
+            inferences.append(
+                {
+                    "claimType": "hypothesis",
+                    "statement": safe_summary,
+                    "basis": ["review-enrichment"],
+                    "confidence": "medium",
+                    "sourceArtifactRefs": _enrichment_refs(),
+                }
+            )
         if review_enrichment.artifact_path:
             source_refs.append(
                 {"label": "Review Enrichment", "path": review_enrichment.artifact_path}
@@ -252,22 +314,34 @@ def _build_operator_worklist_payload(
     if deterministic is not None:
         rank = 1
         for cluster in deterministic.clusters:
+            # Sanitize cluster label and context to prevent "in-cluster" leaks
+            safe_cluster = _sanitize_target_cluster(cluster.label, cluster.context)
+            safe_context = _sanitize_target_context(cluster.context)
+            # Only add item if we have a valid cluster identifier
+            if safe_cluster is None:
+                rank += len(list(cluster.deterministic_next_check_summaries))
+                continue
             for summary in cluster.deterministic_next_check_summaries:
                 # Deterministic next checks carry a method name, not an executable command.
                 # Leave command None so consumers do not misinterpret it as a runnable string.
+                # Sanitize all text fields to prevent internal markers from leaking
                 items.append(
                     {
-                        "id": f"deterministic-{cluster.label}-{rank}",
+                        "id": f"deterministic-{safe_cluster}-{rank}",
                         "rank": rank,
                         "workstream": summary.workstream,
-                        "title": summary.description,
-                        "description": f"Owner: {summary.owner}; method: {summary.method}; evidence needed: {', '.join(summary.evidence_needed)}",
+                        "title": sanitize_operator_text(summary.description),
+                        "description": sanitize_operator_text(
+                            f"Owner: {summary.owner}; method: {summary.method}; evidence needed: {', '.join(summary.evidence_needed)}"
+                        ),
                         "command": None,
-                        "targetCluster": cluster.label,
-                        "targetContext": cluster.context,
-                        "reason": summary.why_now,
-                        "expectedEvidence": ", ".join(summary.evidence_needed),
-                        "safetyNote": f"Urgency: {summary.urgency}; primary triage: {summary.is_primary_triage}",
+                        "targetCluster": safe_cluster,
+                        "targetContext": safe_context,
+                        "reason": sanitize_operator_text(summary.why_now),
+                        "expectedEvidence": sanitize_operator_text(", ".join(summary.evidence_needed)),
+                        "safetyNote": sanitize_operator_text(
+                            f"Urgency: {summary.urgency}; primary triage: {summary.is_primary_triage}"
+                        ),
                         "approvalState": None,
                         "executionState": None,
                         "feedbackState": None,
@@ -310,15 +384,16 @@ def _build_operator_worklist_payload(
                 "id": item_id,
                 "rank": len(items) + 1,
                 "workstream": queue_item.workstream,
-                # Sanitize title to prevent internal context markers from leaking to operator UI
-                "title": sanitize_kubectl_display_command(queue_item.description) or queue_item.description,
-                "description": queue_item.source_reason,
-                "command": queue_item.command_preview,
-                "targetCluster": queue_item.target_cluster,
-                "targetContext": queue_item.target_context,
-                "reason": queue_item.source_reason,
-                "expectedEvidence": queue_item.expected_signal,
-                "safetyNote": queue_item.safety_reason,
+                # Sanitize all text fields to prevent internal markers from leaking
+                "title": sanitize_operator_text(queue_item.description),
+                "description": sanitize_operator_text(queue_item.source_reason),
+                "command": sanitize_kubectl_display_command(queue_item.command_preview) if queue_item.command_preview else None,
+                # Sanitize targetCluster and targetContext to prevent "in-cluster" leaks
+                "targetCluster": _sanitize_target_cluster(queue_item.target_cluster, queue_item.target_context),
+                "targetContext": _sanitize_target_context(queue_item.target_context),
+                "reason": sanitize_operator_text(queue_item.source_reason),
+                "expectedEvidence": sanitize_operator_text(queue_item.expected_signal),
+                "safetyNote": sanitize_operator_text(queue_item.safety_reason),
                 "approvalState": queue_item.approval_state,
                 "executionState": queue_item.execution_state,
                 "feedbackState": queue_item.outcome_status,

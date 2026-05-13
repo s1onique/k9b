@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..security.kubectl_context import display_kube_cluster_label, is_internal_kube_marker
 from .ui_shared import _relative_path
 
 if TYPE_CHECKING:
@@ -441,10 +442,15 @@ def _build_deterministic_next_checks_projection(
 
         summaries.sort(key=_priority_sort_key)
         total_next_checks += len(summaries)
+        # Sanitize label and context to prevent internal markers like "in-cluster" from leaking
+        raw_context = str(cluster.get("context") or "")
+        safe_label = display_kube_cluster_label(label, raw_context)
+        safe_context = raw_context if not is_internal_kube_marker(raw_context) else None
+        # Use fallback for safe_label if it would be None (internal marker with no context fallback)
         entries.append(
             {
-                "label": label,
-                "context": str(cluster.get("context") or ""),
+                "label": safe_label or "the cluster",
+                "context": safe_context,
                 "topProblem": top_problem,
                 "triggerReason": top_problem,
                 "deterministicNextCheckCount": len(summaries),
