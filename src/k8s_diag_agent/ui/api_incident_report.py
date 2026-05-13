@@ -34,6 +34,7 @@ from ..security.kubectl_context import (
 )
 from .api_payloads import (
     ArtifactLink,
+    CrossClusterFindingPayload,
     FreshnessPayload,
     IncidentReportDerivedPayload,
     IncidentReportFactPayload,
@@ -281,6 +282,10 @@ def _build_incident_report_payload(
             }
         )
 
+    # Build cross-cluster findings from comparison triggers
+    # These provide fleet-level drift visibility that individual cluster assessments may miss
+    cross_cluster_findings = _build_cross_cluster_findings_payload(context)
+
     return {
         "title": title,
         "status": status,
@@ -297,7 +302,207 @@ def _build_incident_report_payload(
         "freshness": cast(FreshnessPayload | None, freshness),
         "recommendedActions": recommended_actions,
         "sourceArtifactRefs": deduped_refs,
+        "crossClusterFindings": cross_cluster_findings,
     }
+
+
+def _build_cross_cluster_findings_payload(
+    context: UIIndexContext,
+) -> list[CrossClusterFindingPayload] | None:
+    """Build cross-cluster findings from comparison trigger artifacts.
+
+    Cross-cluster findings represent fleet-level drift patterns that involve
+    multiple clusters. They are distinct from per-cluster observations and
+    surface drift that individual cluster assessments may miss.
+
+    Taxonomy mapping:
+    - observed claims: deterministic drift signals (e.g., helm release diff count)
+    - hypothesis claims: speculative explanations of why drift exists
+    - unknown claims: missing fleet context
+
+    Args:
+        context: UI index context containing run data with comparison triggers.
+
+    Returns:
+        List of CrossClusterFindingPayload or None if no triggers exist.
+    """
+    # Load comparison triggers from notification_history
+    # suspicious-comparison notifications contain trigger_reasons and comparison_summary
+    # Note: notification.details is a tuple of (label, value) tuples, not a dict
+    raw_triggers: list[dict[str, object]] = []
+    for notification in context.notification_history:
+        if notification.kind == "suspicious-comparison":
+            # Convert tuple of tuples to dict for easier access
+            details_dict: dict[str, str] = {}
+            for label, value in notification.details:
+                details_dict[label] = value
+
+            # Parse trigger_reasons from string representation
+            reasons_str = details_dict.get("reasons", "[]")
+            trigger_reasons: list[str] = []
+            if reasons_str.startswith("[") and reasons_str.endswith("]"):
+                try:
+                    import ast
+                    trigger_reasons = ast.literal_eval(reasons_str)
+                    if not isinstance(trigger_reasons, list):
+                        trigger_reasons = []
+                except (ValueError, SyntaxError):
+                    trigger_reasons = []
+
+            # Parse comparison_summary/differences from string representation
+            differences_str = details_dict.get("differences", "{}")
+            comparison_summary: dict[str, int] = {}
+            if differences_str.startswith("{") and differences_str.endswith("}"):
+                try:
+                    import ast
+                    parsed = ast.literal_eval(differences_str)
+                    if isinstance(parsed, dict):
+                        for k, v in parsed.items():
+                            if isinstance(v, (int, float)):
+                                comparison_summary[str(k)] = int(v)
+                except (ValueError, SyntaxError):
+                    pass
+
+            trigger: dict[str, object] = {
+                "primary_label": notification.cluster_label or "",
+                "secondary_label": details_dict.get("secondary_cluster", ""),
+                "trigger_reasons": trigger_reasons,
+                "comparison_summary": comparison_summary,
+                "comparison_intent": details_dict.get("intent", "suspicious-drift"),
+                "artifact_path": notification.artifact_path,
+                "timestamp": notification.timestamp,
+            }
+            raw_triggers.append(trigger)
+
+    if not raw_triggers:
+        return None
+
+    findings: list[CrossClusterFindingPayload] = []
+    for trigger_raw in raw_triggers:
+        if not isinstance(trigger_raw, dict):
+            continue
+
+        # Sanitize cluster labels for operator-facing display
+        primary = _sanitize_target_cluster(str(trigger_raw.get("primary_label", "")))
+        secondary = _sanitize_target_cluster(str(trigger_raw.get("secondary_label", "")))
+
+        # Skip if either cluster label is an internal marker only
+        if not primary and not secondary:
+            continue
+
+        # Parse drift counts from comparison_summary
+        comparison_summary_raw = trigger_raw.get("comparison_summary") or {}
+        drift_counts: dict[str, int] = {}
+        if isinstance(comparison_summary_raw, dict):
+            for key, value in comparison_summary_raw.items():
+                if isinstance(value, (int, str)):
+                    drift_counts[str(key)] = int(value) if isinstance(value, int) else int(value) if str(value).isdigit() else 0
+
+        # Parse trigger reasons - deterministic signals that fired the comparison
+        trigger_reasons_raw = trigger_raw.get("trigger_reasons") or []
+        parsed_trigger_reasons: list[str] = []
+        if isinstance(trigger_reasons_raw, list):
+            for reason in trigger_reasons_raw:
+                if reason:
+                    parsed_trigger_reasons.append(sanitize_operator_text(str(reason)) or str(reason))
+
+        # Build fleet-aware recommendations based on drift categories
+        recommended_next_checks = _derive_fleet_aware_checks(drift_counts, trigger_reasons)
+
+        # Parse timestamp for provenance
+        timestamp_value = trigger_raw.get("timestamp")
+        timestamp_str: str | None = None
+        if isinstance(timestamp_value, str):
+            timestamp_str = timestamp_value
+
+        # Parse artifact path for provenance
+        artifact_path: str | None = None
+        if trigger_raw.get("artifact_path"):
+            artifact_path = str(trigger_raw.get("artifact_path"))
+
+        findings.append(
+            {
+                "primaryCluster": primary or secondary or "unknown",
+                "secondaryCluster": secondary or primary or "unknown",
+                "driftCounts": drift_counts,
+                "intent": str(trigger_raw.get("comparison_intent", "suspicious-drift")),
+                "triggerReasons": trigger_reasons,
+                "artifactPath": artifact_path,
+                "timestamp": timestamp_str,
+                "recommendedNextChecks": recommended_next_checks,
+            }
+        )
+
+    # Sort by timestamp descending (newest first) for consistent ordering
+    # and prioritize operator-salient drift first
+    findings.sort(
+        key=lambda f: (
+            f.get("timestamp") or "",
+            -sum(f.get("driftCounts", {}).values()),
+        ),
+        reverse=True,
+    )
+
+    # Limit to top 5 findings to keep report concise
+    return findings[:5] if findings else None
+
+
+def _derive_fleet_aware_checks(
+    drift_counts: dict[str, int],
+    trigger_reasons: list[str],
+) -> list[str]:
+    """Derive fleet-aware next check recommendations from drift categories.
+
+    Recommendations focus on next useful fleet-aware checks, not just generic
+    cluster triage. They are derived from the drift categories present.
+
+    Args:
+        drift_counts: Drift category counts (e.g., {"helm_releases": 2, "crds": 1})
+        trigger_reasons: Trigger reasons that fired the comparison
+
+    Returns:
+        List of recommended next checks for fleet-level investigation.
+    """
+    recommendations: list[str] = []
+
+    # Helm release drift: recommend inspecting the specific drift
+    if drift_counts.get("helm_releases", 0) > 0:
+        recommendations.append("Compare Helm release versions across same-role clusters")
+
+    # CRD drift: recommend inspecting CRD versions
+    if drift_counts.get("crds", 0) > 0:
+        recommendations.append("Inspect CRD storage versions and served APIs across clusters")
+
+    # Metadata drift (control plane version): recommend fleet-wide version check
+    if drift_counts.get("metadata", 0) > 0:
+        recommendations.append("Check control plane version consistency across fleet")
+
+    # Metrics drift: recommend comparing resource utilization
+    if drift_counts.get("metrics", 0) > 0:
+        recommendations.append("Compare resource utilization patterns across peer clusters")
+
+    # Add fleet-aware checks based on trigger reasons
+    for reason in trigger_reasons:
+        reason_lower = reason.lower()
+        if "health_regression" in reason_lower:
+            if "Investigate health regression across comparable clusters" not in recommendations:
+                recommendations.append("Investigate health regression across comparable clusters")
+        elif "baseline" in reason_lower:
+            if "Review baseline drift across same-cohort clusters" not in recommendations:
+                recommendations.append("Review baseline drift across same-cohort clusters")
+        elif "helm" in reason_lower:
+            if "Compare Helm release versions across same-role clusters" not in recommendations:
+                recommendations.append("Compare Helm release versions across same-role clusters")
+
+    # Deduplicate and limit to top 3 recommendations
+    seen = set()
+    deduped: list[str] = []
+    for rec in recommendations:
+        if rec not in seen:
+            seen.add(rec)
+            deduped.append(rec)
+
+    return deduped[:3]
 
 
 # =============================================================================

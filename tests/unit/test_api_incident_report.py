@@ -1222,6 +1222,16 @@ def _sample_freshness(status: str) -> dict[str, Any]:
     }
 
 
+def _get_cross_cluster_findings(
+    report: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Helper to safely get crossClusterFindings list from report dict."""
+    findings = report.get("crossClusterFindings")
+    if findings is None:
+        return []
+    return findings
+
+
 # =============================================================================
 # Worklist Unification Tests (Epic: Worklist Projection and Execution-State)
 # =============================================================================
@@ -1568,6 +1578,333 @@ class WorklistProvenanceTests(unittest.TestCase):
                 len(set(paths)),
                 f"Item {item.get('id')} should not have duplicate paths in sourceArtifactRefs",
             )
+
+
+# =============================================================================
+# Cross-Cluster Findings Regression Tests (BETA-G2 Epic)
+# =============================================================================
+
+
+class CrossClusterFindingsTests(unittest.TestCase):
+    """Tests for cross-cluster findings in incident reports.
+
+    Regression tests for BETA-G2 epic: Cross-cluster correlation in incident report.
+    Verifies that comparison-triggered, cross-cluster findings are surfaced without
+    interfering with per-cluster observations.
+    """
+
+    def test_helm_release_drift_surfaces_in_cross_cluster_findings(self) -> None:
+        """Helm release drift must surface in crossClusterFindings."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        self.assertIsNotNone(report["crossClusterFindings"])
+        self.assertTrue(len(report["crossClusterFindings"]) > 0)
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("helm_releases", finding.get("driftCounts", {}))
+        self.assertGreater(finding["driftCounts"]["helm_releases"], 0)
+
+    def test_helm_release_drift_recommendation_surfaces(self) -> None:
+        """Fleet-aware recommendation for helm drift must surface."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+            _freshness,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        recs = finding.get("recommendedNextChecks", [])
+        helm_recs = [r for r in recs if "helm" in r.lower()]
+        self.assertTrue(helm_recs, f"Expected helm recommendation, got: {recs}")
+        self.assertIn("Compare Helm release versions across same-role clusters", helm_recs)
+
+    def test_control_plane_drift_surfaces_in_cross_cluster_findings(self) -> None:
+        """Control plane version drift must surface in crossClusterFindings."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_control_plane_drift,
+            _freshness,
+        )
+
+        index = _fixture_control_plane_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        self.assertIsNotNone(report["crossClusterFindings"])
+        self.assertTrue(len(report["crossClusterFindings"]) > 0)
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("metadata", finding.get("driftCounts", {}))
+        self.assertGreater(finding["driftCounts"]["metadata"], 0)
+
+    def test_control_plane_drift_recommendation_surfaces(self) -> None:
+        """Fleet-aware recommendation for control plane drift must surface."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_control_plane_drift,
+            _freshness,
+        )
+
+        index = _fixture_control_plane_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        recs = finding.get("recommendedNextChecks", [])
+        cp_recs = [r for r in recs if "control plane" in r.lower() or "version" in r.lower()]
+        self.assertTrue(cp_recs, f"Expected control plane recommendation, got: {recs}")
+
+    def test_crd_family_drift_surfaces_in_cross_cluster_findings(self) -> None:
+        """CRD family drift must surface in crossClusterFindings."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_crd_family_drift,
+            _freshness,
+        )
+
+        index = _fixture_crd_family_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        self.assertIsNotNone(report["crossClusterFindings"])
+        self.assertTrue(len(report["crossClusterFindings"]) > 0)
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("crds", finding.get("driftCounts", {}))
+        self.assertGreater(finding["driftCounts"]["crds"], 0)
+
+    def test_crd_drift_recommendation_surfaces(self) -> None:
+        """Fleet-aware recommendation for CRD drift must surface."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_crd_family_drift,
+            _freshness,
+        )
+
+        index = _fixture_crd_family_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        recs = finding.get("recommendedNextChecks", [])
+        crd_recs = [r for r in recs if "crd" in r.lower() or "api" in r.lower()]
+        self.assertTrue(crd_recs, f"Expected CRD recommendation, got: {recs}")
+
+    def test_healthy_but_suspicious_cross_cluster_findsings_present(self) -> None:
+        """Suspicious cross-cluster comparison surfaces even when per-cluster health is good."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_healthy_but_suspicious_cross_cluster,
+            _freshness,
+        )
+
+        index = _fixture_healthy_but_suspicious_cross_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        # Status should be healthy (per-cluster perspective)
+        self.assertEqual(report["status"], "healthy")
+        # But cross-cluster findings should still be present
+        self.assertIsNotNone(report["crossClusterFindings"])
+        self.assertTrue(len(report["crossClusterFindings"]) > 0)
+        finding = report["crossClusterFindings"][0]
+        self.assertEqual(finding.get("intent"), "suspicious-comparison")
+
+    def test_cross_cluster_drift_with_degraded_workload_has_both(self) -> None:
+        """Per-cluster degradation and cross-cluster drift both surface."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_cross_cluster_drift_with_degraded_workload,
+            _freshness,
+        )
+
+        index = _fixture_cross_cluster_drift_with_degraded_workload()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        # Status should be degraded (per-cluster perspective)
+        self.assertEqual(report["status"], "degraded")
+        # Facts should be non-empty (per-cluster findings)
+        self.assertTrue(report["facts"])
+        # Cross-cluster findings should also be present
+        self.assertIsNotNone(report["crossClusterFindings"])
+        self.assertTrue(len(report["crossClusterFindings"]) > 0)
+
+    def test_cross_cluster_findings_sorted_by_timestamp(self) -> None:
+        """Multiple cross-cluster findings are sorted by timestamp descending."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_healthy_but_suspicious_cross_cluster,
+            _freshness,
+        )
+
+        index = _fixture_healthy_but_suspicious_cross_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        # With one comparison trigger, we expect at most 1 finding
+        self.assertIsNotNone(report["crossClusterFindings"])
+
+    def test_cross_cluster_findings_limited_to_five(self) -> None:
+        """Cross-cluster findings are limited to top 5 to keep report concise."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+            _freshness,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        findings = report.get("crossClusterFindings") or []
+        self.assertLessEqual(len(findings), 5)
+
+    def test_cross_cluster_findings_have_cluster_labels(self) -> None:
+        """Cross-cluster findings include primary and secondary cluster labels."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+            _freshness,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("primaryCluster", finding)
+        self.assertIn("secondaryCluster", finding)
+        self.assertIsNotNone(finding["primaryCluster"])
+        self.assertIsNotNone(finding["secondaryCluster"])
+
+    def test_cross_cluster_findings_have_trigger_reasons(self) -> None:
+        """Cross-cluster findings include trigger reasons."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+            _freshness,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("triggerReasons", finding)
+        self.assertTrue(len(finding["triggerReasons"]) > 0)
+
+    def test_cross_cluster_findings_have_artifact_path(self) -> None:
+        """Cross-cluster findings include artifact path for provenance."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+            _freshness,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("artifactPath", finding)
+        # Artifact path should be a real path, not "unknown"
+        self.assertIsNotNone(finding["artifactPath"])
+        self.assertNotEqual(finding["artifactPath"], "unknown")
+
+    def test_cross_cluster_findings_have_recommended_next_checks(self) -> None:
+        """Cross-cluster findings include fleet-aware recommended next checks."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+            _freshness,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        finding = report["crossClusterFindings"][0]
+        self.assertIn("recommendedNextChecks", finding)
+        self.assertTrue(len(finding["recommendedNextChecks"]) > 0)
+        # Should have at most 3 recommendations
+        self.assertLessEqual(len(finding["recommendedNextChecks"]), 3)
+
+    def test_no_cross_cluster_findings_when_no_comparison_triggers(self) -> None:
+        """Cross-cluster findings are None when no comparison triggers exist."""
+        index = _fixture_healthy_no_incident()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        # No comparison triggers in healthy fixture
+        self.assertIsNone(report.get("crossClusterFindings"))
+
+    def test_cross_cluster_findings_separated_from_per_cluster(self) -> None:
+        """Cross-cluster findings are clearly separate from per-cluster observations."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_cross_cluster_drift_with_degraded_workload,
+            _freshness,
+        )
+
+        index = _fixture_cross_cluster_drift_with_degraded_workload()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        # Facts are per-cluster observations
+        fact_statements = [f["statement"] for f in report["facts"]]
+        # Cross-cluster findings should NOT appear in facts
+        for finding in report["crossClusterFindings"]:
+            # Trigger reasons and drift counts should not be in facts
+            for reason in finding.get("triggerReasons", []):
+                self.assertNotIn(
+                    reason,
+                    " ".join(fact_statements).lower(),
+                    f"Cross-cluster trigger reason leaked into facts: {reason}",
+                )
+
+    def test_cross_cluster_findings_max_three_recommendations(self) -> None:
+        """Fleet-aware recommendations are limited to 3 per finding."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_healthy_but_suspicious_cross_cluster,
+            _freshness,
+        )
+
+        index = _fixture_healthy_but_suspicious_cross_cluster()
+        context = build_ui_context(index)
+        report = _build_incident_report_payload(context, _freshness("fresh"))
+        self.assertIsNotNone(report)
+        assert report is not None
+        findings = report.get("crossClusterFindings") or []
+        for finding in findings:
+            recs = finding.get("recommendedNextChecks", [])
+            self.assertLessEqual(
+                len(recs), 3, f"Expected max 3 recommendations, got {len(recs)}: {recs}"
+            )
+
+    def test_cross_cluster_findings_in_build_run_payload(self) -> None:
+        """Cross-cluster findings are threaded through build_run_payload."""
+        from tests.fixtures.incident_report_cross_cluster_fixtures import (
+            _fixture_helm_release_drift,
+        )
+
+        index = _fixture_helm_release_drift()
+        context = build_ui_context(index)
+        payload = build_run_payload(context)
+        self.assertIn("incidentReport", payload)
+        report = payload["incidentReport"]
+        self.assertIsNotNone(report)
+        assert report is not None
+        self.assertIsNotNone(report["crossClusterFindings"])
 
 
 if __name__ == "__main__":

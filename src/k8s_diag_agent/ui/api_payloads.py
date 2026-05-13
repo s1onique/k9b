@@ -91,6 +91,8 @@ __all__ = [
     "IncidentReportPayload",
     "OperatorWorklistItemPayload",
     "OperatorWorklistPayload",
+    # Cross-cluster comparison findings
+    "CrossClusterFindingPayload",
     "RunPayload",
     "RunsListEntry",
     "RunsListPayload",
@@ -950,6 +952,41 @@ class IncidentReportUnknownPayload(TypedDict, total=False):
     sourceArtifactRefs: list[ArtifactLink]
 
 
+class CrossClusterFindingPayload(TypedDict, total=False):
+    """A cross-cluster finding from comparison trigger artifacts.
+
+    Cross-cluster findings represent fleet-level drift patterns that involve
+    multiple clusters. They are distinct from per-cluster observations and
+    provide visibility into drift that individual cluster assessments may miss.
+
+    Taxonomy mapping:
+    - observed: deterministic drift signals (e.g., helm release diff count)
+    - hypothesis: speculative explanations of why drift exists
+    - unknown: missing fleet context
+    """
+
+    # Identity
+    primaryCluster: str
+    secondaryCluster: str
+
+    # Drift summary - counts per category
+    # e.g., {"helm_releases": 2, "crds": 0, "metadata": 1}
+    driftCounts: dict[str, int]
+
+    # Comparison intent classification
+    intent: str
+
+    # Trigger reasons - deterministic signals that fired the comparison
+    triggerReasons: list[str]
+
+    # Provenance
+    artifactPath: str | None
+    timestamp: str | None
+
+    # Cross-cluster recommendations (fleet-aware next checks)
+    recommendedNextChecks: list[str]
+
+
 class IncidentReportPayload(TypedDict, total=False):
     """Canonical incident report projection for a selected health run.
 
@@ -958,6 +995,10 @@ class IncidentReportPayload(TypedDict, total=False):
     Canonical structured claims live in facts, derived, inferences,
     recommendations, and unknowns. recommendedActions is legacy display
     compatibility only.
+
+    crossClusterFindings surfaces comparison-triggered fleet-level drift
+    that individual cluster assessments may miss. These findings are
+    clearly separated from per-cluster observations.
     """
 
     title: str
@@ -975,6 +1016,8 @@ class IncidentReportPayload(TypedDict, total=False):
     freshness: FreshnessPayload | None
     recommendedActions: list[str]  # Legacy display compatibility only
     sourceArtifactRefs: list[ArtifactLink]
+    # Cross-cluster findings from comparison triggers
+    crossClusterFindings: list[CrossClusterFindingPayload] | None
 
 
 class OperatorWorklistItemPayload(TypedDict, total=False):
