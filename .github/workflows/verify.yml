@@ -90,7 +90,6 @@ jobs:
     name: Coverage Report
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     permissions:
       contents: read
     steps:
@@ -126,6 +125,7 @@ jobs:
         run: ./scripts/run_coverage.sh
 
       - name: Upload coverage artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-reports-${{ github.run_id }}

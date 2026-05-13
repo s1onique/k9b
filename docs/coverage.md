@@ -102,23 +102,36 @@ Note: `src/App.tsx` is **included** in coverage because it contains substantial 
 
 ## Coverage Policy
 
-### Current Status: Report-Only (Non-Blocking)
+### Current Status: Mandatory (Enforced)
 
-Coverage reporting is implemented for visibility, not enforcement:
+Coverage reporting is now mandatory and enforced via CI thresholds:
 
-- **No thresholds enforced**: `fail_under = 0` in pyproject.toml
+- **Backend line coverage threshold**: 80% (`--cov-fail-under=80` in pytest)
+- **Frontend line/statement coverage threshold**: 90% (Vitest threshold configuration)
+- **Branch/function coverage**: Tracked but not yet enforced (informational only)
 - **CI artifacts uploaded**: Coverage reports are generated and uploaded as CI artifacts
-- **Non-blocking**: Coverage job runs independently and does not affect the verification gate
-- **Future consideration**: Threshold enforcement may be added once baseline coverage is stable
+- **Blocking**: Coverage job now blocks merge on threshold violations
+
+### Thresholds
+
+| Component | Metric | Threshold | Status |
+|-----------|--------|-----------|--------|
+| Backend (Python) | Line coverage | 80% | Enforced |
+| Frontend (TypeScript) | Lines | 90% | Enforced |
+| Frontend (TypeScript) | Statements | 90% | Enforced |
+| Backend (Python) | Branch coverage | N/A | Tracked (not enforced) |
+| Frontend (TypeScript) | Branch coverage | N/A | Tracked (not enforced) |
+| Frontend (TypeScript) | Function coverage | N/A | Tracked (not enforced) |
 
 ### CI Integration
 
 Coverage runs as a separate job in `.github/workflows/verify.yml`:
 
 - Runs on all PRs, main push, and manual dispatch
+- **MANDATORY**: Job failure blocks merge on threshold violations
 - Uploads coverage artifacts (XML, JSON, Lcov, HTML) to CI artifacts
 - Displays coverage summary in CI logs
-- Does NOT block merge on low coverage (report-only policy)
+- Artifacts uploaded even on failure (`if: always()`)
 
 ### Manual vs CI Coverage
 

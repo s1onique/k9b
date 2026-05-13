@@ -33,6 +33,7 @@ run_backend_coverage() {
         --cov-report=json:"$BACKEND_COVERAGE_DIR/coverage.json" \
         --cov-report=lcov:"$BACKEND_COVERAGE_DIR/coverage.info" \
         --cov-report=html:"$BACKEND_COVERAGE_DIR/coverage_html" \
+        --cov-fail-under=80 \
         tests/
 }
 

@@ -36,7 +36,7 @@ Items worth doing shortly after beta or before wider rollout. These improve poli
 
 | Item | Owner/Area | Evidence | Impact | Priority |
 |------|-----------|----------|--------|----------|
-| **Add coverage thresholds to verification gate** | Testing/coverage | Report-only CI job added; thresholds remain informational (fail_under=0) | No automated coverage regression detection | Medium (deferred) |
+| **Add coverage thresholds to verification gate** | Testing/coverage | ✅ RESOLVED (2026-05-13): Mandatory coverage gate added; `--cov-fail-under=80` for backend, 90% thresholds for frontend lines/statements | Automated coverage regression detection now active | ~~Medium (deferred)~~ ✅ CLOSED |
 | **Expand deterministic next-check fixture coverage** | Testing/diagnostics | Regression coverage only covers incident report claim taxonomy; next-check planning behavior has limited fixture coverage | Harder to detect next-check regressions | Medium |
 | **AUTH-08: GET endpoint protection** | Security/deployment | `charts/k9b/README.md` documents "GET endpoint protection **Deferred** (use reverse proxy)" | Mutation endpoints protected but reads are not | Low (reverse proxy is recommended pattern) |
 | **AUTH-09: Full CSRF token** | Security/API | `docs/security/operator-auth-design.md` defers "Full CSRF token (API-R2 sufficient)" | Standard CORS headers used | Low (API-R2 Origin/Referer deemed sufficient) |
@@ -113,7 +113,7 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
 | **GitHub release creation** | Not required | Rolling beta does not require a GitHub release. Distribution is via repository + local Helm chart. |
 | **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
-| **Coverage gate in CI** | Report-only | Non-blocking coverage job added to CI; artifacts uploaded; thresholds remain informational (fail_under=0) |
+| **Coverage gate in CI** | ✅ MANDATORY | Coverage job now blocks merge on threshold violations; backend 80% line coverage enforced via `--cov-fail-under=80`; frontend 90% line/statement coverage enforced via Vitest thresholds |
 
 ---
 
@@ -128,8 +128,8 @@ After beta packaging closes, the next parent epic should focus on one of the fol
 **Scope:**
 1. ~~Add GitLab CI verify lane (or equivalent CI pipeline)~~ — **DONE:** GitHub Actions verify.yml added
 2. ~~Verify image tag public accessibility~~ — **DONE:** Images require secrets; docs corrected to reflect local-only state until secrets configured
-3. Add coverage thresholds to the verification gate
-4. Close Phase 1b LLM anonymization (label/annotation values, Helm release names)
+3. ~~Add coverage thresholds to the verification gate~~ — **DONE:** Mandatory coverage gate added (2026-05-13)
+4. ~~Close Phase 1b LLM anonymization (label/annotation values, Helm release names)~~ — **DONE:** Both resolved (2026-05-13)
 5. Review beta operator feedback and triage into next increment
 6. Scope live integrations discovery
 

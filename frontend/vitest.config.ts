@@ -11,6 +11,10 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "../coverage/frontend",
+      thresholds: {
+        lines: 90,
+        statements: 90,
+      },
       exclude: [
         "node_modules",
         "dist",
