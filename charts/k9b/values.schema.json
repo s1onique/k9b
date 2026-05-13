@@ -108,21 +108,83 @@
     },
     "ingress": {
       "type": "object",
-      "description": "Ingress configuration",
+      "description": "Ingress configuration for external access. Routes all traffic to the frontend service, which proxies /api/ to the backend internally.",
       "properties": {
         "enabled": {
           "type": "boolean",
+          "description": "Enable ingress resource creation",
           "default": false
         },
         "className": {
-          "type": "string"
-        },
-        "host": {
-          "type": "string"
+          "type": "string",
+          "description": "Ingress class name (e.g., nginx, traefik). Empty string means use default ingress class."
         },
         "annotations": {
           "type": "object",
-          "default": {}
+          "description": "Annotations to add to the Ingress metadata. Use for ingress controller-specific settings (e.g., cert-manager.io/cluster-issuer, nginx.ingress.kubernetes.io/auth-type).",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "hosts": {
+          "type": "array",
+          "description": "List of ingress hosts with paths",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["host", "paths"],
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Hostname for the ingress rule (e.g., k9b.example.com)"
+              },
+              "paths": {
+                "type": "array",
+                "description": "List of paths for this host",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "URL path to match (e.g., /)",
+                      "default": "/"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "description": "Path matching type (Prefix, Exact, ImplementationSpecific)",
+                      "enum": ["Prefix", "Exact", "ImplementationSpecific"],
+                      "default": "Prefix"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "description": "TLS configuration for secure ingress",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["secretName", "hosts"],
+            "properties": {
+              "secretName": {
+                "type": "string",
+                "description": "Name of the Kubernetes Secret containing the TLS certificate and key"
+              },
+              "hosts": {
+                "type": "array",
+                "description": "List of hostnames covered by the TLS certificate",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     },

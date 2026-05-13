@@ -1,0 +1,269 @@
+# Helm test assertions for k9b ingress configuration.
+suite: ingress configuration
+
+templates:
+  - ingress.yaml
+
+tests:
+  # ===== Ingress disabled: no Ingress resource =====
+  - it: should NOT render Ingress when ingress.enabled=false
+    set:
+      ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ===== Ingress enabled: renders one Ingress =====
+  - it: should render one networking.k8s.io/v1 Ingress when enabled
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - isKind:
+          of: Ingress
+
+  # ===== Ingress name =====
+  - it: should render Ingress with correct name
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-k9b
+
+  # ===== Ingress className =====
+  - it: should render ingressClassName when className is set
+    set:
+      ingress.enabled: true
+      ingress.className: nginx
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: should NOT render ingressClassName when className is empty
+    set:
+      ingress.enabled: true
+      ingress.className: ""
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isNull:
+          path: spec.ingressClassName
+
+  # ===== Ingress annotations =====
+  - it: should render annotations when set
+    set:
+      ingress.enabled: true
+      ingress.annotations:
+        kubernetes.io/ingress.class: nginx
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isNotNull:
+          path: metadata.annotations
+
+  - it: should NOT render annotations block when annotations is empty
+    set:
+      ingress.enabled: true
+      ingress.annotations: {}
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isNull:
+          path: metadata.annotations
+
+  # ===== Ingress host =====
+  - it: should render host correctly
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: k9b.example.com
+
+  # ===== Multiple hosts =====
+  - it: should render multiple hosts
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+        - host: k9b-staging.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: k9b.example.com
+      - equal:
+          path: spec.rules[1].host
+          value: k9b-staging.example.com
+
+  # ===== Paths =====
+  - it: should render path with default pathType Prefix
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+
+  - it: should render custom pathType
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /api
+              pathType: Exact
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /api
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Exact
+
+  # ===== Backend service: frontend only (not backend/scheduler) =====
+  - it: should route to frontend service, not backend
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-k9b-frontend
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+
+  - it: should use frontend service port from values
+    set:
+      ingress.enabled: true
+      frontend.service.port: 8080
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+
+  # ===== TLS configuration =====
+  - it: should render TLS block when configured
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      ingress.tls:
+        - secretName: k9b-tls
+          hosts:
+            - k9b.example.com
+    asserts:
+      - isNotNull:
+          path: spec.tls
+      - equal:
+          path: spec.tls[0].secretName
+          value: k9b-tls
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: k9b.example.com
+
+  - it: should NOT render TLS block when tls is empty
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      ingress.tls: []
+    asserts:
+      - isNull:
+          path: spec.tls
+
+  - it: should render multiple TLS hosts
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      ingress.tls:
+        - secretName: k9b-tls
+          hosts:
+            - k9b.example.com
+            - www.k9b.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].hosts
+          value:
+            - k9b.example.com
+            - www.k9b.example.com
+
+  # ===== Labels consistency =====
+  - it: should include chart labels on Ingress
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: k9b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isNotNull:
+          path: metadata.labels

@@ -271,12 +271,96 @@ kubectl create secret generic k9b-kubeconfig --from-file=config=/path/to/kubecon
 
 ### Ingress Configuration
 
+The k9b ingress routes all external traffic to the **frontend service**, which proxies `/api/` to the backend internally via nginx. This keeps the backend service internal-only.
+
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `ingress.enabled` | Enable ingress | `false` |
-| `ingress.className` | Ingress class name | `""` |
-| `ingress.host` | Hostname for ingress | `""` |
+| `ingress.className` | Ingress class name (e.g., nginx, traefik) | `""` |
 | `ingress.annotations` | Ingress annotations | `{}` |
+| `ingress.hosts` | List of hosts with paths | `[]` |
+| `ingress.tls` | TLS configuration | `[]` |
+
+#### Plain HTTP Ingress
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: k9b.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+```
+
+#### NGINX Ingress with cert-manager TLS
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: k9b.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: k9b-tls
+      hosts:
+        - k9b.example.com
+```
+
+#### Multiple Hosts
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: k9b.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: www.k9b.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: k9b-tls
+      hosts:
+        - k9b.example.com
+        - www.k9b.example.com
+```
+
+#### Traffic Flow
+
+```
+External Traffic
+      │
+      ▼
+┌─────────────────┐
+│  Ingress         │
+│  (nginx/traefik)│
+└────────┬────────┘
+         │ /
+         ▼
+┌─────────────────┐
+│  Frontend        │  ◄── Ingress routes here
+│  Service :8080   │
+└────────┬────────┘
+         │ /api/
+         ▼
+┌─────────────────┐
+│  Backend        │  ◄── Internal only
+│  Service :8080  │
+└─────────────────┘
+```
+
+The frontend nginx ConfigMap (`frontend.configmapNginx: true`) handles the `/api/` proxy internally using the Helm-templated backend service name.
 
 ## Linting and Testing
 

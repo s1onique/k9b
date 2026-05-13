@@ -147,8 +147,22 @@ frontend:
 ingress:
   enabled: false
   className: ""
-  host: ""
   annotations: {}
+  # hosts: List of ingress hosts with paths.
+  # Example:
+  #   hosts:
+  #     - host: k9b.example.com
+  #       paths:
+  #         - path: /
+  #           pathType: Prefix
+  hosts: []
+  # tls: TLS configuration (secretName and hosts).
+  # Example (commented):
+  #   tls:
+  #     - secretName: k9b-tls
+  #       hosts:
+  #         - k9b.example.com
+  tls: []
 
 # Service account configuration.
 # When serviceAccount.create=true, a ServiceAccount is created and used by all pods.
