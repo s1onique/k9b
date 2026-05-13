@@ -31,22 +31,38 @@ This Helm chart deploys k9b, an LLM-based Kubernetes monitoring and diagnostics 
 
 ### Install the Chart
 
+k9b is distributed as a **rolling beta** from the repository. The supported consumption path is:
+
 ```bash
-# Install from local chart (images must be available in your registry)
+# Install from local chart (supported beta path)
 helm install infra-k9b ./charts/k9b -n k9b --create-namespace
 
-# With explicit image overrides (recommended for production)
-helm install infra-k9b ./charts/k9b -n k9b \
-  --set image.backend.repository=your-registry/gitinsky/k9b-backend \
-  --set image.backend.tag=ecacd81 \
-  --set image.frontend.repository=your-registry/gitinsky/k9b-frontend \
-  --set image.frontend.tag=ecacd81
-
-# Or render locally first
+# Render locally first to inspect
 helm template infra-k9b ./charts/k9b
 ```
 
-**Note:** The default `values.yaml` references `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`. These images must be available in your registry before deployment. Override using `--set` flags as shown above.
+**Beta consumption model:**
+- Clone/pull the repository for the latest version
+- Install the Helm chart from local checkout
+- Build images locally or provide explicit image overrides
+
+**Note:** The default `values.yaml` references `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`. These images are **not currently published**. Override using `--set` flags or use docker-compose for local development.
+
+**For local development with docker-compose:**
+```bash
+docker compose up --build -d
+```
+
+**For Helm deployment with custom image registry:**
+```bash
+helm install infra-k9b ./charts/k9b -n k9b \
+  --set image.backend.repository=your-registry/k9b-backend \
+  --set image.backend.tag=ecacd81 \
+  --set image.frontend.repository=your-registry/k9b-frontend \
+  --set image.frontend.tag=ecacd81
+```
+
+**Public Docker image availability is optional future release mechanics.** DockerHub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub secrets.
 
 ### Upgrade the Chart
 

@@ -107,11 +107,11 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | Item | Status | Action |
 |------|--------|--------|
 | **Full gate CI timeouts** | Implemented | `scripts/verify_all.sh` runs all lanes; no documented full-gate timeout; parallel lane execution may cause long runs |
-| **Image tag public accessibility** | **Resolved** | Images (`docker.io/gitinsky/k9b-backend:ecacd81`, `docker.io/gitinsky/k9b-frontend:ecacd81`) require GitHub secrets to publish. Documentation corrected: images are build-only until secrets configured. Local docker-compose works for development. Helm chart installable from local checkout. |
-| **Public tag/version check** | Not verified | Confirm whether a public versioned tag (e.g., `v0.1.0-beta`) exists on GitHub |
+| **Image tag public accessibility** | **Resolved** | Images are not published; rolling beta consumes from local checkout. DockerHub publishing is optional future release mechanics. See docs/beta-release-notes.md. |
+| **Public tag/version check** | Not required | Rolling beta does not require a fixed GitHub version tag. Consumption path is local checkout + local Helm chart. |
 | **Chart/package publishing** | Documented | Helm chart is installable from local checkout. Publication to DockerHub OCI registry requires `DOCKERHUB_ORG` variable and `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets. |
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
-| **GitHub release creation** | Not verified | Confirm whether a GitHub release is expected for beta or if distribution is via chart + image only |
+| **GitHub release creation** | Not required | Rolling beta does not require a GitHub release. Distribution is via repository + local Helm chart. |
 | **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
 | **Coverage gate in CI** | Deferred | `scripts/coverage_all.sh` exists but is not part of the canonical gate |
 

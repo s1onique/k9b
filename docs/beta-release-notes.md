@@ -1,4 +1,4 @@
-# Beta Release Notes — k9b v0.1.0-beta (2026-05-13)
+# Beta Release Notes — k9b Rolling Beta (2026-05-13)
 
 ## Overview
 
@@ -69,7 +69,7 @@ This document summarizes what is included in the beta, what is intentionally out
 ## Changelog Entry (Beta)
 
 ```markdown
-## [0.1.0-beta] — 2026-05-13
+## [Initial Beta Capability Set] — 2026-05-13
 
 ### Added
 - **Incident report claim taxonomy**: Five distinguishable claim types (`observed`, `derived`, `hypothesis`, `recommendation`, `unknown`) with explicit source provenance and confidence levels.
@@ -187,7 +187,7 @@ The scheduler writes structured JSON events to stdout/stderr and maintains `runs
 
 ### Docker Image Access
 
-**Important:** The Helm chart defaults reference `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`. These images must be available in your registry before Helm deployment.
+**Important:** Public Docker images are not currently published. The Helm chart defaults reference `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`, but these images require GitHub secrets to publish. For the supported beta consumption path, see "Local Helm Chart Installation" below.
 
 **For local development:**
 ```bash

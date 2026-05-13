@@ -1,6 +1,14 @@
-# DockerHub Publishing
+# DockerHub Publishing (Optional Future Release Mechanics)
 
-This repository uses GitHub Actions to build and push Docker images to DockerHub.
+**Status:** This document describes DockerHub publishing workflow. It is **not required for the current rolling beta consumption path**.
+
+**Current beta consumption model:**
+- Clone/pull the repository for the latest version
+- Install the Helm chart from local checkout: `helm install infra-k9b ./charts/k9b`
+- Build images locally or provide explicit image overrides
+- Public Docker image availability is optional future release mechanics
+
+This repository uses GitHub Actions to build and push Docker images to DockerHub when secrets are configured.
 
 ## Verification Gate
 
@@ -35,14 +43,16 @@ To create a DockerHub access token:
 
 **Namespace:** `gitinsky`
 
-**Note:** Images are not currently published. The DockerHub workflow requires:
+**Note:** Images are not currently published. DockerHub publishing is optional future release mechanics. The workflow requires:
 - `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets to be configured in GitHub
 - Image tags are derived from Git commit SHA (e.g., `4344ab1`)
 
-Before publishing images:
+Before publishing images (optional):
 1. Configure GitHub secrets (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`)
 2. Trigger the workflow via `workflow_dispatch` or push to `main`
 3. Verify images are accessible: `docker pull docker.io/gitinsky/k9b-backend:<tag>`
+
+**For the supported beta path, use local Helm chart installation instead.**
 
 ## Trigger Events
 

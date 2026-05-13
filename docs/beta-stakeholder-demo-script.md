@@ -1,4 +1,4 @@
-# Beta Stakeholder Demo Script — k9b v0.1.0-beta
+# Beta Stakeholder Demo Script — k9b Rolling Beta
 
 **Purpose:** Provide a structured 10–15 minute demo script for presenting k9b beta value to stakeholders, platform leads, SREs, and early-adopter operators.
 
