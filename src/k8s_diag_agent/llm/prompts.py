@@ -20,9 +20,11 @@ from .prompt_boundaries import (
 logger = logging.getLogger(__name__)
 
 
-def _metadata_summary(snapshot: ClusterSnapshot) -> dict[str, object]:
+def _metadata_summary(snapshot: ClusterSnapshot, anonymizer: MetadataAnonymizer | None = None) -> dict[str, object]:
     meta = snapshot.metadata
-    return {
+    # Build base metadata dict including labels
+    # Phase 1b: labels may contain sensitive values (name-like data)
+    result: dict[str, object] = {
         "cluster_id": meta.cluster_id,
         "control_plane_version": meta.control_plane_version,
         "node_count": meta.node_count,
@@ -30,14 +32,30 @@ def _metadata_summary(snapshot: ClusterSnapshot) -> dict[str, object]:
         "region": meta.region,
         "labels": meta.labels,
     }
+    # Phase 1b: annotations may contain sensitive values (name-like data)
+    # Use getattr to handle metadata types that don't have annotations field
+    annotations = getattr(meta, "annotations", None)
+    if annotations is not None:
+        result["annotations"] = annotations
+        # Phase 1b: Anonymize label/annotation values that contain name-like data
+        if anonymizer is not None:
+            result = anonymizer.anonymize_labels_annotations(result)
+    elif anonymizer is not None:
+        # Even without annotations, run anonymization for labels
+        result = anonymizer.anonymize_labels_annotations(result)
+    return result
 
 
-def _summarize_helm_diffs(helm_diffs: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _summarize_helm_diffs(helm_diffs: dict[str, dict[str, Any]], anonymizer: MetadataAnonymizer | None = None) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for release_key in sorted(helm_diffs):
         diff = helm_diffs[release_key]
         primary = diff.get("primary")
         secondary = diff.get("secondary")
+        # Anonymize release name before including in prompt (Phase 1b: Helm release name anonymization)
+        if anonymizer is not None:
+            anon_release_data = anonymizer.anonymize({"release": release_key})
+            release_key = anon_release_data.get("release", release_key)
         entry: dict[str, Any] = {"release": release_key}
         # Include namespace if present (for anonymization)
         if primary:
@@ -138,8 +156,9 @@ def build_assessment_prompt(
     anonymizer = MetadataAnonymizer()
 
     # Anonymize metadata summaries before building prompt
-    primary_meta = anonymizer.anonymize(_metadata_summary(primary))
-    secondary_meta = anonymizer.anonymize(_metadata_summary(secondary))
+    # Phase 1b: Pass anonymizer to _metadata_summary for label/annotation value anonymization
+    primary_meta = anonymizer.anonymize(_metadata_summary(primary, anonymizer=anonymizer))
+    secondary_meta = anonymizer.anonymize(_metadata_summary(secondary, anonymizer=anonymizer))
 
     # Anonymize helm diffs and crd diffs
     metadata_deltas = comparison.differences.get("metadata", {})
@@ -150,8 +169,11 @@ def build_assessment_prompt(
     anonymized_metadata_deltas = anonymizer.anonymize(metadata_deltas) if metadata_deltas else {}
 
     # Anonymize helm_summary and crd_summary by anonymizing the input diffs
-    helm_summary = _summarize_helm_diffs(helm_diffs)
+    # Pass anonymizer to _summarize_helm_diffs for release name anonymization (Phase 1b)
+    helm_summary = _summarize_helm_diffs(helm_diffs, anonymizer=anonymizer)
     crd_summary = _summarize_crd_diffs(crd_diffs)
+    # Phase 1b: Apply full anonymization to helm summary including namespace fields
+    # This ensures namespace values like "customer-production" are anonymized
     anonymized_helm_summary = anonymizer.anonymize(helm_summary)
     anonymized_crd_summary = anonymizer.anonymize(crd_summary)
 

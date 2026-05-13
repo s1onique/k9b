@@ -84,6 +84,7 @@ class MockClusterSnapshotMetadata:
     pod_count: int | None = None
     region: str | None = None
     labels: dict[str, str] | None = None
+    annotations: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
