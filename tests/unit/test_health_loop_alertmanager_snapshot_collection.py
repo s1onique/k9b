@@ -694,7 +694,18 @@ class TestAlertmanagerSnapshotCollectionPortForward:
         def write_with_error(*args: object, **kwargs: object) -> None:
             raise OSError("Disk full")
 
-        with patch("urllib.request.urlopen"):
+        # Mock urlopen to return valid Alertmanager JSON
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "status": "success",
+            "data": {
+                "alerts": []
+            }
+        }).encode("utf-8")
+        mock_urlopen = MagicMock()
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        with patch("urllib.request.urlopen", mock_urlopen):
             with patch("subprocess.Popen", return_value=mock_process):
                 with patch.object(runner, "_choose_free_local_port", return_value=18457):
                     with patch.object(runner, "_wait_for_port_ready", return_value=True):
