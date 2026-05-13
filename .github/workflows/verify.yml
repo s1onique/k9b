@@ -138,7 +138,7 @@ jobs:
         run: |
           echo "=== Backend Coverage Summary ==="
           if [ -f coverage/backend/coverage.json ]; then
-              .venv/bin/python -c 'import json; f=open("coverage/backend/coverage.json"); d=json.load(f); t=d["totals"]; print(f"Line coverage: {t[\"percent_covered\"]:.2f}%"); print(f"Lines: {t[\"covered_lines\"]}/{t[\"total_lines\"]}"); print(f"Branches: {t[\"covered_branches\"]}/{t[\"total_branches\"]}")'
+            .venv/bin/python -c 'import json; d=json.load(open("coverage/backend/coverage.json")); t=d["totals"]; print("Line coverage: {:.2f}%".format(t["percent_covered"])); print("Lines: {}/{}".format(t["covered_lines"], t["num_statements"])); print("Branches: {}/{}".format(t["covered_branches"], t["num_branches"]))'
           else
-              echo "Coverage report not available"
+            echo "Coverage report not available"
           fi
