@@ -392,7 +392,8 @@ _run_and_record() {
 _run_python_lane() {
     _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
     _run_and_record "python" "unit-tests" "Running unit tests" env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests
-    _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src tests
+    _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src/k8s_diag_agent
+    _run_and_record "python" "mypy-tests" "Running mypy on tests" "$PYTHON" -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
 }
 
 # Run Frontend lane in background
