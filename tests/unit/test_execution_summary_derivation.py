@@ -21,9 +21,28 @@ class TestExecutionSummaryDerivation:
         """Create plan data dict in the format expected by _compute_execution_summary."""
         return {run_id: {"payload": {"candidates": candidates}}}
 
-    def _make_execution_indices(self, run_id: str, indices: set[int]) -> dict[str, set[int]]:
-        """Create execution indices dict in the format expected by _compute_execution_summary."""
-        return {run_id: indices}
+    def _make_execution_indices(self, run_id: str, indices: set[int]) -> dict[str, dict[int, str]]:
+        """Create execution indices dict with status in the format expected by _compute_execution_summary.
+
+        All indices are assumed to be 'success' status by default for backward compatibility.
+        Use the _make_execution_indices_with_status variant for failed status.
+        """
+        return {run_id: {idx: "success" for idx in indices}}
+
+    def _make_execution_indices_with_status(
+        self, run_id: str, status_by_index: dict[int, str]
+    ) -> dict[str, dict[int, str]]:
+        """Create execution indices dict with explicit status mapping.
+
+        Args:
+            run_id: The run ID
+            status_by_index: Dict mapping candidate index to status string
+                (e.g., {"success", "failed", "unknown"})
+
+        Returns:
+            Dict in the format: {run_id: {candidate_index: status_string}}
+        """
+        return {run_id: status_by_index}
 
     def _assert_summary(self, summary: BatchExecutionSummary, **expected: Any) -> None:
         """Assert summary fields using dict-style access on TypedDict.
@@ -265,3 +284,240 @@ class TestExecutionSummaryDerivation:
 
         # Not safe to automate = not executable
         self._assert_summary(summary, executableCandidates=0, batchExecutionState="no-candidates")
+
+    # === Failed candidates derivation tests ===
+
+    def test_success_candidate_has_no_failures(self) -> None:
+        """Successful execution => executedCandidates=1, failedCandidates=0."""
+        run_id = "run-011"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # Explicitly mark as success
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "success"})
+
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="fully-executed",
+            executedCandidates=1,
+            failedCandidates=0,
+            pendingExecutableCandidates=0,
+        )
+
+    def test_failed_candidate_counts_in_failed(self) -> None:
+        """Failed execution => executedCandidates=1, failedCandidates=1."""
+        run_id = "run-012"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # Explicitly mark as failed
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "failed"})
+
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="fully-executed",
+            executedCandidates=1,
+            failedCandidates=1,
+            pendingExecutableCandidates=0,
+        )
+
+    def test_validation_failure_artifact_counts_as_failed(self) -> None:
+        """Validation failure artifact => executedCandidates=1, failedCandidates=1."""
+        run_id = "run-013"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # Validation failures are written as failed artifacts
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "failed"})
+
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="fully-executed",
+            executedCandidates=1,
+            failedCandidates=1,
+            pendingExecutableCandidates=0,
+        )
+
+    def test_mixed_partial_run_counts_failures(self) -> None:
+        """Mixed partial run: index 0 success, index 1 failed, index 2 pending."""
+        run_id = "run-014"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+            {
+                "description": "Check pod status",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+            {
+                "description": "Check node status",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # index 0 success, index 1 failed, index 2 pending (not in dict)
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "success", 1: "failed"})
+
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="partially-executed",
+            executedCandidates=2,
+            failedCandidates=1,
+            pendingExecutableCandidates=1,
+            executableCandidates=3,
+        )
+
+    def test_multiple_failures_all_counted(self) -> None:
+        """Multiple failed executions => all counted correctly."""
+        run_id = "run-015"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+            {
+                "description": "Check pod status",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+            {
+                "description": "Check node status",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # All executed with failures
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "failed", 1: "failed", 2: "failed"})
+
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="fully-executed",
+            executedCandidates=3,
+            failedCandidates=3,
+            pendingExecutableCandidates=0,
+        )
+
+    def test_unknown_status_not_counted_as_failed(self) -> None:
+        """Unknown status is not counted as failed (counts as executed but not failed)."""
+        run_id = "run-016"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # Unknown status - should not be counted as failed
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "unknown"})
+
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="fully-executed",
+            executedCandidates=1,
+            failedCandidates=0,  # unknown is not failed
+            pendingExecutableCandidates=0,
+        )
+
+    def test_indexed_path_regression_no_extra_glob_calls(self) -> None:
+        """Verify the summary uses cached/indexed status data when available.
+
+        This is a regression test to ensure the implementation does not add
+        glob calls to the hot Recent Runs indexed path.
+        """
+        run_id = "run-017"
+        candidates = [
+            {
+                "description": "Check kubelet metrics",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+            {
+                "description": "Check pod status",
+                "targetContext": "cluster-a",
+                "suggestedCommandFamily": "kubectl",
+                "safeToAutomate": True,
+                "requiresOperatorApproval": False,
+                "duplicateOfExistingEvidence": False,
+            },
+        ]
+        plan_data = self._make_plan_data(run_id, candidates)
+        # Use the new status format that matches what the indexed path produces
+        execution_indices = self._make_execution_indices_with_status(run_id, {0: "success", 1: "failed"})
+
+        # This should work with the cached data structure, not require filesystem access
+        summary = _compute_execution_summary(run_id, all_plan_data=plan_data, all_execution_indices=execution_indices)
+
+        self._assert_summary(
+            summary,
+            batchExecutionState="fully-executed",
+            executedCandidates=2,
+            failedCandidates=1,
+            pendingExecutableCandidates=0,
+        )

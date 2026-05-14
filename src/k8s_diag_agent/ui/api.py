@@ -471,12 +471,16 @@ def _compute_batch_eligibility(
 def _compute_batch_eligibility_from_cache(
     run_id: str,
     all_plan_data: dict[str, dict[str, object]],
-    all_execution_indices: dict[str, set[int]],
+    all_execution_indices: dict[str, dict[int, str]],
 ) -> tuple[bool, int]:
     """Compute batch eligibility using pre-scanned data (no filesystem access).
 
     This is the optimized version that uses data pre-loaded in Stage 3b
     to eliminate per-row filesystem operations.
+
+    The execution_indices now carries status info: dict[candidate_index] = status_string
+    For batch eligibility, we only need to know if a candidate is executed (index in dict),
+    not the status. So we check idx in execution_indices.
 
     Returns:
         Tuple of (batchExecutable: bool, batchEligibleCount: int)
@@ -507,12 +511,13 @@ def _compute_batch_eligibility_from_cache(
         return False, 0
 
     # Get pre-loaded execution indices (use validated_run_id for dict lookup)
-    execution_indices = all_execution_indices.get(validated_run_id, set())
+    # execution_indices is dict[int, str] where str is status, we check if idx is in dict
+    execution_indices = all_execution_indices.get(validated_run_id, {})
 
     # Count eligible candidates using the same logic as run_batch_next_checks.py
     eligible_count = 0
     for idx, candidate in enumerate(candidates_data):
-        # Already executed?
+        # Already executed? (check if idx exists in execution_indices dict)
         if idx in execution_indices:
             continue
 
@@ -554,7 +559,7 @@ def _compute_batch_eligibility_from_cache(
 def _compute_execution_summary(
     run_id: str,
     all_plan_data: dict[str, dict[str, object]],
-    all_execution_indices: dict[str, set[int]],
+    all_execution_indices: dict[str, dict[int, str]],
 ) -> BatchExecutionSummary:
     """Compute execution summary for a run's batch execution state.
 
@@ -566,7 +571,7 @@ def _compute_execution_summary(
     - totalCandidates: total number of next-check plan candidates
     - executableCandidates: candidates eligible for batch execution (safe, approved, etc.)
     - executedCandidates: candidates with execution artifacts (success, failed, or validation-failure)
-    - failedCandidates: executed candidates with failure status
+    - failedCandidates: executed candidates with failure status (status == "failed")
     - pendingExecutableCandidates: executable candidates without execution artifacts
     - batchExecutionState: canonical state for UI eligibility derivation
       - "no-candidates": no candidates in plan
@@ -577,7 +582,8 @@ def _compute_execution_summary(
     Args:
         run_id: The run ID to compute summary for
         all_plan_data: Pre-scanned plan data dict (run_id -> plan dict)
-        all_execution_indices: Pre-scanned execution indices dict (run_id -> set of candidate indices)
+        all_execution_indices: Pre-scanned execution indices dict with status
+            (run_id -> {candidate_index: status_string})
 
     Returns:
         BatchExecutionSummary with all execution state fields
@@ -630,8 +636,9 @@ def _compute_execution_summary(
             batchExecutionState="no-candidates",
         )
 
-    # Get pre-loaded execution indices
-    execution_indices = all_execution_indices.get(validated_run_id, set())
+    # Get pre-loaded execution indices with status
+    # execution_indices is dict[candidate_index] = status_string
+    execution_indices = all_execution_indices.get(validated_run_id, {})
 
     # Count executable candidates and derive execution state
     executable_count = 0
@@ -679,12 +686,15 @@ def _compute_execution_summary(
         if is_executable:
             executable_count += 1
 
-        # Check execution state for this candidate
+        # Check execution state for this candidate using status-enhanced index
+        # execution_indices is dict[int, str] where str is the status from artifact
         if idx in execution_indices:
             executed_count += 1
-            # Note: failed_count would require parsing execution artifacts for status
-            # For now, we track executed vs pending only. Failed candidates are
-            # counted as executed (they have artifacts, no remaining work).
+            # Derive failed count from artifact status
+            # Failed candidates have status == "failed" (from ExternalAnalysisStatus.FAILED)
+            status = execution_indices[idx]
+            if status == "failed":
+                failed_count += 1
 
     # Derive batch execution state
     pending_executable = executable_count - executed_count
@@ -1637,8 +1647,10 @@ def build_runs_list(
     timings["batch_exec_files_found"] = len(exec_files)
 
     # Sub-stage: execution artifact parse and matching (filtered to window run_ids)
+    # Enhance index to capture execution status for failedCandidates derivation
+    # Structure: execution_indices[run_id][candidate_index] = status string
     batch_exec_parse_start = time_module.perf_counter()
-    execution_indices: dict[str, set[int]] = {run_id: set() for run_id in window_run_ids}
+    execution_indices: dict[str, dict[int, str]] = {run_id: {} for run_id in window_run_ids}
     for exec_path in exec_files:
         filename = exec_path.stem
         # Check if this file belongs to a run in our window
@@ -1650,7 +1662,13 @@ def build_runs_list(
                         exec_payload: dict[str, object] = raw.get("payload", {})  # type: ignore[assignment]
                         candidate_index = exec_payload.get("candidateIndex")
                         if isinstance(candidate_index, int):
-                            execution_indices[run_id].add(candidate_index)
+                            # Extract status from artifact for failedCandidates derivation
+                            # Status is at root level in the artifact JSON
+                            status = raw.get("status", "unknown")
+                            if isinstance(status, str):
+                                execution_indices[run_id][candidate_index] = status
+                            else:
+                                execution_indices[run_id][candidate_index] = "unknown"
                 except (OSError, json.JSONDecodeError, ValueError):
                     continue
             # If run_id is not in window_run_ids, skip without parsing

@@ -212,7 +212,8 @@ class TestComputeBatchEligibilityFromCache:
                 }
             }
         }
-        execution_indices = {"run-test": set()}  # type: ignore[var-annotated]
+        # New format: dict[int, str] where str is status
+        execution_indices: dict[str, dict[int, str]] = {"run-test": {}}
 
         executable, count = _compute_batch_eligibility_from_cache(
             "run-test", cast(dict[str, dict[str, object]], plan_data), execution_indices
@@ -228,7 +229,7 @@ class TestComputeBatchEligibilityFromCache:
                 "payload": {"candidates": []}
             }
         }
-        execution_indices: dict[str, set[int]] = {}
+        execution_indices: dict[str, dict[int, str]] = {}
 
         # Traversal should return safe fallback, not raise
         executable, count = _compute_batch_eligibility_from_cache(
@@ -245,7 +246,7 @@ class TestComputeBatchEligibilityFromCache:
                 "payload": {"candidates": []}
             }
         }
-        execution_indices: dict[str, set[int]] = {}
+        execution_indices: dict[str, dict[int, str]] = {}
 
         # Glob metacharacter should be rejected
         executable, count = _compute_batch_eligibility_from_cache(
@@ -279,8 +280,8 @@ class TestComputeBatchEligibilityFromCache:
                 }
             }
         }
-        # Pre-populate execution indices for run-test
-        execution_indices = {"run-test": {0}}  # Index 0 already executed
+        # Pre-populate execution indices for run-test with status
+        execution_indices: dict[str, dict[int, str]] = {"run-test": {0: "success"}}
 
         # run-test should find 1 eligible (c1 executed, c2 not)
         executable, count = _compute_batch_eligibility_from_cache(
@@ -299,7 +300,7 @@ class TestComputeBatchEligibilityFromCache:
     def test_empty_run_id_returns_safe_fallback(self) -> None:
         """Empty run_id should return safe fallback."""
         plan_data: dict[str, dict[str, object]] = {}
-        execution_indices: dict[str, set[int]] = {}
+        execution_indices: dict[str, dict[int, str]] = {}
 
         executable, count = _compute_batch_eligibility_from_cache(
             "", plan_data, execution_indices
@@ -310,7 +311,7 @@ class TestComputeBatchEligibilityFromCache:
     def test_missing_plan_data_returns_zero(self) -> None:
         """Missing plan data should return 0."""
         plan_data: dict[str, dict[str, object]] = {}
-        execution_indices: dict[str, set[int]] = {}
+        execution_indices: dict[str, dict[int, str]] = {}
 
         executable, count = _compute_batch_eligibility_from_cache(
             "run-test", cast(dict[str, dict[str, object]], plan_data), execution_indices
@@ -337,8 +338,8 @@ class TestComputeBatchEligibilityFromCache:
                 }
             }
         }
-        # Execution indices for run-123
-        execution_indices = {"run-123": set()}  # type: ignore[var-annotated]
+        # Execution indices for run-123 with status
+        execution_indices: dict[str, dict[int, str]] = {"run-123": {}}
 
         # Valid run_id should find both plan and indices
         executable, count = _compute_batch_eligibility_from_cache(
