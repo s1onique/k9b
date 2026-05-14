@@ -22,6 +22,15 @@ RUN npm run build
 # =============================================================================
 FROM nginxinc/nginx-unprivileged:stable-alpine AS runtime
 
+# Create nginx temp directories for runtime (non-root compatible)
+# These are required by nginx.conf pid/client_body/proxy/fastcgi/uwsgi/scgi_temp paths
+RUN mkdir -p /tmp/nginx/client_temp \
+            /tmp/nginx/proxy_temp \
+            /tmp/nginx/fastcgi_temp \
+            /tmp/nginx/uwsgi_temp \
+            /tmp/nginx/scgi_temp \
+    && chown -R nginx:nginx /tmp/nginx
+
 # Copy custom nginx config with writable paths in /tmp
 COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
