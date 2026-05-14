@@ -222,9 +222,54 @@ export const RecentRunsPanel = ({
                     </td>
                     <td>
                       {(() => {
+                        // NEW: Use execution summary for button eligibility when available
+                        // This is the authoritative signal that derives button state from
+                        // actual remaining work, not just candidate presence.
+                        if (runEntry.executionSummary) {
+                          const { batchExecutionState, pendingExecutableCandidates } = runEntry.executionSummary;
+                          
+                          // "not-started" with pending work: show Execute
+                          if (batchExecutionState === "not-started" && pendingExecutableCandidates > 0) {
+                            return (
+                              <button
+                                type="button"
+                                className="row-action row-action--primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onBatchExecution(runEntry.runId);
+                                }}
+                                disabled={executingBatchRunId === runEntry.runId}
+                              >
+                                {executingBatchRunId === runEntry.runId ? "Running…" : "Execute"}
+                              </button>
+                            );
+                          }
+                          
+                          // "partially-executed" with pending work: show Resume
+                          if (batchExecutionState === "partially-executed" && pendingExecutableCandidates > 0) {
+                            return (
+                              <button
+                                type="button"
+                                className="row-action row-action--primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onBatchExecution(runEntry.runId);
+                                }}
+                                disabled={executingBatchRunId === runEntry.runId}
+                              >
+                                {executingBatchRunId === runEntry.runId ? "Running…" : "Resume"}
+                              </button>
+                            );
+                          }
+                          
+                          // "fully-executed" or no pending work: hide Execute
+                          // Show dash for runs with no executable work remaining
+                          return <span className="run-action-empty" aria-label="No action available">—</span>;
+                        }
+                        
+                        // BACKWARD COMPATIBILITY: Fall back to batchExecutable for older payloads
+                        // This ensures old responses without executionSummary still work.
                         const displayStatus = getRunsDisplayStatus(runEntry.reviewStatus, executionCountsComplete);
-                        // Show Execute button if status is "no-executions" with complete counts,
-                        // OR if batchExecutable is true (eligible candidates from batch scan)
                         if (displayStatus === "no-executions" || runEntry.batchExecutable) {
                           return (
                             <button

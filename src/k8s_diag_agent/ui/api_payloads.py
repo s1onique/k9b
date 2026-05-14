@@ -96,6 +96,7 @@ __all__ = [
     # Cross-cluster comparison findings
     "CrossClusterFindingPayload",
     "RunPayload",
+    "BatchExecutionSummary",
     "RunsListEntry",
     "RunsListPayload",
     "RunsListTimings",
@@ -1213,6 +1214,33 @@ class RunPayload(TypedDict):
     operatorWorklist: OperatorWorklistPayload | None
 
 
+class BatchExecutionSummary(TypedDict):
+    """Execution summary for a run's batch execution state.
+
+    Provides sufficient information for Recent Runs Execute button eligibility
+    without requiring full execution artifact scanning.
+
+    Contract:
+    - totalCandidates: total number of next-check plan candidates
+    - executableCandidates: candidates eligible for batch execution (safe, approved, etc.)
+    - executedCandidates: candidates with execution artifacts (success, failed, or validation-failure)
+    - failedCandidates: executed candidates with failure status
+    - pendingExecutableCandidates: executable candidates without execution artifacts
+    - batchExecutionState: canonical state for UI eligibility derivation
+      - "no-candidates": no candidates in plan
+      - "not-started": has pending executable candidates, none executed yet
+      - "partially-executed": some candidates executed, some pending
+      - "fully-executed": all executable candidates have execution artifacts
+    """
+
+    totalCandidates: int
+    executableCandidates: int
+    executedCandidates: int
+    failedCandidates: int
+    pendingExecutableCandidates: int
+    batchExecutionState: Literal["no-candidates", "not-started", "partially-executed", "fully-executed"]
+
+
 class RunsListEntry(TypedDict):
     """Payload for a single entry in the runs list."""
 
@@ -1231,6 +1259,9 @@ class RunsListEntry(TypedDict):
     batchEligibility: Literal["computed", "unknown"]
     batchExecutable: bool
     batchEligibleCount: int
+    # Execution summary for button eligibility derivation
+    # Present when batchEligibility is "computed", None otherwise
+    executionSummary: BatchExecutionSummary | None
 
 
 class RunsListPayload(TypedDict):

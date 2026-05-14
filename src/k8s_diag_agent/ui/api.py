@@ -113,6 +113,7 @@ from .api_payloads import (  # noqa: F401 - re-exported for backward compatibili
     AlertmanagerSourcesPayload,
     ArtifactLink,
     AssessmentSummaryPayload,
+    BatchExecutionSummary,
     ClusterAlertSummaryPayload,
     ClusterDetailPayload,
     ClusterSummaryPayload,
@@ -550,6 +551,163 @@ def _compute_batch_eligibility_from_cache(
     return eligible_count > 0, eligible_count
 
 
+def _compute_execution_summary(
+    run_id: str,
+    all_plan_data: dict[str, dict[str, object]],
+    all_execution_indices: dict[str, set[int]],
+) -> BatchExecutionSummary:
+    """Compute execution summary for a run's batch execution state.
+
+    Derives the execution summary from next-check plan candidates and execution
+    artifacts. This provides sufficient information for Recent Runs Execute
+    button eligibility without requiring full execution artifact scanning.
+
+    Contract:
+    - totalCandidates: total number of next-check plan candidates
+    - executableCandidates: candidates eligible for batch execution (safe, approved, etc.)
+    - executedCandidates: candidates with execution artifacts (success, failed, or validation-failure)
+    - failedCandidates: executed candidates with failure status
+    - pendingExecutableCandidates: executable candidates without execution artifacts
+    - batchExecutionState: canonical state for UI eligibility derivation
+      - "no-candidates": no candidates in plan
+      - "not-started": has pending executable candidates, none executed yet
+      - "partially-executed": some candidates executed, some pending
+      - "fully-executed": all executable candidates have execution artifacts
+
+    Args:
+        run_id: The run ID to compute summary for
+        all_plan_data: Pre-scanned plan data dict (run_id -> plan dict)
+        all_execution_indices: Pre-scanned execution indices dict (run_id -> set of candidate indices)
+
+    Returns:
+        BatchExecutionSummary with all execution state fields
+    """
+    from typing import cast
+
+    # SECURITY: Validate run_id for consistency
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        # Invalid run_id - return safe fallback
+        return BatchExecutionSummary(
+            totalCandidates=0,
+            executableCandidates=0,
+            executedCandidates=0,
+            failedCandidates=0,
+            pendingExecutableCandidates=0,
+            batchExecutionState="no-candidates",
+        )
+
+    plan_data = all_plan_data.get(validated_run_id)
+    if not plan_data:
+        return BatchExecutionSummary(
+            totalCandidates=0,
+            executableCandidates=0,
+            executedCandidates=0,
+            failedCandidates=0,
+            pendingExecutableCandidates=0,
+            batchExecutionState="no-candidates",
+        )
+
+    # Get candidates from plan
+    candidates_data: list[dict[str, object]] = []
+    if "candidates" in plan_data and isinstance(plan_data["candidates"], list):
+        candidates_data = cast(list[dict[str, object]], plan_data["candidates"])
+    elif "payload" in plan_data and isinstance(plan_data["payload"], dict):
+        payload = cast(dict[str, object], plan_data["payload"])
+        if "candidates" in payload and isinstance(payload["candidates"], list):
+            candidates_data = cast(list[dict[str, object]], payload["candidates"])
+
+    total_candidates = len(candidates_data)
+
+    if total_candidates == 0:
+        return BatchExecutionSummary(
+            totalCandidates=0,
+            executableCandidates=0,
+            executedCandidates=0,
+            failedCandidates=0,
+            pendingExecutableCandidates=0,
+            batchExecutionState="no-candidates",
+        )
+
+    # Get pre-loaded execution indices
+    execution_indices = all_execution_indices.get(validated_run_id, set())
+
+    # Count executable candidates and derive execution state
+    executable_count = 0
+    executed_count = 0
+    failed_count = 0
+
+    for idx, candidate in enumerate(candidates_data):
+        # Check if this candidate is executable (same logic as batch eligibility)
+        is_executable = True
+
+        # Must be safe to automate
+        if not candidate.get("safeToAutomate"):
+            is_executable = False
+
+        # Must have a valid command family
+        if is_executable:
+            family = candidate.get("suggestedCommandFamily")
+            if not family or not isinstance(family, str):
+                is_executable = False
+
+        # Must have a description
+        if is_executable:
+            description = candidate.get("description")
+            if not description or not isinstance(description, str):
+                is_executable = False
+
+        # Must have target context info
+        if is_executable:
+            target_context = candidate.get("targetContext")
+            if not target_context or not isinstance(target_context, str):
+                is_executable = False
+
+        # Check approval requirement
+        if is_executable:
+            requires_approval = candidate.get("requiresOperatorApproval")
+            if requires_approval:
+                approval_status = str(candidate.get("approvalStatus") or "").lower()
+                if approval_status != "approved":
+                    is_executable = False
+
+        # Check for duplicates
+        if is_executable and candidate.get("duplicateOfExistingEvidence"):
+            is_executable = False
+
+        if is_executable:
+            executable_count += 1
+
+        # Check execution state for this candidate
+        if idx in execution_indices:
+            executed_count += 1
+            # Note: failed_count would require parsing execution artifacts for status
+            # For now, we track executed vs pending only. Failed candidates are
+            # counted as executed (they have artifacts, no remaining work).
+
+    # Derive batch execution state
+    pending_executable = executable_count - executed_count
+
+    if executable_count == 0:
+        batch_execution_state: Literal["no-candidates", "not-started", "partially-executed", "fully-executed"] = "no-candidates"
+    elif executed_count == 0:
+        batch_execution_state = "not-started"
+    elif pending_executable == 0:
+        batch_execution_state = "fully-executed"
+    else:
+        batch_execution_state = "partially-executed"
+
+    return BatchExecutionSummary(
+        totalCandidates=total_candidates,
+        executableCandidates=executable_count,
+        executedCandidates=executed_count,
+        failedCandidates=failed_count,
+        pendingExecutableCandidates=pending_executable,
+        batchExecutionState=batch_execution_state,
+    )
+
+
 def _extract_review_metadata_streaming(review_path: Path) -> dict[str, object] | None:
     """Extract only the required fields from review artifact using ijson streaming.
 
@@ -650,6 +808,7 @@ def _build_runs_list_from_index(
                 batchEligibility="unknown",  # Deferred - requires expensive scan
                 batchExecutable=False,
                 batchEligibleCount=0,
+                executionSummary=None,  # Deferred - requires plan/execution scan
             )
         )
 
@@ -742,6 +901,7 @@ def _build_runs_list_with_batch_eligibility_index(
                 batchEligibility=batch_eligibility,
                 batchExecutable=batch_executable,
                 batchEligibleCount=batch_eligible_count,
+                executionSummary=None,  # Deferred - requires plan/execution scan
             )
         )
 
@@ -909,6 +1069,7 @@ def _build_runs_list_review_streaming(
                 batchEligibility="unknown",
                 batchExecutable=False,
                 batchEligibleCount=0,
+                executionSummary=None,  # Deferred - requires plan/execution scan
             )
         )
 
@@ -1573,6 +1734,14 @@ def build_runs_list(
         row_start = time_module.perf_counter()
         label_normalization_row_ms_total += (time_module.perf_counter() - row_start) * 1000
 
+        # Sub-stage: execution summary computation (for button eligibility)
+        # Only compute when batch eligibility is being computed
+        execution_summary: BatchExecutionSummary | None = None
+        if run_id in batch_eligibility_run_ids:
+            execution_summary = _compute_execution_summary(run_id, plan_data, execution_indices)
+        else:
+            execution_summary = None
+
         runs_list.append(
             RunsListEntry(
                 runId=cast(str, entry["run_id"]),
@@ -1587,6 +1756,7 @@ def build_runs_list(
                 batchEligibility=cast(Literal["computed", "unknown"], batch_eligibility),
                 batchExecutable=batch_executable,
                 batchEligibleCount=batch_eligible_count,
+                executionSummary=execution_summary,
             )
         )
 

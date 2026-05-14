@@ -791,6 +791,20 @@ export type AlertmanagerSources = {
   discovery_timestamp: string | null;
   cluster_context: string | null;
 };
+/**
+ * Execution summary for a run's batch execution state.
+ * Provides sufficient information for Recent Runs Execute button eligibility
+ * without requiring full execution artifact scanning.
+ */
+export type BatchExecutionSummary = {
+  totalCandidates: number;
+  executableCandidates: number;
+  executedCandidates: number;
+  failedCandidates: number;
+  pendingExecutableCandidates: number;
+  batchExecutionState: "no-candidates" | "not-started" | "partially-executed" | "fully-executed";
+};
+
 export type RunsListEntry = {
   runId: string;
   runLabel: string;
@@ -804,6 +818,9 @@ export type RunsListEntry = {
   // Batch execution support for Recent runs
   batchExecutable: boolean;
   batchEligibleCount: number;
+  // Execution summary for button eligibility derivation
+  // Present when batchEligibility is "computed", null otherwise
+  executionSummary: BatchExecutionSummary | null;
 };
 
 export type RunsListPayload = {
