@@ -25,6 +25,14 @@ from ..datetime_utils import parse_iso_to_utc
 from ..health.freshness import freshness_status
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 
+# Re-export all payload TypedDicts for backwards compatibility.
+# Consumers should migrate to importing from ui.api_payloads directly,
+# but existing imports from ui.api will continue to work.
+from ._batch_execution_state import (
+    _is_candidate_batch_executable,
+    _is_candidate_executed,
+)
+
 # Import Alertmanager serializers from extracted module.
 # Re-export for backward compatibility: callers importing from api.py continue to work.
 from .api_alertmanager import (  # noqa: F401 - re-exported for backward compatibility
@@ -101,10 +109,6 @@ from .api_next_check_queue import (  # noqa: F401 - re-exported for backward com
     _serialize_queue_cluster_state,
     _serialize_queue_explanation,
 )
-
-# Re-export all payload TypedDicts for backwards compatibility.
-# Consumers should migrate to importing from ui.api_payloads directly,
-# but existing imports from ui.api will continue to work.
 from .api_payloads import (  # noqa: F401 - re-exported for backward compatibility
     AlertmanagerCompactPayload,
     AlertmanagerEvidenceReferencePayload,
@@ -478,16 +482,15 @@ def _compute_batch_eligibility_from_cache(
     This is the optimized version that uses data pre-loaded in Stage 3b
     to eliminate per-row filesystem operations.
 
-    The execution_indices now carries status info: dict[candidate_index] = status_string
-    For batch eligibility, we only need to know if a candidate is executed (index in dict),
-    not the status. So we check idx in execution_indices.
+    Uses the shared _is_candidate_batch_executable() and _is_candidate_executed()
+    helpers to ensure consistency with _compute_execution_summary().
 
     Returns:
         Tuple of (batchExecutable: bool, batchEligibleCount: int)
     """
     from typing import cast
 
-    # SECURITY: Validate run_id for consistency even though no glob is used here
+    # SECURITY: Validate run_id for consistency
     try:
         validated_run_id = validate_run_id(run_id)
     except SecurityError:
@@ -511,47 +514,14 @@ def _compute_batch_eligibility_from_cache(
         return False, 0
 
     # Get pre-loaded execution indices (use validated_run_id for dict lookup)
-    # execution_indices is dict[int, str] where str is status, we check if idx is in dict
     execution_indices = all_execution_indices.get(validated_run_id, {})
 
-    # Count eligible candidates using the same logic as run_batch_next_checks.py
+    # Count eligible candidates using the shared helper for consistency
+    # A candidate is batch-eligible if it meets eligibility criteria AND is not executed
     eligible_count = 0
     for idx, candidate in enumerate(candidates_data):
-        # Already executed? (check if idx exists in execution_indices dict)
-        if idx in execution_indices:
-            continue
-
-        # Must be safe to automate
-        if not candidate.get("safeToAutomate"):
-            continue
-
-        # Must have a valid command family
-        family = candidate.get("suggestedCommandFamily")
-        if not family or not isinstance(family, str):
-            continue
-
-        # Must have a description
-        description = candidate.get("description")
-        if not description or not isinstance(description, str):
-            continue
-
-        # Must have target context info
-        target_context = candidate.get("targetContext")
-        if not target_context or not isinstance(target_context, str):
-            continue
-
-        # Check approval requirement
-        requires_approval = candidate.get("requiresOperatorApproval")
-        if requires_approval:
-            approval_status = str(candidate.get("approvalStatus") or "").lower()
-            if approval_status != "approved":
-                continue
-
-        # Check for duplicates
-        if candidate.get("duplicateOfExistingEvidence"):
-            continue
-
-        eligible_count += 1
+        if _is_candidate_batch_executable(candidate) and not _is_candidate_executed(idx, execution_indices):
+            eligible_count += 1
 
     return eligible_count > 0, eligible_count
 
@@ -566,6 +536,9 @@ def _compute_execution_summary(
     Derives the execution summary from next-check plan candidates and execution
     artifacts. This provides sufficient information for Recent Runs Execute
     button eligibility without requiring full execution artifact scanning.
+
+    Uses the shared _is_candidate_batch_executable() helper to ensure
+    consistency with _compute_batch_eligibility_from_cache().
 
     Contract:
     - totalCandidates: total number of next-check plan candidates
@@ -637,70 +610,51 @@ def _compute_execution_summary(
         )
 
     # Get pre-loaded execution indices with status
-    # execution_indices is dict[candidate_index] = status_string
     execution_indices = all_execution_indices.get(validated_run_id, {})
 
-    # Count executable candidates and derive execution state
+    # Count executable and executed candidates using the shared helper for consistency
+    # A candidate is batch-executable if it meets eligibility criteria AND is not executed
     executable_count = 0
     executed_count = 0
     failed_count = 0
+    pending_executable = 0
 
     for idx, candidate in enumerate(candidates_data):
-        # Check if this candidate is executable (same logic as batch eligibility)
-        is_executable = True
+        # Check eligibility (eligibility criteria only, not execution state)
+        is_executable = _is_candidate_batch_executable(candidate)
 
-        # Must be safe to automate
-        if not candidate.get("safeToAutomate"):
-            is_executable = False
+        # Check execution state using shared helper
+        is_executed = _is_candidate_executed(idx, execution_indices)
 
-        # Must have a valid command family
-        if is_executable:
-            family = candidate.get("suggestedCommandFamily")
-            if not family or not isinstance(family, str):
-                is_executable = False
-
-        # Must have a description
-        if is_executable:
-            description = candidate.get("description")
-            if not description or not isinstance(description, str):
-                is_executable = False
-
-        # Must have target context info
-        if is_executable:
-            target_context = candidate.get("targetContext")
-            if not target_context or not isinstance(target_context, str):
-                is_executable = False
-
-        # Check approval requirement
-        if is_executable:
-            requires_approval = candidate.get("requiresOperatorApproval")
-            if requires_approval:
-                approval_status = str(candidate.get("approvalStatus") or "").lower()
-                if approval_status != "approved":
-                    is_executable = False
-
-        # Check for duplicates
-        if is_executable and candidate.get("duplicateOfExistingEvidence"):
-            is_executable = False
-
+        # executableCandidates = eligible candidates (regardless of execution status)
+        # This counts ALL candidates that meet batch execution eligibility criteria
         if is_executable:
             executable_count += 1
+            # pendingExecutableCandidates = eligible candidates WITHOUT execution artifacts
+            # Only increment pending if NOT executed
+            if not is_executed:
+                pending_executable += 1
 
-        # Check execution state for this candidate using status-enhanced index
-        # execution_indices is dict[int, str] where str is the status from artifact
-        if idx in execution_indices:
+        if is_executed:
             executed_count += 1
-            # Derive failed count from artifact status
-            # Failed candidates have status == "failed" (from ExternalAnalysisStatus.FAILED)
+            # Failed candidates have status == "failed"
             status = execution_indices[idx]
             if status == "failed":
                 failed_count += 1
 
     # Derive batch execution state
-    pending_executable = executable_count - executed_count
-
-    if executable_count == 0:
+    # no-candidates: only when there are literally no candidates in the plan
+    # not-started: has pending executable candidates, none executed yet
+    # partially-executed: some candidates executed, some pending
+    # fully-executed: all executable candidates have execution artifacts
+    if total_candidates == 0:
         batch_execution_state: Literal["no-candidates", "not-started", "partially-executed", "fully-executed"] = "no-candidates"
+    elif executable_count == 0:
+        # All candidates are blocked/ineligible, but some may have executed
+        if executed_count > 0:
+            batch_execution_state = "fully-executed"  # All eligible executed, rest blocked
+        else:
+            batch_execution_state = "no-candidates"  # Edge case
     elif executed_count == 0:
         batch_execution_state = "not-started"
     elif pending_executable == 0:
