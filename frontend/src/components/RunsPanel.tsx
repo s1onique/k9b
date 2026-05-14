@@ -269,6 +269,17 @@ export const RecentRunsPanel = ({
                         
                         // BACKWARD COMPATIBILITY: Fall back to batchExecutable for older payloads
                         // This ensures old responses without executionSummary still work.
+                        // NOTE: batchExecutable fallback is only valid when batchEligibility="unknown".
+                        // When batchEligibility="computed", executionSummary must be present.
+                        // If executionSummary is missing when batchEligibility="computed", log and
+                        // fall back to batchExecutable for safety (don't hide work silently).
+                        if (runEntry.batchEligibility === "computed" && !runEntry.executionSummary) {
+                          // This state should not happen from properly-functioning backend.
+                          // Log for debugging but fall back to batchExecutable behavior
+                          console.warn(
+                            `[RecentRunsPanel] executionSummary missing when batchEligibility="computed" for run ${runEntry.runId}. Falling back to batchExecutable.`
+                          );
+                        }
                         const displayStatus = getRunsDisplayStatus(runEntry, executionCountsComplete);
                         if (displayStatus === "no-executions-yet" || runEntry.batchExecutable) {
                           return (

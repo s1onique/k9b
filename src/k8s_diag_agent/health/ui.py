@@ -570,9 +570,13 @@ def _build_recent_runs_summary(
     - batchEligibility, batchExecutable, batchEligibleCount
     - reviewStatus, executionCount, reviewedCount, triaged (if available from external-analysis)
 
-    The batch eligibility and review status fields are computed during index generation
+    The batch eligibility and execution summary are computed during index generation
     (where the external-analysis directory is already being scanned), so this function
     can include them without additional cost.
+
+    The _plan_data and _execution_indices fields are stored for use by the API layer's
+    _build_runs_list_with_batch_eligibility_index() function, which needs this data
+    to compute executionSummary without filesystem access.
 
     Args:
         reviews_dir: Path to the reviews directory
@@ -580,15 +584,17 @@ def _build_recent_runs_summary(
         external_analysis_dir: Path to external-analysis directory for batch eligibility computation
 
     Returns:
-        Dict with 'runs' list, 'total_count', and 'version' (total discovered across all runs)
+        Dict with 'runs' list, 'total_count', 'version', and internal data for API layer
     """
     if not reviews_dir.is_dir():
         return {"runs": [], "total_count": 0, "generated_at": datetime.now(UTC).isoformat(), "version": 2}
 
     # Pre-scan external-analysis directory for batch eligibility computation
     # This is done once during index generation, not on each API request
+    # Structure: plan_data[run_id] = plan artifact dict
     plan_data: dict[str, dict[str, object]] = {}
-    execution_indices: dict[str, set[int]] = {}
+    # Structure: execution_indices[run_id] = {candidate_index: status_string}
+    execution_indices_with_status: dict[str, dict[int, str]] = {}
 
     if external_analysis_dir is not None and external_analysis_dir.is_dir():
         # Load plan files for all runs
@@ -601,12 +607,12 @@ def _build_recent_runs_summary(
                     for candidate_run_id in _extract_run_ids_from_filename(filename, "-next-check-plan"):
                         if candidate_run_id:
                             plan_data[candidate_run_id] = raw
-                            execution_indices.setdefault(candidate_run_id, set())
+                            execution_indices_with_status.setdefault(candidate_run_id, {})
                             break
             except (OSError, json.JSONDecodeError):
                 continue
 
-        # Load execution indices for all runs
+        # Load execution indices for all runs WITH status for failedCandidates
         for exec_path in external_analysis_dir.glob("*-next-check-execution*.json"):
             try:
                 raw = json.loads(exec_path.read_text(encoding="utf-8"))
@@ -614,11 +620,15 @@ def _build_recent_runs_summary(
                     filename = exec_path.stem
                     exec_payload = raw.get("payload", {})
                     candidate_index = exec_payload.get("candidateIndex")
+                    # Extract status from artifact for failedCandidates derivation
+                    status = raw.get("status", "unknown")
+                    if not isinstance(status, str):
+                        status = "unknown"
                     for candidate_run_id in _extract_run_ids_from_filename(filename, "-next-check-execution"):
                         if candidate_run_id:
-                            execution_indices.setdefault(candidate_run_id, set())
+                            execution_indices_with_status.setdefault(candidate_run_id, {})
                             if isinstance(candidate_index, int):
-                                execution_indices[candidate_run_id].add(candidate_index)
+                                execution_indices_with_status[candidate_run_id][candidate_index] = status
                             break
             except (OSError, json.JSONDecodeError):
                 continue
@@ -645,7 +655,7 @@ def _build_recent_runs_summary(
         if run_id in plan_data:
             batch_executable, batch_eligible_count = _compute_batch_eligibility_indexed(
                 plan_data[run_id],
-                execution_indices.get(run_id, set()),
+                set(execution_indices_with_status.get(run_id, {}).keys()),
             )
             batch_eligibility = "computed"
             if batch_executable and batch_eligible_count > 0:
@@ -678,12 +688,19 @@ def _build_recent_runs_summary(
     total_count = len(run_summaries)
     recent_runs = run_summaries[:max_runs]
 
-    return {
+    result = {
         "runs": recent_runs,
         "total_count": total_count,
         "generated_at": datetime.now(UTC).isoformat(),
         "version": 2,  # Schema version 2: includes batch eligibility fields
+        # Internal data for API layer - enables executionSummary computation without filesystem access
+        # _plan_data: run_id -> plan artifact dict
+        # _execution_indices: run_id -> {candidate_index: status_string}
+        "_plan_data": plan_data,
+        "_execution_indices": execution_indices_with_status,
     }
+
+    return result
 
 
 def _extract_run_ids_from_filename(filename: str, marker: str) -> list[str]:

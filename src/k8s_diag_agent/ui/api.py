@@ -803,6 +803,154 @@ def _build_runs_list_from_index(
     return payload
 
 
+def _normalize_execution_indices_from_index(
+    raw: object,
+) -> dict[str, dict[int, str]]:
+    """Normalize execution indices loaded from JSON index.
+
+    When execution indices are stored in JSON, integer keys become strings.
+    This function converts them back to integers for consistent lookup.
+
+    Args:
+        raw: The raw _execution_indices value from recent_summary (may be untyped dict)
+
+    Returns:
+        Normalized dict with int keys: run_id -> {candidate_index: status_string}
+        String keys that cannot be parsed as int are ignored.
+        Non-string status values are converted to "unknown".
+    """
+    if not isinstance(raw, dict):
+        return {}
+
+    result: dict[str, dict[int, str]] = {}
+    for run_id, indices in raw.items():
+        if not isinstance(run_id, str) or not isinstance(indices, dict):
+            continue
+
+        normalized: dict[int, str] = {}
+        for key, value in indices.items():
+            # Convert string key to int
+            if isinstance(key, int):
+                candidate_idx = key
+            elif isinstance(key, str):
+                try:
+                    candidate_idx = int(key)
+                except (ValueError, TypeError):
+                    # Non-integer string key - skip this entry
+                    continue
+            else:
+                # Non-string, non-int key - skip
+                continue
+
+            # Normalize status to string
+            if isinstance(value, str):
+                status = value
+            elif value is None:
+                status = "unknown"
+            else:
+                status = str(value) if value else "unknown"
+
+            normalized[candidate_idx] = status
+
+        result[run_id] = normalized
+
+    return result
+
+
+def _compute_execution_summary_indexed(
+    plan_data: dict[str, object],
+    execution_indices: dict[int, str],
+) -> BatchExecutionSummary:
+    """Compute execution summary from pre-loaded plan and execution data.
+
+    This is the index-backed version that uses pre-scanned data without
+    filesystem access. It derives the same summary as _compute_execution_summary()
+    but uses index-computed execution indices (status strings) for failedCandidates.
+
+    Args:
+        plan_data: The next-check-plan artifact data
+        execution_indices: Dict of {candidate_index: status_string} from execution artifacts
+
+    Returns:
+        BatchExecutionSummary with all execution state fields
+    """
+    from typing import cast
+
+    # Get candidates from plan
+    candidates_data: list[dict[str, object]] = []
+    if "candidates" in plan_data and isinstance(plan_data["candidates"], list):
+        candidates_data = cast(list[dict[str, object]], plan_data["candidates"])
+    elif "payload" in plan_data and isinstance(plan_data["payload"], dict):
+        payload = cast(dict[str, object], plan_data["payload"])
+        if "candidates" in payload and isinstance(payload["candidates"], list):
+            candidates_data = cast(list[dict[str, object]], payload["candidates"])
+
+    total_candidates = len(candidates_data)
+
+    if total_candidates == 0:
+        return BatchExecutionSummary(
+            totalCandidates=0,
+            executableCandidates=0,
+            executedCandidates=0,
+            failedCandidates=0,
+            pendingExecutableCandidates=0,
+            batchExecutionState="no-candidates",
+        )
+
+    # Count executable and executed candidates
+    # Uses the same logic as _is_candidate_batch_executable() for consistency
+    executable_count = 0
+    executed_count = 0
+    failed_count = 0
+    pending_executable = 0
+
+    for idx, candidate in enumerate(candidates_data):
+        # Check eligibility using the same criteria as backend batch execution
+        is_executable = _is_candidate_batch_executable(candidate)
+
+        # Check execution state using pre-loaded indices
+        is_executed = idx in execution_indices
+
+        # executableCandidates = eligible candidates (regardless of execution status)
+        if is_executable:
+            executable_count += 1
+            # pendingExecutableCandidates = eligible candidates WITHOUT execution artifacts
+            if not is_executed:
+                pending_executable += 1
+
+        if is_executed:
+            executed_count += 1
+            # Failed candidates have status == "failed"
+            status = execution_indices.get(idx, "unknown")
+            if status == "failed":
+                failed_count += 1
+
+    # Derive batch execution state
+    if total_candidates == 0:
+        batch_execution_state: Literal["no-candidates", "not-started", "partially-executed", "fully-executed"] = "no-candidates"
+    elif executable_count == 0:
+        # All candidates are blocked/ineligible, but some may have executed
+        if executed_count > 0:
+            batch_execution_state = "fully-executed"  # All eligible executed, rest blocked
+        else:
+            batch_execution_state = "no-candidates"  # Edge case
+    elif executed_count == 0:
+        batch_execution_state = "not-started"
+    elif pending_executable == 0:
+        batch_execution_state = "fully-executed"
+    else:
+        batch_execution_state = "partially-executed"
+
+    return BatchExecutionSummary(
+        totalCandidates=total_candidates,
+        executableCandidates=executable_count,
+        executedCandidates=executed_count,
+        failedCandidates=failed_count,
+        pendingExecutableCandidates=pending_executable,
+        batchExecutionState=batch_execution_state,
+    )
+
+
 def _build_runs_list_with_batch_eligibility_index(
     runs_dir: Path,
     runs_from_index: list[dict[str, object]],
@@ -814,7 +962,7 @@ def _build_runs_list_with_batch_eligibility_index(
     """Build runs list from ui-index.json's recent_runs_summary with batch eligibility.
 
     This is the index-backed path for include_batch_eligibility=true.
-    It reads batch eligibility from the pre-computed index without scanning files.
+    It reads batch eligibility AND execution summary from the pre-computed index.
 
     Args:
         runs_dir: Path to the runs directory
@@ -838,7 +986,13 @@ def _build_runs_list_with_batch_eligibility_index(
     if limit is not None:
         runs_to_return = runs_from_index[:limit]
 
-    # Build runs list using index-computed batch eligibility
+    # Read pre-computed plan data and execution indices from index
+    # These are stored in the index during index generation
+    # Use cast to ensure type safety since these come from JSON (untyped dict)
+    all_plan_data = cast(dict[str, dict[str, object]], recent_summary.get("_plan_data", {}))
+    all_execution_indices = _normalize_execution_indices_from_index(recent_summary.get("_execution_indices", {}))
+
+    # Build runs list using index-computed batch eligibility and execution summary
     runs_list: list[RunsListEntry] = []
     for entry in runs_to_return:
         run_id = cast(str, entry.get("run_id", ""))
@@ -850,6 +1004,14 @@ def _build_runs_list_with_batch_eligibility_index(
         batch_eligibility = cast(Literal["computed", "unknown"], entry.get("batchEligibility", "unknown"))
         batch_executable = cast(bool, entry.get("batchExecutable", False))
         batch_eligible_count = cast(int, entry.get("batchEligibleCount", 0))
+
+        # Compute executionSummary when batch eligibility is computed
+        # This uses pre-loaded plan/execution data from the index
+        execution_summary: BatchExecutionSummary | None = None
+        if batch_eligibility == "computed" and run_id in all_plan_data:
+            # Use pre-computed execution indices (with status strings) for accurate failed count
+            exec_indices = all_execution_indices.get(run_id, {})
+            execution_summary = _compute_execution_summary_indexed(all_plan_data[run_id], exec_indices)
 
         runs_list.append(
             RunsListEntry(
@@ -865,7 +1027,7 @@ def _build_runs_list_with_batch_eligibility_index(
                 batchEligibility=batch_eligibility,
                 batchExecutable=batch_executable,
                 batchEligibleCount=batch_eligible_count,
-                executionSummary=None,  # Deferred - requires plan/execution scan
+                executionSummary=execution_summary,
             )
         )
 
