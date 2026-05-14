@@ -194,6 +194,7 @@ def build_run_payload(
     context: UIIndexContext,
     *,
     promotions: Sequence[dict[str, object]] | None = None,
+    health_root: Path | None = None,
 ) -> RunPayload:
     freshness = _build_freshness_payload(context.run.timestamp, context.run.scheduler_interval_seconds)
     return {
@@ -230,7 +231,7 @@ def build_run_payload(
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
         "incidentReport": _build_incident_report_payload(context, freshness),
-        "operatorWorklist": _build_operator_worklist_payload(context),
+        "operatorWorklist": _build_operator_worklist_payload(context, health_root=health_root),
     }
 
 

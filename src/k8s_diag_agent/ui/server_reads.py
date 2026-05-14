@@ -735,8 +735,10 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
             timings["promotions_fallback_reason"] = promotions_fallback_reason  # type: ignore[assignment]
 
         # Payload build phase
+        # Pass health_root to enable execution artifact overlay for worklist derivation
+        # This ensures worklist reflects actual execution state from artifacts
         payload_build_start = time.perf_counter()
-        run_payload = build_run_payload(context, promotions=promotions)
+        run_payload = build_run_payload(context, promotions=promotions, health_root=handler._health_root)
         timings["payload_build_ms"] = (time.perf_counter() - payload_build_start) * 1000
 
         # JSON serialization phase

@@ -23,8 +23,12 @@ Security note:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import json
+import logging
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal, cast
 
 from ..security.kubectl_context import (
@@ -33,6 +37,7 @@ from ..security.kubectl_context import (
     sanitize_kubectl_display_command,
     sanitize_operator_text,
 )
+from ..security.path_validation import SecurityError, safe_run_artifact_glob
 from .api_incident_report_filtering import (
     filter_artifact_refs_preserving_minimum,
 )
@@ -56,6 +61,217 @@ from .api_payloads import (
     StalenessClass,
 )
 from .model import UIIndexContext
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Execution Artifact Overlay for Worklist
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ExecutionArtifactOverlay:
+    """Overlay data from an execution artifact for worklist derivation."""
+    candidate_id: str | None
+    candidate_index: int | None
+    command_family: str | None
+    target_cluster: str | None
+    artifact_path: str | None
+    status: str | None  # success | failed | timed-out
+    timestamp: str | None
+
+
+def _scan_execution_artifacts_for_worklist(
+    health_root: Path,
+    run_id: str,
+) -> tuple[Sequence[ExecutionArtifactOverlay], dict[str, int]]:
+    """Scan external-analysis directory for execution artifacts matching this run.
+    
+    Returns tuple of (overlays, telemetry) where overlays can be used to derive
+    execution state for worklist items.
+    
+    Matching criteria (all non-None fields must match):
+    - candidate_index AND command_family AND target_cluster (primary)
+    - OR candidate_id AND target_cluster (fallback)
+    
+    Telemetry tracks scan performance and match statistics.
+    """
+    scan_strategy = "worklist_derivation"
+    telemetry: dict[str, int] = {
+        "execution_artifacts_found": 0,
+        "execution_artifacts_matched": 0,
+        "execution_artifacts_skipped_mismatch": 0,
+        "execution_artifacts_parse_failed": 0,
+    }
+    
+    overlays: list[ExecutionArtifactOverlay] = []
+    
+    external_analysis_dir = health_root / "external-analysis"
+    if not external_analysis_dir.exists():
+        return overlays, telemetry
+    
+    # SECURITY: Use safe_run_artifact_glob to construct validated glob pattern
+    # This validates run_id internally and returns a safe pattern like
+    # "run-test-next-check-execution-*.json"
+    try:
+        glob_pattern = safe_run_artifact_glob(run_id, "-next-check-execution-*.json")
+    except SecurityError:
+        # Invalid run_id - return empty overlays safely
+        return overlays, telemetry
+    
+    try:
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
+            telemetry["execution_artifacts_found"] = int(telemetry["execution_artifacts_found"]) + 1
+            
+            try:
+                raw = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict):
+                    telemetry["execution_artifacts_parse_failed"] = int(telemetry["execution_artifacts_parse_failed"]) + 1
+                    continue
+                
+                # Verify purpose
+                purpose = raw.get("purpose")
+                if purpose != "next-check-execution":
+                    telemetry["execution_artifacts_skipped_mismatch"] = int(telemetry["execution_artifacts_skipped_mismatch"]) + 1
+                    continue
+                
+                payload = raw.get("payload", {})
+                if not isinstance(payload, dict):
+                    telemetry["execution_artifacts_parse_failed"] = int(telemetry["execution_artifacts_parse_failed"]) + 1
+                    continue
+                
+                # Extract matching fields from payload
+                candidate_id = payload.get("candidateId") or payload.get("candidate_id")
+                candidate_index_raw = payload.get("candidateIndex") or payload.get("candidate_index")
+                
+                # Parse candidate_index
+                candidate_index: int | None = None
+                if candidate_index_raw is not None:
+                    try:
+                        candidate_index = int(str(candidate_index_raw))
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Extract command_family from the tool/command context
+                command_family = payload.get("commandFamily") or payload.get("command_family")
+                if not command_family:
+                    # Try to extract from tool_name pattern: "kubectl-{family}" or similar
+                    tool_name = payload.get("tool_name") or ""
+                    if isinstance(tool_name, str) and "-" in tool_name:
+                        command_family = tool_name.split("-", 1)[1] if "-" in tool_name else tool_name
+                
+                # Extract target_cluster
+                target_cluster = payload.get("clusterLabel") or payload.get("cluster_label") or payload.get("targetCluster")
+                
+                # Extract status from artifact
+                status = raw.get("status")
+                
+                # Extract timestamp
+                timestamp = raw.get("timestamp")
+                
+                # Compute artifact path relative to health_root
+                try:
+                    artifact_path = str(artifact_file.relative_to(health_root))
+                except ValueError:
+                    artifact_path = str(artifact_file)
+                
+                overlay = ExecutionArtifactOverlay(
+                    candidate_id=str(candidate_id) if candidate_id else None,
+                    candidate_index=candidate_index,
+                    command_family=str(command_family) if command_family else None,
+                    target_cluster=str(target_cluster) if target_cluster else None,
+                    artifact_path=artifact_path,
+                    status=str(status) if status else None,
+                    timestamp=str(timestamp) if timestamp else None,
+                )
+                overlays.append(overlay)
+                
+            except (OSError, json.JSONDecodeError) as exc:
+                telemetry["execution_artifacts_parse_failed"] = int(telemetry["execution_artifacts_parse_failed"]) + 1
+                logger.debug(
+                    "Skipped malformed execution artifact during worklist derivation: %s",
+                    artifact_file.name,
+                    extra={
+                        "run_id": run_id,
+                        "artifact_kind": "next-check-execution",
+                        "scan_name": "_scan_execution_artifacts_for_worklist",
+                        "scan_strategy": scan_strategy,
+                        "error": str(exc),
+                    },
+                )
+                continue
+    except OSError as exc:
+        logger.warning(
+            "Failed to scan execution artifacts for worklist derivation",
+            extra={
+                "run_id": run_id,
+                "health_root": str(health_root),
+                "error": str(exc),
+            },
+        )
+    
+    telemetry["execution_artifacts_matched"] = len(overlays)
+    return overlays, telemetry
+
+
+def _match_execution_overlay_to_queue_item(
+    overlay: ExecutionArtifactOverlay,
+    queue_item_candidate_id: str | None,
+    queue_item_candidate_index: int | None,
+    queue_item_command_family: str | None,
+    queue_item_target_cluster: str | None,
+) -> bool:
+    """Check if an execution artifact overlay matches a queue item.
+    
+    Matching rules (all non-None overlay fields must match):
+    1. Primary: candidate_index + command_family + target_cluster (all required)
+    2. Fallback: candidate_id + target_cluster (all required)
+    
+    Returns True if overlay should be applied to this queue item.
+    """
+    # Primary match: candidate_index + command_family + target_cluster
+    if overlay.candidate_index is not None and overlay.command_family is not None and overlay.target_cluster is not None:
+        index_match = overlay.candidate_index == queue_item_candidate_index
+        family_match = overlay.command_family.lower() == queue_item_command_family.lower() if queue_item_command_family else False
+        cluster_match = overlay.target_cluster == queue_item_target_cluster
+        
+        if index_match and family_match and cluster_match:
+            return True
+    
+    # Fallback match: candidate_id + target_cluster
+    if overlay.candidate_id and overlay.target_cluster:
+        id_match = overlay.candidate_id == queue_item_candidate_id
+        cluster_match = overlay.target_cluster == queue_item_target_cluster
+        
+        if id_match and cluster_match:
+            return True
+    
+    return False
+
+
+def _derive_execution_state_from_artifact(status: str | None) -> str:
+    """Derive execution_state string from artifact status.
+    
+    Maps artifact status to queue item execution_state:
+    - "success" -> "executed-success"
+    - "failed" -> "executed-failed"
+    - "timed-out" / "timeout" -> "timed-out"
+    - other -> "executed-success" (default for any completed artifact)
+    """
+    if status is None:
+        return "executed-success"
+    
+    status_lower = status.lower()
+    if status_lower == "success":
+        return "executed-success"
+    elif status_lower == "failed":
+        return "executed-failed"
+    elif status_lower in ("timed-out", "timeout"):
+        return "timed-out"
+    else:
+        # Any other status means execution completed (artifact was created)
+        return "executed-success"
 
 
 def _sanitize_target_cluster(cluster: str | None, context: str | None = None) -> str | None:
@@ -908,12 +1124,19 @@ def _derive_item_state(
 
 def _build_operator_worklist_payload(
     context: UIIndexContext,
+    health_root: Path | None = None,
 ) -> OperatorWorklistPayload | None:
     """Derive a ranked operator worklist from deterministic next checks and queue state.
 
     Unified projection from deterministic next checks, planner candidates,
     and execution history. This is a read-only projection; there is no new
     persistence layer.
+
+    Execution overlay derivation:
+    - If health_root is provided, scans external-analysis/ for execution artifacts
+    - Matches artifacts to queue items by candidate_index + command_family + target_cluster
+    - Marks matched items as executed with executionState from artifact status
+    - This ensures worklist reflects actual execution even when queue data is stale
 
     Truthfulness rules:
     - command is None for deterministic/advisory items (they have method, not executable cmd)
@@ -923,6 +1146,15 @@ def _build_operator_worklist_payload(
     - mergedSources preserves all contributing origins when multiple sources refer to the same logical action
     """
     items: list[OperatorWorklistItemPayload] = []
+    
+    # Scan execution artifacts for overlay derivation
+    # This enables worklist items to reflect actual execution state from artifacts
+    execution_overlays: tuple[ExecutionArtifactOverlay, ...] = ()
+    if health_root is not None:
+        run_id = context.run.run_id if hasattr(context.run, "run_id") else ""
+        if run_id:
+            overlays, _ = _scan_execution_artifacts_for_worklist(health_root, run_id)
+            execution_overlays = tuple(overlays)
 
     # Track deterministic IDs for dedupe with queue items
     deterministic_ids: set[str] = set()
@@ -1232,6 +1464,91 @@ def _build_operator_worklist_payload(
 
     if not items:
         return None
+
+    # Apply execution artifact overlay to derive actual execution state from artifacts
+    # This ensures worklist reflects execution even when queue data is stale
+    # Only overlay if the item is not already marked as executed
+    for item in items:
+        # Get current execution state
+        current_execution_state = item.get("executionState") or ""
+        
+        # Skip if already marked as executed
+        if current_execution_state in ("executed-success", "executed-failed", "timed-out", "completed"):
+            continue
+        
+        # Get item fields for matching
+        item_candidate_id = item.get("id")  # candidate_id from queue item
+        item_candidate_index = None
+        item_command_family = None
+        item_target_cluster = item.get("targetCluster")
+        
+        # Extract command_family from source data if available
+        # Look in description for command family hints
+        description = item.get("description") or ""
+        if "kubectl" in description.lower():
+            parts = description.lower().split("kubectl")
+            if len(parts) > 1:
+                cmd_part = parts[1].split()[0] if parts[1].strip() else ""
+                if cmd_part:
+                    item_command_family = cmd_part
+        
+        # Try to extract candidate_index from queue items if available
+        # Check the queue_item in context if we have matching
+        for queue_item in queue_items:
+            queue_item_id = queue_item.candidate_id or f"queue-{queue_item.description}"
+            if queue_item_id == item_candidate_id:
+                item_candidate_index = queue_item.candidate_index if hasattr(queue_item, "candidate_index") else None
+                if hasattr(queue_item, "suggested_command_family") and queue_item.suggested_command_family:
+                    item_command_family = queue_item.suggested_command_family
+                break
+        
+        # Match against execution overlays
+        for overlay in execution_overlays:
+            if _match_execution_overlay_to_queue_item(
+                overlay=overlay,
+                queue_item_candidate_id=str(item_candidate_id) if item_candidate_id else None,
+                queue_item_candidate_index=item_candidate_index,
+                queue_item_command_family=item_command_family,
+                queue_item_target_cluster=item_target_cluster,
+            ):
+                # Apply overlay - mark as executed
+                derived_execution_state = _derive_execution_state_from_artifact(overlay.status)
+                item["executionState"] = derived_execution_state
+                item["itemState"] = _ITEM_STATE_EXECUTED
+                
+                # Update lastStateChangedAt from artifact timestamp
+                if overlay.timestamp:
+                    item["lastStateChangedAt"] = overlay.timestamp
+                
+                # Add artifact reference if not already present
+                if overlay.artifact_path:
+                    refs = list(item.get("sourceArtifactRefs") or [])
+                    # Check if artifact already in refs
+                    artifact_exists = any(
+                        ref.get("path") == overlay.artifact_path 
+                        for ref in refs
+                    )
+                    if not artifact_exists:
+                        refs.append({
+                            "label": "Next-Check Execution",
+                            "path": overlay.artifact_path,
+                        })
+                        item["sourceArtifactRefs"] = refs
+                
+                # Update ranking reason for executed items
+                item["rankingReason"] = _derive_worklist_ranking_reason(
+                    source_type=item.get("sourceType"),
+                    item_state=_ITEM_STATE_EXECUTED,
+                    execution_state=derived_execution_state,
+                    is_primary_triage=None,
+                    urgency=None,
+                    priority_label=cast("str | None", item.get("priorityLabel")),
+                    command=item.get("command"),
+                    workstream=item.get("workstream"),
+                )
+                
+                # Only match first applicable overlay
+                break
 
     # Apply artifact filtering to worklist item provenance
     # Filter skipped/placeholder artifacts from sourceArtifactRefs to improve quality
