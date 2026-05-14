@@ -28,6 +28,10 @@ services:
     volumes:
       - ./runs:/app/runs
       - ./podman/kubeconfig:/app/kubeconfig:Z
+    networks:
+      default:
+        aliases:
+          - k9b-backend
 
   scheduler:
     image: localhost/k9b_python:latest
