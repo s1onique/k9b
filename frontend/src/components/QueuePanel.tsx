@@ -523,13 +523,15 @@ export const QueuePanel = ({
                         ) : null}
                       </div>
                       <div className="queue-item-status-badges">
-                        <span className={`action-state-badge action-state-${item.approvalState === "approved" ? "ready" : item.approvalState === "approval-required" ? "approval" : "inactive"}`}>
-                          {item.approvalState === "approved" ? "Approved" : item.approvalState === "approval-required" ? "Needs approval" : "Pending"}
-                        </span>
-                        {/* Use canonical execution label - do NOT show "unexecuted" as a badge */}
-                        {deriveExecutionLabel(item) && (
-                          <span className={`execution-state-badge execution-state-${item.executionState}`}>
+                        {/* For executed items: show execution label only, suppress generic PENDING */}
+                        {deriveExecutionLabel(item) ? (
+                          <span className={`execution-state-badge execution-state-${item.executionState ?? item.outcomeStatus ?? "executed"}`}>
                             {deriveExecutionLabel(item)}
+                          </span>
+                        ) : (
+                          /* For unexecuted items: show approval state badge */
+                          <span className={`action-state-badge action-state-${item.approvalState === "approved" ? "ready" : item.approvalState === "approval-required" ? "approval" : "inactive"}`}>
+                            {item.approvalState === "approved" ? "Approved" : item.approvalState === "approval-required" ? "Needs approval" : "Pending"}
                           </span>
                         )}
                       </div>

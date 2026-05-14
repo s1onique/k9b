@@ -16,7 +16,7 @@ import type {
   NextCheckExecutionResponse,
   ArtifactLink,
 } from "../types";
-import { deriveExecutionLabel } from "../utils";
+import { deriveExecutionLabel, isItemExecuted } from "../utils";
 
 // Execution result types - kept inline to avoid circular imports
 type ExecutionErrorResult = {

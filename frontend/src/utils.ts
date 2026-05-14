@@ -111,13 +111,27 @@ export const EXECUTED_STATES = new Set([
 ] as const);
 
 /**
+ * Check if an artifact path represents an execution artifact.
+ * Used for plan-candidate data where execution evidence appears as
+ * latestArtifactPath containing "next-check-execution".
+ */
+export function hasExecutionArtifactPath(path?: string | null): boolean {
+  return path?.includes("next-check-execution") === true;
+}
+
+/**
  * Check if a candidate has been executed (has execution artifacts, execution state, or itemState).
  * This is the canonical predicate for all UI decisions about whether to show
  * "Run candidate" buttons and how to display execution status.
+ *
+ * Supports both queue-item shapes (itemState, executionState, sourceArtifactRefs)
+ * and plan-candidate shapes (outcomeStatus, latestArtifactPath).
  */
 export function isItemExecuted(item: {
   itemState?: string | null;
   executionState?: string | null;
+  outcomeStatus?: string | null;
+  latestArtifactPath?: string | null;
   sourceArtifactRefs?: Array<{ path?: string | null }>;
 }): boolean {
   // Check itemState first (backend state signal)
@@ -130,10 +144,20 @@ export function isItemExecuted(item: {
     return true;
   }
 
+  // Check outcomeStatus (plan-candidate execution signal)
+  if (item.outcomeStatus && EXECUTED_STATES.has(item.outcomeStatus as typeof EXECUTED_STATES extends Set<infer T> ? T : never)) {
+    return true;
+  }
+
+  // Check latestArtifactPath for execution artifacts (plan-candidate shape)
+  if (hasExecutionArtifactPath(item.latestArtifactPath)) {
+    return true;
+  }
+
   // Check for execution artifacts (sourceArtifactRefs containing execution artifacts)
   if (item.sourceArtifactRefs) {
     const hasExecutionArtifact = item.sourceArtifactRefs.some((ref) =>
-      ref.path?.includes("next-check-execution") || ref.path?.includes("execution")
+      hasExecutionArtifactPath(ref.path)
     );
     if (hasExecutionArtifact) {
       return true;
@@ -144,35 +168,67 @@ export function isItemExecuted(item: {
 }
 
 /**
- * Derive the canonical execution display label for a queue item.
+ * Format an executed state value for display in execution label.
+ */
+const formatExecutedState = (state: string): string => {
+  if (state === "executed-failed") return "executed / failed";
+  if (state === "timed-out") return "executed / timed-out";
+  if (state === "completed") return "executed / completed";
+  if (state === "executed-success") return "executed / success";
+  // Generic executed state from outcomeStatus or itemState
+  return "executed";
+};
+
+/**
+ * Derive the canonical execution display label for a queue item or plan candidate.
  * Returns the appropriate display text for the execution badge:
  * - "executed / success" for successful execution
  * - "executed / failed" for failed execution
  * - "executed / timed-out" for timed-out execution
  * - "executed" when itemState says executed but executionState is missing/stale
  * - null if not executed
+ *
+ * Supports both queue-item shapes (itemState, executionState) and
+ * plan-candidate shapes (outcomeStatus, latestArtifactPath).
  */
 export function deriveExecutionLabel(item: {
   itemState?: string | null;
   executionState?: string | null;
+  outcomeStatus?: string | null;
+  latestArtifactPath?: string | null;
 }): string | null {
-  // If itemState says executed, show "executed" label regardless of executionState
+  // Priority 1: Check executionState first (most authoritative for queue items)
+  if (item.executionState) {
+    if (EXECUTED_STATES.has(item.executionState as typeof EXECUTED_STATES extends Set<infer T> ? T : never)) {
+      return formatExecutedState(item.executionState);
+    }
+    // executionState present but not executed - not an executed item
+    // Note: "unexecuted" or "pending" with other executed signals means it was executed
+  }
+
+  // Priority 2: Check outcomeStatus (plan-candidate execution signal)
+  if (item.outcomeStatus && EXECUTED_STATES.has(item.outcomeStatus as typeof EXECUTED_STATES extends Set<infer T> ? T : never)) {
+    return formatExecutedState(item.outcomeStatus);
+  }
+
+  // Priority 3: Check itemState (backend state signal)
   if (item.itemState && EXECUTED_ITEM_STATES.has(item.itemState as typeof EXECUTED_ITEM_STATES extends Set<infer T> ? T : never)) {
+    // If itemState says executed but executionState is missing/stale, show generic "executed"
     if (!item.executionState || item.executionState === "unexecuted" || item.executionState === "pending") {
       return "executed";
     }
+    // executionState exists and is not executed states, but itemState says executed - show executed
+    return "executed";
   }
 
-  if (!item.executionState) {
-    return null;
-  }
-
-  if (item.executionState === "executed-failed") {
-    return "executed / failed";
-  } else if (item.executionState === "timed-out") {
-    return "executed / timed-out";
-  } else if (EXECUTED_STATES.has(item.executionState as typeof EXECUTED_STATES extends Set<infer T> ? T : never)) {
-    return "executed / success";
+  // Priority 4: Check latestArtifactPath for execution artifacts (plan-candidate shape)
+  if (hasExecutionArtifactPath(item.latestArtifactPath)) {
+    // If we have an execution artifact but no explicit status, check outcomeStatus or show generic
+    if (item.outcomeStatus && EXECUTED_STATES.has(item.outcomeStatus as typeof EXECUTED_STATES extends Set<infer T> ? T : never)) {
+      return formatExecutedState(item.outcomeStatus);
+    }
+    // Has execution artifact but no explicit outcome - show generic "executed"
+    return "executed";
   }
 
   return null;
