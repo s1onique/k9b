@@ -731,7 +731,82 @@ def execute_manual_next_check(
         return existing_artifact
 
     runner = command_runner or _default_runner
-    command = _build_command(description, target_context, family)
+
+    # Build command and catch validation failures BEFORE attempting execution.
+    # Validation failures (e.g., invalid Kubernetes resource names) are terminal
+    # preflight failures that should be persisted as execution artifacts so the
+    # queue overlay can show "executed / failed" after refresh.
+    try:
+        command = _build_command(description, target_context, family)
+    except ManualNextCheckError as validation_error:
+        # Write a failed execution artifact for terminal validation failures
+        duration_ms = 0
+        artifact_path = _artifact_path_for_run(health_root, run_id, candidate_index)
+        alertmanager_provenance = _extract_alertmanager_provenance(candidate)
+        artifact = ExternalAnalysisArtifact(
+            tool_name="next-check-runner",
+            run_id=run_id,
+            cluster_label=target_cluster or run_label,
+            run_label=run_label,
+            source_artifact=str(plan_artifact_path),
+            summary="Manual next-check command validation failed",
+            status=ExternalAnalysisStatus.FAILED,
+            timestamp=datetime.now(UTC),
+            artifact_path=str(artifact_path),
+            provider="next-check-runner",
+            duration_ms=duration_ms,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION,
+            raw_output=None,
+            payload=_build_payload(
+                candidate,
+                candidate_index,
+                [],  # No command built due to validation failure
+                str(plan_artifact_path),
+                target_cluster,
+                target_context,
+                timed_out=False,
+                stdout_truncated=False,
+                stderr_truncated=False,
+                output_bytes_captured=0,
+            ),
+            error_summary=str(validation_error),
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            output_bytes_captured=0,
+            alertmanager_provenance=alertmanager_provenance,
+        )
+        _log_artifact_write(
+            run_id=run_id,
+            run_label=run_label,
+            artifact_path=artifact_path,
+            health_root=health_root,
+            purpose=ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION.value,
+        )
+        write_external_analysis_artifact(artifact_path, artifact)
+        _log_execution_event(
+            message="Manual next-check execution validation failed",
+            severity="WARNING",
+            run_label=run_label,
+            run_id=run_id,
+            plan_artifact_path=str(plan_artifact_path),
+            candidate_index=candidate_index,
+            target_cluster=target_cluster,
+            target_context=target_context,
+            candidate_description=description,
+            candidate_id=candidate_id_value,
+            command=None,
+            command_family=family.value,
+            status=artifact.status.value,
+            artifact_path=artifact.artifact_path,
+            event="validation-failed",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            output_bytes_captured=0,
+        )
+        # Re-raise so the handler can process the artifact normally
+        raise
+
     _log_execution_event(
         message="Manual next-check execution requested",
         severity="INFO",

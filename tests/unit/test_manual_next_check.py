@@ -198,3 +198,96 @@ class ManualNextCheckTests(unittest.TestCase):
         expected_stdout_bytes = (_OUTPUT_LIMIT - 1) + len("…".encode())
         self.assertEqual(artifact.output_bytes_captured, expected_stdout_bytes + len("ok"))
         self.assertIn("…", artifact.raw_output or "")
+
+    def test_invalid_resource_name_writes_failed_artifact(self) -> None:
+        """Validation failures (e.g., invalid Kubernetes resource names) should write
+        a failed execution artifact so the queue overlay shows 'executed / failed'
+        after refresh, not 'Pending'."""
+        # Use underscore which is invalid for Kubernetes DNS names
+        candidate = self._base_candidate()
+        candidate["description"] = "kubectl get pod litellm-779689bf65-d9d6q_ai-litellm"
+        with self.assertRaises(ManualNextCheckError) as cm:
+            execute_manual_next_check(
+                health_root=self.health_root,
+                run_id="run-invalid-resource",
+                run_label="run-invalid-resource",
+                plan_artifact_path=Path("external-analysis/plan.json"),
+                candidate_index=0,
+                candidate=candidate,
+                target_context="prod",
+                target_cluster="cluster-a",
+                command_runner=lambda command: self._runner(0),
+            )
+        # Verify the error message mentions the validation failure
+        self.assertIn("invalid resource name", str(cm.exception))
+        # Verify artifact was written with failed status
+        artifact_path = self.health_root / "external-analysis" / "run-invalid-resource-next-check-execution-0.json"
+        self.assertTrue(artifact_path.exists(), "Failed validation should write execution artifact")
+        data = json.loads(artifact_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "failed")
+        self.assertEqual(data["purpose"], "next-check-execution")
+        self.assertIn("invalid resource name", data["error_summary"])
+        # Verify payload contains candidate info
+        payload = data["payload"]
+        self.assertEqual(payload["candidateIndex"], 0)
+        self.assertEqual(payload["targetCluster"], "cluster-a")
+        # Command should be empty since validation failed before command was built
+        self.assertEqual(payload["command"], [])
+
+    def test_invalid_namespace_name_writes_failed_artifact(self) -> None:
+        """Invalid namespace names should also write a failed execution artifact."""
+        # Use underscore which is invalid for Kubernetes DNS label names
+        candidate = self._base_candidate()
+        candidate["description"] = "kubectl get pods -n my_invalid_namespace"
+        with self.assertRaises(ManualNextCheckError) as cm:
+            execute_manual_next_check(
+                health_root=self.health_root,
+                run_id="run-invalid-namespace",
+                run_label="run-invalid-namespace",
+                plan_artifact_path=Path("external-analysis/plan.json"),
+                candidate_index=0,
+                candidate=candidate,
+                target_context="prod",
+                target_cluster="cluster-a",
+                command_runner=lambda command: self._runner(0),
+            )
+        # Verify the error message mentions the validation failure
+        self.assertIn("invalid namespace name", str(cm.exception))
+        # Verify artifact was written with failed status
+        artifact_path = self.health_root / "external-analysis" / "run-invalid-namespace-next-check-execution-0.json"
+        self.assertTrue(artifact_path.exists(), "Failed validation should write execution artifact")
+        data = json.loads(artifact_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "failed")
+        self.assertIn("invalid namespace name", data["error_summary"])
+
+    def test_validation_failure_is_idempotent(self) -> None:
+        """Retrying the same invalid candidate should return the existing failed artifact."""
+        candidate = self._base_candidate()
+        candidate["description"] = "kubectl get pod invalid_name_here"
+        # First attempt - should write artifact and raise
+        with self.assertRaises(ManualNextCheckError):
+            execute_manual_next_check(
+                health_root=self.health_root,
+                run_id="run-idempotent",
+                run_label="run-idempotent",
+                plan_artifact_path=Path("external-analysis/plan.json"),
+                candidate_index=0,
+                candidate=candidate,
+                target_context="prod",
+                target_cluster="cluster-a",
+                command_runner=lambda command: self._runner(0),
+            )
+        # Second attempt - should return existing artifact (idempotent)
+        artifact = execute_manual_next_check(
+            health_root=self.health_root,
+            run_id="run-idempotent",
+            run_label="run-idempotent",
+            plan_artifact_path=Path("external-analysis/plan.json"),
+            candidate_index=0,
+            candidate=candidate,
+            target_context="prod",
+            target_cluster="cluster-a",
+            command_runner=lambda command: self._runner(0),
+        )
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
+        self.assertIn("invalid resource name", artifact.error_summary or "")
