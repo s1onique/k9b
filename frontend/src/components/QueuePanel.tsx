@@ -525,7 +525,7 @@ export const QueuePanel = ({
                       <div className="queue-item-status-badges">
                         {/* For executed items: show execution label only, suppress generic PENDING */}
                         {deriveExecutionLabel(item) ? (
-                          <span className={`execution-state-badge execution-state-${item.executionState ?? item.outcomeStatus ?? "executed"}`}>
+                          <span className={`execution-state-chip execution-state-chip--${item.executionState ?? item.outcomeStatus ?? "executed"}`}>
                             {deriveExecutionLabel(item)}
                           </span>
                         ) : (

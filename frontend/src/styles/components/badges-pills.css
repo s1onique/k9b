@@ -206,3 +206,98 @@
   color: #268bd2;
   border-color: rgba(38, 139, 210, 0.35);
 }
+
+/* ==========================================================================
+   Execution State Chips
+   Status badges for executed queue items (success, failed, timed-out, completed)
+   ========================================================================== */
+
+/* Base execution state chip */
+.execution-state-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid;
+  letter-spacing: 0.02em;
+}
+
+/* Success - green */
+.execution-state-chip--executed-success,
+.execution-state-chip--success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+/* Failed - red */
+.execution-state-chip--executed-failed,
+.execution-state-chip--failed {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+/* Timed out - amber/orange */
+.execution-state-chip--timed-out {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde047;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+/* Completed - blue/slate */
+.execution-state-chip--completed {
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+/* Generic executed (no specific outcome) - slate/neutral */
+.execution-state-chip--executed {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* ==========================================================================
+   SOLARIZED LIGHT THEME OVERRIDES - Execution State Chips
+   ========================================================================== */
+
+/* Success - Solarized */
+[data-theme="solarized-light"] .execution-state-chip--executed-success,
+[data-theme="solarized-light"] .execution-state-chip--success {
+  background: rgba(133, 153, 0, 0.12);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.35);
+}
+
+/* Failed - Solarized */
+[data-theme="solarized-light"] .execution-state-chip--executed-failed,
+[data-theme="solarized-light"] .execution-state-chip--failed {
+  background: rgba(220, 50, 47, 0.12);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.35);
+}
+
+/* Timed out - Solarized */
+[data-theme="solarized-light"] .execution-state-chip--timed-out {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.35);
+}
+
+/* Completed - Solarized */
+[data-theme="solarized-light"] .execution-state-chip--completed {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.35);
+}
+
+/* Generic executed - Solarized */
+[data-theme="solarized-light"] .execution-state-chip--executed {
+  background: rgba(147, 161, 161, 0.12);
+  color: #657b83;
+  border-color: rgba(147, 161, 161, 0.35);
+}
