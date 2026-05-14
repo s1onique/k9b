@@ -164,6 +164,43 @@ describe("Execution State Chips", () => {
     expect(panel.getByText("Pending")).toBeInTheDocument();
   });
 
+  test("pending approval badge has action-state-badge class", async () => {
+    const run = makeRunWithOverrides({
+      nextCheckQueue: [
+        {
+          ...sampleRun.nextCheckQueue![0],
+          executionState: "unexecuted",
+          approvalState: "pending",
+        },
+      ],
+    });
+
+    vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": run }));
+
+    render(<QueuePanel {...createMockQueuePanelProps(run)} />);
+
+    const panel = await getQueuePanelWithRunData();
+    const badge = panel.getByText("Pending");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveClass("action-state-badge");
+    // Badge should have action-state-badge class (geometry shared with execution-state-chip)
+    expect(badge.className).toContain("action-state-badge");
+  });
+
+  test("both action-state-badge and execution-state-chip classes exist in CSS", async () => {
+    // Verify the CSS file contains both shared geometry selectors
+    const cssContent = await import("fs").then((fs) =>
+      fs.readFileSync(
+        require("path").resolve(__dirname, "../styles/components/badges-pills.css"),
+        "utf8"
+      )
+    );
+    expect(cssContent).toContain(".action-state-badge,");
+    expect(cssContent).toContain(".execution-state-chip");
+    expect(cssContent).toContain("min-height: 1.45rem");
+    expect(cssContent).toContain("padding: 0.2rem 0.65rem");
+  });
+
   test("text label is always present (color is not the only signal)", async () => {
     const run = makeRunWithOverrides({
       nextCheckQueue: [

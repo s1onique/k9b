@@ -10,17 +10,13 @@
 /* ==========================================================================
    Action State Badges
    Compact pill badges showing approval/execution state.
+   Geometry (height, padding, font-size, etc.) is shared with .execution-state-chip
+   in badges-pills.css via the combined selector .action-state-badge,.execution-state-chip.
+   Only color/semantic variants defined here.
    ========================================================================== */
 
 .action-state-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.65rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  /* Inherits shared geometry from badges-pills.css */
 }
 
 .action-state-ready {

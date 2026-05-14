@@ -208,20 +208,35 @@
 }
 
 /* ==========================================================================
+   Shared Chip Geometry
+   Common geometry for action-state-badge and execution-state-chip.
+   Both serve as compact state labels and should share the same vertical size.
+   ========================================================================== */
+
+.action-state-badge,
+.execution-state-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.45rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
    Execution State Chips
    Status badges for executed queue items (success, failed, timed-out, completed)
    ========================================================================== */
 
-/* Base execution state chip */
+/* Base execution state chip - inherits shared geometry from above */
 .execution-state-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  border: 1px solid;
-  letter-spacing: 0.02em;
+  /* Inherits all shared geometry from .action-state-badge,.execution-state-chip */
 }
 
 /* Success - green */
