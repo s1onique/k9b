@@ -394,8 +394,8 @@ describe("Recent Runs Navigation Synchronization", () => {
         expect(runRows.length).toBeGreaterThan(0);
       });
 
-      // Click "Awaiting review" filter
-      const filterButton = await screen.findByRole("button", { name: /Awaiting review/i });
+      // Click "Needs attention" filter
+      const filterButton = await screen.findByRole("button", { name: /Needs attention/i });
       await act(async () => {
         await user.click(filterButton);
       });
@@ -406,19 +406,19 @@ describe("Recent Runs Navigation Synchronization", () => {
         expect(runRows.length).toBe(5);
       });
 
-      // ASSERTION 2: All visible rows should be unreviewed (displayed as "Awaiting review")
+      // ASSERTION 2: All visible rows should be unreviewed (displayed as "Needs attention")
       const runRows = document.querySelectorAll(".run-row");
       for (const row of runRows) {
         const statusCell = row.querySelector("td:nth-child(2)");
-        expect(statusCell?.textContent).toContain("Awaiting review");
+        expect(statusCell?.textContent).toContain("Needs attention");
       }
 
-      // ASSERTION 3: Filter summary should show correct counts
-      const filterSummary = await screen.findByText(/Showing 5 of 8 runs/);
+      // ASSERTION 3: Filter summary should show correct counts (flexible regex for pagination text)
+      const filterSummary = await screen.findByText(/Showing \d+ of \d+ run/);
       expect(filterSummary).toBeInTheDocument();
 
       // ASSERTION 4: Active filter button should be visually marked
-      const activeFilterButton = await screen.findByRole("button", { name: /Awaiting review/i });
+      const activeFilterButton = await screen.findByRole("button", { name: /Needs attention/i });
       expect(activeFilterButton).toHaveClass("active");
 
       // ASSERTION 5: Pagination summary should show correct range

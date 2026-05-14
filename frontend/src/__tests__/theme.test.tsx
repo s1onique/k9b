@@ -72,20 +72,23 @@ describe("Theme System", () => {
     render(<App />);
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
-    // Check review status badges exist and have semantic classes
+    // Check execution status badges exist and have semantic classes
     // Use querySelector to find elements with both text AND the correct class
-    const fullyReviewedBadges = document.querySelectorAll(".status-pill-fully-reviewed");
-    expect(fullyReviewedBadges.length).toBeGreaterThan(0);
+    // NOTE: Labels changed from reviewStatus to executionSummary
+    // - "fully-reviewed" → "fully-executed"
+    // - "unreviewed" → "needs-attention"
+    const fullyExecutedBadges = document.querySelectorAll(".status-pill-fully-executed");
+    expect(fullyExecutedBadges.length).toBeGreaterThan(0);
 
-    const unreviewedBadges = document.querySelectorAll(".status-pill-unreviewed");
-    expect(unreviewedBadges.length).toBeGreaterThan(0);
+    const needsAttentionBadges = document.querySelectorAll(".status-pill-needs-attention");
+    expect(needsAttentionBadges.length).toBeGreaterThan(0);
 
     // Verify the badges have the correct status-pill class
-    fullyReviewedBadges.forEach((badge) => {
+    fullyExecutedBadges.forEach((badge) => {
       expect(badge).toHaveClass("status-pill");
     });
 
-    unreviewedBadges.forEach((badge) => {
+    needsAttentionBadges.forEach((badge) => {
       expect(badge).toHaveClass("status-pill");
     });
   });
@@ -198,8 +201,8 @@ describe("Theme System", () => {
     expect(degradedPills.length).toBeGreaterThan(0);
     expect(healthyPills.length).toBeGreaterThan(0);
 
-    // Verify review badges are present
-    const fullyReviewedBadges = screen.getAllByText("Fully reviewed");
+    // Verify review badges are present (now shows "Fully executed" instead of "Fully reviewed")
+    const fullyReviewedBadges = screen.getAllByText("Fully executed");
     expect(fullyReviewedBadges.length).toBeGreaterThan(0);
 
     // Verify theme attribute is still correct

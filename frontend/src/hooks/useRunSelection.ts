@@ -52,24 +52,51 @@
  *   - handleShowSelectedRun: () => void - navigate to and highlight the selected run
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RunsListEntry } from "../types";
+import type { BatchExecutionSummary, RunsListEntry } from "../types";
 
 export const AUTOREFRESH_STORAGE_KEY = "dashboard-autorefresh-interval";
 const DEFAULT_AUTOREFRESH_SECONDS = 5;
 
-// Review status filter types for recent runs panel
-export type RunsReviewFilter = "all" | "no-executions" | "awaiting-review" | "partially-reviewed" | "fully-reviewed" | "needs-attention";
+// ==========================================================================
+// Filter types and options - derived from executionSummary when available
+// ==========================================================================
+
+/**
+ * Filter buckets for Recent Runs panel.
+ * These now derive from executionSummary instead of stale reviewStatus.
+ * 
+ * Mapping from executionSummary:
+ * - no-candidates → no-executable-work
+ * - not-started + pending > 0 → no-executions-yet
+ * - partially-executed → partially-executed
+ * - fully-executed + failed > 0 → needs-attention
+ * - fully-executed + failed == 0 → fully-executed
+ */
+export type RunsReviewFilter = 
+  | "all" 
+  | "no-executable-work" 
+  | "no-executions-yet" 
+  | "partially-executed" 
+  | "fully-executed" 
+  | "needs-attention";
 
 export const RUNS_REVIEW_FILTER_OPTIONS: { label: string; value: RunsReviewFilter }[] = [
   { label: "All runs", value: "all" },
-  { label: "No executions yet", value: "no-executions" },
-  { label: "Awaiting review", value: "awaiting-review" },
-  { label: "Partially reviewed", value: "partially-reviewed" },
-  { label: "Fully reviewed", value: "fully-reviewed" },
+  { label: "No executable work", value: "no-executable-work" },
+  { label: "No executions yet", value: "no-executions-yet" },
+  { label: "Partially executed", value: "partially-executed" },
+  { label: "Fully executed", value: "fully-executed" },
   { label: "Needs attention", value: "needs-attention" },
 ];
 
-const RUNS_REVIEW_FILTER_VALUES: RunsReviewFilter[] = ["all", "no-executions", "awaiting-review", "partially-reviewed", "fully-reviewed", "needs-attention"];
+const RUNS_REVIEW_FILTER_VALUES: RunsReviewFilter[] = [
+  "all", 
+  "no-executable-work", 
+  "no-executions-yet", 
+  "partially-executed", 
+  "fully-executed", 
+  "needs-attention"
+];
 
 const isRunsReviewFilterValue = (value: unknown): value is RunsReviewFilter =>
   typeof value === "string" && RUNS_REVIEW_FILTER_VALUES.includes(value as RunsReviewFilter);
@@ -82,6 +109,138 @@ const DEFAULT_RUNS_PAGE_SIZE = 5;
 const MAX_RUNS_PAGE_SIZE = 20;
 export const RUNS_PAGE_SIZE_OPTIONS = [5, 10, 20] as const;
 
+// ==========================================================================
+// Execution display status derived from executionSummary
+// ==========================================================================
+
+/**
+ * Display status for runs in the Recent Runs table.
+ * Uses executionSummary when available, falls back to reviewStatus otherwise.
+ */
+export type RunsDisplayStatus = 
+  | "no-executable-work"     // batchExecutionState === "no-candidates"
+  | "no-executions-yet"      // batchExecutionState === "not-started" + pending > 0
+  | "partially-executed"     // batchExecutionState === "partially-executed"
+  | "fully-executed"         // batchExecutionState === "fully-executed" + failed === 0
+  | "needs-attention"        // batchExecutionState === "fully-executed" + failed > 0
+  | "unknown";              // executionSummary absent, fallback to reviewStatus
+
+export type RunsReviewStatus = RunsListEntry["reviewStatus"];
+
+/**
+ * Derive display status from executionSummary.
+ * Returns null if executionSummary is not available.
+ */
+export const deriveExecutionDisplayStatusFromSummary = (
+  executionSummary: BatchExecutionSummary | null
+): RunsDisplayStatus | null => {
+  if (!executionSummary) {
+    return null;
+  }
+
+  const { batchExecutionState, failedCandidates, pendingExecutableCandidates } = executionSummary;
+
+  switch (batchExecutionState) {
+    case "no-candidates":
+      return "no-executable-work";
+    
+    case "not-started":
+      // Only show "No executions yet" if there's actual work to do
+      if (pendingExecutableCandidates > 0) {
+        return "no-executions-yet";
+      }
+      // If no pending work, treat as fully executed
+      return "fully-executed";
+    
+    case "partially-executed":
+      return "partially-executed";
+    
+    case "fully-executed":
+      // Failed candidates need attention
+      if (failedCandidates > 0) {
+        return "needs-attention";
+      }
+      return "fully-executed";
+    
+    default:
+      // Unknown state - should not happen but handle gracefully
+      return "unknown";
+  }
+};
+
+/**
+ * Maps execution-based filter bucket for a run.
+ * Returns the filter bucket this run belongs to, or null if it doesn't fit any bucket.
+ */
+const getRunFilterBucket = (executionSummary: BatchExecutionSummary | null): RunsReviewFilter | null => {
+  if (!executionSummary) {
+    return null;
+  }
+
+  const { batchExecutionState, failedCandidates, pendingExecutableCandidates } = executionSummary;
+
+  switch (batchExecutionState) {
+    case "no-candidates":
+      return "no-executable-work";
+    
+    case "not-started":
+      if (pendingExecutableCandidates > 0) {
+        return "no-executions-yet";
+      }
+      return "fully-executed";
+    
+    case "partially-executed":
+      return "partially-executed";
+    
+    case "fully-executed":
+      if (failedCandidates > 0) {
+        return "needs-attention";
+      }
+      return "fully-executed";
+    
+    default:
+      return null;
+  }
+};
+
+/**
+ * Determines the display status for a run in the Recent Runs table.
+ * Uses executionSummary when available, falls back to reviewStatus for backward compatibility.
+ */
+export const getRunsDisplayStatus = (
+  run: RunsListEntry,
+  executionCountsComplete: boolean,
+): RunsDisplayStatus => {
+  // Try executionSummary first (preferred source of truth)
+  const executionStatus = deriveExecutionDisplayStatusFromSummary(run.executionSummary);
+  if (executionStatus) {
+    return executionStatus;
+  }
+
+  // Fallback: Use reviewStatus for backward compatibility with older payloads
+  if (!executionCountsComplete && run.reviewStatus === "no-executions") {
+    return "unknown";
+  }
+  
+  // Map old reviewStatus to new display statuses
+  // This preserves backward compatibility for payloads without executionSummary
+  switch (run.reviewStatus) {
+    case "no-executions":
+      return "no-executions-yet";
+    case "unreviewed":
+    case "partially-reviewed":
+      return "needs-attention";
+    case "fully-reviewed":
+      return "fully-executed";
+    default:
+      return "unknown";
+  }
+};
+
+// ==========================================================================
+// Filter counts computation
+// ==========================================================================
+
 // Compute filter counts from runs list
 export const computeRunsFilterCounts = (
   runs: RunsListEntry[],
@@ -89,31 +248,43 @@ export const computeRunsFilterCounts = (
 ): Record<RunsReviewFilter, number> => {
   const counts: Record<RunsReviewFilter, number> = {
     all: runs.length,
-    'no-executions': 0,
-    'awaiting-review': 0,
-    'partially-reviewed': 0,
-    'fully-reviewed': 0,
+    'no-executable-work': 0,
+    'no-executions-yet': 0,
+    'partially-executed': 0,
+    'fully-executed': 0,
     'needs-attention': 0,
   };
 
   runs.forEach((run) => {
-    if (run.reviewStatus === 'no-executions') {
-      if (executionCountsComplete) {
-        counts['no-executions']++;
+    const bucket = getRunFilterBucket(run.executionSummary);
+    
+    if (bucket) {
+      counts[bucket]++;
+    } else {
+      // Fallback to reviewStatus for backward compatibility
+      switch (run.reviewStatus) {
+        case "no-executions":
+          if (executionCountsComplete) {
+            counts['no-executions-yet']++;
+          }
+          break;
+        case "unreviewed":
+        case "partially-reviewed":
+          counts['needs-attention']++;
+          break;
+        case "fully-reviewed":
+          counts['fully-executed']++;
+          break;
       }
-    } else if (run.reviewStatus === 'unreviewed') {
-      counts['awaiting-review']++;
-      counts['needs-attention']++;
-    } else if (run.reviewStatus === 'partially-reviewed') {
-      counts['partially-reviewed']++;
-      counts['needs-attention']++;
-    } else if (run.reviewStatus === 'fully-reviewed') {
-      counts['fully-reviewed']++;
     }
   });
 
   return counts;
 };
+
+// ==========================================================================
+// Storage helpers
+// ==========================================================================
 
 const readStoredRunsReviewFilter = (): RunsReviewFilter => {
   if (typeof window === "undefined") {
@@ -183,22 +354,49 @@ const persistAutoRefreshInterval = (value: string) => {
   window.localStorage.setItem(AUTOREFRESH_STORAGE_KEY, value);
 };
 
+// ==========================================================================
+// Run filtering logic
+// ==========================================================================
+
 /**
- * Determines the display status for a run in the Recent Runs table.
+ * Check if a run matches a given filter bucket.
+ * Uses executionSummary when available, falls back to reviewStatus only when executionSummary is absent.
  */
-export type RunsDisplayStatus = "no-executions" | "unreviewed" | "partially-reviewed" | "fully-reviewed" | "unknown";
-
-export type RunsReviewStatus = RunsListEntry["reviewStatus"];
-
-export const getRunsDisplayStatus = (
-  reviewStatus: RunsReviewStatus,
-  executionCountsComplete: boolean,
-): RunsDisplayStatus => {
-  if (!executionCountsComplete && reviewStatus === "no-executions") {
-    return "unknown";
+const runMatchesFilter = (run: RunsListEntry, filter: RunsReviewFilter, executionCountsComplete: boolean): boolean => {
+  // "all" always matches
+  if (filter === "all") {
+    return true;
   }
-  return reviewStatus;
+
+  // Use executionSummary as source of truth when present
+  const bucket = getRunFilterBucket(run.executionSummary);
+  
+  // If executionSummary is present and maps to a bucket, use it exclusively
+  if (bucket !== null) {
+    return bucket === filter;
+  }
+
+  // Fallback to reviewStatus only when executionSummary is null/missing
+  // This preserves backward compatibility for older payloads without executionSummary
+  switch (filter) {
+    case "no-executions-yet":
+      return run.reviewStatus === "no-executions" && executionCountsComplete;
+    case "needs-attention":
+      return run.reviewStatus === "unreviewed" || run.reviewStatus === "partially-reviewed";
+    case "fully-executed":
+      return run.reviewStatus === "fully-reviewed";
+    case "no-executable-work":
+    case "partially-executed":
+      // These filter buckets don't have reviewStatus fallbacks - only executionSummary defines them
+      return false;
+    default:
+      return false;
+  }
 };
+
+// ==========================================================================
+// Hook interface
+// ==========================================================================
 
 export interface UseRunSelectionReturn {
   /** Run list from RunControl (passed-through for convenience) */
@@ -343,25 +541,8 @@ export const useRunSelection = (options: UseRunSelectionOptions = {}): UseRunSel
     if (runsFilter === "all") {
       return runs;
     }
-    return runs.filter((r) => {
-      if (runsFilter === "no-executions") {
-        return r.reviewStatus === "no-executions";
-      }
-      if (runsFilter === "awaiting-review") {
-        return r.reviewStatus === "unreviewed";
-      }
-      if (runsFilter === "partially-reviewed") {
-        return r.reviewStatus === "partially-reviewed";
-      }
-      if (runsFilter === "fully-reviewed") {
-        return r.reviewStatus === "fully-reviewed";
-      }
-      if (runsFilter === "needs-attention") {
-        return r.reviewStatus === "unreviewed" || r.reviewStatus === "partially-reviewed";
-      }
-      return true;
-    });
-  }, [runs, runsFilter]);
+    return runs.filter((r) => runMatchesFilter(r, runsFilter, executionCountsComplete));
+  }, [runs, runsFilter, executionCountsComplete]);
 
   const runsFilterCounts = useMemo(() => computeRunsFilterCounts(runs, executionCountsComplete), [runs, executionCountsComplete]);
 

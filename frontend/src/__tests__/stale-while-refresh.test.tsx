@@ -27,6 +27,8 @@ const createRunEntry = (overrides: Partial<RunsListEntry> = {}): RunsListEntry =
   reviewStatus: "unreviewed",
   reviewDownloadPath: null,
   batchExecutable: false,
+  batchEligibleCount: 0,
+  executionSummary: null,
   ...overrides,
 });
 
@@ -41,7 +43,7 @@ const defaultProps = {
   executionCountsComplete: true,
   selectedRunId: null as string | null,
   runsFilter: "all" as const,
-  runsFilterCounts: { all: 3, "no-executions": 0, "awaiting-review": 1, "partially-reviewed": 1, "fully-reviewed": 1, "needs-attention": 2 },
+  runsFilterCounts: { all: 3, "no-executable-work": 0, "no-executions-yet": 0, "partially-executed": 1, "fully-executed": 1, "needs-attention": 1 },
   paginatedRunsList: defaultRuns,
   filteredRunsList: defaultRuns,
   runsListLoading: false,
@@ -185,8 +187,12 @@ describe("stale-while-refresh behavior for Recent Runs panel", () => {
         />
       );
 
-      const executeButton = screen.getByRole("button", { name: /execute/i });
-      expect(executeButton).not.toBeDisabled();
+      // Find the Execute button in the table row (not filter bar)
+      const executeButtons = screen.getAllByRole("button", { name: /execute/i });
+      const rowExecuteButton = executeButtons.find(btn => 
+        btn.closest(".row-action") !== null
+      );
+      expect(rowExecuteButton).not.toBeDisabled();
     });
   });
 
@@ -202,11 +208,11 @@ describe("stale-while-refresh behavior for Recent Runs panel", () => {
       expect(screen.getByText("Failed to load runs")).toBeInTheDocument();
     });
 
-    it("shows 'No runs match the current filter' when filter returns empty and not refreshing", () => {
+      it("shows 'No runs match the current filter' when filter returns empty and not refreshing", () => {
       render(
         <RecentRunsPanel
           {...defaultProps}
-          runsFilter="no-executions"
+          runsFilter="no-executions-yet"
           filteredRunsList={[]}
         />
       );
@@ -218,7 +224,7 @@ describe("stale-while-refresh behavior for Recent Runs panel", () => {
       render(
         <RecentRunsPanel
           {...defaultProps}
-          runsFilter="no-executions"
+          runsFilter="no-executions-yet"
           filteredRunsList={[]}
           runsListLoading={true}
           runsListRefreshing={true}

@@ -1,16 +1,20 @@
 /**
  * Regression test: Recent runs Execute button visibility.
  *
- * Background: The Execute button should show for runs with batchExecutable=true
- * (eligible candidates from batch eligibility scan), even if the reviewStatus
- * is not "no-executions".
+ * Background: The Execute button should show for runs with executionSummary
+ * indicating pending work. When executionSummary is present, button state
+ * derives from:
+ * - not-started + pending > 0 => Execute
+ * - partially-executed + pending > 0 => Resume
+ * - fully-executed / no pending => hide Execute
  *
- * This test ensures the Execute button correctly responds to batchExecutable.
+ * This test ensures the Execute button correctly responds to executionSummary.
  */
 import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { RecentRunsPanel } from "../components/RunsPanel";
-import type { RunsListEntry, RunsReviewFilter } from "../types";
+import type { RunsListEntry } from "../types";
+import type { RunsReviewFilter } from "../hooks/useRunSelection";
 
 // Helper to create a basic run entry with optional batchExecutable override
 const createRunEntry = (
@@ -29,26 +33,33 @@ const createRunEntry = (
   batchEligibility: "unknown",
   batchExecutable: false,
   batchEligibleCount: 0,
+  executionSummary: null,
   ...overrides,
 });
 
-// Common filter counts for single-run tests
+// Common filter counts for single-run tests with new filter types
 const singleFilterCounts: Record<RunsReviewFilter, number> = {
-  "all": 1,
-  "no-executions": 1,
-  "awaiting-review": 0,
-  "partially-reviewed": 0,
-  "fully-reviewed": 0,
+  all: 1,
+  "no-executable-work": 0,
+  "no-executions-yet": 1,
+  "partially-executed": 0,
+  "fully-executed": 0,
   "needs-attention": 0,
 };
 
 describe("Recent runs Execute button visibility", () => {
-  test("shows Execute button when batchExecutable is true", () => {
-    // Arrange: Create a run with batchExecutable=true (has eligible candidates)
+  test("shows Execute button when executionSummary indicates not-started with pending work", () => {
+    // Arrange: Create a run with executionSummary=not-started and pending work
     const runsList: RunsListEntry[] = [
       createRunEntry("run-with-candidates", {
-        batchExecutable: true,
-        batchEligibleCount: 5,
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 5,
+          executedCandidates: 0,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 5,
+          batchExecutionState: "not-started",
+        },
       }),
     ];
 
@@ -83,21 +94,28 @@ describe("Recent runs Execute button visibility", () => {
       />
     );
 
-    // Assert: Execute button should be visible
-    const executeButton = screen.getByRole("button", { name: /execute/i });
-    expect(executeButton).toBeInTheDocument();
+    // Assert: Execute button should be visible (filter for row-action context)
+    const executeButtons = screen.getAllByRole("button", { name: /execute/i });
+    const rowExecuteButton = executeButtons.find(btn => btn.closest(".row-action") !== null);
+    expect(rowExecuteButton).toBeInTheDocument();
 
     // Clicking should call onBatchExecution
-    executeButton.click();
+    rowExecuteButton!.click();
     expect(onBatchExecution).toHaveBeenCalledWith("run-with-candidates");
   });
 
-  test("shows Execute button when reviewStatus is 'no-executions'", () => {
-    // Arrange: Create a run with no-executions status (hasn't run any checks yet)
+  test("shows Resume button when executionSummary indicates partially-executed with pending work", () => {
+    // Arrange: Create a run with partially-executed state
     const runsList: RunsListEntry[] = [
-      createRunEntry("run-no-executions", {
-        reviewStatus: "no-executions",
-        batchExecutable: false,
+      createRunEntry("run-partial", {
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 5,
+          executedCandidates: 3,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 2,
+          batchExecutionState: "partially-executed",
+        },
       }),
     ];
 
@@ -110,7 +128,14 @@ describe("Recent runs Execute button visibility", () => {
         executionCountsComplete={true}
         selectedRunId={null}
         runsFilter="all"
-        runsFilterCounts={singleFilterCounts}
+        runsFilterCounts={{
+          all: 1,
+          "no-executable-work": 0,
+          "no-executions-yet": 0,
+          "partially-executed": 1,
+          "fully-executed": 0,
+          "needs-attention": 0,
+        }}
         paginatedRunsList={runsList}
         filteredRunsList={runsList}
         runsListLoading={false}
@@ -132,30 +157,24 @@ describe("Recent runs Execute button visibility", () => {
       />
     );
 
-    // Assert: Execute button should be visible
-    expect(screen.getByRole("button", { name: /execute/i })).toBeInTheDocument();
+    // Assert: Resume button should be visible
+    expect(screen.getByRole("button", { name: /resume/i })).toBeInTheDocument();
   });
 
-  test("shows dash (—) when run is not executable and has executions", () => {
-    // Arrange: Create a run that has been executed (reviewed) - no need to execute again
+  test("shows dash (—) when run is fully-executed without pending work", () => {
+    // Arrange: Create a fully-executed run
     const runsList: RunsListEntry[] = [
       createRunEntry("run-reviewed", {
-        reviewStatus: "fully-reviewed",
-        executionCount: 5,
-        reviewedCount: 5,
-        triaged: true,
-        batchExecutable: false,
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 5,
+          executedCandidates: 5,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 0,
+          batchExecutionState: "fully-executed",
+        },
       }),
     ];
-
-    const filterCountsReviewed: Record<RunsReviewFilter, number> = {
-      "all": 1,
-      "no-executions": 0,
-      "awaiting-review": 0,
-      "partially-reviewed": 0,
-      "fully-reviewed": 1,
-      "needs-attention": 0,
-    };
 
     // Act
     render(
@@ -164,7 +183,14 @@ describe("Recent runs Execute button visibility", () => {
         executionCountsComplete={true}
         selectedRunId={null}
         runsFilter="all"
-        runsFilterCounts={filterCountsReviewed}
+        runsFilterCounts={{
+          all: 1,
+          "no-executable-work": 0,
+          "no-executions-yet": 0,
+          "partially-executed": 0,
+          "fully-executed": 1,
+          "needs-attention": 0,
+        }}
         paginatedRunsList={runsList}
         filteredRunsList={runsList}
         runsListLoading={false}
@@ -186,8 +212,11 @@ describe("Recent runs Execute button visibility", () => {
       />
     );
 
-    // Assert: No Execute button, dash should be shown in the Action column
-    expect(screen.queryByRole("button", { name: /execute/i })).not.toBeInTheDocument();
+    // Assert: No Execute button in row-action context, dash should be shown in the Action column
+    const executeButtons = screen.queryAllByRole("button", { name: /execute/i });
+    const rowExecuteButtons = executeButtons.filter(btn => btn.closest(".row-action") !== null);
+    expect(rowExecuteButtons.length).toBe(0);
+    expect(screen.queryByRole("button", { name: /resume/i })).not.toBeInTheDocument();
     // Use getAllByText since both Review and Action columns may show "—" for runs without downloads
     const dashes = screen.getAllByText("—", { selector: '[aria-label="No action available"]' });
     // At least one dash should be in the Action column
@@ -198,8 +227,14 @@ describe("Recent runs Execute button visibility", () => {
     // Arrange
     const runsList: RunsListEntry[] = [
       createRunEntry("run-executing", {
-        batchExecutable: true,
-        batchEligibleCount: 3,
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 5,
+          executedCandidates: 0,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 5,
+          batchExecutionState: "not-started",
+        },
       }),
     ];
 
@@ -240,27 +275,45 @@ describe("Recent runs Execute button visibility", () => {
 
   test("Execute button calls onBatchExecution with correct runId", () => {
     // Arrange: Multiple runs with different states
-    // run-1: batchExecutable=true -> shows Execute
-    // run-2: batchExecutable=false, reviewStatus=fully-reviewed -> shows dash
-    // run-3: batchExecutable=true -> shows Execute
     const runsList: RunsListEntry[] = [
-      createRunEntry("run-1", { batchExecutable: true, batchEligibleCount: 2 }),
-      createRunEntry("run-2", { 
-        batchExecutable: false, 
-        reviewStatus: "fully-reviewed",
-        executionCount: 5,
-        reviewedCount: 5,
-        triaged: true,
+      createRunEntry("run-1", {
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 2,
+          executedCandidates: 0,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 2,
+          batchExecutionState: "not-started",
+        },
       }),
-      createRunEntry("run-3", { batchExecutable: true, batchEligibleCount: 7 }),
+      createRunEntry("run-2", {
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 5,
+          executedCandidates: 5,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 0,
+          batchExecutionState: "fully-executed",
+        },
+      }),
+      createRunEntry("run-3", {
+        executionSummary: {
+          totalCandidates: 10,
+          executableCandidates: 7,
+          executedCandidates: 0,
+          failedCandidates: 0,
+          pendingExecutableCandidates: 7,
+          batchExecutionState: "not-started",
+        },
+      }),
     ];
 
     const multiFilterCounts: Record<RunsReviewFilter, number> = {
-      "all": 3,
-      "no-executions": 1,
-      "awaiting-review": 0,
-      "partially-reviewed": 0,
-      "fully-reviewed": 1,  // run-2 is fully-reviewed
+      all: 3,
+      "no-executable-work": 0,
+      "no-executions-yet": 2, // run-1 and run-3 have pending work
+      "partially-executed": 0,
+      "fully-executed": 1, // run-2 is fully-executed
       "needs-attention": 0,
     };
 
@@ -296,14 +349,70 @@ describe("Recent runs Execute button visibility", () => {
     );
 
     // Find the Execute button for run-3 and click it
-    // run-1 and run-3 have batchExecutable=true, run-2 doesn't
+    // run-1 and run-3 have executionSummary with pending work, run-2 doesn't
     const executeButtons = screen.getAllByRole("button", { name: /execute/i });
-    expect(executeButtons.length).toBe(2);
+    // Filter to only row-action buttons (not filter bar buttons)
+    const rowExecuteButtons = executeButtons.filter(btn => btn.closest(".row-action") !== null);
+    expect(rowExecuteButtons.length).toBe(2);
 
     // Click run-3's button (it's the second one since run-1 is also executable)
-    executeButtons[1].click();
+    rowExecuteButtons[1].click();
 
     // Verify the correct runId was passed
     expect(onBatchExecution).toHaveBeenCalledWith("run-3");
+  });
+
+  test("backward compat: shows Execute for batchExecutable=true without executionSummary", () => {
+    // Arrange: Legacy run without executionSummary but with batchExecutable=true
+    const runsList: RunsListEntry[] = [
+      createRunEntry("run-legacy", {
+        executionSummary: null,
+        batchExecutable: true,
+        batchEligibleCount: 5,
+      }),
+    ];
+
+    const onBatchExecution = vi.fn();
+
+    // Act
+    render(
+      <RecentRunsPanel
+        runsList={runsList}
+        executionCountsComplete={true}
+        selectedRunId={null}
+        runsFilter="all"
+        runsFilterCounts={{
+          all: 1,
+          "no-executable-work": 0,
+          "no-executions-yet": 1,
+          "partially-executed": 0,
+          "fully-executed": 0,
+          "needs-attention": 0,
+        }}
+        paginatedRunsList={runsList}
+        filteredRunsList={runsList}
+        runsListLoading={false}
+        runsListError={null}
+        runsPage={1}
+        totalRunsPages={1}
+        runsPageSize={5}
+        isRunsListFollowingSelection={true}
+        isSelectedRunVisibleOnCurrentRunsPage={true}
+        executingBatchRunId={null}
+        batchExecutionError={{}}
+        onRunsFilterChange={() => {}}
+        onRunsPageChange={() => {}}
+        onRunsPageSizeChange={() => {}}
+        onRunSelection={() => {}}
+        onBatchExecution={onBatchExecution}
+        onShowSelectedRun={() => {}}
+        onFocusClusterForNextChecks={() => {}}
+      />
+    );
+
+    // Assert: Execute button should be visible for backward compatibility (filter for row-action)
+    const executeButtons = screen.getAllByRole("button", { name: /execute/i });
+    const rowExecuteButton = executeButtons.find(btn => btn.closest(".row-action") !== null);
+    expect(rowExecuteButton).toBeInTheDocument();
   });
 });

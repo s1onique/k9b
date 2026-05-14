@@ -237,9 +237,9 @@ describe("useRunSelection refresh behavior (Phase 5)", () => {
     expect(result.current.runsFilter).toBe("all");
     expect(result.current.filteredRunsList.length).toBe(3);
 
-    // Change filter to "unreviewed"
+    // Change filter to "needs-attention" (maps from unreviewed reviewStatus)
     act(() => {
-      result.current.handleRunsFilterChange("awaiting-review");
+      result.current.handleRunsFilterChange("needs-attention");
     });
 
     expect(result.current.filteredRunsList.length).toBe(1); // Only run-122 is unreviewed

@@ -397,8 +397,8 @@ describe('Recent runs selection-pagination sync', () => {
       expect(runRows.length).toBeGreaterThan(0);
     });
 
-    // Click Awaiting review filter
-    const filterButton = await screen.findByRole('button', { name: /Awaiting review/i });
+    // Click Needs attention filter
+    const filterButton = await screen.findByRole('button', { name: /Needs attention/i });
     await act(async () => {
       await user.click(filterButton);
     });
@@ -410,7 +410,7 @@ describe('Recent runs selection-pagination sync', () => {
     });
 
     // ASSERTION: Active filter button should be visually marked
-    const activeFilterButton = await screen.findByRole('button', { name: /Awaiting review/i });
+    const activeFilterButton = await screen.findByRole('button', { name: /Needs attention/i });
     expect(activeFilterButton).toHaveClass('active');
   });
 });

@@ -255,10 +255,10 @@ describe("App", () => {
     expect(runsList).not.toBeNull();
 
     // Verify runs are displayed with review status pills - use getAll since there may be multiple
-    // Note: StatusBadge renders "Awaiting review" for reviewStatus="unreviewed" per RunsPanel.tsx
-    const unreviewedPills = screen.getAllByText("Awaiting review");
+    // Note: StatusBadge renders "Needs attention" for reviewStatus="unreviewed" per RunsPanel.tsx
+    const unreviewedPills = screen.getAllByText("Needs attention");
     expect(unreviewedPills.length).toBeGreaterThan(0);
-    const partiallyReviewedPills = screen.getAllByText("Partially reviewed");
+    const partiallyReviewedPills = screen.getAllByText("Partially executed");
     expect(partiallyReviewedPills.length).toBeGreaterThan(0);
 
     // Verify runs list has items - the run items are rendered
@@ -288,25 +288,27 @@ describe("App", () => {
     const allRunItems = document.querySelectorAll(".run-row");
     expect(allRunItems.length).toBe(4);
 
-    // Test "no-executions" filter button - should show runs with no executions
+    // Test "No executions yet" filter button - should show runs with no executions
     // From fixtures: run-120 (reviewStatus: "no-executions") = 1 run
-    // The filter buttons are in order: All runs, No executions yet, Awaiting review, etc.
-    const noExecutionsFilterButton = document.querySelectorAll(".runs-filter-button")[1] as HTMLButtonElement;
+    // The filter buttons are in order: All runs, No executable work, No executions yet, Partially executed, Fully executed, Needs attention
+    // Index 2 is "No executions yet" which matches reviewStatus="no-executions"
+    const noExecutionsFilterButton = document.querySelectorAll(".runs-filter-button")[2] as HTMLButtonElement;
     await act(async () => {
       await user.click(noExecutionsFilterButton);
     });
     let filteredItems = document.querySelectorAll(".run-row");
     expect(filteredItems.length).toBe(1);
 
-    // Test "Awaiting review" filter - should show runs with reviewStatus "unreviewed"
-    // From fixtures: run-122 (reviewStatus: "unreviewed") = 1 run
-    const awaitingReviewFilter = document.querySelectorAll(".runs-filter-button")[2] as HTMLButtonElement;
+    // Test "Needs attention" filter - should show runs with reviewStatus "unreviewed" or "partially-reviewed"
+    // From fixtures: run-122 (reviewStatus: "unreviewed") + run-121 (reviewStatus: "partially-reviewed") = 2 runs
+    // Index 5 is "Needs attention" which maps from reviewStatus="unreviewed" or "partially-reviewed"
+    const awaitingReviewFilter = document.querySelectorAll(".runs-filter-button")[5] as HTMLButtonElement;
     await act(async () => {
       await user.click(awaitingReviewFilter);
     });
     filteredItems = document.querySelectorAll(".run-row");
-    expect(filteredItems.length).toBe(1);
-    expect(screen.getByText(/Showing 1 of 4/)).toBeInTheDocument();
+    expect(filteredItems.length).toBe(2);
+    expect(screen.getByText(/Showing 2 of 4/)).toBeInTheDocument();
 
     // Test "all" filter button - should show all runs again, no summary text
     const allFilterButton = document.querySelectorAll(".runs-filter-button")[0] as HTMLButtonElement;
@@ -2393,15 +2395,15 @@ describe("Recent runs review status badges", () => {
     });
 
     // Find the status pill for fully-reviewed runs - should have the green class
-    const fullyReviewedPills = document.querySelectorAll(".status-pill-fully-reviewed");
+    const fullyReviewedPills = document.querySelectorAll(".status-pill-fully-executed");
     expect(fullyReviewedPills.length).toBe(2);
 
     // Verify each pill has both the base status-pill class and the specific fully-reviewed class
     fullyReviewedPills.forEach((pill) => {
       expect(pill).toHaveClass("status-pill");
-      expect(pill).toHaveClass("status-pill-fully-reviewed");
+      expect(pill).toHaveClass("status-pill-fully-executed");
       // Verify it does NOT have the unreviewed class (different color)
-      expect(pill).not.toHaveClass("status-pill-unreviewed");
+      expect(pill).not.toHaveClass("status-pill-needs-attention");
     });
   });
 
@@ -2438,15 +2440,15 @@ describe("Recent runs review status badges", () => {
     });
 
     // Find the status pill for unreviewed runs - should have the amber class
-    const unreviewedPills = document.querySelectorAll(".status-pill-unreviewed");
+    const unreviewedPills = document.querySelectorAll(".status-pill-needs-attention");
     expect(unreviewedPills.length).toBe(1);
 
     // Verify the pill has both base class and specific unreviewed class
     const pill = unreviewedPills[0];
     expect(pill).toHaveClass("status-pill");
-    expect(pill).toHaveClass("status-pill-unreviewed");
+    expect(pill).toHaveClass("status-pill-needs-attention");
     // Verify it does NOT have the fully-reviewed class (green color)
-    expect(pill).not.toHaveClass("status-pill-fully-reviewed");
+    expect(pill).not.toHaveClass("status-pill-fully-executed");
   });
 
   test("recent-runs badges distinguish fully-reviewed (green) from unreviewed (amber)", async () => {
@@ -2493,19 +2495,19 @@ describe("Recent runs review status badges", () => {
     });
 
     // Find both pill types
-    const fullyReviewedPill = document.querySelector(".status-pill-fully-reviewed");
-    const unreviewedPill = document.querySelector(".status-pill-unreviewed");
+    const fullyReviewedPill = document.querySelector(".status-pill-fully-executed");
+    const unreviewedPill = document.querySelector(".status-pill-needs-attention");
 
     expect(fullyReviewedPill).not.toBeNull();
     expect(unreviewedPill).not.toBeNull();
 
     // Verify they have different CSS classes (different styles)
-    expect(fullyReviewedPill).toHaveClass("status-pill-fully-reviewed");
-    expect(unreviewedPill).toHaveClass("status-pill-unreviewed");
+    expect(fullyReviewedPill).toHaveClass("status-pill-fully-executed");
+    expect(unreviewedPill).toHaveClass("status-pill-needs-attention");
 
     // Verify they are distinct from each other
-    expect(fullyReviewedPill).not.toHaveClass("status-pill-unreviewed");
-    expect(unreviewedPill).not.toHaveClass("status-pill-fully-reviewed");
+    expect(fullyReviewedPill).not.toHaveClass("status-pill-needs-attention");
+    expect(unreviewedPill).not.toHaveClass("status-pill-fully-executed");
 
     // Both should have the base status-pill class
     expect(fullyReviewedPill).toHaveClass("status-pill");

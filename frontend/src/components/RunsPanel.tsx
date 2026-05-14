@@ -190,7 +190,7 @@ export const RecentRunsPanel = ({
                     </td>
                     <td>
                       <StatusBadge 
-                        displayStatus={getRunsDisplayStatus(runEntry.reviewStatus, executionCountsComplete)}
+                        displayStatus={getRunsDisplayStatus(runEntry, executionCountsComplete)}
                       />
                     </td>
                     <td>
@@ -269,8 +269,8 @@ export const RecentRunsPanel = ({
                         
                         // BACKWARD COMPATIBILITY: Fall back to batchExecutable for older payloads
                         // This ensures old responses without executionSummary still work.
-                        const displayStatus = getRunsDisplayStatus(runEntry.reviewStatus, executionCountsComplete);
-                        if (displayStatus === "no-executions" || runEntry.batchExecutable) {
+                        const displayStatus = getRunsDisplayStatus(runEntry, executionCountsComplete);
+                        if (displayStatus === "no-executions-yet" || runEntry.batchExecutable) {
                           return (
                             <button
                               type="button"
@@ -360,18 +360,20 @@ export const RunDetailLoadingPlaceholder = ({ title }: { title: string }) => {
  */
 const StatusBadge = ({ displayStatus }: { displayStatus: RunsDisplayStatus }) => {
   const label = {
-    "no-executions": "No executions",
-    "unreviewed": "Awaiting review",
-    "partially-reviewed": "Partially reviewed",
-    "fully-reviewed": "Fully reviewed",
+    "no-executable-work": "No executable checks",
+    "no-executions-yet": "No executions yet",
+    "partially-executed": "Partially executed",
+    "fully-executed": "Fully executed",
+    "needs-attention": "Needs attention",
     "unknown": "Not reviewed yet",
   }[displayStatus];
 
   const variant = {
-    "no-executions": "no-executions",
-    "unreviewed": "unreviewed",
-    "partially-reviewed": "partially-reviewed",
-    "fully-reviewed": "fully-reviewed",
+    "no-executable-work": "no-executable-work",
+    "no-executions-yet": "no-executions-yet",
+    "partially-executed": "partially-executed",
+    "fully-executed": "fully-executed",
+    "needs-attention": "needs-attention",
     "unknown": "unknown",
   }[displayStatus];
 
