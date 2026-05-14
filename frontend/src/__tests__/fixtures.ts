@@ -89,7 +89,7 @@ export const sampleNextCheckCandidates: NextCheckPlanCandidate[] = [
     candidateIndex: 0,
     approvalStatus: "not-required",
     approvalState: "not-required",
-    executionState: "executed-success",
+    executionState: "unexecuted",
     outcomeStatus: "executed-success",
     latestArtifactPath: "/artifacts/run-123-next-check-execution-0.json",
     latestTimestamp: "2026-04-06T12:05:00Z",

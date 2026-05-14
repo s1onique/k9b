@@ -16,6 +16,7 @@ import type {
   NextCheckExecutionResponse,
   ArtifactLink,
 } from "../types";
+import { deriveExecutionLabel } from "../utils";
 
 // Execution result types - kept inline to avoid circular imports
 type ExecutionErrorResult = {
@@ -103,6 +104,7 @@ const outcomeStatusLabels: Record<string, string> = {
   "approval-stale": "Approval stale",
   "approval-orphaned": "Orphaned approval",
   "not-used": "Not used",
+  pending: "Awaiting approval",
   unknown: "Unknown",
 };
 
@@ -419,7 +421,7 @@ export const ClusterNextCheckPlanSection: React.FC<ClusterNextCheckPlanSectionPr
                   {outcomeStatusDisplay(candidate.outcomeStatus)}
                 </span>
                 <span className="muted tiny">
-                  Approval: {humanizeReason(candidate.approvalState) || candidate.approvalState || "unknown"} · Execution: {humanizeReason(candidate.executionState) || candidate.executionState || "unknown"}
+                  Approval: {humanizeReason(candidate.approvalState) || candidate.approvalState || "unknown"} · Execution: {deriveExecutionLabel(candidate) ?? "—"}
                 </span>
                 {candidate.latestTimestamp ? (
                   <span className="muted tiny">Updated {relativeRecency(candidate.latestTimestamp)}</span>

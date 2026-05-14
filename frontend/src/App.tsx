@@ -72,6 +72,7 @@ import {
   relativeRecency,
   statusClass,
   truncateText,
+  isItemExecuted,
 } from "./utils";
 import {
   confidenceWeight,
@@ -635,6 +636,11 @@ const App = () => {
     }
     const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
     if (!targetLabel) {
+      return false;
+    }
+    // CRITICAL: Do not allow re-execution of already executed items
+    // Use canonical execution state derivation to prevent contradictions
+    if (isItemExecuted(candidate)) {
       return false;
     }
     return true;

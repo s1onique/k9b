@@ -20,6 +20,8 @@ import {
   formatTimestamp,
   relativeRecency,
   statusClass,
+  isItemExecuted,
+  deriveExecutionLabel,
 } from "../utils";
 import { FailureFollowUpBlock } from "./FailureFollowUpBlock";
 import { ResultInterpretationBlock } from "./ResultInterpretationBlock";
@@ -524,9 +526,10 @@ export const QueuePanel = ({
                         <span className={`action-state-badge action-state-${item.approvalState === "approved" ? "ready" : item.approvalState === "approval-required" ? "approval" : "inactive"}`}>
                           {item.approvalState === "approved" ? "Approved" : item.approvalState === "approval-required" ? "Needs approval" : "Pending"}
                         </span>
-                        {item.executionState && (
+                        {/* Use canonical execution label - do NOT show "unexecuted" as a badge */}
+                        {deriveExecutionLabel(item) && (
                           <span className={`execution-state-badge execution-state-${item.executionState}`}>
-                            {item.executionState.replace(/[-]/g, " ")}
+                            {deriveExecutionLabel(item)}
                           </span>
                         )}
                       </div>
