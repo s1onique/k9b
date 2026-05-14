@@ -1081,7 +1081,12 @@ def _find_next_check_plan(
     else:
         # Fall back to review-enrichment artifact for alias mapping
         alias_mapping = _find_alias_mapping_from_review(external_analysis_dir, run_id, artifact_index)
-    deanon_candidates = _build_queue_from_plan(payload, alias_mapping)
+    
+    # Scan execution artifacts for overlay derivation
+    # This enables queue items to reflect actual execution state from artifacts
+    execution_overlays = _scan_execution_artifacts_for_queue(external_analysis_dir, run_id)
+    
+    deanon_candidates = _build_queue_from_plan(payload, alias_mapping, execution_overlays)
 
     return {
         "status": artifact_data.get("status", "unknown"),
@@ -1097,15 +1102,159 @@ def _find_next_check_plan(
     }
 
 
+def _scan_execution_artifacts_for_queue(
+    external_analysis_dir: Path,
+    run_id: str,
+) -> list[dict[str, object]]:
+    """Scan external-analysis directory for execution artifacts to overlay queue state.
+
+    Returns a list of overlays that can be matched against queue candidates.
+    Each overlay contains: candidate_index, command_family, target_cluster, status, artifact_path, timestamp.
+    """
+    overlays: list[dict[str, object]] = []
+
+    if not external_analysis_dir.exists():
+        return overlays
+
+    try:
+        validated_run_id = validate_run_id(run_id)
+    except SecurityError:
+        return overlays
+
+    # SECURITY: run_id validated by validate_run_id() before glob construction
+    glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution-*.json")
+    for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
+        try:
+            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+            if not isinstance(artifact_data, dict):
+                continue
+
+            # Verify purpose
+            purpose = artifact_data.get("purpose")
+            if purpose != "next-check-execution":
+                continue
+
+            payload = artifact_data.get("payload", {})
+            if not isinstance(payload, dict):
+                continue
+
+            # Extract matching fields from payload
+            candidate_id = payload.get("candidateId") or payload.get("candidate_id")
+            candidate_index_raw = payload.get("candidateIndex") or payload.get("candidate_index")
+            candidate_index: int | None = None
+            if candidate_index_raw is not None:
+                try:
+                    candidate_index = int(str(candidate_index_raw))
+                except (ValueError, TypeError):
+                    pass
+
+            # Extract command_family
+            command_family = payload.get("commandFamily") or payload.get("command_family")
+            if not command_family:
+                tool_name = payload.get("tool_name") or ""
+                if isinstance(tool_name, str) and "-" in tool_name:
+                    command_family = tool_name.split("-", 1)[1] if "-" in tool_name else tool_name
+
+            # Extract target_cluster
+            target_cluster = payload.get("clusterLabel") or payload.get("cluster_label") or payload.get("targetCluster")
+
+            # Extract status and timestamp
+            status = artifact_data.get("status")
+            timestamp = artifact_data.get("timestamp")
+
+            # Compute artifact path relative to external-analysis parent
+            try:
+                artifact_path = str(artifact_file.relative_to(external_analysis_dir.parent))
+            except ValueError:
+                artifact_path = str(artifact_file)
+
+            overlays.append({
+                "candidate_id": str(candidate_id) if candidate_id else None,
+                "candidate_index": candidate_index,
+                "command_family": str(command_family) if command_family else None,
+                "target_cluster": str(target_cluster) if target_cluster else None,
+                "status": str(status) if status else None,
+                "timestamp": str(timestamp) if timestamp else None,
+                "artifact_path": artifact_path,
+            })
+        except (OSError, json.JSONDecodeError):
+            continue
+
+    return overlays
+
+
+def _match_overlay_to_candidate(
+    overlay: dict[str, object],
+    candidate: dict[str, object],
+) -> bool:
+    """Check if an execution overlay matches a queue candidate.
+
+    Primary match: candidate_index + command_family + target_cluster (all required)
+    Fallback match: candidate_id + target_cluster (all required)
+    """
+    overlay_index = overlay.get("candidate_index")
+    overlay_family = overlay.get("command_family")
+    overlay_cluster = overlay.get("target_cluster")
+    overlay_id = overlay.get("candidate_id")
+
+    candidate_index = candidate.get("candidateIndex") or candidate.get("candidate_index")
+    candidate_family = candidate.get("suggestedCommandFamily") or candidate.get("commandFamily") or candidate.get("command_family")
+    candidate_cluster = candidate.get("targetCluster") or candidate.get("target_cluster")
+    candidate_id = candidate.get("candidateId") or candidate.get("candidate_id")
+
+    # Primary match: candidate_index + command_family + target_cluster
+    if overlay_index is not None and overlay_family and overlay_cluster:
+        index_match = overlay_index == candidate_index
+        family_match = overlay_family.lower() == str(candidate_family).lower() if candidate_family else False
+        cluster_match = overlay_cluster == candidate_cluster
+        if index_match and family_match and cluster_match:
+            return True
+
+    # Fallback match: candidate_id + target_cluster
+    if overlay_id and overlay_cluster:
+        id_match = overlay_id == candidate_id
+        cluster_match = overlay_cluster == candidate_cluster
+        if id_match and cluster_match:
+            return True
+
+    return False
+
+
+def _derive_execution_state_from_status(status: str | None) -> str:
+    """Derive execution_state from artifact status.
+
+    Maps artifact status to queue item execution_state:
+    - "success" -> "executed-success"
+    - "failed" -> "executed-failed"
+    - "timed-out" / "timeout" -> "timed-out"
+    - other -> "executed-success" (default for any completed artifact)
+    """
+    if status is None:
+        return "executed-success"
+
+    status_lower = status.lower()
+    if status_lower == "success":
+        return "executed-success"
+    elif status_lower == "failed":
+        return "executed-failed"
+    elif status_lower in ("timed-out", "timeout"):
+        return "timed-out"
+    else:
+        return "executed-success"
+
+
 def _build_queue_from_plan(
     plan: dict[str, object] | None,
     alias_mapping: dict[str, str] | None = None,
+    execution_overlays: list[dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
-    """Build next-check queue from plan artifact.
+    """Build next-check queue from plan artifact with execution state overlay.
 
     Args:
         plan: The plan artifact dict containing candidates
         alias_mapping: Optional alias-to-real mapping for de-anonymization
+        execution_overlays: Optional list of execution artifact overlays to apply
+                           (e.g., from _scan_execution_artifacts_for_queue)
     """
     if not plan:
         return []
@@ -1119,25 +1268,40 @@ def _build_queue_from_plan(
         if not isinstance(candidate, dict):
             continue
 
-        requires_approval = bool(candidate.get("requiresOperatorApproval"))
-        safe_to_automate = bool(candidate.get("safeToAutomate"))
+        # Apply de-anonymization if alias_mapping provided
+        if alias_mapping:
+            deanon_candidate = deanonymize_next_check_candidate(candidate, alias_mapping)
+        else:
+            deanon_candidate = candidate
+
+        requires_approval = bool(deanon_candidate.get("requiresOperatorApproval"))
+        safe_to_automate = bool(deanon_candidate.get("safeToAutomate"))
+
+        # Check for matching execution overlay
+        execution_state = deanon_candidate.get("executionState", "unexecuted")
+        outcome_status = deanon_candidate.get("outcomeStatus")
+        latest_artifact_path = deanon_candidate.get("latestArtifactPath")
+
+        if execution_overlays:
+            for overlay in execution_overlays:
+                if _match_overlay_to_candidate(overlay, deanon_candidate):
+                    # Found matching execution artifact - overlay execution state
+                    status_value = overlay.get("status")
+                    execution_state = _derive_execution_state_from_status(str(status_value) if status_value is not None else None)
+                    outcome_status = execution_state  # Map executionState to outcomeStatus
+                    latest_artifact_path = overlay.get("artifact_path")
+                    break
 
         # Determine queue status
         queue_status = "safe-ready"
         if requires_approval:
-            approval_state = str(candidate.get("approvalState", "")).lower()
+            approval_state = str(deanon_candidate.get("approvalState", "")).lower()
             if approval_state == "approved":
                 queue_status = "approved-ready"
             else:
                 queue_status = "approval-needed"
         elif not safe_to_automate:
             queue_status = "duplicate-or-stale"
-
-        # Apply de-anonymization if alias_mapping provided
-        if alias_mapping:
-            deanon_candidate = deanonymize_next_check_candidate(candidate, alias_mapping)
-        else:
-            deanon_candidate = candidate
 
         queue.append({
             "candidateId": deanon_candidate.get("candidateId"),
@@ -1149,9 +1313,9 @@ def _build_queue_from_plan(
             "safeToAutomate": safe_to_automate,
             "requiresOperatorApproval": requires_approval,
             "approvalState": deanon_candidate.get("approvalState"),
-            "executionState": deanon_candidate.get("executionState", "unexecuted"),
-            "outcomeStatus": deanon_candidate.get("outcomeStatus"),
-            "latestArtifactPath": deanon_candidate.get("latestArtifactPath"),
+            "executionState": execution_state,
+            "outcomeStatus": outcome_status,
+            "latestArtifactPath": latest_artifact_path,
             "queueStatus": queue_status,
             "sourceReason": deanon_candidate.get("sourceReason"),
             "expectedSignal": deanon_candidate.get("expectedSignal"),
