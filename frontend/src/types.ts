@@ -939,6 +939,8 @@ export type OperatorWorklistItemPayload = {
   reason: string | null;
   expectedEvidence: string | null;
   safetyNote: string | null;
+  /** Canonical item state: advisory | approval-needed | approved | queued | executed | reviewed */
+  itemState: string | null;
   approvalState: string | null;
   executionState: string | null;
   feedbackState: string | null;

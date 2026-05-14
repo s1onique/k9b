@@ -118,6 +118,7 @@ const sampleOperatorWorklist: OperatorWorklistPayload = {
       reason: "Immediate triage for High CPU",
       expectedEvidence: "kubelet logs",
       safetyNote: "Urgency: high; primary triage: true",
+      itemState: "advisory",
       approvalState: "not-required",
       executionState: "unexecuted",
       feedbackState: null,
@@ -137,6 +138,7 @@ const sampleOperatorWorklist: OperatorWorklistPayload = {
       reason: "Gather additional evidence",
       expectedEvidence: "pod status",
       safetyNote: "Urgency: medium; primary triage: false",
+      itemState: "advisory",
       approvalState: null,
       executionState: null,
       feedbackState: null,
@@ -152,16 +154,16 @@ const sampleOperatorWorklist: OperatorWorklistPayload = {
 /** Large worklist fixture for pagination tests (10 items) */
 const largeOperatorWorklist: OperatorWorklistPayload = {
   items: [
-    { id: "item-1", rank: 1, workstream: "incident", title: "Item 1", description: "", command: "kubectl test 1", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-2", rank: 2, workstream: "evidence", title: "Item 2", description: "", command: "kubectl test 2", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-3", rank: 3, workstream: "incident", title: "Item 3", description: "", command: "kubectl test 3", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-4", rank: 4, workstream: "evidence", title: "Item 4", description: "", command: "kubectl test 4", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-5", rank: 5, workstream: "incident", title: "Item 5", description: "", command: "kubectl test 5", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-6", rank: 6, workstream: "evidence", title: "Item 6", description: "", command: "kubectl test 6", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-7", rank: 7, workstream: "incident", title: "Item 7", description: "", command: "kubectl test 7", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-8", rank: 8, workstream: "evidence", title: "Item 8", description: "", command: "kubectl test 8", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-9", rank: 9, workstream: "incident", title: "Item 9", description: "", command: "kubectl test 9", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
-    { id: "item-10", rank: 10, workstream: "evidence", title: "Item 10", description: "", command: null, targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-1", rank: 1, workstream: "incident", title: "Item 1", description: "", command: "kubectl test 1", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-2", rank: 2, workstream: "evidence", title: "Item 2", description: "", command: "kubectl test 2", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-3", rank: 3, workstream: "incident", title: "Item 3", description: "", command: "kubectl test 3", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-4", rank: 4, workstream: "evidence", title: "Item 4", description: "", command: "kubectl test 4", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-5", rank: 5, workstream: "incident", title: "Item 5", description: "", command: "kubectl test 5", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-6", rank: 6, workstream: "evidence", title: "Item 6", description: "", command: "kubectl test 6", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-7", rank: 7, workstream: "incident", title: "Item 7", description: "", command: "kubectl test 7", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-8", rank: 8, workstream: "evidence", title: "Item 8", description: "", command: "kubectl test 8", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-9", rank: 9, workstream: "incident", title: "Item 9", description: "", command: "kubectl test 9", targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
+    { id: "item-10", rank: 10, workstream: "evidence", title: "Item 10", description: "", command: null, targetCluster: null, targetContext: null, reason: null, expectedEvidence: null, safetyNote: null, itemState: "queued", approvalState: null, executionState: null, feedbackState: null, sourceArtifactRefs: [] },
   ],
   totalItems: 10,
   completedItems: 0,
@@ -920,9 +922,10 @@ describe("OperatorWorklistCard", () => {
   test("10. State badges (approval, execution, feedback) render when present", () => {
     render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
 
-    // First item has approval and execution states
+    // First item has approval state
     expect(screen.getByText("not-required")).toBeInTheDocument();
-    expect(screen.getByText("unexecuted")).toBeInTheDocument();
+    // "unexecuted" is not shown as badge (canonical behavior - absence of execution)
+    expect(screen.queryByText("unexecuted")).not.toBeInTheDocument();
   });
 
   // Test 11: Empty state renders honestly
@@ -1175,9 +1178,10 @@ describe("OperatorWorklistCard Pagination", () => {
   test("10b. Pagination does not break existing worklist functionality (state badges)", () => {
     render(<OperatorWorklistCard operatorWorklist={sampleOperatorWorklist} />);
 
-    // State badges should still render
+    // Approval state badge should still render
     expect(screen.getByText("not-required")).toBeInTheDocument();
-    expect(screen.getByText("unexecuted")).toBeInTheDocument();
+    // "unexecuted" is not shown (canonical behavior)
+    expect(screen.queryByText("unexecuted")).not.toBeInTheDocument();
   });
 
   test("10c. Pagination does not break existing worklist functionality (source links)", () => {

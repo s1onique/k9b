@@ -84,6 +84,7 @@ describe("Regression: Degraded incident with actionable worklist", () => {
         reason: "Immediate triage for degraded cluster",
         expectedEvidence: "pod status, events",
         safetyNote: "Urgency: high; primary triage: true",
+        itemState: "queued",
         approvalState: "approved",
         executionState: "unexecuted",
         feedbackState: null,
@@ -126,9 +127,12 @@ describe("Regression: Degraded incident with actionable worklist", () => {
     // Command should be visible
     expect(screen.getByTestId("command-text-worklist-command-1")).toBeInTheDocument();
 
-    // State badges should be visible
+    // Approval state badge should be visible
     expect(screen.getByText("approved")).toBeInTheDocument();
-    expect(screen.getByText("unexecuted")).toBeInTheDocument();
+    
+    // Execution badge is NOT shown for unexecuted items (canonical behavior)
+    // "unexecuted" is the absence of execution, not a state to display
+    expect(screen.queryByText("unexecuted")).not.toBeInTheDocument();
   });
 
   test("Actionable worklist item shows target cluster and reason", () => {
@@ -318,6 +322,7 @@ describe("Regression: Approval-needed item rendering", () => {
         reason: "Gather diagnostic evidence for investigation",
         expectedEvidence: "kubelet logs, system events",
         safetyNote: "Urgency: medium; requires approval",
+        itemState: "approval-needed",
         approvalState: "approval-required",
         executionState: null,
         feedbackState: null,
@@ -335,6 +340,7 @@ describe("Regression: Approval-needed item rendering", () => {
         reason: "Verify control plane health",
         expectedEvidence: "control plane pod status",
         safetyNote: "Urgency: high; primary triage",
+        itemState: "approved",
         approvalState: "approved",
         executionState: "unexecuted",
         feedbackState: null,
@@ -408,6 +414,7 @@ describe("Regression: Deterministic advisory item with null command", () => {
         reason: "Collect evidence for pending pods investigation",
         expectedEvidence: "pod events, recent failures",
         safetyNote: "Urgency: medium; primary triage: false",
+        itemState: "advisory",
         approvalState: null,
         executionState: null,
         feedbackState: null,
@@ -427,6 +434,7 @@ describe("Regression: Deterministic advisory item with null command", () => {
         reason: "Detect version drift between clusters",
         expectedEvidence: "Helm release status",
         safetyNote: "Urgency: low; primary triage: false",
+        itemState: "advisory",
         approvalState: null,
         executionState: null,
         feedbackState: null,
@@ -510,6 +518,7 @@ describe("Regression: Executed/reviewed item rendering", () => {
         reason: "High CPU investigation",
         expectedEvidence: "node CPU/memory metrics",
         safetyNote: "Urgency: high; primary triage",
+        itemState: "executed",
         approvalState: "not-required",
         executionState: "executed-success",
         feedbackState: "useful",
@@ -529,6 +538,7 @@ describe("Regression: Executed/reviewed item rendering", () => {
         reason: "Error pattern investigation",
         expectedEvidence: "application logs",
         safetyNote: "Urgency: medium; primary triage: false",
+        itemState: "executed",
         approvalState: "approved",
         executionState: "executed-failed",
         feedbackState: "noisy",
@@ -548,6 +558,7 @@ describe("Regression: Executed/reviewed item rendering", () => {
         reason: "Replica count drift check",
         expectedEvidence: "replica counts",
         safetyNote: "Urgency: low",
+        itemState: "reviewed",
         approvalState: "not-required",
         executionState: "executed-success",
         feedbackState: "partial",
@@ -563,7 +574,8 @@ describe("Regression: Executed/reviewed item rendering", () => {
   test("Executed-success item shows correct execution and feedback states", () => {
     render(<OperatorWorklistCard operatorWorklist={executedReviewedWorklist} />);
 
-    expect(screen.getByText("executed-success")).toBeInTheDocument();
+    // Canonical display: "executed / success" instead of raw "executed-success"
+    expect(screen.getByText("executed / success")).toBeInTheDocument();
     expect(screen.getByText("useful")).toBeInTheDocument();
   });
 
@@ -576,7 +588,8 @@ describe("Regression: Executed/reviewed item rendering", () => {
       await userEvent.click(nextButton);
     });
 
-    expect(screen.getByText("executed-failed")).toBeInTheDocument();
+    // Canonical display: "executed / failed" instead of raw "executed-failed"
+    expect(screen.getByText("executed / failed")).toBeInTheDocument();
     expect(screen.getByText("noisy")).toBeInTheDocument();
   });
 
@@ -598,14 +611,16 @@ describe("Regression: Executed/reviewed item rendering", () => {
     // After navigating twice, we should be on page 3
     // Check that item 3 is visible and has the partial feedback state
     expect(screen.getByTestId("worklist-item-3")).toBeInTheDocument();
-    expect(screen.getByText("executed-success")).toBeInTheDocument();
+    // Canonical display: "executed / success" instead of raw "executed-success"
+    expect(screen.getByText("executed / success")).toBeInTheDocument();
     expect(screen.getByText("partial")).toBeInTheDocument();
   });
 
   test("Executed/reviewed items have correct CSS classes for visual distinction", () => {
     render(<OperatorWorklistCard operatorWorklist={executedReviewedWorklist} />);
 
-    const successBadge = document.querySelector(".worklist-state-executed-success");
+    // Canonical CSS class: .worklist-state-executed for executed items
+    const successBadge = document.querySelector(".worklist-state-executed");
     expect(successBadge).toBeInTheDocument();
 
     const usefulBadge = document.querySelector(".worklist-state-useful");

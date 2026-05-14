@@ -76,8 +76,89 @@ const ArtifactLinkItem = ({ artifactRef }: { artifactRef: ArtifactLinkRef }) => 
   );
 };
 
+// ============================================================================
+// Canonical execution state derivation
+// ============================================================================
+
+/** Canonical executed states - any of these means the item has been executed */
+const EXECUTED_STATES = new Set([
+  "executed-success",
+  "executed-failed",
+  "timed-out",
+  "completed",
+]);
+
+/** Canonical item states that indicate execution */
+const EXECUTED_ITEM_STATES = new Set(["executed", "reviewed"]);
+
+/**
+ * Derive the canonical execution display label for a worklist item.
+ * Uses itemState as the authoritative source, with executionState as fallback.
+ *
+ * Returns the appropriate display text for the execution badge:
+ * - "executed / success" for successful execution
+ * - "executed / failed" for failed execution
+ * - "executed / timed-out" for timed-out execution
+ * - "executed" for general executed state
+ * - null if not executed
+ */
+function deriveExecutionLabel(item: OperatorWorklistItemPayload): string | null {
+  // Check itemState first (canonical state from backend overlay)
+  if (item.itemState && EXECUTED_ITEM_STATES.has(item.itemState)) {
+    if (item.executionState === "executed-failed") {
+      return "executed / failed";
+    } else if (item.executionState === "timed-out") {
+      return "executed / timed-out";
+    } else if (item.executionState && EXECUTED_STATES.has(item.executionState)) {
+      return "executed / success";
+    }
+    return "executed";
+  }
+
+  // Fall back to executionState if itemState is not set
+  if (item.executionState && EXECUTED_STATES.has(item.executionState)) {
+    if (item.executionState === "executed-failed") {
+      return "executed / failed";
+    } else if (item.executionState === "timed-out") {
+      return "executed / timed-out";
+    }
+    return "executed / success";
+  }
+
+  // Not executed
+  return null;
+}
+
+/**
+ * Check if a worklist item has been executed (has execution artifacts or execution state).
+ * This is the canonical predicate for all UI decisions about whether to show
+ * "Run candidate" buttons and how to display execution status.
+ */
+function isItemExecuted(item: OperatorWorklistItemPayload): boolean {
+  // Check itemState (canonical state from backend overlay)
+  if (item.itemState && EXECUTED_ITEM_STATES.has(item.itemState)) {
+    return true;
+  }
+
+  // Check executionState
+  if (item.executionState && EXECUTED_STATES.has(item.executionState)) {
+    return true;
+  }
+
+  // Check for execution artifacts (sourceArtifactRefs containing execution artifacts)
+  const hasExecutionArtifact = item.sourceArtifactRefs.some((ref) =>
+    ref.path?.includes("next-check-execution") || ref.path?.includes("execution")
+  );
+
+  return hasExecutionArtifact;
+}
+
 /** Renders a single worklist item */
 const WorklistItemRow = ({ item }: { item: OperatorWorklistItemPayload }) => {
+  // Derive canonical execution state for display
+  const executionLabel = deriveExecutionLabel(item);
+  const isExecuted = isItemExecuted(item);
+
   return (
     <li className="worklist-item" data-testid={`worklist-item-${item.rank}`}>
       {/* Rank + workstream header - title uses ExpandableText for truncation */}
@@ -139,16 +220,17 @@ const WorklistItemRow = ({ item }: { item: OperatorWorklistItemPayload }) => {
         </div>
       )}
 
-      {/* State indicators */}
+      {/* State indicators - use canonical itemState/executionState derivation */}
       <div className="worklist-state-row">
         {item.approvalState && (
           <span className={`worklist-state worklist-approval-state worklist-state-${item.approvalState}`}>
             {item.approvalState}
           </span>
         )}
-        {item.executionState && (
-          <span className={`worklist-state worklist-execution-state worklist-state-${item.executionState}`}>
-            {item.executionState}
+        {/* Use canonical execution label derived from itemState/executionState */}
+        {executionLabel && (
+          <span className={`worklist-state worklist-execution-state ${isExecuted ? "worklist-state-executed" : ""}`}>
+            {executionLabel}
           </span>
         )}
         {item.feedbackState && (
