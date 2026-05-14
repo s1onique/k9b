@@ -1084,7 +1084,11 @@ def _find_next_check_plan(
     
     # Scan execution artifacts for overlay derivation
     # This enables queue items to reflect actual execution state from artifacts
-    execution_overlays = _scan_execution_artifacts_for_queue(external_analysis_dir, run_id)
+    execution_overlays = _scan_execution_artifacts_for_queue(
+        external_analysis_dir,
+        run_id,
+        artifact_index=artifact_index,
+    )
     
     deanon_candidates = _build_queue_from_plan(payload, alias_mapping, execution_overlays)
 
@@ -1105,31 +1109,56 @@ def _find_next_check_plan(
 def _scan_execution_artifacts_for_queue(
     external_analysis_dir: Path,
     run_id: str,
+    *,
+    artifact_index: RunArtifactIndex | None = None,
 ) -> list[dict[str, object]]:
     """Scan external-analysis directory for execution artifacts to overlay queue state.
 
+    Uses artifact_index if provided for O(1) lookup, otherwise falls back
+    to scanning the directory (for backward compatibility).
+
     Returns a list of overlays that can be matched against queue candidates.
     Each overlay contains: candidate_index, command_family, target_cluster, status, artifact_path, timestamp.
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory (used if no index)
+        run_id: The run ID to filter by
+        artifact_index: Pre-built index for O(1) lookup (optional)
     """
     overlays: list[dict[str, object]] = []
 
-    if not external_analysis_dir.exists():
-        return overlays
+    # Use index for O(1) lookup if available
+    if artifact_index is not None:
+        execution_artifacts = list(artifact_index.next_check_execution)
+    else:
+        # Fall back to directory scan for backward compatibility
+        if not external_analysis_dir.exists():
+            return overlays
 
-    try:
-        validated_run_id = validate_run_id(run_id)
-    except SecurityError:
-        return overlays
-
-    # SECURITY: run_id validated by validate_run_id() before glob construction
-    glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution-*.json")
-    for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
         try:
-            artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
-            if not isinstance(artifact_data, dict):
+            validated_run_id = validate_run_id(run_id)
+        except SecurityError:
+            return overlays
+
+        _scan_execution: list[dict[str, object]] = []
+        # SECURITY: run_id validated by validate_run_id() before glob construction
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-execution-*.json")
+        for artifact_file in sorted(external_analysis_dir.glob(glob_pattern)):
+            try:
+                artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
+                if isinstance(artifact_data, dict) and artifact_data.get("purpose") == "next-check-execution":
+                    # Add artifact_path for reference (relative to external-analysis parent)
+                    artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
+                    _scan_execution.append(artifact_data)
+            except (OSError, json.JSONDecodeError):
                 continue
 
-            # Verify purpose
+        execution_artifacts = _scan_execution
+
+    # Process artifacts (from index or scan) - all have artifact_path set
+    for artifact_data in execution_artifacts:
+        try:
+            # Verify purpose (already filtered for index path, but check for scan path)
             purpose = artifact_data.get("purpose")
             if purpose != "next-check-execution":
                 continue
@@ -1162,11 +1191,10 @@ def _scan_execution_artifacts_for_queue(
             status = artifact_data.get("status")
             timestamp = artifact_data.get("timestamp")
 
-            # Compute artifact path relative to external-analysis parent
-            try:
-                artifact_path = str(artifact_file.relative_to(external_analysis_dir.parent))
-            except ValueError:
-                artifact_path = str(artifact_file)
+            # Use artifact_path from index or scan (already set above)
+            artifact_path = artifact_data.get("artifact_path")
+            if not isinstance(artifact_path, str):
+                artifact_path = str(artifact_data)
 
             overlays.append({
                 "candidate_id": str(candidate_id) if candidate_id else None,
