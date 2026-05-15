@@ -103,7 +103,11 @@ def build_execution_summary_diagnostics(
 
     # Check internal data in index
     all_plan_data = recent_summary.get("_plan_data", {})
-    all_execution_indices = recent_summary.get("_execution_indices", {})
+    # CRITICAL: Normalize execution indices to handle JSON string keys
+    # Without this, string keys like "0", "1" won't match integer candidate indices
+    from .api import _normalize_execution_indices_from_index
+
+    all_execution_indices = _normalize_execution_indices_from_index(recent_summary.get("_execution_indices", {}))
 
     diagnostic["plan_data_in_index"] = run_id in all_plan_data
     diagnostic["execution_indices_in_index"] = run_id in all_execution_indices
@@ -231,10 +235,11 @@ def get_recent_runs_debug_data(
     recent_summary = raw_index.get("recent_runs_summary", {})
     runs_list = recent_summary.get("runs", [])
 
-    # Find the target run's row
+    # Find the target run's row - check both run_id and runId for robustness
+    # Recent Runs rows use runId (camelCase) in the serialized output
     target_row = None
     for entry in runs_list:
-        if entry.get("run_id") == run_id:
+        if entry.get("run_id") == run_id or entry.get("runId") == run_id:
             target_row = dict(entry)
             break
 

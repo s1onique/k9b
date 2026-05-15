@@ -637,9 +637,10 @@ def _compute_execution_summary(
 
         if is_executed:
             executed_count += 1
-            # Failed candidates have status == "failed"
+            # Failed candidates have status == "failed" or containing "/failed"
+            # Handle both "failed" and "executed/failed" status strings
             status = execution_indices[idx]
-            if status == "failed":
+            if status == "failed" or status.endswith("/failed") or "failed" in status.lower():
                 failed_count += 1
 
     # Derive batch execution state
@@ -920,9 +921,10 @@ def _compute_execution_summary_indexed(
 
         if is_executed:
             executed_count += 1
-            # Failed candidates have status == "failed"
+            # Failed candidates have status == "failed" or containing "/failed"
+            # Handle both "failed" and "executed/failed" status strings
             status = execution_indices.get(idx, "unknown")
-            if status == "failed":
+            if status == "failed" or status.endswith("/failed") or "failed" in status.lower():
                 failed_count += 1
 
     # Derive batch execution state

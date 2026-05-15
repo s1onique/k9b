@@ -146,9 +146,10 @@ def _compute_execution_counts_from_candidates(
 
         if is_executed:
             executed_count += 1
-            # Failed candidates have status == "failed"
+            # Failed candidates have status == "failed" or containing "/failed"
+            # Handle both "failed" and "executed/failed" status strings
             status = execution_indices[idx]
-            if status == "failed":
+            if status == "failed" or status.endswith("/failed") or "failed" in status.lower():
                 failed_count += 1
 
     return executable_count, executed_count, failed_count, pending_executable_count

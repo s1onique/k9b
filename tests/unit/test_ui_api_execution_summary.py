@@ -389,3 +389,173 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
 
             # This means batchExecutable should be False (no pending work to do)
             # The frontend should NOT show an Execute button for this run
+
+    def test_string_key_execution_indices_with_status_strings(self) -> None:
+        """Regression test: string-key execution indices with status strings produce correct summary.
+
+        This test verifies the bug where:
+        1. JSON stores execution indices with string keys like "0", "1"
+        2. Status values like "executed/success" and "executed/failed" are stored
+        3. The indexed path must normalize keys and correctly count failures
+
+        Without the fix, executedCandidates would be 0 because string keys "0", "1"
+        don't match integer lookups in _compute_execution_summary_indexed().
+        """
+        # Create plan data with 2 candidates
+        plan_data = {
+            "purpose": "next-check-planning",
+            "payload": {
+                "candidates": [
+                    {
+                        "safeToAutomate": True,
+                        "suggestedCommandFamily": "kubectl-describe",
+                        "description": "Check pod",
+                        "targetContext": "default",
+                    },
+                    {
+                        "safeToAutomate": True,
+                        "suggestedCommandFamily": "kubectl-get",
+                        "description": "Get pod",
+                        "targetContext": "default",
+                    },
+                ]
+            },
+        }
+
+        # Simulate JSON round-trip: string keys, and status includes "executed/" prefix
+        # This is what ui-index.json actually stores after JSON serialization
+        raw_indices = {
+            "health-run-X": {
+                "0": "executed/success",
+                "1": "executed/failed",
+            }
+        }
+
+        # Normalize like api_debug does
+        normalized = _normalize_execution_indices_from_index(raw_indices)
+
+        # Get indices for the run (now with int keys)
+        exec_indices = normalized.get("health-run-X", {})
+
+        # Key assertion: indices must have int keys, not string keys
+        self.assertIn(0, exec_indices, "Index 0 must be present as int key")
+        self.assertIn(1, exec_indices, "Index 1 must be present as int key")
+
+        # Compute execution summary with normalized indices
+        summary = _compute_execution_summary_indexed(plan_data, exec_indices)
+
+        # Critical assertions - these would fail without normalization
+        self.assertEqual(summary["totalCandidates"], 2)
+        self.assertEqual(summary["executedCandidates"], 2, "Both candidates must be executed")
+        self.assertEqual(summary["pendingExecutableCandidates"], 0, "No pending candidates")
+        self.assertEqual(summary["batchExecutionState"], "fully-executed")
+
+        # Status-based failure counting
+        self.assertEqual(summary["failedCandidates"], 1, "Index 1 with failed status must be counted")
+
+    def test_build_execution_summary_diagnostics_with_string_keys(self) -> None:
+        """Regression test: build_execution_summary_diagnostics handles string-key execution indices.
+
+        This tests that the diagnostics bundle correctly computes execution summary
+        when ui-index.json has string-key execution indices (JSON round-trip artifact).
+        """
+        import os
+        import tempfile
+        from pathlib import Path
+
+        # Enable debug endpoints for this test
+        os.environ["K9B_ENABLE_DEBUG_ENDPOINTS"] = "true"
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                health_root = Path(tmpdir)
+
+                # Create a review artifact
+                reviews_dir = health_root / "reviews"
+                reviews_dir.mkdir(parents=True)
+                review_content = {
+                    "run_id": "health-run-20260515T195410Z",
+                    "run_label": "Health Run",
+                    "timestamp": "2026-05-15T19:54:10Z",
+                    "cluster_count": 1,
+                }
+                review_path = reviews_dir / "health-run-20260515T195410Z-review.json"
+                review_path.write_text(json.dumps(review_content), encoding="utf-8")
+
+                # Create plan artifact with 8 candidates
+                external_analysis_dir = health_root / "external-analysis"
+                external_analysis_dir.mkdir(parents=True)
+                plan_content = {
+                    "purpose": "next-check-planning",
+                    "payload": {
+                        "candidates": [
+                            {
+                                "safeToAutomate": True,
+                                "suggestedCommandFamily": "kubectl-describe",
+                                "description": f"Check resource {i}",
+                                "targetContext": "default",
+                            }
+                            for i in range(8)
+                        ]
+                    },
+                }
+                plan_path = external_analysis_dir / "health-run-20260515T195410Z-next-check-plan.json"
+                plan_path.write_text(json.dumps(plan_content), encoding="utf-8")
+
+                # Create execution artifacts for 8 candidates (4 failed, 4 success)
+                for idx in range(8):
+                    status = "executed/failed" if idx % 2 == 0 else "executed/success"
+                    exec_content = {
+                        "purpose": "next-check-execution",
+                        "status": status,
+                        "payload": {"candidateIndex": idx},
+                    }
+                    exec_path = external_analysis_dir / f"health-run-20260515T195410Z-next-check-execution-{idx}.json"
+                    exec_path.write_text(json.dumps(exec_content), encoding="utf-8")
+
+                # Build recent_runs_summary like health/ui.py does
+                from k8s_diag_agent.health.ui import _build_recent_runs_summary
+
+                recent_summary = _build_recent_runs_summary(
+                    reviews_dir, external_analysis_dir=external_analysis_dir
+                )
+
+                # Verify the summary has execution indices for our run
+                raw_exec_indices = recent_summary.get("_execution_indices", {})
+                self.assertIn("health-run-20260515T195410Z", raw_exec_indices)
+
+                # The implementation stores int keys directly (not as JSON strings)
+                # The important thing is that the diagnostics function normalizes them
+                run_indices = raw_exec_indices["health-run-20260515T195410Z"]
+                self.assertEqual(len(run_indices), 8, "All 8 execution indices should be present")
+
+                # Write a ui-index.json that the diagnostics function can read
+                # This mirrors what the index generation does
+                ui_index = {"recent_runs_summary": recent_summary}
+                ui_index_path = health_root / "ui-index.json"
+                ui_index_path.write_text(json.dumps(ui_index), encoding="utf-8")
+
+                # Now call the diagnostics function - it should normalize keys internally
+                from k8s_diag_agent.ui.api_debug import build_execution_summary_diagnostics
+
+                diagnostic = build_execution_summary_diagnostics(
+                    "health-run-20260515T195410Z",
+                    health_root,
+                    debug_flag=True,
+                )
+
+                self.assertIsNotNone(diagnostic, "Diagnostic should be computed")
+
+                # Key assertion: executedCandidates should be 8, not 0
+                computed = diagnostic.get("computed_execution_summary")
+                self.assertIsNotNone(computed, "Computed execution summary must be present")
+                self.assertEqual(
+                    computed["executedCandidates"], 8,
+                    "All 8 candidates must be counted as executed (not 0 due to string key mismatch)"
+                )
+                self.assertEqual(computed["pendingExecutableCandidates"], 0)
+                self.assertEqual(computed["failedCandidates"], 4, "4 failures expected (indices 0,2,4,6)")
+
+        finally:
+            # Clean up environment
+            os.environ.pop("K9B_ENABLE_DEBUG_ENDPOINTS", None)
