@@ -175,6 +175,11 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         include_batch_eligibility_param = params.get("include_batch_eligibility", ["false"])[0]
         include_batch_eligibility = str(include_batch_eligibility_param).lower() == "true"
 
+        # DEBUG PARAMETER: Enable execution summary diagnostics for preprod debugging
+        # This parameter is NOT included in the cache key - diagnostics are always fresh
+        debug_execution_summary_param = params.get("debug_execution_summary", ["false"])[0]
+        debug_execution_summary = str(debug_execution_summary_param).lower() == "true"
+
         # CRITICAL: Acquire single-flight FIRST, then compute cache key inside critical section
         # Include limit, include_status, include_expensive, and include_batch_eligibility in cache key for proper cache isolation
         provisional_key = f"/api/runs:{handler.runs_dir}:limit={limit_value}:status={include_status}:expensive={include_expensive}:batch_eligibility={include_batch_eligibility}"
@@ -268,6 +273,21 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                     return
 
         runs_payload = build_runs_list_payload(handler, limit=limit_value, include_status=include_status, include_expensive=include_expensive, include_batch_eligibility=include_batch_eligibility)
+
+        # Add debug diagnostics if requested (not cached - always fresh)
+        # Debug is gated by environment variable K9B_ENABLE_DEBUG_ENDPOINTS=true
+        import os
+        if debug_execution_summary and os.environ.get("K9B_ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true":
+            from .api_debug import build_execution_summary_diagnostics
+            health_root = handler.runs_dir / "health"
+            # Get first run_id from runs list for diagnostics
+            runs_list = runs_payload.get("runs", [])
+            if runs_list and isinstance(runs_list, list):
+                first_run_id = runs_list[0].get("runId", "") if runs_list else ""
+                if first_run_id:
+                    diagnostic = build_execution_summary_diagnostics(first_run_id, health_root, debug_flag=True)
+                    if diagnostic:
+                        runs_payload["_debug_execution_summary"] = diagnostic
 
         _single_flight_release(provisional_key, runs_payload, success=True, result_type="built")
 
@@ -847,6 +867,26 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         label = params.get("cluster_label", [None])[0]
         handler._send_json(build_cluster_detail_payload(context, cluster_label=label))
         return
+
+    # Debug endpoint: /api/debug/runs/{run_id}/execution-summary
+    # Only enabled when K9B_ENABLE_DEBUG_ENDPOINTS=true
+    if route.startswith("/api/debug/runs/"):
+        import os
+        import re as regex_module
+        if os.environ.get("K9B_ENABLE_DEBUG_ENDPOINTS", "false").lower() != "true":
+            handler._send_json({"error": "Debug endpoints disabled - set K9B_ENABLE_DEBUG_ENDPOINTS=true to enable"})
+            return
+        match = regex_module.match(r"^/api/debug/runs/([^/]+)/execution-summary$", route)
+        if match:
+            run_id = match.group(1)
+            health_root = handler.runs_dir / "health"
+            from .api_debug import build_execution_summary_diagnostics
+            diagnostic = build_execution_summary_diagnostics(run_id, health_root, debug_flag=True)
+            if diagnostic:
+                handler._send_json(diagnostic)
+            else:
+                handler._send_json({"error": "Diagnostics disabled"})
+            return
 
     handler._send_text(404, "Not Found")
 
