@@ -63,6 +63,8 @@ spec:
               value: {{ .Values.backend.env.HEALTH_UI_RUNS_DIR | quote }}
             - name: PYTHONPATH
               value: {{ .Values.backend.env.PYTHONPATH | quote }}
+            - name: K9B_ENABLE_DEBUG_ENDPOINTS
+              value: {{ .Values.backend.env.K9B_ENABLE_DEBUG_ENDPOINTS | default "false" | quote }}
             - name: KUBERNETES_AUTH_MODE
               value: {{ .Values.kubernetes.auth.mode | quote }}
             - name: KUBERNETES_AUTH_KUBECONFIG_ENABLED

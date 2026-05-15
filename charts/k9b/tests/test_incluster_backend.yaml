@@ -160,6 +160,24 @@ tests:
           pattern: "name: HEALTH_UI_HOST"
           value: "127.0.0.1"
 
+  # ===== K9B_ENABLE_DEBUG_ENDPOINTS =====
+
+  - it: backend should render K9B_ENABLE_DEBUG_ENDPOINTS=false by default
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: 'name: K9B_ENABLE_DEBUG_ENDPOINTS'
+          value: 'value: "false"'
+
+  - it: backend should render K9B_ENABLE_DEBUG_ENDPOINTS=true when override is set
+    set:
+      backend.env.K9B_ENABLE_DEBUG_ENDPOINTS: "true"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env
+          pattern: 'name: K9B_ENABLE_DEBUG_ENDPOINTS'
+          value: 'value: "true"'
+
   # ===== Backend Service port =====
 
   - it: backend service should expose port 8080

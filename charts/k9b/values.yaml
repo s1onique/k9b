@@ -46,6 +46,9 @@ backend:
     HEALTH_UI_RUNS_DIR: "/app/runs"
     # PYTHONPATH: Python module search path.
     PYTHONPATH: "/app/src"
+    # K9B_ENABLE_DEBUG_ENDPOINTS: Enable UI debug diagnostics endpoints (/api/debug/*).
+    # Set to "true" to show diagnostic execution details button in the UI.
+    K9B_ENABLE_DEBUG_ENDPOINTS: "false"
   resources:
     requests:
       cpu: 100m
