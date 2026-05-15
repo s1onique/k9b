@@ -5,35 +5,30 @@
  * handleAlertmanagerRelevanceFeedback calls refreshAppData() after successful submission.
  */
 
+const mockSubmitAlertmanagerRelevanceFeedback = vi.fn();
+const mockFetchFleet = vi.fn();
+const mockFetchProposals = vi.fn();
+const mockFetchNotifications = vi.fn();
+const mockPromoteDeterministicNextCheck = vi.fn();
+const mockSubmitUsefulnessFeedback = vi.fn();
+const mockFetchDebugDiagnosticsEnabled = vi.fn();
+const mockDownloadExecutionStateDiagnostics = vi.fn();
+
+vi.mock("../api", () => ({
+  submitAlertmanagerRelevanceFeedback: (...args: unknown[]) => mockSubmitAlertmanagerRelevanceFeedback(...args),
+  fetchFleet: (...args: unknown[]) => mockFetchFleet(...args),
+  fetchProposals: (...args: unknown[]) => mockFetchProposals(...args),
+  fetchNotifications: (...args: unknown[]) => mockFetchNotifications(...args),
+  promoteDeterministicNextCheck: (...args: unknown[]) => mockPromoteDeterministicNextCheck(...args),
+  submitUsefulnessFeedback: (...args: unknown[]) => mockSubmitUsefulnessFeedback(...args),
+  fetchDebugDiagnosticsEnabled: (...args: unknown[]) => mockFetchDebugDiagnosticsEnabled(...args),
+  downloadExecutionStateDiagnostics: (...args: unknown[]) => mockDownloadExecutionStateDiagnostics(...args),
+}));
+
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { useAppData } from "../hooks/useAppData";
 import * as apiModule from "../api";
-
-// Mock the API module
-vi.mock("../api", () => ({
-  submitAlertmanagerRelevanceFeedback: vi.fn(),
-  fetchFleet: vi.fn().mockResolvedValue({
-    clusters: [],
-    fleetStatus: { ratingCounts: [] },
-    topProblem: { title: "", detail: "" },
-    proposalSummary: { pending: 0, total: 0 },
-  }),
-  fetchProposals: vi.fn().mockResolvedValue({
-    proposals: [],
-    statusSummary: [],
-  }),
-  fetchNotifications: vi.fn().mockResolvedValue({
-    notifications: [],
-    totalCount: 0,
-  }),
-  promoteDeterministicNextCheck: vi.fn(),
-  submitUsefulnessFeedback: vi.fn(),
-  fetchDebugDiagnosticsEnabled: vi.fn().mockResolvedValue({
-    debugExecutionDiagnosticsEnabled: false,
-  }),
-  downloadExecutionStateDiagnostics: vi.fn(),
-}));
 
 // Import after mocking
 import {
@@ -46,6 +41,24 @@ import {
 describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchFleet.mockResolvedValue({
+      clusters: [],
+      fleetStatus: { ratingCounts: [] },
+      topProblem: { title: "", detail: "" },
+      proposalSummary: { pending: 0, total: 0 },
+    });
+    mockFetchProposals.mockResolvedValue({
+      proposals: [],
+      statusSummary: [],
+    });
+    mockFetchNotifications.mockResolvedValue({
+      notifications: [],
+      totalCount: 0,
+    });
+    mockFetchDebugDiagnosticsEnabled.mockResolvedValue({
+      debugExecutionDiagnosticsEnabled: false,
+    });
+    mockDownloadExecutionStateDiagnostics.mockResolvedValue(new Blob(["test"]));
   });
 
   test("calls submitAlertmanagerRelevanceFeedback with correct payload", async () => {

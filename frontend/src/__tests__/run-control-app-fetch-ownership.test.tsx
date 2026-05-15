@@ -28,7 +28,6 @@ import React from "react";
 import App, { SELECTED_RUN_STORAGE_KEY } from "../App";
 import { makeRunWithOverrides } from "./fixtures";
 
-// Mock API module - hoisted to top
 const mockFetchRun = vi.fn();
 const mockFetchRunsList = vi.fn();
 const mockFetchFleet = vi.fn();
@@ -40,6 +39,8 @@ const mockExecuteNextCheckCandidate = vi.fn();
 const mockApproveNextCheckCandidate = vi.fn();
 const mockRunBatchExecution = vi.fn();
 const mockSubmitAlertmanagerRelevanceFeedback = vi.fn();
+const mockFetchDebugDiagnosticsEnabled = vi.fn();
+const mockDownloadExecutionStateDiagnostics = vi.fn();
 
 vi.mock("../api", () => ({
   fetchRun: (...args: unknown[]) => mockFetchRun(...args),
@@ -53,10 +54,8 @@ vi.mock("../api", () => ({
   approveNextCheckCandidate: (...args: unknown[]) => mockApproveNextCheckCandidate(...args),
   runBatchExecution: (...args: unknown[]) => mockRunBatchExecution(...args),
   submitAlertmanagerRelevanceFeedback: (...args: unknown[]) => mockSubmitAlertmanagerRelevanceFeedback(...args),
-  fetchDebugDiagnosticsEnabled: vi.fn().mockResolvedValue({
-    debugExecutionDiagnosticsEnabled: false,
-  }),
-  downloadExecutionStateDiagnostics: vi.fn(),
+  fetchDebugDiagnosticsEnabled: (...args: unknown[]) => mockFetchDebugDiagnosticsEnabled(...args),
+  downloadExecutionStateDiagnostics: (...args: unknown[]) => mockDownloadExecutionStateDiagnostics(...args),
 }));
 
 describe("run-control-app-fetch-ownership", () => {
@@ -137,6 +136,10 @@ describe("run-control-app-fetch-ownership", () => {
     mockApproveNextCheckCandidate.mockResolvedValue({ status: "success", summary: "OK" });
     mockRunBatchExecution.mockResolvedValue({ status: "success", summary: "OK" });
     mockSubmitAlertmanagerRelevanceFeedback.mockResolvedValue(undefined);
+    mockFetchDebugDiagnosticsEnabled.mockResolvedValue({
+      debugExecutionDiagnosticsEnabled: false,
+    });
+    mockDownloadExecutionStateDiagnostics.mockResolvedValue(new Blob(["test"]));
 
     // Set up localStorage with persisted selected run
     const storageMock = createStorageMock();

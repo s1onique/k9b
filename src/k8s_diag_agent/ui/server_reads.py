@@ -884,8 +884,6 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         if bundle_match:
             run_id = bundle_match.group(1)
             health_root = handler.runs_dir / "health"
-            # Validate run_id format for safety
-            from ..security.path_validation import SecurityError, validate_run_id
             from .api_debug import build_execution_state_bundle
 
             try:
