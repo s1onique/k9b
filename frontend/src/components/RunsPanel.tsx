@@ -543,15 +543,29 @@ export const RunSummaryPanel = ({
   const [debugDiagnosticsError, setDebugDiagnosticsError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDebugDiagnosticsEnabled()
-      .then((response) => {
-        setDebugDiagnosticsEnabled(response.debugExecutionDiagnosticsEnabled);
-        setDebugDiagnosticsError(null);
-      })
-      .catch(() => {
-        // Silently disable if fetch fails (e.g., endpoint not available)
-        setDebugDiagnosticsEnabled(false);
-      });
+    let cancelled = false;
+
+    async function loadDebugDiagnosticsEnabled() {
+      try {
+        const response = await fetchDebugDiagnosticsEnabled();
+        if (!cancelled) {
+          // Defensive: treat undefined/null/malformed response as disabled
+          setDebugDiagnosticsEnabled(response?.debugExecutionDiagnosticsEnabled === true);
+          setDebugDiagnosticsError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          // Silently disable if fetch fails (e.g., endpoint not available)
+          setDebugDiagnosticsEnabled(false);
+        }
+      }
+    }
+
+    void loadDebugDiagnosticsEnabled();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Handler for downloading execution state diagnostics bundle
