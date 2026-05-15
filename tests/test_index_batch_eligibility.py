@@ -855,7 +855,9 @@ class TestExecutionArtifactRunIdExtraction:
         )
 
         # Verify execution indices were correctly stored
-        execution_indices = summary.get("_execution_indices", {})
+        execution_indices_obj = summary.get("_execution_indices", {})
+        assert isinstance(execution_indices_obj, dict)
+        execution_indices = cast(dict[str, dict[int, str]], execution_indices_obj)
         assert run_id in execution_indices, f"run_id {run_id} should be in execution_indices"
 
         # Verify we got 8 parsed execution indices
@@ -937,7 +939,9 @@ class TestExecutionArtifactRunIdExtraction:
         )
 
         # Verify execution indices were correctly stored
-        execution_indices = summary.get("_execution_indices", {})
+        execution_indices_obj = summary.get("_execution_indices", {})
+        assert isinstance(execution_indices_obj, dict)
+        execution_indices = cast(dict[str, dict[int, str]], execution_indices_obj)
         assert run_id in execution_indices, f"run_id {run_id} should be in execution_indices"
 
         # Verify we got 1 parsed execution index
@@ -1012,7 +1016,9 @@ class TestExecutionArtifactRunIdExtraction:
         )
 
         # Verify execution indices were stored under the actual run_id from artifact
-        execution_indices = summary.get("_execution_indices", {})
+        execution_indices_obj = summary.get("_execution_indices", {})
+        assert isinstance(execution_indices_obj, dict)
+        execution_indices = cast(dict[str, dict[int, str]], execution_indices_obj)
 
         # Should be stored under artifact_run_id, NOT filename_run_id
         assert artifact_run_id in execution_indices, f"artifact_run_id {artifact_run_id} should be in execution_indices"
