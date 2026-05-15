@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -20,7 +18,6 @@ class TestDebugEnvironmentGuard:
         monkeypatch.delenv("K9B_ENABLE_DEBUG_ENDPOINTS", raising=False)
 
         # Re-import to pick up fresh env state
-        import importlib
         import sys
 
         # Clear any cached imports
@@ -36,7 +33,6 @@ class TestDebugEnvironmentGuard:
         """Debug should be enabled when env var is 'true'."""
         monkeypatch.setenv("K9B_ENABLE_DEBUG_ENDPOINTS", "true")
 
-        import importlib
         import sys
 
         mods_to_clear = [k for k in sys.modules if k.startswith("k8s_diag_agent.ui.api_debug")]
@@ -51,7 +47,6 @@ class TestDebugEnvironmentGuard:
         """Debug should be disabled when env var is 'false'."""
         monkeypatch.setenv("K9B_ENABLE_DEBUG_ENDPOINTS", "false")
 
-        import importlib
         import sys
 
         mods_to_clear = [k for k in sys.modules if k.startswith("k8s_diag_agent.ui.api_debug")]
@@ -66,7 +61,6 @@ class TestDebugEnvironmentGuard:
         """Debug should be disabled when env var is empty string."""
         monkeypatch.setenv("K9B_ENABLE_DEBUG_ENDPOINTS", "")
 
-        import importlib
         import sys
 
         mods_to_clear = [k for k in sys.modules if k.startswith("k8s_diag_agent.ui.api_debug")]
@@ -85,7 +79,6 @@ class TestBuildExecutionSummaryDiagnostics:
         """Function should return None when debug_flag is False."""
         monkeypatch.setenv("K9B_ENABLE_DEBUG_ENDPOINTS", "true")
 
-        import importlib
         import sys
 
         mods_to_clear = [k for k in sys.modules if k.startswith("k8s_diag_agent.ui.api_debug")]
@@ -105,7 +98,6 @@ class TestBuildExecutionSummaryDiagnostics:
         """Function should return None when env var is not set."""
         monkeypatch.delenv("K9B_ENABLE_DEBUG_ENDPOINTS", raising=False)
 
-        import importlib
         import sys
 
         mods_to_clear = [k for k in sys.modules if k.startswith("k8s_diag_agent.ui.api_debug")]
@@ -125,7 +117,6 @@ class TestBuildExecutionSummaryDiagnostics:
         """Function should return diagnostic dict when both debug_flag and env are set."""
         monkeypatch.setenv("K9B_ENABLE_DEBUG_ENDPOINTS", "true")
 
-        import importlib
         import sys
 
         mods_to_clear = [k for k in sys.modules if k.startswith("k8s_diag_agent.ui.api_debug")]
