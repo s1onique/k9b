@@ -73,7 +73,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
 
     // Wait for initial fetch to complete
     await waitFor(() => {
-      expect(fetchFleet).toHaveBeenCalled();
+      expect(mockFetchFleet).toHaveBeenCalled();
     });
 
     // Call the handler
@@ -84,7 +84,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     );
 
     // Verify API was called with correct arguments
-    expect(submitAlertmanagerRelevanceFeedback).toHaveBeenCalledWith({
+    expect(mockSubmitAlertmanagerRelevanceFeedback).toHaveBeenCalledWith({
       artifactPath: "/artifacts/execution-1.json",
       alertmanagerRelevance: "relevant",
       alertmanagerRelevanceSummary: "This was helpful for debugging",
@@ -100,7 +100,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     );
 
     await waitFor(() => {
-      expect(fetchFleet).toHaveBeenCalled();
+      expect(mockFetchFleet).toHaveBeenCalled();
     });
 
     // Test all valid relevance values
@@ -120,7 +120,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
         undefined
       );
 
-      expect(submitAlertmanagerRelevanceFeedback).toHaveBeenCalledWith({
+      expect(mockSubmitAlertmanagerRelevanceFeedback).toHaveBeenCalledWith({
         artifactPath: "/artifacts/execution-1.json",
         alertmanagerRelevance: relevance,
         alertmanagerRelevanceSummary: undefined,
@@ -139,7 +139,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     );
 
     await waitFor(() => {
-      expect(fetchFleet).toHaveBeenCalled();
+      expect(mockFetchFleet).toHaveBeenCalled();
     });
 
     // Count initial calls
@@ -177,7 +177,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     );
 
     await waitFor(() => {
-      expect(fetchFleet).toHaveBeenCalled();
+      expect(mockFetchFleet).toHaveBeenCalled();
     });
 
     await expect(
