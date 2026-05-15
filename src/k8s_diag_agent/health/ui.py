@@ -19,6 +19,7 @@ from ..external_analysis.config import (
 )
 from ..security.deanonymization import deanonymize_review_enrichment, deanonymize_text, safe_alias_mapping
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+from ..ui.execution_index_utils import collect_execution_indices_for_run
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 from .ui_deterministic_next_checks import (
@@ -612,60 +613,26 @@ def _build_recent_runs_summary(
             except (OSError, json.JSONDecodeError):
                 continue
 
-        # Load execution indices for all runs WITH status for failedCandidates
-        # CRITICAL: We scan for BOTH patterns:
-        # 1. Numbered: "run-id-next-check-execution-0.json" (with trailing dash + number)
-        # 2. Simple: "run-id-next-check-execution.json" (no trailing dash)
+        # Collect execution indices for all runs using run_id-scoped scanning
+        # This ensures consistency with the fresh worklist path which uses the same approach.
+        # Previously used a global glob pattern that could miss execution artifacts.
         #
-        # For pattern 1, the run_id itself contains "-next-check-", so we must use
-        # "-next-check-execution-" (with trailing dash) to extract the correct run_id.
-        # For pattern 2, we use "-next-check-execution" as the marker.
-        #
-        # Priority: Extract run_id from artifact's run_id field FIRST, then fall back
-        # to filename parsing. This ensures correctness even with malformed filenames.
-        for exec_path in external_analysis_dir.glob("*-next-check-execution*.json"):
-            # Skip alertmanager-review artifacts
-            if "-next-check-execution-alertmanager-review" in exec_path.stem:
-                continue
-            # Skip usefulness-review artifacts
-            if "-next-check-execution-usefulness-review" in exec_path.stem:
-                continue
+        # First pass: collect all run_ids from review files to scope the scan
+        all_run_ids: set[str] = set()
+        for review_path in reviews_dir.glob("*-review.json"):
             try:
-                raw = json.loads(exec_path.read_text(encoding="utf-8"))
-                if raw.get("purpose") != "next-check-execution":
-                    continue
-
-                # Extract run_id from artifact's run_id field (most reliable)
-                candidate_run_id = raw.get("run_id")
-                if not isinstance(candidate_run_id, str):
-                    # Filename parsing as fallback
-                    filename = exec_path.stem
-                    # Determine which marker to use based on filename pattern
-                    if "-next-check-execution-" in filename:
-                        # Numbered pattern: extract with trailing dash marker
-                        for extracted_id in _extract_run_ids_from_filename(filename, "-next-check-execution-"):
-                            if extracted_id:
-                                candidate_run_id = extracted_id
-                                break
-                    else:
-                        # Simple pattern: extract without trailing dash
-                        for extracted_id in _extract_run_ids_from_filename(filename, "-next-check-execution"):
-                            if extracted_id:
-                                candidate_run_id = extracted_id
-                                break
-                if not isinstance(candidate_run_id, str):
-                    continue
-                exec_payload = raw.get("payload", {})
-                candidate_index = exec_payload.get("candidateIndex")
-                # Extract status from artifact for failedCandidates derivation
-                status = raw.get("status", "unknown")
-                if not isinstance(status, str):
-                    status = "unknown"
-                execution_indices_with_status.setdefault(candidate_run_id, {})
-                if isinstance(candidate_index, int):
-                    execution_indices_with_status[candidate_run_id][candidate_index] = status
+                review_raw = json.loads(review_path.read_text(encoding="utf-8"))
+                review_run_id = review_raw.get("run_id")
+                if isinstance(review_run_id, str):
+                    all_run_ids.add(review_run_id)
             except (OSError, json.JSONDecodeError):
                 continue
+
+        # Second pass: for each run, collect execution indices using run-scoped glob
+        for run_id in all_run_ids:
+            indices = collect_execution_indices_for_run(external_analysis_dir, run_id)
+            if indices:
+                execution_indices_with_status[run_id] = indices
 
     # Collect all run summaries with batch eligibility
     run_summaries: list[dict[str, object]] = []
