@@ -1299,7 +1299,11 @@ describe("downloadExecutionStateDiagnostics", () => {
       })
     );
     const result = await downloadExecutionStateDiagnostics("run-123");
-    expect(result).toBeInstanceOf(Blob);
+    // Avoid instanceof Blob - Blob may come from different jsdom/fetch realm.
+    // Assert shape only: has numeric size > 0.
+    expect(result).toBeDefined();
+    expect(typeof result.size).toBe("number");
+    expect(result.size).toBeGreaterThan(0);
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
       "/api/debug/runs/run-123/execution-state-bundle",
       expect.objectContaining({ cache: "no-store" })
