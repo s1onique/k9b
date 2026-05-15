@@ -30,7 +30,9 @@ import { describe, expect, test, vi } from "vitest";
 import { useAppData } from "../hooks/useAppData";
 import * as apiModule from "../api";
 
-// Import after mocking
+// NOTE: The imported API functions are now wrapper functions around the top-level mock variables.
+// Use the top-level mock variables directly for mockResolvedValue/mockRejectedValue/assertions.
+// The wrapper pattern is needed so vi.clearAllMocks() can restore default implementations.
 import {
   submitAlertmanagerRelevanceFeedback,
   fetchFleet,
@@ -127,7 +129,7 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
   });
 
   test("refreshes app data after successful submission", async () => {
-    vi.mocked(submitAlertmanagerRelevanceFeedback).mockResolvedValue(undefined);
+    mockSubmitAlertmanagerRelevanceFeedback.mockResolvedValue(undefined);
 
     const { result } = renderHook(() =>
       useAppData({
@@ -141,8 +143,8 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     });
 
     // Count initial calls
-    const initialFleetCalls = fetchFleet.mock.calls.length;
-    const initialProposalsCalls = fetchProposals.mock.calls.length;
+    const initialFleetCalls = mockFetchFleet.mock.calls.length;
+    const initialProposalsCalls = mockFetchProposals.mock.calls.length;
 
     // Call the handler
     await result.current.handleAlertmanagerRelevanceFeedback(
@@ -155,15 +157,15 @@ describe("useAppData - handleAlertmanagerRelevanceFeedback", () => {
     await waitFor(
       () => {
         // refreshAppData() should be called which triggers fleet/proposals fetches
-        expect(fetchFleet.mock.calls.length).toBeGreaterThan(initialFleetCalls);
-        expect(fetchProposals.mock.calls.length).toBeGreaterThan(initialProposalsCalls);
+        expect(mockFetchFleet.mock.calls.length).toBeGreaterThan(initialFleetCalls);
+        expect(mockFetchProposals.mock.calls.length).toBeGreaterThan(initialProposalsCalls);
       },
       { timeout: 2000 }
     );
   });
 
   test("re-throws error from API on submission failure", async () => {
-    vi.mocked(submitAlertmanagerRelevanceFeedback).mockRejectedValue(
+    mockSubmitAlertmanagerRelevanceFeedback.mockRejectedValue(
       new Error("API Error: Invalid request")
     );
 
