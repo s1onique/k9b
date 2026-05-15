@@ -19,7 +19,7 @@ from ..external_analysis.config import (
 )
 from ..security.deanonymization import deanonymize_review_enrichment, deanonymize_text, safe_alias_mapping
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
-from ..ui.execution_index_utils import collect_execution_indices_for_run
+from ..ui.execution_index_utils import collect_execution_indices_for_all_runs
 from .adaptation import HealthProposal
 from .notifications import NotificationArtifact
 from .ui_deterministic_next_checks import (
@@ -597,8 +597,20 @@ def _build_recent_runs_summary(
     # Structure: execution_indices[run_id] = {candidate_index: status_string}
     execution_indices_with_status: dict[str, dict[int, str]] = {}
 
+    # Use shared one-pass collector for O(artifacts) instead of O(runs × artifacts)
+    # This ensures consistency between index-backed and fresh worklist paths
+    exec_dir = external_analysis_dir if external_analysis_dir is not None else None
+    if exec_dir is None:
+        execution_indices_with_status = {}
+        exec_diagnostics: dict[str, object] = {}
+    else:
+        execution_indices_with_status, exec_diagnostics = collect_execution_indices_for_all_runs(
+            exec_dir, 
+            health_root=reviews_dir.parent if reviews_dir.parent.name == "health" else None
+        )
+    
+    # Load plan files for all runs
     if external_analysis_dir is not None and external_analysis_dir.is_dir():
-        # Load plan files for all runs
         for plan_path in external_analysis_dir.glob("*-next-check-plan*.json"):
             try:
                 raw = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -608,31 +620,9 @@ def _build_recent_runs_summary(
                     for candidate_run_id in _extract_run_ids_from_filename(filename, "-next-check-plan"):
                         if candidate_run_id:
                             plan_data[candidate_run_id] = raw
-                            execution_indices_with_status.setdefault(candidate_run_id, {})
                             break
             except (OSError, json.JSONDecodeError):
                 continue
-
-        # Collect execution indices for all runs using run_id-scoped scanning
-        # This ensures consistency with the fresh worklist path which uses the same approach.
-        # Previously used a global glob pattern that could miss execution artifacts.
-        #
-        # First pass: collect all run_ids from review files to scope the scan
-        all_run_ids: set[str] = set()
-        for review_path in reviews_dir.glob("*-review.json"):
-            try:
-                review_raw = json.loads(review_path.read_text(encoding="utf-8"))
-                review_run_id = review_raw.get("run_id")
-                if isinstance(review_run_id, str):
-                    all_run_ids.add(review_run_id)
-            except (OSError, json.JSONDecodeError):
-                continue
-
-        # Second pass: for each run, collect execution indices using run-scoped glob
-        for run_id in all_run_ids:
-            indices = collect_execution_indices_for_run(external_analysis_dir, run_id)
-            if indices:
-                execution_indices_with_status[run_id] = indices
 
     # Collect all run summaries with batch eligibility
     run_summaries: list[dict[str, object]] = []
