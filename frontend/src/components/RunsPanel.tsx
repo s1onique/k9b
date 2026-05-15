@@ -15,7 +15,8 @@ import type { NextCheckPlanCandidate, NextCheckStatusVariant, RunPayload, RunsLi
 import { getRunsDisplayStatus, type RunsDisplayStatus } from "../hooks/useRunSelection";
 import type { LlmTelemetryPreviewData } from "./run-summary/RunOverviewDashboard";
 import { artifactUrl, formatTimestamp, relativeRecency, statusClass } from "../utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { fetchDebugDiagnosticsEnabled, downloadExecutionStateDiagnostics } from "../api";
 import {
   RunHeader,
   RunKpiStrip,
@@ -537,6 +538,44 @@ export const RunSummaryPanel = ({
   onRetrySelectedRun,
   selectedRunId,
 }: RunSummaryPanelProps) => {
+  // Check if debug diagnostics are enabled on the backend
+  const [debugDiagnosticsEnabled, setDebugDiagnosticsEnabled] = useState(false);
+  const [debugDiagnosticsError, setDebugDiagnosticsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDebugDiagnosticsEnabled()
+      .then((response) => {
+        setDebugDiagnosticsEnabled(response.debugExecutionDiagnosticsEnabled);
+        setDebugDiagnosticsError(null);
+      })
+      .catch(() => {
+        // Silently disable if fetch fails (e.g., endpoint not available)
+        setDebugDiagnosticsEnabled(false);
+      });
+  }, []);
+
+  // Handler for downloading execution state diagnostics bundle
+  const handleDownloadDiagnostics = async () => {
+    if (!selectedRunId) return;
+
+    try {
+      const blob = await downloadExecutionStateDiagnostics(selectedRunId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `k9b-execution-state-diagnostics-${selectedRunId}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setDebugDiagnosticsError(null);
+    } catch (err) {
+      // Preserve backend error message so operators see "Debug endpoints disabled" etc.
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setDebugDiagnosticsError(errorMessage || "Failed to download diagnostics bundle");
+    }
+  };
+
   // Phase 3: Handle progressive loading states from RunControl
   // These states take precedence over the "no run" state
   if (runOwnedPanelState === "slow") {
@@ -587,6 +626,22 @@ export const RunSummaryPanel = ({
         collectorVersion={run.collectorVersion}
         timestamp={run.timestamp}
       />
+      {/* Debug diagnostics download button - only shown when enabled */}
+      {debugDiagnosticsEnabled && selectedRunId && (
+        <div className="run-header-actions">
+          <button
+            type="button"
+            className="row-action row-action--secondary"
+            onClick={handleDownloadDiagnostics}
+            title="Download execution state diagnostics bundle"
+          >
+            Download diagnostics
+          </button>
+          {debugDiagnosticsError && (
+            <span className="muted small error-text">{debugDiagnosticsError}</span>
+          )}
+        </div>
+      )}
       {/* Tabbed interface for run summary content */}
       <RunSummaryTabs
         activeTab={activeTab}

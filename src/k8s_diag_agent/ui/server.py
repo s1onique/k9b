@@ -1797,6 +1797,36 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _set_status(self, code: int) -> None:
+        """Set the response status code."""
+        self._status_code = code
+        self.send_response(code)
+
+    def _send_bytes(self, data: bytes, *, content_type: str = "application/octet-stream", filename: str | None = None) -> None:
+        """Send raw bytes response with optional Content-Disposition header.
+
+        Args:
+            data: Raw bytes to send
+            content_type: Content-Type header value
+            filename: Optional filename for Content-Disposition header
+        """
+        self._response_bytes = len(data)
+
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        if filename:
+            # Use quoted filename for ASCII, encoded for non-ASCII
+            self.send_header("Content-Disposition", f"attachment; filename=\"{filename}\"")
+        # INTENTIONAL: Always force Connection: close for development
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(data)
+        self.wfile.flush()
+
+        # Tell BaseHTTPRequestHandler to close connection after this response
+        self.close_connection = True
+
     def _send_text(self, code: int, message: str) -> None:
         self.send_response(code)
         self.send_header("Content-Type", "text/plain; charset=utf-8")

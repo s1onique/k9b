@@ -13,8 +13,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   approveNextCheckCandidate,
+  downloadExecutionStateDiagnostics,
   executeNextCheckCandidate,
   fetchClusterDetail,
+  fetchDebugDiagnosticsEnabled,
   fetchFleet,
   fetchNotifications,
   fetchProposals,
@@ -1227,5 +1229,133 @@ describe("API client resilience", () => {
       );
       vi.mocked(globalThis.fetch).mockClear();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Debug diagnostics API functions
+// ---------------------------------------------------------------------------
+
+describe("fetchDebugDiagnosticsEnabled", () => {
+  test("calls /api/debug/diagnostics-enabled and returns enabled status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/diagnostics-enabled": mockResponse({
+          debugExecutionDiagnosticsEnabled: true,
+        }),
+      })
+    );
+    const result = await fetchDebugDiagnosticsEnabled();
+    expect(result).toEqual({ debugExecutionDiagnosticsEnabled: true });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/debug/diagnostics-enabled",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  test("returns disabled status when endpoint returns false", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/diagnostics-enabled": mockResponse({
+          debugExecutionDiagnosticsEnabled: false,
+        }),
+      })
+    );
+    const result = await fetchDebugDiagnosticsEnabled();
+    expect(result).toEqual({ debugExecutionDiagnosticsEnabled: false });
+  });
+
+  test("throws on non-OK response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/diagnostics-enabled": new Response(null, { status: 500, statusText: "Internal Server Error" }),
+      })
+    );
+    await expect(fetchDebugDiagnosticsEnabled()).rejects.toThrow("Internal Server Error");
+  });
+
+  test("throws on network error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("Network error")))
+    );
+    await expect(fetchDebugDiagnosticsEnabled()).rejects.toThrow("Network error");
+  });
+});
+
+describe("downloadExecutionStateDiagnostics", () => {
+  test("calls correct endpoint with runId", async () => {
+    const blob = new Blob(["test"], { type: "application/zip" });
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/runs/run-123/execution-state-bundle": new Response(blob, {
+          status: 200,
+          statusText: "OK",
+        }),
+      })
+    );
+    const result = await downloadExecutionStateDiagnostics("run-123");
+    expect(result).toBeInstanceOf(Blob);
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/debug/runs/run-123/execution-state-bundle",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  test("encodes special characters in runId", async () => {
+    const blob = new Blob(["test"], { type: "application/zip" });
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/runs/run%2F456/execution-state-bundle": new Response(blob, {
+          status: 200,
+        }),
+      })
+    );
+    await downloadExecutionStateDiagnostics("run/456");
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/debug/runs/run%2F456/execution-state-bundle",
+      expect.any(Object)
+    );
+  });
+
+  test("extracts error message from JSON error response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/runs/run-123/execution-state-bundle": mockResponse(
+          { error: "Debug endpoints disabled" },
+          403
+        ),
+      })
+    );
+    await expect(downloadExecutionStateDiagnostics("run-123")).rejects.toThrow(
+      "Debug endpoints disabled"
+    );
+  });
+
+  test("throws on non-OK response without error field", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/debug/runs/run-123/execution-state-bundle": new Response(null, {
+          status: 404,
+          statusText: "Not Found",
+        }),
+      })
+    );
+    await expect(downloadExecutionStateDiagnostics("run-123")).rejects.toThrow("Not Found");
+  });
+
+  test("throws on network error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("Network error")))
+    );
+    await expect(downloadExecutionStateDiagnostics("run-123")).rejects.toThrow("Network error");
   });
 });

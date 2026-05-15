@@ -34,6 +34,65 @@ environment:
   - K9B_ENABLE_DEBUG_ENDPOINTS=true
 ```
 
+## Using the UI Download Button
+
+The k9b UI provides a **Download diagnostics** button in the run summary panel when debug endpoints are enabled.
+
+### Requirements
+
+1. **Backend:** Must have `K9B_ENABLE_DEBUG_ENDPOINTS=true` set
+2. **UI:** Automatically detects the enabled state via `GET /api/debug/diagnostics-enabled`
+
+### How to Use
+
+1. Navigate to the **Recent Runs** panel
+2. Select a run to view its details in the **Run Summary** panel
+3. If debug endpoints are enabled, a **Download diagnostics** button appears below the run header
+4. Click the button to download a `.zip` bundle containing:
+   - `summary.md` - Markdown summary with root-cause hints
+   - `recent-runs-debug.json` - Recent runs debug data
+   - `recent-runs-row.json` - Target run's row from Recent Runs
+   - `runs-debug-block.json` - Debug execution summary block
+   - `execution-summary-diagnostics.json` - Detailed diagnostic analysis
+   - `worklist-run-payload.json` - Worklist/run payload from plan artifacts
+
+### UI Workflow
+
+```
+┌─────────────────────────────────────────────┐
+│ Recent Runs                                 │
+│ ┌─────────────────────────────────────────┐ │
+│ │ Run 42  │ Partially executed │ ... │    │ │
+│ └─────────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+           ↓ Select run
+┌─────────────────────────────────────────────┐
+│ Run 42                           [Download diagnostics] │
+│ ID: run-42-abcd                     ↓      │
+├─────────────────────────────────────────────┤
+│ [Overview] [Next Checks] [Artifacts]        │
+│ ...                                         │
+└─────────────────────────────────────────────┘
+           ↓ Click button
+┌─────────────────────────────────────────────┐
+│ Download: k9b-execution-state-diagnostics-  │
+│           run-42-abcd.zip                    │
+└─────────────────────────────────────────────┘
+```
+
+### When Button is Hidden
+
+The button is hidden when:
+- Debug endpoints are disabled (`K9B_ENABLE_DEBUG_ENDPOINTS` not set to `true`)
+- No run is selected in the summary panel
+
+### Error Handling
+
+If the download fails:
+1. An error message appears below the button
+2. Check that the backend is running with debug endpoints enabled
+3. Verify the run ID exists in the recent runs list
+
 ## Using the Diagnostic Script
 
 The `scripts/debug_recent_runs_execution_state.sh` script automates evidence collection.

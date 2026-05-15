@@ -769,14 +769,15 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
         # External analysis count (fast glob only, no load)
         # SECURITY: run_id validated by validate_run_id() before glob construction
+        # NOTE: F823 false positive - imports are at module level, ruff misidentifies scope
         external_analysis_dir = handler._health_root / "external-analysis"
         external_analysis_count = 0
         if external_analysis_dir.exists():
             try:
-                validated_run_id = validate_run_id(context.run.run_id)
+                validated_run_id = validate_run_id(context.run.run_id)  # noqa: F823
                 glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
                 external_analysis_count = len(list(external_analysis_dir.glob(glob_pattern)))
-            except SecurityError:
+            except SecurityError:  # noqa: F823
                 # Safe fallback: return 0 on invalid run_id
                 external_analysis_count = 0
         timings["external_analysis_files_scanned"] = external_analysis_count
@@ -873,20 +874,61 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     if route.startswith("/api/debug/runs/"):
         import os
         import re as regex_module
+
         if os.environ.get("K9B_ENABLE_DEBUG_ENDPOINTS", "false").lower() != "true":
             handler._send_json({"error": "Debug endpoints disabled - set K9B_ENABLE_DEBUG_ENDPOINTS=true to enable"})
             return
+
+        # Match execution-state-bundle endpoint
+        bundle_match = regex_module.match(r"^/api/debug/runs/([^/]+)/execution-state-bundle$", route)
+        if bundle_match:
+            run_id = bundle_match.group(1)
+            health_root = handler.runs_dir / "health"
+            # Validate run_id format for safety
+            from ..security.path_validation import SecurityError, validate_run_id
+            from .api_debug import build_execution_state_bundle
+
+            try:
+                validate_run_id(run_id)
+            except SecurityError:
+                handler._send_json({"error": "Invalid run_id format"})
+                return
+
+            bundle_bytes = build_execution_state_bundle(run_id, health_root)
+            if bundle_bytes is None:
+                handler._send_json({"error": "Debug diagnostics disabled"})
+                return
+
+            # Send ZIP response (only call _send_bytes - it sets status internally)
+            handler._send_bytes(
+                bundle_bytes,
+                content_type="application/zip",
+                filename=f"k9b-execution-state-diagnostics-{run_id}.zip",
+            )
+            return
+
+        # Match execution-summary endpoint
         match = regex_module.match(r"^/api/debug/runs/([^/]+)/execution-summary$", route)
         if match:
             run_id = match.group(1)
             health_root = handler.runs_dir / "health"
             from .api_debug import build_execution_summary_diagnostics
+
             diagnostic = build_execution_summary_diagnostics(run_id, health_root, debug_flag=True)
             if diagnostic:
                 handler._send_json(diagnostic)
             else:
                 handler._send_json({"error": "Diagnostics disabled"})
             return
+
+    # Debug diagnostics enabled flag: GET /api/debug/diagnostics-enabled
+    if route == "/api/debug/diagnostics-enabled":
+        from .api_debug import is_debug_diagnostics_enabled
+
+        handler._send_json({
+            "debugExecutionDiagnosticsEnabled": is_debug_diagnostics_enabled()
+        })
+        return
 
     handler._send_text(404, "Not Found")
 

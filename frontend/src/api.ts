@@ -485,3 +485,41 @@ export const submitAlertmanagerRelevanceFeedback = async (
   }
   return (await response.json()) as AlertmanagerRelevanceFeedbackResponse;
 };
+
+// Debug diagnostics types
+export type DebugDiagnosticsEnabledResponse = {
+  debugExecutionDiagnosticsEnabled: boolean;
+};
+
+// Check if debug diagnostics are enabled on the backend
+export const fetchDebugDiagnosticsEnabled = async (): Promise<DebugDiagnosticsEnabledResponse> => {
+  const response = await fetch("/api/debug/diagnostics-enabled", {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch debug diagnostics status: ${response.statusText}`);
+  }
+  return (await response.json()) as DebugDiagnosticsEnabledResponse;
+};
+
+// Download execution state diagnostics bundle for a specific run
+export const downloadExecutionStateDiagnostics = async (runId: string): Promise<Blob> => {
+  const response = await fetch(`/api/debug/runs/${encodeURIComponent(runId)}/execution-state-bundle`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to download diagnostics bundle");
+  }
+
+  return response.blob();
+};
