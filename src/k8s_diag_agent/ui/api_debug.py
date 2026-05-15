@@ -80,6 +80,9 @@ def build_execution_summary_diagnostics(
         "execution_artifact_parsed_indices": [],
         "execution_artifact_parse_errors": [],
         "run_id_extraction_method": None,
+        # Execution index diagnostics from recent_runs_summary
+        "_execution_index_diagnostics": None,
+        "_execution_index_collector_version": None,
     }
 
     ui_index_path = health_root / "ui-index.json"
@@ -108,6 +111,13 @@ def build_execution_summary_diagnostics(
         return diagnostic
 
     diagnostic["ui_index_generated_at"] = recent_summary.get("generated_at")
+
+    # Extract execution index diagnostics from recent_runs_summary
+    # This includes scan metadata: total found, run_ids discovered, sample files, etc.
+    exec_index_diagnostics = recent_summary.get("_execution_index_diagnostics")
+    if exec_index_diagnostics and isinstance(exec_index_diagnostics, dict):
+        diagnostic["_execution_index_diagnostics"] = exec_index_diagnostics
+        diagnostic["_execution_index_collector_version"] = exec_index_diagnostics.get("_execution_index_collector_version")
 
     # Check internal data in index
     all_plan_data = recent_summary.get("_plan_data", {})

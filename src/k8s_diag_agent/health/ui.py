@@ -77,6 +77,10 @@ from .ui_shared import _relative_path
 
 logger = logging.getLogger(__name__)
 
+# Version marker for execution index collector
+# If marker is missing in bundle, deployment/runtime is stale
+EXECUTION_INDEX_COLLECTOR_VERSION = "shared-one-pass-v1"
+
 # Re-export: required by test_health_ui.py
 __all__ = ["_classify_deterministic_next_check"]
 
@@ -679,16 +683,24 @@ def _build_recent_runs_summary(
     total_count = len(run_summaries)
     recent_runs = run_summaries[:max_runs]
 
+    # Add execution index diagnostics for bundle debugging
+    # This includes scan metadata: total found, run_ids discovered, sample files, etc.
+    exec_diagnostics_with_version = dict(exec_diagnostics) if exec_diagnostics else {}
+    exec_diagnostics_with_version["_execution_index_collector_version"] = EXECUTION_INDEX_COLLECTOR_VERSION
+
     result = {
         "runs": recent_runs,
         "total_count": total_count,
         "generated_at": datetime.now(UTC).isoformat(),
-        "version": 2,  # Schema version 2: includes batch eligibility fields
+        "version": 3,  # Schema version 3: includes _execution_index_diagnostics
         # Internal data for API layer - enables executionSummary computation without filesystem access
         # _plan_data: run_id -> plan artifact dict
         # _execution_indices: run_id -> {candidate_index: status_string}
         "_plan_data": plan_data,
         "_execution_indices": execution_indices_with_status,
+        # Execution index diagnostics: scan metadata for bundle debugging
+        # Includes total found, run_ids discovered, sample files, skipped reasons
+        "_execution_index_diagnostics": exec_diagnostics_with_version,
     }
 
     return result
