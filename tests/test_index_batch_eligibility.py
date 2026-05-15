@@ -409,7 +409,9 @@ class TestBuildRecentRunsSummaryWithExternalAnalysis:
         )
 
         # Verify summary structure
-        assert summary["version"] == 2
+        assert summary["version"] == 3
+        assert "_execution_index_diagnostics" in summary
+        assert summary["_execution_index_diagnostics"]["_execution_index_collector_version"] == "shared-one-pass-v1"
         runs = _summary_runs(summary)
         assert len(runs) == 1
 
@@ -527,8 +529,8 @@ class TestBuildRecentRunsSummaryWithExternalAnalysis:
         # Call _build_recent_runs_summary without external_analysis_dir
         summary = _build_recent_runs_summary(reviews_dir)
 
-        # Verify summary structure - version 2 even without external-analysis (schema is consistent)
-        assert summary["version"] == 2
+        # Verify summary structure - version 3 even without external-analysis (schema is consistent)
+        assert summary["version"] == 3
         runs = _summary_runs(summary)
         assert len(runs) == 1
 
@@ -594,7 +596,7 @@ class TestExtractRunIdsFromFilename:
         )
 
         # Verify batch eligibility was computed despite numbered artifact
-        assert summary["version"] == 2
+        assert summary["version"] == 3
         runs = _summary_runs(summary)
         assert len(runs) == 1
         run = runs[0]
