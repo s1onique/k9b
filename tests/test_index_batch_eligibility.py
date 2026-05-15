@@ -763,3 +763,262 @@ class TestNonContiguousCandidateIndex:
         assert run["batchExecutable"] is True
         # Only 1 eligible (first candidate was executed by enumerate index 0)
         assert run["batchEligibleCount"] == 1
+
+
+class TestExecutionArtifactRunIdExtraction:
+    """Tests for correct execution artifact run_id extraction.
+
+    This addresses the bug where execution artifacts like
+    health-run-20260515T200439Z-next-check-execution-0.json were incorrectly
+    parsed because the marker "-next-check-execution" matched INSIDE the run_id
+    rather than as the artifact suffix delimiter.
+    """
+
+    def test_execution_artifact_with_numbered_suffix(self, tmp_path: Path) -> None:
+        """Should correctly extract run_id from numbered execution artifacts.
+
+        The bug: filename "health-run-20260515T200439Z-next-check-execution-0.json"
+        contains "-next-check-" INSIDE the run_id, so using marker "-next-check-execution"
+        would match the marker at position 27 (inside run_id) rather than position 35.
+
+        The fix: Use marker "-next-check-execution-" (with trailing dash) or extract
+        run_id from the artifact's run_id field.
+        """
+        from k8s_diag_agent.health.ui import _build_recent_runs_summary
+
+        # Create health directory structure
+        health_dir = tmp_path / "health"
+        health_dir.mkdir(parents=True)
+        reviews_dir = health_dir / "reviews"
+        reviews_dir.mkdir(parents=True)
+        ea_dir = health_dir / "external-analysis"
+        ea_dir.mkdir(parents=True)
+
+        run_id = "health-run-20260515T200439Z"
+
+        # Create a review file
+        (reviews_dir / f"{run_id}-review.json").write_text(
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "run_label": "Test Run",
+                    "timestamp": "2026-05-15T20:04:39Z",
+                    "cluster_count": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        # Create plan with 11 candidates
+        plan = {
+            "purpose": "next-check-planning",
+            "candidates": [
+                {
+                    "suggestedCommandFamily": "kubectl",
+                    "description": f"Check {i}",
+                    "targetContext": "default/cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                }
+                for i in range(11)
+            ],
+        }
+        (ea_dir / f"{run_id}-next-check-plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+        # Create 8 execution artifacts with numbered suffixes (indices 0-7)
+        # 2 failed, 6 success
+        execution_statuses = {
+            0: "success",
+            1: "success",
+            2: "failed",
+            3: "success",
+            4: "failed",
+            5: "success",
+            6: "success",
+            7: "success",
+        }
+        for idx, status in execution_statuses.items():
+            execution = {
+                "purpose": "next-check-execution",
+                "run_id": run_id,  # Artifact has run_id field
+                "status": status,
+                "payload": {"candidateIndex": idx},
+            }
+            # Filename pattern: health-run-20260515T200439Z-next-check-execution-{idx}.json
+            (ea_dir / f"{run_id}-next-check-execution-{idx}.json").write_text(json.dumps(execution), encoding="utf-8")
+
+        # Call _build_recent_runs_summary
+        summary = _build_recent_runs_summary(
+            reviews_dir,
+            external_analysis_dir=ea_dir,
+        )
+
+        # Verify execution indices were correctly stored
+        execution_indices = summary.get("_execution_indices", {})
+        assert run_id in execution_indices, f"run_id {run_id} should be in execution_indices"
+
+        # Verify we got 8 parsed execution indices
+        run_exec_indices = execution_indices[run_id]
+        assert len(run_exec_indices) == 8, f"Expected 8 execution indices, got {len(run_exec_indices)}"
+
+        # Verify status extraction
+        assert run_exec_indices.get(0) == "success", f"Index 0 should be success, got {run_exec_indices.get(0)}"
+        assert run_exec_indices.get(2) == "failed", f"Index 2 should be failed, got {run_exec_indices.get(2)}"
+        assert run_exec_indices.get(4) == "failed", f"Index 4 should be failed, got {run_exec_indices.get(4)}"
+
+        # Verify batch eligibility was computed correctly
+        runs = _summary_runs(summary)
+        run = runs[0]
+        assert run["batchEligibility"] == "computed"
+        assert run["batchExecutable"] is True
+        # 11 total - 8 executed = 3 pending
+        assert run["batchEligibleCount"] == 3, f"Expected 3 eligible, got {run['batchEligibleCount']}"
+
+    def test_execution_artifact_run_id_from_artifact_field(self, tmp_path: Path) -> None:
+        """Should prefer run_id from artifact's run_id field over filename parsing."""
+        from k8s_diag_agent.health.ui import _build_recent_runs_summary
+
+        # Create health directory structure
+        health_dir = tmp_path / "health"
+        health_dir.mkdir(parents=True)
+        reviews_dir = health_dir / "reviews"
+        reviews_dir.mkdir(parents=True)
+        ea_dir = health_dir / "external-analysis"
+        ea_dir.mkdir(parents=True)
+
+        run_id = "test-run-with-hyphens"
+
+        # Create a review file
+        (reviews_dir / f"{run_id}-review.json").write_text(
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "run_label": "Test Run",
+                    "timestamp": "2026-05-15T20:04:39Z",
+                    "cluster_count": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        # Create plan with 3 candidates
+        plan = {
+            "purpose": "next-check-planning",
+            "candidates": [
+                {
+                    "suggestedCommandFamily": "kubectl",
+                    "description": f"Check {i}",
+                    "targetContext": "default/cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                }
+                for i in range(3)
+            ],
+        }
+        (ea_dir / f"{run_id}-next-check-plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+        # Create execution artifact with DIFFERENT run_id in filename vs artifact field
+        # The filename has run_id but artifact field says something else
+        execution = {
+            "purpose": "next-check-execution",
+            "run_id": run_id,  # Primary: from artifact field
+            "status": "success",
+            "payload": {"candidateIndex": 0},
+        }
+        # Filename contains run_id with the marker inside
+        (ea_dir / f"{run_id}-next-check-execution-0.json").write_text(json.dumps(execution), encoding="utf-8")
+
+        # Call _build_recent_runs_summary
+        summary = _build_recent_runs_summary(
+            reviews_dir,
+            external_analysis_dir=ea_dir,
+        )
+
+        # Verify execution indices were correctly stored
+        execution_indices = summary.get("_execution_indices", {})
+        assert run_id in execution_indices, f"run_id {run_id} should be in execution_indices"
+
+        # Verify we got 1 parsed execution index
+        run_exec_indices = execution_indices[run_id]
+        assert len(run_exec_indices) == 1, f"Expected 1 execution index, got {len(run_exec_indices)}"
+        assert run_exec_indices.get(0) == "success"
+
+        # Verify batch eligibility: 3 - 1 = 2 remaining
+        runs = _summary_runs(summary)
+        run = runs[0]
+        assert run["batchEligibleCount"] == 2
+
+    def test_execution_artifact_filename_vs_run_id_field_priority(self, tmp_path: Path) -> None:
+        """Should use artifact run_id field as primary, filename as fallback."""
+        from k8s_diag_agent.health.ui import _build_recent_runs_summary
+
+        # Create health directory structure
+        health_dir = tmp_path / "health"
+        health_dir.mkdir(parents=True)
+        reviews_dir = health_dir / "reviews"
+        reviews_dir.mkdir(parents=True)
+        ea_dir = health_dir / "external-analysis"
+        ea_dir.mkdir(parents=True)
+
+        artifact_run_id = "actual-run-id-in-artifact"
+        filename_run_id = "health-run-timestamp"
+
+        # Create review for the actual run_id from artifact
+        (reviews_dir / f"{artifact_run_id}-review.json").write_text(
+            json.dumps(
+                {
+                    "run_id": artifact_run_id,
+                    "run_label": "Test Run",
+                    "timestamp": "2026-05-15T20:04:39Z",
+                    "cluster_count": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        # Create plan for the actual run_id
+        plan = {
+            "purpose": "next-check-planning",
+            "candidates": [
+                {
+                    "suggestedCommandFamily": "kubectl",
+                    "description": "Check 1",
+                    "targetContext": "default/cluster-a",
+                    "safeToAutomate": True,
+                    "requiresOperatorApproval": False,
+                    "duplicateOfExistingEvidence": False,
+                },
+            ],
+        }
+        (ea_dir / f"{artifact_run_id}-next-check-plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+        # Create execution artifact with run_id in both filename and artifact field
+        # Artifact field takes priority
+        execution = {
+            "purpose": "next-check-execution",
+            "run_id": artifact_run_id,  # This should be used
+            "status": "success",
+            "payload": {"candidateIndex": 0},
+        }
+        # Filename has a different run_id than the artifact field
+        (ea_dir / f"{filename_run_id}-next-check-execution-0.json").write_text(json.dumps(execution), encoding="utf-8")
+
+        # Call _build_recent_runs_summary
+        summary = _build_recent_runs_summary(
+            reviews_dir,
+            external_analysis_dir=ea_dir,
+        )
+
+        # Verify execution indices were stored under the actual run_id from artifact
+        execution_indices = summary.get("_execution_indices", {})
+
+        # Should be stored under artifact_run_id, NOT filename_run_id
+        assert artifact_run_id in execution_indices, f"artifact_run_id {artifact_run_id} should be in execution_indices"
+        assert filename_run_id not in execution_indices, f"filename_run_id {filename_run_id} should NOT be in execution_indices"
+
+        # Verify batch eligibility: 1 - 1 = 0 remaining
+        runs = _summary_runs(summary)
+        run = runs[0]
+        assert run["batchEligibleCount"] == 0

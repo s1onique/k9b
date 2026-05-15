@@ -613,23 +613,57 @@ def _build_recent_runs_summary(
                 continue
 
         # Load execution indices for all runs WITH status for failedCandidates
+        # CRITICAL: We scan for BOTH patterns:
+        # 1. Numbered: "run-id-next-check-execution-0.json" (with trailing dash + number)
+        # 2. Simple: "run-id-next-check-execution.json" (no trailing dash)
+        #
+        # For pattern 1, the run_id itself contains "-next-check-", so we must use
+        # "-next-check-execution-" (with trailing dash) to extract the correct run_id.
+        # For pattern 2, we use "-next-check-execution" as the marker.
+        #
+        # Priority: Extract run_id from artifact's run_id field FIRST, then fall back
+        # to filename parsing. This ensures correctness even with malformed filenames.
         for exec_path in external_analysis_dir.glob("*-next-check-execution*.json"):
+            # Skip alertmanager-review artifacts
+            if "-next-check-execution-alertmanager-review" in exec_path.stem:
+                continue
+            # Skip usefulness-review artifacts
+            if "-next-check-execution-usefulness-review" in exec_path.stem:
+                continue
             try:
                 raw = json.loads(exec_path.read_text(encoding="utf-8"))
-                if raw.get("purpose") == "next-check-execution":
+                if raw.get("purpose") != "next-check-execution":
+                    continue
+
+                # Extract run_id from artifact's run_id field (most reliable)
+                candidate_run_id = raw.get("run_id")
+                if not isinstance(candidate_run_id, str):
+                    # Filename parsing as fallback
                     filename = exec_path.stem
-                    exec_payload = raw.get("payload", {})
-                    candidate_index = exec_payload.get("candidateIndex")
-                    # Extract status from artifact for failedCandidates derivation
-                    status = raw.get("status", "unknown")
-                    if not isinstance(status, str):
-                        status = "unknown"
-                    for candidate_run_id in _extract_run_ids_from_filename(filename, "-next-check-execution"):
-                        if candidate_run_id:
-                            execution_indices_with_status.setdefault(candidate_run_id, {})
-                            if isinstance(candidate_index, int):
-                                execution_indices_with_status[candidate_run_id][candidate_index] = status
-                            break
+                    # Determine which marker to use based on filename pattern
+                    if "-next-check-execution-" in filename:
+                        # Numbered pattern: extract with trailing dash marker
+                        for extracted_id in _extract_run_ids_from_filename(filename, "-next-check-execution-"):
+                            if extracted_id:
+                                candidate_run_id = extracted_id
+                                break
+                    else:
+                        # Simple pattern: extract without trailing dash
+                        for extracted_id in _extract_run_ids_from_filename(filename, "-next-check-execution"):
+                            if extracted_id:
+                                candidate_run_id = extracted_id
+                                break
+                if not isinstance(candidate_run_id, str):
+                    continue
+                exec_payload = raw.get("payload", {})
+                candidate_index = exec_payload.get("candidateIndex")
+                # Extract status from artifact for failedCandidates derivation
+                status = raw.get("status", "unknown")
+                if not isinstance(status, str):
+                    status = "unknown"
+                execution_indices_with_status.setdefault(candidate_run_id, {})
+                if isinstance(candidate_index, int):
+                    execution_indices_with_status[candidate_run_id][candidate_index] = status
             except (OSError, json.JSONDecodeError):
                 continue
 

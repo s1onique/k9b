@@ -72,6 +72,14 @@ def build_execution_summary_diagnostics(
         "plan_data_in_index": False,
         "execution_indices_in_index": False,
         "index_path": None,
+        # Debug fields for parsing correlation issues
+        "raw_execution_indices_for_run": None,
+        "raw_execution_indices_type": None,
+        "execution_artifact_count_for_run": 0,
+        "execution_artifact_filenames": [],
+        "execution_artifact_parsed_indices": [],
+        "execution_artifact_parse_errors": [],
+        "run_id_extraction_method": None,
     }
 
     ui_index_path = health_root / "ui-index.json"
