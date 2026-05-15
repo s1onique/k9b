@@ -29,6 +29,10 @@ vi.mock("../api", () => ({
   }),
   promoteDeterministicNextCheck: vi.fn(),
   submitUsefulnessFeedback: vi.fn(),
+  fetchDebugDiagnosticsEnabled: vi.fn().mockResolvedValue({
+    debugExecutionDiagnosticsEnabled: false,
+  }),
+  downloadExecutionStateDiagnostics: vi.fn(),
 }));
 
 // Import after mocking

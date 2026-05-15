@@ -53,6 +53,10 @@ vi.mock("../api", () => ({
   approveNextCheckCandidate: (...args: unknown[]) => mockApproveNextCheckCandidate(...args),
   runBatchExecution: (...args: unknown[]) => mockRunBatchExecution(...args),
   submitAlertmanagerRelevanceFeedback: (...args: unknown[]) => mockSubmitAlertmanagerRelevanceFeedback(...args),
+  fetchDebugDiagnosticsEnabled: vi.fn().mockResolvedValue({
+    debugExecutionDiagnosticsEnabled: false,
+  }),
+  downloadExecutionStateDiagnostics: vi.fn(),
 }));
 
 describe("run-control-app-fetch-ownership", () => {
