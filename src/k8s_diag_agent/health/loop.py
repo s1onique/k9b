@@ -69,6 +69,7 @@ from .loop_scheduler import (
 )
 from .loop_signal_id import _SignalIdGenerator
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
+from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
 from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
@@ -1805,6 +1806,8 @@ class HealthLoopRunner:
         self._run_alertmanager_snapshot_collection(directories)
         # Run vmalert discovery (non-fatal)
         self._run_vmalert_discovery(records, directories)
+        # Collect vmalert rule state from discovered sources (non-fatal)
+        self._run_vmalert_rule_state_collection(directories)
         assessments = self._build_assessments(
             records,
             history,
@@ -3202,6 +3205,23 @@ class HealthLoopRunner:
             directories=directories,
             log_event=log_callback,
             run_id=self.run_id,
+        )
+
+    def _run_vmalert_rule_state_collection(
+        self,
+        directories: dict[str, Path],
+    ) -> None:
+        """Collect vmalert rule state from discovered sources.
+
+        Delegates to loop_vmalert_rule_state module for the actual collection logic.
+
+        This is non-fatal: fetch failures are logged but do not stop the run.
+        """
+        _run_vmalert_rule_state_collection_impl(
+            inventory=self._vmalert_inventory,
+            directories=directories,
+            run_id=self.run_id,
+            cluster_label=self.run_label,
         )
 
     def _choose_free_local_port(self) -> int:
