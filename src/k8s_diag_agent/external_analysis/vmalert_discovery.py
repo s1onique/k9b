@@ -236,7 +236,7 @@ class VmalertSourceInventory:
     artifact_id: str | None = field(default_factory=new_artifact_id)
 
     def add_source(self, source: VmalertSource) -> None:
-        """Add a source, respecting manual precedence."""
+        """Add a source, respecting manual precedence and merging provenance."""
         existing = self.sources.get(source.identity_key)
         if existing is None:
             self.sources[source.identity_key] = source
@@ -250,10 +250,64 @@ class VmalertSourceInventory:
             return
 
         if _ORIGIN_PRIORITY[source.origin] < _ORIGIN_PRIORITY[existing.origin]:
-            self.sources[source.identity_key] = source
+            # New source has higher priority - merge provenances before replacing
+            merged_provenances = set(existing.merged_provenances)
+            merged_provenances.update(source.merged_provenances)
+            # Also add origins that might not be in merged_provenances yet
+            merged_provenances.add(existing.origin)
+            merged_provenances.add(source.origin)
+            
+            # Create merged source preserving winner's data but with merged provenance
+            merged_source = VmalertSource(
+                source_id=source.source_id,
+                endpoint=source.endpoint,
+                namespace=source.namespace,
+                name=source.name,
+                origin=source.origin,
+                state=source.state,
+                discovered_at=source.discovered_at,
+                verified_at=source.verified_at,
+                last_check=source.last_check,
+                last_error=source.last_error,
+                verified_version=source.verified_version,
+                confidence_hints=source.confidence_hints,
+                merged_provenances=tuple(sorted(merged_provenances, key=lambda p: _ORIGIN_PRIORITY[p])),
+                cluster_label=source.cluster_label,
+                cluster_context=source.cluster_context,
+                cluster_uid=source.cluster_uid,
+                object_uid=source.object_uid,
+            )
+            self.sources[source.identity_key] = merged_source
         elif source.origin == existing.origin:
             if source.state == VmalertSourceState.AUTO_TRACKED:
                 self.sources[source.identity_key] = source
+        else:
+            # Lower priority source - merge provenance but keep higher priority source
+            merged_provenances = set(existing.merged_provenances)
+            merged_provenances.update(source.merged_provenances)
+            merged_provenances.add(source.origin)
+            
+            # Update existing source with merged provenance but keep its origin
+            merged_source = VmalertSource(
+                source_id=existing.source_id,
+                endpoint=existing.endpoint,
+                namespace=existing.namespace,
+                name=existing.name,
+                origin=existing.origin,  # Keep existing origin
+                state=existing.state,
+                discovered_at=existing.discovered_at,
+                verified_at=existing.verified_at,
+                last_check=existing.last_check,
+                last_error=existing.last_error,
+                verified_version=existing.verified_version,
+                confidence_hints=existing.confidence_hints,
+                merged_provenances=tuple(sorted(merged_provenances, key=lambda p: _ORIGIN_PRIORITY[p])),
+                cluster_label=existing.cluster_label,
+                cluster_context=existing.cluster_context,
+                cluster_uid=existing.cluster_uid,
+                object_uid=existing.object_uid,
+            )
+            self.sources[source.identity_key] = merged_source
 
     def get_by_origin(self, origin: VmalertSourceOrigin) -> tuple[VmalertSource, ...]:
         """Get all sources with a specific origin."""
