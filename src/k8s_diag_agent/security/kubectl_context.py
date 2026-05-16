@@ -278,11 +278,11 @@ def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None)
 
     Replaces internal execution markers like "in-cluster" with either:
     - The cluster_context if it's a real cluster identity
-    - Neutral fallback text ("the cluster") if no real context is available
+    - "cluster-local" if no real context is available (canonical presentation label)
 
     This handles both:
-    1. Standalone cluster names (e.g., cluster_name="in-cluster" → "the cluster")
-    2. Embedded markers in prose text (e.g., "in-cluster is degraded" → "the cluster is degraded")
+    1. Standalone cluster names (e.g., cluster_name="in-cluster" → "cluster-local")
+    2. Embedded markers in prose text (e.g., "in-cluster is degraded" → "cluster-local is degraded")
 
     Args:
         cluster_name: The cluster name as it appears in prose, or None.
@@ -295,13 +295,13 @@ def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None)
         >>> sanitize_cluster_prose("rc-runity-test-msk1-c02", "in-cluster")
         'rc-runity-test-msk1-c02'
         >>> sanitize_cluster_prose("in-cluster", "in-cluster")
-        'the cluster'
+        'cluster-local'
         >>> sanitize_cluster_prose("in-cluster", "real-context")
         'real-context'
         >>> sanitize_cluster_prose(None, None)
-        'the cluster'
+        'cluster-local'
         >>> sanitize_cluster_prose("in-cluster is in a degraded state")
-        'the cluster is in a degraded state'
+        'cluster-local is in a degraded state'
         >>> sanitize_cluster_prose("in-cluster is in a degraded state", "prod-cluster")
         'prod-cluster is in a degraded state'
     """
@@ -317,7 +317,7 @@ def sanitize_cluster_prose(cluster_name: str | None, context: str | None = None)
     # cluster_name is an internal marker - use display_label logic
     display_label = display_kube_cluster_label(cluster_name, context)
     if display_label is None:
-        return "the cluster"
+        return CLUSTER_LOCAL_PRESENTATION_LABEL
     return display_label
 
 
@@ -328,10 +328,15 @@ _INTERNAL_MARKER_PATTERN = re.compile(
 )
 
 
+# Canonical presentation label for internal execution context markers
+# Used in operator-facing UI instead of internal marker "in-cluster"
+CLUSTER_LOCAL_PRESENTATION_LABEL = "cluster-local"
+
+
 def sanitize_text_with_embedded_markers(
     text: str | None,
     cluster_context: str | None = None,
-    fallback: str = "the cluster",
+    fallback: str = CLUSTER_LOCAL_PRESENTATION_LABEL,
 ) -> str | None:
     """Sanitize text containing embedded internal markers.
 
@@ -343,7 +348,8 @@ def sanitize_text_with_embedded_markers(
     Args:
         text: The text containing embedded markers, or None.
         cluster_context: Optional real cluster context to use as replacement.
-        fallback: Fallback string if no context is available (default: "the cluster").
+        fallback: Fallback string if no context is available
+            (default: "cluster-local" - canonical presentation label).
 
     Returns:
         Sanitized text with internal markers replaced, or None if input is None.
@@ -352,7 +358,7 @@ def sanitize_text_with_embedded_markers(
         >>> sanitize_text_with_embedded_markers("in-cluster is degraded", "prod-cluster")
         'prod-cluster is degraded'
         >>> sanitize_text_with_embedded_markers("in-cluster is degraded", None)
-        'the cluster is degraded'
+        'cluster-local is degraded'
         >>> sanitize_text_with_embedded_markers("in_cluster needs attention", "prod-cluster")
         'prod-cluster needs attention'
         >>> sanitize_text_with_embedded_markers("prod-cluster is healthy", None)

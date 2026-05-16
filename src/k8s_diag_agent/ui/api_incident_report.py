@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from ..security.kubectl_context import (
+    CLUSTER_LOCAL_PRESENTATION_LABEL,
     display_kube_cluster_label,
     is_internal_kube_marker,
     sanitize_kubectl_display_command,
@@ -260,14 +261,14 @@ def _sanitize_target_cluster(cluster: str | None, context: str | None = None) ->
     """Sanitize a cluster label for operator-facing display.
 
     Removes internal context markers like "in-cluster" and "in_cluster" from
-    cluster labels, returning None if the label is only an internal marker.
+    cluster labels, returning "cluster-local" if the label is only an internal marker.
 
     Args:
         cluster: The cluster label to sanitize.
         context: Optional context for fallback if cluster is internal marker.
 
     Returns:
-        Sanitized cluster label, or None if the label is only an internal marker.
+        Sanitized cluster label, or "cluster-local" if the label is only an internal marker.
     """
     if cluster is None:
         return None
@@ -275,7 +276,7 @@ def _sanitize_target_cluster(cluster: str | None, context: str | None = None) ->
     if is_internal_kube_marker(cluster):
         if context and not is_internal_kube_marker(context):
             return context
-        return None
+        return CLUSTER_LOCAL_PRESENTATION_LABEL
     return cluster
 
 
@@ -283,18 +284,18 @@ def _sanitize_target_context(context: str | None) -> str | None:
     """Sanitize a context value for operator-facing display.
 
     Removes internal context markers like "in-cluster" and "in_cluster".
-    Returns None if the context is only an internal marker.
+    Returns "cluster-local" if the context is only an internal marker.
 
     Args:
         context: The context value to sanitize.
 
     Returns:
-        Sanitized context, or None if the context is an internal marker.
+        Sanitized context, or "cluster-local" if the context is an internal marker.
     """
     if context is None:
         return None
     if is_internal_kube_marker(context):
-        return None
+        return CLUSTER_LOCAL_PRESENTATION_LABEL
     return context
 
 

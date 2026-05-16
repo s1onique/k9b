@@ -31,15 +31,15 @@ from k8s_diag_agent.ui.api_incident_report import (
 class TestSanitizeTargetCluster(unittest.TestCase):
     """Tests for _sanitize_target_cluster function."""
 
-    def test_in_cluster_returns_none(self) -> None:
-        """Internal 'in-cluster' cluster label returns None."""
+    def test_in_cluster_returns_cluster_local(self) -> None:
+        """Internal 'in-cluster' cluster label returns 'cluster-local'."""
         result = _sanitize_target_cluster("in-cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
-    def test_in_cluster_underscore_returns_none(self) -> None:
-        """Internal 'in_cluster' cluster label returns None."""
+    def test_in_cluster_underscore_returns_cluster_local(self) -> None:
+        """Internal 'in_cluster' cluster label returns 'cluster-local'."""
         result = _sanitize_target_cluster("in_cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
     def test_in_cluster_with_context_fallback(self) -> None:
         """'in-cluster' with valid context fallback returns context."""
@@ -51,10 +51,10 @@ class TestSanitizeTargetCluster(unittest.TestCase):
         result = _sanitize_target_cluster("in_cluster", "prod-cluster")
         self.assertEqual(result, "prod-cluster")
 
-    def test_in_cluster_with_internal_context_fallback_returns_none(self) -> None:
-        """'in-cluster' with 'in-cluster' context fallback returns None."""
+    def test_in_cluster_with_internal_context_fallback_returns_cluster_local(self) -> None:
+        """'in-cluster' with 'in-cluster' context fallback returns 'cluster-local'."""
         result = _sanitize_target_cluster("in-cluster", "in-cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
     def test_real_cluster_preserved(self) -> None:
         """Real cluster labels are preserved."""
@@ -70,15 +70,15 @@ class TestSanitizeTargetCluster(unittest.TestCase):
 class TestSanitizeTargetContext(unittest.TestCase):
     """Tests for _sanitize_target_context function."""
 
-    def test_in_cluster_returns_none(self) -> None:
-        """Internal 'in-cluster' context returns None."""
+    def test_in_cluster_returns_cluster_local(self) -> None:
+        """Internal 'in-cluster' context returns 'cluster-local'."""
         result = _sanitize_target_context("in-cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
-    def test_in_cluster_underscore_returns_none(self) -> None:
-        """Internal 'in_cluster' context returns None."""
+    def test_in_cluster_underscore_returns_cluster_local(self) -> None:
+        """Internal 'in_cluster' context returns 'cluster-local'."""
         result = _sanitize_target_context("in_cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
     def test_real_context_preserved(self) -> None:
         """Real contexts are preserved."""
@@ -155,19 +155,19 @@ class TestOperatorWorklistTargetSanitization(unittest.TestCase):
     """Tests that worklist targetCluster and targetContext do not show 'in-cluster'."""
 
     def test_queue_item_with_in_cluster_target_sanitized(self) -> None:
-        """Queue item targetCluster 'in-cluster' should be sanitized."""
+        """Queue item targetCluster 'in-cluster' should return 'cluster-local'."""
         result = _sanitize_target_cluster("in-cluster", "in-cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
     def test_queue_item_with_real_target_preserved(self) -> None:
         """Queue item with real targetCluster is preserved."""
         result = _sanitize_target_cluster("rc-runity-test-msk1-c02", "rc-runity-test-msk1-c02")
         self.assertEqual(result, "rc-runity-test-msk1-c02")
 
-    def test_sanitize_target_context_in_cluster_removed(self) -> None:
-        """Worklist targetContext 'in-cluster' should be None."""
+    def test_sanitize_target_context_in_cluster_returns_cluster_local(self) -> None:
+        """Worklist targetContext 'in-cluster' should return 'cluster-local'."""
         result = _sanitize_target_context("in-cluster")
-        self.assertIsNone(result)
+        self.assertEqual(result, "cluster-local")
 
     def test_sanitize_target_context_real_value_preserved(self) -> None:
         """Worklist targetContext with real value is preserved."""
@@ -183,15 +183,15 @@ class TestOperatorWorklistTargetSanitization(unittest.TestCase):
 class TestSanitizeClusterProse(unittest.TestCase):
     """Tests for sanitize_cluster_prose function."""
 
-    def test_in_cluster_in_prose_returns_fallback(self) -> None:
-        """'in-cluster' in prose text returns 'the cluster' fallback."""
+    def test_in_cluster_in_prose_returns_cluster_local(self) -> None:
+        """'in-cluster' in prose text returns 'cluster-local' presentation label."""
         result = sanitize_cluster_prose("in-cluster is in a degraded state")
-        self.assertEqual(result, "the cluster is in a degraded state")
+        self.assertEqual(result, "cluster-local is in a degraded state")
 
-    def test_in_cluster_underscore_in_prose_returns_fallback(self) -> None:
-        """'in_cluster' in prose text returns 'the cluster' fallback."""
+    def test_in_cluster_underscore_in_prose_returns_cluster_local(self) -> None:
+        """'in_cluster' in prose text returns 'cluster-local' presentation label."""
         result = sanitize_cluster_prose("in_cluster needs attention")
-        self.assertEqual(result, "the cluster needs attention")
+        self.assertEqual(result, "cluster-local needs attention")
 
     def test_real_cluster_in_prose_preserved(self) -> None:
         """Real cluster names in prose are preserved."""

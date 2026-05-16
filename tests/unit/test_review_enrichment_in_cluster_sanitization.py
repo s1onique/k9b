@@ -54,14 +54,14 @@ class TestSanitizeTextField(unittest.TestCase):
     """Tests for _sanitize_text_field helper function."""
 
     def test_in_cluster_in_text_replaced(self) -> None:
-        """'in-cluster' in text is replaced with safe fallback."""
+        """'in-cluster' in text is replaced with 'cluster-local' presentation label."""
         result = _sanitize_text_field("in-cluster is in a degraded state")
-        self.assertEqual(result, "the cluster is in a degraded state")
+        self.assertEqual(result, "cluster-local is in a degraded state")
 
     def test_in_cluster_underscore_in_text_replaced(self) -> None:
-        """'in_cluster' in text is replaced with safe fallback."""
+        """'in_cluster' in text is replaced with 'cluster-local' presentation label."""
         result = _sanitize_text_field("in_cluster needs attention")
-        self.assertEqual(result, "the cluster needs attention")
+        self.assertEqual(result, "cluster-local needs attention")
 
     def test_real_cluster_in_text_preserved(self) -> None:
         """Real cluster names in text are preserved."""
@@ -179,7 +179,7 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
         summary = result["summary"]
         assert summary is not None
         self.assertNotIn("in-cluster", summary)
-        self.assertIn("the cluster", summary)
+        self.assertIn("cluster-local", summary)
 
     def test_summary_with_in_cluster_underscore_sanitized(self) -> None:
         """Summary containing 'in_cluster' is sanitized."""
@@ -243,11 +243,11 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
         )
         result = self._require_payload(_serialize_review_enrichment(view))
         self.assertEqual(len(result["topConcerns"]), 2)
-        # in-cluster reference should be replaced
+        # in-cluster reference should be replaced with cluster-local
         concern0 = result["topConcerns"][0]
         assert concern0 is not None
         self.assertNotIn("in-cluster", concern0)
-        self.assertIn("the cluster", concern0)
+        self.assertIn("cluster-local", concern0)
         # prod-cluster should be preserved
         self.assertIn("prod-cluster", result["topConcerns"][1])
 
@@ -303,7 +303,7 @@ class TestSerializeReviewEnrichmentSanitization(unittest.TestCase):
         self.assertIsNotNone(error_summary)
         assert error_summary is not None
         self.assertNotIn("in-cluster", error_summary)
-        self.assertIn("the cluster", error_summary)
+        self.assertIn("cluster-local", error_summary)
 
     def test_skip_reason_with_in_cluster_sanitized(self) -> None:
         """skipReason containing 'in-cluster' is sanitized."""

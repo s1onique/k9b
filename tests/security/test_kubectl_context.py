@@ -139,7 +139,7 @@ class TestSanitizeClusterProse:
         """Internal marker falls back to real context."""
         assert sanitize_cluster_prose("in-cluster", "real-context") == "real-context"
 
-    def test_in_cluster_falls_back_to_neutral(self) -> None:
-        """Internal marker with no fallback returns neutral fallback."""
-        assert sanitize_cluster_prose("in-cluster", "in-cluster") == "the cluster"
-        assert sanitize_cluster_prose("in-cluster", None) == "the cluster"
+    def test_in_cluster_falls_back_to_cluster_local(self) -> None:
+        """Internal marker with no fallback returns 'cluster-local' presentation label."""
+        assert sanitize_cluster_prose("in-cluster", "in-cluster") == "cluster-local"
+        assert sanitize_cluster_prose("in-cluster", None) == "cluster-local"
