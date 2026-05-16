@@ -994,17 +994,54 @@ def _build_runs_list_with_batch_eligibility_index(
     all_plan_data = cast(dict[str, dict[str, object]], recent_summary.get("_plan_data", {}))
     all_execution_indices = _normalize_execution_indices_from_index(recent_summary.get("_execution_indices", {}))
 
-    # CRITICAL: If external-analysis is newer than ui-index.json, the _execution_indices
-    # in the index may be stale. Re-collect execution indices from filesystem in that case.
-    # This handles the batch execution freshness issue where execution artifacts are written
-    # after the index was generated.
+    # CRITICAL: Execution indices in the index are stale when execution artifacts
+    # were written AFTER the index snapshot was taken (generated_at).
+    #
+    # The OLD heuristic compared external-analysis directory mtime against ui-index.json
+    # file mtime. This fails when:
+    # - ui-index.json file mtime reflects file write completion (T2)
+    # - But index content was snapshotted BEFORE execution artifacts were created (T0)
+    # - Execution artifacts were written between snapshot and file completion (T1)
+    # - T0 < T1 < T2 causes file mtime to falsely indicate fresh content
+    #
+    # The FIX uses the index snapshot timestamp (generated_at) as the source of truth.
+    # If any execution artifact has mtime > generated_at, the indices are stale.
     run_health_dir = runs_dir / "health"
     ui_index_path = run_health_dir / "ui-index.json"
+    external_analysis_dir = run_health_dir / "external-analysis"
+    execution_indices_are_stale = False
+    newest_execution_artifact_mtime: float | None = None
+
+    # Parse the index snapshot timestamp
+    generated_at_str = recent_summary.get("generated_at")
+    generated_at_ts: float | None = None
+    if isinstance(generated_at_str, str):
+        from ..datetime_utils import parse_iso_to_utc
+
+        parsed_dt = parse_iso_to_utc(generated_at_str)
+        if parsed_dt is not None:
+            generated_at_ts = parsed_dt.timestamp()
+
+    # If we have a valid generated_at, compare against newest execution artifact mtime
+    if generated_at_ts is not None and external_analysis_dir.exists():
+        try:
+            # Find the newest execution artifact mtime
+            exec_files = list(external_analysis_dir.glob("*-next-check-execution*.json"))
+            if exec_files:
+                newest_execution_artifact_mtime = max(f.stat().st_mtime for f in exec_files if f.exists())
+                # If execution artifacts are newer than the index snapshot, indices are stale
+                if newest_execution_artifact_mtime > generated_at_ts:
+                    execution_indices_are_stale = True
+                    timings["index_stale_by_generated_at"] = True
+        except (OSError, ValueError):
+            pass
+
+    # Fallback: If we couldn't determine generated_at freshness, use the old heuristic
+    # (external-analysis dir mtime vs ui-index.json file mtime) as a secondary signal
     external_analysis_is_fresher = False
-    if ui_index_path.exists():
+    if not execution_indices_are_stale and ui_index_path.exists():
         try:
             ui_index_mtime = ui_index_path.stat().st_mtime
-            external_analysis_dir = run_health_dir / "external-analysis"
             if external_analysis_dir.exists():
                 external_mtime = external_analysis_dir.stat().st_mtime
                 if external_mtime > ui_index_mtime:
@@ -1013,9 +1050,14 @@ def _build_runs_list_with_batch_eligibility_index(
         except OSError:
             pass
 
-    # When external-analysis is fresher, recompute execution indices from filesystem
-    # to ensure we have the latest execution state after batch execution
-    if external_analysis_is_fresher:
+    # Mark stale if either condition triggers
+    if execution_indices_are_stale or external_analysis_is_fresher:
+        timings["index_stale_execution_indices"] = True
+
+    # When execution indices are stale (either by generated_at or by dir mtime),
+    # recompute execution indices from filesystem to ensure we have the latest
+    # execution state after batch execution
+    if execution_indices_are_stale or external_analysis_is_fresher:
         from .execution_index_utils import collect_execution_indices_for_all_runs
 
         external_analysis_dir = run_health_dir / "external-analysis"
@@ -1049,7 +1091,7 @@ def _build_runs_list_with_batch_eligibility_index(
 
             # CRITICAL: When index is stale, also recompute batchExecutable and batchEligibleCount
             # from fresh execution indices. The index values are stale after batch execution.
-            if external_analysis_is_fresher:
+            if execution_indices_are_stale or external_analysis_is_fresher:
                 batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(
                     run_id, all_plan_data, all_execution_indices
                 )

@@ -1366,3 +1366,4 @@ class RunsListTimings(TypedDict, total=False):
     # Stale execution indices detection (index freshness fallback)
     index_stale_execution_indices: bool  # True when external-analysis dir is fresher than ui-index.json
     index_execution_indices_recomputed: bool  # True when execution indices were recomputed from filesystem
+    index_stale_by_generated_at: bool  # True when execution artifact mtime > generated_at (primary detection)
