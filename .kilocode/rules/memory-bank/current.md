@@ -4,7 +4,7 @@ Purpose: compact task-facing project state for routine work.
 
 **Last Updated:** 2026-05-16
 
-**Note:** Some previously referenced files do not exist (see `.kilocode/rules/10-agent-mission.md`, `.kilocode/rules/30-output-contracts.md`, `.kilocode/rules/40-tool-use.md`, `.kilocode/rules/50-kubernetes-monitoring-domain.md`, `.kilocode/rules/memory-bank/tech.md`, `.kilocode/rules/memory-bank/product.md`). These are tracked in `docs/agent-docs-audit.md`.
+**See also:** `docs/agent-docs-audit.md` for documentation drift tracking.
 
 ## Mission
 
@@ -31,7 +31,7 @@ k9b is a Kubernetes diagnostics and monitoring agent that is:
 - Keep deterministic and provider-assisted paths separate.
 - Verification is mandatory before claiming completion.
 - `scripts/verify_all.sh` is the canonical acceptance gate.
-- Coverage thresholds are enforced (80% backend line, 90% frontend lines/statements).
+- Coverage is gate-managed; verify active thresholds in `docs/coverage.md` and CI config.
 
 ## Current product state (as of 2026-05-13)
 
