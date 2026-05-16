@@ -10,7 +10,6 @@ This is NOT testing artifact inspector views (those intentionally show raw data)
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock
 
 from k8s_diag_agent.security.kubectl_context import (
     CLUSTER_LOCAL_PRESENTATION_LABEL,
@@ -21,7 +20,6 @@ from k8s_diag_agent.ui.api_incident_report import (
     _sanitize_target_cluster,
     _sanitize_target_context,
 )
-
 
 # =============================================================================
 # Realistic Operator Payload Fixtures
