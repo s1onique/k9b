@@ -669,6 +669,56 @@ class AlertmanagerSourcesPayload(TypedDict, total=False):
     cluster_context: str | None
 
 
+class VmalertSourcePayload(TypedDict, total=False):
+    """Payload for a single vmalert source."""
+
+    source_id: str
+    endpoint: str
+    namespace: str | None
+    name: str | None
+    origin: str
+    state: str
+    discovered_at: str | None
+    verified_at: str | None
+    last_check: str | None
+    last_error: str | None
+    verified_version: str | None
+    confidence_hints: list[str]
+    # Deduplication provenance fields
+    merged_provenances: list[str]  # all contributing origins
+    display_provenance: str  # human-readable provenance string
+    # Manual provenance: distinguishes operator-configured vs operator-promoted
+    manual_source_mode: str | None  # operator-configured, operator-promoted, or not-present
+    # Computed UI fields
+    is_manual: bool
+    is_tracking: bool
+    can_disable: bool
+    can_promote: bool
+    display_origin: str
+    display_state: str
+    provenance_summary: str
+    # Cluster association for per-cluster UI filtering
+    cluster_label: str | None
+    # Deterministic identity fields for historical/debug tracking
+    canonicalEntityId: str | None
+    cluster_uid: str | None
+    object_uid: str | None
+
+
+class VmalertSourcesPayload(TypedDict, total=False):
+    """Payload for the full vmalert source inventory."""
+
+    sources: list[VmalertSourcePayload]
+    total_count: int
+    source_count: int
+    discovered_count: int
+    discovered_but_unverified_count: int
+    auto_tracked_count: int
+    manual_count: int
+    discovery_timestamp: str | None
+    cluster_context: str | None
+
+
 class ProviderExecutionBranchPayload(TypedDict, total=False):
     """Payload for a single provider execution branch."""
 
@@ -1210,6 +1260,7 @@ class RunPayload(TypedDict):
     diagnosticPack: DiagnosticPackPayload | None
     alertmanagerCompact: AlertmanagerCompactPayload | None
     alertmanagerSources: AlertmanagerSourcesPayload | None
+    vmalertSources: VmalertSourcesPayload | None
     incidentReport: IncidentReportPayload | None
     operatorWorklist: OperatorWorklistPayload | None
 

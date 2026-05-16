@@ -27,6 +27,7 @@ from ..external_analysis.alertmanager_source_actions import (
 )
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from ..external_analysis.utils import artifact_matches_run
+from ..external_analysis.vmalert_artifact import read_vmalert_sources
 from ..security.path_validation import SecurityError, validate_run_id
 from .ui_shared import _relative_path
 
@@ -309,6 +310,44 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
     }
 
 
+def _serialize_vmalert_sources(output_dir: Path, run_id: str) -> dict[str, object] | None:
+    """Read and serialize vmalert sources inventory artifact for UI."""
+    inventory = read_vmalert_sources(output_dir / f"{run_id}-vmalert-sources.json")
+    if inventory is None:
+        return None
+
+    sources = []
+    for source in inventory.sources.values():
+        sources.append({
+            "source_id": source.source_id,
+            "endpoint": source.endpoint,
+            "namespace": source.namespace,
+            "name": source.name,
+            "origin": source.origin.value,
+            "state": source.state.value,
+            "discovered_at": source.discovered_at.isoformat() if source.discovered_at else None,
+            "verified_at": source.verified_at.isoformat() if source.verified_at else None,
+            "last_check": source.last_check.isoformat() if source.last_check else None,
+            "last_error": source.last_error,
+            "verified_version": source.verified_version,
+            "confidence_hints": list(source.confidence_hints),
+            "merged_provenances": [p.value for p in source.merged_provenances],
+            "display_provenance": source.display_provenance,
+            "cluster_label": source.cluster_label,
+            "cluster_context": source.cluster_context,
+            "canonical_identity": source.canonical_identity,
+            "canonicalEntityId": source.canonical_entity_id,
+        })
+
+    return {
+        "sources": sources,
+        "total_count": len(sources),
+        "source_count": len(sources),
+        "discovery_timestamp": inventory.discovered_at.isoformat() if inventory.discovered_at else None,
+        "cluster_context": inventory.cluster_context,
+    }
+
+
 # Re-export constants for consumers that need them
 __all__ = [
     "_serialize_diagnostic_pack",
@@ -316,5 +355,6 @@ __all__ = [
     "_find_diagnostic_pack_review_artifact",
     "_serialize_alertmanager_compact",
     "_serialize_alertmanager_sources",
+    "_serialize_vmalert_sources",
     "LATEST_PACK_DIR_NAME",
 ]

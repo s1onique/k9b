@@ -167,6 +167,11 @@ from .model_run_status import (  # noqa: F401 - re-exported for import compatibi
     _build_planner_availability_view,
     _build_run_stats_view,
 )
+from .model_vmalert import (  # noqa: F401 - re-exported for import compatibility
+    VmalertSourcesView,
+    VmalertSourceView,
+    _build_vmalert_sources_view,
+)
 
 
 @dataclass(frozen=True)
@@ -276,6 +281,7 @@ class UIIndexContext:
     next_check_queue: tuple[NextCheckQueueItemView, ...]
     alertmanager_compact: AlertmanagerCompactView | None
     alertmanager_sources: AlertmanagerSourcesView | None
+    vmalert_sources: VmalertSourcesView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -351,6 +357,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     )
     alertmanager_compact = _build_alertmanager_compact_view(run_data.get("alertmanager_compact"))
     alertmanager_sources = _build_alertmanager_sources_view(run_data.get("alertmanager_sources"))
+    vmalert_sources = _build_vmalert_sources_view(run_data.get("vmalert_sources"))
     return UIIndexContext(
         run=run,
         clusters=clusters,
@@ -373,6 +380,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         next_check_queue=run.next_check_queue,
         alertmanager_compact=alertmanager_compact,
         alertmanager_sources=alertmanager_sources,
+        vmalert_sources=vmalert_sources,
     )
 
 

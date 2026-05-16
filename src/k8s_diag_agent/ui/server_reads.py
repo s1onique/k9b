@@ -1314,7 +1314,7 @@ def load_context_for_run(handler: HealthUIRequestHandler, run_id: str) -> Any:
                 "captured_at": compact_raw.get("captured_at"),
                 "by_cluster": compact_raw.get("by_cluster", []),
             }
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             pass
 
     alertmanager_sources_entry = None
@@ -1324,7 +1324,17 @@ def load_context_for_run(handler: HealthUIRequestHandler, run_id: str) -> Any:
 
         try:
             alertmanager_sources_entry = _serialize_am_sources(handler._health_root, run_id)
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError):
+            pass
+
+    vmalert_sources_entry = None
+    vmalert_sources_path = handler._health_root / f"{run_id}-vmalert-sources.json"
+    if vmalert_sources_path.exists():
+        from ..health.ui import _serialize_vmalert_sources
+
+        try:
+            vmalert_sources_entry = _serialize_vmalert_sources(handler._health_root, run_id)
+        except (OSError, json.JSONDecodeError, ValueError, KeyError):
             pass
 
     run_entry = {
@@ -1356,6 +1366,7 @@ def load_context_for_run(handler: HealthUIRequestHandler, run_id: str) -> Any:
         "diagnostic_pack": None,
         "alertmanager_compact": alertmanager_compact_entry,
         "alertmanager_sources": alertmanager_sources_entry,
+        "vmalert_sources": vmalert_sources_entry,
     }
 
     proposal_status_summary = _build_proposal_status_summary(proposals_data)

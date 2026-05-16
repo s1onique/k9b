@@ -1427,6 +1427,21 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         else:
             _timings["alertmanager_sources_build_ms"] = 0.0
 
+        # Phase 15b: Load vmalert sources inventory if available
+        # vmalert artifacts are written at health_root, not external-analysis/
+        vmalert_sources_entry = None
+        vmalert_sources_path = self._health_root / f"{run_id}-vmalert-sources.json"
+        if vmalert_sources_path.exists():
+            # Import here to avoid circular import at module level
+            from ..health.ui import _serialize_vmalert_sources
+            try:
+                vmalert_sources_entry = _phase("vmalert_sources_build_ms", lambda: _serialize_vmalert_sources(self._health_root, run_id))
+            except (OSError, json.JSONDecodeError, ValueError, KeyError):
+                _timings["vmalert_sources_build_ms"] = 0.0
+                pass  # Sources not available - non-fatal
+        else:
+            _timings["vmalert_sources_build_ms"] = 0.0
+
         # Phase 16: Build run entry with artifact-backed values
         run_entry = {
             "run_id": run_id,
@@ -1457,6 +1472,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "diagnostic_pack": None,
             "alertmanager_compact": alertmanager_compact_entry,
             "alertmanager_sources": alertmanager_sources_entry,
+            "vmalert_sources": vmalert_sources_entry,
         }
 
         # Phase 17: Build proposal status summary
@@ -1526,6 +1542,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 "llm_stats_build_ms": round(cast(float, _timings.get("llm_stats_build_ms", 0.0)), 2),
                 "alertmanager_compact_read_ms": round(cast(float, _timings.get("alertmanager_compact_read_ms", 0.0)), 2),
                 "alertmanager_sources_build_ms": round(cast(float, _timings.get("alertmanager_sources_build_ms", 0.0)), 2),
+                "vmalert_sources_build_ms": round(cast(float, _timings.get("vmalert_sources_build_ms", 0.0)), 2),
                 "proposal_status_summary_build_ms": round(cast(float, _timings.get("proposal_status_summary_build_ms", 0.0)), 2),
                 "build_ui_context_ms": round(cast(float, _timings.get("build_ui_context_ms", 0.0)), 2),
                 "proposals_source": cast(str, _timings.get("proposals_source", "missing")),

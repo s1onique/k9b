@@ -31,6 +31,7 @@ from .ui_diagnostic_pack import (
     _serialize_alertmanager_sources,
     _serialize_diagnostic_pack,
     _serialize_diagnostic_pack_review,
+    _serialize_vmalert_sources,
 )
 from .ui_llm_stats import (
     _build_historical_llm_stats,
@@ -173,6 +174,8 @@ def write_health_ui_index(
     alertmanager_compact_entry = _serialize_alertmanager_compact(output_dir, run_id)
     # Read Alertmanager sources inventory if available
     alertmanager_sources_entry = _serialize_alertmanager_sources(output_dir, run_id)
+    # Read vmalert sources inventory if available
+    vmalert_sources_entry = _serialize_vmalert_sources(output_dir, run_id)
     run_entry = {
         "run_id": run_id,
         "run_label": run_label,
@@ -220,6 +223,7 @@ def write_health_ui_index(
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
         "alertmanager_compact": alertmanager_compact_entry,
         "alertmanager_sources": alertmanager_sources_entry,
+        "vmalert_sources": vmalert_sources_entry,
     }
     # Build proposal_status_summary ONCE for reuse in both index and review artifact
     # This avoids repeated scanning of proposals/ directory on each /api/run request
