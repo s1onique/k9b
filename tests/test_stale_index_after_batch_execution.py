@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import cast
 
 from k8s_diag_agent.ui.api import build_runs_list
+from k8s_diag_agent.ui.api_payloads import RunsListPayload
 
 
-def _payload_runs(payload: dict[str, object]) -> list[dict[str, object]]:
+def _payload_runs(payload: RunsListPayload) -> list[dict[str, object]]:
     """Helper to narrow payload["runs"] type for mypy."""
     runs = payload.get("runs")
     assert isinstance(runs, list)
@@ -150,7 +151,6 @@ class TestStaleIndexAfterBatchExecution:
             include_batch_eligibility=True,
             _timings=True,
         )
-        payload1 = cast(dict[str, object], payload1)
         runs1 = _payload_runs(payload1)
         assert len(runs1) == 1
 
@@ -185,7 +185,6 @@ class TestStaleIndexAfterBatchExecution:
             include_batch_eligibility=True,
             _timings=True,
         )
-        payload2 = cast(dict[str, object], payload2)
         runs2 = _payload_runs(payload2)
         assert len(runs2) == 1
 
@@ -284,7 +283,6 @@ class TestStaleIndexAfterBatchExecution:
             include_batch_eligibility=True,
             _timings=True,
         )
-        payload1 = cast(dict[str, object], payload1)
         runs1 = _payload_runs(payload1)
         assert len(runs1) == 1
 
@@ -319,7 +317,6 @@ class TestStaleIndexAfterBatchExecution:
             include_batch_eligibility=True,
             _timings=True,
         )
-        payload2 = cast(dict[str, object], payload2)
         runs2 = _payload_runs(payload2)
         assert len(runs2) == 1
 
@@ -430,7 +427,6 @@ class TestStaleIndexAfterBatchExecution:
             include_batch_eligibility=True,
             _timings=True,
         )
-        payload = cast(dict[str, object], payload)
         runs = _payload_runs(payload)
         assert len(runs) == 1
 
