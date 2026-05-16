@@ -59,6 +59,8 @@ from .api_payloads import (
     OperatorWorklistItemPayload,
     OperatorWorklistPayload,
     StalenessClass,
+    VmalertDiscoveryContextPayload,
+    VmalertSourceSummaryPayload,
 )
 from .execution_index_utils import (
     collect_execution_artifacts_for_all_runs,
@@ -537,6 +539,11 @@ def _build_incident_report_payload(
     # These provide fleet-level drift visibility that individual cluster assessments may miss
     cross_cluster_findings = _build_cross_cluster_findings_payload(context)
 
+    # Build vmalert discovery context for diagnostic awareness
+    # This is a read-only, non-invasive integration: no live scraping or actions
+    # vmalertSources is sourced from the UI context (artifact-backed, not re-discovered)
+    vmalert_context = _build_vmalert_discovery_context(context)
+
     return {
         "title": title,
         "status": status,
@@ -554,6 +561,7 @@ def _build_incident_report_payload(
         "recommendedActions": recommended_actions,
         "sourceArtifactRefs": filtered_refs,
         "crossClusterFindings": cross_cluster_findings,
+        "vmalertDiscoveryContext": vmalert_context,
     }
 
 
@@ -696,6 +704,51 @@ def _build_cross_cluster_findings_payload(
 
     # Limit to top 5 findings to keep report concise
     return findings[:5] if findings else None
+
+
+def _build_vmalert_discovery_context(
+    context: UIIndexContext,
+) -> VmalertDiscoveryContextPayload | None:
+    """Build vmalert discovery context for the incident report.
+
+    This is a read-only, non-invasive integration: no live scraping or actions.
+    vmalertSources is sourced from the UI context (artifact-backed, not re-discovered).
+
+    Contract invariants:
+    - Returns None when no vmalert sources are available (not an error)
+    - source_count == 0 means quiet/no-op (not an error)
+    - discovered_but_unverified sources are represented but non-fatal
+    - No errors are raised for missing/discovery failures
+
+    Args:
+        context: UI index context containing vmalert sources from artifact.
+
+    Returns:
+        VmalertDiscoveryContextPayload or None if no sources available.
+    """
+    vmalert_sources = context.vmalert_sources
+    if vmalert_sources is None:
+        return None
+
+    # Build compact source summaries for diagnostic context
+    sources: list[VmalertSourceSummaryPayload] = []
+    for source in vmalert_sources.sources:
+        sources.append({
+            "endpoint": source.endpoint,
+            "namespace": source.namespace,
+            "name": source.name,
+            "origin": source.origin,
+            "state": source.state,
+            "display_provenance": source.display_provenance,
+            "cluster_label": source.cluster_label,
+        })
+
+    return {
+        "source_count": vmalert_sources.source_count,
+        "discovered_count": vmalert_sources.discovered_count,
+        "discovered_but_unverified_count": vmalert_sources.discovered_but_unverified_count,
+        "sources": sources,
+    }
 
 
 def _derive_fleet_aware_checks(

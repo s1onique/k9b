@@ -95,6 +95,8 @@ __all__ = [
     "OperatorWorklistPayload",
     # Cross-cluster comparison findings
     "CrossClusterFindingPayload",
+    "VmalertDiscoveryContextPayload",
+    "VmalertSourceSummaryPayload",
     "RunPayload",
     "BatchExecutionSummary",
     "RunsListEntry",
@@ -1093,6 +1095,38 @@ class CrossClusterFindingPayload(TypedDict, total=False):
     recommendedNextChecks: list[str]
 
 
+class VmalertDiscoveryContextPayload(TypedDict, total=False):
+    """vmalert discovery context in the incident report.
+
+    Provides operator-visible context about discovered vmalert sources.
+    This is a read-only, non-invasive integration: no live scraping or actions.
+
+    Contract invariants:
+    - source_count: total sources (0 = quiet, not an error)
+    - discovered_count: sources in discovered state
+    - discovered_but_unverified_count: sources discovered but not yet verified
+    - sources: list of discovered sources with key fields for context
+    - All missing/unverified states are non-fatal and do not degrade diagnostics
+    """
+
+    source_count: int
+    discovered_count: int
+    discovered_but_unverified_count: int
+    sources: list[VmalertSourceSummaryPayload]
+
+
+class VmalertSourceSummaryPayload(TypedDict, total=False):
+    """Compact vmalert source summary for diagnostics context."""
+
+    endpoint: str
+    namespace: str | None
+    name: str | None
+    origin: str
+    state: str
+    display_provenance: str
+    cluster_label: str | None
+
+
 class IncidentReportPayload(TypedDict, total=False):
     """Canonical incident report projection for a selected health run.
 
@@ -1105,6 +1139,9 @@ class IncidentReportPayload(TypedDict, total=False):
     crossClusterFindings surfaces comparison-triggered fleet-level drift
     that individual cluster assessments may miss. These findings are
     clearly separated from per-cluster observations.
+
+    vmalertDiscoveryContext provides operator-visible context about discovered
+    vmalert sources for diagnostic awareness. This is read-only and non-invasive.
     """
 
     title: str
@@ -1124,6 +1161,9 @@ class IncidentReportPayload(TypedDict, total=False):
     sourceArtifactRefs: list[ArtifactLink]
     # Cross-cluster findings from comparison triggers
     crossClusterFindings: list[CrossClusterFindingPayload] | None
+    # vmalert discovery context for diagnostic awareness
+    # Present when vmalert sources are available; None when no sources discovered
+    vmalertDiscoveryContext: VmalertDiscoveryContextPayload | None
 
 
 class OperatorWorklistItemPayload(TypedDict, total=False):
