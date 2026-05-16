@@ -316,6 +316,7 @@ class TestStaleIndexGeneratedAtRace:
 
         run = runs[0]
         summary = _execution_summary(run)
+        assert summary is not None
 
         # No executions have happened
         assert summary["executedCandidates"] == 0, (
@@ -410,6 +411,7 @@ class TestStaleIndexGeneratedAtRace:
 
         # Verify execution summary is correct
         summary = _execution_summary(runs[0])
+        assert summary is not None
         assert summary["executedCandidates"] == 5
         assert summary["pendingExecutableCandidates"] == 0
         assert summary["batchExecutionState"] == "fully-executed"
