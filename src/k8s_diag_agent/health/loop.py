@@ -25,6 +25,7 @@ from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnaly
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..external_analysis.next_check_planner import plan_next_checks
 from ..external_analysis.review_schema import classify_review_enrichment_shape
+from ..external_analysis.vmalert_discovery import VmalertSourceInventory
 from ..identity.artifact import new_artifact_id
 from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
@@ -67,6 +68,7 @@ from .loop_scheduler import (
     ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
 )
 from .loop_signal_id import _SignalIdGenerator
+from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
@@ -1753,6 +1755,8 @@ class HealthLoopRunner:
         self._expected_scheduler_interval_seconds = expected_scheduler_interval_seconds
         # Storage for verified Alertmanager inventory (populated by _run_alertmanager_discovery)
         self._alertmanager_inventory: AlertmanagerSourceInventory | None = None
+        # Storage for vmalert inventory (populated by _run_vmalert_discovery)
+        self._vmalert_inventory: VmalertSourceInventory | None = None
 
     def _log_event(self, component: str, severity: str, message: str, **metadata: Any) -> None:
         emit_structured_log(
@@ -1799,6 +1803,8 @@ class HealthLoopRunner:
         self._run_alertmanager_discovery(records, directories)
         # Collect Alertmanager snapshots from tracked sources
         self._run_alertmanager_snapshot_collection(directories)
+        # Run vmalert discovery (non-fatal)
+        self._run_vmalert_discovery(records, directories)
         assessments = self._build_assessments(
             records,
             history,
@@ -3173,6 +3179,29 @@ class HealthLoopRunner:
             directories=directories,
             start_port_forward=self._start_alertmanager_port_forward,
             stop_port_forward=self._stop_alertmanager_port_forward,
+        )
+
+    def _run_vmalert_discovery(
+        self,
+        records: list[HealthSnapshotRecord],
+        directories: dict[str, Path],
+    ) -> None:
+        """Run vmalert discovery for each cluster target and persist the inventory.
+
+        Delegates to loop_vmalert_discovery module for the actual discovery logic.
+        Stores the verified inventory in self._vmalert_inventory for downstream processing.
+
+        This is non-fatal: discovery/verification failures are logged but do not stop the run.
+        """
+
+        def log_callback(component: str, severity: str, message: str, **metadata: Any) -> None:
+            self._log_event(component, severity, message, **metadata)
+
+        self._vmalert_inventory = _run_vmalert_discovery_impl(
+            records=records,
+            directories=directories,
+            log_event=log_callback,
+            run_id=self.run_id,
         )
 
     def _choose_free_local_port(self) -> int:

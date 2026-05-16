@@ -54,3 +54,6 @@ feedback/runner.py _run_assessment feedback assessment boundary - docs/security-
 cli_handlers.py handle_assess_snapshots CLI snapshot assessment boundary - graceful continue, no credential exposure
 cli_handlers.py handle_assess_drilldown CLI drilldown assessment boundary - graceful continue, no credential exposure
 cli_handlers.py handle_deliver_notifications CLI notification delivery boundary - graceful continue, no credential exposure
+
+# === VMAlert Discovery Boundaries ===
+health/loop_vmalert_discovery.py run_vmalert_discovery vmalert verification failure boundary - graceful continue, non-fatal verification failures
