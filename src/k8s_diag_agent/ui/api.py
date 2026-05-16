@@ -994,6 +994,38 @@ def _build_runs_list_with_batch_eligibility_index(
     all_plan_data = cast(dict[str, dict[str, object]], recent_summary.get("_plan_data", {}))
     all_execution_indices = _normalize_execution_indices_from_index(recent_summary.get("_execution_indices", {}))
 
+    # CRITICAL: If external-analysis is newer than ui-index.json, the _execution_indices
+    # in the index may be stale. Re-collect execution indices from filesystem in that case.
+    # This handles the batch execution freshness issue where execution artifacts are written
+    # after the index was generated.
+    run_health_dir = runs_dir / "health"
+    ui_index_path = run_health_dir / "ui-index.json"
+    external_analysis_is_fresher = False
+    if ui_index_path.exists():
+        try:
+            ui_index_mtime = ui_index_path.stat().st_mtime
+            external_analysis_dir = run_health_dir / "external-analysis"
+            if external_analysis_dir.exists():
+                external_mtime = external_analysis_dir.stat().st_mtime
+                if external_mtime > ui_index_mtime:
+                    external_analysis_is_fresher = True
+                    timings["index_stale_execution_indices"] = True
+        except OSError:
+            pass
+
+    # When external-analysis is fresher, recompute execution indices from filesystem
+    # to ensure we have the latest execution state after batch execution
+    if external_analysis_is_fresher:
+        from .execution_index_utils import collect_execution_indices_for_all_runs
+
+        external_analysis_dir = run_health_dir / "external-analysis"
+        if external_analysis_dir.exists():
+            fresh_indices, _ = collect_execution_indices_for_all_runs(external_analysis_dir)
+            # Merge fresh indices (they take precedence over stale index data)
+            for run_id, indices in fresh_indices.items():
+                all_execution_indices[run_id] = indices
+            timings["index_execution_indices_recomputed"] = True
+
     # Build runs list using index-computed batch eligibility and execution summary
     runs_list: list[RunsListEntry] = []
     for entry in runs_to_return:
@@ -1014,6 +1046,13 @@ def _build_runs_list_with_batch_eligibility_index(
             # Use pre-computed execution indices (with status strings) for accurate failed count
             exec_indices = all_execution_indices.get(run_id, {})
             execution_summary = _compute_execution_summary_indexed(all_plan_data[run_id], exec_indices)
+
+            # CRITICAL: When index is stale, also recompute batchExecutable and batchEligibleCount
+            # from fresh execution indices. The index values are stale after batch execution.
+            if external_analysis_is_fresher:
+                batch_executable, batch_eligible_count = _compute_batch_eligibility_from_cache(
+                    run_id, all_plan_data, all_execution_indices
+                )
 
         runs_list.append(
             RunsListEntry(

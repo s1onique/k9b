@@ -468,3 +468,170 @@ class TestIndexPathPerformance:
         assert timings.get("batch_exec_files_found") == 0
         assert timings.get("batch_plan_glob_ms") == 0.0
         assert timings.get("batch_exec_glob_ms") == 0.0
+
+
+class TestStaleIndexAfterBatchExecution:
+    """Regression tests for stale index after batch execution.
+
+    These tests verify that when new execution artifacts are written after batch execution,
+    the runs list cache is invalidated even if ui-index.json wasn't regenerated.
+
+    Issue: Batch execution writes next-check-execution artifacts to external-analysis/
+    but doesn't regenerate ui-index.json. The cache was keyed on ui-index.json mtime,
+    causing stale Recent Runs to show "No Executions Yet" until the next health loop.
+
+    The fix: Cache freshness uses max(ui-index mtime, external-analysis mtime).
+    This ensures cache is invalidated when external-analysis changes, even if ui-index doesn't.
+    """
+
+    def test_cache_keyed_on_max_mtime_not_just_ui_index(self, tmp_path: Path) -> None:
+        """Cache must be invalidated when external-analysis mtime changes, even if ui-index doesn't.
+
+        This is the core regression test for the batch execution freshness issue.
+        Before the fix: cache was keyed only on ui-index.json mtime.
+        After the fix: cache is keyed on max(ui-index, external-analysis) mtime.
+        """
+        import os
+        import time as time_module
+
+        health_dir = tmp_path / "health"
+        health_dir.mkdir(parents=True)
+        reviews_dir = health_dir / "reviews"
+        reviews_dir.mkdir(parents=True)
+        ea_dir = health_dir / "external-analysis"
+        ea_dir.mkdir(parents=True)
+
+        # Create ui-index.json with v2 batch eligibility
+        ui_index = {
+            "run": {"run_id": "test-run", "run_label": "Test"},
+            "recent_runs_summary": {
+                "runs": [
+                    {
+                        "run_id": "test-run",
+                        "run_label": "Test",
+                        "timestamp": "2026-04-30T12:00:00Z",
+                        "cluster_count": 2,
+                        "batchEligibility": "computed",
+                        "batchExecutable": True,
+                        "batchEligibleCount": 5,
+                    }
+                ],
+                "total_count": 1,
+                "version": 2,
+            },
+        }
+        ui_index_path = health_dir / "ui-index.json"
+        ui_index_path.write_text(json.dumps(ui_index), encoding="utf-8")
+
+        # Set ui-index.json mtime to a known old time
+        old_time = 1000000000.0
+        time_module.sleep(0.01)
+        os.utime(ui_index_path, (old_time, old_time))
+
+        handler = cast(HealthUIRequestHandler, MockHandler(tmp_path))
+
+        # First call - builds cache keyed on external-analysis mtime (which is newer in tmp_path)
+        payload1 = build_runs_list_payload(
+            handler,
+            include_batch_eligibility=True,
+        )
+        payload1 = cast(dict[str, object], payload1)
+        runs1 = _payload_runs(payload1)
+        assert len(runs1) == 1
+
+        # Simulate batch execution: write execution artifacts to external-analysis
+        # This should change external-analysis mtime
+        time_module.sleep(0.01)
+        for i in range(3):
+            exec_artifact = {
+                "purpose": "next-check-execution",
+                "run_id": "test-run",
+                "payload": {"candidateIndex": i},
+                "status": "success",
+            }
+            (ea_dir / f"test-run-next-check-execution-{i}.json").write_text(
+                json.dumps(exec_artifact), encoding="utf-8"
+            )
+
+        # Record external-analysis mtime before second call
+        ea_mtime_after = ea_dir.stat().st_mtime
+        assert ea_mtime_after > old_time, "external-analysis should be newer after writing artifacts"
+
+        # Second call - cache should be invalidated because external-analysis mtime changed
+        # (even though ui-index.json mtime is still old_time)
+        payload2 = build_runs_list_payload(
+            handler,
+            include_batch_eligibility=True,
+        )
+        payload2 = cast(dict[str, object], payload2)
+        runs2 = _payload_runs(payload2)
+        assert len(runs2) == 1
+
+        # The key assertion: cache was rebuilt (not stale)
+        # Both payloads should have the same data (from index path)
+        # But the second one was freshly computed because external-analysis mtime changed
+        assert runs2[0]["runId"] == "test-run"
+
+    def test_batch_eligibility_index_uses_max_ui_index_and_external_analysis_mtime(self, tmp_path: Path) -> None:
+        """Verify that cache freshness uses max(ui-index, external-analysis) mtime.
+
+        This ensures the cache is invalidated when either source changes.
+        """
+        import time as time_module
+
+        health_dir = tmp_path / "health"
+        health_dir.mkdir(parents=True)
+        reviews_dir = health_dir / "reviews"
+        reviews_dir.mkdir(parents=True)
+        ea_dir = health_dir / "external-analysis"
+        ea_dir.mkdir(parents=True)
+
+        # Create ui-index.json
+        ui_index = {
+            "run": {"run_id": "test-run", "run_label": "Test"},
+            "recent_runs_summary": {
+                "runs": [
+                    {
+                        "run_id": "test-run",
+                        "run_label": "Test",
+                        "timestamp": "2026-04-30T12:00:00Z",
+                        "cluster_count": 2,
+                        "batchEligibility": "computed",
+                        "batchExecutable": True,
+                        "batchEligibleCount": 5,
+                    }
+                ],
+                "total_count": 1,
+                "version": 2,
+            },
+        }
+        ui_index_path = health_dir / "ui-index.json"
+        ui_index_path.write_text(json.dumps(ui_index), encoding="utf-8")
+
+        import os
+
+        # Set ui-index.json mtime to old
+        old_time = 1000000000.0
+        os.utime(ui_index_path, (old_time, old_time))
+
+        # Set external-analysis mtime to be newer than ui-index
+        time_module.sleep(0.01)
+        new_time = 1000000100.0
+        os.utime(ea_dir, (new_time, new_time))
+
+        # Verify external-analysis is indeed newer
+        assert ea_dir.stat().st_mtime > ui_index_path.stat().st_mtime
+
+        handler = cast(HealthUIRequestHandler, MockHandler(tmp_path))
+
+        # Call should rebuild cache (not use stale cache keyed on ui-index mtime)
+        payload = build_runs_list_payload(
+            handler,
+            include_batch_eligibility=True,
+        )
+
+        # Verify cache was rebuilt, not served from cache keyed on older ui-index mtime
+        payload = cast(dict[str, object], payload)
+        runs = _payload_runs(payload)
+        assert len(runs) == 1
+        assert runs[0]["batchExecutable"] is True

@@ -411,7 +411,8 @@ class TestBuildRecentRunsSummaryWithExternalAnalysis:
         # Verify summary structure
         assert summary["version"] == 3
         assert "_execution_index_diagnostics" in summary
-        assert summary["_execution_index_diagnostics"]["_execution_index_collector_version"] == "shared-one-pass-v1"
+        diagnostics = cast(dict[str, object], summary["_execution_index_diagnostics"])
+        assert diagnostics["_execution_index_collector_version"] == "shared-one-pass-v1"
         runs = _summary_runs(summary)
         assert len(runs) == 1
 

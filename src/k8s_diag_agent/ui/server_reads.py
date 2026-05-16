@@ -224,7 +224,16 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
                     # FAST PATH: Use ui-index.json mtime for cache freshness.
                     # Batch eligibility comes from the index, not from external-analysis files.
                     # Only use this path if the index is v2+ with batch eligibility fields.
+                    # NOTE: We still include external-analysis mtime to ensure cache invalidation
+                    # after batch execution writes new execution artifacts.
                     cache_mtime = ui_index_path.stat().st_mtime
+                    external_analysis_dir = health_root / "external-analysis"
+                    if external_analysis_dir.exists():
+                        external_mtime = external_analysis_dir.stat().st_mtime
+                        # CRITICAL: Use max(ui-index, external-analysis) mtime to ensure
+                        # cache is invalidated when new execution artifacts are written,
+                        # even if ui-index.json wasn't regenerated.
+                        cache_mtime = max(cache_mtime, external_mtime)
                 else:
                     # STANDARD PATH: Use directory mtimes for cache correctness.
                     mtimes = []
@@ -988,8 +997,17 @@ def build_runs_list_payload(
                 # FAST PATH: Use ui-index.json mtime for cache freshness.
                 # Batch eligibility comes from the index, not from external-analysis files.
                 # Only use this path if the index is v2+ with batch eligibility fields.
+                # NOTE: We still include external-analysis mtime to ensure cache invalidation
+                # after batch execution writes new execution artifacts.
                 cache_mtime = ui_index_path.stat().st_mtime
-                timings["cache_freshness_source"] = "ui_index"
+                external_analysis_dir = health_root / "external-analysis"
+                if external_analysis_dir.exists():
+                    external_mtime = external_analysis_dir.stat().st_mtime
+                    # CRITICAL: Use max(ui-index, external-analysis) mtime to ensure
+                    # cache is invalidated when new execution artifacts are written,
+                    # even if ui-index.json wasn't regenerated.
+                    cache_mtime = max(cache_mtime, external_mtime)
+                timings["cache_freshness_source"] = "ui_index_plus_external"
                 timings["cache_freshness_path"] = "batch_eligibility_index"
             else:
                 # STANDARD PATH: Use external-analysis mtime for cache correctness.
