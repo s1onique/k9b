@@ -282,4 +282,45 @@ Determine whether the missing files should be created, consolidated, or their re
 | `.kilocode/rules/50-kubernetes-monitoring-domain.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md | remove reference | Domain guidance is embedded in existing docs | ✅ RESOLVED: removed from all active reading paths |
 | `.kilocode/rules/memory-bank/tech.md` | progress.md | remove reference | Already noted as missing; tech detail scattered across source | ✅ RESOLVED: removed from progress.md |
 | `.kilocode/rules/memory-bank/product.md` | progress.md | remove reference | Already noted as missing; product info in brief.md | ✅ RESOLVED: removed from progress.md |
-| `scripts/run_coverage.sh` | docs/coverage.md | update reference | Update coverage.md to reference actual commands | ✅ RESOLVED: primary now uses direct pytest/vitest commands |
+| `scripts/run_coverage.sh` | docs/coverage.md | update reference | Make run_coverage.sh canonical; direct commands as component-level | ✅ RESOLVED: run_coverage.sh is primary; direct commands are component-level examples |
+
+---
+
+## High-Relevance Docs Deep Dive (2026-05-16)
+
+### Coverage Documentation Audit
+
+| Doc | Verdict | Issue | Action Taken | Follow-up |
+|-----|---------|-------|-------------|-----------|
+| `docs/coverage.md` | ✅ Corrected | Direct pytest/vitest commands presented as "Full Coverage Report" without noting `run_coverage.sh` as canonical | Made `run_coverage.sh` primary; direct commands are "Component-Level Commands" | None |
+
+### Verification Documentation Audit
+
+| Doc | Verdict | Issue | Action Taken | Follow-up |
+|-----|---------|-------|-------------|-----------|
+| `docs/verification.md` | ✅ Current | None identified | N/A | None |
+
+### Agent Guidance Audit
+
+| Doc | Verdict | Issue | Action Taken | Follow-up |
+|-----|---------|-------|-------------|-----------|
+| `AGENTS.md` | ✅ Current | Stale reading paths | ✅ Cleaned in previous slice | None |
+| `.kilocode/rules/00-global.md` | ✅ Current | Stale reading paths | ✅ Cleaned in previous slice | None |
+| `.kilocode/rules/05-fast-task-bootstrap.md` | ✅ Current | None identified | N/A | None |
+| `.kilocode/rules/20-architecture-doctrine.md` | ✅ Current | Stale relationship section | ✅ Cleaned in previous slice | None |
+| `.kilocode/rules/memory-bank/current.md` | ✅ Current | Stale references | ✅ Cleaned in previous slice | None |
+| `.kilocode/rules/memory-bank/brief.md` | ✅ Current | Stale standing rules | ✅ Cleaned in previous slice | None |
+| `.kilocode/rules/memory-bank/progress.md` | ✅ Current | Stale references | ✅ Cleaned in previous slice | None |
+| `docs/data-model.md` | ✅ Current | None identified | N/A | None |
+| `README.md` | ✅ Current | None identified | N/A | None |
+
+### Summary
+
+| Category | Count |
+|----------|-------|
+| Useful/Current | 15 |
+| Corrected | 8 |
+| Stale/Investigate | 0 |
+| Duplicate/Merge | 0 |
+| Not agent-facing | 5 |
+| **Total audited** | **28** |
