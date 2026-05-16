@@ -6,6 +6,7 @@ This module provides helpers for generating and deriving canonical identities ac
 - Inferred entities (using deterministic hashing of defining facts)
 - Artifacts (using UUIDv7)
 - Alertmanager sources (canonical entity IDs and operator-intent keys)
+- vmalert sources (canonical entity IDs and operator-intent keys)
 """
 
 from __future__ import annotations
@@ -21,6 +22,12 @@ from .artifact import new_artifact_id
 from .cluster import derive_cluster_uid
 from .entity import build_deterministic_entity_id
 from .k8s_object import build_k8s_object_ref
+from .vmalert_source import (
+    build_vmalert_canonical_entity_id,
+    build_vmalert_canonical_human_id,
+    build_vmalert_operator_intent_key,
+    extract_vmalert_source_facts,
+)
 
 __all__ = [
     "new_artifact_id",
@@ -33,4 +40,9 @@ __all__ = [
     "build_alertmanager_canonical_human_id",
     "build_alertmanager_operator_intent_key",
     "get_canonical_identity_summary",
+    # vmalert source identity helpers
+    "extract_vmalert_source_facts",
+    "build_vmalert_canonical_entity_id",
+    "build_vmalert_canonical_human_id",
+    "build_vmalert_operator_intent_key",
 ]
