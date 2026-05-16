@@ -240,6 +240,27 @@ Do NOT update for:
 3. Identify patterns in doc usage
 4. Feed findings back into doc improvements
 
+### How to Run the Drift Checker
+
+A documentation drift checker is available to detect broken references:
+
+```bash
+.venv/bin/python scripts/check_doc_references.py
+```
+
+**What it checks:**
+- Backtick-quoted paths in agent-facing docs
+- Paths must start with a known prefix (docs/, scripts/, src/, .kilocode/, etc.)
+- Flags/commands are excluded (e.g., `verify_all.sh --python-only`)
+
+**What it skips:**
+- Short filenames (e.g., `progress.md`) — valid in context
+- Code/function names (e.g., `EvidenceRecord`, `run-health-loop`)
+- Audit table entries (intentionally-missing files documented there)
+- Code blocks
+
+**Scope:** Currently covers 11 key agent-facing docs. Can be extended to scan additional files.
+
 ---
 
 ## Verification

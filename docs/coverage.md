@@ -78,14 +78,14 @@ Note: `models.py` and `schemas.py` are **included** in coverage because they con
 
 - `node_modules/`, `dist/`, `.vite/` - Build artifacts
 - `vitest.config.ts` - Test configuration
-- `src/vitest.setup.ts` - Test setup (JSDOM configuration)
-- `src/main.tsx` - React entrypoint (DOM mounting only)
-- `src/types.ts` - TypeScript type definitions (no runtime logic)
-- `src/theme.ts` - Theme configuration (static values)
-- `src/themes.css`, `src/index.css` - Styling (no JS logic)
+- `frontend/src/vitest.setup.ts` - Test setup (JSDOM configuration)
+- `frontend/src/main.tsx` - React entrypoint (DOM mounting only)
+- `frontend/src/types.ts` - TypeScript type definitions (no runtime logic)
+- `frontend/src/theme.ts` - Theme configuration (static values)
+- `frontend/src/themes.css`, `frontend/src/index.css` - Styling (no JS logic)
 - `**/*.{test,spec}.{ts,tsx}` - Test files themselves
 
-Note: `src/App.tsx` is **included** in coverage because it contains substantial workflow/business logic.
+Note: `frontend/src/App.tsx` is **included** in coverage because it contains substantial workflow/business logic.
 
 ### What Is Being Measured
 
@@ -99,10 +99,10 @@ Note: `src/App.tsx` is **included** in coverage because it contains substantial 
 - `ui/` - UI API and model logic
 - And all other domain modules
 
-**Frontend**: Business logic in `src/` including:
-- `App.tsx` - Main component with workflow logic
-- `api.ts` - API communication
-- `src/components/` - Component logic
+**Frontend**: Business logic in `frontend/src/` including:
+- `frontend/src/App.tsx` - Main component with workflow logic
+- `frontend/src/api.ts` - API communication
+- `frontend/src/components/` - Component logic
 
 ## Coverage Policy
 
