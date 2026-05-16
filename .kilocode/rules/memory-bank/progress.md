@@ -52,10 +52,10 @@ The repository currently has:
 
 ### Memory Bank files
 - `.kilocode/rules/memory-bank/brief.md`
-- `.kilocode/rules/memory-bank/product.md`
 - `.kilocode/rules/memory-bank/architecture.md`
-- `.kilocode/rules/memory-bank/tech.md`
 - `.kilocode/rules/memory-bank/progress.md`
+
+**Note:** `product.md` and `tech.md` do not exist. See `docs/agent-docs-audit.md`.
 
 ### Doctrine files
 - `docs/doctrine/constitution.md`
