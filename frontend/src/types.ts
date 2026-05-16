@@ -8,6 +8,9 @@
  * Consumers: All frontend components, hooks, and API layer.
  */
 
+// Re-export vmalert types from separate module
+export type { VmalertSource, VmalertSources } from "./types/vmalert";
+
 export type ArtifactLink = {
   label: string;
   path: string;
@@ -106,6 +109,8 @@ export type RunPayload = {
   diagnosticPack?: DiagnosticPack | null;
   alertmanagerCompact?: AlertmanagerCompact | null;
   alertmanagerSources?: AlertmanagerSources | null;
+  // VictoriaMetrics vmalert discovery status (compact display)
+  vmalertSources?: VmalertSources | null;
   // Phase 2: Canonical incident surface projections
   incidentReport?: IncidentReportPayload | null;
   operatorWorklist?: OperatorWorklistPayload | null;
