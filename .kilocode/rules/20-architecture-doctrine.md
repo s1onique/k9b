@@ -211,9 +211,6 @@ Escalate instead of making a strong architectural recommendation when:
 
 Use this file together with:
 - `AGENTS.md`
-- `.kilocode/rules/10-agent-mission.md`
-- `.kilocode/rules/30-output-contracts.md`
-- `.kilocode/rules/40-tool-use.md`
-- `.kilocode/rules/50-kubernetes-monitoring-domain.md`
+- `.kilocode/rules/00-global.md`
 - `.kilocode/rules/memory-bank/*.md`
 - `docs/doctrine/*`

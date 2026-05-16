@@ -64,11 +64,7 @@ Primary human-readable entrypoint: `AGENTS.md`
 
 Standing repo rules:
 - `.kilocode/rules/00-global.md`
-- `.kilocode/rules/10-agent-mission.md`
 - `.kilocode/rules/20-architecture-doctrine.md`
-- `.kilocode/rules/30-output-contracts.md`
-- `.kilocode/rules/40-tool-use.md`
-- `.kilocode/rules/50-kubernetes-monitoring-domain.md`
 
 Deeper doctrine:
 - `docs/doctrine/`

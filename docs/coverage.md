@@ -11,10 +11,14 @@ Code coverage reporting is implemented for both backend (Python) and frontend (T
 ### Full Coverage Report
 
 ```bash
-./scripts/run_coverage.sh  # or use pytest/vitest directly
+.venv/bin/python -m pytest --cov=src/k8s_diag_agent tests/
+cd frontend && npm run test:ui -- --coverage
 ```
 
-**Note:** If `run_coverage.sh` is not present, use the direct commands below.
+Alternative (if available):
+```bash
+./scripts/run_coverage.sh
+```
 
 ### Backend Only
 

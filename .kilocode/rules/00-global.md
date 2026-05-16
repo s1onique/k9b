@@ -10,13 +10,10 @@ It should stay short, stable, and always applicable.
 Before doing substantial work, consult in this order:
 
 1. `AGENTS.md`
-2. `.kilocode/rules/10-agent-mission.md`
+2. `.kilocode/rules/00-global.md` (this file)
 3. `.kilocode/rules/20-architecture-doctrine.md`
-4. `.kilocode/rules/30-output-contracts.md`
-5. `.kilocode/rules/40-tool-use.md`
-6. `.kilocode/rules/50-kubernetes-monitoring-domain.md`
-7. relevant files under `.kilocode/rules/memory-bank/`
-8. relevant files under `docs/doctrine/`
+4. relevant files under `.kilocode/rules/memory-bank/`
+5. relevant files under `docs/doctrine/`
 
 Do not assume the current task is context-free.
 

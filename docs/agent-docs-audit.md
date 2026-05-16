@@ -276,10 +276,10 @@ Determine whether the missing files should be created, consolidated, or their re
 
 | Missing Path | Referenced By | Decision | Rationale | Follow-up |
 |--------------|---------------|-----------|-----------|-----------|
-| `.kilocode/rules/10-agent-mission.md` | AGENTS.md, 00-global.md, brief.md, progress.md | remove reference | Content distributed across AGENTS.md and 20-architecture-doctrine.md | Update referencing docs to remove this path |
-| `.kilocode/rules/30-output-contracts.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md, brief.md | remove reference | No clear gap this file would fill; existing docs cover the intent | Update referencing docs |
-| `.kilocode/rules/40-tool-use.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md | remove reference | Tool use guidance is in 00-global.md and 05-fast-task-bootstrap.md | Update referencing docs |
-| `.kilocode/rules/50-kubernetes-monitoring-domain.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md | remove reference | Domain guidance is embedded in existing docs | Update referencing docs |
-| `.kilocode/rules/memory-bank/tech.md` | progress.md | remove reference | Already noted as missing; tech detail scattered across source | Remove reference; no need to create |
-| `.kilocode/rules/memory-bank/product.md` | progress.md | remove reference | Already noted as missing; product info in brief.md | Remove reference; no need to create |
-| `scripts/run_coverage.sh` | docs/coverage.md | update reference | Update coverage.md to reference actual script or document | See decision below |
+| `.kilocode/rules/10-agent-mission.md` | AGENTS.md, 00-global.md, brief.md, progress.md | remove reference | Content distributed across AGENTS.md and 20-architecture-doctrine.md | ✅ RESOLVED: removed from all active reading paths |
+| `.kilocode/rules/30-output-contracts.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md, brief.md | remove reference | No clear gap this file would fill; existing docs cover the intent | ✅ RESOLVED: removed from all active reading paths |
+| `.kilocode/rules/40-tool-use.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md | remove reference | Tool use guidance is in 00-global.md and 05-fast-task-bootstrap.md | ✅ RESOLVED: removed from all active reading paths |
+| `.kilocode/rules/50-kubernetes-monitoring-domain.md` | AGENTS.md, 00-global.md, 20-architecture-doctrine.md | remove reference | Domain guidance is embedded in existing docs | ✅ RESOLVED: removed from all active reading paths |
+| `.kilocode/rules/memory-bank/tech.md` | progress.md | remove reference | Already noted as missing; tech detail scattered across source | ✅ RESOLVED: removed from progress.md |
+| `.kilocode/rules/memory-bank/product.md` | progress.md | remove reference | Already noted as missing; product info in brief.md | ✅ RESOLVED: removed from progress.md |
+| `scripts/run_coverage.sh` | docs/coverage.md | update reference | Update coverage.md to reference actual commands | ✅ RESOLVED: primary now uses direct pytest/vitest commands |

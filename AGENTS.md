@@ -41,11 +41,9 @@ Read in this order:
 1. `.kilocode/rules/00-global.md`
 2. `.kilocode/rules/20-architecture-doctrine.md`
 3. `.kilocode/rules/05-fast-task-bootstrap.md`
-4. `.kilocode/rules/30-output-contracts.md`
-5. `.kilocode/rules/40-tool-use.md`
-6. `.kilocode/rules/memory-bank/current.md`
-7. directly relevant code/tests/docs for the task
-8. `docs/data-model.md` only if the task affects artifact, UI, API, or persistence contracts
+4. `.kilocode/rules/memory-bank/current.md`
+5. directly relevant code/tests/docs for the task
+6. `docs/data-model.md` only if the task affects artifact, UI, API, or persistence contracts
 
 Do not read by default on this path:
 - `README.md`
@@ -68,15 +66,13 @@ Use this path for:
 Read in this order:
 
 1. `.kilocode/rules/00-global.md`
-2. `.kilocode/rules/10-agent-mission.md`
-3. `.kilocode/rules/20-architecture-doctrine.md`
-4. `.kilocode/rules/30-output-contracts.md`
-5. `.kilocode/rules/40-tool-use.md`
-6. `.kilocode/rules/50-kubernetes-monitoring-domain.md`
-7. relevant files under `.kilocode/rules/memory-bank/`
-8. relevant files under `docs/doctrine/`
-9. `docs/data-model.md`
-10. `README.md` only when startup/runbook/operator workflow details matter
+2. `.kilocode/rules/20-architecture-doctrine.md`
+3. `.kilocode/rules/memory-bank/architecture.md`
+4. `.kilocode/rules/memory-bank/current.md`
+5. relevant files under `.kilocode/rules/memory-bank/`
+6. relevant files under `docs/doctrine/`
+7. `docs/data-model.md`
+8. `README.md` only when startup/runbook/operator workflow details matter
 
 ### Human-reference files
 
