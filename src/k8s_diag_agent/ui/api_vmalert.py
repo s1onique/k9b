@@ -16,10 +16,18 @@ Ownership reminder:
 from __future__ import annotations
 
 from .api_payloads import (
+    VmalertRuleStateAlertPayload,
+    VmalertRuleStateFetchErrorPayload,
+    VmalertRuleStatePayload,
+    VmalertRuleStateRuleGroupPayload,
     VmalertSourcePayload,
     VmalertSourcesPayload,
 )
 from .model import (
+    VmalertRuleStateAlertView,
+    VmalertRuleStateFetchErrorView,
+    VmalertRuleStateRuleGroupView,
+    VmalertRuleStateView,
     VmalertSourcesView,
     VmalertSourceView,
 )
@@ -80,4 +88,79 @@ def _serialize_vmalert_sources(
         "manual_count": view.manual_count,
         "discovery_timestamp": view.discovery_timestamp,
         "cluster_context": view.cluster_context,
+    }
+
+
+def _serialize_vmalert_rule_state_alert(
+    view: VmalertRuleStateAlertView,
+) -> VmalertRuleStateAlertPayload:
+    """Serialize a single vmalert alert to payload dict."""
+    return {
+        "alertname": view.alertname,
+        "state": view.state,
+        "severity": view.severity,
+        "cluster_label": view.cluster_label,
+        "namespace": view.namespace,
+        "workload": view.workload,
+        "pod": view.pod,
+        "instance": view.instance,
+        "summary": view.summary,
+        "description": view.description,
+        "active_at": view.active_at,
+        "starts_at": view.starts_at,
+        "source_endpoint": view.source_endpoint,
+        "group_name": view.group_name,
+        "rule_name": view.rule_name,
+    }
+
+
+def _serialize_vmalert_rule_state_rule_group(
+    view: VmalertRuleStateRuleGroupView,
+) -> VmalertRuleStateRuleGroupPayload:
+    """Serialize a vmalert rule group to payload dict."""
+    return {
+        "name": view.name,
+        "file": view.file,
+        "interval": view.interval,
+        "rule_count": view.rule_count,
+        "firing_alert_count": view.firing_alert_count,
+        "error_count": view.error_count,
+    }
+
+
+def _serialize_vmalert_rule_state_fetch_error(
+    view: VmalertRuleStateFetchErrorView,
+) -> VmalertRuleStateFetchErrorPayload:
+    """Serialize a vmalert fetch error to payload dict."""
+    return {
+        "source_endpoint": view.source_endpoint,
+        "source_id": view.source_id,
+        "status": view.status,
+        "error": view.error,
+    }
+
+
+def _serialize_vmalert_rule_state(
+    view: VmalertRuleStateView | None,
+) -> VmalertRuleStatePayload | None:
+    """Serialize vmalert rule state to payload.
+
+    Returns None when artifact is missing (not an error).
+    """
+    if not view:
+        return None
+    return {
+        "source_count": view.source_count,
+        "fetched_source_count": view.fetched_source_count,
+        "failed_source_count": view.failed_source_count,
+        "alert_count": view.alert_count,
+        "firing_alert_count": view.firing_alert_count,
+        "pending_alert_count": view.pending_alert_count,
+        "critical_firing_count": view.critical_firing_count,
+        "rule_group_count": view.rule_group_count,
+        "fetch_error_count": view.fetch_error_count,
+        "captured_at": view.captured_at,
+        "alerts": [_serialize_vmalert_rule_state_alert(a) for a in view.alerts],
+        "rule_groups": [_serialize_vmalert_rule_state_rule_group(g) for g in view.rule_groups],
+        "fetch_errors": [_serialize_vmalert_rule_state_fetch_error(e) for e in view.fetch_errors],
     }

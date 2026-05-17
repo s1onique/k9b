@@ -188,6 +188,7 @@ from .api_review_enrichment import (  # noqa: F401 - re-exported for backward co
     _serialize_review_enrichment_status,
 )
 from .api_vmalert import (  # noqa: F401 - re-exported for backward compatibility
+    _serialize_vmalert_rule_state,
     _serialize_vmalert_sources,
 )
 from .model import (
@@ -239,6 +240,7 @@ def build_run_payload(
         "alertmanagerCompact": _serialize_alertmanager_compact(context.alertmanager_compact),
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
         "vmalertSources": _serialize_vmalert_sources(context.vmalert_sources),
+        "vmalertRuleState": _serialize_vmalert_rule_state(context.vmalert_rule_state),
         "incidentReport": _build_incident_report_payload(context, freshness),
         "operatorWorklist": _build_operator_worklist_payload(context, health_root=health_root),
     }

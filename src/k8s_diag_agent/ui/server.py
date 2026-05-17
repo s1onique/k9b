@@ -1442,6 +1442,19 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         else:
             _timings["vmalert_sources_build_ms"] = 0.0
 
+        # Phase 15c: Load vmalert rule state artifact if available
+        # vmalert rule state artifact is written at health_root, not external-analysis/
+        vmalert_rule_state_entry: dict[str, object] | None = None
+        vmalert_rule_state_path = self._health_root / f"{run_id}-vmalert-rule-state.json"
+        if vmalert_rule_state_path.exists():
+            try:
+                vmalert_rule_state_entry = cast(dict[str, object], json.loads(vmalert_rule_state_path.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                _timings["vmalert_rule_state_read_ms"] = 0.0
+                pass  # Rule state not available - non-fatal
+        else:
+            _timings["vmalert_rule_state_read_ms"] = 0.0
+
         # Phase 16: Build run entry with artifact-backed values
         run_entry = {
             "run_id": run_id,
@@ -1473,6 +1486,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             "alertmanager_compact": alertmanager_compact_entry,
             "alertmanager_sources": alertmanager_sources_entry,
             "vmalert_sources": vmalert_sources_entry,
+            "vmalert_rule_state": vmalert_rule_state_entry,
         }
 
         # Phase 17: Build proposal status summary

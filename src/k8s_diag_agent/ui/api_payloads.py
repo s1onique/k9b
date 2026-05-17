@@ -97,6 +97,11 @@ __all__ = [
     "CrossClusterFindingPayload",
     "VmalertDiscoveryContextPayload",
     "VmalertSourceSummaryPayload",
+    # vmalert rule state
+    "VmalertRuleStatePayload",
+    "VmalertRuleStateAlertPayload",
+    "VmalertRuleStateRuleGroupPayload",
+    "VmalertRuleStateFetchErrorPayload",
     "RunPayload",
     "BatchExecutionSummary",
     "RunsListEntry",
@@ -1127,6 +1132,116 @@ class VmalertSourceSummaryPayload(TypedDict, total=False):
     cluster_label: str | None
 
 
+class VmalertRuleStateAlertPayload(TypedDict, total=False):
+    """Payload for a single vmalert alert in rule state."""
+
+    alertname: str
+    state: str
+    severity: str | None
+    cluster_label: str | None
+    namespace: str | None
+    workload: str | None
+    pod: str | None
+    instance: str | None
+    summary: str | None
+    description: str | None
+    active_at: str | None
+    starts_at: str | None
+    source_endpoint: str | None
+    group_name: str | None
+    rule_name: str | None
+
+
+class VmalertRuleStateRuleGroupPayload(TypedDict, total=False):
+    """Payload for a vmalert rule group in rule state."""
+
+    name: str
+    file: str | None
+    interval: str | None
+    rule_count: int
+    firing_alert_count: int
+    error_count: int
+
+
+class VmalertRuleStateFetchErrorPayload(TypedDict, total=False):
+    """Payload for a vmalert fetch error in rule state."""
+
+    source_endpoint: str
+    source_id: str | None
+    status: str
+    error: str
+
+
+class VmalertRuleStatePayload(TypedDict, total=False):
+    """Payload for vmalert rule state in run payload.
+
+    Exposes collected vmalert alert/rule state as read-only diagnostic context.
+
+    Contract invariants:
+    - source_count: total sources attempted
+    - fetched_source_count: sources successfully fetched
+    - failed_source_count: sources that failed to fetch (non-fatal)
+    - alert_count: total alerts across all sources
+    - firing_alert_count: alerts in firing state
+    - pending_alert_count: alerts in pending state
+    - critical_firing_count: firing alerts with critical severity
+    - alerts: list of alert signals
+    - rule_groups: list of rule groups
+    - fetch_errors: list of fetch errors (non-fatal diagnostic context)
+    - Missing artifact returns None (not an error)
+    """
+
+    source_count: int
+    fetched_source_count: int
+    failed_source_count: int
+    alert_count: int
+    firing_alert_count: int
+    pending_alert_count: int
+    critical_firing_count: int
+    rule_group_count: int
+    fetch_error_count: int
+    captured_at: str
+    alerts: list[VmalertRuleStateAlertPayload]
+    rule_groups: list[VmalertRuleStateRuleGroupPayload]
+    fetch_errors: list[VmalertRuleStateFetchErrorPayload]
+
+
+class VmalertRuleStateContextPayload(TypedDict, total=False):
+    """Compact vmalert rule state context for the incident report.
+
+    Provides operator-visible diagnostic context about vmalert firing/pending alerts.
+    This is a read-only, non-invasive integration: no live scraping or actions.
+    vmalertRuleState is sourced from the UI context (artifact-backed).
+
+    Contract invariants:
+    - source_count, fetched_source_count, failed_source_count: source status
+    - alert_count, firing_alert_count, pending_alert_count: alert state counts
+    - critical_firing_count: critical severity firing alerts
+    - top_alertnames: most frequent firing alert names (up to 5)
+    - severity_counts: firing alert counts per severity
+    - affected_namespaces: namespaces with firing alerts
+    - affected_workloads: workloads with firing alerts
+    - fetch_error_count: non-fatal fetch errors
+    - Missing artifact returns None (not an error)
+    - Empty alerts means quiet zero-count state (not an error)
+    - Pending alerts are visible but not escalated
+    - Fetch failures are visible but non-fatal
+    """
+
+    source_count: int
+    fetched_source_count: int
+    failed_source_count: int
+    alert_count: int
+    firing_alert_count: int
+    pending_alert_count: int
+    critical_firing_count: int
+    top_alertnames: list[str]
+    severity_counts: list[tuple[str, int]]
+    affected_namespaces: list[str]
+    affected_workloads: list[str]
+    fetch_error_count: int
+
+
 class IncidentReportPayload(TypedDict, total=False):
     """Canonical incident report projection for a selected health run.
 
@@ -1164,6 +1279,10 @@ class IncidentReportPayload(TypedDict, total=False):
     # vmalert discovery context for diagnostic awareness
     # Present when vmalert sources are available; None when no sources discovered
     vmalertDiscoveryContext: VmalertDiscoveryContextPayload | None
+    # vmalert rule state context for firing/pending alert diagnostics
+    # Present when vmalert rule state artifact exists; None when missing
+    # Non-fatal: fetch errors and pending alerts are visible but not escalated
+    vmalertRuleStateContext: VmalertRuleStateContextPayload | None
 
 
 class OperatorWorklistItemPayload(TypedDict, total=False):
@@ -1301,6 +1420,7 @@ class RunPayload(TypedDict):
     alertmanagerCompact: AlertmanagerCompactPayload | None
     alertmanagerSources: AlertmanagerSourcesPayload | None
     vmalertSources: VmalertSourcesPayload | None
+    vmalertRuleState: VmalertRuleStatePayload | None
     incidentReport: IncidentReportPayload | None
     operatorWorklist: OperatorWorklistPayload | None
 

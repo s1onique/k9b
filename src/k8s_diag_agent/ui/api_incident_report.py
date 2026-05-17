@@ -60,6 +60,7 @@ from .api_payloads import (
     OperatorWorklistPayload,
     StalenessClass,
     VmalertDiscoveryContextPayload,
+    VmalertRuleStateContextPayload,
     VmalertSourceSummaryPayload,
 )
 from .execution_index_utils import (
@@ -544,6 +545,11 @@ def _build_incident_report_payload(
     # vmalertSources is sourced from the UI context (artifact-backed, not re-discovered)
     vmalert_context = _build_vmalert_discovery_context(context)
 
+    # Build vmalert rule state context for firing/pending alert diagnostics
+    # This is a read-only, non-invasive integration: no live scraping or actions
+    # vmalertRuleState is sourced from the UI context (artifact-backed)
+    vmalert_rule_state_context = _build_vmalert_rule_state_context(context)
+
     return {
         "title": title,
         "status": status,
@@ -562,6 +568,7 @@ def _build_incident_report_payload(
         "sourceArtifactRefs": filtered_refs,
         "crossClusterFindings": cross_cluster_findings,
         "vmalertDiscoveryContext": vmalert_context,
+        "vmalertRuleStateContext": vmalert_rule_state_context,
     }
 
 
@@ -748,6 +755,47 @@ def _build_vmalert_discovery_context(
         "discovered_count": vmalert_sources.discovered_count,
         "discovered_but_unverified_count": vmalert_sources.discovered_but_unverified_count,
         "sources": sources,
+    }
+
+
+def _build_vmalert_rule_state_context(
+    context: UIIndexContext,
+) -> VmalertRuleStateContextPayload | None:
+    """Build vmalert rule state context for the incident report.
+
+    This is a read-only, non-invasive integration: no live scraping or actions.
+    vmalertRuleState is sourced from the UI context (artifact-backed).
+
+    Contract invariants:
+    - Returns None when no vmalert rule state is available (not an error)
+    - Empty alerts means quiet zero-count state (not an error)
+    - Pending alerts are visible but not escalated
+    - Fetch failures are visible but non-fatal
+    - No errors are raised for missing/malformed artifacts
+
+    Args:
+        context: UI index context containing vmalert rule state from artifact.
+
+    Returns:
+        VmalertRuleStateContextPayload or None if no rule state available.
+    """
+    vmalert_rule_state = context.vmalert_rule_state
+    if vmalert_rule_state is None:
+        return None
+
+    return {
+        "source_count": vmalert_rule_state.source_count,
+        "fetched_source_count": vmalert_rule_state.fetched_source_count,
+        "failed_source_count": vmalert_rule_state.failed_source_count,
+        "alert_count": vmalert_rule_state.alert_count,
+        "firing_alert_count": vmalert_rule_state.firing_alert_count,
+        "pending_alert_count": vmalert_rule_state.pending_alert_count,
+        "critical_firing_count": vmalert_rule_state.critical_firing_count,
+        "top_alertnames": list(vmalert_rule_state.top_alertnames),
+        "severity_counts": list(vmalert_rule_state.severity_counts),
+        "affected_namespaces": list(vmalert_rule_state.affected_namespaces),
+        "affected_workloads": list(vmalert_rule_state.affected_workloads),
+        "fetch_error_count": vmalert_rule_state.fetch_error_count,
     }
 
 

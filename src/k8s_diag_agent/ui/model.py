@@ -172,6 +172,13 @@ from .model_vmalert import (  # noqa: F401 - re-exported for import compatibilit
     VmalertSourceView,
     _build_vmalert_sources_view,
 )
+from .model_vmalert_rule_state import (  # noqa: F401 - re-exported for import compatibility
+    VmalertRuleStateAlertView,
+    VmalertRuleStateFetchErrorView,
+    VmalertRuleStateRuleGroupView,
+    VmalertRuleStateView,
+    _build_vmalert_rule_state_view,
+)
 
 
 @dataclass(frozen=True)
@@ -282,6 +289,7 @@ class UIIndexContext:
     alertmanager_compact: AlertmanagerCompactView | None
     alertmanager_sources: AlertmanagerSourcesView | None
     vmalert_sources: VmalertSourcesView | None
+    vmalert_rule_state: VmalertRuleStateView | None
 
 
 def load_ui_index(directory: Path) -> Mapping[str, object]:
@@ -358,6 +366,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
     alertmanager_compact = _build_alertmanager_compact_view(run_data.get("alertmanager_compact"))
     alertmanager_sources = _build_alertmanager_sources_view(run_data.get("alertmanager_sources"))
     vmalert_sources = _build_vmalert_sources_view(run_data.get("vmalert_sources"))
+    vmalert_rule_state = _build_vmalert_rule_state_view(run_data.get("vmalert_rule_state"))
     return UIIndexContext(
         run=run,
         clusters=clusters,
@@ -381,6 +390,7 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
         alertmanager_compact=alertmanager_compact,
         alertmanager_sources=alertmanager_sources,
         vmalert_sources=vmalert_sources,
+        vmalert_rule_state=vmalert_rule_state,
     )
 
 

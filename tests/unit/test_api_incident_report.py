@@ -473,6 +473,291 @@ class VmalertDiscoveryContextTests(unittest.TestCase):
         self.assertIsNotNone(incident_report["vmalertDiscoveryContext"])
 
 
+class VmalertRuleStateContextTests(unittest.TestCase):
+    """Tests for vmalert rule state context in incident report."""
+
+    def test_missing_vmalert_rule_state_returns_none(self) -> None:
+        """Test that missing vmalert rule-state artifact returns vmalertRuleStateContext None."""
+        index = sample_ui_index()
+        # No vmalert_rule_state in run data
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertIn("vmalertRuleStateContext", payload)
+        self.assertIsNone(payload["vmalertRuleStateContext"])
+
+    def test_empty_alert_state_returns_quiet_zero_count(self) -> None:
+        """Test that empty alert state returns quiet zero-count context."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 0,
+            "firing_alert_count": 0,
+            "pending_alert_count": 0,
+            "critical_firing_count": 0,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertIn("vmalertRuleStateContext", payload)
+        ctx = payload["vmalertRuleStateContext"]
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+        # Verify zero counts for quiet state
+        self.assertEqual(ctx["alert_count"], 0)
+        self.assertEqual(ctx["firing_alert_count"], 0)
+        self.assertEqual(ctx["pending_alert_count"], 0)
+        self.assertEqual(ctx["critical_firing_count"], 0)
+        self.assertEqual(ctx["fetch_error_count"], 0)
+
+    def test_firing_critical_alert_in_counts(self) -> None:
+        """Test that firing critical alert appears in firing/critical counts."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 3,
+            "firing_alert_count": 2,
+            "pending_alert_count": 1,
+            "critical_firing_count": 1,
+            "rule_group_count": 1,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app"},
+                {"alertname": "WarningAlert", "state": "firing", "severity": "warning",
+                 "namespace": "monitoring", "workload": "statefulset/db"},
+                {"alertname": "PendingAlert", "state": "pending", "severity": "info",
+                 "namespace": "kube-system", "workload": "deployment/pending"},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertIn("vmalertRuleStateContext", payload)
+        ctx = payload["vmalertRuleStateContext"]
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+        # Verify counts
+        self.assertEqual(ctx["alert_count"], 3)
+        self.assertEqual(ctx["firing_alert_count"], 2)
+        self.assertEqual(ctx["pending_alert_count"], 1)
+        self.assertEqual(ctx["critical_firing_count"], 1)
+
+    def test_pending_alert_in_pending_count_not_firing(self) -> None:
+        """Test that pending alert appears in pending count but not firing count."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 2,
+            "firing_alert_count": 1,
+            "pending_alert_count": 1,
+            "critical_firing_count": 0,
+            "rule_group_count": 1,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "FiringAlert", "state": "firing", "severity": "warning",
+                 "namespace": "default", "workload": None},
+                {"alertname": "PendingAlert", "state": "pending", "severity": "warning",
+                 "namespace": "kube-system", "workload": None},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        ctx = payload["vmalertRuleStateContext"]
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+        # Pending is not firing
+        self.assertEqual(ctx["firing_alert_count"], 1)
+        self.assertEqual(ctx["pending_alert_count"], 1)
+
+    def test_top_alertnames_severity_counts_affected_namespaces_workloads(self) -> None:
+        """Test that computed properties are threaded into context."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 5,
+            "firing_alert_count": 3,
+            "pending_alert_count": 2,
+            "critical_firing_count": 1,
+            "rule_group_count": 1,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                # Firing alerts (count for top_alertnames, severity_counts, affected namespaces/workloads)
+                {"alertname": "PodNotReady", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app1"},
+                {"alertname": "PodNotReady", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app2"},  # Same namespace, different workload
+                {"alertname": "HighCpu", "state": "firing", "severity": "warning",
+                 "namespace": "monitoring", "workload": "statefulset/db"},
+                # Pending alerts (NOT counted for top_alertnames, severity_counts, affected)
+                {"alertname": "PendingAlert", "state": "pending", "severity": "info",
+                 "namespace": "kube-system", "workload": "deployment/pending"},
+                {"alertname": "PendingAlert2", "state": "pending", "severity": "warning",
+                 "namespace": "kube-system", "workload": "deployment/pending2"},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        ctx = payload["vmalertRuleStateContext"]
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+
+        # top_alertnames: most common firing alertnames (PodNotReady > HighCpu)
+        self.assertIn("top_alertnames", ctx)
+        assert ctx["top_alertnames"] is not None
+        top_names = ctx["top_alertnames"]
+        self.assertIn("PodNotReady", top_names)
+        self.assertIn("HighCpu", top_names)
+        # PodNotReady appears twice (2 firing), HighCpu once (1 firing)
+        # Order should be by count descending
+        pod_index = top_names.index("PodNotReady") if "PodNotReady" in top_names else -1
+        cpu_index = top_names.index("HighCpu") if "HighCpu" in top_names else -1
+        if pod_index >= 0 and cpu_index >= 0:
+            self.assertLess(pod_index, cpu_index)  # PodNotReady should come first
+
+        # severity_counts: only firing alerts counted
+        self.assertIn("severity_counts", ctx)
+        assert ctx["severity_counts"] is not None
+        severity_dict = dict(ctx["severity_counts"])
+        self.assertEqual(severity_dict.get("critical"), 2)  # Two PodNotReady firing (both critical)
+        self.assertEqual(severity_dict.get("warning"), 1)  # Only HighCpu (warning)
+        self.assertNotIn("info", severity_dict)  # Pending alerts not counted
+        self.assertNotIn("warning", [s for s, c in ctx["severity_counts"] if s == "warning" and c == 2])  # Not 2 warnings
+
+        # affected_namespaces: only firing alerts
+        self.assertIn("affected_namespaces", ctx)
+        assert ctx["affected_namespaces"] is not None
+        namespaces = ctx["affected_namespaces"]
+        self.assertIn("default", namespaces)  # Firing alerts
+        self.assertIn("monitoring", namespaces)  # Firing alerts
+        self.assertNotIn("kube-system", namespaces)  # Pending alerts not included
+
+        # affected_workloads: only firing alerts
+        self.assertIn("affected_workloads", ctx)
+        assert ctx["affected_workloads"] is not None
+        workloads = ctx["affected_workloads"]
+        self.assertIn("deployment/app1", workloads)
+        self.assertIn("deployment/app2", workloads)
+        self.assertIn("statefulset/db", workloads)
+        self.assertNotIn("deployment/pending", workloads)  # Pending not included
+
+    def test_fetch_error_count_is_non_fatal(self) -> None:
+        """Test that fetch_error_count is threaded as non-fatal context."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 3,
+            "fetched_source_count": 2,
+            "failed_source_count": 1,
+            "alert_count": 2,
+            "firing_alert_count": 1,
+            "pending_alert_count": 1,
+            "critical_firing_count": 0,
+            "rule_group_count": 2,
+            "fetch_error_count": 1,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "Alert1", "state": "firing", "severity": "warning", "namespace": None, "workload": None},
+                {"alertname": "Alert2", "state": "pending", "severity": "info", "namespace": None, "workload": None},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [
+                {"source_endpoint": "http://vmalert-failed:8880", "status": "500", "error": "connection refused"}
+            ],
+        }
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        ctx = payload["vmalertRuleStateContext"]
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+
+        # Source status
+        self.assertEqual(ctx["source_count"], 3)
+        self.assertEqual(ctx["fetched_source_count"], 2)
+        self.assertEqual(ctx["failed_source_count"], 1)
+        self.assertEqual(ctx["fetch_error_count"], 1)
+
+        # Context is not None even with fetch errors (non-fatal)
+        self.assertIsNotNone(ctx)
+
+    def test_context_preserves_source_metadata(self) -> None:
+        """Test that source metadata is preserved in context."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 2,
+            "fetched_source_count": 1,
+            "failed_source_count": 1,
+            "alert_count": 0,
+            "firing_alert_count": 0,
+            "pending_alert_count": 0,
+            "critical_firing_count": 0,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_incident_report_payload(context, _sample_freshness("fresh"))
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        ctx = payload["vmalertRuleStateContext"]
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+
+        # Source metadata preserved
+        self.assertEqual(ctx["source_count"], 2)
+        self.assertEqual(ctx["fetched_source_count"], 1)
+        self.assertEqual(ctx["failed_source_count"], 1)
+
+
+def _sample_freshness(status: str) -> dict[str, object]:
+    """Return a sample freshness payload."""
+    return {
+        "ageSeconds": 60 if status == "fresh" else 600 if status == "stale" else 120,
+        "expectedIntervalSeconds": 300,
+        "status": status,
+    }
+
+
 class OperatorWorklistPayloadTests(unittest.TestCase):
     def setUp(self) -> None:
         self.index = sample_ui_index()
