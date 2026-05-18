@@ -8,8 +8,17 @@
  * Consumers: All frontend components, hooks, and API layer.
  */
 
+import type { VmalertRuleState } from "./types/vmalert";
+
 // Re-export vmalert types from separate module
-export type { VmalertSource, VmalertSources } from "./types/vmalert";
+export type {
+  VmalertSource,
+  VmalertSources,
+  VmalertRuleState,
+  VmalertRuleStateAlert,
+  VmalertRuleStateRuleGroup,
+  VmalertRuleStateFetchError,
+} from "./types/vmalert";
 
 export type ArtifactLink = {
   label: string;
@@ -111,6 +120,8 @@ export type RunPayload = {
   alertmanagerSources?: AlertmanagerSources | null;
   // VictoriaMetrics vmalert discovery status (compact display)
   vmalertSources?: VmalertSources | null;
+  // VictoriaMetrics vmalert alert/rule state (collected from vmalert sources)
+  vmalertRuleState?: VmalertRuleState | null;
   // Phase 2: Canonical incident surface projections
   incidentReport?: IncidentReportPayload | null;
   operatorWorklist?: OperatorWorklistPayload | null;

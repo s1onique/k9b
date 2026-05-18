@@ -80,6 +80,7 @@
 @import url('./components/alertmanager-sources.css');
 @import url('./components/alertmanager-snapshot.css');
 @import url('./components/vmalert-discovery.css');
+@import url('./components/vmalert-alert-state.css');
 @import url('./components/llm-activity.css');
 @import url('./components/execution-history.css');
 @import url('./components/next-check-plan.css');

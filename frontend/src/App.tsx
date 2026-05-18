@@ -62,6 +62,7 @@ import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
+import { VmalertAlertStatePanel } from "./components/VmalertAlertStatePanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
 import { RecentRunsPanel, RunSummaryPanel } from "./components/RunsPanel";
 export type { RecentRunsPanelProps, RunSummaryPanelProps } from "./components/RunsPanel";
@@ -1256,6 +1257,8 @@ const App = () => {
       )}
       {/* VictoriaMetrics vmalert discovery - compact display only, no actions */}
       <VmalertDiscoveryPanel vmalertSources={run?.vmalertSources} />
+      {/* VictoriaMetrics vmalert alert state - compact display of alert counts and firing alerts */}
+      <VmalertAlertStatePanel vmalertRuleState={run?.vmalertRuleState} />
     {run ? (
       <DeterministicNextChecksPanel
         deterministicChecks={deterministicChecks}

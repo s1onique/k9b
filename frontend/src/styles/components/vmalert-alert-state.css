@@ -1,0 +1,225 @@
+/**
+ * vmalert-alert-state.css
+ *
+ * Compact operator-visible surface for VictoriaMetrics vmalert alert state.
+ * Follows the same visual treatment as vmalert-discovery.css for consistency.
+ */
+
+.vmalert-alert-state {
+  /* Panel inherits from .panel */
+}
+
+.vmalert-alert-state .section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vmalert-alert-state .section-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Warning state for fetch errors */
+.vmalert-alert-state-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background-color: var(--color-background-subtle, #1a1a1a);
+  border-radius: var(--border-radius, 4px);
+  border-left: 3px solid var(--color-warning, #f0ad4e);
+}
+
+.vmalert-alert-state-warning-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.vmalert-alert-state-warning-text {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* Healthy/no-alerts state */
+.vmalert-alert-state-healthy {
+  margin-top: 0.75rem;
+}
+
+.vmalert-alert-state-healthy-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-success, #28a745);
+}
+
+.vmalert-alert-state-healthy-meta {
+  margin: 0.25rem 0 0 0;
+}
+
+/* Active alerts state */
+.vmalert-alert-state-active {
+  margin-top: 0.75rem;
+}
+
+.vmalert-alert-state-summary {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.vmalert-alert-state-worklist-note {
+  margin: 0 0 0.75rem 0;
+  padding: 0.5rem;
+  background-color: var(--color-background-subtle, #1a1a1a);
+  border-radius: var(--border-radius, 4px);
+  border-left: 3px solid var(--color-info, #17a2b8);
+}
+
+/* Alert table */
+.vmalert-alert-state-list {
+  margin-top: 0.5rem;
+  overflow-x: auto;
+}
+
+.vmalert-alert-state-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.vmalert-alert-state-table th,
+.vmalert-alert-state-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border, #333);
+}
+
+.vmalert-alert-state-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--color-background-subtle, #1a1a1a);
+}
+
+.vmalert-alert-state-table tbody tr:hover {
+  background-color: var(--color-background-hover, #252525);
+}
+
+/* Row highlighting for critical/firing alerts */
+.vmalert-alert-row--critical {
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+.vmalert-alert-row--critical:hover {
+  background-color: rgba(220, 53, 69, 0.15);
+}
+
+.vmalert-alert-row--firing {
+  background-color: rgba(255, 193, 7, 0.05);
+}
+
+.vmalert-alert-row--firing:hover {
+  background-color: rgba(255, 193, 7, 0.1);
+}
+
+.vmalert-alert-row--pending {
+  /* No special background for pending */
+}
+
+/* Cell styles */
+.vmalert-alert-cell {
+  vertical-align: top;
+}
+
+.vmalert-alert-cell--name {
+  min-width: 200px;
+}
+
+.vmalert-alert-name {
+  display: block;
+  font-weight: 500;
+}
+
+.vmalert-alert-summary {
+  display: block;
+  margin-top: 0.25rem;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* State badges */
+.vmalert-alert-state-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--border-radius, 4px);
+  text-transform: capitalize;
+}
+
+.vmalert-alert-state-badge--firing {
+  background-color: var(--color-firing, rgba(255, 193, 7, 0.2));
+  color: var(--color-warning, #f0ad4e);
+  border: 1px solid var(--color-warning, #f0ad4e);
+}
+
+.vmalert-alert-state-badge--pending {
+  background-color: var(--color-pending, rgba(23, 162, 184, 0.2));
+  color: var(--color-info, #17a2b8);
+  border: 1px solid var(--color-info, #17a2b8);
+}
+
+/* Severity badges */
+.vmalert-alert-severity-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--border-radius, 4px);
+  text-transform: capitalize;
+}
+
+.vmalert-alert-severity-badge--critical {
+  background-color: var(--color-critical, rgba(220, 53, 69, 0.2));
+  color: var(--color-critical-text, #dc3545);
+  border: 1px solid var(--color-critical-border, #dc3545);
+}
+
+.vmalert-alert-severity-badge--warning {
+  background-color: var(--color-warning, rgba(255, 193, 7, 0.2));
+  color: var(--color-warning-text, #ffc107);
+  border: 1px solid var(--color-warning-border, #ffc107);
+}
+
+.vmalert-alert-severity-badge--info {
+  background-color: var(--color-info, rgba(23, 162, 184, 0.2));
+  color: var(--color-info-text, #17a2b8);
+  border: 1px solid var(--color-info-border, #17a2b8);
+}
+
+.vmalert-alert-severity-badge--default {
+  background-color: var(--color-background-subtle, #2a2a2a);
+  color: var(--color-text-muted, #888);
+  border: 1px solid var(--color-border, #444);
+}
+
+/* More alerts indicator */
+.vmalert-alert-state-more {
+  margin: 0.5rem 0 0 0;
+  text-align: center;
+}
+
+/* Status pill extensions for critical state */
+.status-pill--critical {
+  background-color: var(--color-critical, rgba(220, 53, 69, 0.2));
+  color: var(--color-critical-text, #dc3545);
+  border: 1px solid var(--color-critical-border, #dc3545);
+  font-weight: 600;
+}

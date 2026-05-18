@@ -2,7 +2,8 @@
  * vmalert.ts — TypeScript type definitions for VictoriaMetrics vmalert integration.
  *
  * Mirrors the backend VmalertSourceView and VmalertSourcesView from
- * src/k8s_diag_agent/ui/model_vmalert.py
+ * src/k8s_diag_agent/ui/model_vmalert.py and VmalertRuleState*View from
+ * src/k8s_diag_agent/ui/model_vmalert_rule_state.py
  *
  * Backend fields (vmalertSourcesView):
  * - sources: VmalertSourceView[]
@@ -14,6 +15,21 @@
  * - manual_count: int
  * - discovery_timestamp: str | None
  * - cluster_context: str | None
+ *
+ * Backend fields (VmalertRuleStatePayload):
+ * - source_count: int
+ * - fetched_source_count: int
+ * - failed_source_count: int
+ * - alert_count: int
+ * - firing_alert_count: int
+ * - pending_alert_count: int
+ * - critical_firing_count: int
+ * - rule_group_count: int
+ * - fetch_error_count: int
+ * - captured_at: str
+ * - alerts: VmalertRuleStateAlertPayload[]
+ * - rule_groups: VmalertRuleStateRuleGroupPayload[]
+ * - fetch_errors: VmalertRuleStateFetchErrorPayload[]
  *
  * Frontend usage: compact display in RunSummaryPanel, similar to alertmanagerCompact.
  * Full source table is out of scope for this slice.
@@ -70,4 +86,58 @@ export type VmalertSources = {
   manual_count: number;
   discovery_timestamp: string | null;
   cluster_context: string | null;
+};
+
+/** A single vmalert alert in rule state */
+export type VmalertRuleStateAlert = {
+  alertname: string;
+  state: string;
+  severity: string | null;
+  cluster_label: string | null;
+  namespace: string | null;
+  workload: string | null;
+  pod: string | null;
+  instance: string | null;
+  summary: string | null;
+  description: string | null;
+  active_at: string | null;
+  starts_at: string | null;
+  source_endpoint: string | null;
+  group_name: string | null;
+  rule_name: string | null;
+};
+
+/** A vmalert rule group in rule state */
+export type VmalertRuleStateRuleGroup = {
+  name: string;
+  file: string | null;
+  interval: string | null;
+  rule_count: number;
+  firing_alert_count: number;
+  error_count: number;
+};
+
+/** A vmalert fetch error in rule state */
+export type VmalertRuleStateFetchError = {
+  source_endpoint: string;
+  source_id: string | null;
+  status: string;
+  error: string;
+};
+
+/** Full vmalert rule state for a run */
+export type VmalertRuleState = {
+  source_count: number;
+  fetched_source_count: number;
+  failed_source_count: number;
+  alert_count: number;
+  firing_alert_count: number;
+  pending_alert_count: number;
+  critical_firing_count: number;
+  rule_group_count: number;
+  fetch_error_count: number;
+  captured_at: string;
+  alerts: VmalertRuleStateAlert[];
+  rule_groups: VmalertRuleStateRuleGroup[];
+  fetch_errors: VmalertRuleStateFetchError[];
 };
