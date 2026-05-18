@@ -12,6 +12,7 @@ Coverage goals (per epic):
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from typing import Any, cast
 
 from k8s_diag_agent.ui.api import build_run_payload
@@ -747,6 +748,333 @@ class VmalertRuleStateContextTests(unittest.TestCase):
         self.assertEqual(ctx["source_count"], 2)
         self.assertEqual(ctx["fetched_source_count"], 1)
         self.assertEqual(ctx["failed_source_count"], 1)
+
+
+class VmalertAlertWorklistItemTests(unittest.TestCase):
+    """Tests for vmalert alert-derived operator worklist items."""
+
+    def setUp(self) -> None:
+        self.index = sample_ui_index()
+        self.context = build_ui_context(self.index)
+
+    def test_critical_firing_alert_creates_worklist_item(self) -> None:
+        """Test that critical firing alert creates one worklist item."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 1,
+            "firing_alert_count": 1,
+            "pending_alert_count": 0,
+            "critical_firing_count": 1,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app", "instance": "app-0",
+                 "cluster_label": "cluster-a", "source_endpoint": "http://vmalert:8880"},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # Find vmalert alert items
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 1)
+        
+        item = vmalert_items[0]
+        # ID contains alertname + namespace + workload + source_endpoint
+        self.assertIn("vmalert-critical-CriticalAlert", item["id"])
+        self.assertIn("default", item["id"])
+        self.assertEqual(item["title"], "Critical vmalert alert firing: CriticalAlert (default/deployment/app)")
+        self.assertIn("namespace=default", item["description"])
+        self.assertIn("workload=deployment/app", item["description"])
+        self.assertEqual(item["workstream"], "incident")
+        self.assertEqual(item["itemState"], "advisory")
+        self.assertIn("Critical vmalert alert firing", item["rankingReason"])
+
+    def test_pending_critical_alert_does_not_create_item(self) -> None:
+        """Test that pending critical alert does not create a worklist item."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 1,
+            "firing_alert_count": 0,
+            "pending_alert_count": 1,
+            "critical_firing_count": 0,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "CriticalAlert", "state": "pending", "severity": "critical",
+                 "namespace": "default", "workload": None},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # No vmalert alert items for pending alerts
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 0)
+
+    def test_warning_firing_alert_does_not_create_item(self) -> None:
+        """Test that warning firing alert does not create a worklist item."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 1,
+            "firing_alert_count": 1,
+            "pending_alert_count": 0,
+            "critical_firing_count": 0,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "WarningAlert", "state": "firing", "severity": "warning",
+                 "namespace": "monitoring", "workload": None},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # No vmalert alert items for warning severity
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 0)
+
+    def test_missing_severity_firing_alert_does_not_create_item(self) -> None:
+        """Test that firing alert with missing severity does not create a worklist item."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 1,
+            "firing_alert_count": 1,
+            "pending_alert_count": 0,
+            "critical_firing_count": 0,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "UnknownSeverityAlert", "state": "firing", "severity": None,
+                 "namespace": "default", "workload": None},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # No vmalert alert items for missing severity
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 0)
+
+    def test_duplicate_critical_firing_alerts_deduplicate(self) -> None:
+        """Test that duplicate critical firing alerts are deduplicated."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 2,
+            "firing_alert_count": 2,
+            "pending_alert_count": 0,
+            "critical_firing_count": 2,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                # Same alertname + namespace + workload + source_endpoint = duplicate
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app",
+                 "source_endpoint": "http://vmalert:8880"},
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app",
+                 "source_endpoint": "http://vmalert:8880"},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # Only one vmalert alert item (deduplicated)
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 1)
+
+    def test_distinct_namespaces_produce_distinct_items(self) -> None:
+        """Test that distinct namespaces produce distinct worklist items."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 2,
+            "firing_alert_count": 2,
+            "pending_alert_count": 0,
+            "critical_firing_count": 2,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app",
+                 "source_endpoint": "http://vmalert:8880"},
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "monitoring", "workload": "deployment/app",
+                 "source_endpoint": "http://vmalert:8880"},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # Two distinct vmalert alert items (different namespaces)
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 2)
+        
+        # Verify distinct IDs contain the namespace
+        item_ids = {item["id"] for item in vmalert_items}
+        self.assertEqual(len(item_ids), 2)
+        # Check that both namespaces are represented in IDs
+        self.assertTrue(any("default" in i for i in item_ids), f"Expected 'default' in IDs: {item_ids}")
+        self.assertTrue(any("monitoring" in i for i in item_ids), f"Expected 'monitoring' in IDs: {item_ids}")
+
+    def test_item_includes_alertname_namespace_workload_source_endpoint(self) -> None:
+        """Test that worklist item includes alertname, namespace, workload, source endpoint, and provenance."""
+        index = sample_ui_index()
+        run_entry = cast(dict[str, object], index["run"])
+        run_entry["vmalert_rule_state"] = {
+            "source_count": 1,
+            "fetched_source_count": 1,
+            "failed_source_count": 0,
+            "alert_count": 1,
+            "firing_alert_count": 1,
+            "pending_alert_count": 0,
+            "critical_firing_count": 1,
+            "rule_group_count": 0,
+            "fetch_error_count": 0,
+            "captured_at": "2024-01-01T00:00:00Z",
+            "alerts": [
+                {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                 "namespace": "default", "workload": "deployment/app",
+                 "source_endpoint": "http://vmalert:8880",
+                 "cluster_label": "cluster-a"},
+            ],
+            "rule_groups": [],
+            "fetch_errors": [],
+        }
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 1)
+        
+        item = vmalert_items[0]
+        # Check alert identity in ID and title
+        self.assertIn("CriticalAlert", item["id"])
+        self.assertIn("CriticalAlert", item["title"])
+        # Check namespace/workload in title
+        self.assertIn("default", item["title"])
+        # Check source endpoint in reason
+        self.assertIn("http://vmalert:8880", item["reason"])
+        # Check provenance
+        self.assertEqual(item["sourceType"], "vmalert-alert")
+        # Check target cluster
+        self.assertEqual(item["targetCluster"], "cluster-a")
+
+    def test_vmalert_alert_item_links_rule_state_artifact(self) -> None:
+        """Test that vmalert alert worklist item links to the rule-state artifact."""
+        import tempfile
+
+        # Create a temp directory to act as health_root
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            health_root = Path(tmp_dir)
+
+            index = sample_ui_index()
+            run_entry = cast(dict[str, object], index["run"])
+            # Add run_id so artifact path can be constructed
+            run_entry["run_id"] = "test-run-001"
+            run_entry["vmalert_rule_state"] = {
+                "source_count": 1,
+                "fetched_source_count": 1,
+                "failed_source_count": 0,
+                "alert_count": 1,
+                "firing_alert_count": 1,
+                "pending_alert_count": 0,
+                "critical_firing_count": 1,
+                "rule_group_count": 0,
+                "fetch_error_count": 0,
+                "captured_at": "2024-01-01T00:00:00Z",
+                "alerts": [
+                    {"alertname": "CriticalAlert", "state": "firing", "severity": "critical",
+                     "namespace": "default", "workload": None, "source_endpoint": None,
+                     "cluster_label": "cluster-a"},
+                ],
+                "rule_groups": [],
+                "fetch_errors": [],
+            }
+            context = build_ui_context(index)
+            payload = _build_operator_worklist_payload(context, health_root=health_root)
+            self.assertIsNotNone(payload)
+            assert payload is not None
+
+            # Find vmalert alert item
+            vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+            self.assertEqual(len(vmalert_items), 1)
+
+            item = vmalert_items[0]
+            # Verify sourceArtifactRefs contains the rule-state artifact
+            refs = item.get("sourceArtifactRefs") or []
+            self.assertEqual(len(refs), 1)
+            self.assertEqual(refs[0]["label"], "VMAlert Rule State")
+            self.assertEqual(refs[0]["path"], "test-run-001-vmalert-rule-state.json")
+
+    def test_no_vmalert_rule_state_returns_normal_worklist(self) -> None:
+        """Test that missing vmalert rule state returns normal worklist unchanged."""
+        index = sample_ui_index()
+        # No vmalert_rule_state in run data
+        context = build_ui_context(index)
+        payload = _build_operator_worklist_payload(context)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        
+        # No vmalert alert items
+        vmalert_items = [i for i in payload["items"] if i.get("sourceType") == "vmalert-alert"]
+        self.assertEqual(len(vmalert_items), 0)
 
 
 def _sample_freshness(status: str) -> dict[str, object]:
@@ -1820,14 +2148,6 @@ class ClusterLabelSanitizationRegressionTests(unittest.TestCase):
                 statement.startswith("Cluster prod-cluster"),
                 f"Expected 'Cluster prod-cluster' prefix, got: {statement}",
             )
-
-
-def _sample_freshness(status: str) -> dict[str, Any]:
-    return {
-        "ageSeconds": 600,
-        "expectedIntervalSeconds": 300,
-        "status": status,
-    }
 
 
 def _get_cross_cluster_findings(

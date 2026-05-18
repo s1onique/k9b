@@ -877,6 +877,7 @@ _SOURCE_TYPE_DETERMINISTIC = "deterministic"
 _SOURCE_TYPE_PLANNER = "planner"
 _SOURCE_TYPE_PROMOTION = "promotion"
 _SOURCE_TYPE_EXECUTION = "execution"
+_SOURCE_TYPE_VMALERT_ALERT = "vmalert-alert"
 
 
 # =============================================================================
@@ -1545,6 +1546,104 @@ def _build_operator_worklist_payload(
                 "stalenessClass": staleness,
             }
         )
+
+    # =============================================================================
+    # vmalert Alert-Derived Worklist Items
+    # =============================================================================
+
+    # Add conservative vmalert alert-derived operator worklist items.
+    # Rule: severity=critical AND state=firing => create an advisory worklist item.
+    # All other alerts (warning, pending, missing severity) remain context-only.
+    # This is a read-only projection; no actions are taken.
+    vmalert_rule_state = context.vmalert_rule_state
+    if vmalert_rule_state is not None:
+        # Track seen items for deduplication: (alertname, namespace, workload, source_endpoint)
+        seen_vmalert_keys: set[tuple[str, str | None, str | None, str | None]] = set()
+
+        # Process firing critical alerts as worklist items
+        for alert in vmalert_rule_state.alerts:
+            # Conservative rule: only severity=critical AND state=firing
+            if alert.state != "firing" or alert.severity != "critical":
+                continue
+
+            # Deduplication key: same alertname + namespace + workload + source_endpoint
+            dedupe_key = (alert.alertname, alert.namespace, alert.workload, alert.source_endpoint)
+            if dedupe_key in seen_vmalert_keys:
+                continue
+            seen_vmalert_keys.add(dedupe_key)
+
+            # Build item ID from alert identity
+            ns_suffix = f"-{alert.namespace}" if alert.namespace else ""
+            wl_suffix = f"-{alert.workload}" if alert.workload else ""
+            ep_suffix = f"-{alert.source_endpoint}" if alert.source_endpoint else ""
+            item_id = f"vmalert-critical-{alert.alertname}{ns_suffix}{wl_suffix}{ep_suffix}"
+
+            # Build title and description
+            title = f"Critical vmalert alert firing: {alert.alertname}"
+            if alert.namespace or alert.workload:
+                location_parts = [p for p in [alert.namespace, alert.workload] if p]
+                title += f" ({'/'.join(location_parts)})"
+
+            # Build description with available context
+            description_parts = []
+            if alert.namespace:
+                description_parts.append(f"namespace={alert.namespace}")
+            if alert.workload:
+                description_parts.append(f"workload={alert.workload}")
+            if alert.instance:
+                description_parts.append(f"instance={alert.instance}")
+            description = "; ".join(description_parts) if description_parts else None
+
+            # Build reason explaining why this item was created
+            reason = f"vmalert reported alert '{alert.alertname}' as firing with severity=critical"
+            if alert.source_endpoint:
+                reason += f" (source: {alert.source_endpoint})"
+
+            # Build source artifact ref for provenance
+            vmalert_artifact_refs: list[ArtifactLink] = []
+            if health_root is not None:
+                run_id = context.run.run_id if hasattr(context.run, "run_id") else ""
+                if run_id:
+                    artifact_path = f"{run_id}-vmalert-rule-state.json"
+                    vmalert_artifact_refs.append({
+                        "label": "VMAlert Rule State",
+                        "path": artifact_path,
+                    })
+
+            # Derive ranking reason for critical vmalert item
+            ranking_reason = "Critical vmalert alert firing; requires operator attention"
+
+            # Assign rank after existing items (critical alerts rank above informational)
+            # Use a high rank to appear near the top
+            item_rank = len(items) + 1
+
+            items.append(
+                {
+                    "id": item_id,
+                    "rank": item_rank,
+                    "workstream": "incident",  # Critical alerts are incident-class
+                    "title": title,
+                    "description": description,
+                    "command": None,  # Advisory item: no executable command
+                    "targetCluster": alert.cluster_label,
+                    "targetContext": None,
+                    "reason": reason,
+                    "expectedEvidence": None,
+                    "safetyNote": f"Severity: {alert.severity}; State: {alert.state}",
+                    "itemState": _ITEM_STATE_ADVISORY,
+                    "approvalState": None,
+                    "executionState": None,
+                    "feedbackState": None,
+                    "sourceType": _SOURCE_TYPE_VMALERT_ALERT,
+                    "mergedSources": None,
+                    "sourceArtifactRefs": vmalert_artifact_refs,
+                    "rankingReason": ranking_reason,
+                    "firstRecommendedAt": None,
+                    "lastStateChangedAt": None,
+                    "recommendationAgeSeconds": None,
+                    "stalenessClass": None,
+                }
+            )
 
     if not items:
         return None
