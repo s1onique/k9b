@@ -11,12 +11,14 @@
  * - If pending_alert_count > 0: show pending count clearly
  * - If firing_alert_count > 0: show firing count clearly
  * - If critical_firing_count > 0: make this visually prominent
- * - Show top alerts (priority: critical firing > other firing > pending), limited to 10 rows
+ * - Show alerts (priority: critical firing > other firing > pending) with pagination
  *
  * Actions (silence/ack/disable) are out of scope for this slice - visibility only.
  */
 
+import { useState, useEffect, useMemo } from "react";
 import type { VmalertRuleState, VmalertRuleStateAlert } from "../types";
+import Pagination from "./Pagination";
 
 // Severity ordering for alert display
 const SEVERITY_ORDER = ["critical", "warning", "info", "unknown"];
@@ -24,8 +26,8 @@ const SEVERITY_ORDER = ["critical", "warning", "info", "unknown"];
 // State ordering for alert display
 const STATE_ORDER = ["firing", "pending"];
 
-// Maximum number of alerts to show in the compact list
-const MAX_ALERTS_SHOWN = 10;
+// Page size for alert list
+const PAGE_SIZE = 10;
 
 /**
  * Sort alerts by priority:
@@ -96,10 +98,24 @@ export const VmalertAlertStatePanel = ({
   const hasAlerts = alert_count > 0;
   const hasFetchedSources = fetched_source_count > 0;
 
-  // Sort and limit alerts for display
-  const sortedAlerts = sortAlertsByPriority(alerts);
-  const displayedAlerts = sortedAlerts.slice(0, MAX_ALERTS_SHOWN);
-  const hasMoreAlerts = alerts.length > MAX_ALERTS_SHOWN;
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Sort alerts by priority
+  const sortedAlerts = useMemo(() => sortAlertsByPriority(alerts), [alerts]);
+
+  // Calculate pagination values
+  const totalPages = Math.max(1, Math.ceil(sortedAlerts.length / PAGE_SIZE));
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const displayedAlerts = sortedAlerts.slice(startIndex, startIndex + PAGE_SIZE);
+
+  // Reset to page 1 when alert data changes
+  useEffect(() => {
+    setCurrentPage((prevPage) => {
+      // If current page exceeds total pages, clamp to last page
+      return prevPage > totalPages ? totalPages : 1;
+    });
+  }, [alert_count, totalPages]);
 
   // Build the source summary line
   const sourceSummaryParts: string[] = [];
@@ -116,6 +132,9 @@ export const VmalertAlertStatePanel = ({
     sourceSummaryParts.push(`${critical_firing_count} critical`);
   }
   const sourceSummary = sourceSummaryParts.join(" · ");
+
+  // Determine if pagination controls should be shown
+  const showPagination = hasAlerts && totalPages > 1;
 
   return (
     <section className="panel vmalert-alert-state" id="vmalert-alert-state">
@@ -234,10 +253,17 @@ export const VmalertAlertStatePanel = ({
                 ))}
               </tbody>
             </table>
-            {hasMoreAlerts && (
-              <p className="vmalert-alert-state-more muted tiny">
-                Showing {MAX_ALERTS_SHOWN} of {alerts.length} alerts.
-              </p>
+
+            {/* Pagination controls */}
+            {showPagination && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={sortedAlerts.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setCurrentPage}
+                label="Alerts"
+              />
             )}
           </div>
         </div>

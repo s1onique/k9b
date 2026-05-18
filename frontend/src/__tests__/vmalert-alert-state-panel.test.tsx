@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { VmalertAlertStatePanel } from "../components/VmalertAlertStatePanel";
 import type { VmalertRuleState, VmalertRuleStateAlert } from "../types/vmalert";
 
@@ -498,15 +499,17 @@ describe("VmalertAlertStatePanel", () => {
     });
   });
 
-  describe("Alert limit - max 10 alerts shown", () => {
-    it("shows only first 10 alerts when more exist", () => {
-      const alerts = Array.from({ length: 15 }, (_, i) =>
-        makeVmalertRuleStateAlert({
-          alertname: `Alert${i}`,
+  describe("Alert pagination", () => {
+    it("shows 10 alerts per page when more than 10 alerts exist", () => {
+      // Create 15 alerts with unique names
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 15; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
+          alertname: `PageTestAlert${i}`,
           state: "firing",
           severity: "warning",
-        })
-      );
+        }));
+      }
       const state = makeVmalertRuleState({
         source_count: 1,
         fetched_source_count: 1,
@@ -516,18 +519,146 @@ describe("VmalertAlertStatePanel", () => {
       });
       render(<VmalertAlertStatePanel vmalertRuleState={state} />);
 
-      // Should show "Showing 10 of 15 alerts"
-      expect(screen.getByText(/Showing 10 of 15 alerts/i)).toBeInTheDocument();
+      // Should show 10 rows (header + 10 data rows)
+      const rows = screen.getAllByRole("row");
+      const alertRows = rows.slice(1); // Skip header
+      expect(alertRows).toHaveLength(10);
     });
 
-    it("does not show 'more' indicator when under limit", () => {
-      const alerts = Array.from({ length: 5 }, (_, i) =>
-        makeVmalertRuleStateAlert({
+    it("shows pagination controls when more than 10 alerts", () => {
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 15; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
           alertname: `Alert${i}`,
           state: "firing",
           severity: "warning",
-        })
-      );
+        }));
+      }
+      const state = makeVmalertRuleState({
+        source_count: 1,
+        fetched_source_count: 1,
+        alert_count: 15,
+        firing_alert_count: 15,
+        alerts,
+      });
+      render(<VmalertAlertStatePanel vmalertRuleState={state} />);
+
+      // Should show pagination navigation
+      expect(screen.getByRole("navigation", { name: /alerts pagination/i })).toBeInTheDocument();
+      // Should show pagination summary with correct total count
+      const paginationSummary = document.querySelector('.pagination-summary');
+      expect(paginationSummary).not.toBeNull();
+      expect(paginationSummary?.textContent).toContain('15');
+      // Check page indicator using textContent on the page indicator element
+      const pageIndicator = document.querySelector('.pagination-page-indicator');
+      expect(pageIndicator).not.toBeNull();
+      expect(pageIndicator?.textContent).toContain('1');
+      expect(pageIndicator?.textContent).toContain('2');
+    });
+
+    it("Next button is present and enabled on first page", () => {
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 15; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
+          alertname: `NextTest${i}`,
+          state: "firing",
+          severity: "warning",
+        }));
+      }
+      const state = makeVmalertRuleState({
+        source_count: 1,
+        fetched_source_count: 1,
+        alert_count: 15,
+        firing_alert_count: 15,
+        alerts,
+      });
+      render(<VmalertAlertStatePanel vmalertRuleState={state} />);
+
+      const nextButton = screen.getByRole("button", { name: /next page/i });
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    it("Previous button is disabled on first page", () => {
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 15; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
+          alertname: `DisabledTest${i}`,
+          state: "firing",
+          severity: "warning",
+        }));
+      }
+      const state = makeVmalertRuleState({
+        source_count: 1,
+        fetched_source_count: 1,
+        alert_count: 15,
+        firing_alert_count: 15,
+        alerts,
+      });
+      render(<VmalertAlertStatePanel vmalertRuleState={state} />);
+
+      const prevButton = screen.getByRole("button", { name: /previous page/i });
+      expect(prevButton).toBeDisabled();
+    });
+
+    it("clicking Next navigates to page 2 and Previous returns to page 1", async () => {
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 15; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
+          alertname: `PageNav${i}`,
+          state: "firing",
+          severity: "warning",
+        }));
+      }
+      const state = makeVmalertRuleState({
+        source_count: 1,
+        fetched_source_count: 1,
+        alert_count: 15,
+        firing_alert_count: 15,
+        alerts,
+      });
+      render(<VmalertAlertStatePanel vmalertRuleState={state} />);
+
+      // Page 1: should show 10 rows
+      const rowsOnPage1 = screen.getAllByRole("row").slice(1);
+      expect(rowsOnPage1).toHaveLength(10);
+      // Page indicator shows Page 1 of 2
+      const pageIndicator1 = document.querySelector('.pagination-page-indicator');
+      expect(pageIndicator1?.textContent).toContain('1');
+      expect(pageIndicator1?.textContent).toContain('2');
+
+      // Click Next to go to page 2
+      const nextButton = screen.getByRole("button", { name: /next page/i });
+      await act(async () => {
+        await userEvent.click(nextButton);
+      });
+
+      // Page 2: should show 5 rows
+      const rowsOnPage2 = screen.getAllByRole("row").slice(1);
+      expect(rowsOnPage2).toHaveLength(5);
+      // Page indicator shows Page 2 of 2
+      const pageIndicator2 = document.querySelector('.pagination-page-indicator');
+      expect(pageIndicator2?.textContent).toContain('2');
+
+      // Click Previous to return to page 1
+      const prevButton = screen.getByRole("button", { name: /previous page/i });
+      await act(async () => {
+        await userEvent.click(prevButton);
+      });
+
+      // Back on page 1: should show 10 rows again
+      const rowsOnPage1Back = screen.getAllByRole("row").slice(1);
+      expect(rowsOnPage1Back).toHaveLength(10);
+    });
+
+    it("hides pagination controls when alert_count <= 10", () => {
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 5; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
+          alertname: `Small${i}`,
+          state: "firing",
+          severity: "warning",
+        }));
+      }
       const state = makeVmalertRuleState({
         source_count: 1,
         fetched_source_count: 1,
@@ -537,7 +668,115 @@ describe("VmalertAlertStatePanel", () => {
       });
       render(<VmalertAlertStatePanel vmalertRuleState={state} />);
 
-      expect(screen.queryByText(/Showing \d+ of \d+ alerts/i)).not.toBeInTheDocument();
+      // Should not show pagination controls
+      expect(screen.queryByRole("navigation", { name: /alerts pagination/i })).not.toBeInTheDocument();
+    });
+
+    it("does not show pagination when exactly 10 alerts", () => {
+      const alerts: VmalertRuleStateAlert[] = [];
+      for (let i = 0; i < 10; i++) {
+        alerts.push(makeVmalertRuleStateAlert({
+          alertname: `ExactTen${i}`,
+          state: "firing",
+          severity: "warning",
+        }));
+      }
+      const state = makeVmalertRuleState({
+        source_count: 1,
+        fetched_source_count: 1,
+        alert_count: 10,
+        firing_alert_count: 10,
+        alerts,
+      });
+      render(<VmalertAlertStatePanel vmalertRuleState={state} />);
+
+      // Should not show pagination controls (only 1 page)
+      expect(screen.queryByRole("navigation", { name: /alerts pagination/i })).not.toBeInTheDocument();
+    });
+
+    it("preserves sort order across pages", () => {
+      const alerts: VmalertRuleStateAlert[] = [
+        // Critical firing first (page 1)
+        makeVmalertRuleStateAlert({
+          alertname: "CriticalAlpha",
+          state: "firing",
+          severity: "critical",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "CriticalBeta",
+          state: "firing",
+          severity: "critical",
+        }),
+        // Other firing (page 1 - fills to 10)
+        makeVmalertRuleStateAlert({
+          alertname: "WarningAlpha",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningBeta",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningGamma",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningDelta",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningEpsilon",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningZeta",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningEta",
+          state: "firing",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "WarningTheta",
+          state: "firing",
+          severity: "warning",
+        }),
+        // Pending alerts (page 2)
+        makeVmalertRuleStateAlert({
+          alertname: "PendingAlpha",
+          state: "pending",
+          severity: "warning",
+        }),
+        makeVmalertRuleStateAlert({
+          alertname: "PendingBeta",
+          state: "pending",
+          severity: "info",
+        }),
+      ];
+      const state = makeVmalertRuleState({
+        source_count: 1,
+        fetched_source_count: 1,
+        alert_count: 12,
+        firing_alert_count: 10,
+        pending_alert_count: 2,
+        alerts,
+      });
+      render(<VmalertAlertStatePanel vmalertRuleState={state} />);
+
+      // Page 1 should show 10 rows
+      const rowsOnPage1 = screen.getAllByRole("row");
+      const alertRowsOnPage1 = rowsOnPage1.slice(1);
+      expect(alertRowsOnPage1).toHaveLength(10);
+      // Critical should be first
+      expect(alertRowsOnPage1[0].textContent).toContain("CriticalAlpha");
+      expect(alertRowsOnPage1[1].textContent).toContain("CriticalBeta");
     });
   });
 
