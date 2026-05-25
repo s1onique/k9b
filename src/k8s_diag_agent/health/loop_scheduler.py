@@ -1,20 +1,14 @@
-"""Scheduler and lock-management family for the health loop.
+"""Scheduler and lock-management for the health loop.
 
-Extracts process-identity, lock-file, and scheduling infrastructure from loop.py into a focused module.
+Extracts scheduling infrastructure from loop.py into a focused module.
 Preserves behavior exactly - no lock semantics, scheduling cadence, logging, or artifact shape changes.
 
-This module provides the scheduling logic that:
-1. Manages per-interval health loop execution
-2. Acquires/releases file-based locks with provenance tracking
-3. Evaluates lock staleness based on process identity and age
-4. Logs scheduler events and run summaries
-
+Models and constants are extracted to loop_scheduler_models.py.
 The run_health_loop function is injected as a parameter to avoid circular imports.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import socket
@@ -22,7 +16,6 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -34,85 +27,18 @@ if TYPE_CHECKING:
 from ..security.subprocess_helpers import (
     _sanitize_output,
 )
-
-# Module-level constants
-_HEALTH_LOCK_FILENAME = ".health-loop.lock"
-_HEALTH_ONLY_MESSAGE = "No peer mappings configured; running health-only mode."
-
-# Subprocess timeout for diagnostic pack build scripts (120s)
-DIAGNOSTIC_PACK_TIMEOUT_SECONDS = 120
-
-# Stale lock evaluation thresholds
-_LOCK_SKIP_ESCALATION_THRESHOLD = 3
-_LOCK_STALE_MIN_SECONDS = 60
-_LOCK_STALE_AGE_MULTIPLIER = 2
-
-
-@dataclass(frozen=True)
-class ProcessIdentity:
-    """Identifies a running process by start time, command line, and hostname."""
-
-    start_time: str | None
-    cmdline: str | None
-    hostname: str | None
-
-    @property
-    def signature(self) -> str | None:
-        """Compute a SHA-256 signature from identity components."""
-        values = (self.start_time, self.cmdline, self.hostname)
-        if not any(values):
-            return None
-        payload = "|".join(value or "" for value in values)
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-@dataclass(frozen=True)
-class LockFileSnapshot:
-    """Captures the state of a lock file at a point in time."""
-
-    timestamp_value: str | None
-    timestamp: datetime | None
-    pid: int | None
-    mtime: float | None
-    identity: ProcessIdentity | None
-    scheduler_instance_id: str | None
-    attempted_run_id: str | None
-    scheduler_pid: int | None
-    child_pid: int | None
-    child_start_time: str | None
-    run_label: str | None
-
-    def age_seconds(self, reference: datetime) -> float | None:
-        """Compute lock age in seconds from a reference time."""
-        if self.timestamp is not None:
-            return max(0.0, (reference - self.timestamp).total_seconds())
-        if self.mtime is not None:
-            return max(0.0, reference.timestamp() - self.mtime)
-        return None
-
-
-@dataclass(frozen=True)
-class LockEvaluation:
-    """Result of evaluating whether an existing lock is stale."""
-
-    snapshot: LockFileSnapshot | None
-    lock_age_seconds: float | None
-    pid_alive: bool | None
-    current_identity: ProcessIdentity | None
-    identity_match: bool | None
-    provenance_match: bool | None
-    should_cleanup: bool
-    stale_decision: str
-    cleanup_reason: str | None
-
-
-def _str_or_none(value: object | None) -> str | None:
-    """Convert a value to a string or return None."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value or None
-    return str(value)
+from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward compatibility
+    _HEALTH_LOCK_FILENAME,
+    _HEALTH_ONLY_MESSAGE,
+    _LOCK_SKIP_ESCALATION_THRESHOLD,
+    _LOCK_STALE_AGE_MULTIPLIER,
+    _LOCK_STALE_MIN_SECONDS,
+    DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
+    LockEvaluation,
+    LockFileSnapshot,
+    ProcessIdentity,
+    _str_or_none,
+)
 
 
 class HealthLoopScheduler:
