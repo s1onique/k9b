@@ -24,6 +24,14 @@ if TYPE_CHECKING:
     from .loop import HealthRunConfig
     from .loop_scheduler_models import LockEvaluation, LockFileSnapshot, ProcessIdentity
 
+from .loop_scheduler_config import (  # noqa: F401 - re-exported for backward compatibility
+    _LOCK_STALE_AGE_MULTIPLIER,
+    _LOCK_STALE_MIN_SECONDS,
+    compute_stale_lock_age_threshold,
+    format_last_run_timestamp,
+    parse_lock_timestamp,
+    resolve_hostname,
+)
 from .loop_scheduler_diagnostics import (
     build_diagnostic_pack,  # noqa: F401 - re-exported for backward compatibility
     log_run_summary,  # noqa: F401 - re-exported for backward compatibility
@@ -33,8 +41,6 @@ from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward co
     _HEALTH_LOCK_FILENAME,
     _HEALTH_ONLY_MESSAGE,
     _LOCK_SKIP_ESCALATION_THRESHOLD,
-    _LOCK_STALE_AGE_MULTIPLIER,
-    _LOCK_STALE_MIN_SECONDS,
     LockEvaluation,  # noqa: F401 - re-exported for backward compatibility
     LockFileSnapshot,  # noqa: F401 - re-exported for backward compatibility
     ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
@@ -107,11 +113,11 @@ class HealthLoopScheduler:
         )
 
     def _resolve_hostname(self) -> str | None:
-        """Resolve the local hostname, returning None on failure."""
-        try:
-            return socket.gethostname()
-        except OSError:
-            return None
+        """Resolve the local hostname, returning None on failure.
+
+        Delegates to the extracted resolve_hostname function for the actual implementation.
+        """
+        return resolve_hostname()
 
     def _resolve_run_id(
         self,
@@ -583,21 +589,29 @@ class HealthLoopScheduler:
         return True
 
     def _parse_lock_timestamp(self, value: str | None) -> datetime | None:
-        """Parse lock timestamp to timezone-aware UTC datetime."""
-        from ..datetime_utils import parse_iso_to_utc
-        return parse_iso_to_utc(value)
+        """Parse lock timestamp to timezone-aware UTC datetime.
+
+        Delegates to the extracted parse_lock_timestamp function for the actual implementation.
+        """
+        return parse_lock_timestamp(value)
 
     def _stale_lock_age_threshold(self) -> float:
-        """Compute the threshold for considering a lock stale."""
-        interval = self._interval_seconds or self._LOCK_STALE_MIN_SECONDS
-        base = max(interval, self._LOCK_STALE_MIN_SECONDS)
-        return base * self._LOCK_STALE_AGE_MULTIPLIER
+        """Compute the threshold for considering a lock stale.
+
+        Delegates to the extracted compute_stale_lock_age_threshold function.
+        """
+        return compute_stale_lock_age_threshold(
+            interval_seconds=self._interval_seconds,
+            min_seconds=self._LOCK_STALE_MIN_SECONDS,
+            age_multiplier=self._LOCK_STALE_AGE_MULTIPLIER,
+        )
 
     def _format_last_run_timestamp(self) -> str | None:
-        """Format the last run finish time as ISO string."""
-        if self._last_run_finish_time is None:
-            return None
-        return datetime.fromtimestamp(self._last_run_finish_time, UTC).isoformat()
+        """Format the last run finish time as ISO string.
+
+        Delegates to the extracted format_last_run_timestamp function.
+        """
+        return format_last_run_timestamp(self._last_run_finish_time)
 
     def _remove_stale_lock(self, evaluation: LockEvaluation) -> bool:
         """Remove a stale lock file and log the removal."""
