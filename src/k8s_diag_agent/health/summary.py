@@ -4,23 +4,31 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..security import sanitize_payload
-from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal, ProposalLifecycleStatus
 from .proposal_lifecycle_events import derive_current_proposal_status
-from .utils import normalize_ref
+from .summary_clusters import (
+    _discover_latest_run_id,
+    _load_history,
+    build_cluster_summaries,
+)
+from .summary_clusters import (
+    _load_json as _load_json_impl,
+)
+from .summary_proposals import collect_proposals_for_run, load_all_proposals
+from .summary_triggers import collect_comparison_summaries, collect_triggers
 
 logger = logging.getLogger(__name__)
 
+_TRANSITIONS_SUBDIR = "transitions"
 _ASSESSMENT_PATTERN = re.compile(r"(?P<run_id>.+-\d{8}T\d{6}Z)-(?P<label>.+)-assessment\.json$")
 _TIMESTAMP_LENGTH = 16  # YYYYMMDDTHHMMSSZ
-_TRANSITIONS_SUBDIR = "transitions"
 
 
 @dataclass(frozen=True)
@@ -133,12 +141,12 @@ def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> Healt
 
     history = _load_history(history_path)
     cluster_summaries = _build_cluster_summaries(assessments_dir, run_id, history)
-    all_proposals = _load_all_proposals(proposals_dir)
+    all_proposals = load_all_proposals(proposals_dir)
     transitions_dir = proposals_dir / _TRANSITIONS_SUBDIR
     proposal_list = _collect_proposals_for_run(all_proposals, transitions_dir, run_id)
-    trigger_artifacts = _collect_triggers(triggers_dir, run_id)
+    trigger_artifacts = _collect_triggers_data(triggers_dir, run_id)
     promoted = _collect_promoted_reports(all_proposals, transitions_dir, reviews_dir, run_id)
-    comparison_summaries = _collect_comparison_summaries(runs_dir, run_id)
+    comparison_list = _collect_comparison_summaries(runs_dir, run_id)
 
     return HealthSummary(
         run_id=run_id,
@@ -147,8 +155,62 @@ def gather_health_summary(runs_dir: Path, *, run_id: str | None = None) -> Healt
         proposals=tuple(proposal_list),
         promoted=tuple(promoted),
         triggers=tuple(trigger_artifacts),
-        comparisons=tuple(comparison_summaries),
+        comparisons=tuple(comparison_list),
     )
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    """Load JSON file with logging on the summary module logger.
+
+    This wrapper ensures logging happens on k8s_diag_agent.health.summary
+    for backward compatibility with tests.
+    """
+    try:
+        return _load_json_impl(path)
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Skipped malformed assessment artifact: %s", path.name, exc_info=True)
+        return {}
+
+
+def _collect_comparison_summaries(root: Path, run_id: str) -> list[ComparisonSummary]:
+    """Convert comparison dicts to ComparisonSummary dataclass objects."""
+    try:
+        comp_dicts = collect_comparison_summaries(root, run_id)
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Skipped malformed comparison-decisions artifact: %s", f"{run_id}-comparison-decisions.json", exc_info=True)
+        return []
+    return [
+        ComparisonSummary(
+            primary_label=d["primary_label"],
+            secondary_label=d["secondary_label"],
+            policy_eligible=d["policy_eligible"],
+            triggered=d["triggered"],
+            comparison_intent=d["comparison_intent"],
+            reason=d["reason"],
+            primary_class=d["primary_class"],
+            secondary_class=d["secondary_class"],
+            primary_role=d["primary_role"],
+            secondary_role=d["secondary_role"],
+            primary_cohort=d["primary_cohort"],
+            secondary_cohort=d["secondary_cohort"],
+            expected_drift_categories=d["expected_drift_categories"],
+            ignored_drift_categories=d["ignored_drift_categories"],
+            notes=d["notes"],
+        )
+        for d in comp_dicts
+    ]
+
+
+def _collect_triggers_data(triggers_dir: Path, run_id: str) -> list[TriggerSummary]:
+    """Convert trigger dicts to TriggerSummary dataclass objects."""
+    return [TriggerSummary(**d) for d in collect_triggers(triggers_dir, run_id)]
+
+
+def _collect_proposals_for_run(
+    proposals: Iterable[HealthProposal], transitions_dir: Path | None, run_id: str
+) -> list[ProposalSummary]:
+    """Convert proposal dicts to ProposalSummary dataclass objects."""
+    return [ProposalSummary(**d) for d in collect_proposals_for_run(proposals, transitions_dir, run_id)]
 
 
 def format_health_summary(summary: HealthSummary) -> str:
@@ -264,164 +326,42 @@ def format_health_summary(summary: HealthSummary) -> str:
     return "\n".join(lines)
 
 
-def _discover_latest_run_id(assessments_dir: Path) -> str | None:
-    if not assessments_dir.is_dir():
-        return None
-    candidates: dict[str, datetime] = {}
-    for path in assessments_dir.iterdir():
-        if not path.is_file():
-            continue
-        parsed = _parse_assessment_filename(path.name)
-        if not parsed:
-            continue
-        run_id, _ = parsed
-        timestamp = _parse_run_timestamp(run_id)
-        if not timestamp:
-            continue
-        candidates[run_id] = max(timestamp, candidates.get(run_id, timestamp))
-    if not candidates:
-        return None
-    latest = max(candidates.items(), key=lambda item: item[1])
-    return latest[0]
-
-
-def _parse_assessment_filename(name: str) -> tuple[str, str] | None:
-    match = _ASSESSMENT_PATTERN.match(name)
-    if not match:
-        return None
-    return match.group("run_id"), match.group("label")
-
-
 def _parse_run_timestamp(run_id: str) -> datetime | None:
     if len(run_id) < _TIMESTAMP_LENGTH:
         return None
-    timestamp = run_id[-_TIMESTAMP_LENGTH :]
+    timestamp = run_id[-_TIMESTAMP_LENGTH:]
     try:
         return datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ")
     except ValueError:
         return None
 
 
-def _load_history(history_path: Path) -> dict[str, Any]:
-    if not history_path.exists():
-        return {}
-    try:
-        raw = json.loads(history_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if isinstance(raw, Mapping):
-        return dict(raw)
-    return {}
-
-
-# Constant suffix for assessment artifact glob pattern.
-# REVIEWED: Fixed pattern, no user-controlled interpolation after run_id prefix.
-_ASSESSMENT_SUFFIX = "-*-assessment.json"
-
-
+# Re-export _build_cluster_summaries for backward compatibility with tests.
+# Delegates to summary_clusters.build_cluster_summaries.
 def _build_cluster_summaries(
     assessments_dir: Path, run_id: str, history: Mapping[str, Any]
 ) -> list[ClusterSummary]:
-    summaries: list[ClusterSummary] = []
-    if not assessments_dir.is_dir():
-        return summaries
+    """Build ClusterSummary objects for the health summary.
 
-    # Validate run_id before glob construction to prevent traversal/injection
-    try:
-        validated_run_id = validate_run_id(run_id)
-    except SecurityError:
-        # Return empty summaries on invalid run_id (safe fallback)
-        return summaries
-
-    # Use safe_run_artifact_glob for validated glob pattern construction
-    glob_pattern = safe_run_artifact_glob(validated_run_id, _ASSESSMENT_SUFFIX)
-    for path in sorted(assessments_dir.glob(glob_pattern)):
-        label = _label_from_assessment_path(run_id, path)
-        data = _load_json(path)
-        findings = data.get("findings") if isinstance(data, Mapping) else []
-        top_finding = None
-        if isinstance(findings, Sequence) and findings:
-            first = findings[0]
-            if isinstance(first, Mapping):
-                top_finding = first.get("description") or first.get("text")
-            else:
-                top_finding = str(first)
-        summary_entry = ClusterSummary(
-            label=label or "unknown",
-            top_finding=top_finding,
-            findings_count=len(findings) if isinstance(findings, Sequence) else 0,
-            health_rating=_lookup_history_field(history, label, "health_rating"),
-            warning_count=_history_int(history, label, "warning_event_count"),
-            non_running_pods=_history_int(history, label, "pod_counts", "non_running"),
-            missing_evidence=_history_list(history, label, "missing_evidence"),
-            cluster_class=_lookup_history_field(history, label, "cluster_class"),
-            cluster_role=_lookup_history_field(history, label, "cluster_role"),
-            baseline_cohort=_lookup_history_field(history, label, "baseline_cohort"),
-            baseline_policy_path=_lookup_history_field(history, label, "baseline_policy_path"),
+    Backward-compatibility wrapper around summary_clusters.build_cluster_summaries.
+    """
+    cluster_dicts = build_cluster_summaries(assessments_dir, run_id, history)
+    return [
+        ClusterSummary(
+            label=d["label"],
+            top_finding=d["top_finding"],
+            findings_count=d["findings_count"],
+            health_rating=d["health_rating"],
+            warning_count=d["warning_count"],
+            non_running_pods=d["non_running_pods"],
+            missing_evidence=d["missing_evidence"],
+            cluster_class=d["cluster_class"],
+            cluster_role=d["cluster_role"],
+            baseline_cohort=d["baseline_cohort"],
+            baseline_policy_path=d["baseline_policy_path"],
         )
-        summaries.append(summary_entry)
-    return summaries
-
-
-def _load_json(path: Path) -> Mapping[str, Any]:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        logger.warning("Skipped malformed assessment artifact: %s", path.name, exc_info=True)
-        return {}
-    if isinstance(raw, Mapping):
-        return raw
-    return {}
-
-
-def _label_from_assessment_path(run_id: str, path: Path) -> str | None:
-    name = path.name
-    prefix = f"{run_id}-"
-    suffix = "-assessment.json"
-    if not name.startswith(prefix) or not name.endswith(suffix):
-        return None
-    return name[len(prefix) : -len(suffix)]
-
-
-def _lookup_history_field(history: Mapping[str, Any], label: str | None, *fields: str) -> Any | None:
-    entry = _history_entry_for_label(history, label)
-    if not isinstance(entry, Mapping):
-        return None
-    result: Any = entry
-    for field in fields:
-        if not isinstance(result, Mapping) or field not in result:
-            return None
-        result = result[field]
-    return result
-
-
-def _history_entry_for_label(history: Mapping[str, Any], label: str | None) -> Mapping[str, Any] | None:
-    if not label:
-        return None
-    normalized = normalize_ref(label)
-    for key, value in history.items():
-        if normalize_ref(key) == normalized and isinstance(value, Mapping):
-            return value
-    return None
-
-
-def _history_int(history: Mapping[str, Any], label: str | None, *fields: str) -> int | None:
-    result = _lookup_history_field(history, label, *fields)
-    if isinstance(result, int):
-        return result
-    if isinstance(result, str) and result.isdigit():
-        return int(result)
-    return None
-
-
-def _history_list(history: Mapping[str, Any], label: str | None, field: str) -> tuple[str, ...] | None:
-    entry = _history_entry_for_label(history, label)
-    if not isinstance(entry, Mapping):
-        return None
-    raw = entry.get(field)
-    if isinstance(raw, Sequence):
-        return tuple(str(item) for item in raw if item is not None)
-    return None
+        for d in cluster_dicts
+    ]
 
 
 def _format_cluster_metadata(
@@ -462,117 +402,6 @@ def _describe_categories(categories: tuple[str, ...]) -> str:
         else:
             parts.append(category)
     return ", ".join(parts)
-
-
-def _load_all_proposals(proposals_dir: Path) -> list[HealthProposal]:
-    proposals: list[HealthProposal] = []
-    if not proposals_dir.is_dir():
-        return proposals
-    for path in sorted(proposals_dir.glob("*.json")):
-        data = _load_json(path)
-        if not data:
-            continue
-        try:
-            proposals.append(HealthProposal.from_dict(data))
-        except ValueError:
-            continue
-    return proposals
-
-
-def _collect_proposals_for_run(
-    proposals: Iterable[HealthProposal], transitions_dir: Path | None, run_id: str
-) -> list[ProposalSummary]:
-    summaries: list[ProposalSummary] = []
-    for proposal in proposals:
-        if proposal.source_run_id != run_id:
-            continue
-        # Use event-aware derivation for current status
-        current_status = derive_current_proposal_status(proposal.to_dict(), transitions_dir)
-        lifecycle_status = current_status.value
-        summaries.append(
-            ProposalSummary(
-                proposal_id=proposal.proposal_id,
-                target=proposal.target,
-                rationale=proposal.rationale,
-                confidence=proposal.confidence.value,
-                source_run_id=proposal.source_run_id,
-                lifecycle_status=lifecycle_status,
-            )
-        )
-    return summaries
-
-
-def _collect_triggers(triggers_dir: Path, run_id: str) -> list[TriggerSummary]:
-    triggers: list[TriggerSummary] = []
-    if not triggers_dir.is_dir():
-        return triggers
-    pattern = f"{run_id}-*-trigger.json"
-    for path in sorted(triggers_dir.glob(pattern)):
-        data = _load_json(path)
-        reasons = tuple(str(item) for item in (data.get("trigger_reasons") or ()) if item)
-        notes = str(data.get("notes")) if data.get("notes") else None
-        comparison_intent = (
-            str(data.get("comparison_intent"))
-            if data.get("comparison_intent")
-            else None
-        )
-        peer_notes = str(data.get("peer_notes")) if data.get("peer_notes") else None
-        triggers.append(
-            TriggerSummary(
-                primary=str(data.get("primary") or ""),
-                secondary=str(data.get("secondary") or ""),
-                primary_label=str(data.get("primary_label") or ""),
-                secondary_label=str(data.get("secondary_label") or ""),
-                reasons=reasons,
-                notes=notes,
-                comparison_intent=comparison_intent,
-                peer_notes=peer_notes,
-            )
-        )
-    return triggers
-
-
-def _collect_comparison_summaries(root: Path, run_id: str) -> list[ComparisonSummary]:
-    path = root / f"{run_id}-comparison-decisions.json"
-    if not path.exists():
-        return []
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        logger.warning(
-            "Skipped malformed comparison-decisions artifact: %s", path.name, exc_info=True
-        )
-        return []
-    if not isinstance(raw, Sequence):
-        return []
-    summaries: list[ComparisonSummary] = []
-    for entry in raw:
-        if not isinstance(entry, Mapping):
-            continue
-        summaries.append(
-            ComparisonSummary(
-                primary_label=str(entry.get("primary_label") or ""),
-                secondary_label=str(entry.get("secondary_label") or ""),
-                policy_eligible=bool(entry.get("policy_eligible")),
-                triggered=bool(entry.get("triggered")),
-                comparison_intent=str(entry.get("comparison_intent") or ""),
-                reason=str(entry.get("reason") or ""),
-                primary_class=str(entry.get("primary_class")) if entry.get("primary_class") is not None else None,
-                secondary_class=str(entry.get("secondary_class")) if entry.get("secondary_class") is not None else None,
-                primary_role=str(entry.get("primary_role")) if entry.get("primary_role") is not None else None,
-                secondary_role=str(entry.get("secondary_role")) if entry.get("secondary_role") is not None else None,
-                primary_cohort=str(entry.get("primary_cohort")) if entry.get("primary_cohort") is not None else None,
-                secondary_cohort=str(entry.get("secondary_cohort")) if entry.get("secondary_cohort") is not None else None,
-                expected_drift_categories=tuple(
-                    str(item) for item in (entry.get("expected_drift_categories") or ()) if item
-                ),
-                ignored_drift_categories=tuple(
-                    str(item) for item in (entry.get("ignored_drift_categories") or ()) if item
-                ),
-                notes=str(entry.get("notes")) if entry.get("notes") else None,
-            )
-        )
-    return summaries
 
 
 def _collect_promoted_reports(
@@ -623,13 +452,18 @@ def _load_review(run_id: str, reviews_dir: Path) -> Mapping[str, Any] | None:
     path = reviews_dir / f"{run_id}-review.json"
     if not path.exists():
         return None
-    data = _load_json(path)
-    return data if data else None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(raw, Mapping):
+        return raw
+    return None
 
 
 def _extract_top_selection(review: Mapping[str, Any]) -> TopSelection | None:
     selections = review.get("selected_drilldowns") or []
-    if not isinstance(selections, Sequence) or not selections:
+    if not isinstance(selections, (list, tuple)) or not selections:
         return None
     selection = selections[0]
     raw_label = selection.get("label") or selection.get("context") or ""
@@ -641,7 +475,7 @@ def _extract_top_selection(review: Mapping[str, Any]) -> TopSelection | None:
 
 def _extract_quality_score(review: Mapping[str, Any], dimension: str) -> int | None:
     metrics = review.get("quality_summary") or []
-    if not isinstance(metrics, Sequence):
+    if not isinstance(metrics, (list, tuple)):
         return None
     for entry in metrics:
         if not isinstance(entry, Mapping):
