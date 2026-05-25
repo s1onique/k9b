@@ -1,22 +1,31 @@
-"""Reusable CLI handlers extracted from the main entry point."""
+"""Reusable CLI handlers extracted from the main entry point.
+
+Snapshot-related handlers have been extracted to cli_snapshot_handlers.py
+for better LLM-friendly traversal.
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
 import sys
-from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import requests
 
-from .collect.cluster_snapshot import ClusterSnapshot, CollectionStatus
-from .collect.fixture_loader import load_fixture
-from .collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
-from .compare.two_cluster import compare_snapshots
-from .correlate.linkers import correlate_signals
+from .cli_logging import CLI_LOG_PATH, _cli_run_label, _log_cli_event  # noqa: F401
+from .cli_snapshot_handlers import (  # noqa: F401
+    BATCH_CONFIG_FALLBACK,
+    DEFAULT_BATCH_CONFIG,
+    BatchSnapshotConfig,
+    SnapshotTarget,
+    handle_assess_snapshots,
+    handle_batch_snapshot,
+    handle_compare,
+    handle_fixture,
+    handle_snapshot,
+)
 from .feedback.runner import run_feedback_loop
 from .health import run_health_loop, schedule_health_loop
 from .health.adaptation import (
@@ -27,7 +36,6 @@ from .health.adaptation import (
     evaluate_proposal,
     render_proposal_patch,
 )
-from .health.artifact_readers import read_cluster_snapshot_artifact
 from .health.drilldown import DrilldownArtifact
 from .health.drilldown_assessor import assess_drilldown_artifact
 from .health.notifications import (
@@ -40,332 +48,14 @@ from .health.proposal_lifecycle_events import (
     write_proposal_lifecycle_event,
 )
 from .health.summary import format_health_summary, gather_health_summary
-from .llm.assessor_schema import AssessorAssessment
-from .llm.prompts import build_assessment_prompt
-from .llm.provider import build_assessment_input, get_provider
-from .models import Assessment
-from .normalize.evidence import normalize_signals
 from .notifications.delivery import DeliveryJournal, artifact_digest
-from .reason.diagnoser import build_findings_and_hypotheses
-from .recommend.next_steps import build_recommended_action, propose_next_steps
-from .render.formatter import assessment_to_dict, dump_json, format_summary
 from .structured_logging import emit_structured_log
 from .ui import start_ui_server
 
-DEFAULT_BATCH_CONFIG = Path("snapshots/targets.local.json")
-BATCH_CONFIG_FALLBACK = Path("snapshots/targets.local.example.json")
 RUN_CONFIG_DEFAULT = Path("runs/run-config.local.json")
 RUN_CONFIG_FALLBACK = Path("runs/run-config.local.example.json")
 HEALTH_CONFIG_DEFAULT = Path("runs/health-config.local.json")
 HEALTH_CONFIG_FALLBACK = Path("runs/health-config.local.example.json")
-
-
-@dataclass(frozen=True)
-class SnapshotTarget:
-    context: str
-    label: str | None = None
-    output: str | None = None
-
-
-@dataclass(frozen=True)
-class BatchSnapshotConfig:
-    targets: tuple[SnapshotTarget, ...]
-    output_dir: Path
-
-CLI_LOG_PATH: Path | None = None
-
-
-def _cli_run_label(command: str, identifier: str | None = None) -> str:
-    label = command
-    if identifier:
-        label = f"{label}-{identifier}"
-    return label
-
-
-def _log_cli_event(
-    component: str,
-    run_label: str,
-    message: str,
-    *,
-    severity: str = "INFO",
-    run_id: str | None = None,
-    metadata: Mapping[str, Any] | None = None,
-    **extra_metadata: Any,
-) -> dict[str, Any]:
-    return emit_structured_log(
-        component=component,
-        message=message,
-        run_label=run_label,
-        severity=severity,
-        run_id=run_id,
-        log_path=CLI_LOG_PATH,
-        metadata=metadata,
-        **extra_metadata,
-    )
-
-
-def handle_fixture(args: argparse.Namespace) -> int:
-    fixture_data = load_fixture(args.fixture)
-    evidence, signals = normalize_signals(fixture_data)
-    correlated = correlate_signals(signals)
-    findings, hypotheses = build_findings_and_hypotheses(signals, correlated)
-    next_checks = propose_next_steps(hypotheses)
-    action = build_recommended_action()
-
-    assessment = Assessment(
-        observed_signals=signals,
-        findings=findings,
-        hypotheses=hypotheses,
-        next_evidence_to_collect=next_checks,
-        recommended_action=action,
-        safety_level=action.safety_level,
-        probable_layer_of_origin=findings[0].layer if findings and findings[0].layer else None,
-    )
-
-    serialized = assessment_to_dict(assessment)
-    if args.output:
-        dump_json(assessment, str(args.output))
-    else:
-        sys.stdout.write(json.dumps(serialized, indent=2))
-        sys.stdout.write("\n")
-    if not args.quiet:
-        print(format_summary(assessment))
-    return 0
-
-
-def handle_snapshot(args: argparse.Namespace) -> int:
-    component = "cli-snapshot"
-    run_label = _cli_run_label(component, args.context)
-    _log_cli_event(
-        component,
-        run_label,
-        "snapshot command started",
-        metadata={"context": args.context},
-    )
-    try:
-        contexts = list_kube_contexts()
-    except RuntimeError as exc:
-        _log_cli_event(
-            component,
-            run_label,
-            "unable to discover kube contexts",
-            severity="ERROR",
-            metadata={"error": str(exc)},
-        )
-        print(f"Unable to discover kube contexts: {exc}", file=sys.stderr)
-        return 1
-    if contexts and args.context not in contexts:
-        _log_cli_event(
-            component,
-            run_label,
-            "requested context unavailable",
-            severity="ERROR",
-            metadata={"context": args.context, "available": contexts},
-        )
-        print(
-            f"Context '{args.context}' not found. Available contexts: {', '.join(contexts)}",
-            file=sys.stderr,
-        )
-        return 1
-    try:
-        snapshot = collect_cluster_snapshot(args.context)
-    except RuntimeError as exc:
-        _log_cli_event(
-            component,
-            run_label,
-            "snapshot collection failed",
-            severity="ERROR",
-            metadata={"error": str(exc)},
-        )
-        print(f"Snapshot collection failed: {exc}", file=sys.stderr)
-        return 1
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(snapshot.to_dict(), indent=2), encoding="utf-8")
-    print(f"Snapshot for '{args.context}' written to {args.output}")
-    _log_cli_event(
-        component,
-        run_label,
-        "snapshot command completed",
-        metadata={"output": str(args.output)},
-    )
-    return 0
-
-
-def handle_batch_snapshot(args: argparse.Namespace, default_config: Path = DEFAULT_BATCH_CONFIG) -> int:
-    try:
-        config_path = _resolve_config_path(
-            args.config,
-            BATCH_CONFIG_FALLBACK,
-            args.config == default_config,
-        )
-    except RuntimeError as exc:
-        run_label = _cli_run_label("cli-batch-snapshot", args.config.name)
-        _log_cli_event(
-            "cli-batch-snapshot",
-            run_label,
-            "batch snapshot config resolution failed",
-            severity="ERROR",
-            metadata={"error": str(exc), "config": str(args.config)},
-        )
-        print(f"Unable to resolve batch config: {exc}", file=sys.stderr)
-        return 1
-    component = "cli-batch-snapshot"
-    run_label = _cli_run_label(component, config_path.name)
-    _log_cli_event(
-        component,
-        run_label,
-        "batch snapshot command started",
-        metadata={"config": str(config_path)},
-    )
-    try:
-        config = _load_batch_config(config_path)
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
-        _log_cli_event(
-            component,
-            run_label,
-            "unable to load batch config",
-            severity="ERROR",
-            metadata={"error": str(exc), "config": str(config_path)},
-        )
-        print(f"Unable to load batch config {config_path}: {exc}", file=sys.stderr)
-        return 1
-    if not config.targets:
-        _log_cli_event(
-            component,
-            run_label,
-            "batch config contains no targets",
-            severity="ERROR",
-            metadata={"config": str(config_path)},
-        )
-        print(f"Batch config {config_path} contains no targets.", file=sys.stderr)
-        return 1
-    try:
-        contexts = list_kube_contexts()
-    except RuntimeError as exc:
-        print(f"Unable to discover kube contexts: {exc}", file=sys.stderr)
-        return 1
-    available = set(contexts)
-    successes = 0
-    issues: list[str] = []
-    config.output_dir.mkdir(parents=True, exist_ok=True)
-    for target in config.targets:
-        label = target.label or target.context
-        if target.context not in available:
-            msg = f"Context '{target.context}' not found; skipping {label}."
-            print(msg, file=sys.stderr)
-            issues.append(msg)
-            continue
-        output_path = Path(target.output) if target.output else config.output_dir / f"{target.context}.json"
-        try:
-            snapshot = collect_cluster_snapshot(target.context)
-        except RuntimeError as exc:
-            msg = f"Snapshot for '{target.context}' failed: {exc}"
-            print(msg, file=sys.stderr)
-            issues.append(msg)
-            continue
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(snapshot.to_dict(), indent=2), encoding="utf-8")
-        print(f"Collected snapshot for '{target.context}' -> {output_path}")
-        partial = _format_partial_status(snapshot.collection_status)
-        if partial:
-            print(f"  partial issues: {partial}", file=sys.stderr)
-        successes += 1
-    print(f"Batch snapshot processed {successes} target(s).")
-    if issues:
-        print(f"Issues encountered for {len(issues)} target(s).", file=sys.stderr)
-        _log_cli_event(
-            component,
-            run_label,
-            "batch snapshot completed with issues",
-            severity="WARNING",
-            metadata={"successes": successes, "issues": issues},
-        )
-    else:
-        _log_cli_event(
-            component,
-            run_label,
-            "batch snapshot completed",
-            metadata={"successes": successes},
-        )
-    return 0
-
-
-def handle_compare(args: argparse.Namespace) -> int:
-    component = "cli-compare"
-    run_label = _cli_run_label(component, f"{args.snapshot_a.name}-{args.snapshot_b.name}")
-    _log_cli_event(
-        component,
-        run_label,
-        "compare command started",
-        metadata={"snapshot_a": str(args.snapshot_a), "snapshot_b": str(args.snapshot_b)},
-    )
-    try:
-        primary = _load_snapshot(args.snapshot_a)
-        secondary = _load_snapshot(args.snapshot_b)
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
-        _log_cli_event(
-            component,
-            run_label,
-            "unable to load snapshots",
-            severity="ERROR",
-            metadata={"error": str(exc)},
-        )
-        print(f"Unable to load snapshots: {exc}", file=sys.stderr)
-        return 1
-    comparison = compare_snapshots(primary, secondary)
-    if not comparison.differences:
-        print("Snapshots match across tracked dimensions.")
-        _log_cli_event(
-            component,
-            run_label,
-            "compare command completed with no differences",
-            metadata={"differences": 0},
-        )
-        return 0
-    print(json.dumps(comparison.differences, indent=2))
-    _log_cli_event(
-        component,
-        run_label,
-        "compare command completed with differences",
-        metadata={"differences": len(comparison.differences)},
-    )
-    return 0
-
-
-def handle_assess_snapshots(args: argparse.Namespace) -> int:
-    try:
-        primary = _load_snapshot(args.snapshot_a)
-        secondary = _load_snapshot(args.snapshot_b)
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
-        print(f"Unable to load snapshots: {exc}", file=sys.stderr)
-        return 1
-    comparison = compare_snapshots(primary, secondary)
-    prompt = build_assessment_prompt(primary, secondary, comparison)
-    provider = get_provider(args.provider)
-    payload = build_assessment_input(primary, secondary, comparison)
-    try:
-        raw_assessment = provider.assess(prompt, payload)
-    except Exception as exc:
-        print(f"LLM assessment failed: {exc}", file=sys.stderr)
-        return 1
-    try:
-        validated = AssessorAssessment.from_dict(raw_assessment)
-    except ValueError as exc:
-        print(f"LLM assessment returned invalid schema: {exc}", file=sys.stderr)
-        return 1
-    serialized = validated.to_dict()
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
-    else:
-        sys.stdout.write(json.dumps(serialized, indent=2))
-        sys.stdout.write("\n")
-    if not args.quiet and validated.hypotheses:
-        print(
-            f"LLM assessment ready. Hypothesis: {validated.hypotheses[0].description}",
-            file=sys.stderr,
-        )
-    return 0
 
 
 def handle_assess_drilldown(args: argparse.Namespace) -> int:
@@ -377,7 +67,7 @@ def handle_assess_drilldown(args: argparse.Namespace) -> int:
         return 1
     try:
         validated = assess_drilldown_artifact(artifact, provider_name=args.provider)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - LLM provider errors are diverse
         print(f"LLM assessment failed: {exc}", file=sys.stderr)
         return 1
     serialized = validated.to_dict()
@@ -503,7 +193,7 @@ def handle_deliver_notifications(args: argparse.Namespace) -> int:
     for path in artifacts:
         try:
             artifact = load_notification_artifact(path)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - Mattermost API errors are diverse
             print(f"Skipping {path.name}: {exc}", file=sys.stderr)
             continue
         digest = artifact_digest(artifact)
@@ -646,7 +336,7 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     event_path = write_proposal_lifecycle_event(event, transitions_dir)
 
     run_label = proposal.source_run_id or proposal.proposal_id
-    metadata = {
+    metadata: dict[str, object] = {
         "noise_reduction": evaluation.noise_reduction,
         "signal_loss": evaluation.signal_loss,
         "test_outcome": evaluation.test_outcome,
@@ -679,29 +369,6 @@ def handle_promote_proposal(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_batch_config(path: Path) -> BatchSnapshotConfig:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    output_dir = Path(str(raw.get("output_dir") or "snapshots"))
-    targets_raw = raw.get("targets")
-    if not isinstance(targets_raw, list):
-        raise ValueError("`targets` must be a list")
-    targets: list[SnapshotTarget] = []
-    for raw_target in targets_raw:
-        if not isinstance(raw_target, dict):
-            continue
-        context = raw_target.get("context")
-        if not context:
-            continue
-        targets.append(
-            SnapshotTarget(
-                context=str(context),
-                label=_str_or_none(raw_target.get("label")),
-                output=_str_or_none(raw_target.get("output")),
-            )
-        )
-    return BatchSnapshotConfig(tuple(targets), output_dir)
-
-
 def _resolve_config_path(preferred: Path, fallback: Path, allow_fallback: bool) -> Path:
     if preferred.exists():
         return preferred
@@ -712,24 +379,30 @@ def _resolve_config_path(preferred: Path, fallback: Path, allow_fallback: bool) 
     raise RuntimeError(f"Config {preferred} not found; create it from {fallback} before running.")
 
 
-def _format_partial_status(status: CollectionStatus) -> str | None:
-    issues: list[str] = []
-    if status.helm_error:
-        issues.append(f"helm_error={status.helm_error}")
-    if status.missing_evidence:
-        issues.append(f"missing_evidence={','.join(status.missing_evidence)}")
-    if not issues:
-        return None
-    return "; ".join(issues)
-
-
-def _str_or_none(value: object | None) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text if text else None
-
-
-def _load_snapshot(path: Path) -> ClusterSnapshot:
-    """Load a ClusterSnapshot from disk using the typed artifact reader."""
-    return read_cluster_snapshot_artifact(path)
+# Re-export for backward compatibility
+__all__ = [
+    "CLI_LOG_PATH",
+    "SnapshotTarget",
+    "BatchSnapshotConfig",
+    "DEFAULT_BATCH_CONFIG",
+    "BATCH_CONFIG_FALLBACK",
+    "RUN_CONFIG_DEFAULT",
+    "RUN_CONFIG_FALLBACK",
+    "HEALTH_CONFIG_DEFAULT",
+    "HEALTH_CONFIG_FALLBACK",
+    "handle_fixture",
+    "handle_snapshot",
+    "handle_batch_snapshot",
+    "handle_compare",
+    "handle_assess_snapshots",
+    "handle_assess_drilldown",
+    "handle_run_feedback",
+    "handle_health_loop",
+    "handle_health_summary",
+    "handle_health_ui",
+    "handle_deliver_notifications",
+    "handle_check_proposal",
+    "handle_promote_proposal",
+    "_cli_run_label",
+    "_log_cli_event",
+]
