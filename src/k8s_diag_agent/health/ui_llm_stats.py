@@ -1,15 +1,15 @@
-"""LLM/provider stats and policy serialization for UI consumers."""
+"""LLM/provider stats and policy serialization for UI consumers.
+
+This module provides high-level builders for LLM stats, policy, and execution
+reporting. Core aggregation and activity serialization are delegated to
+ui_projection.llm_activity.
+"""
 
 from __future__ import annotations
 
-import json
-import math
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisPurpose,
@@ -19,196 +19,52 @@ from ..external_analysis.config import (
     AutoDrilldownPolicy,
     ExternalAnalysisSettings,
 )
-from ..security.deanonymization import deanonymize_text
-from .ui_serialization import _LLM_ACTIVITY_LIMIT  # noqa: E402
-from .ui_shared import _relative_path
+from .ui_projection.llm_activity import (
+    _EPOCH_SENTINEL,
+    _SCOPE_CURRENT_RUN,
+    _SCOPE_RETAINED_HISTORY,
+    _build_historical_llm_stats,
+    _build_llm_stats,
+    _coerce_optional_str,
+    _collect_historical_external_analysis_entries,
+    _compute_llm_stats,
+    _parse_optional_int,
+    _parse_timestamp,
+    _percentile_value,
+    _serialize_llm_activity,
+)
 
 if TYPE_CHECKING:
     from .loop import DrilldownArtifact
 
-# Scope constants for LLM stats aggregation
-_SCOPE_CURRENT_RUN = "current_run"
-_SCOPE_RETAINED_HISTORY = "retained_history"
 
-# UTC-aware sentinel for sorting (datetime.min is naive, cannot compare with aware datetimes)
-_EPOCH_SENTINEL = datetime.min.replace(tzinfo=UTC)
+# Re-export for backward compatibility
+__all__ = [
+    # Constants from llm_activity
+    "_SCOPE_CURRENT_RUN",
+    "_SCOPE_RETAINED_HISTORY",
+    "_EPOCH_SENTINEL",
+    # Stats functions from llm_activity
+    "_build_llm_stats",
+    "_build_historical_llm_stats",
+    "_collect_historical_external_analysis_entries",
+    "_compute_llm_stats",
+    "_serialize_llm_activity",
+    # Parsing helpers from llm_activity
+    "_parse_optional_int",
+    "_parse_timestamp",
+    "_coerce_optional_str",
+    "_percentile_value",
+    # Policy/execution (stay in this module)
+    "_build_llm_policy",
+    "_build_provider_execution",
+]
 
 
-def _parse_optional_int(value: object | None) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, (int,)):
-        return int(value)
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return None
-    return None
+# =============================================================================
+# LLM Policy Reporting
+# =============================================================================
 
-def _parse_timestamp(value: object | None) -> datetime | None:
-    """Parse an ISO timestamp string to timezone-aware UTC datetime."""
-    return parse_iso_to_utc(value)
-
-def _coerce_optional_str(value: object | None) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-def _build_llm_stats(external_analysis: dict[str, object], scope: str = _SCOPE_CURRENT_RUN) -> dict[str, object]:
-    artifacts = external_analysis.get("artifacts") or ()
-    if not isinstance(artifacts, Sequence):
-        artifacts = ()
-    filtered = [
-        entry
-        for entry in artifacts
-        if isinstance(entry, Mapping)
-        and entry.get("purpose") != ExternalAnalysisPurpose.NEXT_CHECK_PLANNING.value
-    ]
-    return _compute_llm_stats(filtered, scope)
-
-def _build_historical_llm_stats(
-    external_analysis_dir: Path,
-    entries: Sequence[Mapping[str, object]] | None = None,
-) -> dict[str, object]:
-    historical_entries = entries or _collect_historical_external_analysis_entries(external_analysis_dir)
-    return _compute_llm_stats(historical_entries, _SCOPE_RETAINED_HISTORY)
-
-def _collect_historical_external_analysis_entries(
-    directory: Path,
-) -> list[Mapping[str, object]]:
-    entries: list[Mapping[str, object]] = []
-    if not directory.is_dir():
-        return entries
-    for path in sorted(directory.glob("*.json")):
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            continue
-        if isinstance(raw, Mapping):
-            entries.append(raw)
-    return entries
-
-def _compute_llm_stats(entries: Sequence[object], scope: str) -> dict[str, object]:
-    total_calls = 0
-    successful_calls = 0
-    failed_calls = 0
-    durations: list[int] = []
-    latest_timestamp: datetime | None = None
-    latest_timestamp_str: str | None = None
-    provider_counts: dict[str, dict[str, int]] = {}
-    for entry in entries:
-        if not isinstance(entry, Mapping):
-            continue
-        status = str(entry.get("status") or "").lower()
-        if status not in ("success", "failed"):
-            continue
-        total_calls += 1
-        if status == "success":
-            successful_calls += 1
-        if status == "failed":
-            failed_calls += 1
-        raw_timestamp = entry.get("timestamp")
-        timestamp = _parse_timestamp(raw_timestamp)
-        if timestamp:
-            if latest_timestamp is None or timestamp > latest_timestamp:
-                latest_timestamp = timestamp
-                latest_timestamp_str = raw_timestamp if isinstance(raw_timestamp, str) else latest_timestamp_str
-        duration = _parse_optional_int(entry.get("duration_ms"))
-        if duration is not None:
-            durations.append(duration)
-        provider = str(entry.get("tool_name") or "unknown")
-        counter = provider_counts.setdefault(provider, {"calls": 0, "failedCalls": 0})
-        counter["calls"] += 1
-        if status == "failed":
-            counter["failedCalls"] += 1
-    percentile_values: dict[str, int | None] = {
-        "p50": None,
-        "p95": None,
-        "p99": None,
-    }
-    if durations:
-        float_durations = [float(value) for value in durations]
-        float_durations.sort()
-        percentile_values["p50"] = _percentile_value(float_durations, 50)
-        percentile_values["p95"] = _percentile_value(float_durations, 95)
-        percentile_values["p99"] = _percentile_value(float_durations, 99)
-    provider_breakdown = [
-        {"provider": provider, "calls": data["calls"], "failedCalls": data["failedCalls"]}
-        for provider, data in sorted(provider_counts.items())
-    ]
-    return {
-        "totalCalls": total_calls,
-        "successfulCalls": successful_calls,
-        "failedCalls": failed_calls,
-        "lastCallTimestamp": latest_timestamp_str,
-        "p50LatencyMs": percentile_values["p50"],
-        "p95LatencyMs": percentile_values["p95"],
-        "p99LatencyMs": percentile_values["p99"],
-        "providerBreakdown": provider_breakdown,
-        "scope": scope,
-    }
-
-def _serialize_llm_activity(
-    entries: Sequence[Mapping[str, object]],
-    root_dir: Path,
-    limit: int = _LLM_ACTIVITY_LIMIT,
-    alias_mapping: Mapping[str, str] | None = None,
-) -> dict[str, object]:
-    normalized: list[tuple[datetime | None, dict[str, object]]] = []
-    for entry in entries:
-        if not isinstance(entry, Mapping):
-            continue
-        timestamp_value = entry.get("timestamp")
-        timestamp = _parse_timestamp(timestamp_value)
-        if isinstance(timestamp_value, str):
-            timestamp_str = timestamp_value
-        elif timestamp:
-            timestamp_str = timestamp.isoformat()
-        else:
-            timestamp_str = None
-
-        # FIX: De-anonymize text fields to prevent provider aliases from leaking to UI
-        summary = _coerce_optional_str(entry.get("summary"))
-        if summary and alias_mapping:
-            summary = deanonymize_text(summary, alias_mapping)
-        error_summary = _coerce_optional_str(entry.get("error_summary"))
-        if error_summary and alias_mapping:
-            error_summary = deanonymize_text(error_summary, alias_mapping)
-        skip_reason = _coerce_optional_str(entry.get("skip_reason"))
-        if skip_reason and alias_mapping:
-            skip_reason = deanonymize_text(skip_reason, alias_mapping)
-
-        activity_entry: dict[str, object] = {
-            "timestamp": timestamp_str,
-            "run_id": _coerce_optional_str(entry.get("run_id")),
-            "run_label": _coerce_optional_str(entry.get("run_label")),
-            "cluster_label": _coerce_optional_str(entry.get("cluster_label")),
-            "tool_name": _coerce_optional_str(entry.get("tool_name")),
-            "provider": _coerce_optional_str(entry.get("provider")),
-            "purpose": _coerce_optional_str(entry.get("purpose")),
-            "status": _coerce_optional_str(entry.get("status")),
-            "latency_ms": _parse_optional_int(entry.get("duration_ms")),
-            "artifact_path": _relative_path(root_dir, entry.get("artifact_path")),
-            "summary": summary,
-            "error_summary": error_summary,
-            "skip_reason": skip_reason,
-        }
-        normalized.append((timestamp, activity_entry))
-    sorted_entries = sorted(
-        normalized,
-        key=lambda item: item[0] or _EPOCH_SENTINEL,
-        reverse=True,
-    )
-    trimmed_entries = [payload for _, payload in sorted_entries[:limit]]
-    return {
-        "entries": trimmed_entries,
-        "summary": {"retained_entries": len(normalized)},
-    }
 
 def _build_llm_policy(
     settings: ExternalAnalysisSettings | None,
@@ -246,6 +102,12 @@ def _build_llm_policy(
         }
     }
 
+
+# =============================================================================
+# Provider Execution Reporting
+# =============================================================================
+
+
 def _build_provider_execution(
     settings: ExternalAnalysisSettings | None,
     artifacts: Sequence[ExternalAnalysisArtifact],
@@ -262,6 +124,7 @@ def _build_provider_execution(
             artifacts, review_config
         ),
     }
+
 
 def _execution_counts_for_purpose(
     artifacts: Sequence[ExternalAnalysisArtifact],
@@ -281,6 +144,7 @@ def _execution_counts_for_purpose(
         elif status == ExternalAnalysisStatus.SKIPPED:
             skipped += 1
     return success, failed, skipped
+
 
 def _build_auto_drilldown_execution(
     policy: AutoDrilldownPolicy,
@@ -327,6 +191,7 @@ def _build_auto_drilldown_execution(
         "notes": notes,
     }
 
+
 def _extract_review_run_config(run_config: Mapping[str, object] | None) -> tuple[bool | None, str | None]:
     run_enabled: bool | None = None
     run_provider: str | None = None
@@ -337,6 +202,7 @@ def _extract_review_run_config(run_config: Mapping[str, object] | None) -> tuple
             provider_raw = str(run_config.get("provider") or "").strip()
             run_provider = provider_raw or None
     return run_enabled, run_provider
+
 
 def _build_review_enrichment_execution(
     artifacts: Sequence[ExternalAnalysisArtifact],
@@ -376,11 +242,3 @@ def _build_review_enrichment_execution(
         "budgetLimited": None,
         "notes": notes,
     }
-
-def _percentile_value(values: list[float], percentile: float) -> int:
-    if not values:
-        return 0
-    idx = math.ceil((percentile / 100) * len(values)) - 1
-    idx = max(0, min(idx, len(values) - 1))
-    return int(values[idx])
-
