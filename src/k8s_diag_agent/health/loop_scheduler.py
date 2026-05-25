@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -31,6 +30,13 @@ from .loop_scheduler_config import (  # noqa: F401 - re-exported for backward co
     format_last_run_timestamp,
     parse_lock_timestamp,
     resolve_hostname,
+)
+from .loop_scheduler_cycle import (  # noqa: F401 - re-exported for backward compatibility
+    compute_freshness_age,  # noqa: F401 - re-exported for backward compatibility
+    compute_sleep_duration,  # noqa: F401 - re-exported for backward compatibility
+    should_break_after_cycle,  # noqa: F401 - re-exported for backward compatibility
+    should_continue_scheduler,  # noqa: F401 - re-exported for backward compatibility
+    update_finish_time,  # noqa: F401 - re-exported for backward compatibility
 )
 from .loop_scheduler_diagnostics import (
     build_diagnostic_pack,  # noqa: F401 - re-exported for backward compatibility

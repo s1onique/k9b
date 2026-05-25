@@ -7,7 +7,6 @@ Preserves behavior exactly - no lock semantics, scheduling cadence, or artifact 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
