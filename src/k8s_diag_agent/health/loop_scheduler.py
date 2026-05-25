@@ -47,6 +47,19 @@ from .loop_scheduler_diagnostics import (
     log_run_summary,  # noqa: F401 - re-exported for backward compatibility
     resolve_run_id,
 )
+from .loop_scheduler_lock_facade import (  # noqa: F401 - re-exported for backward compatibility
+    acquire_lock as _facade_acquire_lock,
+)
+from .loop_scheduler_lock_facade import (
+    log_lock_held as _facade_log_lock_held,
+)
+from .loop_scheduler_lock_facade import (
+    release_lock as _facade_release_lock,
+)
+from .loop_scheduler_lock_facade import (
+    remove_stale_lock as _facade_remove_stale_lock,
+)
+from .loop_scheduler_locking import LockManager
 from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward compatibility
     _HEALTH_LOCK_FILENAME,
     _HEALTH_ONLY_MESSAGE,
@@ -110,6 +123,9 @@ class HealthLoopScheduler:
         # Store config reference for effective config logging at startup
         self._run_config: HealthRunConfig | None = None
 
+        # Initialize LockManager for lock operations
+        self._lock_manager = LockManager(self)
+
     def _log_event(self, severity: str, message: str, **metadata: Any) -> None:
         """Emit a structured log event for the scheduler."""
         from ..structured_logging import emit_structured_log
@@ -130,46 +146,18 @@ class HealthLoopScheduler:
         return resolve_hostname()
 
     def _acquire_lock(self) -> bool:
-        """Attempt to acquire the scheduler lock file."""
-        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-        while True:
-            try:
-                payload = {
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "pid": os.getpid(),
-                }
-                identity = self._current_process_identity()
-                identity_data = self._serialize_identity(identity)
-                if identity_data:
-                    payload["identity"] = identity_data
-                payload["scheduler_instance_id"] = self._instance_id
-                if self._pending_run_id:
-                    payload["attempted_run_id"] = self._pending_run_id
-                payload["scheduler_pid"] = os.getpid()
-                payload["child_pid"] = os.getpid()
-                if self._pending_run_start:
-                    payload["child_start_time"] = self._pending_run_start.isoformat()
-                payload["run_label"] = self._run_label
-                with self._lock_path.open("x", encoding="utf-8") as handle:
-                    handle.write(json.dumps(payload))
-                    handle.write("\n")
-                self._lock_skip_streak = 0
-                return True
-            except FileExistsError:
-                evaluation = self._evaluate_lock_state()
-                if evaluation.should_cleanup and self._remove_stale_lock(evaluation):
-                    self._lock_skip_streak = 0
-                    continue
-                self._log_lock_held(evaluation)
-                return False
+        """Attempt to acquire the scheduler lock file.
+
+        Delegates to the lock facade for actual implementation.
+        """
+        return _facade_acquire_lock(self._lock_manager)
 
     def _release_lock(self) -> None:
-        """Release the scheduler lock file if it exists."""
-        try:
-            if self._lock_path.exists():
-                self._lock_path.unlink()
-        except OSError:
-            pass
+        """Release the scheduler lock file if it exists.
+
+        Delegates to the lock facade for actual implementation.
+        """
+        _facade_release_lock(self._lock_manager)
 
     def _current_process_identity(self) -> ProcessIdentity | None:
         """Get the identity of the current process."""
@@ -612,90 +600,18 @@ class HealthLoopScheduler:
         return format_last_run_timestamp(self._last_run_finish_time)
 
     def _remove_stale_lock(self, evaluation: LockEvaluation) -> bool:
-        """Remove a stale lock file and log the removal."""
-        try:
-            if self._lock_path.exists():
-                self._lock_path.unlink()
-        except OSError:
-            return False
-        snapshot = evaluation.snapshot
-        metadata: dict[str, object | None] = {
-            "lock_file": str(self._lock_path),
-            "lock_age_seconds": evaluation.lock_age_seconds,
-            "lock_pid": snapshot.pid if snapshot else None,
-            "pid_alive": evaluation.pid_alive,
-            "lock_timestamp": snapshot.timestamp_value if snapshot else None,
-            "expected_interval_seconds": self._interval_seconds,
-            "cleanup_reason": evaluation.cleanup_reason or evaluation.stale_decision,
-            "event": "lock-stale",
-            "identity_match": evaluation.identity_match,
-            "current_identity_signature": evaluation.current_identity.signature if evaluation.current_identity else None,
-            "scheduler_instance_id": snapshot.scheduler_instance_id if snapshot else None,
-            "attempted_run_id": snapshot.attempted_run_id if snapshot else None,
-            "scheduler_pid": snapshot.scheduler_pid if snapshot else None,
-            "child_pid": snapshot.child_pid if snapshot else None,
-            "child_start_time": snapshot.child_start_time if snapshot else None,
-            "run_label": snapshot.run_label if snapshot else None,
-            "provenance_match": evaluation.provenance_match,
-        }
-        last_run_ts = self._format_last_run_timestamp()
-        if last_run_ts is not None:
-            metadata["last_successful_run_timestamp"] = last_run_ts
-        if snapshot and snapshot.identity:
-            metadata["lock_identity_signature"] = snapshot.identity.signature
-            metadata["lock_identity_start_time"] = snapshot.identity.start_time
-            metadata["lock_identity_hostname"] = snapshot.identity.hostname
-        self._log_event(
-            "WARNING",
-            "Removed stale lock file",
-            **metadata,
-        )
-        return True
+        """Remove a stale lock file and log the removal.
+
+        Delegates to the lock facade for actual implementation.
+        """
+        return _facade_remove_stale_lock(self._lock_manager, evaluation)
 
     def _log_lock_held(self, evaluation: LockEvaluation) -> None:
-        """Log when a lock is held by another process."""
-        self._lock_skip_streak += 1
-        escalated = self._lock_skip_streak >= self._lock_skip_escalation_threshold
-        severity = "ERROR" if escalated else "WARNING"
-        snapshot = evaluation.snapshot
-        metadata: dict[str, object | None] = {
-            "reason": "lock-held",
-            "lock_file": str(self._lock_path),
-            "event": "lock-skip",
-            "lock_age_seconds": evaluation.lock_age_seconds,
-            "lock_pid": snapshot.pid if snapshot else None,
-            "pid_alive": evaluation.pid_alive,
-            "lock_timestamp": snapshot.timestamp_value if snapshot else None,
-            "expected_interval_seconds": self._interval_seconds,
-            "stale_decision": evaluation.stale_decision,
-            "repeated_lock_skips": self._lock_skip_streak,
-            "identity_match": evaluation.identity_match,
-            "current_identity_signature": evaluation.current_identity.signature if evaluation.current_identity else None,
-            "scheduler_instance_id": snapshot.scheduler_instance_id if snapshot else None,
-            "attempted_run_id": snapshot.attempted_run_id if snapshot else None,
-            "scheduler_pid": snapshot.scheduler_pid if snapshot else None,
-            "child_pid": snapshot.child_pid if snapshot else None,
-            "child_start_time": snapshot.child_start_time if snapshot else None,
-            "run_label": snapshot.run_label if snapshot else None,
-            "provenance_match": evaluation.provenance_match,
-        }
-        last_run_ts = self._format_last_run_timestamp()
-        if last_run_ts is not None:
-            metadata["last_successful_run_timestamp"] = last_run_ts
-        if evaluation.identity_match is False:
-            metadata["identity_mismatch"] = True
-        if snapshot and snapshot.identity:
-            metadata["lock_identity_signature"] = snapshot.identity.signature
-            metadata["lock_identity_start_time"] = snapshot.identity.start_time
-            metadata["lock_identity_hostname"] = snapshot.identity.hostname
-        if escalated:
-            metadata["lock_skip_escalated"] = True
-            metadata["severity_reason"] = "repeated-lock-held"
-        self._log_event(
-            severity,
-            "Health run skipped because lock is held",
-            **metadata,
-        )
+        """Log when a lock is held by another process.
+
+        Delegates to the lock facade for actual implementation.
+        """
+        _facade_log_lock_held(self._lock_manager, evaluation)
 
     def _log_run_summary(
         self,

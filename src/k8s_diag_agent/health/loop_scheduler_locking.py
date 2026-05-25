@@ -126,8 +126,9 @@ class LockManager:
             pass
         return ProcessIdentity(start_time, cmdline, hostname)
 
-    def serialize_identity(self, identity: ProcessIdentity | None) -> dict[str, str] | None:
-        """Serialize identity to a dictionary for JSON storage."""
+    @staticmethod
+    def serialize_identity_static(identity: ProcessIdentity | None) -> dict[str, str] | None:
+        """Serialize identity to a dictionary for JSON storage (static version)."""
         if identity is None:
             return None
         data: dict[str, str] = {}
@@ -138,6 +139,10 @@ class LockManager:
         if identity.hostname is not None:
             data["hostname"] = identity.hostname
         return data or None
+
+    def serialize_identity(self, identity: ProcessIdentity | None) -> dict[str, str] | None:
+        """Serialize identity to a dictionary for JSON storage."""
+        return self.serialize_identity_static(identity)
 
     def load_lock_snapshot(self) -> LockFileSnapshot | None:
         """Load the current lock file snapshot."""
@@ -218,14 +223,15 @@ class LockManager:
     def evaluate_lock_state(self) -> LockEvaluation:
         """Evaluate the current lock file state to determine staleness."""
         snapshot = self.load_lock_snapshot()
+        # Use scheduler's methods so test patches work
         evaluation = _evaluate_lock_state_pure(
             snapshot=snapshot,
             current_pid=os.getpid(),
             interval_seconds=self._interval_seconds,
             instance_id=self._instance_id,
             pending_run_id=self._pending_run_id,
-            read_identity_fn=self.read_process_identity,
-            pid_alive_fn=self.pid_is_alive,
+            read_identity_fn=self._scheduler._read_process_identity,
+            pid_alive_fn=self._scheduler._pid_is_alive,
         )
         self._write_lock_status(evaluation)
         return evaluation
@@ -316,7 +322,7 @@ class LockManager:
     def log_lock_held(self, evaluation: LockEvaluation) -> None:
         """Log when a lock is held by another process."""
         self._scheduler._lock_skip_streak += 1
-        escalated = self._scheduler._lock_skip_streak >= _LOCK_SKIP_ESCALATION_THRESHOLD
+        escalated = self._scheduler._lock_skip_streak >= self._scheduler._lock_skip_escalation_threshold
         severity = "ERROR" if escalated else "WARNING"
         snapshot = evaluation.snapshot
         metadata: dict[str, object | None] = {
