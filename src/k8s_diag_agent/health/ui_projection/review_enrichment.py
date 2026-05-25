@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ...external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from ...external_analysis.config import (
@@ -23,9 +22,6 @@ from ...external_analysis.config import (
 )
 from ...security.deanonymization import deanonymize_review_enrichment, deanonymize_text, safe_alias_mapping
 from ..ui_shared import _relative_path
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

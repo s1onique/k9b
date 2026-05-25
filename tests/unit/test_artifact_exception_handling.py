@@ -660,7 +660,7 @@ class TestBuildRecentRunsSummaryExceptionHandling(TestCase):
         malformed_review = reviews_dir / "run-2-20260102T000000Z-review.json"
         malformed_review.write_text("{ malformed json", encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.health.ui", level=logging.WARNING) as cm:
+        with self.assertLogs("k8s_diag_agent.health.ui_projection.runs", level=logging.WARNING) as cm:
             result = _build_recent_runs_summary(reviews_dir)
 
         # Should have processed 1 valid run
