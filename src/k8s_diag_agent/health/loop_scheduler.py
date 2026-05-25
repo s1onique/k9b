@@ -31,17 +31,21 @@ from .loop_scheduler_config import (  # noqa: F401 - re-exported for backward co
     parse_lock_timestamp,
     resolve_hostname,
 )
-from .loop_scheduler_cycle import (  # noqa: F401 - re-exported for backward compatibility
-    compute_freshness_age,  # noqa: F401 - re-exported for backward compatibility
+from .loop_scheduler_cycle import (
+    CycleState,
+    clear_pending_run_metadata,
+    compute_cycle_exit_code,  # noqa: F401 - re-exported for backward compatibility
+    compute_freshness_age,
     compute_sleep_duration,  # noqa: F401 - re-exported for backward compatibility
+    create_pending_run_metadata,
     should_break_after_cycle,  # noqa: F401 - re-exported for backward compatibility
     should_continue_scheduler,  # noqa: F401 - re-exported for backward compatibility
-    update_finish_time,  # noqa: F401 - re-exported for backward compatibility
+    update_finish_time,
 )
 from .loop_scheduler_diagnostics import (
     build_diagnostic_pack,  # noqa: F401 - re-exported for backward compatibility
     log_run_summary,  # noqa: F401 - re-exported for backward compatibility
-    resolve_run_id,  # noqa: F401 - re-exported for backward compatibility
+    resolve_run_id,
 )
 from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward compatibility
     _HEALTH_LOCK_FILENAME,
@@ -124,18 +128,6 @@ class HealthLoopScheduler:
         Delegates to the extracted resolve_hostname function for the actual implementation.
         """
         return resolve_hostname()
-
-    def _resolve_run_id(
-        self,
-        assessments: list[Any],
-        triggers: list[Any],
-    ) -> str:
-        """Resolve the run ID from assessments or triggers."""
-        if assessments:
-            return getattr(assessments[0], 'run_id', "<unknown>")
-        if triggers:
-            return getattr(triggers[0], 'run_id', "<unknown>")
-        return "<unknown>"
 
     def _acquire_lock(self) -> bool:
         """Attempt to acquire the scheduler lock file."""
@@ -766,10 +758,16 @@ class HealthLoopScheduler:
 
 
     def run(self) -> int:
-        """Execute the scheduler loop, running health loops at configured intervals."""
-        from .loop_history import _build_runtime_run_id
-        executed_runs = 0
-        last_exit = 0
+        """Execute the scheduler loop, running health loops at configured intervals.
+
+        Loop control, freshness, finish-time, pending-run metadata, and
+        cadence decisions are delegated to helpers in loop_scheduler_cycle.
+        """
+        cycle = CycleState(
+            run_once=self._run_once,
+            max_runs=self._max_runs,
+            interval_seconds=self._interval_seconds,
+        )
         self._log_event(
             "INFO",
             "Health scheduler started",
@@ -781,23 +779,19 @@ class HealthLoopScheduler:
         self._log_effective_scheduler_config()
         _run_health_loop = self._run_health_loop_fn
         try:
-            while True:
-                if self._run_once and executed_runs >= 1:
-                    break
-                if self._max_runs is not None and executed_runs >= self._max_runs:
-                    break
-                run_executed = False
-                self._pending_run_id = _build_runtime_run_id(self._run_label)
-                self._pending_run_start = datetime.now(UTC)
+            while cycle.should_continue():
+                cycle.reset_cycle()
+                self._pending_run_id, self._pending_run_start = create_pending_run_metadata(
+                    self._run_label,
+                )
                 if not self._acquire_lock():
-                    run_executed = False
+                    cycle.mark_skipped()
                 else:
                     try:
                         run_start_time = time.time()
-                        freshness_age_seconds = (
-                            run_start_time - self._last_run_finish_time
-                            if self._last_run_finish_time is not None
-                            else None
+                        freshness_age_seconds = compute_freshness_age(
+                            run_start_time=run_start_time,
+                            last_run_finish_time=self._last_run_finish_time,
                         )
                         (
                             exit_code,
@@ -815,9 +809,8 @@ class HealthLoopScheduler:
                             expected_scheduler_interval_seconds=self._interval_seconds,
                             run_id=self._pending_run_id,
                         )
-                        run_id = self._resolve_run_id(assessments, triggers)
-                        run_executed = True
-                        last_exit = exit_code
+                        run_id = resolve_run_id(assessments, triggers)
+                        cycle.mark_executed(exit_code)
                         if exit_code != 0:
                             self._log_event(
                                 "ERROR",
@@ -827,7 +820,6 @@ class HealthLoopScheduler:
                                 event="run-failure",
                             )
                             return exit_code
-                        executed_runs += 1
                         self._log_run_summary(
                             assessments,
                             triggers,
@@ -838,20 +830,13 @@ class HealthLoopScheduler:
                             expected_interval_seconds=self._interval_seconds,
                         )
                         self._maybe_build_diagnostic_pack(run_id)
-                        self._last_run_finish_time = time.time()
+                        self._last_run_finish_time = update_finish_time()
                     finally:
-                        self._pending_run_id = None
-                        self._pending_run_start = None
+                        self._pending_run_id, self._pending_run_start = clear_pending_run_metadata()
                         self._release_lock()
-                if not run_executed and self._run_once:
+                if cycle.should_break_after():
                     break
-                if self._run_once:
-                    break
-                if self._max_runs is not None and executed_runs >= self._max_runs:
-                    break
-                if not self._interval_seconds:
-                    break
-                time.sleep(self._interval_seconds)
+                time.sleep(cycle.sleep_seconds())
         except KeyboardInterrupt:
             self._log_event(
                 "WARNING",
@@ -863,10 +848,10 @@ class HealthLoopScheduler:
         self._log_event(
             "INFO",
             "Health scheduler stopped",
-            exit_code=last_exit,
+            exit_code=cycle.last_exit,
             event="stop",
         )
-        return last_exit
+        return cycle.last_exit
 
 
 def schedule_health_loop(
