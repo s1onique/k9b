@@ -49,7 +49,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/llm/llamacpp_provider.py", "[EXTRACTION] LLM provider - complex dependencies"),
     ("src/k8s_diag_agent/health/loop_scheduler.py", "[EXTRACTION] Loop scheduler - complex extraction"),
     ("src/k8s_diag_agent/cli_handlers.py", "[EXTRACTION] CLI handlers - command complexity"),
-    ("src/k8s_diag_agent/health/adaptation.py", "[EXTRACTION] Adaptation module - complex logic"),
 
     # [TEST] Test fixtures - need split by behavior
     ("tests/fixtures/incident_report_fixtures.py", "[TEST] Fixture data - extract by test family"),
