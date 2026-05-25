@@ -63,9 +63,11 @@ from .loop_run_config_helpers import _resolve_collector_version, _resolve_output
 from .loop_scheduler import (
     _HEALTH_ONLY_MESSAGE,  # noqa: F401
     HealthLoopScheduler,  # noqa: F401 - re-exported for backward compatibility
-    LockEvaluation,  # noqa: F401 - re-exported for backward compatibility
-    LockFileSnapshot,  # noqa: F401 - re-exported for backward compatibility
-    ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
+)
+from .loop_scheduler_locking import (  # noqa: F401 - re-exported for backward compatibility
+    LockEvaluation,
+    LockFileSnapshot,
+    ProcessIdentity,
 )
 from .loop_signal_id import _SignalIdGenerator
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl

@@ -4,6 +4,7 @@ Extracts scheduling infrastructure from loop.py into a focused module.
 Preserves behavior exactly - no lock semantics, scheduling cadence, logging, or artifact shape changes.
 
 Models and constants are extracted to loop_scheduler_models.py.
+Lock-management logic is extracted to loop_scheduler_locking.py.
 The run_health_loop function is injected as a parameter to avoid circular imports.
 """
 
@@ -23,6 +24,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from .loop import HealthRunConfig
+    from .loop_scheduler_models import LockEvaluation, LockFileSnapshot, ProcessIdentity
 
 from ..security.subprocess_helpers import (
     _sanitize_output,
@@ -34,9 +36,9 @@ from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward co
     _LOCK_STALE_AGE_MULTIPLIER,
     _LOCK_STALE_MIN_SECONDS,
     DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
-    LockEvaluation,
-    LockFileSnapshot,
-    ProcessIdentity,
+    LockEvaluation,  # noqa: F401 - re-exported for backward compatibility
+    LockFileSnapshot,  # noqa: F401 - re-exported for backward compatibility
+    ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
     _str_or_none,
 )
 
