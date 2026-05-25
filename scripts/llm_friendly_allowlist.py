@@ -53,7 +53,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/health/drilldown.py", "[EXTRACTION] Drilldown module - complex logic"),
     ("src/k8s_diag_agent/health/review_feedback.py", "[EXTRACTION] Review feedback - complex logic"),
     ("src/k8s_diag_agent/health/summary.py", "[EXTRACTION] Summary module - complex aggregation"),
-    ("src/k8s_diag_agent/health/ui_planner_queue.py", "[EXTRACTION] Planner queue - complex UI logic"),
 
     # [TEST] Test fixtures - need split by behavior
     ("tests/fixtures/incident_report_fixtures.py", "[TEST] Fixture data - extract by test family"),
