@@ -20,7 +20,6 @@ from ..external_analysis.next_check_approval import NextCheckApprovalRecord, col
 from ..external_analysis.utils import artifact_matches_run
 from ..security.deanonymization import deanonymize_next_check_candidate, safe_alias_mapping
 from ..security.kubectl_context import is_real_kube_context
-from ..structured_logging import emit_structured_log
 from .ui_next_check_execution import (
     NextCheckExecutionRecord,
     _apply_failure_follow_up,
@@ -30,6 +29,10 @@ from .ui_next_check_execution import (
     _derive_outcome_status,
     _determine_execution_state,
     _latest_outcome_artifact,
+)
+from .ui_projection.planner_queue_approval import (
+    _log_next_check_approval_freshness,
+    _plan_paths_match,
 )
 from .ui_projection.planner_queue_explanation import (
     _NEXT_CHECK_QUEUE_EXPLANATION_HINTS,
@@ -146,38 +149,6 @@ def _find_review_enrichment_artifact_for_alias(
         ):
             return artifact
     return None
-
-
-def _plan_paths_match(plan_path: str | None, approval_path: str | None) -> bool:
-    """Check if approval plan path matches the current plan path."""
-    if not plan_path or not approval_path:
-        return False
-    return plan_path == approval_path
-
-
-def _log_next_check_approval_freshness(
-    run_label: str | None,
-    run_id: str,
-    candidate_id: str | None,
-    candidate_index: int | None,
-    plan_artifact_path: str | None,
-    approval_plan_path: str | None,
-    candidate_description: str | None,
-    status: str,
-) -> None:
-    """Log when an approval's plan path doesn't match the current plan."""
-    if status != "approval-stale":
-        return
-    emit_structured_log(
-        "next_check_approval_stale",
-        run_id=run_id,
-        run_label=run_label,
-        candidate_id=candidate_id,
-        candidate_index=candidate_index,
-        plan_artifact_path=plan_artifact_path,
-        approval_plan_path=approval_plan_path,
-        candidate_description=candidate_description,
-    )
 
 
 # =============================================================================
