@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,21 +30,16 @@ from .loop_scheduler_config import (  # noqa: F401 - re-exported for backward co
     parse_lock_timestamp,
     resolve_hostname,
 )
-from .loop_scheduler_cycle import (
-    CycleState,
-    clear_pending_run_metadata,
+from .loop_scheduler_cycle import (  # noqa: F401 - C0404: re-exported for backward compatibility
+    CycleState,  # noqa: F401 - re-exported for backward compatibility
     compute_cycle_exit_code,  # noqa: F401 - re-exported for backward compatibility
-    compute_freshness_age,
     compute_sleep_duration,  # noqa: F401 - re-exported for backward compatibility
-    create_pending_run_metadata,
     should_break_after_cycle,  # noqa: F401 - re-exported for backward compatibility
     should_continue_scheduler,  # noqa: F401 - re-exported for backward compatibility
-    update_finish_time,
 )
 from .loop_scheduler_diagnostics import (
     build_diagnostic_pack,  # noqa: F401 - re-exported for backward compatibility
     log_run_summary,  # noqa: F401 - re-exported for backward compatibility
-    resolve_run_id,
 )
 from .loop_scheduler_lock_facade import (  # noqa: F401 - re-exported for backward compatibility
     acquire_lock as _facade_acquire_lock,
@@ -69,6 +63,7 @@ from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward co
     ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
     _str_or_none,
 )
+from .loop_scheduler_run import run_scheduler_loop
 
 
 class HealthLoopScheduler:
@@ -672,102 +667,13 @@ class HealthLoopScheduler:
             log_fn=self._log_event,
         )
 
-
     def run(self) -> int:
         """Execute the scheduler loop, running health loops at configured intervals.
 
-        Loop control, freshness, finish-time, pending-run metadata, and
-        cadence decisions are delegated to helpers in loop_scheduler_cycle.
+        Delegates to run_scheduler_loop() for the orchestration body, preserving
+        all behavior exactly while keeping this surface minimal for test compatibility.
         """
-        cycle = CycleState(
-            run_once=self._run_once,
-            max_runs=self._max_runs,
-            interval_seconds=self._interval_seconds,
-        )
-        self._log_event(
-            "INFO",
-            "Health scheduler started",
-            interval_seconds=self._interval_seconds,
-            max_runs=self._max_runs,
-            run_once=self._run_once,
-        )
-        # Emit effective scheduler config log (one-time startup event)
-        self._log_effective_scheduler_config()
-        _run_health_loop = self._run_health_loop_fn
-        try:
-            while cycle.should_continue():
-                cycle.reset_cycle()
-                self._pending_run_id, self._pending_run_start = create_pending_run_metadata(
-                    self._run_label,
-                )
-                if not self._acquire_lock():
-                    cycle.mark_skipped()
-                else:
-                    try:
-                        run_start_time = time.time()
-                        freshness_age_seconds = compute_freshness_age(
-                            run_start_time=run_start_time,
-                            last_run_finish_time=self._last_run_finish_time,
-                        )
-                        (
-                            exit_code,
-                            assessments,
-                            triggers,
-                            drilldowns,
-                            external_artifacts,
-                            settings,
-                        ) = _run_health_loop(
-                            self._config_path,
-                            manual_triggers=self._manual_triggers,
-                            manual_drilldown_contexts=self._manual_drilldown_contexts,
-                            manual_external_analysis=self._manual_external_analysis,
-                            quiet=self._quiet,
-                            expected_scheduler_interval_seconds=self._interval_seconds,
-                            run_id=self._pending_run_id,
-                        )
-                        run_id = resolve_run_id(assessments, triggers)
-                        cycle.mark_executed(exit_code)
-                        if exit_code != 0:
-                            self._log_event(
-                                "ERROR",
-                                "Health run failed",
-                                run_id=run_id,
-                                severity_reason=f"exit_code={exit_code}",
-                                event="run-failure",
-                            )
-                            return exit_code
-                        self._log_run_summary(
-                            assessments,
-                            triggers,
-                            drilldowns,
-                            external_artifacts,
-                            settings,
-                            freshness_age_seconds=freshness_age_seconds,
-                            expected_interval_seconds=self._interval_seconds,
-                        )
-                        self._maybe_build_diagnostic_pack(run_id)
-                        self._last_run_finish_time = update_finish_time()
-                    finally:
-                        self._pending_run_id, self._pending_run_start = clear_pending_run_metadata()
-                        self._release_lock()
-                if cycle.should_break_after():
-                    break
-                time.sleep(cycle.sleep_seconds())
-        except KeyboardInterrupt:
-            self._log_event(
-                "WARNING",
-                "Health scheduler interrupted",
-                event="interrupted",
-                reason="keyboard",
-            )
-            return 1
-        self._log_event(
-            "INFO",
-            "Health scheduler stopped",
-            exit_code=cycle.last_exit,
-            event="stop",
-        )
-        return cycle.last_exit
+        return run_scheduler_loop(self)
 
 
 def schedule_health_loop(
