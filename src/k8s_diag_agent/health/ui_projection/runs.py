@@ -28,7 +28,7 @@ EXECUTION_INDEX_COLLECTOR_VERSION = "shared-one-pass-v1"
 # Regex pattern for extracting timestamp from run_id
 _RUN_ID_TIMESTAMP_PATTERN = re.compile(r"(\d{8}T\d{6}Z)$")
 
-# Min datetime for sorting fallback
+# Minimum datetime for sorting
 _MIN_DATETIME = datetime.min.replace(tzinfo=UTC)
 
 
@@ -142,8 +142,8 @@ def _build_recent_runs_summary(
         )
 
     # Sort by timestamp descending (newest first)
-    # Parse timestamps for sorting
-    def get_sort_key(entry: dict[str, object]) -> object:
+    # Sort by timestamp descending (newest first)
+    def get_sort_key(entry: dict[str, object]) -> datetime:
         ts = entry.get("timestamp", "")
         parsed = parse_iso_to_utc(ts)
         return parsed if parsed else _MIN_DATETIME

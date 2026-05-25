@@ -11,11 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from ..datetime_utils import parse_iso_to_utc
-from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
-from ..external_analysis.config import (
-    AutoDrilldownPolicy,
-    ExternalAnalysisSettings,
-)
+from ..external_analysis.artifact import ExternalAnalysisArtifact
+from ..external_analysis.config import ExternalAnalysisSettings
 from ..security.deanonymization import safe_alias_mapping
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal
@@ -66,6 +63,8 @@ from .ui_projection import (
     _build_recent_runs_summary,
     _build_review_enrichment_status,
     _find_review_enrichment_artifact,
+    _serialize_auto_drilldown_interpretations,
+    _serialize_auto_drilldown_policy,
     _serialize_review_enrichment,
     _serialize_review_enrichment_policy,
 )
@@ -93,15 +92,6 @@ if TYPE_CHECKING:
 
 
 NotificationRecord = tuple[NotificationArtifact, Path]
-
-
-def _serialize_auto_drilldown_policy(policy: AutoDrilldownPolicy) -> dict[str, object]:
-    provider = (policy.provider or "").strip()
-    return {
-        "enabled": policy.enabled,
-        "provider": provider or None,
-        "maxPerRun": policy.max_per_run,
-    }
 
 
 def write_health_ui_index(
@@ -316,35 +306,6 @@ def _serialize_external_analysis(
             continue
         status_counts.append({"status": status, "count": count})
     return {"count": len(entries), "status_counts": status_counts, "artifacts": entries}
-
-
-def _serialize_auto_drilldown_interpretations(artifacts: object | None, root_dir: Path) -> dict[str, dict[str, object]]:
-    interpretations: dict[str, dict[str, object]] = {}
-    if not isinstance(artifacts, Sequence):
-        return interpretations
-    seen: set[str] = set()
-    for entry in artifacts:
-        if not isinstance(entry, Mapping):
-            continue
-        if entry.get("purpose") != ExternalAnalysisPurpose.AUTO_DRILLDOWN.value:
-            continue
-        cluster_label = str(entry.get("cluster_label") or "").strip()
-        if not cluster_label or cluster_label in seen:
-            continue
-        seen.add(cluster_label)
-        interpretations[cluster_label] = {
-            "adapter": str(entry.get("tool_name") or ""),
-            "status": str(entry.get("status") or ""),
-            "summary": entry.get("summary"),
-            "timestamp": str(entry.get("timestamp") or ""),
-            "artifact_path": _relative_path(root_dir, entry.get("artifact_path")),
-            "provider": entry.get("provider"),
-            "duration_ms": entry.get("duration_ms"),
-            "payload": entry.get("payload"),
-            "error_summary": entry.get("error_summary"),
-            "skip_reason": entry.get("skip_reason"),
-        }
-    return interpretations
 
 
 _RUN_ID_TIMESTAMP_PATTERN = re.compile(r"(\d{8}T\d{6}Z)$")

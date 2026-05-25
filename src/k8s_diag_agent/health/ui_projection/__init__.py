@@ -3,13 +3,19 @@
 This package contains focused projection helpers organized by concern:
 - review_enrichment: Review enrichment serialization and status building
 - runs: Recent runs summary projection
-- external_sources: Alertmanager/vmalert source serialization (future)
+- auto_drilldown: Auto-drilldown policy and interpretation serialization
 
 Extracted to keep health/ui.py under LLM-friendly size limits while
 preserving the public compatibility surface.
 """
 
 from __future__ import annotations
+
+# Re-export from auto_drilldown for backward compatibility
+from .auto_drilldown import (
+    _serialize_auto_drilldown_interpretations,
+    _serialize_auto_drilldown_policy,
+)
 
 # Re-export from review_enrichment for backward compatibility
 from .review_enrichment import (
@@ -38,4 +44,6 @@ __all__ = [
     "_compute_batch_eligibility_indexed",
     "_extract_run_ids_from_filename",
     "EXECUTION_INDEX_COLLECTOR_VERSION",
+    "_serialize_auto_drilldown_interpretations",
+    "_serialize_auto_drilldown_policy",
 ]
