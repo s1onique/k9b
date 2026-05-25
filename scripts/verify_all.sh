@@ -390,6 +390,7 @@ _run_and_record() {
 
 # Run Python lane in background
 _run_python_lane() {
+    _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet
     _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
     _run_and_record "python" "unit-tests" "Running unit tests" env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests
     _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src/k8s_diag_agent
