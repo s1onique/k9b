@@ -5,18 +5,16 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.artifact import ExternalAnalysisArtifact
 from ..external_analysis.config import ExternalAnalysisSettings
 from ..security.deanonymization import safe_alias_mapping
-from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 from .adaptation import HealthProposal
-from .notifications import NotificationArtifact
 from .ui_deterministic_next_checks import (
     _build_deterministic_next_checks_projection,
     _classify_deterministic_next_check,
@@ -60,6 +58,9 @@ from .ui_planner_queue import (
 
 # Import from extracted ui_projection modules for backward compatibility
 from .ui_projection import (
+    NotificationRecord,  # noqa: F401  # re-exported for type compatibility
+    _build_notification_index,
+    _build_promotions_index,
     _build_recent_runs_summary,
     _build_review_enrichment_status,
     _find_review_enrichment_artifact,
@@ -67,6 +68,7 @@ from .ui_projection import (
     _serialize_auto_drilldown_policy,
     _serialize_review_enrichment,
     _serialize_review_enrichment_policy,
+    _write_proposal_status_summary_to_review,
 )
 from .ui_serialization import (
     _ANALYSIS_STATUS_ORDER,
@@ -78,7 +80,6 @@ from .ui_serialization import (
     _serialize_notification_history,
     _serialize_proposal,
     _serialize_proposal_status_summary,
-    _stringify_notification_value,
 )
 from .ui_shared import _relative_path
 
@@ -89,9 +90,6 @@ __all__ = ["_classify_deterministic_next_check"]
 
 if TYPE_CHECKING:
     from .loop import DrilldownArtifact, HealthAssessmentArtifact, HealthSnapshotRecord
-
-
-NotificationRecord = tuple[NotificationArtifact, Path]
 
 
 def write_health_ui_index(
@@ -111,23 +109,38 @@ def write_health_ui_index(
 ) -> Path:
     assessment_map = {artifact.label: artifact for artifact in assessments}
     drilldown_map = _latest_drilldown_map(drilldowns)
-    clusters = [_serialize_cluster(record, assessment_map, drilldown_map, output_dir) for record in records]
+    clusters = [
+        _serialize_cluster(record, assessment_map, drilldown_map, output_dir) for record in records
+    ]
     deterministic_next_checks = _build_deterministic_next_checks_projection(
         clusters,
         assessment_map,
         drilldown_map,
         output_dir,
     )
-    cluster_context_map = {record.target.label: record.target.context for record in records}
-    drilldown_entries = [_serialize_drilldown(artifact, output_dir) for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True)]
+    cluster_context_map = {
+        record.target.label: record.target.context for record in records
+    }
+    drilldown_entries = [
+        _serialize_drilldown(artifact, output_dir)
+        for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True)
+    ]
     latest_drilldown = drilldown_entries[0] if drilldown_entries else None
     # Wire transitions_dir for current-state derivation from event artifacts
     transitions_dir = output_dir / "proposals" / "transitions"
-    proposals_data = [_serialize_proposal(proposal, output_dir, transitions_dir) for proposal in proposals]
-    drilldown_availability = _serialize_drilldown_availability(records, drilldown_map, output_dir)
+    proposals_data = [
+        _serialize_proposal(proposal, output_dir, transitions_dir) for proposal in proposals
+    ]
+    drilldown_availability = _serialize_drilldown_availability(
+        records, drilldown_map, output_dir
+    )
     external_analysis_data = _serialize_external_analysis(external_analysis, output_dir)
-    historical_entries = _collect_historical_external_analysis_entries(output_dir / "external-analysis")
-    auto_drilldown_data = _serialize_auto_drilldown_interpretations(external_analysis_data.get("artifacts"), output_dir)
+    historical_entries = _collect_historical_external_analysis_entries(
+        output_dir / "external-analysis"
+    )
+    auto_drilldown_data = _serialize_auto_drilldown_interpretations(
+        external_analysis_data.get("artifacts"), output_dir
+    )
     notification_history = _serialize_notification_history(notifications, output_dir)
     latest_assessment = _serialize_latest_assessment(assessments, output_dir)
     review_enrichment_entry = _serialize_review_enrichment(
@@ -152,9 +165,13 @@ def write_health_ui_index(
         bool(review_enrichment_entry),
         review_config,
     )
-    planner_availability_entry = _build_next_check_planner_availability(plan_entry, review_enrichment_entry, review_status)
+    planner_availability_entry = _build_next_check_planner_availability(
+        plan_entry, review_enrichment_entry, review_status
+    )
     auto_config = _serialize_auto_drilldown_policy(settings.auto_drilldown)
-    diagnostic_pack_review_entry = _serialize_diagnostic_pack_review(external_analysis, output_dir, run_id)
+    diagnostic_pack_review_entry = _serialize_diagnostic_pack_review(
+        external_analysis, output_dir, run_id
+    )
     # Read Alertmanager compact artifact if available
     alertmanager_compact_entry = _serialize_alertmanager_compact(output_dir, run_id)
     # Read Alertmanager sources inventory if available
@@ -172,8 +189,12 @@ def write_health_ui_index(
         "external_analysis_count": external_analysis_data.get("count", 0),
         "notification_count": len(notifications),
         "llm_stats": _build_llm_stats(external_analysis_data),
-        "historical_llm_stats": _build_historical_llm_stats(output_dir / "external-analysis", historical_entries),
-        "llm_activity": _serialize_llm_activity(historical_entries, output_dir, alias_mapping=alias_mapping),
+        "historical_llm_stats": _build_historical_llm_stats(
+            output_dir / "external-analysis", historical_entries
+        ),
+        "llm_activity": _serialize_llm_activity(
+            historical_entries, output_dir, alias_mapping=alias_mapping
+        ),
         "llm_policy": _build_llm_policy(
             settings,
             external_analysis,
@@ -204,7 +225,9 @@ def write_health_ui_index(
         "deterministic_next_checks": deterministic_next_checks,
         "diagnostic_pack_review": diagnostic_pack_review_entry,
         "diagnostic_pack": _serialize_diagnostic_pack(output_dir, run_id, run_label),
-        "next_check_execution_history": _build_next_check_execution_history(external_analysis, output_dir, run_id),
+        "next_check_execution_history": _build_next_check_execution_history(
+            external_analysis, output_dir, run_id
+        ),
         "scheduler_interval_seconds": expected_scheduler_interval_seconds,
         "alertmanager_compact": alertmanager_compact_entry,
         "alertmanager_sources": alertmanager_sources_entry,
@@ -245,7 +268,9 @@ def write_health_ui_index(
     index["notification_index"] = _build_notification_index(notifications, output_dir)
     # Build promotions_index for fast /api/run promotions loading
     # This is the key optimization: avoid globbing all external-analysis files on each request
-    index["promotions_index"] = _build_promotions_index(output_dir / "external-analysis", run_id)
+    index["promotions_index"] = _build_promotions_index(
+        output_dir / "external-analysis", run_id
+    )
     index_path = output_dir / "ui-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -257,7 +282,9 @@ def write_health_ui_index(
     return index_path
 
 
-def _latest_drilldown_map(drilldowns: Sequence[DrilldownArtifact]) -> dict[str, DrilldownArtifact]:
+def _latest_drilldown_map(
+    drilldowns: Sequence[DrilldownArtifact],
+) -> dict[str, DrilldownArtifact]:
     mapping: dict[str, DrilldownArtifact] = {}
     for artifact in sorted(drilldowns, key=lambda item: item.timestamp, reverse=True):
         mapping.setdefault(artifact.label, artifact)
@@ -356,7 +383,9 @@ def _collect_review_timestamps(reviews_dir: Path) -> dict[str, datetime]:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            logger.warning("Skipped malformed review timestamp artifact: %s", path.name, exc_info=True)
+            logger.warning(
+                "Skipped malformed review timestamp artifact: %s", path.name, exc_info=True
+            )
             continue
         run_id = raw.get("run_id")
         timestamp = raw.get("timestamp")
@@ -380,225 +409,3 @@ def _parse_run_start(run_id: str) -> datetime | None:
     except ValueError:
         return None
     return parsed.replace(tzinfo=UTC)
-
-
-# Maximum number of notification summaries to store in the index
-# This bounds index size while providing fast default list access
-_NOTIFICATION_INDEX_LIMIT = 500
-
-
-def _build_notification_index(
-    notifications: Sequence[NotificationRecord],
-    output_dir: Path,
-) -> dict[str, object]:
-    """Build a compact notification index for fast /api/notifications default path.
-
-    This is the key optimization to avoid scanning all notification files on cold startup.
-    Each entry contains only the fields needed for the initial notification list:
-    - kind, summary, timestamp, runId, clusterLabel
-    - artifactPath for provenance pointer to full artifact
-
-    The index is bounded to latest 500 notifications to keep index size manageable.
-
-    Args:
-        notifications: Sequence of (NotificationArtifact, Path) tuples
-        output_dir: Path to the health directory for relative path computation
-
-    Returns:
-        Dict with 'notifications' list, 'total_count', 'generated_at', 'version'
-    """
-    if not notifications:
-        return {
-            "notifications": [],
-            "total_count": 0,
-            "generated_at": datetime.now(UTC).isoformat(),
-            "version": 1,
-        }
-
-    # Sort by timestamp descending (newest first)
-    sorted_notifications = sorted(
-        notifications,
-        key=lambda item: item[0].timestamp,
-        reverse=True,
-    )
-
-    total_count = len(sorted_notifications)
-
-    # Build notification entries with list-view fields
-    entries: list[dict[str, object]] = []
-    for artifact, path in sorted_notifications:
-        # Build minimal detail entries for the list view
-        detail_entries = [{"label": str(key), "value": _stringify_notification_value(value)} for key, value in sorted(artifact.details.items())]
-
-        entry: dict[str, object] = {
-            "kind": artifact.kind,
-            "summary": artifact.summary,
-            "timestamp": artifact.timestamp,
-            "runId": artifact.run_id,
-            "clusterLabel": artifact.cluster_label,
-            "context": artifact.context,
-            "details": detail_entries,
-            "artifactPath": _relative_path(output_dir, path),
-        }
-
-        # Thread artifact_id for provenance/debugging surfaces (optional)
-        if artifact.artifact_id:
-            entry["artifact_id"] = artifact.artifact_id
-
-        entries.append(entry)
-
-    # Bound entries to limit
-    bounded_entries = entries[:_NOTIFICATION_INDEX_LIMIT]
-
-    return {
-        "notifications": bounded_entries,
-        "total_count": total_count,
-        "generated_at": datetime.now(UTC).isoformat(),
-        "version": 1,
-    }
-
-
-# Maximum number of promotion entries to store in the index
-# Most runs have very few promotions, so this is generous
-_PROMOTIONS_INDEX_LIMIT = 100
-
-
-def _build_promotions_index(
-    external_analysis_dir: Path,
-    run_id: str,
-) -> dict[str, object]:
-    """Build a compact promotions index for fast /api/run promotions loading.
-
-    This is the key optimization to avoid globbing all external-analysis files
-    on each /api/run request. The index stores promotion entries for the current
-    run only, with enough data to reconstruct queue entries without re-reading
-    promotion artifacts.
-
-    IMPORTANT: The index is run-scoped to prevent cross-run data leakage.
-    When /api/run requests a historical run, it must validate that the index's
-    run_id matches the requested run_id, otherwise fall back to file-based loading.
-
-    Args:
-        external_analysis_dir: Path to the external-analysis directory
-        run_id: The current run ID to filter promotions for
-
-    Returns:
-        Dict with 'run_id', 'promotions' list, 'total_count', 'generated_at', 'version'
-    """
-    if not external_analysis_dir.is_dir():
-        return {
-            "run_id": run_id,
-            "promotions": [],
-            "total_count": 0,
-            "generated_at": datetime.now(UTC).isoformat(),
-            "version": 1,
-        }
-
-    # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
-    try:
-        validated_run_id = validate_run_id(run_id)
-    except SecurityError:
-        # Invalid run_id - cannot safely search, return safe fallback
-        return {
-            "run_id": run_id,
-            "promotions": [],
-            "total_count": 0,
-            "generated_at": datetime.now(UTC).isoformat(),
-            "version": 1,
-        }
-
-    # Scan for promotion artifacts for this run only
-    promotion_entries: list[dict[str, object]] = []
-    # SECURITY: run_id validated by validate_run_id() before glob construction
-    for artifact_path in external_analysis_dir.glob(safe_run_artifact_glob(validated_run_id, "-next-check-promotion-*.json")):
-        try:
-            raw = json.loads(artifact_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.warning("Skipped malformed promotion artifact: %s", artifact_path.name, exc_info=True)
-            continue
-
-        # Extract payload for queue entry reconstruction
-        payload = raw.get("payload")
-        if not isinstance(payload, Mapping):
-            continue
-
-        # Build minimal queue entry from promotion payload
-        entry: dict[str, object] = {
-            "candidateId": payload.get("candidateId"),
-            "candidateIndex": payload.get("promotionIndex", 0),
-            "description": payload.get("description", "Deterministic next check"),
-            "targetCluster": payload.get("clusterLabel", ""),
-            "targetContext": payload.get("targetContext"),
-            "sourceReason": (payload.get("whyNow") or payload.get("topProblem") or "Deterministic next check"),
-            "workstream": payload.get("workstream"),
-            "urgency": payload.get("urgency"),
-            "priorityScore": payload.get("priorityScore"),
-            "sourceType": "deterministic",
-            "approvalState": "approval-required",
-            "executionState": "unexecuted",
-            "queueStatus": "approval-needed",
-            "artifactPath": _relative_path(external_analysis_dir.parent, artifact_path),
-        }
-
-        promotion_entries.append(entry)
-
-    # Sort by promotion index (consistent ordering)
-    promotion_entries.sort(key=lambda x: cast(int, x.get("candidateIndex") or 0))
-
-    # Bound entries to limit
-    bounded_entries = promotion_entries[:_PROMOTIONS_INDEX_LIMIT]
-
-    return {
-        "run_id": run_id,  # CRITICAL: run-scoped to prevent cross-run data leakage
-        "promotions": bounded_entries,
-        "total_count": len(promotion_entries),
-        "generated_at": datetime.now(UTC).isoformat(),
-        "version": 1,
-    }
-
-
-def _write_proposal_status_summary_to_review(
-    output_dir: Path,
-    run_id: str,
-    proposal_status_summary: dict[str, object],
-) -> None:
-    """Write proposal_status_summary to review artifact for fast past-run loading.
-
-    NOTE: The summary is stored as _proposal_status_summary in the review artifact.
-    This is derived read-model metadata (underscore-prefixed to mark as internal
-    indexing data), NOT source evidence. It provides a fast path to skip proposals/
-    directory scanning when loading historical runs via /api/run?run_id=.
-
-    Fallback behavior: If a review artifact lacks _proposal_status_summary (e.g., from
-    an older run created before this optimization), _load_context_for_run() will fall
-    back to scanning the proposals/ directory and building the summary on-demand.
-
-    This is the key optimization to avoid _load_context_for_run() scanning
-    the proposals/ directory on each /api/run request for historical runs.
-
-    Args:
-        output_dir: Path to the health directory (runs/health/)
-        run_id: The run ID to update the review artifact for
-        proposal_status_summary: The pre-computed proposal status summary dict
-    """
-    reviews_dir = output_dir / "reviews"
-    review_path = reviews_dir / f"{run_id}-review.json"
-
-    if not review_path.exists():
-        return
-
-    try:
-        review_data = json.loads(review_path.read_text(encoding="utf-8"))
-        if not isinstance(review_data, dict):
-            return
-
-        # Add proposal_status_summary to review artifact
-        # Use underscore prefix to mark as internal indexing metadata
-        review_data["_proposal_status_summary"] = proposal_status_summary
-
-        # Write back preserving original formatting (compact write)
-        review_path.write_text(json.dumps(review_data, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        # Non-fatal: if we can't write the summary, past runs will still work
-        # by falling back to the directory scan path
-        logger.warning("Failed to write proposal status summary to review: %s", review_path.name, exc_info=True)

@@ -730,7 +730,8 @@ class TestBuildPromotionsIndexExceptionHandling(TestCase):
         malformed_promo = external_analysis_dir / f"{self.run_id}-next-check-promotion-2.json"
         malformed_promo.write_text("{ malformed json", encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.health.ui", level=logging.WARNING) as cm:
+        # Logger moved from health.ui to health.ui_projection.notification_index
+        with self.assertLogs("k8s_diag_agent.health.ui_projection.notification_index", level=logging.WARNING) as cm:
             result = _build_promotions_index(external_analysis_dir, self.run_id)
 
         # Should have indexed 1 valid promotion
@@ -762,7 +763,8 @@ class TestBuildPromotionsIndexExceptionHandling(TestCase):
                 },
             }), encoding="utf-8")
 
-        with self.assertNoLogs("k8s_diag_agent.health.ui", level=logging.WARNING):
+        # Logger moved from health.ui to health.ui_projection.notification_index
+        with self.assertNoLogs("k8s_diag_agent.health.ui_projection.notification_index", level=logging.WARNING):
             result = _build_promotions_index(external_analysis_dir, self.run_id)
 
         self.assertEqual(result["total_count"], 2)
@@ -798,7 +800,8 @@ class TestWriteProposalStatusSummaryExceptionHandling(TestCase):
         review_path.chmod(0o000)
 
         try:
-            with self.assertLogs("k8s_diag_agent.health.ui", level=logging.WARNING) as cm:
+            # Logger moved from health.ui to health.ui_projection.notification_index
+            with self.assertLogs("k8s_diag_agent.health.ui_projection.notification_index", level=logging.WARNING) as cm:
                 # This should NOT raise - it should be caught and logged
                 _write_proposal_status_summary_to_review(
                     self.tmpdir,

@@ -36,7 +36,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [EXTRACTION] Backend - extraction in progress
     ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
     ("src/k8s_diag_agent/ui/api_incident_report.py", "[EXTRACTION] Incident report - extract builders"),
-    ("src/k8s_diag_agent/health/ui.py", "[EXTRACTION] Health UI - extract by panel"),
     ("src/k8s_diag_agent/ui/api.py", "[EXTRACTION] API orchestrator - re-export pattern"),
     ("src/k8s_diag_agent/ui/server.py", "[EXTRACTION] Server routes - pending extraction"),
     ("src/k8s_diag_agent/ui/server_read_support.py", "[EXTRACTION] Read support - pending extraction"),
