@@ -13,8 +13,6 @@ from __future__ import annotations
 import json
 import os
 import socket
-import subprocess
-import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -26,8 +24,10 @@ if TYPE_CHECKING:
     from .loop import HealthRunConfig
     from .loop_scheduler_models import LockEvaluation, LockFileSnapshot, ProcessIdentity
 
-from ..security.subprocess_helpers import (
-    _sanitize_output,
+from .loop_scheduler_diagnostics import (
+    build_diagnostic_pack,  # noqa: F401 - re-exported for backward compatibility
+    log_run_summary,  # noqa: F401 - re-exported for backward compatibility
+    resolve_run_id,  # noqa: F401 - re-exported for backward compatibility
 )
 from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward compatibility
     _HEALTH_LOCK_FILENAME,
@@ -35,7 +35,6 @@ from .loop_scheduler_models import (  # noqa: F401 - re-exported for backward co
     _LOCK_SKIP_ESCALATION_THRESHOLD,
     _LOCK_STALE_AGE_MULTIPLIER,
     _LOCK_STALE_MIN_SECONDS,
-    DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
     LockEvaluation,  # noqa: F401 - re-exported for backward compatibility
     LockFileSnapshot,  # noqa: F401 - re-exported for backward compatibility
     ProcessIdentity,  # noqa: F401 - re-exported for backward compatibility
@@ -696,158 +695,33 @@ class HealthLoopScheduler:
         freshness_age_seconds: float | None = None,
         expected_interval_seconds: int | None = None,
     ) -> None:
-        """Log a summary of a completed health run."""
-        from .freshness import freshness_status
-        from .ui import _build_provider_execution, _serialize_review_enrichment_policy
-        run_id = self._resolve_run_id(assessments, triggers)
-        healthy_count = sum(
-            1 for artifact in assessments 
-            if getattr(getattr(artifact, 'health_rating', None), 'value', None) == "healthy"
-        )
-        degraded_count = len(assessments) - healthy_count
-        review_config = _serialize_review_enrichment_policy(settings.review_enrichment)
-        provider_execution = _build_provider_execution(
-            settings,
-            external_analysis,
-            drilldowns,
-            review_config,
-        )
-        metadata: dict[str, object] = {
-            "run_id": run_id,
-            "assessment_count": len(assessments),
-            "healthy_count": healthy_count,
-            "degraded_count": degraded_count,
-            "trigger_count": len(triggers),
-            "drilldown_count": len(drilldowns),
-            "external_analysis_count": len(external_analysis),
-            "provider_execution": provider_execution,
-            "event": "run-summary",
-        }
-        if expected_interval_seconds is not None:
-            metadata["expected_interval_seconds"] = expected_interval_seconds
-            if freshness_age_seconds is not None:
-                age_value = int(max(0.0, freshness_age_seconds))
-                metadata["freshness_age_seconds"] = age_value
-                status = freshness_status(age_value, expected_interval_seconds)
-                if status:
-                    metadata["freshness_status"] = status
-        self._log_event(
-            "INFO",
-            "Health run summary",
-            **metadata,
+        """Log a summary of a completed health run.
+
+        Delegates to the extracted log_run_summary function for the actual implementation.
+        """
+        log_run_summary(
+            log_fn=self._log_event,
+            assessments=assessments,
+            triggers=triggers,
+            drilldowns=drilldowns,
+            external_analysis=external_analysis,
+            settings=settings,
+            last_run_finish_time=self._last_run_finish_time,
+            freshness_age_seconds=freshness_age_seconds,
+            expected_interval_seconds=expected_interval_seconds,
         )
 
     def _maybe_build_diagnostic_pack(self, run_id: str) -> None:
-        """Build diagnostic pack if configured via environment."""
-        from .loop_history import _env_is_truthy
-        env_value = os.environ.get("HEALTH_BUILD_DIAGNOSTIC_PACK")
-        if not _env_is_truthy(env_value):
-            return
-        if not run_id or run_id == "<unknown>":
-            self._log_event(
-                "INFO",
-                "Skipping diagnostic pack generation; run_id unavailable",
-                run_id=run_id,
-                event="diag-pack-skipped",
-            )
-            return
-        runs_dir = str(self._runs_dir_base)
-        build_script = self._scripts_dir / "build_diagnostic_pack.py"
-        build_cmd = [
-            sys.executable,
-            str(build_script),
-            "--run-id",
-            run_id,
-            "--runs-dir",
-            runs_dir,
-        ]
-        try:
-            subprocess.run(
-                build_cmd,
-                check=True,
-                env=os.environ,
-                timeout=DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            self._log_event(
-                "ERROR",
-                "Scheduled diagnostic pack build timed out",
-                run_id=run_id,
-                severity_reason=f"build timed out after {DIAGNOSTIC_PACK_TIMEOUT_SECONDS}s",
-                event="diag-pack-build-timeout",
-            )
-            return
-        except (subprocess.CalledProcessError, OSError) as exc:
-            # Sanitize error to prevent credential leakage
-            if isinstance(exc, subprocess.CalledProcessError):
-                stderr_output = exc.stderr if exc.stderr else exc.stdout
-                error_str = _sanitize_output(
-                    stderr_output.decode("utf-8", errors="replace")
-                    if isinstance(stderr_output, bytes)
-                    else (stderr_output or "")
-                )
-            else:
-                error_str = str(exc)
-            self._log_event(
-                "ERROR",
-                "Scheduled diagnostic pack build failed",
-                run_id=run_id,
-                severity_reason=error_str,
-                event="diag-pack-build-failed",
-            )
-            return
-        update_script = self._scripts_dir / "update_ui_index.py"
-        update_cmd = [
-            sys.executable,
-            str(update_script),
-            "--run-id",
-            run_id,
-            "--runs-dir",
-            runs_dir,
-        ]
-        try:
-            subprocess.run(
-                update_cmd,
-                check=True,
-                env=os.environ,
-                timeout=DIAGNOSTIC_PACK_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            self._log_event(
-                "ERROR",
-                "Scheduled UI index refresh timed out after diagnostic pack build",
-                run_id=run_id,
-                severity_reason=f"index refresh timed out after {DIAGNOSTIC_PACK_TIMEOUT_SECONDS}s",
-                event="diag-pack-ui-refresh-timeout",
-            )
-            return
-        except (subprocess.CalledProcessError, OSError) as exc:
-            # Sanitize error to prevent credential leakage
-            if isinstance(exc, subprocess.CalledProcessError):
-                stderr_output = exc.stderr if exc.stderr else exc.stdout
-                error_str = _sanitize_output(
-                    stderr_output.decode("utf-8", errors="replace")
-                    if isinstance(stderr_output, bytes)
-                    else (stderr_output or "")
-                )
-            else:
-                error_str = str(exc)
-            self._log_event(
-                "ERROR",
-                "Scheduled UI index refresh failed after diagnostic pack build",
-                run_id=run_id,
-                severity_reason=error_str,
-                event="diag-pack-ui-refresh-failed",
-            )
-            return
-        self._log_event(
-            "INFO",
-            "Scheduled diagnostic pack generated",
-            run_id=run_id,
-            runs_dir=runs_dir,
-            event="diag-pack-generated",
-        )
+        """Build diagnostic pack if configured via environment.
 
+        Delegates to the extracted build_diagnostic_pack function for the actual implementation.
+        """
+        build_diagnostic_pack(
+            log_fn=self._log_event,
+            scripts_dir=self._scripts_dir,
+            runs_dir_base=self._runs_dir_base,
+            run_id=run_id,
+        )
 
     def _log_effective_scheduler_config(self) -> None:
         """Emit the effective scheduler configuration log event.
