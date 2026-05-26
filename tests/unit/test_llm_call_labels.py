@@ -147,29 +147,29 @@ class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
     """Tests for review-enrichment failure metadata including llm_* fields."""
 
     def test_llamacpp_adapter_adds_llm_fields_to_failure_metadata(self) -> None:
-        """LlamaCppAdapter._run_http adds llm_call, llm_call_id, llm_provider, llm_operation to failure_metadata."""
+        """build_generic_failure_metadata in llamacpp_adapter_http.py adds llm_* fields to failure_metadata."""
         import inspect
 
-        from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+        from k8s_diag_agent.external_analysis.llamacpp_adapter_http import build_generic_failure_metadata
 
-        source = inspect.getsource(LlamaCppAdapter._run_http)
+        source = inspect.getsource(build_generic_failure_metadata)
 
-        # Check that the adapter includes llm_* fields in failure_metadata
-        self.assertIn('failure_metadata["llm_call"] = True', source)
-        self.assertIn('failure_metadata["llm_call_id"]', source)
-        self.assertIn('failure_metadata["llm_provider"]', source)
-        self.assertIn('failure_metadata["llm_operation"] = "review-enrichment"', source)
+        # Check that the function includes llm_* fields in failure_metadata
+        self.assertIn('metadata["llm_call"] = True', source)
+        self.assertIn('metadata["llm_call_id"]', source)
+        self.assertIn('metadata["llm_provider"]', source)
+        self.assertIn('metadata["llm_operation"] = "review-enrichment"', source)
 
     def test_llamacpp_adapter_uses_build_llm_call_id(self) -> None:
-        """LlamaCppAdapter uses build_llm_call_id helper."""
+        """run_http_assessment uses build_llm_call_id helper."""
         import inspect
 
-        from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+        from k8s_diag_agent.external_analysis.llamacpp_adapter_http import run_http_assessment
 
-        source = inspect.getsource(LlamaCppAdapter._run_http)
+        source = inspect.getsource(run_http_assessment)
 
-        # Check that the adapter uses the helper
-        self.assertIn("build_llm_call_id(request.run_id, \"review-enrichment\", self.name)", source)
+        # Check that the function uses the helper
+        self.assertIn('build_llm_call_id(request.run_id, "review-enrichment", adapter_name)', source)
 
 
 class AutoDrilldownLogsTest(unittest.TestCase):
