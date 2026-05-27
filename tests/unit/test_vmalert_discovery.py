@@ -469,7 +469,7 @@ class TestVMAlertCRDDiscovery:
             },
         }
         
-        source = strategy._parse_crd_item(crd_item, None, None)
+        source = strategy._parse_crd_item(crd_item, None)
         
         assert source is not None
         assert source.name == "vmalert-main"

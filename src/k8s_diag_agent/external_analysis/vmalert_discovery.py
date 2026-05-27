@@ -16,6 +16,13 @@ Key invariants:
 Identity model:
 - canonical_entity_id: Deterministic hash from normalized defining facts (namespace, name, origin, cluster_uid, etc.)
 - canonical_identity: namespace/name string for human-readable matching
+
+This module is a compatibility surface. Actual implementations are in submodules:
+- vmalert_discovery_models: Core data models and enums
+- vmalert_discovery_crd_strategy: CRD-based discovery and context helpers
+- vmalert_discovery_service_strategy: Service heuristic discovery
+- vmalert_discovery_sources: Source construction helpers
+- vmalert_discovery_strategies: Strategy façade for imports
 """
 
 from __future__ import annotations
@@ -26,675 +33,34 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
-from typing import Any
 
-from ..identity.artifact import new_artifact_id
+# Import models from dedicated module
+from .vmalert_discovery_models import (
+    _ORIGIN_PRIORITY,
+    DiscoveryResult,
+    VmalertSource,
+    VmalertSourceInventory,
+    VmalertSourceMode,
+    VmalertSourceOrigin,
+    VmalertSourceState,
+    _parse_datetime,
+)
+
+# Import sources/strategies from dedicated modules
+from .vmalert_discovery_sources import (
+    _IN_CLUSTER_CONTEXT,
+    _kubectl_context_args,
+    _should_add_context_flag,
+    build_endpoint_for_manual,
+)
+from .vmalert_discovery_strategies import (
+    DiscoveryStrategy,
+    ServiceHeuristicDiscoveryStrategy,
+    VMAlertCRDDiscoveryStrategy,
+)
 
 # Module logger for debug output
 _logger = logging.getLogger(__name__)
-
-
-# In-cluster context sentinel (matches live_snapshot.py behavior)
-_IN_CLUSTER_CONTEXT = "in-cluster"
-
-
-class VmalertSourceOrigin(StrEnum):
-    """Origin of a vmalert source."""
-
-    MANUAL = "manual"
-    VMALERT_CRD = "vmalert-crd"
-    SERVICE_HEURISTIC = "service-heuristic"
-
-
-# Explicit priority map: lower number = higher priority
-_ORIGIN_PRIORITY: dict[VmalertSourceOrigin, int] = {
-    VmalertSourceOrigin.MANUAL: 0,
-    VmalertSourceOrigin.VMALERT_CRD: 10,
-    VmalertSourceOrigin.SERVICE_HEURISTIC: 20,
-}
-
-
-def _normalize_endpoint_for_identity(endpoint: str) -> str:
-    """Strip scheme and trailing slash to get a canonical identity key."""
-    normalized = endpoint.rstrip('/')
-    if normalized.startswith('http://'):
-        normalized = normalized[7:]
-    elif normalized.startswith('https://'):
-        normalized = normalized[8:]
-    return normalized
-
-
-class VmalertSourceState(StrEnum):
-    """Current state of a vmalert source."""
-
-    DISCOVERED = "discovered"
-    DISCOVERED_BUT_UNVERIFIED = "discovered-but-unverified"
-    AUTO_TRACKED = "auto-tracked"
-    DEGRADED = "degraded"
-    MISSING = "missing"
-    MANUAL = "manual"
-
-
-class VmalertSourceMode(StrEnum):
-    """How a source entered manual tracking."""
-
-    NOT_MANUAL = "not-manual"
-    OPERATOR_CONFIGURED = "operator-configured"
-    OPERATOR_PROMOTED = "operator-promoted"
-
-
-@dataclass(frozen=True)
-class VmalertSource:
-    """A discovered or configured vmalert source with explicit provenance."""
-
-    source_id: str
-    endpoint: str
-    namespace: str | None = None
-    name: str | None = None
-    origin: VmalertSourceOrigin = VmalertSourceOrigin.SERVICE_HEURISTIC
-    state: VmalertSourceState = VmalertSourceState.DISCOVERED
-    discovered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    verified_at: datetime | None = None
-    last_check: datetime | None = None
-    last_error: str | None = None
-    verified_version: str | None = None
-    confidence_hints: tuple[str, ...] = field(default_factory=tuple)
-    merged_provenances: tuple[VmalertSourceOrigin, ...] = field(default_factory=tuple)
-    cluster_label: str | None = None
-    cluster_context: str | None = None
-    cluster_uid: str | None = None
-    object_uid: str | None = None
-    manual_source_mode: VmalertSourceMode = VmalertSourceMode.NOT_MANUAL
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, 'endpoint', self.endpoint.rstrip('/'))
-        if self.origin not in self.merged_provenances:
-            object.__setattr__(self, 'merged_provenances', self.merged_provenances + (self.origin,))
-
-    @property
-    def canonical_identity(self) -> str:
-        """Canonical identity for deduplication across strategies."""
-        if self.namespace and self.name:
-            return f"{self.namespace}/{self.name}"
-        return _normalize_endpoint_for_identity(self.endpoint)
-
-    @property
-    def canonical_entity_id(self) -> str:
-        """Canonical historical identity - deterministic hash from normalized defining facts."""
-        from ..identity.vmalert_source import build_vmalert_canonical_entity_id
-        return build_vmalert_canonical_entity_id(
-            namespace=self.namespace,
-            name=self.name,
-            origin=self.origin.value if self.origin else None,
-            endpoint=self.endpoint,
-            cluster_uid=self.cluster_uid,
-            object_uid=self.object_uid,
-        )
-
-    @property
-    def operator_intent_key(self) -> str:
-        """Operator-intent persistence key for durable actions."""
-        from ..identity.vmalert_source import build_vmalert_operator_intent_key
-        return build_vmalert_operator_intent_key(
-            cluster_label=self.cluster_label,
-            cluster_context=self.cluster_context,
-            namespace=self.namespace,
-            name=self.name,
-            endpoint=self.endpoint,
-        )
-
-    @property
-    def identity_key(self) -> str:
-        """Legacy identity key - prefer canonical_identity for deduplication."""
-        return self.source_id
-
-    @property
-    def display_provenance(self) -> str:
-        """Human-readable provenance showing all merged origins."""
-        origins = [p.value for p in self.merged_provenances]
-        labels = {
-            'manual': 'Manual',
-            'vmalert-crd': 'VMAlert CRD',
-            'service-heuristic': 'Service Heuristic',
-        }
-        return ', '.join(labels.get(o, o) for o in origins)
-
-    def to_dict(self) -> dict[str, Any]:
-        result = {
-            'source_id': self.source_id,
-            'endpoint': self.endpoint,
-            'namespace': self.namespace,
-            'name': self.name,
-            'origin': self.origin.value,
-            'state': self.state.value,
-            'discovered_at': self.discovered_at.isoformat(),
-            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
-            'last_check': self.last_check.isoformat() if self.last_check else None,
-            'last_error': self.last_error,
-            'verified_version': self.verified_version,
-            'confidence_hints': list(self.confidence_hints),
-            'merged_provenances': [p.value for p in self.merged_provenances],
-            'display_provenance': self.display_provenance,
-            'cluster_label': self.cluster_label,
-            'cluster_context': self.cluster_context,
-            'canonical_identity': self.canonical_identity,
-            'canonicalEntityId': self.canonical_entity_id,
-        }
-        if self.cluster_uid is not None:
-            result['cluster_uid'] = self.cluster_uid
-        if self.object_uid is not None:
-            result['object_uid'] = self.object_uid
-        if self.manual_source_mode != VmalertSourceMode.NOT_MANUAL:
-            result['manual_source_mode'] = self.manual_source_mode.value
-        return result
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> VmalertSource:
-        """Reconstruct source from serialized dict."""
-        merged_raw = data.get('merged_provenances')
-        merged_provenances: tuple[VmalertSourceOrigin, ...] = ()
-        if merged_raw:
-            merged_provenances = tuple(
-                VmalertSourceOrigin(v) if isinstance(v, str) else v
-                for v in merged_raw
-            )
-        manual_source_mode_raw = data.get('manual_source_mode')
-        if manual_source_mode_raw:
-            manual_source_mode = VmalertSourceMode(manual_source_mode_raw)
-        else:
-            manual_source_mode = VmalertSourceMode.NOT_MANUAL
-        return cls(
-            source_id=str(data['source_id']),
-            endpoint=str(data['endpoint']),
-            namespace=data.get('namespace'),
-            name=data.get('name'),
-            origin=VmalertSourceOrigin(data.get('origin', 'service-heuristic')),
-            state=VmalertSourceState(data.get('state', 'discovered')),
-            discovered_at=_parse_datetime(data.get('discovered_at')),
-            verified_at=_parse_datetime(data.get('verified_at')),
-            last_check=_parse_datetime(data.get('last_check')),
-            last_error=data.get('last_error'),
-            verified_version=data.get('verified_version'),
-            confidence_hints=tuple(data.get('confidence_hints', [])),
-            merged_provenances=merged_provenances,
-            cluster_label=data.get('cluster_label'),
-            cluster_context=data.get('cluster_context'),
-            cluster_uid=data.get('cluster_uid'),
-            object_uid=data.get('object_uid'),
-            manual_source_mode=manual_source_mode,
-        )
-
-
-@dataclass
-class VmalertSourceInventory:
-    """Collection of vmalert sources with merge semantics."""
-
-    sources: dict[str, VmalertSource] = field(default_factory=dict)
-    discovered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    cluster_context: str | None = None
-    artifact_id: str | None = field(default_factory=new_artifact_id)
-
-    def add_source(self, source: VmalertSource) -> None:
-        """Add a source, respecting manual precedence and merging provenance."""
-        existing = self.sources.get(source.identity_key)
-        if existing is None:
-            self.sources[source.identity_key] = source
-            return
-
-        if existing.origin == VmalertSourceOrigin.MANUAL:
-            return
-
-        if source.origin == VmalertSourceOrigin.MANUAL:
-            self.sources[source.identity_key] = source
-            return
-
-        if _ORIGIN_PRIORITY[source.origin] < _ORIGIN_PRIORITY[existing.origin]:
-            # New source has higher priority - merge provenances before replacing
-            merged_provenances = set(existing.merged_provenances)
-            merged_provenances.update(source.merged_provenances)
-            # Also add origins that might not be in merged_provenances yet
-            merged_provenances.add(existing.origin)
-            merged_provenances.add(source.origin)
-            
-            # Create merged source preserving winner's data but with merged provenance
-            merged_source = VmalertSource(
-                source_id=source.source_id,
-                endpoint=source.endpoint,
-                namespace=source.namespace,
-                name=source.name,
-                origin=source.origin,
-                state=source.state,
-                discovered_at=source.discovered_at,
-                verified_at=source.verified_at,
-                last_check=source.last_check,
-                last_error=source.last_error,
-                verified_version=source.verified_version,
-                confidence_hints=source.confidence_hints,
-                merged_provenances=tuple(sorted(merged_provenances, key=lambda p: _ORIGIN_PRIORITY[p])),
-                cluster_label=source.cluster_label,
-                cluster_context=source.cluster_context,
-                cluster_uid=source.cluster_uid,
-                object_uid=source.object_uid,
-            )
-            self.sources[source.identity_key] = merged_source
-        elif source.origin == existing.origin:
-            if source.state == VmalertSourceState.AUTO_TRACKED:
-                self.sources[source.identity_key] = source
-        else:
-            # Lower priority source - merge provenance but keep higher priority source
-            merged_provenances = set(existing.merged_provenances)
-            merged_provenances.update(source.merged_provenances)
-            merged_provenances.add(source.origin)
-            
-            # Update existing source with merged provenance but keep its origin
-            merged_source = VmalertSource(
-                source_id=existing.source_id,
-                endpoint=existing.endpoint,
-                namespace=existing.namespace,
-                name=existing.name,
-                origin=existing.origin,  # Keep existing origin
-                state=existing.state,
-                discovered_at=existing.discovered_at,
-                verified_at=existing.verified_at,
-                last_check=existing.last_check,
-                last_error=existing.last_error,
-                verified_version=existing.verified_version,
-                confidence_hints=existing.confidence_hints,
-                merged_provenances=tuple(sorted(merged_provenances, key=lambda p: _ORIGIN_PRIORITY[p])),
-                cluster_label=existing.cluster_label,
-                cluster_context=existing.cluster_context,
-                cluster_uid=existing.cluster_uid,
-                object_uid=existing.object_uid,
-            )
-            self.sources[source.identity_key] = merged_source
-
-    def get_by_origin(self, origin: VmalertSourceOrigin) -> tuple[VmalertSource, ...]:
-        """Get all sources with a specific origin."""
-        return tuple(s for s in self.sources.values() if s.origin == origin)
-
-    def get_by_state(self, state: VmalertSourceState) -> tuple[VmalertSource, ...]:
-        """Get all sources with a specific state."""
-        return tuple(s for s in self.sources.values() if s.state == state)
-
-    def get_auto_tracked(self) -> tuple[VmalertSource, ...]:
-        """Get all sources that are being actively tracked."""
-        return tuple(s for s in self.sources.values() if s.state in (VmalertSourceState.AUTO_TRACKED, VmalertSourceState.MANUAL))
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "sources": [s.to_dict() for s in self.sources.values()],
-            "discovered_at": self.discovered_at.isoformat(),
-            "cluster_context": self.cluster_context,
-            "source_count": len(self.sources),
-            "artifact_id": self.artifact_id,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> VmalertSourceInventory:
-        """Reconstruct inventory from serialized dict."""
-        sources = {s["source_id"]: VmalertSource.from_dict(s) for s in data.get("sources", [])}
-        artifact_id: str | None = None
-        if data.get("artifact_id"):
-            artifact_id = str(data["artifact_id"])
-        return cls(
-            sources=sources,
-            discovered_at=_parse_datetime(data.get("discovered_at")),
-            cluster_context=data.get("cluster_context"),
-            artifact_id=artifact_id,
-        )
-
-
-# --- Discovery Strategy Interfaces ---
-
-
-@dataclass(frozen=True)
-class DiscoveryResult:
-    """Result from a discovery strategy."""
-
-    sources: tuple[VmalertSource, ...]
-    strategy: str
-    errors: tuple[str, ...] = field(default_factory=tuple)
-
-
-class DiscoveryStrategy:
-    """Base class for vmalert discovery strategies."""
-
-    name: str = "base"
-
-    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
-        """Discover vmalert sources."""
-        raise NotImplementedError
-
-
-def _should_add_context_flag(context: str | None) -> bool:
-    """Determine if kubectl should use --context flag."""
-    if context is None:
-        return False
-    return context != _IN_CLUSTER_CONTEXT
-
-
-def _kubectl_context_args(context: str | None) -> list[str]:
-    """Return kubectl --context args based on context value."""
-    if context is None or context == _IN_CLUSTER_CONTEXT:
-        return []
-    return ["--context", context]
-
-
-class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
-    """Discover vmalert via service heuristics.
-
-    Lowest confidence method - looks for conventional service patterns
-    and port configurations. Primary fallback when CRD is not available.
-    """
-
-    name = "service-heuristic"
-
-    # Likely namespace patterns for VictoriaMetrics stack
-    LIKELY_NAMESPACES = frozenset({
-        'victoria-metrics-k8s-stack',
-        'monitoring',
-        'victoria-metrics',
-        'vm',
-    })
-
-    # Likely port names for vmalert HTTP endpoints
-    LIKELY_PORT_NAMES = frozenset({
-        'http',
-        'web',
-        'metrics',
-        'api',
-        'vmalert',
-    })
-
-    # Likely port numbers
-    LIKELY_PORTS = frozenset({8080, 8880})
-
-    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
-        """Search for vmalert services by name pattern and labels."""
-        import subprocess
-
-        sources: list[VmalertSource] = []
-        errors: list[str] = []
-
-        try:
-            # Search all namespaces for services
-            cmd = ["kubectl", "get", "svc", "-A", "-o", "json"]
-            cmd.extend(_kubectl_context_args(context))
-
-            _logger.debug(
-                "vmalert service heuristic discovery: searching all namespaces with command: %s",
-                " ".join(cmd),
-            )
-
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            if result.returncode != 0:
-                stderr = result.stderr.lower()
-                if "not found" in stderr or "no resources" in stderr:
-                    _logger.debug("vmalert service discovery: no services found")
-                    return DiscoveryResult(sources=(), errors=(), strategy=self.name)
-                errors.append(f"kubectl get svc failed: {result.stderr[:200]}")
-                _logger.warning("vmalert service heuristic discovery failed: %s", errors[-1])
-                return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
-
-            data = json.loads(result.stdout)
-            items = data.get("items", [])
-
-            _logger.debug(
-                "vmalert service heuristic discovery: found %d services across all namespaces",
-                len(items),
-            )
-
-            for item in items:
-                source = self._parse_service_item(item, cluster_uid)
-                if source:
-                    sources.append(source)
-                    _logger.debug(
-                        "vmalert service heuristic discovery: found service %s in namespace %s",
-                        source.name,
-                        source.namespace,
-                    )
-
-        except subprocess.TimeoutExpired:
-            errors.append("vmalert service discovery timed out")
-            _logger.warning("vmalert service heuristic discovery timed out")
-        except FileNotFoundError:
-            errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for vmalert service heuristic discovery")
-        except json.JSONDecodeError as exc:
-            errors.append(f"Failed to parse kubectl output: {exc}")
-            _logger.warning("Failed to parse vmalert service heuristic output: %s", exc)
-
-        return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
-
-    def _parse_service_item(
-        self,
-        item: dict[str, Any],
-        cluster_uid: str | None,
-    ) -> VmalertSource | None:
-        """Parse a service to check if it's a vmalert service."""
-        metadata = item.get("metadata", {})
-        name = metadata.get("name", "")
-        namespace = metadata.get("namespace", "default")
-        labels = metadata.get("labels", {})
-
-        # Check name patterns for vmalert - name match is primary
-        name_lower = name.lower()
-        if not self._matches_vmalert_name(name_lower):
-            return None
-
-        # Check labels - optional if name match is strong, but raises confidence
-        has_labels = self._matches_vmalert_labels(labels)
-        # Require label match only if name doesn't clearly indicate vmalert
-        if not has_labels and not name_lower.startswith("vmalert-"):
-            return None
-
-        # Extract port information
-        spec = item.get("spec", {})
-        ports = spec.get("ports", [])
-        target_port = self._extract_vmalert_port(ports)
-
-        if target_port is None:
-            return None
-
-        # Capture object UID
-        object_uid: str | None = metadata.get("uid")
-
-        source_id = f"service:{namespace}/{name}"
-
-        # Construct canonical in-cluster DNS URL
-        endpoint = f"http://{name}.{namespace}.svc:{target_port}"
-
-        # Build confidence hints
-        confidence_hints: list[str] = ["from-service"]
-        if self._matches_likely_namespace(namespace):
-            confidence_hints.append("likely-namespace")
-        if self._matches_likely_port(ports):
-            confidence_hints.append("likely-port")
-
-        return VmalertSource(
-            source_id=source_id,
-            endpoint=endpoint,
-            namespace=namespace,
-            name=name,
-            origin=VmalertSourceOrigin.SERVICE_HEURISTIC,
-            state=VmalertSourceState.DISCOVERED,
-            confidence_hints=tuple(confidence_hints),
-            cluster_uid=cluster_uid,
-            object_uid=object_uid,
-        )
-
-    def _matches_vmalert_name(self, name_lower: str) -> bool:
-        """Check if service name matches vmalert patterns."""
-        # Exact or prefix match
-        if name_lower.startswith("vmalert-"):
-            return True
-        # Contains match
-        if "vmalert" in name_lower:
-            return True
-        return False
-
-    def _matches_vmalert_labels(self, labels: dict[str, str]) -> bool:
-        """Check if service labels indicate vmalert/VM operator ownership."""
-        # Check for app.kubernetes.io labels
-        app_name = labels.get("app.kubernetes.io/name", "")
-        if "vmalert" in app_name.lower():
-            return True
-
-        component = labels.get("app.kubernetes.io/component", "")
-        if "vmalert" in component.lower():
-            return True
-
-        # Check for VM operator labels
-        if labels.get("operator.victoriametrics.com/name"):
-            return True
-        if labels.get("app") and "vmalert" in labels["app"].lower():
-            return True
-
-        return False
-
-    def _extract_vmalert_port(self, ports: list[dict[str, Any]]) -> int | None:
-        """Extract the most likely vmalert HTTP port from service ports."""
-        # First, look for ports by likely names
-        for port_spec in ports:
-            port_name = port_spec.get("name", "").lower()
-            port_num = port_spec.get("port")
-            if port_num and port_name in self.LIKELY_PORT_NAMES:
-                return int(port_num)
-
-        # Second, look for likely port numbers
-        for port_spec in ports:
-            port_num = port_spec.get("port")
-            if port_num and int(port_num) in self.LIKELY_PORTS:
-                return int(port_num)
-
-        # Fallback: return first TCP port if available
-        for port_spec in ports:
-            if port_spec.get("protocol") == "TCP":
-                return int(port_spec.get("port", 0))
-
-        return None
-
-    def _matches_likely_namespace(self, namespace: str) -> bool:
-        """Check if namespace matches likely VM stack namespaces."""
-        return namespace in self.LIKELY_NAMESPACES
-
-    def _matches_likely_port(self, ports: list[dict[str, Any]]) -> bool:
-        """Check if any port matches likely vmalert ports."""
-        for port_spec in ports:
-            if int(port_spec.get("port", 0)) in self.LIKELY_PORTS:
-                return True
-        return False
-
-
-class VMAlertCRDDiscoveryStrategy(DiscoveryStrategy):
-    """Discover vmalert via VMAlert CRDs (VictoriaMetrics Operator)."""
-
-    name = "vmalert-crd"
-
-    def discover(self, context: str | None = None, cluster_uid: str | None = None) -> DiscoveryResult:
-        """Query VMAlert CRDs using kubectl."""
-        import subprocess
-
-        sources: list[VmalertSource] = []
-        errors: list[str] = []
-
-        try:
-            # Try VictoriaMetrics Operator CRDs
-            cmd = ["kubectl", "get", "vmalerts", "-A", "-o", "json"]
-            cmd.extend(_kubectl_context_args(context))
-
-            _logger.debug(
-                "vmalert CRD discovery: searching all namespaces with command: %s",
-                " ".join(cmd),
-            )
-
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            if result.returncode != 0:
-                stderr = result.stderr.lower()
-                if "not found" in stderr or "no resources" in stderr:
-                    _logger.debug("vmalert CRD discovery: VMAlert CRD not installed")
-                    return DiscoveryResult(sources=(), errors=(), strategy=self.name)
-                errors.append(f"kubectl failed: {result.stderr[:200]}")
-                _logger.warning("vmalert CRD discovery failed: %s", errors[-1])
-                return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
-
-            data = json.loads(result.stdout)
-            items = data.get("items", [])
-
-            _logger.debug(
-                "vmalert CRD discovery: found %d VMAlert CRDs across all namespaces",
-                len(items),
-            )
-
-            for item in items:
-                source = self._parse_crd_item(item, context, cluster_uid)
-                if source:
-                    sources.append(source)
-                    _logger.debug(
-                        "vmalert CRD discovery: found source %s in namespace %s",
-                        source.name,
-                        source.namespace,
-                    )
-
-        except subprocess.TimeoutExpired:
-            errors.append("kubectl get vmalerts timed out")
-            _logger.warning("vmalert CRD discovery timed out")
-        except FileNotFoundError:
-            errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for vmalert CRD discovery")
-        except json.JSONDecodeError as exc:
-            errors.append(f"Failed to parse kubectl output: {exc}")
-            _logger.warning("Failed to parse vmalert CRD discovery output: %s", exc)
-
-        return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
-
-    def _parse_crd_item(
-        self,
-        item: dict[str, Any],
-        context: str | None,
-        cluster_uid: str | None,
-    ) -> VmalertSource | None:
-        """Parse a VMAlert CRD item into a source."""
-        metadata = item.get("metadata", {})
-        name = metadata.get("name")
-        namespace = metadata.get("namespace", "default")
-
-        if not name:
-            return None
-
-        object_uid: str | None = metadata.get("uid")
-
-        # Extract port from spec (VMAlert CRD typically specifies port)
-        spec = item.get("spec", {})
-        port = spec.get("port", 8080)  # Default to 8080
-
-        source_id = f"crd:{namespace}/{name}"
-        endpoint = f"http://{name}.{namespace}.svc:{port}"
-
-        return VmalertSource(
-            source_id=source_id,
-            endpoint=endpoint,
-            namespace=namespace,
-            name=name,
-            origin=VmalertSourceOrigin.VMALERT_CRD,
-            state=VmalertSourceState.DISCOVERED,
-            confidence_hints=("from-crd", f"namespace={namespace}"),
-            cluster_uid=cluster_uid,
-            object_uid=object_uid,
-        )
 
 
 # --- Verification ---
@@ -926,48 +292,6 @@ def verify_and_update_inventory(
     )
 
 
-# --- Utility Functions ---
-
-
-def _parse_datetime(value: str | None) -> datetime:
-    """Parse ISO format datetime string to timezone-aware UTC datetime."""
-    if not value:
-        return datetime.now(UTC)
-    try:
-        if value.endswith("Z"):
-            value = f"{value[:-1]}+00:00"
-        parsed = datetime.fromisoformat(value)
-    except (ValueError, TypeError):
-        return datetime.now(UTC)
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def build_endpoint_for_manual(
-    endpoint: str,
-    namespace: str | None = None,
-    name: str | None = None,
-) -> VmalertSource:
-    """Build a manual vmalert source from user-provided endpoint."""
-    if not endpoint.startswith(("http://", "https://")):
-        endpoint = f"http://{endpoint}"
-
-    source_id = f"manual:{endpoint}"
-    if namespace and name:
-        source_id = f"manual:{namespace}/{name}"
-
-    return VmalertSource(
-        source_id=source_id,
-        endpoint=endpoint,
-        namespace=namespace,
-        name=name,
-        origin=VmalertSourceOrigin.MANUAL,
-        state=VmalertSourceState.MANUAL,
-        manual_source_mode=VmalertSourceMode.OPERATOR_CONFIGURED,
-    )
-
-
 # --- Canonical Deduplication ---
 
 
@@ -1056,3 +380,38 @@ def merge_deduplicate_inventory(
         cluster_context=inventory.cluster_context,
         artifact_id=inventory.artifact_id,
     )
+
+
+# --- Re-exports for backward compatibility ---
+# These allow existing code to import from vmalert_discovery instead of the submodules
+
+__all__ = [
+    # Enums
+    "VmalertSourceOrigin",
+    "VmalertSourceState",
+    "VmalertSourceMode",
+    # Core models
+    "VmalertSource",
+    "VmalertSourceInventory",
+    "DiscoveryResult",
+    # Constants
+    "_ORIGIN_PRIORITY",
+    "_IN_CLUSTER_CONTEXT",
+    # Utility
+    "_parse_datetime",
+    # From vmalert_discovery_sources
+    "_should_add_context_flag",
+    "_kubectl_context_args",
+    "build_endpoint_for_manual",
+    # From vmalert_discovery_strategies
+    "DiscoveryStrategy",
+    "VMAlertCRDDiscoveryStrategy",
+    "ServiceHeuristicDiscoveryStrategy",
+    # Verification
+    "VerificationResult",
+    "verify_vmalert_endpoint",
+    # Orchestration
+    "discover_vmalerts",
+    "verify_and_update_inventory",
+    "merge_deduplicate_inventory",
+]
