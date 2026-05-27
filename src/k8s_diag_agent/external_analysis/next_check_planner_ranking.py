@@ -529,7 +529,6 @@ def rank_candidates(
     for score, candidate, demotion_applied, am_bonus, ranking_reason, am_ns_match, am_cluster_match, am_service_match in scored:
         provenance: AlertmanagerRankingProvenance | None = None
         feedback_provenance: dict[str, Any] | None = None
-        
         if am_bonus > 0 and alertmanager_signal is not None and (am_ns_match or am_cluster_match or am_service_match):
             # Compute base bonus (before severity adjustment) for provenance
             base_bonus = 0
@@ -540,24 +539,9 @@ def rank_candidates(
             if am_service_match:
                 base_bonus += _ALERTMANAGER_SERVICE_MATCH_BONUS
             
-            # Import here to avoid circular import
-            from .next_check_planner_models import AlertmanagerRankingProvenance as ProvenanceClass
-            
-            provenance = ProvenanceClass(
-                matched_dimensions=tuple(d for d, v in [
-                    ("namespace", alertmanager_signal.affected_namespaces if am_ns_match else ()),
-                    ("cluster", alertmanager_signal.affected_clusters if am_cluster_match else ()),
-                    ("service", alertmanager_signal.affected_services if am_service_match else ()),
-                ] if v),
-                matched_values={
-                    "namespace": alertmanager_signal.affected_namespaces,
-                    "cluster": alertmanager_signal.affected_clusters,
-                    "service": alertmanager_signal.affected_services,
-                },
-                base_bonus=base_bonus,
-                applied_bonus=am_bonus,
-                severity_summary={sev: count for sev, count in alertmanager_signal.severity_counts},
-                signal_status=alertmanager_signal.status,
+            provenance = build_alertmanager_provenance(
+                am_ns_match, am_cluster_match, am_service_match,
+                base_bonus, am_bonus, alertmanager_signal
             )
         
         # Add feedback provenance if this candidate was adjusted
