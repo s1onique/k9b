@@ -17,6 +17,7 @@ from .alertmanager_feedback import (
     compute_feedback_adjusted_bonus,
 )
 from .next_check_planner_models import (
+    MUTATION_KEYWORDS,  # noqa: F401 - re-exported for manual_next_check compatibility
     ApprovalReason,
     BlockingReason,
     CommandFamily,
