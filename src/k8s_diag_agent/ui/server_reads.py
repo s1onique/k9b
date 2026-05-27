@@ -10,8 +10,9 @@ Architecture: This module imports from server.py for shared helpers (which are
 safe to import at module level as they don't depend on handler instance state).
 server.py imports this module, so we must avoid circular imports at module load.
 
-Extraction: Run-context loading moved to server_run_reads.py. Re-exported here
-for backward compatibility with existing callers.
+Extraction: Run-context loading moved to server_run_reads.py. Debug/batch handlers
+moved to server_artifact_reads.py. Re-exported here for backward compatibility
+with existing callers.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ import logging
 import math
 import time
 from collections.abc import Mapping
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -30,54 +30,20 @@ if TYPE_CHECKING:
 # SECURITY: Import validation helpers for path/glob security hardening
 from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 
-# Re-export from extraction module for backward compatibility
+# Re-export from extraction modules for backward compatibility
+from .server_artifact_reads import _handle_debug_routes, _has_batch_eligibility_index
 from .server_run_reads import _get_llm_activity_from_index, _load_ui_index_file, load_context_for_run
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "_get_llm_activity_from_index",
+    "_has_batch_eligibility_index",
     "_load_ui_index_file",
     "build_runs_list_payload",
     "handle_api",
     "load_context_for_run",
 ]
-
-
-def _has_batch_eligibility_index(ui_index_path: Path) -> bool:
-    """Check if ui-index.json has v2+ with batch eligibility fields.
-
-    This is a cheap validator to ensure the index is usable for the
-    batch eligibility fast path before using its mtime for cache freshness.
-
-    Args:
-        ui_index_path: Path to ui-index.json
-
-    Returns:
-        True if the index has version >= 2 and entries have batch eligibility fields
-    """
-    try:
-        raw_index = json.loads(ui_index_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return False
-
-    recent_summary = raw_index.get("recent_runs_summary")
-    if not isinstance(recent_summary, dict):
-        return False
-
-    if recent_summary.get("version", 1) < 2:
-        return False
-
-    runs = recent_summary.get("runs")
-    if not isinstance(runs, list):
-        return False
-
-    if not runs:
-        # Empty runs list is valid - just means no runs yet
-        return True
-
-    first = runs[0]
-    return isinstance(first, dict) and "batchEligibility" in first and "batchExecutable" in first and "batchEligibleCount" in first
 
 
 def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
@@ -836,63 +802,8 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         handler._send_json(build_cluster_detail_payload(context, cluster_label=label))
         return
 
-    # Debug endpoint: /api/debug/runs/{run_id}/execution-summary
-    # Only enabled when K9B_ENABLE_DEBUG_ENDPOINTS=true
-    if route.startswith("/api/debug/runs/"):
-        import os
-        import re as regex_module
-
-        if os.environ.get("K9B_ENABLE_DEBUG_ENDPOINTS", "false").lower() != "true":
-            handler._send_json({"error": "Debug endpoints disabled - set K9B_ENABLE_DEBUG_ENDPOINTS=true to enable"})
-            return
-
-        # Match execution-state-bundle endpoint
-        bundle_match = regex_module.match(r"^/api/debug/runs/([^/]+)/execution-state-bundle$", route)
-        if bundle_match:
-            run_id = bundle_match.group(1)
-            health_root = handler.runs_dir / "health"
-            from .api_debug import build_execution_state_bundle
-
-            try:
-                validate_run_id(run_id)
-            except SecurityError:
-                handler._send_json({"error": "Invalid run_id format"})
-                return
-
-            bundle_bytes = build_execution_state_bundle(run_id, health_root)
-            if bundle_bytes is None:
-                handler._send_json({"error": "Debug diagnostics disabled"})
-                return
-
-            # Send ZIP response (only call _send_bytes - it sets status internally)
-            handler._send_bytes(
-                bundle_bytes,
-                content_type="application/zip",
-                filename=f"k9b-execution-state-diagnostics-{run_id}.zip",
-            )
-            return
-
-        # Match execution-summary endpoint
-        match = regex_module.match(r"^/api/debug/runs/([^/]+)/execution-summary$", route)
-        if match:
-            run_id = match.group(1)
-            health_root = handler.runs_dir / "health"
-            from .api_debug import build_execution_summary_diagnostics
-
-            diagnostic = build_execution_summary_diagnostics(run_id, health_root, debug_flag=True)
-            if diagnostic:
-                handler._send_json(diagnostic)
-            else:
-                handler._send_json({"error": "Diagnostics disabled"})
-            return
-
-    # Debug diagnostics enabled flag: GET /api/debug/diagnostics-enabled
-    if route == "/api/debug/diagnostics-enabled":
-        from .api_debug import is_debug_diagnostics_enabled
-
-        handler._send_json({
-            "debugExecutionDiagnosticsEnabled": is_debug_diagnostics_enabled()
-        })
+    # Debug routes: delegate to extraction module
+    if _handle_debug_routes(handler, route):
         return
 
     handler._send_text(404, "Not Found")
