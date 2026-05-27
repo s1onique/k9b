@@ -43,17 +43,19 @@ from .alertmanager_discovery_models import (
     _parse_datetime,
 )
 
-# Import sources/strategies from dedicated module
+# Import sources/strategies from dedicated modules
 from .alertmanager_discovery_sources import (
     _IN_CLUSTER_CONTEXT,
-    CRDDiscoveryStrategy,
-    DiscoveryStrategy,
-    PrometheusCRDConfigDiscoveryStrategy,
-    ServiceHeuristicDiscoveryStrategy,
     _kubectl_context_args,
     _resolve_prometheus_operator_alias,
     _should_add_context_flag,
     build_endpoint_for_manual,
+)
+from .alertmanager_discovery_strategies import (
+    CRDDiscoveryStrategy,
+    DiscoveryStrategy,
+    PrometheusCRDConfigDiscoveryStrategy,
+    ServiceHeuristicDiscoveryStrategy,
 )
 
 # Module logger for debug output
