@@ -42,7 +42,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/ui/server_reads.py", "[EXTRACTION] Server reads - pending extraction"),
     ("src/k8s_diag_agent/ui/server_next_checks.py", "[EXTRACTION] Next checks - reduced to 757 lines"),
     ("src/k8s_diag_agent/external_analysis/alertmanager_discovery.py", "[EXTRACTION] Alertmanager discovery - extraction in progress"),
-    ("src/k8s_diag_agent/external_analysis/next_check_planner_ranking.py", "[EXTRACTION] Next check planner ranking - extracted from planner; 557 lines"),
     ("src/k8s_diag_agent/external_analysis/vmalert_discovery.py", "[EXTRACTION] vmalert discovery - extraction in progress"),
     # llamacpp_provider.py extracted to config/errors/payloads/response modules (143 lines)
     ("src/k8s_diag_agent/health/loop_scheduler.py", "[EXTRACTION] Loop scheduler - run loop extracted; compatibility surface remains"),

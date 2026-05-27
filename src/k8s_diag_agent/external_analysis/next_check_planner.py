@@ -9,6 +9,14 @@ from ..external_analysis.artifact import ExternalAnalysisArtifact
 from .alertmanager_feedback import (
     build_feedback_from_execution_artifacts,
 )
+from .next_check_planner_alertmanager import (
+    AlertmanagerRankingSignal,
+    _build_alertmanager_rationale,
+    _compute_alertmanager_bonus,
+    build_alertmanager_provenance,
+    compute_alertmanager_match_bonus,
+    extract_alertmanager_severity_weight,
+)
 from .next_check_planner_candidates import (
     NextCheckCandidate,
     build_candidates_from_enrichment,
@@ -28,15 +36,9 @@ from .next_check_planner_models import (
     detect_expected_signal,
 )
 from .next_check_planner_ranking import (
-    AlertmanagerRankingSignal,
-    _build_alertmanager_rationale,
-    _compute_alertmanager_bonus,
     _compute_candidate_sort_score,
     _is_early_incident_triage,
     _rank_candidates,
-    build_alertmanager_provenance,
-    compute_alertmanager_match_bonus,
-    extract_alertmanager_severity_weight,
     rank_candidates,
 )
 
