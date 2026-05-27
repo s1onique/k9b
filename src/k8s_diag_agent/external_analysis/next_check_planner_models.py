@@ -6,6 +6,7 @@ Extracted from next_check_planner.py to reduce file size and improve modularity.
 from __future__ import annotations
 
 import re as re_module
+from dataclasses import dataclass
 from enum import StrEnum
 
 # These are kubectl verbs that are genuinely mutating and should require approval.
@@ -97,6 +98,37 @@ class BlockingReason(StrEnum):
     MISSING_CONTEXT = "missing_context"
 
 
+@dataclass(frozen=True)
+class AlertmanagerRankingProvenance:
+    """Structured provenance for Alertmanager-driven ranking influence.
+    
+    Supports debugging, future UI use, and tuning.
+    """
+    # Dimensions that matched for this candidate
+    matched_dimensions: tuple[str, ...]
+    # Values that matched for each dimension
+    matched_values: dict[str, tuple[str, ...]]
+    # Bonus applied before severity adjustment
+    base_bonus: int
+    # Final bonus after severity adjustment
+    applied_bonus: int
+    # Severity distribution that influenced the bonus
+    severity_summary: dict[str, int]
+    # Signal status at time of ranking
+    signal_status: str | None
+    
+    def to_dict(self) -> dict[str, object]:
+        """Convert to serializable dict for UI/debugging."""
+        return {
+            "matchedDimensions": list(self.matched_dimensions),
+            "matchedValues": {k: list(v) for k, v in self.matched_values.items()},
+            "baseBonus": self.base_bonus,
+            "appliedBonus": self.applied_bonus,
+            "severitySummary": dict(self.severity_summary),
+            "signalStatus": self.signal_status,
+        }
+
+
 # Re-export for backward compatibility
 __all__ = [
     # Enums
@@ -118,6 +150,8 @@ __all__ = [
     "_confidence_level",
     "_cost_from_risk",
     "_normalize_text",
+    # Provenance
+    "AlertmanagerRankingProvenance",
 ]
 
 
