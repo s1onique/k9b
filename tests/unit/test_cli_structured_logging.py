@@ -25,15 +25,20 @@ class CLIStructuredLoggingTest(unittest.TestCase):
     def test_snapshot_logs_start_and_end(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             args = argparse.Namespace(context="alpha", output=Path(tmpdir) / "snapshot.json")
-            with patch("k8s_diag_agent.cli_handlers.list_kube_contexts", return_value=["alpha"]), \
-                patch("k8s_diag_agent.cli_handlers.collect_cluster_snapshot", return_value=DummySnapshot()), \
-                patch("k8s_diag_agent.cli_handlers.emit_structured_log") as log_mock:
+            with patch("k8s_diag_agent.cli_snapshot_handlers.list_kube_contexts", return_value=["alpha"]), \
+                patch("k8s_diag_agent.cli_snapshot_handlers.collect_cluster_snapshot", return_value=DummySnapshot()), \
+                patch("k8s_diag_agent.cli_snapshot_handlers._log_cli_event") as log_mock:
                 result = handle_snapshot(args)
         self.assertEqual(result, 0)
         self.assertEqual(log_mock.call_count, 2)
-        self.assertEqual(log_mock.call_args_list[0][1]["component"], "cli-snapshot")
-        self.assertEqual(log_mock.call_args_list[0][1]["message"], "snapshot command started")
-        self.assertEqual(log_mock.call_args_list[-1][1]["message"], "snapshot command completed")
+        # _log_cli_event signature: (component, run_label, message, *, severity, run_id, metadata, **extra)
+        # First call - "snapshot command started"
+        first_call = log_mock.call_args_list[0]
+        self.assertEqual(first_call.args[0], "cli-snapshot")
+        self.assertEqual(first_call.args[2], "snapshot command started")
+        # Last call - "snapshot command completed"
+        last_call = log_mock.call_args_list[-1]
+        self.assertEqual(last_call.args[2], "snapshot command completed")
 
     def test_batch_snapshot_logs_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -48,24 +53,24 @@ class CLIStructuredLoggingTest(unittest.TestCase):
                 encoding="utf-8",
             )
             args = argparse.Namespace(config=config_path)
-            with patch("k8s_diag_agent.cli_handlers.list_kube_contexts", return_value=["alpha"]), \
-                patch("k8s_diag_agent.cli_handlers.collect_cluster_snapshot", return_value=DummySnapshot()), \
-                patch("k8s_diag_agent.cli_handlers.emit_structured_log") as log_mock:
+            with patch("k8s_diag_agent.cli_snapshot_handlers.list_kube_contexts", return_value=["alpha"]), \
+                patch("k8s_diag_agent.cli_snapshot_handlers.collect_cluster_snapshot", return_value=DummySnapshot()), \
+                patch("k8s_diag_agent.cli_snapshot_handlers._log_cli_event") as log_mock:
                 result = handle_batch_snapshot(args, default_config=config_path)
             self.assertEqual(result, 0)
-            messages = [call[1]["message"] for call in log_mock.call_args_list]
+            messages = [call[0][2] for call in log_mock.call_args_list]
             self.assertIn("batch snapshot command started", messages)
             self.assertIn("batch snapshot completed", messages)
 
     def test_compare_logs_completion(self) -> None:
         args = argparse.Namespace(snapshot_a=Path("a.json"), snapshot_b=Path("b.json"))
         dummy_comparison = argparse.Namespace(differences={}, metadata=None)
-        with patch("k8s_diag_agent.cli_handlers._load_snapshot", return_value=DummySnapshot()), \
-            patch("k8s_diag_agent.cli_handlers.compare_snapshots", return_value=dummy_comparison), \
-            patch("k8s_diag_agent.cli_handlers.emit_structured_log") as log_mock:
+        with patch("k8s_diag_agent.cli_snapshot_handlers._load_snapshot", return_value=DummySnapshot()), \
+            patch("k8s_diag_agent.cli_snapshot_handlers.compare_snapshots", return_value=dummy_comparison), \
+            patch("k8s_diag_agent.cli_snapshot_handlers._log_cli_event") as log_mock:
             result = handle_compare(args)
         self.assertEqual(result, 0)
-        self.assertEqual(log_mock.call_args_list[-1][1]["message"], "compare command completed with no differences")
+        self.assertEqual(log_mock.call_args_list[-1].args[2], "compare command completed with no differences")
 
     def test_run_feedback_logs_every_step(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -86,8 +91,8 @@ class CLIStructuredLoggingTest(unittest.TestCase):
             )
             args = argparse.Namespace(config=config_path, provider=None, quiet=True)
             with patch("k8s_diag_agent.cli_handlers.run_feedback_loop", return_value=(0, [])), \
-                patch("k8s_diag_agent.cli_handlers.emit_structured_log") as log_mock:
+                patch("k8s_diag_agent.cli_handlers._log_cli_event") as log_mock:
                 result = handle_run_feedback(args, default_config=config_path)
             self.assertEqual(result, 0)
-            self.assertEqual(log_mock.call_args_list[0][1]["message"], "run-feedback command started")
-            self.assertEqual(log_mock.call_args_list[-1][1]["message"], "run-feedback command completed")
+            self.assertEqual(log_mock.call_args_list[0].args[2], "run-feedback command started")
+            self.assertEqual(log_mock.call_args_list[-1].args[2], "run-feedback command completed")

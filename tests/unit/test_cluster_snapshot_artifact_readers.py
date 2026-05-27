@@ -292,8 +292,8 @@ class TestRegressionCliCallSite:
     """Regression tests proving CLI call-site behavior is preserved."""
 
     def test_cli_load_snapshot_still_works(self, tmp_path: Path) -> None:
-        """Test that cli_handlers._load_snapshot pattern still works."""
-        from k8s_diag_agent.cli_handlers import _load_snapshot
+        """Test that cli_snapshot_handlers._load_snapshot pattern still works."""
+        from k8s_diag_agent.cli_snapshot_handlers import _load_snapshot
 
         snapshot_data = _make_valid_snapshot(cluster_id="cli-test")
         snapshot_path = tmp_path / "cli-test.json"
@@ -306,7 +306,7 @@ class TestRegressionCliCallSite:
 
     def test_cli_compare_reports_differences_still_works(self, tmp_path: Path) -> None:
         """Test that handle_compare still reports differences after migration."""
-        from k8s_diag_agent.cli_handlers import _load_snapshot
+        from k8s_diag_agent.cli_snapshot_handlers import _load_snapshot
         from k8s_diag_agent.compare.two_cluster import compare_snapshots
 
         snapshot_a_data = _make_valid_snapshot(cluster_id="alpha", node_count=3)
@@ -327,7 +327,7 @@ class TestRegressionCliCallSite:
 
     def test_malformed_snapshot_raises_in_strict_mode(self, tmp_path: Path) -> None:
         """Strict reader should raise on malformed snapshot (CLI behavior)."""
-        from k8s_diag_agent.cli_handlers import _load_snapshot
+        from k8s_diag_agent.cli_snapshot_handlers import _load_snapshot
 
         snapshot_path = tmp_path / "malformed.json"
         snapshot_path.write_text("{ invalid", encoding="utf-8")
