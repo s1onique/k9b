@@ -20,10 +20,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
-# Import from server_next_checks for compatibility with test mocking
-# Tests patch k8s_diag_agent.ui.server_next_checks.execute_manual_next_check
-from . import server_next_checks  # noqa: F401
-
 logger = logging.getLogger(__name__)
 
 
@@ -302,8 +298,11 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
         handler._send_json({"error": "Cluster context unavailable"}, 400)
         return
     try:
-        # Use server_next_checks.execute_manual_next_check for test mocking compatibility
-        artifact = server_next_checks.execute_manual_next_check(
+        # Import from server_next_checks for test mocking compatibility
+        # (tests patch k8s_diag_agent.ui.server_next_checks.execute_manual_next_check)
+        from . import server_next_checks as next_checks_compat
+
+        artifact = next_checks_compat.execute_manual_next_check(
             health_root=handler._health_root,
             run_id=context.run.run_id,
             run_label=context.run.run_label,
