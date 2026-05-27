@@ -19,6 +19,8 @@ health/loop.py _enrich_with_llm_review review enrichment LLM call boundary - doc
 health/loop.py _run_review_enrichment review enrichment LLM call boundary - docs/security-exception-audit.md ~2647
 health/loop_review_pipeline.py write_review_and_proposals health review build boundary - docs/security-exception-audit.md ~82
 external_analysis/llamacpp_adapter.py _run_http LLM provider failure boundary - docs/security-exception-audit.md ~241
+external_analysis/llamacpp_adapter_http.py run_http_assessment LLM HTTP assessment catch-all boundary - comprehensive error handling for provider.assess(), no credential exposure
+external_analysis/llamacpp_adapter_http.py build_generic_failure_metadata LLM failure metadata build catch-all - graceful failure reporting, no credential exposure
 
 
 # === Subprocess Boundaries ===
