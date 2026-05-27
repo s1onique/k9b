@@ -22,7 +22,6 @@ from .next_check_planner_models import (
     CommandFamily,
     CostEstimate,
     DuplicateReason,
-    MUTATION_KEYWORDS,
     NormalizationReason,
     RiskLevel,
     SafetyReason,
