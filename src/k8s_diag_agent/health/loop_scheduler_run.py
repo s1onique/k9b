@@ -119,7 +119,7 @@ def run_scheduler_loop(scheduler: Any) -> int:
                             severity_reason=f"exit_code={exit_code}",
                             event="run-failure",
                         )
-                        return int(exit_code)  # type: ignore[no-any-return]
+                        return int(exit_code)
 
                     # Log run summary with freshness
                     scheduler._log_run_summary(
@@ -159,7 +159,7 @@ def run_scheduler_loop(scheduler: Any) -> int:
             event="interrupted",
             reason="keyboard",
         )
-        return 1  # type: ignore[no-any-return]
+        return 1
 
     # Log scheduler shutdown with final exit code
     scheduler._log_event(
@@ -168,7 +168,7 @@ def run_scheduler_loop(scheduler: Any) -> int:
         exit_code=cycle.last_exit,
         event="stop",
     )
-    return cycle.last_exit  # type: ignore[no-any-return]
+    return cycle.last_exit
 
 
 # =============================================================================
