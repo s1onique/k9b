@@ -1,15 +1,12 @@
 """Payload construction for llama.cpp provider."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .llamacpp_provider_config import (
     _SYSTEM_INSTRUCTIONS,
     LlamaCppProviderConfig,
 )
-
-if TYPE_CHECKING:
-    pass  # reserved for type-only imports
 
 
 def build_payload(

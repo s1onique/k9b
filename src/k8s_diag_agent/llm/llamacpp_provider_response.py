@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import Any, NoReturn
 
 from .llamacpp_provider_errors import LLMResponseParseError
-
-if TYPE_CHECKING:
-    pass  # reserved for type-only imports
 
 
 def _type_name(value: Any) -> str:
