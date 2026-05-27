@@ -26,6 +26,7 @@ from ..external_analysis.manual_next_check import execute_manual_next_check  # n
 # Import extracted handlers
 from .server_next_check_approval import handle_next_check_approval  # noqa: F401
 from .server_next_check_execution import handle_next_check_execution  # noqa: F401
+from .server_next_check_utils import find_candidate_in_all_plan_artifacts  # noqa: F401
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
