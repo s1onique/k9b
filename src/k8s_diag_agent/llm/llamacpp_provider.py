@@ -1,428 +1,45 @@
 """llama.cpp provider that speaks the OpenAI-compatible API."""
 from __future__ import annotations
 
-import json
-import os
-import warnings
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any, NoReturn, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import requests
 
 from .assessor_schema import AssessorAssessment
 from .base import LLMProvider
-
-DEFAULT_TIMEOUT_SECONDS = 120
-DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 768
-DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 1200
+from .llamacpp_provider_config import (
+    _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
+    DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN,
+    DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT,
+    DEFAULT_TIMEOUT_SECONDS,
+    LlamaCppProviderConfig,
+)
+from .llamacpp_provider_errors import (
+    LLMFailureClass,
+    LLMFailureMetadata,
+    LLMResponseParseError,
+    classify_llm_failure,
+)
+from .llamacpp_provider_payloads import build_payload, build_request_headers
+from .llamacpp_provider_response import (
+    _extract_response_diagnostics,
+    build_error_message,
+    extract_assessment,
+)
 
 if TYPE_CHECKING:
     from .base import LLMAssessmentInput
 
 SessionFactory = Callable[[], requests.Session]
 
-# Canonical and legacy environment variable names for OpenAI-compatible provider
-# Canonical names (K9B_EXTERNAL_ANALYSIS_*) are preferred; legacy names (LLAMA_CPP_*) are accepted for backward compatibility
-_CANONICAL_ENV_BASE_URL = "K9B_EXTERNAL_ANALYSIS_BASE_URL"
-_CANONICAL_ENV_MODEL = "K9B_EXTERNAL_ANALYSIS_MODEL"
-_CANONICAL_ENV_API_KEY = "K9B_EXTERNAL_ANALYSIS_API_KEY"
-_CANONICAL_ENV_TIMEOUT = "K9B_EXTERNAL_ANALYSIS_TIMEOUT_SECONDS"
-_CANONICAL_ENV_MAX_TOKENS_AUTO_DRILLDOWN = "K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN"
-_CANONICAL_ENV_MAX_TOKENS_REVIEW_ENRICHMENT = "K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT"
-_CANONICAL_ENV_RESPONSE_FORMAT_JSON = "K9B_EXTERNAL_ANALYSIS_RESPONSE_FORMAT_JSON"
-_CANONICAL_ENV_TEMPERATURE = "K9B_EXTERNAL_ANALYSIS_TEMPERATURE"
-_CANONICAL_ENV_TOP_P = "K9B_EXTERNAL_ANALYSIS_TOP_P"
-_CANONICAL_ENV_TOP_K = "K9B_EXTERNAL_ANALYSIS_TOP_K"
-_CANONICAL_ENV_REPEAT_PENALTY = "K9B_EXTERNAL_ANALYSIS_REPEAT_PENALTY"
-_CANONICAL_ENV_SEED = "K9B_EXTERNAL_ANALYSIS_SEED"
-_CANONICAL_ENV_STOP = "K9B_EXTERNAL_ANALYSIS_STOP"
-_CANONICAL_ENV_ENABLE_THINKING = "K9B_EXTERNAL_ANALYSIS_ENABLE_THINKING"
-
-_LEGACY_ENV_BASE_URL = "LLAMA_CPP_BASE_URL"
-_LEGACY_ENV_MODEL = "LLAMA_CPP_MODEL"
-_LEGACY_ENV_API_KEY = "LLAMA_CPP_API_KEY"
-_LEGACY_ENV_TIMEOUT = "LLAMA_CPP_TIMEOUT_SECONDS"
-_LEGACY_ENV_MAX_TOKENS_AUTO_DRILLDOWN = "LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN"
-_LEGACY_ENV_MAX_TOKENS_REVIEW_ENRICHMENT = "LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT"
-_LEGACY_ENV_RESPONSE_FORMAT_JSON = "LLAMA_CPP_RESPONSE_FORMAT_JSON"
-_LEGACY_ENV_TEMPERATURE = "LLAMA_CPP_TEMPERATURE"
-_LEGACY_ENV_TOP_P = "LLAMA_CPP_TOP_P"
-_LEGACY_ENV_TOP_K = "LLAMA_CPP_TOP_K"
-_LEGACY_ENV_REPEAT_PENALTY = "LLAMA_CPP_REPEAT_PENALTY"
-_LEGACY_ENV_SEED = "LLAMA_CPP_SEED"
-_LEGACY_ENV_STOP = "LLAMA_CPP_STOP"
-_LEGACY_ENV_ENABLE_THINKING = "LLAMA_CPP_ENABLE_THINKING"
-
-# Track deprecation warnings to emit only once per process
-_DEPRECATION_WARNING_LOGGED: set[str] = set()
-
-
-def _get_env_with_fallback(
-    canonical_name: str,
-    legacy_name: str,
-    source: Mapping[str, str],
-) -> tuple[str | None, str | None, bool]:
-    """Get environment variable value with canonical/legacy fallback.
-
-    Args:
-        canonical_name: The canonical env var name (e.g., K9B_EXTERNAL_ANALYSIS_BASE_URL)
-        legacy_name: The legacy env var name (e.g., LLAMA_CPP_BASE_URL)
-        source: The environment dict to read from
-
-    Returns:
-        Tuple of (value, used_var_name, used_legacy). If neither is set, returns (None, None, False).
-    """
-    # Try canonical first
-    canonical_value = source.get(canonical_name)
-    if canonical_value is not None and str(canonical_value).strip():
-        return canonical_value.strip(), canonical_name, False
-
-    # Fall back to legacy
-    legacy_value = source.get(legacy_name)
-    if legacy_value is not None and str(legacy_value).strip():
-        return legacy_value.strip(), legacy_name, True
-
-    return None, None, False
-
-_SYSTEM_INSTRUCTIONS = (
-    "You are a Kubernetes diagnostics assistant."
-    " Provide a single JSON object that matches the AssessorAssessment schema exactly."  # noqa: E501
-    " Do not include markdown, XML, or explanatory text outside the JSON payload."  # noqa: E501
-    " Include all required keys (observed_signals, findings, hypotheses, next_evidence_to_collect,"
-    " recommended_action, safety_level) and set strings accordingly."
-)
-
-# System instructions for review-enrichment use case (bounded advisory payload)
-# NOTE: These instructions are authoritative. The prompt builder in llamacpp_adapter.py
-# adds additional guidance that complements but does not replace these instructions.
-_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
-    "You are a Kubernetes diagnostics review advisor."
-    " CRITICAL: Return ONLY a valid JSON object. Do NOT use markdown fences, XML, or any text outside the JSON."
-    " The JSON must contain at minimum a 'summary' field with a non-empty string value."
-    " Include these fields: summary (required), triageOrder, topConcerns, evidenceGaps, nextChecks, focusNotes."
-    " Each array field must contain non-empty strings. Highlight missing data explicitly in arrays."
-    " nextChecks entries MUST be kubectl commands starting with: kubectl describe, kubectl logs, kubectl get, or kubectl top."
-    " NEVER include phrases like: validate, confirm, investigate, verify, plan upgrade in nextChecks."
-    " NEVER suggest mutations: do not include apply, patch, scale, edit, upgrade, delete, restart, rollout."
-    " If Alertmanager data is present, you MAY include alertmanagerEvidenceReferences."
-    " alertmanagerEvidenceReferences format: [{\"cluster\": \"<string>\", \"matchedDimensions\": [\"<dim>\"], \"reason\": \"<string>\", \"usedFor\": \"top_concern\"}]"
-    " usedFor values: EXACTLY one of: top_concern, next_check, summary, triage_order, focus_note. Do NOT derive usedFor from field names."
-    " Do NOT use plural forms. Invalid plural usedFor examples include: top_concerns, next_checks, triage_order_items, focus_notes, evidence_gaps."
-)
-
-
-@dataclass(frozen=True)
-class LlamaCppProviderConfig:
-    base_url: str
-    model: str
-    api_key: str | None = None
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
-    max_tokens_auto_drilldown: int = DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
-    max_tokens_review_enrichment: int = DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
-    response_format_json: bool = False
-    enable_thinking: bool = False
-    # Generation settings for structured JSON output
-    temperature: float | None = 0.0
-    top_p: float | None = None
-    top_k: int | None = None
-    repeat_penalty: float | None = None
-    seed: int | None = None
-    stop: tuple[str, ...] | None = None
-
-    @staticmethod
-    def _parse_enable_thinking(value: str | None) -> bool:
-        """Parse enable_thinking from env var, defaulting to False."""
-        if value is None:
-            return False
-        trimmed = value.strip().lower()
-        if trimmed in ("true", "1", "yes"):
-            return True
-        if trimmed in ("false", "0", "no", ""):
-            return False
-        # Unknown value - default to False for safety
-        return False
-
-
-    @property
-    def endpoint(self) -> str:
-        base = self.base_url.rstrip('/')
-        return f"{base}/v1/chat/completions"
-
-    @property
-    def generation_settings(self) -> dict[str, object]:
-        """Return non-None generation settings for logging."""
-        settings: dict[str, object] = {}
-        if self.temperature is not None:
-            settings["temperature"] = self.temperature
-        if self.top_p is not None:
-            settings["top_p"] = self.top_p
-        if self.top_k is not None:
-            settings["top_k"] = self.top_k
-        if self.repeat_penalty is not None:
-            settings["repeat_penalty"] = self.repeat_penalty
-        if self.seed is not None:
-            settings["seed"] = self.seed
-        if self.stop is not None:
-            settings["stop_count"] = len(self.stop)
-        # Always include enable_thinking to reflect the config value
-        settings["enable_thinking"] = self.enable_thinking
-        return settings
-
-    @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> LlamaCppProviderConfig:
-        source: Mapping[str, str] = env if env is not None else os.environ
-        missing: list[str] = []
-        used_legacy: set[str] = set()
-
-        # Get base_url with fallback from canonical to legacy
-        base_url, _, used_legacy_base = _get_env_with_fallback(
-            _CANONICAL_ENV_BASE_URL, _LEGACY_ENV_BASE_URL, source
-        )
-        if not base_url:
-            missing.append(_CANONICAL_ENV_BASE_URL)
-        elif used_legacy_base:
-            used_legacy.add("base_url")
-
-        # Get model with fallback from canonical to legacy
-        model, _, used_legacy_model = _get_env_with_fallback(
-            _CANONICAL_ENV_MODEL, _LEGACY_ENV_MODEL, source
-        )
-        if not model:
-            missing.append(_CANONICAL_ENV_MODEL)
-        elif used_legacy_model:
-            used_legacy.add("model")
-
-        if missing:
-            raise RuntimeError(
-                f"Missing environment variables for OpenAI-compatible provider: {', '.join(missing)}. "
-                f"Use K9B_EXTERNAL_ANALYSIS_BASE_URL and K9B_EXTERNAL_ANALYSIS_MODEL (legacy LLAMA_CPP_* vars accepted)."
-            )
-
-        # After this point, base_url and model are guaranteed to be str (not None)
-        assert base_url is not None
-        assert model is not None
-
-        # Emit deprecation warning once for legacy env usage
-        if used_legacy and "env_deprecation" not in _DEPRECATION_WARNING_LOGGED:
-            warnings.warn(
-                "LLAMA_CPP_* environment variables are deprecated. Use K9B_EXTERNAL_ANALYSIS_* variables instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            _DEPRECATION_WARNING_LOGGED.add("env_deprecation")
-
-        # Get api_key with fallback
-        api_key, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_API_KEY, _LEGACY_ENV_API_KEY, source
-        )
-
-        # Get generation settings with fallback
-        timeout_seconds_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_TIMEOUT, _LEGACY_ENV_TIMEOUT, source
-        )
-        timeout_seconds = cls._parse_timeout(timeout_seconds_raw)
-
-        max_tokens_auto_drilldown_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_MAX_TOKENS_AUTO_DRILLDOWN, _LEGACY_ENV_MAX_TOKENS_AUTO_DRILLDOWN, source
-        )
-        max_tokens_auto_drilldown = cls._parse_max_tokens(max_tokens_auto_drilldown_raw, DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
-
-        max_tokens_review_enrichment_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_MAX_TOKENS_REVIEW_ENRICHMENT, _LEGACY_ENV_MAX_TOKENS_REVIEW_ENRICHMENT, source
-        )
-        max_tokens_review_enrichment = cls._parse_max_tokens(max_tokens_review_enrichment_raw, DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
-
-        response_format_json_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_RESPONSE_FORMAT_JSON, _LEGACY_ENV_RESPONSE_FORMAT_JSON, source
-        )
-        response_format_json = cls._parse_response_format_json(response_format_json_raw)
-
-        temperature_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_TEMPERATURE, _LEGACY_ENV_TEMPERATURE, source
-        )
-        temperature = cls._parse_temperature(temperature_raw)
-
-        top_p_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_TOP_P, _LEGACY_ENV_TOP_P, source
-        )
-        top_p = cls._parse_top_p(top_p_raw)
-
-        top_k_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_TOP_K, _LEGACY_ENV_TOP_K, source
-        )
-        top_k = cls._parse_top_k(top_k_raw)
-
-        repeat_penalty_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_REPEAT_PENALTY, _LEGACY_ENV_REPEAT_PENALTY, source
-        )
-        repeat_penalty = cls._parse_repeat_penalty(repeat_penalty_raw)
-
-        seed_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_SEED, _LEGACY_ENV_SEED, source
-        )
-        seed = cls._parse_seed(seed_raw)
-
-        stop_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_STOP, _LEGACY_ENV_STOP, source
-        )
-        stop = cls._parse_stop(stop_raw)
-
-        enable_thinking_raw, _, _ = _get_env_with_fallback(
-            _CANONICAL_ENV_ENABLE_THINKING, _LEGACY_ENV_ENABLE_THINKING, source
-        )
-        enable_thinking = cls._parse_enable_thinking(enable_thinking_raw)
-
-        return cls(
-            base_url=base_url,
-            model=model,
-            api_key=api_key,
-            timeout_seconds=timeout_seconds,
-            max_tokens_auto_drilldown=max_tokens_auto_drilldown,
-            max_tokens_review_enrichment=max_tokens_review_enrichment,
-            response_format_json=response_format_json,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            repeat_penalty=repeat_penalty,
-            seed=seed,
-            stop=stop,
-            enable_thinking=enable_thinking,
-        )
-    @staticmethod
-
-    def _parse_timeout(value: str | None) -> int:
-        if value is None:
-            return DEFAULT_TIMEOUT_SECONDS
-        trimmed = value.strip()
-        if not trimmed:
-            return DEFAULT_TIMEOUT_SECONDS
-        try:
-            parsed = int(trimmed)
-        except ValueError as exc:
-            raise ValueError(
-                f"LLAMA_CPP_TIMEOUT_SECONDS must be an integer but got '{value}'"
-            ) from exc
-        if parsed <= 0:
-            raise ValueError("LLAMA_CPP_TIMEOUT_SECONDS must be a positive integer")
-        return parsed
-
-    @staticmethod
-    def _parse_max_tokens(value: str | None, default: int) -> int:
-        """Parse max_tokens from env var, returning default if not set or invalid."""
-        if value is None:
-            return default
-        trimmed = value.strip()
-        if not trimmed:
-            return default
-        try:
-            parsed = int(trimmed)
-        except ValueError:
-            return default
-        if parsed <= 0:
-            return default
-        return parsed
-
-    @staticmethod
-    def _parse_response_format_json(value: str | None) -> bool:
-        """Parse response_format_json from env var, defaulting to False."""
-        if value is None:
-            return False
-        trimmed = value.strip().lower()
-        if trimmed in ("true", "1", "yes"):
-            return True
-        if trimmed in ("false", "0", "no", ""):
-            return False
-        # Unknown value - default to False for safety
-        return False
-
-    @staticmethod
-    def _parse_temperature(value: str | None) -> float | None:
-        """Parse temperature from env var, defaulting to 0.0."""
-        if value is None:
-            return 0.0
-        trimmed = value.strip()
-        if not trimmed:
-            return 0.0
-        try:
-            return float(trimmed)
-        except ValueError:
-            return 0.0
-
-    @staticmethod
-    def _parse_top_p(value: str | None) -> float | None:
-        """Parse top_p from env var, defaulting to None."""
-        if value is None:
-            return None
-        trimmed = value.strip()
-        if not trimmed:
-            return None
-        try:
-            parsed = float(trimmed)
-            if 0.0 < parsed <= 1.0:
-                return parsed
-            return None
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _parse_top_k(value: str | None) -> int | None:
-        """Parse top_k from env var, defaulting to None."""
-        if value is None:
-            return None
-        trimmed = value.strip()
-        if not trimmed:
-            return None
-        try:
-            parsed = int(trimmed)
-            if parsed > 0:
-                return parsed
-            return None
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _parse_repeat_penalty(value: str | None) -> float | None:
-        """Parse repeat_penalty from env var, defaulting to None."""
-        if value is None:
-            return None
-        trimmed = value.strip()
-        if not trimmed:
-            return None
-        try:
-            return float(trimmed)
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _parse_seed(value: str | None) -> int | None:
-        """Parse seed from env var, defaulting to None."""
-        if value is None:
-            return None
-        trimmed = value.strip()
-        if not trimmed:
-            return None
-        try:
-            return int(trimmed)
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _parse_stop(value: str | None) -> tuple[str, ...] | None:
-        """Parse stop sequences from env var, defaulting to None."""
-        if value is None:
-            return None
-        trimmed = value.strip()
-        if not trimmed:
-            return None
-        # Support comma-separated stop sequences
-        sequences = [s.strip() for s in trimmed.split(",") if s.strip()]
-        return tuple(sequences) if sequences else None
-
 
 class LlamaCppProvider(LLMProvider):
     """Provider implementation that calls an OpenAI-compatible llama.cpp endpoint."""
+
+    # Re-export internal helpers for backward compatibility
+    _extract_assessment = staticmethod(extract_assessment)
+    _extract_response_diagnostics = staticmethod(_extract_response_diagnostics)
 
     def __init__(
         self,
@@ -442,270 +59,6 @@ class LlamaCppProvider(LLMProvider):
         if self._endpoint is None:
             self._endpoint = self._config.endpoint
         return self._config, self._session, self._endpoint
-
-    def _build_payload(
-        self,
-        prompt: str,
-        config: LlamaCppProviderConfig,
-        *,
-        system_instructions: str | None = None,
-        max_tokens: int | None = None,
-        response_format_json: bool = False,
-    ) -> dict[str, Any]:
-        system = system_instructions if system_instructions is not None else _SYSTEM_INSTRUCTIONS
-        payload: dict[str, Any] = {
-            "model": config.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-        }
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-        if response_format_json:
-            payload["response_format"] = {"type": "json_object"}
-        # Apply generation settings from config (only non-None values)
-        if config.temperature is not None:
-            payload["temperature"] = config.temperature
-        if config.top_p is not None:
-            payload["top_p"] = config.top_p
-        if config.top_k is not None:
-            payload["top_k"] = config.top_k
-        if config.repeat_penalty is not None:
-            payload["repeat_penalty"] = config.repeat_penalty
-        if config.seed is not None:
-            payload["seed"] = config.seed
-        if config.stop is not None:
-            payload["stop"] = list(config.stop)
-        # Disable thinking mode for Qwen-based models
-        payload["chat_template_kwargs"] = {
-            "enable_thinking": config.enable_thinking
-        }
-        return payload
-
-    def _request_headers(self, config: LlamaCppProviderConfig) -> dict[str, str]:
-        headers: dict[str, str] = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        if config.api_key:
-            headers["Authorization"] = f"Bearer {config.api_key}"
-        return headers
-
-    def _extract_assessment(self, data: Any, *, max_tokens: int | None = None) -> dict[str, Any]:
-        payload_snippet = self._payload_snippet(data)
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"llama.cpp response expected an object but got {self._type_name(data)}; "
-                f"response snippet: {payload_snippet}"
-            )
-        choices0_type: str | None = None
-        message_type: str | None = None
-
-        def debug_context() -> str:
-            parts = [f"response snippet: {payload_snippet}"]
-            if choices0_type:
-                parts.append(f"choices[0] type: {choices0_type}")
-            if message_type:
-                parts.append(f"choices[0]['message'] type: {message_type}")
-            return "; ".join(parts)
-
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"llama.cpp response expected an object but got {self._type_name(data)}; {debug_context()}"
-            )
-
-        def raise_shape_error(path: str, expected: str, value: Any) -> NoReturn:
-            raise ValueError(
-                f"llama.cpp response {path} expected {expected} but got {self._type_name(value)}; "
-                f"{debug_context()}"
-            )
-
-        def extract_text_from_content(node: Any, path: str) -> str | None:
-            if node is None:
-                return None
-            if isinstance(node, str):
-                return node
-            if isinstance(node, dict):
-                nested_path = f"{path}['content']"
-                return extract_text_from_content(node.get("content"), nested_path)
-            raise_shape_error(path, "a string or nested 'content' object", node)
-
-        choices = data.get("choices")
-        if not isinstance(choices, list):
-            raise_shape_error("'choices'", "a list", choices)
-        if not choices:
-            raise ValueError(
-                f"llama.cpp response 'choices' expected a non-empty list; {debug_context()}"
-            )
-        top_choice = choices[0]
-        choices0_type = self._type_name(top_choice)
-        if not isinstance(top_choice, dict):
-            raise_shape_error("'choices[0]'", "a dictionary", top_choice)
-
-        message = top_choice.get("message")
-        if message is not None:
-            message_type = self._type_name(message)
-        if message is not None and not isinstance(message, dict | str):
-            raise_shape_error("'choices[0]['message']'", "a dictionary or string", message)
-
-        content: str | None
-        if isinstance(message, str):
-            content = message
-        elif isinstance(message, dict):
-            content = extract_text_from_content(
-                message.get("content"), "'choices[0]['message']['content']'"
-            )
-        else:
-            content = None
-
-        if content is None:
-            text_field = top_choice.get("text")
-            if text_field is None:
-                raise ValueError(
-                    f"llama.cpp response choice lacks textual content; response snippet: {payload_snippet}"
-                )
-            if not isinstance(text_field, str):
-                raise_shape_error("'choices[0]['text']'", "a string", text_field)
-            content = text_field
-
-        # Handle empty content explicitly - this is a distinct failure mode from invalid JSON
-        if not content:
-            raise ValueError(
-                f"llama.cpp response content is empty; response snippet: {payload_snippet}"
-            )
-
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            # Extract structured output diagnostics before raising
-            resp_diags = self._extract_response_diagnostics(data)
-            excerpt = content[:500]
-            excerpt_snippet = " ".join(excerpt.split()) or excerpt
-            if len(content) > 500:
-                excerpt_snippet = f"{excerpt_snippet}…"
-            # Check if completion was stopped by length cap
-            finish_reason = resp_diags.get("finish_reason")
-            stopped_by_length = finish_reason == "length" if finish_reason else False
-            raise LLMResponseParseError(
-                f"llama.cpp response text content is not valid JSON (first 500 chars: {excerpt_snippet}); "
-                f"response snippet: {payload_snippet}",
-                finish_reason=resp_diags.get("finish_reason"),
-                response_content_chars=resp_diags.get("response_content_chars"),
-                response_content_prefix=resp_diags.get("response_content_prefix"),
-                completion_stopped_by_length=stopped_by_length,
-                max_tokens=max_tokens,
-            ) from exc
-        if not isinstance(parsed, dict):
-            raise_shape_error("message JSON", "an object", parsed)
-        return cast(dict[str, Any], parsed)
-
-    @staticmethod
-    def _base_url_mutually_exclusive_v1(base_url: str) -> bool:
-        return base_url.rstrip('/').endswith('/v1')
-
-    @staticmethod
-    def _format_http_status(response: Any) -> str | None:
-        status_code = getattr(response, "status_code", None)
-        if status_code is None:
-            return None
-        reason = getattr(response, "reason", "") or ""
-        reason_text = f" {reason}" if reason else ""
-        return f"HTTP {status_code}{reason_text}"
-
-    @staticmethod
-    def _response_body_snippet(response: Any, limit: int = 320) -> str | None:
-        raw = getattr(response, "text", None)
-        if raw is None:
-            return None
-        text = str(raw).strip()
-        if not text:
-            return None
-        snippet = " ".join(text.split())
-        if len(snippet) > limit:
-            snippet = snippet[:limit].rstrip()
-            snippet = f"{snippet}…"
-        return snippet
-
-    @staticmethod
-    def _type_name(value: Any) -> str:
-        if value is None:
-            return "NoneType"
-        return type(value).__name__
-
-    @staticmethod
-    def _payload_snippet(value: Any, limit: int = 320) -> str:
-        try:
-            serialized = json.dumps(value, ensure_ascii=False)
-        except (TypeError, ValueError):
-            serialized = repr(value)
-        snippet = " ".join(serialized.split())
-        if len(snippet) > limit:
-            snippet = snippet[:limit].rstrip()
-            snippet = f"{snippet}…"
-        return snippet
-
-    @staticmethod
-    def _extract_response_diagnostics(data: Any, max_prefix_len: int = 200) -> dict[str, Any]:
-        """Extract structured output diagnostics from LLM response.
-
-        Args:
-            data: The parsed JSON response from the LLM
-            max_prefix_len: Maximum length for response content prefix
-
-        Returns:
-            Dict with finish_reason, content chars, content prefix if available
-        """
-        diagnostics: dict[str, Any] = {}
-        try:
-            choices = data.get("choices")
-            if isinstance(choices, list) and choices:
-                top_choice = choices[0]
-                if isinstance(top_choice, dict):
-                    # Extract finish_reason
-                    finish_reason = top_choice.get("finish_reason")
-                    if finish_reason is not None:
-                        diagnostics["finish_reason"] = str(finish_reason)
-                    # Extract content
-                    message = top_choice.get("message")
-                    content: str | None = None
-                    if isinstance(message, dict):
-                        content = message.get("content")
-                    elif isinstance(message, str):
-                        content = message
-                    if content is not None:
-                        diagnostics["response_content_chars"] = len(content)
-                        if content:
-                            prefix = content[:max_prefix_len]
-                            diagnostics["response_content_prefix"] = prefix
-        except Exception:  # noqa: BLE001
-            # Best-effort extraction, don't fail on unexpected response shape
-            pass
-        return diagnostics
-
-    @classmethod
-    def _build_error_message(
-        cls,
-        config: LlamaCppProviderConfig,
-        endpoint: str,
-        exc: requests.RequestException,
-        response: requests.Response | None,
-        timeout_seconds: int,
-    ) -> str:
-        context: list[str] = [f"Endpoint {endpoint} (LLAMA_CPP_BASE_URL={config.base_url})"]
-        if cls._base_url_mutually_exclusive_v1(config.base_url):
-            context.append("Base URL already includes '/v1'; provider still appends '/v1/chat/completions'. Remove the trailing '/v1' if you only meant to specify the server root.")
-        if response is not None:
-            status_text = cls._format_http_status(response)
-            if status_text:
-                context.append(status_text)
-            snippet = cls._response_body_snippet(response)
-            if snippet:
-                context.append(f"Response snippet: {snippet}")
-        else:
-            context.append(f"{exc.__class__.__name__}: {exc}")
-        context.append(f"timeout={timeout_seconds}s")
-        return "llama.cpp request failed: " + "; ".join(context)
 
     def max_tokens_for_operation(self, operation: str) -> int | None:
         """Get max_tokens for a given operation type.
@@ -738,7 +91,7 @@ class LlamaCppProvider(LLMProvider):
         effective_response_format_json = (
             response_format_json if response_format_json is not None else config.response_format_json
         )
-        request_payload = self._build_payload(
+        request_payload = build_payload(
             prompt,
             config,
             system_instructions=system_instructions,
@@ -751,22 +104,23 @@ class LlamaCppProvider(LLMProvider):
             response = session.post(
                 endpoint,
                 json=request_payload,
-                headers=self._request_headers(config),
+                headers=build_request_headers(config),
                 timeout=timeout_seconds,
             )
             response.raise_for_status()
         except requests.RequestException as exc:
             raise RuntimeError(
-                self._build_error_message(config, endpoint, exc, response, timeout_seconds)
+                build_error_message(config.base_url, endpoint, exc, response, timeout_seconds)
             ) from exc
         assert response is not None
         raw = response.json()
-        assessment = self._extract_assessment(raw, max_tokens=max_tokens)
+        assessment = extract_assessment(raw, max_tokens=max_tokens)
         if validate_schema:
             try:
                 validated = AssessorAssessment.from_dict(assessment)
             except ValueError as exc:
-                snippet = self._payload_snippet(assessment)
+                from .llamacpp_provider_response import _payload_snippet
+                snippet = _payload_snippet(assessment)
                 raise ValueError(
                     f"Assessor schema validation failed: {exc}; assessment snippet: {snippet}"
                 ) from exc
@@ -774,205 +128,7 @@ class LlamaCppProvider(LLMProvider):
         return assessment
 
 
-class LLMFailureClass(StrEnum):
-    """Classification of LLM provider failures for diagnostics and observability."""
-
-    LLM_CLIENT_READ_TIMEOUT = "llm_client_read_timeout"
-    LLM_CLIENT_CONNECT_TIMEOUT = "llm_client_connect_timeout"
-    LLM_SERVER_HTTP_ERROR = "llm_server_http_error"
-    LLM_RESPONSE_PARSE_ERROR = "llm_response_parse_error"
-    LLM_CLIENT_REQUEST_ERROR = "llm_client_request_error"
-    LLM_ADAPTER_ERROR = "llm_adapter_error"
-    LLM_RESPONSE_PARSE_ERROR_LENGTH_CAPPED = "llm_response_parse_error_length_capped"
-    LLM_RESPONSE_INVALID_JSON = "llm_response_invalid_json"
-    LLM_RESPONSE_UNRECOGNIZED_PAYLOAD = "llm_response_unrecognized_payload"
-    LLM_EMPTY_RESPONSE = "llm_empty_response"
-
-
-def classify_llm_failure(
-    exc: BaseException,
-    response: requests.Response | None = None,
-    _seen: frozenset[int] | None = None,
-) -> tuple[LLMFailureClass, str]:
-    """Classify an LLM provider exception into a stable failure class.
-
-
-    This helper distinguishes common failure modes for better diagnostics:
-    - Read timeout (server slow to respond)
-    - Connect timeout (cannot reach server)
-    - HTTP errors (4xx/5xx responses)
-    - Response parse errors (malformed output)
-    - Client request errors (other requests lib errors)
-    - Adapter errors (unexpected exceptions)
-    For wrapped exceptions (e.g., RuntimeError wrapping a requests.RequestException),
-    this function checks the exception chain via __cause__ and __context__ to
-    preserve the original classification.
-
-    Args:
-        exc: The exception that caused the failure.
-        response: The HTTP response object if available.
-        _seen: Internal - set of seen exception ids to prevent infinite recursion.
-
-    Returns:
-        Tuple of (failure_class, exception_type_name)
-    """
-    exc_name = exc.__class__.__name__
-    # Cycle protection: track seen exceptions by id
-    if _seen is None:
-        _seen = frozenset()
-    exc_id = id(exc)
-    if exc_id in _seen:
-        # Cycle detected - return adapter error to prevent infinite loop
-        return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
-    new_seen = _seen | {exc_id}
-
-    # Check for HTTP error responses first
-    if response is not None:
-        status_code = getattr(response, "status_code", None)
-        if status_code is not None:
-            if 400 <= status_code < 600:
-                return LLMFailureClass.LLM_SERVER_HTTP_ERROR, exc_name
-    # Classify HTTPError even without response (e.g., pre-response errors)
-    if isinstance(exc, requests.HTTPError):
-        return LLMFailureClass.LLM_SERVER_HTTP_ERROR, exc_name
-    # For RuntimeError, check if it\'s wrapping a requests exception
-    # by traversing the exception chain (__cause__ and __context__)
-    if isinstance(exc, RuntimeError):
-        # Check the __cause__ first (explicit chaining via 'raise X from Y')
-        cause = getattr(exc, '__cause__', None)
-        if cause is not None and not isinstance(cause, BaseException):
-            cause = None
-        if cause is not None:
-            # Recursively classify the cause with cycle protection
-            cause_class, cause_name = classify_llm_failure(cause, response, new_seen)
-            return cause_class, cause_name
-        # Check __context__ for implicit exception chaining
-        context = getattr(exc, '__context__', None)
-        if context is not None and isinstance(context, requests.RequestException):
-            # Return the context exception\'s type to preserve the inner exception
-            return _classify_request_exception(context, context.__class__.__name__)
-        # Fallback: check if the RuntimeError message contains timeout keywords
-        exc_msg = str(exc).lower()
-        if 'timeout' in exc_msg or 'timed out' in exc_msg:
-            if 'connect' in exc_msg:
-                return LLMFailureClass.LLM_CLIENT_CONNECT_TIMEOUT, exc_name
-            return LLMFailureClass.LLM_CLIENT_READ_TIMEOUT, exc_name
-        # Default to adapter error for unexpected RuntimeErrors
-        return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
-    return _classify_request_exception(exc, exc_name)
-
-
-
-def _classify_request_exception(exc: BaseException, exc_name: str) -> tuple[LLMFailureClass, str]:
-    """Helper to classify a requests.RequestException or similar."""
-    if isinstance(exc, requests.Timeout):
-        # requests.Timeout has two subclasses: ConnectTimeout and ReadTimeout
-        # but they may not always be distinguishable, so check class name
-        if "Connect" in exc_name or "connect" in str(exc).lower():
-            return LLMFailureClass.LLM_CLIENT_CONNECT_TIMEOUT, exc_name
-        return LLMFailureClass.LLM_CLIENT_READ_TIMEOUT, exc_name
-
-    if isinstance(exc, requests.ConnectionError):
-        err_msg = str(exc).lower()
-        if "timeout" in err_msg or "timed out" in err_msg:
-            return LLMFailureClass.LLM_CLIENT_CONNECT_TIMEOUT, exc_name
-        return LLMFailureClass.LLM_CLIENT_REQUEST_ERROR, exc_name
-
-    if isinstance(exc, requests.RequestException):
-        return LLMFailureClass.LLM_CLIENT_REQUEST_ERROR, exc_name
-
-    if isinstance(exc, (ValueError, json.JSONDecodeError)):
-        return LLMFailureClass.LLM_RESPONSE_PARSE_ERROR, exc_name
-
-    # Default to adapter error for unexpected exceptions
-    return LLMFailureClass.LLM_ADAPTER_ERROR, exc_name
-
-class LLMResponseParseError(ValueError):
-    """Exception raised when LLM response cannot be parsed as valid JSON.
-
-    Carries structured output diagnostics for observability and failure analysis.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        finish_reason: str | None = None,
-        response_content_chars: int | None = None,
-        response_content_prefix: str | None = None,
-        completion_stopped_by_length: bool = False,
-        max_tokens: int | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.finish_reason = finish_reason
-        self.response_content_chars = response_content_chars
-        self.response_content_prefix = response_content_prefix
-        self.completion_stopped_by_length = completion_stopped_by_length
-        self.max_tokens = max_tokens
-
-    def to_diagnostics(self) -> dict[str, Any]:
-        """Convert to diagnostics dict for failure metadata."""
-        return {
-            "finish_reason": self.finish_reason,
-            "response_content_chars": self.response_content_chars,
-            "response_content_prefix": self.response_content_prefix,
-            "completion_stopped_by_length": self.completion_stopped_by_length,
-            "max_tokens": self.max_tokens,
-        }
-
-
-
-@dataclass(frozen=True)
-class LLMFailureMetadata:
-    """Structured metadata for LLM provider failures."""
-
-    failure_class: str
-    exception_type: str
-    timeout_seconds: int | None = None
-    elapsed_ms: int | None = None
-    endpoint: str | None = None
-    summary: str | None = None
-    # Structured output diagnostics
-    finish_reason: str | None = None
-    response_content_chars: int | None = None
-    response_content_prefix: str | None = None
-    json_parse_error: str | None = None
-    completion_stopped_by_length: bool | None = None
-    max_tokens: int | None = None
-    provider: str | None = None
-    operation: str | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        result: dict[str, object] = {
-            "failure_class": self.failure_class,
-            "exception_type": self.exception_type,
-        }
-        if self.timeout_seconds is not None:
-            result["timeout_seconds"] = self.timeout_seconds
-        if self.elapsed_ms is not None:
-            result["elapsed_ms"] = self.elapsed_ms
-        if self.endpoint is not None:
-            result["endpoint"] = self.endpoint
-        if self.summary is not None:
-            result["summary"] = self.summary
-        if self.finish_reason is not None:
-            result["finish_reason"] = self.finish_reason
-        if self.response_content_chars is not None:
-            result["response_content_chars"] = self.response_content_chars
-        if self.response_content_prefix is not None:
-            result["response_content_prefix"] = self.response_content_prefix
-        if self.json_parse_error is not None:
-            result["json_parse_error"] = self.json_parse_error
-        if self.completion_stopped_by_length is not None:
-            result["completion_stopped_by_length"] = self.completion_stopped_by_length
-        if self.max_tokens is not None:
-            result["max_tokens"] = self.max_tokens
-        if self.provider is not None:
-            result["provider"] = self.provider
-        if self.operation is not None:
-            result["operation"] = self.operation
-        return result
-
-
+# Re-export public API from split modules for backward compatibility
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN",
@@ -981,6 +137,7 @@ __all__ = [
     "LlamaCppProviderConfig",
     "LLMFailureClass",
     "LLMFailureMetadata",
-    "classify_llm_failure",
     "LLMResponseParseError",
+    "_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS",
+    "classify_llm_failure",
 ]

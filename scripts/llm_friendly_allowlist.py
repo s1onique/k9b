@@ -44,7 +44,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/external_analysis/alertmanager_discovery.py", "[EXTRACTION] Alertmanager discovery - extraction in progress"),
     ("src/k8s_diag_agent/external_analysis/next_check_planner.py", "[EXTRACTION] Next check planner - complex extraction"),
     ("src/k8s_diag_agent/external_analysis/vmalert_discovery.py", "[EXTRACTION] vmalert discovery - extraction in progress"),
-    ("src/k8s_diag_agent/llm/llamacpp_provider.py", "[EXTRACTION] LLM provider - complex dependencies"),
+    ("src/k8s_diag_agent/llm/llamacpp_provider.py", "[EXTRACTION] LLM provider - extracted to config/errors/payloads/response modules"),
     ("src/k8s_diag_agent/health/loop_scheduler.py", "[EXTRACTION] Loop scheduler - run loop extracted; compatibility surface remains"),
 
 

@@ -59,3 +59,4 @@ cli_snapshot_assess_handlers.py handle_assess_snapshots CLI snapshot assessment 
 
 # === VMAlert Discovery Boundaries ===
 health/loop_vmalert_discovery.py run_vmalert_discovery vmalert verification failure boundary - graceful continue, non-fatal verification failures
+llm/llamacpp_provider_response.py _extract_response_diagnostics best-effort diagnostics extraction - graceful continue, no credential exposure
