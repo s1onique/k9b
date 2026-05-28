@@ -176,7 +176,7 @@ def handle_runs_list_route(handler: HealthUIRequestHandler, query: str) -> None:
                 return
 
     # Import here to avoid circular import
-    from .server_reads import build_runs_list_payload
+    from .server_runs_list_payload import build_runs_list_payload
 
     runs_payload = build_runs_list_payload(handler, limit=limit_value, include_status=include_status, include_expensive=include_expensive, include_batch_eligibility=include_batch_eligibility)
 
