@@ -21,17 +21,18 @@ import json
 import logging
 import math
 import time
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
-# SECURITY: Import validation helpers for path/glob security hardening
-from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
-
 # Re-export from extraction modules for backward compatibility
-from .server_artifact_reads import _handle_debug_routes, _has_batch_eligibility_index
+from .server_artifact_reads import (
+    _count_external_analysis_files,
+    _handle_debug_routes,
+    _has_batch_eligibility_index,
+    _load_promotions_for_run,
+)
 from .server_run_reads import _get_llm_activity_from_index, _load_ui_index_file, load_context_for_run
 from .server_runs_list_reads import handle_runs_list_route
 
@@ -483,61 +484,16 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         # NOTE: context is already loaded via handler._load_context() before this block
         timings["context_load_ms"] = (time.perf_counter() - context_load_start) * 1000
 
-        # Promotions load phase - OPTIMIZED to use index instead of file glob
+        # Promotions load phase - delegate to extraction module
         promotions_load_start = time.perf_counter()
-        timings["promoted_glob_ms"] = 0.0  # No longer doing glob
-        timings["promotion_glob_count"] = 0  # No longer doing glob
-
-        # Load promotions from ui-index.json with run_id validation
-        promotions_index: Mapping[str, object] | None = None
-        promotions_source = "file_scan"
-        promotions_index_run_id: str | None = None
-        promotions_fallback_reason: str | None = None
-
-        try:
-            index = _load_ui_index_file(handler._health_root)
-            raw_promotions_index = index.get("promotions_index")
-            if isinstance(raw_promotions_index, Mapping):
-                # Validate shape - must have run_id field for run-scoped correctness
-                if "run_id" not in raw_promotions_index:
-                    promotions_fallback_reason = "missing_run_id_field"
-                else:
-                    promotions_index = raw_promotions_index
-                    promotions_index_run_id = str(raw_promotions_index.get("run_id") or "")
-                    # CRITICAL: Validate run_id matches selected run to prevent cross-run data leakage
-                    if promotions_index_run_id != context.run.run_id:
-                        promotions_fallback_reason = f"run_id_mismatch:{promotions_index_run_id}!={context.run.run_id}"
-                        promotions_index = None
-                    elif not isinstance(raw_promotions_index.get("promotions"), list):
-                        promotions_fallback_reason = "invalid_promotions_shape"
-                        promotions_index = None
-        except Exception as exc:
-            promotions_fallback_reason = f"index_load_error:{exc}"
-            promotions_index = None
-
-        if promotions_index is not None:
-            # Use index-backed promotions (instant)
-            raw_promotions = promotions_index.get("promotions", [])
-            promotions = list(cast(list[dict[str, object]], raw_promotions)) if isinstance(raw_promotions, list) else []
-            promotions_source = "index"
-        else:
-            # CRITICAL: Do NOT probe external-analysis when index is missing/mismatched
-            # Even bounded iterdir() costs 1.5-2.7s on large directories, which blocks /api/run
-            # Return empty promotions with explicit reason so operator can regenerate index
-            if promotions_fallback_reason is None:
-                promotions_fallback_reason = "missing_promotions_index"
-
-            promotions = []
-            promotions_source = "skipped_missing_index"
-            timings["promoted_glob_ms"] = 0.0
-            timings["promotion_glob_count"] = 0
-
+        promotions, promotion_timings = _load_promotions_for_run(handler._health_root, context.run.run_id)
+        # Copy timings from extraction module
+        for key, value in promotion_timings.items():
+            timings[key] = value
         timings["promotions_load_ms"] = (time.perf_counter() - promotions_load_start) * 1000
-        timings["promotions_count"] = len(promotions)
-        timings["promotions_source"] = promotions_source  # type: ignore[assignment]
-        timings["promotions_index_run_id"] = promotions_index_run_id or ""  # type: ignore[assignment]
-        if promotions_fallback_reason:
-            timings["promotions_fallback_reason"] = promotions_fallback_reason  # type: ignore[assignment]
+        promotions_source = cast(str, promotion_timings.get("promotions_source", "unknown"))
+        promotions_index_run_id = promotion_timings.get("promotions_index_run_id")
+        promotions_fallback_reason = promotion_timings.get("promotions_fallback_reason")
 
         # Payload build phase
         # Pass health_root to enable execution artifact overlay for worklist derivation
@@ -553,18 +509,8 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         timings["payload_bytes"] = len(serialized.encode("utf-8"))
 
         # External analysis count (fast glob only, no load)
-        # SECURITY: run_id validated by validate_run_id() before glob construction
-        # NOTE: F823 false positive - imports are at module level, ruff misidentifies scope
-        external_analysis_dir = handler._health_root / "external-analysis"
-        external_analysis_count = 0
-        if external_analysis_dir.exists():
-            try:
-                validated_run_id = validate_run_id(context.run.run_id)  # noqa: F823
-                glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
-                external_analysis_count = len(list(external_analysis_dir.glob(glob_pattern)))
-            except SecurityError:  # noqa: F823
-                # Safe fallback: return 0 on invalid run_id
-                external_analysis_count = 0
+        # Delegate to extraction module for artifact-read isolation
+        external_analysis_count = _count_external_analysis_files(handler._health_root, context.run.run_id)
         timings["external_analysis_files_scanned"] = external_analysis_count
 
         # OPTIMIZATION: Skip notification file scan for initial selected-run detail

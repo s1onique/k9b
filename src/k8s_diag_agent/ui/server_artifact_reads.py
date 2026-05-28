@@ -3,11 +3,13 @@
 This module contains artifact-read-specific handlers extracted from server_reads.py:
 - Debug endpoint handlers for execution-state-bundle, execution-summary, and diagnostics-enabled
 - Batch eligibility index validation helpers
+- Promotions loading from ui-index.json with run_id validation
+- External analysis file counting
 
 Keep behavior exact: HTTP status codes, error messages, and security checks are
 preserved from the original implementation.
 
-Extraction rationale: These debug and batch-eligibility helpers are artifact-read
+Extraction rationale: These debug, promotions, and counting helpers are artifact-read
 concerns that belong together as a cohesive group. They read diagnostic artifacts
 and return structured data, making them a natural seam for extraction.
 """
@@ -18,20 +20,23 @@ import json
 import logging
 import os
 import re as regex_module
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
-from ..security.path_validation import SecurityError, validate_run_id
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
 
 logger = logging.getLogger(__name__)
 
 
 __all__ = [
+    "_count_external_analysis_files",
     "_handle_debug_routes",
     "_has_batch_eligibility_index",
+    "_load_promotions_for_run",
 ]
 
 
@@ -148,3 +153,124 @@ def _handle_debug_routes(handler: HealthUIRequestHandler, route: str) -> bool:
         return True
 
     return False
+
+
+def _load_ui_index_for_promotions(health_root: Path) -> dict[str, object] | None:
+    """Load ui-index.json with error handling for promotions loading.
+
+    Args:
+        health_root: Path to the health directory containing ui-index.json
+
+    Returns:
+        The parsed ui-index.json contents as a dict, or None if not available
+    """
+    ui_index_path = health_root / "ui-index.json"
+    if not ui_index_path.exists():
+        return None
+    try:
+        raw = json.loads(ui_index_path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            return raw
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
+
+
+def _load_promotions_for_run(
+    health_root: Path,
+    run_id: str,
+) -> tuple[list[dict[str, object]], dict[str, Any]]:
+    """Load promotions from ui-index.json with run_id validation.
+
+    This function reads the promotions_index from ui-index.json and validates
+    that it belongs to the requested run to prevent cross-run data leakage.
+
+    Args:
+        health_root: Path to the health directory containing ui-index.json
+        run_id: The run ID to validate against
+
+    Returns:
+        Tuple of (promotions list, timings dict with load metrics)
+    """
+    timings: dict[str, Any] = {}
+    timings["promoted_glob_ms"] = 0.0
+    timings["promotion_glob_count"] = 0
+
+    # Load promotions from ui-index.json with run_id validation
+    promotions_index: Mapping[str, object] | None = None
+    promotions_source = "file_scan"
+    promotions_index_run_id: str | None = None
+    promotions_fallback_reason: str | None = None
+
+    index = _load_ui_index_for_promotions(health_root)
+    if index is not None:
+        raw_promotions_index = index.get("promotions_index")
+        if isinstance(raw_promotions_index, Mapping):
+            # Validate shape - must have run_id field for run-scoped correctness
+            if "run_id" not in raw_promotions_index:
+                promotions_fallback_reason = "missing_run_id_field"
+            else:
+                promotions_index = raw_promotions_index
+                promotions_index_run_id = str(raw_promotions_index.get("run_id") or "")
+                # CRITICAL: Validate run_id matches selected run to prevent cross-run data leakage
+                if promotions_index_run_id != run_id:
+                    promotions_fallback_reason = f"run_id_mismatch:{promotions_index_run_id}!={run_id}"
+                    promotions_index = None
+                elif not isinstance(raw_promotions_index.get("promotions"), list):
+                    promotions_fallback_reason = "invalid_promotions_shape"
+                    promotions_index = None
+    else:
+        promotions_fallback_reason = "missing_index"
+
+    if promotions_index is not None:
+        # Use index-backed promotions (instant)
+        raw_promotions = promotions_index.get("promotions", [])
+        promotions = list(cast(list[dict[str, object]], raw_promotions)) if isinstance(raw_promotions, list) else []
+        promotions_source = "index"
+    else:
+        # CRITICAL: Do NOT probe external-analysis when index is missing/mismatched
+        # Even bounded iterdir() costs 1.5-2.7s on large directories, which blocks /api/run
+        # Return empty promotions with explicit reason so operator can regenerate index
+        if promotions_fallback_reason is None:
+            promotions_fallback_reason = "missing_promotions_index"
+
+        promotions = []
+        promotions_source = "skipped_missing_index"
+
+    timings["promotions_count"] = len(promotions)
+    timings["promotions_source"] = promotions_source
+    timings["promotions_index_run_id"] = promotions_index_run_id or ""
+    if promotions_fallback_reason:
+        timings["promotions_fallback_reason"] = promotions_fallback_reason
+
+    return promotions, timings
+
+
+def _count_external_analysis_files(
+    health_root: Path,
+    run_id: str,
+) -> int:
+    """Count external analysis files for a run (fast glob only, no load).
+
+    SECURITY: run_id is validated by validate_run_id() before glob construction.
+
+    Args:
+        health_root: Path to the health directory containing external-analysis
+        run_id: The run ID to count files for
+
+    Returns:
+        Number of external analysis files for this run
+    """
+    external_analysis_dir = health_root / "external-analysis"
+    if not external_analysis_dir.exists():
+        return 0
+
+    try:
+        validated_run_id = validate_run_id(run_id)
+        glob_pattern = safe_run_artifact_glob(validated_run_id, "-*.json")
+        return len(list(external_analysis_dir.glob(glob_pattern)))
+    except SecurityError:
+        # Safe fallback: return 0 on invalid run_id
+        return 0
+
+
