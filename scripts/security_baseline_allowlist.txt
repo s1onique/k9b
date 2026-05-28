@@ -45,6 +45,7 @@ ui/server_reads.py load_context_for_run graceful context loading fallback - grac
 ui/server_reads.py build_ui_context graceful UI context build fallback - graceful continue, no credential exposure
 ui/server_reads.py compact_raw graceful compact alertmanager parsing fallback - graceful continue, no credential exposure
 ui/server_reads.py _serialize_am_sources graceful alertmanager sources serialization fallback - graceful continue, no credential exposure
+ui/server_reads.py build_runs_list_payload graceful runs list payload build fallback - graceful continue, no credential exposure
 
 # === Batch Execution ===
 batch.py run_batch_next_checks batch execution candidate boundary - docs/security-exception-audit.md ~443
