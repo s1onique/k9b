@@ -155,25 +155,29 @@ def _handle_debug_routes(handler: HealthUIRequestHandler, route: str) -> bool:
     return False
 
 
-def _load_ui_index_for_promotions(health_root: Path) -> dict[str, object] | None:
+def _load_ui_index_for_promotions(health_root: Path) -> tuple[dict[str, object] | None, str | None]:
     """Load ui-index.json with error handling for promotions loading.
 
     Args:
         health_root: Path to the health directory containing ui-index.json
 
     Returns:
-        The parsed ui-index.json contents as a dict, or None if not available
+        Tuple of (parsed ui-index.json contents or None, error reason or None).
+        Error reasons are preserved for operator-visible diagnostics:
+        - None: index loaded successfully
+        - "missing_index": file does not exist
+        - "index_load_error:<exc>": read/parse failed with exception
     """
     ui_index_path = health_root / "ui-index.json"
     if not ui_index_path.exists():
-        return None
+        return None, "missing_index"
     try:
         raw = json.loads(ui_index_path.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
-            return raw
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        pass
-    return None
+            return raw, None
+        return None, "invalid_index_shape"
+    except Exception as exc:
+        return None, f"index_load_error:{exc}"
 
 
 def _load_promotions_for_run(
@@ -202,7 +206,7 @@ def _load_promotions_for_run(
     promotions_index_run_id: str | None = None
     promotions_fallback_reason: str | None = None
 
-    index = _load_ui_index_for_promotions(health_root)
+    index, index_load_error = _load_ui_index_for_promotions(health_root)
     if index is not None:
         raw_promotions_index = index.get("promotions_index")
         if isinstance(raw_promotions_index, Mapping):
@@ -220,7 +224,10 @@ def _load_promotions_for_run(
                     promotions_fallback_reason = "invalid_promotions_shape"
                     promotions_index = None
     else:
-        promotions_fallback_reason = "missing_index"
+        # Use the specific error from _load_ui_index_for_promotions
+        # This preserves the original server_reads.py behavior for malformed indices
+        # "missing_index", "invalid_index_shape", or "index_load_error:<exc>"
+        promotions_fallback_reason = index_load_error or "missing_index"
 
     if promotions_index is not None:
         # Use index-backed promotions (instant)
