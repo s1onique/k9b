@@ -67,6 +67,7 @@ ui/server_run_reads.py load_context_for_run graceful context loading fallback - 
 ui/server_run_reads.py _get_llm_activity_from_index graceful LLM activity index loading - graceful continue, no credential exposure
 ui/server_run_reads.py _load_ui_index_file graceful index file loading - graceful continue, no credential exposure
 ui/server_artifact_reads.py _load_ui_index_for_promotions graceful promotions index loading - preserves error diagnostics, no credential exposure
+ui/server_run_detail_reads.py handle_run_detail_route graceful run detail route handling - graceful continue, no credential exposure
 
 # === Manual Next Check Execution ===
 ui/server_next_check_execution.py execute_manual_next_check manual execution fallback boundary - docs/security-exception-audit.md ~322
