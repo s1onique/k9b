@@ -35,7 +35,7 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [EXTRACTION] Backend - extraction in progress
     ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
-    ("src/k8s_diag_agent/ui/api_incident_report.py", "[EXTRACTION] Incident report - extract builders"),
+    ("src/k8s_diag_agent/ui/api_incident_report.py", "[EXTRACTION] Incident report - worklist helpers extracted to api_incident_report_worklist_helpers.py (210 lines); remaining: incident/report + worklist builders (~1576 lines)"),
     ("src/k8s_diag_agent/ui/api.py", "[EXTRACTION] API orchestrator - re-export pattern"),
     ("src/k8s_diag_agent/ui/server.py", "[EXTRACTION] Server routes - pending extraction"),
     # server_read_support.py extracted - cluster/drilldown to server_read_clusters.py (495);
