@@ -17,7 +17,7 @@ Truthfulness rules enforced by the builders:
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Literal, cast
 
 from ..security.kubectl_context import sanitize_operator_text
 from .api_incident_report_ownership import (
@@ -204,8 +204,8 @@ def _build_unknown_claims(
         if "routingHint" in ownership_fields:
             unknown_entry["routingHint"] = cast("str | None", ownership_fields["routingHint"])
         if "ownershipConfidence" in ownership_fields:
-            # Copy directly - ownership_fields already contains validated data
-            unknown_entry["ownershipConfidence"] = ownership_fields["ownershipConfidence"]
+            # Cast to proper type - ownership_fields contains validated data
+            unknown_entry["ownershipConfidence"] = cast("Literal['high', 'medium', 'low', 'unknown'] | None", ownership_fields.get("ownershipConfidence"))
         unknowns.append(unknown_entry)
 
     return unknowns
@@ -294,6 +294,10 @@ def _build_recommendation_claims(
     if assessment is None or assessment.recommended_action is None:
         return recommendations, recommended_actions
 
+    def _assessment_refs() -> list[ArtifactLink]:
+        path = assessment.artifact_path if assessment else None
+        return [{"label": "Assessment", "path": path}] if path else []
+
     action = assessment.recommended_action
     # Sanitize action description to prevent internal markers from leaking
     safe_action_description = sanitize_operator_text(action.description)
@@ -303,7 +307,7 @@ def _build_recommendation_claims(
                 "claimType": "recommendation",
                 "statement": safe_action_description,
                 "safetyLevel": action.safety_level or "unknown",
-                "sourceArtifactRefs": [],
+                "sourceArtifactRefs": _assessment_refs(),
             }
         )
         recommended_actions.append(safe_action_description)

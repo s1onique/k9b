@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..security.kubectl_context import sanitize_operator_text
-from .api_incident_report_worklist import _sanitize_target_cluster
+from .api_incident_report_worklist_state import _sanitize_target_cluster
 from .api_payloads import (
     CrossClusterFindingPayload,
     VmalertDiscoveryContextPayload,
