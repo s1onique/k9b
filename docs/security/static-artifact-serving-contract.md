@@ -73,13 +73,15 @@ The `serve_artifact` function in `server_static.py` enforces the following polic
 
 The `serve_static` function in `server_static.py` enforces:
 
-1. **Static files are served only from `static_dir`.** The candidate path is built as `static_dir / target.lstrip("/")` and resolved. String-prefix check `str(candidate).startswith(str(static_root))` verifies containment.
+1. **Static files are served only from `static_dir`.** The candidate path is built as `static_dir / target.lstrip("/")` and resolved. `Path.relative_to()` validates containment.
 
-2. **Traversal/unknown routes fall back to `index.html`.** If the candidate path does not exist or escapes the static root, `candidate` is reassigned to `static_root / "index.html"`.
+2. **Path containment uses `Path.relative_to()`** instead of string-prefix checks. This correctly rejects sibling directories (e.g., `/tmp/static-evil` is not contained in `/tmp/static`) and traversal/escape attempts where the resolved path is outside `static_root`.
 
-3. **Fallback must never serve attacker-targeted files.** The prefix check ensures the fallback `index.html` path is within `static_dir`.
+3. **Traversal/unknown routes fall back to `index.html`.** If `candidate.relative_to(static_root)` raises `ValueError` (containment failure), `candidate` is reassigned to `static_root / "index.html"`.
 
-4. **Fallback must not leak host paths.** The `404` message for missing static assets uses a static string (`"Static assets unavailable"`).
+4. **Fallback must never serve attacker-targeted files.** The `relative_to()` check ensures the fallback `index.html` path is within `static_dir`.
+
+5. **Fallback must not leak host paths.** The `404` message for missing static assets uses a static string (`"Static assets unavailable"`).
 
 ---
 

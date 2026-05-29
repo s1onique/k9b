@@ -21,6 +21,12 @@ if TYPE_CHECKING:
 def serve_static(handler: HealthUIRequestHandler, route: str) -> None:
     """Serve static files from the frontend dist directory.
 
+    Security Policy:
+    - Path containment is validated using Path.relative_to()
+    - Traversal/escape attempts fall back to index.html (SPA behavior)
+    - No attacker-targeted file is served
+    - No absolute host paths leak in responses
+
     Args:
         handler: The HealthUIRequestHandler instance
         route: The request path
@@ -28,13 +34,25 @@ def serve_static(handler: HealthUIRequestHandler, route: str) -> None:
     target = route or "/"
     if target.endswith("/"):
         target += "index.html"
-    candidate = (handler.static_dir / target.lstrip("/")).resolve()
+
     static_root = handler.static_dir.resolve()
-    if not str(candidate).startswith(str(static_root)) or not candidate.exists():
+    candidate = (static_root / target.lstrip("/")).resolve()
+
+    # Validate containment using Path.relative_to() - safe containment check
+    # This correctly rejects sibling directories (e.g., /tmp/static-evil vs /tmp/static)
+    # and traversal/escape attempts where resolved path is outside static_root
+    try:
+        candidate.relative_to(static_root)
+    except ValueError:
         candidate = static_root / "index.html"
-        if not candidate.exists():
-            handler._send_text(404, "Static assets unavailable")
-            return
+
+    if not candidate.exists():
+        candidate = static_root / "index.html"
+
+    if not candidate.exists():
+        handler._send_text(404, "Static assets unavailable")
+        return
+
     send_file(handler, candidate)
 
 

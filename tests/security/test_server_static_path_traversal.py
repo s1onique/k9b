@@ -296,3 +296,47 @@ class TestServeStaticPathTraversal:
         """Absolute paths should return index.html fallback."""
         served = self._call_serve_static("/etc/passwd")
         assert served == self.static_dir / "index.html"
+
+    def test_sibling_directory_not_accessible(self) -> None:
+        """Sibling directories must not be accessible via static route.
+
+        This tests the sibling-prefix vulnerability case where:
+        - static_dir = /tmp/static
+        - sibling = /tmp/static-evil
+
+        A naive string-prefix check would incorrectly serve files from /tmp/static-evil
+        because '/tmp/static-evil/file.txt' starts with '/tmp/static'.
+
+        Using Path.relative_to() correctly rejects this by validating that the resolved
+        path is actually contained within static_root.
+
+        Note: The request uses '../' traversal to actually resolve to the sibling directory.
+        Without traversal, serve_static() would just look for a nested 'static-evil' directory
+        under static_root, which doesn't exercise the sibling-prefix escape.
+        """
+        import shutil
+
+        # Create a sibling directory at the same level as static_dir
+        sibling_dir = self.static_dir.parent / f"{self.static_dir.name}-evil"
+        sibling_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a file in the sibling directory that could be mistaken by string-prefix check
+        evil_file = sibling_dir / "secret.txt"
+        evil_file.write_text("SIBLING_CANARY_CONTENT", encoding="utf-8")
+
+        try:
+            # Use '../' traversal to resolve to the sibling directory.
+            # This is the critical path that the old string-prefix check would have missed:
+            #   candidate = static_root / "../static-evil/secret.txt" -> resolves to /tmp/static-evil/secret.txt
+            #   Old check: '/tmp/static-evil/secret.txt'.startswith('/tmp/static') = True (WRONG!)
+            #   New check: Path.relative_to() raises ValueError correctly (CORRECT!)
+            served = self._call_serve_static(f"../{self.static_dir.name}-evil/secret.txt")
+
+            # Must fall back to index.html, not serve the sibling file
+            assert served == self.static_dir / "index.html", (
+                f"Sibling directory was accessible: {served}"
+            )
+        finally:
+            # Cleanup
+            if sibling_dir.exists():
+                shutil.rmtree(sibling_dir)
