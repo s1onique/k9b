@@ -20,7 +20,6 @@ from typing import Any, cast
 import pytest
 
 from k8s_diag_agent.ui.server import (
-    HealthUIRequestHandler,
     _export_usefulness_review_for_run,
 )
 
@@ -152,11 +151,11 @@ class TestBatchExecutionExternalBoundary:
 
     def test_batch_execution_external_boundary_reviewed_safe(self) -> None:
         """Verify the external execution boundary is reviewed-safe with comment."""
-        # Verify the handler exists
-        assert hasattr(HealthUIRequestHandler, "_handle_run_batch_next_check_execution")
+        # Verify the handler exists in the extracted module
+        from k8s_diag_agent.ui.server_batch_execution import handle_run_batch_next_check_execution
 
         # The REVIEWED: comment is in the source code
-        source = inspect.getsource(HealthUIRequestHandler._handle_run_batch_next_check_execution)
+        source = inspect.getsource(handle_run_batch_next_check_execution)
         assert "REVIEWED" in source or "External execution boundary" in source
 
 

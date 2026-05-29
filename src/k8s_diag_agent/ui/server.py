@@ -26,7 +26,7 @@ from ..external_analysis.deterministic_next_check_promotion import (
 )
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
-from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_bearer_token, _validate_json_mutation_request, _validate_runs_dir
+from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_bearer_token, _validate_runs_dir
 
 # Route patterns for path matching
 _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
@@ -36,8 +36,12 @@ _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
 
 # Re-export next-check mutation handlers from server_next_checks
 # Re-export feedback mutation handlers from server_feedback
+# Re-export batch execution handler from server_batch_execution
 from .server_alertmanager import (  # noqa: E402, F401
     handle_alertmanager_source_action,
+)
+from .server_batch_execution import (  # noqa: E402, F401
+    handle_run_batch_next_check_execution,
 )
 from .server_feedback import (  # noqa: E402, F401
     handle_alertmanager_relevance_feedback,
@@ -841,7 +845,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                 handle_alertmanager_relevance_feedback(self)
                 return
             if route == "/api/run-batch-next-check-execution":
-                self._handle_run_batch_next_check_execution()
+                handle_run_batch_next_check_execution(self)
                 return
             # Alertmanager source action endpoint: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
             # Body: { "action": "promote"|"disable", "reason": "..." }
@@ -1082,98 +1086,6 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
                     continue
 
         return None, None, None
-
-    def _handle_run_batch_next_check_execution(self) -> None:
-        """Handle batch execution of next-check candidates for a specific run.
-
-        Accepts run_id in the payload and executes all eligible candidates
-        that haven't been executed yet.
-        """
-        # Validate Content-Type and request size, parse JSON body
-        payload = _validate_json_mutation_request(self)
-        if payload is None:
-            return
-
-        run_id = payload.get("runId")
-        if not isinstance(run_id, str) or not run_id:
-            self._send_json({"error": "runId is required"}, 400)
-            return
-
-        # Default to False (actual execution) - UI Execute button should send dryRun: false
-        # Preview/dry-run can be triggered by explicitly sending dryRun: true
-        # Handle both boolean and string values - JSON.stringify converts boolean to "true"/"false" strings
-        dry_run_raw = payload.get("dryRun", False)
-        if isinstance(dry_run_raw, bool):
-            dry_run = dry_run_raw
-        elif isinstance(dry_run_raw, str):
-            # Handle string "true"/"false" from JSON.stringify (converts boolean to string)
-            dry_run = dry_run_raw.lower() == "true"
-        else:
-            dry_run = bool(dry_run_raw)
-
-        # Log the parsed dry_run value for observability
-        emit_structured_log(
-            component="batch-execution",
-            message="Batch execution request parsed",
-            run_id=run_id,
-            run_label="",
-            severity="INFO",
-            metadata={
-                "run_id": run_id,
-                "dry_run_parsed": dry_run,
-                "dry_run_source": "request_payload" if "dryRun" in payload else "default_false",
-            },
-        )
-
-        # Import the batch execution function from the package
-        try:
-            from k8s_diag_agent.batch import run_batch_next_checks
-        except (ModuleNotFoundError, ImportError, AttributeError) as exc:
-            # REVIEWED: Module import boundary - narrowing to expected import errors
-            self._send_json({"error": f"Failed to load batch execution module: {exc}"}, 500)
-            return
-
-        try:
-            result = run_batch_next_checks(
-                runs_dir=self.runs_dir,
-                run_id=run_id,
-                dry_run=dry_run,
-            )
-        except FileNotFoundError:
-            self._send_json({"error": f"Run not found: {run_id}"}, 404)
-            return
-        except Exception as exc:
-            # REVIEWED: External execution boundary - run_batch_next_checks may raise
-            # diverse exceptions from artifact writes, subprocess calls, JSON serialization
-            # Narrowing would risk leaking uncontrolled failures to 500 response
-            self._send_json({"error": f"Batch execution failed: {exc}"}, 500)
-            return
-
-        # Convert result to response
-        # Use "would_execute" for dry-run mode to clearly distinguish from actual execution
-        execution_mode = "would_execute" if dry_run else "executed"
-        response = {
-            "status": "success",
-            "summary": f"Batch execution {execution_mode} for run {run_id}",
-            "runId": run_id,
-            "dryRun": dry_run,
-            "totalCandidates": result.total_candidates,
-            "eligibleCandidates": result.eligible_candidates,
-            "executedCount": result.executed_count,
-            "skippedAlreadyExecuted": result.skipped_already_executed,
-            "skippedIneligible": result.skipped_ineligible,
-            "failedCount": result.failed_count,
-            "successCount": result.success_count,
-        }
-
-        # If not dry run, refresh diagnostic pack and update UI read model
-        if not dry_run and result.executed_count > 0:
-            _refresh_diagnostic_pack_latest(run_id, self.runs_dir)
-            _persist_batch_execution_history_to_ui_index(self.runs_dir, run_id)
-            # Invalidate the runs list cache so Recent Runs reflects the new execution state
-            _invalidate_runs_list_cache()
-
-        self._send_json(response)
 
     def _load_context(self, requested_run_id: str | None = None) -> UIIndexContext | None:
         """Load the UI context, optionally for a specific run.
