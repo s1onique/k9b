@@ -73,10 +73,11 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--json] [--python-only] [--frontend-only]"
+            echo "Usage: $0 [--json] [--python-only] [--frontend-only] [--helm-only]"
             echo "  --json           Emit only JSON summary to stdout"
-            echo "  --python-only     Run only Python lane steps"
-            echo "  --frontend-only   Run only Frontend lane steps"
+            echo "  --python-only    Run only Python lane steps"
+            echo "  --frontend-only  Run only Frontend lane steps"
+            echo "  --helm-only      Run only Helm chart verification"
             echo ""
             echo "Without scope flags, runs all steps (full gate)."
             echo ""
@@ -86,7 +87,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Usage: $0 [--json] [--python-only] [--frontend-only]" >&2
+            echo "Usage: $0 [--json] [--python-only] [--frontend-only] [--helm-only]" >&2
             exit 1
             ;;
     esac
