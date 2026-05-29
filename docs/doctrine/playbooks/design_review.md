@@ -253,6 +253,21 @@ Do not:
 - treat present org structure as permanent architecture truth,
 - or hide tradeoffs in vague prose.
 
+## Blockstor-derived review checks
+
+When reviewing, explicitly assess:
+
+- **Clean-room evidence**: Are build/test/release claims backed by executable repo-owned commands or artifacts?
+- **Cold resume**: Can work resume from repo state alone after context loss?
+- **Release certification**: Are releases tied to explicit verification evidence and known-risk statements?
+- **Inspectability**: Are important files, scripts, prompts, and docs small enough to review?
+- **Truthfulness**: Does the repo clearly separate implemented, partial, planned, and unknown?
+- **Doctrine linkage**: Are important doctrines connected to checklist, prompt, gate, or script behavior?
+
+Do not reward polished prose unless it is backed by repository evidence.
+
+---
+
 ## Design review heuristics for this repo
 
 In this repository, strong designs usually have these properties:

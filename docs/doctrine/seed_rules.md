@@ -12,6 +12,9 @@ And above:
 - evals
 - implementation details
 
+See also:
+- [Blockstor-Derived Factory Rules](blockstor-derived-rules.md) — clean-room evidence, cold resume, release certification, inspectable artifacts, truthfulness, and doctrine-to-check linkage.
+
 Its purpose is to make important behavior:
 - explicit,
 - reusable,
