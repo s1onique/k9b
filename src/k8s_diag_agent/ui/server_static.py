@@ -41,6 +41,12 @@ def serve_static(handler: HealthUIRequestHandler, route: str) -> None:
 def serve_artifact(handler: HealthUIRequestHandler, query: str) -> None:
     """Serve artifact files from the runs directory.
 
+    Security Policy:
+    - Symlink artifacts are REJECTED (no following symlinks)
+    - Only regular files under runs_dir are served
+    - Path containment is validated using Path.relative_to()
+    - Error responses do not leak absolute host paths
+
     Args:
         handler: The HealthUIRequestHandler instance
         query: The query string containing the artifact path
@@ -52,72 +58,145 @@ def serve_artifact(handler: HealthUIRequestHandler, query: str) -> None:
         return
     requested = Path(paths[0])
     requested_relative = str(requested)
+
+    # Reject hostile path components after query parsing and before filesystem access.
+    if _contains_hostile_components(requested_relative):
+        log_artifact_request(handler, requested_relative, None, None, "hostile-path", 400)
+        handler._send_text(400, "Invalid artifact path")
+        return
+
     try:
-        artifact_path = (handler.runs_dir / requested).resolve()
+        candidate = handler.runs_dir / requested
     except Exception:  # pragma: no cover - defensive guard
         log_artifact_request(handler, requested_relative, None, None, "invalid-path", 400)
         handler._send_text(400, "Invalid artifact path")
         return
-    root_resolved = handler.runs_dir.resolve()
-    normalized_path = str(artifact_path)
-    within_allowed_root = normalized_path.startswith(str(root_resolved))
-    if not within_allowed_root:
-        log_artifact_request(
-            handler, requested_relative, normalized_path, str(root_resolved),
-            "path-escape-attempt", 400
-        )
+
+    # CRITICAL: Check if the candidate is a symlink and reject it entirely.
+    # Symlinks inside runs_dir can point outside runs_dir, creating an escape.
+    # This is the preferred policy: reject symlink artifacts with no exceptions.
+    if candidate.is_symlink():
+        log_artifact_request(handler, requested_relative, None, None, "symlink-rejected", 400)
         handler._send_text(400, "Invalid artifact path")
         return
-    exists = artifact_path.exists()
-    if not exists:
+
+    # Resolve both paths for final containment validation
+    # This handles cases where runs_dir itself is a symlink
+    try:
+        root_resolved = handler.runs_dir.resolve()
+    except Exception:
+        log_artifact_request(handler, requested_relative, None, None, "root-resolve-error", 500)
+        handler._send_text(500, "Unable to access artifact root")
+        return
+
+    try:
+        artifact_resolved = candidate.resolve()
+    except Exception:
+        log_artifact_request(handler, requested_relative, None, None, "resolve-error", 400)
+        handler._send_text(400, "Invalid artifact path")
+        return
+
+    # Validate containment using Path.relative_to() - safe containment check
+    # This correctly rejects sibling directories (e.g., /tmp/root-evil vs /tmp/root)
+    # and symlink escapes where resolved path is outside root
+    try:
+        artifact_resolved.relative_to(root_resolved)
+    except ValueError:
         log_artifact_request(
-            handler, requested_relative, normalized_path, str(root_resolved),
-            "not-found", 404
+            handler, requested_relative, str(artifact_resolved), str(root_resolved),
+            "path-escape-attempt", 403
+        )
+        handler._send_text(403, "Access denied")
+        return
+
+    # Verify the final artifact is a regular file
+    if not artifact_resolved.is_file():
+        log_artifact_request(
+            handler, requested_relative, str(artifact_resolved), str(root_resolved),
+            "not-regular-file", 404
         )
         handler._send_text(404, "Artifact not found")
         return
+
     status = "success"
-    if artifact_path.suffix.lower() == ".zip":
+    if artifact_resolved.suffix.lower() == ".zip":
         try:
-            artifact_bytes = artifact_path.read_bytes()
-        except OSError as exc:
+            artifact_bytes = artifact_resolved.read_bytes()
+        except OSError:
             log_artifact_request(
-                handler, requested_relative, normalized_path, str(root_resolved),
+                handler, requested_relative, str(artifact_resolved), str(root_resolved),
                 "read-error", 500
             )
-            handler._send_text(500, f"Unable to read artifact: {exc}")
+            handler._send_text(500, "Unable to read artifact")
             return
         handler.send_response(200)
         handler.send_header("Content-Type", "application/zip")
         handler.send_header("Content-Length", str(len(artifact_bytes)))
         handler.send_header(
             "Content-Disposition",
-            f"attachment; filename=\"{artifact_path.name}\"",
+            f"attachment; filename=\"{artifact_resolved.name}\"",
         )
         handler.end_headers()
         handler.wfile.write(artifact_bytes)
         log_artifact_request(
-            handler, requested_relative, normalized_path, str(root_resolved),
+            handler, requested_relative, str(artifact_resolved), str(root_resolved),
             status, 200
         )
         return
     try:
-        payload = artifact_path.read_text(encoding="utf-8")
-    except OSError as exc:
+        payload = artifact_resolved.read_text(encoding="utf-8")
+    except OSError:
         log_artifact_request(
-            handler, requested_relative, normalized_path, str(root_resolved),
+            handler, requested_relative, str(artifact_resolved), str(root_resolved),
             "read-error", 500
         )
-        handler._send_text(500, f"Unable to read artifact: {exc}")
+        handler._send_text(500, "Unable to read artifact")
         return
     handler.send_response(200)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.end_headers()
     handler.wfile.write(payload.encode("utf-8"))
     log_artifact_request(
-        handler, requested_relative, normalized_path, str(root_resolved),
+        handler, requested_relative, str(artifact_resolved), str(root_resolved),
         status, 200
     )
+
+
+def _contains_hostile_components(path: str) -> bool:
+    """Check for hostile path components after query parsing.
+
+    The caller is expected to pass the decoded query parameter value returned
+    by parse_qs(). This function rejects traversal, absolute paths, null bytes,
+    and Windows-style absolute path forms before filesystem access.
+
+    Args:
+        path: The decoded path string to check
+
+    Returns:
+        True if the path contains hostile components, False otherwise
+    """
+    # Null byte check
+    if "\x00" in path:
+        return True
+
+    # Absolute path check
+    if path.startswith("/") or path.startswith("\\"):
+        return True
+
+    # Windows drive letter check
+    if len(path) >= 2 and path[1] == ":":
+        return True
+
+    # UNC path check
+    if path.startswith("\\\\"):
+        return True
+
+    # Path traversal check (.. components)
+    parts = path.replace("\\", "/").split("/")
+    if ".." in parts:
+        return True
+
+    return False
 
 
 def log_artifact_request(

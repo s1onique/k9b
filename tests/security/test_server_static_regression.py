@@ -403,6 +403,47 @@ class TestServeArtifactPathTraversal:
             "serve_artifact() must check containment BEFORE following symlinks."
         )
 
+    def test_symlink_in_intermediate_directory_not_followed(self) -> None:
+        """Symlink in an intermediate path component must not be followed.
+
+        This tests the case where a symlink directory (not the final file)
+        inside runs_dir points outside runs_dir. The path might look like:
+        runs/external-analysis/linkdir/canary.json
+        where linkdir -> /outside/canary_dir
+
+        The initial is_symlink() check only catches the final path component.
+        The relative_to() check after resolution catches the escaped target.
+        """
+        import os
+
+        from k8s_diag_agent.ui.server_static import serve_artifact
+
+        # Create a symlink directory pointing to a canary parent directory
+        # Note: Do NOT create linkdir as a real directory - we want to create a symlink there
+        canary_parent = self.canary.get_all_canary_paths()[0].parent
+
+        symlink_dir_path = self.ea_dir / "linkdir"
+        try:
+            os.symlink(canary_parent, symlink_dir_path, target_is_directory=True)
+        except OSError:
+            pytest.skip("Platform does not support symlinks")
+
+        # Create a file inside the symlink target to attempt to access
+        canary_file = self.canary.get_all_canary_paths()[0]
+
+        # Try to access the canary file through the intermediate symlink
+        # Request: external-analysis/linkdir/<canary_filename>
+        handler = MockHandler(self.runs_dir, self.canary)
+        query = f"path=external-analysis/linkdir/{canary_file.name}"
+        serve_artifact(handler, query)
+
+        # Should not serve canary content - the relative_to() check after
+        # resolution should catch that the resolved path is outside root
+        assert self.canary.get_canary_content().encode() not in handler._response_body, (
+            "Intermediate symlink escape: canary content was served via symlink dir. "
+            "The relative_to() containment check after resolution must reject this."
+        )
+
 
 # =============================================================================
 # TESTS: serve_static() PATH TRAVERSAL REJECTION
