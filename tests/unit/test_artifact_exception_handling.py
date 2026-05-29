@@ -320,7 +320,7 @@ class TestFindNextCheckPlanExceptionHandling(TestCase):
         malformed_artifact = self.external_analysis_dir / f"{self.run_id}-next-check-plan-2.json"
         malformed_artifact.write_text("{ malformed", encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+        with self.assertLogs("k8s_diag_agent.ui.server_read_next_checks", level=logging.WARNING) as cm:
             result = _find_next_check_plan(self.external_analysis_dir, self.run_id)
 
         # Should have found the valid artifact
@@ -359,7 +359,7 @@ class TestBuildExecutionHistoryExceptionHandling(TestCase):
         malformed_artifact = self.external_analysis_dir / f"{self.run_id}-next-check-execution-2.json"
         malformed_artifact.write_text("{ malformed", encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+        with self.assertLogs("k8s_diag_agent.ui.server_read_execution_history", level=logging.WARNING) as cm:
             history, telemetry = _build_execution_history(self.external_analysis_dir, self.run_id)
 
         # Should have found 1 valid execution entry

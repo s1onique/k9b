@@ -34,39 +34,23 @@ from .server_read_clusters import (  # noqa: F401 - backward compatibility
     _merge_alertmanager_review_into_history_entry,
 )
 
-# Re-export next-check/execution helpers from extraction module for backward compatibility
-from .server_read_next_checks import (  # noqa: F401 - backward compatibility
+# Re-export execution history helpers from extraction module for backward compatibility
+from .server_read_execution_history import (  # noqa: F401 - backward compatibility
     _build_execution_history,
+    _get_field_with_default,
+    _get_field_with_fallback,
+)
+
+# Re-export next-check/queue helpers from extraction module for backward compatibility
+from .server_read_next_checks import (  # noqa: F401 - backward compatibility
     _build_queue_from_plan,
+    _derive_execution_state_from_status,
     _find_next_check_plan,
+    _match_overlay_to_candidate,
     _scan_execution_artifacts_for_queue,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _get_field_with_fallback(data: dict[str, object], *keys: str) -> object | None:
-    """Get a value from dict with fallback keys, preserving false/0 values.
-
-    Checks each key in order and returns the first one that exists (even if falsy).
-    Returns None if no key is found.
-    """
-    for key in keys:
-        if key in data:
-            return data[key]
-    return None
-
-
-def _get_field_with_default(data: dict[str, object], default: object, *keys: str) -> object:
-    """Get a value from dict with fallback keys, returning default if not found.
-
-    Checks each key in order and returns the first one that exists (even if falsy).
-    Returns the provided default value if no key is found.
-    """
-    for key in keys:
-        if key in data:
-            return data[key]
-    return default
 
 
 def _count_run_artifacts(artifacts_dir: Path, run_id: str) -> int:
