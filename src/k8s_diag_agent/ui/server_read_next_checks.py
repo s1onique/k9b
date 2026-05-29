@@ -37,7 +37,7 @@ def _find_next_check_plan(
         Next-check plan data dict, or None if not found
     """
     # Import alias mapping finder from server_read_support (stays there, needed by review enrichment too)
-    from .server_read_support import _find_alias_mapping_from_review
+    from .server_read_llm_stats import _find_alias_mapping_from_review
 
     # Use index for O(1) lookup if available
     _scan_plan_artifacts: list[dict[str, object]] = []

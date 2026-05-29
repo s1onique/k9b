@@ -38,7 +38,9 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/ui/api_incident_report.py", "[EXTRACTION] Incident report - extract builders"),
     ("src/k8s_diag_agent/ui/api.py", "[EXTRACTION] API orchestrator - re-export pattern"),
     ("src/k8s_diag_agent/ui/server.py", "[EXTRACTION] Server routes - pending extraction"),
-    ("src/k8s_diag_agent/ui/server_read_support.py", "[EXTRACTION] Read support - cluster/drilldown in server_read_clusters.py (495); next-check in server_read_next_checks.py (378); execution history in server_read_execution_history.py (206); llm-stats remain; 749 total"),
+    # server_read_support.py extracted - cluster/drilldown to server_read_clusters.py (495);
+    #   next-check to server_read_next_checks.py (379); execution history to server_read_execution_history.py (207);
+    #   llm-stats to server_read_llm_stats.py (388); now 390 lines, below 500 threshold
     # vmalert_discovery.py extracted to models/sources/strategies modules (416 lines, below threshold)
     # llamacpp_provider.py extracted to config/errors/payloads/response modules (143 lines)
     ("src/k8s_diag_agent/health/loop_scheduler.py", "[EXTRACTION] Loop scheduler - run loop extracted; compatibility surface remains"),
