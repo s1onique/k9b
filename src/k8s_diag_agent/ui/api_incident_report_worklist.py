@@ -1,27 +1,24 @@
-"""Operator worklist payload builders.
+"""Operator worklist payload builder.
 
-These functions derive the ranked operator worklist projection from existing
-UI context artifacts (assessments, next-check queue, execution history).
-They do not introduce new immutable artifacts; the output is a read-only API projection.
+This module provides the main worklist payload builder that derives a ranked
+operator worklist from deterministic next checks, queue state, and vmalert alerts.
+
+This module is an orchestration layer that imports from focused helper modules:
+- api_incident_report_worklist_temporal.py: temporal context derivation
+- api_incident_report_worklist_state.py: item state, adaptation, ranking, sanitization
+- api_incident_report_worklist_helpers.py: execution overlay handling
 
 This module is an extraction from api_incident_report.py to reduce its
 LLM-friendly file size while preserving backward-compatible re-exports.
-
-Security note:
-    All operator-facing text fields are sanitized at serialization boundary
-    to prevent internal context markers from leaking to the operator UI.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import cast
 
 from ..security.kubectl_context import (
-    CLUSTER_LOCAL_PRESENTATION_LABEL,
-    is_internal_kube_marker,
     sanitize_kubectl_display_command,
     sanitize_operator_text,
 )
@@ -34,6 +31,23 @@ from .api_incident_report_worklist_helpers import (
     _match_execution_overlay_to_queue_item,
     _scan_execution_artifacts_for_worklist,
 )
+from .api_incident_report_worklist_state import (
+    _ITEM_STATE_ADVISORY,
+    _ITEM_STATE_APPROVAL_NEEDED,
+    _ITEM_STATE_EXECUTED,
+    _ITEM_STATE_QUEUED,
+    _ITEM_STATE_REVIEWED,
+    _SOURCE_TYPE_DETERMINISTIC,
+    _SOURCE_TYPE_PLANNER,
+    _SOURCE_TYPE_PROMOTION,
+    _SOURCE_TYPE_VMALERT_ALERT,
+    _derive_adaptation_provenance,
+    _derive_item_state,
+    _derive_worklist_ranking_reason,
+    _sanitize_target_cluster,
+    _sanitize_target_context,
+)
+from .api_incident_report_worklist_temporal import _derive_temporal_context
 from .api_payloads import (
     ArtifactLink,
     FeedbackAdaptationProvenancePayload,
@@ -44,232 +58,34 @@ from .model import UIIndexContext
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# Constants and Item State Definitions
-# =============================================================================
-
-_ITEM_STATE_ADVISORY = "advisory"
-_ITEM_STATE_APPROVAL_NEEDED = "approval-needed"
-_ITEM_STATE_APPROVED = "approved"
-_ITEM_STATE_QUEUED = "queued"
-_ITEM_STATE_EXECUTED = "executed"
-_ITEM_STATE_REVIEWED = "reviewed"
-
-_SOURCE_TYPE_DETERMINISTIC = "deterministic"
-_SOURCE_TYPE_PLANNER = "planner"
-_SOURCE_TYPE_PROMOTION = "promotion"
-_SOURCE_TYPE_VMALERT_ALERT = "vmalert-alert"
-
-# Staleness thresholds in seconds
-_STALENESS_FRESH_SECONDS = 5 * 60  # < 5 minutes
-_STALENESS_AGING_SECONDS = 30 * 60  # 5-30 minutes
-# > 30 minutes = stale
-
-# Adaptation effect constants
-_ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED = "hypothesis_strengthened"
-_ADAPTATION_EFFECT_HYPOTHESIS_WEAKENED = "hypothesis_weakened"
-_ADAPTATION_EFFECT_UNKNOWN_RESOLVED = "unknown_resolved"
-_ADAPTATION_EFFECT_RECOMMENDATION_PROMOTED = "recommendation_promoted"
-_ADAPTATION_EFFECT_RECOMMENDATION_DEPRIORITIZED = "recommendation_deprioritized"
-_ADAPTATION_EFFECT_NO_MATERIAL_CHANGE = "no_material_change"
-
-_USE_TO_ADAPTATION_MAP: dict[str, str] = {
-    "useful": _ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED,
-    "partial": _ADAPTATION_EFFECT_UNKNOWN_RESOLVED,
-    "noisy": _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE,
-    "empty": _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE,
-}
-
-
-
-# =============================================================================
-# Adaptation Provenance Derivation
-# =============================================================================
-
-
-def _derive_adaptation_provenance(
-    usefulness_class: str | None,
-    usefulness_summary: str | None,
-    execution_result_summary: str | None,
-) -> dict[str, object] | None:
-    """Derive adaptation provenance from execution feedback."""
-    if not usefulness_class:
-        return None
-    effect = _USE_TO_ADAPTATION_MAP.get(usefulness_class)
-    if not effect:
-        return None
-    if effect == _ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED:
-        summary = usefulness_summary[:100] if usefulness_summary else "Strengthened leading workload hypothesis"
-        summary = f"Strengthened leading hypothesis: {summary}"
-    elif effect == _ADAPTATION_EFFECT_UNKNOWN_RESOLVED:
-        summary = usefulness_summary[:100] if usefulness_summary else "Resolved missing evidence gap"
-        summary = f"Resolved evidence gap: {summary}"
-    elif effect == _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE:
-        summary = usefulness_summary[:100] if usefulness_summary else "No material change to diagnosis"
-        summary = f"No material change: {summary}"
-    else:
-        summary = None
-    return {
-        "feedbackAdaptation": True,
-        "adaptationReason": f"usefulness:{usefulness_class}",
-        "adaptationEffect": effect,
-        "adaptationSummary": summary,
-        "originalBonus": 0,
-        "suppressedBonus": 0,
-        "penaltyApplied": 0,
-        "explanation": execution_result_summary,
-    }
-
-
-# =============================================================================
-# Ranking Rationale Derivation
-# =============================================================================
-
-
-def _derive_worklist_ranking_reason(
-    source_type: str | None,
-    item_state: str | None,
-    execution_state: str | None,
-    is_primary_triage: bool | None,
-    urgency: str | None,
-    priority_label: str | None,
-    command: str | None,
-    workstream: str | None,
-) -> str | None:
-    """Derive a concise ranking rationale for a worklist item."""
-    if item_state in (_ITEM_STATE_EXECUTED, _ITEM_STATE_REVIEWED):
-        return "Already executed; retained for result review"
-    if is_primary_triage and source_type == _SOURCE_TYPE_DETERMINISTIC:
-        if urgency and urgency != "unknown":
-            return f"Primary triage for current degraded workload ({urgency} urgency)"
-        return "Primary triage for current degraded workload"
-    if workstream == "drift":
-        return "Fleet-level drift affects comparable clusters"
-    if source_type in (_SOURCE_TYPE_PLANNER, _SOURCE_TYPE_PROMOTION) and command is not None:
-        if item_state == _ITEM_STATE_APPROVAL_NEEDED:
-            return "Pending operator approval before execution"
-        if item_state == _ITEM_STATE_APPROVED:
-            return "Approved and ready for execution"
-        if item_state == _ITEM_STATE_QUEUED:
-            if priority_label in ("primary", "critical"):
-                return "Executable now; likely to confirm the leading hypothesis"
-            return "Queued for automated execution"
-        if priority_label in ("primary", "critical"):
-            return "Executable now; likely to confirm the leading hypothesis"
-        return "Planner-selected check; executable now"
-    if source_type == _SOURCE_TYPE_DETERMINISTIC:
-        if urgency and urgency != "unknown":
-            return f"Advisory check; {urgency} urgency for evidence collection"
-        return "Advisory check; method-based diagnostics"
-    return None
-
-
-# =============================================================================
-# Temporal Context Derivation
-# =============================================================================
-
-
-def _parse_timestamp(timestamp_str: str | None) -> datetime | None:
-    """Parse an ISO 8601 timestamp string to datetime."""
-    if not timestamp_str:
-        return None
-    try:
-        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-        return dt.replace(tzinfo=UTC)
-    except (ValueError, TypeError):
-        pass
-    try:
-        dt = datetime.fromisoformat(timestamp_str)
-        return dt.replace(tzinfo=UTC)
-    except (ValueError, TypeError):
-        pass
-    return None
-
-
-class StalenessClass(TypedDict):
-    pass
-
-
-def _derive_temporal_context(
-    first_recommended_at: str | None,
-    last_state_changed_at: str | None,
-    current_run_timestamp: str | None,
-) -> tuple[str | None, str | None, int | None, Literal['fresh', 'aging', 'stale', 'unknown'] | None]:
-    """Derive temporal context for a worklist item."""
-    # Handle insufficient timing data first
-    if not first_recommended_at or not current_run_timestamp:
-        return first_recommended_at, last_state_changed_at, None, "unknown"
-    
-    now_dt = _parse_timestamp(current_run_timestamp)
-    first_dt = _parse_timestamp(first_recommended_at)
-    
-    if not now_dt or not first_dt:
-        return first_recommended_at, last_state_changed_at, None, "unknown"
-    
-    delta = now_dt - first_dt
-    age_seconds = int(delta.total_seconds())
-    
-    if age_seconds < 0:
-        return first_recommended_at, last_state_changed_at, None, "unknown"
-    
-    if age_seconds < _STALENESS_FRESH_SECONDS:
-        staleness: Literal["fresh", "aging", "stale", "unknown"] = "fresh"
-    elif age_seconds < _STALENESS_AGING_SECONDS:
-        staleness = "aging"
-    else:
-        staleness = "stale"
-    
-    return first_recommended_at, last_state_changed_at, age_seconds, staleness
-
-
-def _derive_item_state(queue_item: object) -> str | None:
-    """Derive canonical item state from queue item execution and approval state."""
-    execution_state = getattr(queue_item, "execution_state", None) or ""
-    if execution_state in ("executed-success", "executed-failed", "timed-out", "completed"):
-        if execution_state in ("executed-success", "completed"):
-            return _ITEM_STATE_EXECUTED
-        return _ITEM_STATE_REVIEWED
-    # Check both snake_case and camelCase for backward compatibility
-    requires_approval = getattr(queue_item, "requires_operator_approval", False) or getattr(queue_item, "requires_approval", False)
-    approval_state = getattr(queue_item, "approval_state", None) or ""
-    if approval_state == "reviewed":
-        return _ITEM_STATE_REVIEWED
-    if requires_approval and approval_state == "approved":
-        return _ITEM_STATE_APPROVED
-    if requires_approval and approval_state != "approved":
-        return _ITEM_STATE_APPROVAL_NEEDED
-    safe_to_automate = getattr(queue_item, "safe_to_automate", False)
-    if safe_to_automate and execution_state == "unexecuted":
-        return _ITEM_STATE_QUEUED
-    if execution_state == "unexecuted":
-        return _ITEM_STATE_QUEUED
-    return None
-
-
-# =============================================================================
-# Sanitization Helpers
-# =============================================================================
-
-
-def _sanitize_target_cluster(cluster: str | None, context: str | None = None) -> str | None:
-    """Sanitize a cluster label for operator-facing display."""
-    if cluster is None:
-        return None
-    if is_internal_kube_marker(cluster):
-        if context and not is_internal_kube_marker(context):
-            return context
-        return CLUSTER_LOCAL_PRESENTATION_LABEL
-    return cluster
-
-
-def _sanitize_target_context(context: str | None) -> str | None:
-    """Sanitize a context value for operator-facing display."""
-    if context is None:
-        return None
-    if is_internal_kube_marker(context):
-        return CLUSTER_LOCAL_PRESENTATION_LABEL
-    return context
-
+# Re-export for backward compatibility
+from .api_incident_report_worklist_state import (  # noqa: F401
+    _ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED,
+    _ADAPTATION_EFFECT_HYPOTHESIS_WEAKENED,
+    _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE,
+    _ADAPTATION_EFFECT_RECOMMENDATION_DEPRIORITIZED,
+    _ADAPTATION_EFFECT_RECOMMENDATION_PROMOTED,
+    _ADAPTATION_EFFECT_UNKNOWN_RESOLVED,
+    _ITEM_STATE_ADVISORY,
+    _ITEM_STATE_APPROVAL_NEEDED,
+    _ITEM_STATE_APPROVED,
+    _ITEM_STATE_EXECUTED,
+    _ITEM_STATE_QUEUED,
+    _ITEM_STATE_REVIEWED,
+    _SOURCE_TYPE_DETERMINISTIC,
+    _SOURCE_TYPE_PLANNER,
+    _SOURCE_TYPE_PROMOTION,
+    _SOURCE_TYPE_VMALERT_ALERT,
+    _USE_TO_ADAPTATION_MAP,
+    _derive_adaptation_provenance,
+    _derive_item_state,
+    _derive_worklist_ranking_reason,
+    _sanitize_target_cluster,
+    _sanitize_target_context,
+)
+from .api_incident_report_worklist_temporal import (  # noqa: F401
+    _derive_temporal_context,
+)
 
 
 # =============================================================================
@@ -302,7 +118,8 @@ def _build_operator_worklist_payload(
                 continue
             for summary in cluster.deterministic_next_check_summaries:
                 title_str = sanitize_operator_text(summary.description)
-                title_str = title_str if title_str is not None else summary.description
+                if title_str is None:
+                    title_str = summary.description
                 item_id = f"deterministic-{safe_cluster}-{rank}"
                 deterministic_ids.add(item_id)
                 item_state = _ITEM_STATE_ADVISORY
@@ -317,8 +134,8 @@ def _build_operator_worklist_payload(
                     workstream=summary.workstream,
                 )
                 assessment_timestamp = None
-                if cluster.assessment_artifact_path:
-                    assessment_timestamp = context.latest_assessment.timestamp if context.latest_assessment else None
+                if cluster.assessment_artifact_path and context.latest_assessment:
+                    assessment_timestamp = context.latest_assessment.timestamp
                 first_recommended_at = assessment_timestamp
                 last_state_changed_at: str | None = None
                 first_rec, last_change, age_sec, staleness = _derive_temporal_context(
@@ -400,9 +217,9 @@ def _build_operator_worklist_payload(
             if matched_deterministic:
                 continue
         existing_queue_ids = {
-            cast(str | None, item.get("id"))
+            cast("str | None", item.get("id"))
             for item in items
-            if cast(str | None, item.get("sourceType")) == _SOURCE_TYPE_PLANNER
+            if cast("str | None", item.get("sourceType")) == _SOURCE_TYPE_PLANNER
         }
         if item_id in existing_queue_ids:
             for existing in items:
@@ -416,7 +233,8 @@ def _build_operator_worklist_payload(
                         existing["sourceArtifactRefs"] = refs
             continue
         queue_title = sanitize_operator_text(queue_item.description)
-        queue_title = queue_title if queue_title is not None else queue_item.description
+        if queue_title is None:
+            queue_title = queue_item.description
         source_type = _SOURCE_TYPE_PLANNER
         if queue_item.source_type == "deterministic":
             source_type = _SOURCE_TYPE_PROMOTION
@@ -466,10 +284,12 @@ def _build_operator_worklist_payload(
                 usefulness_summary=usefulness_summary,
                 execution_result_summary=result_summary,
             )
-        first_recommended_at = queue_item.plan_artifact_timestamp if hasattr(queue_item, "plan_artifact_timestamp") and queue_item.plan_artifact_timestamp else None
-        if not first_recommended_at and queue_item.plan_artifact_path:
-            first_recommended_at = None
-        last_state_changed_at = queue_item.latest_timestamp if hasattr(queue_item, "latest_timestamp") and queue_item.latest_timestamp else None
+        first_recommended_at: str | None = None
+        if hasattr(queue_item, "plan_artifact_timestamp") and queue_item.plan_artifact_timestamp:
+            first_recommended_at = queue_item.plan_artifact_timestamp
+        last_state_changed_at: str | None = None
+        if hasattr(queue_item, "latest_timestamp") and queue_item.latest_timestamp:
+            last_state_changed_at = queue_item.latest_timestamp
         first_rec, last_change, age_sec, staleness = _derive_temporal_context(
             first_recommended_at=first_recommended_at,
             last_state_changed_at=last_state_changed_at,
@@ -513,13 +333,13 @@ def _build_operator_worklist_payload(
             seen_vmalert_keys.add(dedupe_key)
             ns_suffix = f"-{alert.namespace}" if alert.namespace else ""
             wl_suffix = f"-{alert.workload}" if alert.workload else ""
-            ep_suffix = f"-{alert.source_endpoint}" if alert.source_endpoint else ""
-            item_id = f"vmalert-critical-{alert.alertname}{ns_suffix}{wl_suffix}{ep_suffix}"
+            eth_suffix = f"-{alert.source_endpoint}" if alert.source_endpoint else ""
+            item_id = f"vmalert-critical-{alert.alertname}{ns_suffix}{wl_suffix}{eth_suffix}"
             title = f"Critical vmalert alert firing: {alert.alertname}"
             if alert.namespace or alert.workload:
                 location_parts = [p for p in [alert.namespace, alert.workload] if p]
                 title += f" ({'/'.join(location_parts)})"
-            description_parts = []
+            description_parts: list[str] = []
             if alert.namespace:
                 description_parts.append(f"namespace={alert.namespace}")
             if alert.workload:
@@ -537,10 +357,9 @@ def _build_operator_worklist_payload(
                     artifact_path = f"{run_id}-vmalert-rule-state.json"
                     vmalert_artifact_refs.append({"label": "VMAlert Rule State", "path": artifact_path})
             ranking_reason = "Critical vmalert alert firing; requires operator attention"
-            item_rank = len(items) + 1
             items.append({
                 "id": item_id,
-                "rank": item_rank,
+                "rank": len(items) + 1,
                 "workstream": "incident",
                 "title": title,
                 "description": description,
@@ -573,9 +392,9 @@ def _build_operator_worklist_payload(
         item_candidate_index = None
         item_command_family = None
         item_target_cluster = item.get("targetCluster")
-        description = item.get("description") or ""
-        if "kubectl" in description.lower():
-            parts = description.lower().split("kubectl")
+        desc_text = item.get("description") or ""
+        if "kubectl" in desc_text.lower():
+            parts = desc_text.lower().split("kubectl")
             if len(parts) > 1:
                 cmd_part = parts[1].split()[0] if parts[1].strip() else ""
                 if cmd_part:
@@ -583,7 +402,7 @@ def _build_operator_worklist_payload(
         for queue_item in queue_items:
             queue_item_id = queue_item.candidate_id or f"queue-{queue_item.description}"
             if queue_item_id == item_candidate_id:
-                item_candidate_index = queue_item.candidate_index if hasattr(queue_item, "candidate_index") else None
+                item_candidate_index = getattr(queue_item, "candidate_index", None)
                 if hasattr(queue_item, "suggested_command_family") and queue_item.suggested_command_family:
                     item_command_family = queue_item.suggested_command_family
                 break
