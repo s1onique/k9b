@@ -281,7 +281,7 @@ class TestFindReviewEnrichmentExceptionHandling(TestCase):
         malformed_artifact = self.external_analysis_dir / f"{self.run_id}-review-enrichment-2.json"
         malformed_artifact.write_text("{ malformed", encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+        with self.assertLogs("k8s_diag_agent.ui.server_read_llm_stats", level=logging.WARNING) as cm:
             result = _find_review_enrichment(self.external_analysis_dir, self.run_id)
 
         # Should have found the valid artifact
@@ -396,7 +396,7 @@ class TestBuildLlmStatsExceptionHandling(TestCase):
         malformed_artifact = self.external_analysis_dir / f"{self.run_id}-drilldown-2.json"
         malformed_artifact.write_text("{ malformed", encoding="utf-8")
 
-        with self.assertLogs("k8s_diag_agent.ui.server_read_support", level=logging.WARNING) as cm:
+        with self.assertLogs("k8s_diag_agent.ui.server_read_llm_stats", level=logging.WARNING) as cm:
             stats = _build_llm_stats_for_run(self.external_analysis_dir, self.run_id)
 
         # Should have counted 1 valid artifact
