@@ -97,14 +97,20 @@ def _derive_adaptation_provenance(
     if not effect:
         return None
     if effect == _ADAPTATION_EFFECT_HYPOTHESIS_STRENGTHENED:
-        summary = usefulness_summary[:100] if usefulness_summary else "Strengthened leading workload hypothesis"
-        summary = f"Strengthened leading hypothesis: {summary}"
+        if usefulness_summary:
+            summary = f"Strengthened leading hypothesis: {usefulness_summary[:100]}"
+        else:
+            summary = "Strengthened leading workload hypothesis"
     elif effect == _ADAPTATION_EFFECT_UNKNOWN_RESOLVED:
-        summary = usefulness_summary[:100] if usefulness_summary else "Resolved missing evidence gap"
-        summary = f"Resolved evidence gap: {summary}"
+        if usefulness_summary:
+            summary = f"Resolved evidence gap: {usefulness_summary[:100]}"
+        else:
+            summary = "Resolved missing evidence gap"
     elif effect == _ADAPTATION_EFFECT_NO_MATERIAL_CHANGE:
-        summary = usefulness_summary[:100] if usefulness_summary else "No material change to diagnosis"
-        summary = f"No material change: {summary}"
+        if usefulness_summary:
+            summary = f"No material change: {usefulness_summary[:100]}"
+        else:
+            summary = "No material change to diagnosis"
     else:
         summary = None
     return {
