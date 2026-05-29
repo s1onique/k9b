@@ -14,7 +14,7 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
+from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id, validate_safe_path_id
 
 logger = logging.getLogger(__name__)
 
@@ -390,14 +390,18 @@ def _build_drilldown_availability_from_review(
             available += 1
             timestamp = review_data.get("timestamp")  # Use review timestamp as approximation
             available_flag = True
-            # Find the actual artifact path
+            # Find the actual artifact path - validate label for safe glob construction
             artifact_path = None
-            # SECURITY: validated_run_id already set above
-            # Note: drilldowns_dir already validated (exists check above)
-            label_glob_pattern = safe_run_artifact_glob(validated_run_id, f"-{label}-*.json")
-            for df in drilldowns_dir.glob(label_glob_pattern):
-                artifact_path = str(df.relative_to(drilldowns_dir.parent))
-                break
+            try:
+                validated_label = validate_safe_path_id(label, "label")
+                # SECURITY: run_id and label validated before glob construction
+                label_glob_pattern = safe_run_artifact_glob(validated_run_id, f"-{validated_label}-*.json")
+                for df in drilldowns_dir.glob(label_glob_pattern):
+                    artifact_path = str(df.relative_to(drilldowns_dir.parent))
+                    break
+            except SecurityError:
+                # Invalid label - cannot safely search
+                artifact_path = None
         else:
             timestamp = None
             artifact_path = None
