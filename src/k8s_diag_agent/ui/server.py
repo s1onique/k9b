@@ -5,7 +5,6 @@ from __future__ import annotations
 import functools
 import json
 import logging
-import mimetypes
 import re
 import sys
 import time
@@ -25,6 +24,13 @@ from ..external_analysis.deterministic_next_check_promotion import (
 )
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
+from .server_response import (  # noqa: E402, F401
+    send_bytes_response,
+    send_file_response,
+    send_json_response,
+    send_text_response,
+    set_response_status,
+)
 from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_bearer_token, _validate_runs_dir
 
 # Route patterns for path matching
@@ -1047,102 +1053,24 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         return parsed if parsed else 1
 
     def _send_json(self, body: object, code: int = 200) -> None:
-        send_start = time.perf_counter()
-        payload = json.dumps(body, ensure_ascii=False)
-        encode_done = time.perf_counter()
-        encoded = payload.encode("utf-8")
-        body_write_done = time.perf_counter()
-
-        # Set response bytes for access logging BEFORE sending
-        self._response_bytes = len(encoded)
-
-        self.send_response(code)
-        send_headers_done = time.perf_counter()
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(encoded)))
-        # INTENTIONAL: Always force Connection: close for development and single-threaded
-        # server instances. This prevents proxy/Vite/podman keep-alive socket reuse delays
-        # where the browser waits for a fresh socket after backend completion.
-        # For production multi-process servers behind a reverse proxy, this header can be
-        # removed if the proxy handles connection management correctly.
-        self.send_header("Connection", "close")
-        self.end_headers()
-        flush_done = time.perf_counter()
-        self.wfile.write(encoded)
-        self.wfile.flush()
-        write_done = time.perf_counter()
-
-        # Tell BaseHTTPRequestHandler to close connection after this response
-        # This is the definitive way to prevent keep-alive with HTTP/1.1
-        self.close_connection = True
-
-        # Log detailed send timing for debugging
-        emit_structured_log(
-            component="ui-send",
-            message="HTTP response sent",
-            run_id="",
-            run_label="",
-            severity="DEBUG",
-            metadata={
-                "path": self._request_path,
-                "payload_bytes": len(encoded),
-                "json_dumps_ms": round((encode_done - send_start) * 1000, 3),
-                "encode_ms": round((body_write_done - encode_done) * 1000, 3),
-                "send_response_ms": round((send_headers_done - body_write_done) * 1000, 3),
-                "send_headers_ms": round((flush_done - send_headers_done) * 1000, 3),
-                "wfile_write_ms": round((write_done - flush_done) * 1000, 3),
-                "total_send_ms": round((write_done - send_start) * 1000, 3),
-            },
-        )
+        """Send a JSON response with structured timing instrumentation."""
+        send_json_response(self, body, code, request_path=self._request_path)
 
     def _send_file(self, path: Path) -> None:
-        try:
-            data = path.read_bytes()
-        except OSError as exc:
-            self._send_text(500, f"Unable to read asset: {exc}")
-            return
-        content_type, _ = mimetypes.guess_type(path.name)
-        self.send_response(200)
-        self.send_header("Content-Type", content_type or "application/octet-stream")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        """Send a file response with appropriate content type."""
+        send_file_response(self, path)
 
     def _set_status(self, code: int) -> None:
         """Set the response status code."""
-        self._status_code = code
-        self.send_response(code)
+        set_response_status(self, code)
 
     def _send_bytes(self, data: bytes, *, content_type: str = "application/octet-stream", filename: str | None = None) -> None:
-        """Send raw bytes response with optional Content-Disposition header.
-
-        Args:
-            data: Raw bytes to send
-            content_type: Content-Type header value
-            filename: Optional filename for Content-Disposition header
-        """
-        self._response_bytes = len(data)
-
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        if filename:
-            # Use quoted filename for ASCII, encoded for non-ASCII
-            self.send_header("Content-Disposition", f"attachment; filename=\"{filename}\"")
-        # INTENTIONAL: Always force Connection: close for development
-        self.send_header("Connection", "close")
-        self.end_headers()
-        self.wfile.write(data)
-        self.wfile.flush()
-
-        # Tell BaseHTTPRequestHandler to close connection after this response
-        self.close_connection = True
+        """Send raw bytes response with optional Content-Disposition header."""
+        send_bytes_response(self, data, content_type=content_type, filename=filename)
 
     def _send_text(self, code: int, message: str) -> None:
-        self.send_response(code)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(message.encode("utf-8"))
+        """Send a plain text response."""
+        send_text_response(self, code, message)
 
 
 def _relative_path(base: Path, target: object | None) -> str | None:
