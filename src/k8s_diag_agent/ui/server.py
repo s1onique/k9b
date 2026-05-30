@@ -10,10 +10,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, cast
 
-from ..external_analysis.artifact import (
-    ExternalAnalysisArtifact,
-    ExternalAnalysisStatus,
-)
+from ..external_analysis.artifact import ExternalAnalysisArtifact
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
 
@@ -591,30 +588,23 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
 
 def _relative_path(base: Path, target: object | None) -> str | None:
-    if target is None:
-        return None
-    candidate = Path(str(target))
-    try:
-        return str(candidate.relative_to(base))
-    except ValueError:
-        return str(candidate)
+    """Compatibility wrapper for relative path helper.
+
+    Delegates to server_next_check_utils.relative_path while preserving
+    the old symbol name for callers that import from k8s_diag_agent.ui.server.
+    """
+    from .server_next_check_utils import relative_path
+
+    return relative_path(base, target)
 
 
 def _determine_execution_state_from_artifact(artifact: ExternalAnalysisArtifact) -> str:
-    """Determine execution state from an execution artifact.
+    """Compatibility wrapper for execution state from artifact.
 
-    This is a local version that works directly with the artifact object,
-    used to compute execution state for the API response without needing
-    to build a full NextCheckExecutionRecord.
-
-    Args:
-        artifact: The execution artifact from manual next-check execution.
-
-    Returns:
-        Execution state string: "executed-success", "executed-failed", or "timed-out".
+    Delegates to server_next_check_utils.determine_execution_state_from_artifact
+    while preserving the old symbol name for callers that import from
+    k8s_diag_agent.ui.server.
     """
-    if artifact.timed_out:
-        return "timed-out"
-    if artifact.status == ExternalAnalysisStatus.SUCCESS:
-        return "executed-success"
-    return "executed-failed"
+    from .server_next_check_utils import determine_execution_state_from_artifact as _impl
+
+    return _impl(artifact)
