@@ -5,7 +5,6 @@ from __future__ import annotations
 import functools
 import json
 import logging
-import re
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -13,7 +12,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
-from urllib.parse import unquote
 
 from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -24,20 +22,6 @@ from ..external_analysis.deterministic_next_check_promotion import (
 )
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
-from .server_response import (  # noqa: E402, F401
-    send_bytes_response,
-    send_file_response,
-    send_json_response,
-    send_text_response,
-    set_response_status,
-)
-from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_bearer_token, _validate_runs_dir
-
-# Route patterns for path matching
-_RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
-    r"^/api/runs/([^/]+)/alertmanager-sources/([^/]+)/action$"
-)
-
 
 # Re-export handlers and helpers from extracted modules for backward compatibility
 from .server_alertmanager import (  # noqa: E402, F401
@@ -88,6 +72,18 @@ from .server_read_support import (  # noqa: E402, F401
     _merge_alertmanager_review_into_history_entry,
     _scan_external_analysis,
 )
+from .server_response import (  # noqa: E402, F401
+    send_bytes_response,
+    send_file_response,
+    send_json_response,
+    send_text_response,
+    set_response_status,
+)
+from .server_routes import (  # noqa: E402, F401
+    handle_get_request,
+    handle_post_request,
+)
+from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_runs_dir
 
 logger = logging.getLogger(__name__)
 
@@ -511,32 +507,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # instead of just the request processing time
         self._reset_request_state()
 
-        route, _, query = self.path.partition("?")
-        self._request_method = "GET"
-        self._request_path = route
-        self._request_query = query
-        self._is_static = not route.startswith("/api/") and route != "/artifact"
-
-        try:
-            if route.startswith("/api/"):
-                self._handle_api(route, query)
-            elif route == "/artifact":
-                from .server_static import serve_artifact
-                serve_artifact(self, query)
-            else:
-                from .server_static import serve_static
-                serve_static(self, route)
-        except Exception:
-            # REVIEWED: Final HTTP framework boundary for GET route dispatch.
-            # Prevents raw tracebacks / broken sockets from escaping to clients.
-            # Returns existing controlled 500 behavior via self._status_code = 500.
-            # Narrower exceptions are handled inside route-specific handlers
-            # (serve_static, serve_artifact, _handle_api) before this catch.
-            self._status_code = 500
-            self._log_access_completion()
-            raise
-        else:
-            self._log_access_completion()
+        # Delegate to extracted route handler (re-exported at module level)
+        handle_get_request(self)
 
     def do_POST(self) -> None:
         # CRITICAL: Reset timing state FIRST to measure actual request processing time
@@ -544,61 +516,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         # instead of just the request processing time
         self._reset_request_state()
 
-        route, _, _ = self.path.partition("?")
-        self._request_method = "POST"
-        self._request_path = route
-        self._request_query = ""
-        self._is_static = False
-
-        # AUTH-05: Validate bearer token for mutation endpoints if configured
-        if not _validate_bearer_token(self, self._auth_token):
-            self._status_code = 401
-            self._log_access_completion()
-            return
-
-        try:
-            # Delegate next-check mutation handlers to server_next_checks module
-            if route == "/api/deterministic-next-check/promote":
-                handle_deterministic_promotion(self)
-                return
-            if route == "/api/next-check-execution":
-                handle_next_check_execution(self)
-                return
-            if route == "/api/next-check-approval":
-                handle_next_check_approval(self)
-                return
-            if route == "/api/next-check-execution-usefulness":
-                handle_usefulness_feedback(self)
-                return
-            if route == "/api/alertmanager-relevance-feedback":
-                handle_alertmanager_relevance_feedback(self)
-                return
-            if route == "/api/run-batch-next-check-execution":
-                handle_run_batch_next_check_execution(self)
-                return
-            # Alertmanager source action endpoint: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
-            # Body: { "action": "promote"|"disable", "reason": "..." }
-            runs_am_source_match = _RUN_ALERTMANAGER_SOURCE_ACTION.match(route)
-            if runs_am_source_match:
-                run_id = runs_am_source_match.group(1)
-                # Decode URL-encoded source_id before lookup/validation
-                # e.g., "crd%3Amonitoring%2Fkube-prometheus-stack-alertmanager" -> "crd:monitoring/kube-prometheus-stack-alertmanager"
-                source_id = unquote(runs_am_source_match.group(2))
-                handle_alertmanager_source_action(self, run_id, source_id)
-                return
-            self._status_code = 404
-            self._send_text(404, "Not Found")
-        except Exception:
-            # REVIEWED: Final HTTP framework boundary for POST route dispatch.
-            # Prevents raw tracebacks / broken sockets from escaping to clients.
-            # Returns existing controlled 500 behavior via self._status_code = 500.
-            # Narrower exceptions are handled inside route-specific handlers
-            # (handle_* functions) before this catch.
-            self._status_code = 500
-            self._log_access_completion()
-            raise
-        else:
-            self._log_access_completion()
+        # Delegate to extracted route handler (re-exported at module level)
+        handle_post_request(self)
 
     def set_request_timing(self, request_id: str, route_return_ms: float) -> None:
         """Set correlation and timing info for access log from server_reads.
