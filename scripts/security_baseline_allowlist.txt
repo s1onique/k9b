@@ -49,6 +49,7 @@ ui/server_runs_list_payload.py build_runs_list_payload graceful runs list payloa
 
 # === Batch Execution ===
 batch.py run_batch_next_checks batch execution candidate boundary - docs/security-exception-audit.md ~443
+ui/server_batch_execution.py handle_run_batch_next_check_execution external execution boundary - docs/security-exception-audit.md ~101
 
 # === Feedback Runner ===
 feedback/runner.py _run_assessment feedback assessment boundary - docs/security-exception-audit.md ~444
