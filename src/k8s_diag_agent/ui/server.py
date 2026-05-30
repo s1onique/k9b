@@ -49,6 +49,10 @@ from .server_next_checks import (  # noqa: E402, F401
     handle_next_check_approval,
     handle_next_check_execution,
 )
+from .server_parse_utils import (  # noqa: E402, F401
+    parse_limit,
+    parse_page,
+)
 from .server_read_support import (  # noqa: E402, F401
     RunArtifactIndex,  # noqa: E402
     _build_clusters_and_drilldown_availability,
@@ -554,17 +558,12 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         return payload
 
     def _parse_limit(self, value: str | None) -> int | None:
-        if not value:
-            return None
-        try:
-            parsed = int(value)
-        except ValueError:
-            return None
-        return parsed if parsed > 0 else None
+        """Parse a limit parameter from query string (delegates to server_parse_utils)."""
+        return parse_limit(value)
 
     def _parse_page(self, value: str | None) -> int:
-        parsed = self._parse_limit(value)
-        return parsed if parsed else 1
+        """Parse a page parameter from query string (delegates to server_parse_utils)."""
+        return parse_page(value)
 
     def _send_json(self, body: object, code: int = 200) -> None:
         """Send a JSON response with structured timing instrumentation."""
