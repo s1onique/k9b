@@ -18,7 +18,7 @@ import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from .model import UIIndexContext, build_ui_context, load_ui_index
 
@@ -73,9 +73,14 @@ def load_request_context(
         return None
 
 
+# Type alias for the emit_structured_log signature to avoid mypy assignment issues
+_EmitFn = Callable[..., dict[str, Any]]
+
+
 def load_context_for_run(
     handler: HealthUIRequestHandler,
     run_id: str,
+    emit_fn: _EmitFn | None = None,
 ) -> UIIndexContext | None:
     """Load UI context for a specific run from its durable artifacts.
 
@@ -85,6 +90,9 @@ def load_context_for_run(
     Args:
         handler: The HealthUIRequestHandler instance with runs_dir and _health_root
         run_id: The run ID to load.
+        emit_fn: Optional emit_structured_log function to use. If None, imports from
+            structured_logging. Injecting emit_fn preserves the server.emit_structured_log
+            patch point for test mock compatibility.
 
     Returns:
         UIIndexContext for the requested run, or None if not found.
@@ -100,8 +108,10 @@ def load_context_for_run(
         _timings[name] = (time.perf_counter() - _t0) * 1000
         return result
 
-    # Import shared helpers here to avoid circular imports at module level
-    from ..structured_logging import emit_structured_log
+    # Import emit_fn here to allow caller injection for test mock compatibility
+    if emit_fn is None:
+        from ..structured_logging import emit_structured_log as _emit
+        emit_fn = _emit
     from .server_read_support import (
         RunArtifactIndex,
         _build_clusters_and_drilldown_availability,
@@ -406,7 +416,8 @@ def load_context_for_run(
     _timings["total_ms"] = (time.perf_counter() - _total_start) * 1000
 
     # Emit structured timing log with all phases
-    emit_structured_log(
+    # Use injected emit_fn to preserve server.emit_structured_log patch point for tests
+    emit_fn(
         component="ui-run-context",
         message="/api/run _load_context_for_run phase timings",
         run_id=run_id,

@@ -5,8 +5,8 @@
 # Entries are reviewed-safe boundaries consciously accepted until architecture-level refactor.
 
 # === HTTP Framework Boundaries ===
-ui/server.py do_GET HTTP framework catch-all - docs/security-exception-audit.md ~724
-ui/server.py do_POST HTTP framework catch-all - docs/security-exception-audit.md ~776
+ui/server_routes.py handle_get_request HTTP framework catch-all - GET route dispatch boundary, prevents traceback leakage
+ui/server_routes.py handle_post_request HTTP framework catch-all - POST route dispatch boundary, prevents traceback leakage
 
 # === External Execution Boundaries ===
 ui/server.py _handle_run_batch_next_check_execution External execution boundary - docs/security-exception-audit.md ~1075
@@ -75,4 +75,3 @@ ui/server_run_detail_reads.py handle_run_detail_route graceful run detail route 
 
 # === Manual Next Check Execution ===
 ui/server_next_check_execution.py execute_manual_next_check manual execution fallback boundary - docs/security-exception-audit.md ~322
-

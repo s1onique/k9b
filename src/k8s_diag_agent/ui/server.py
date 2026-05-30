@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, Sequence
-from http.server import BaseHTTPRequestHandler
+from http.server import (
+    BaseHTTPRequestHandler,
+    ThreadingHTTPServer,  # noqa: E402, F401 (re-export for backward compatibility)
+)
 from pathlib import Path
 
 from ..external_analysis.artifact import ExternalAnalysisArtifact
@@ -378,7 +381,8 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
             UIIndexContext for the requested run, or None if not found.
         """
         # Thin compatibility wrapper - delegates to extracted module
-        return load_context_for_run(self, run_id)
+        # Inject emit_structured_log from module namespace to preserve test mock compatibility
+        return load_context_for_run(self, run_id, emit_fn=emit_structured_log)
 
     def _parse_limit(self, value: str | None) -> int | None:
         """Parse a limit parameter from query string (delegates to server_parse_utils)."""
