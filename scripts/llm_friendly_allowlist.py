@@ -36,7 +36,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [EXTRACTION] Backend - extraction in progress
     ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
     ("src/k8s_diag_agent/ui/api.py", "[EXTRACTION] API orchestrator - re-export pattern"),
-    ("src/k8s_diag_agent/ui/server.py", "[EXTRACTION] Server routes - batch execution, side effects, context loading, and response helpers extracted; route dispatch and API orchestration remain"),
+    ("src/k8s_diag_agent/ui/server.py", "[EXTRACTION] Server routes - batch execution, side effects, context loading, response helpers, route dispatch, and runtime helpers extracted; handler/access-log glue remains"),
     # server_read_support.py extracted - cluster/drilldown to server_read_clusters.py (495);
     #   next-check to server_read_next_checks.py (379); execution history to server_read_execution_history.py (207);
     #   llm-stats to server_read_llm_stats.py (388); now 390 lines, below 500 threshold

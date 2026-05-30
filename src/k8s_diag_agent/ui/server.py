@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import functools
 import json
 import logging
-import sys
 import time
 from collections.abc import Mapping, Sequence
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
@@ -83,12 +81,63 @@ from .server_routes import (  # noqa: E402, F401
     handle_get_request,
     handle_post_request,
 )
-from .server_shared import _compute_health_root, _normalize_runs_dir, _validate_runs_dir
+from .server_runtime import (  # noqa: E402, F401
+    _SAFE_LOOPBACK_HOSTS,
+    _SLOW_REQUEST_THRESHOLD_MS,
+    DEFAULT_STATIC_DIR,
+    PROJECT_ROOT,
+    _is_exposed_host,
+    _log_request_access_with_emit,
+    start_ui_server,
+)
+from .server_shared import _compute_health_root
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_STATIC_DIR = PROJECT_ROOT / "frontend" / "dist"
+
+def _log_request_access(
+    method: str,
+    path: str,
+    query: str,
+    status_code: int,
+    duration_ms: float,
+    response_bytes: int,
+    client_ip: str,
+    run_label: str = "",
+    is_static_asset: bool = False,
+    request_id: str = "",
+    route_return_ms: float = 0.0,
+    client_request_id: str = "",
+) -> None:
+    """Thin wrapper that injects server.emit_structured_log for test mock compatibility.
+
+    This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
+    for backward compatibility with tests. We access emit_structured_log from the
+    module's global namespace at call time, not import time, to allow test mocks to work.
+
+    Similarly, _SLOW_REQUEST_THRESHOLD_MS is passed as a parameter so tests can
+    patch k8s_diag_agent.ui.server._SLOW_REQUEST_THRESHOLD_MS directly.
+    """
+    _log_request_access_with_emit(
+        emit_fn=emit_structured_log,
+        slow_request_threshold_ms=_SLOW_REQUEST_THRESHOLD_MS,
+        method=method,
+        path=path,
+        query=query,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        response_bytes=response_bytes,
+        client_ip=client_ip,
+        run_label=run_label,
+        is_static_asset=is_static_asset,
+        request_id=request_id,
+        route_return_ms=route_return_ms,
+        client_request_id=client_request_id,
+    )
+
+
+# NOTE: PROJECT_ROOT, DEFAULT_STATIC_DIR are imported from server_runtime
+# for backward compatibility. See import section above.
 
 # In-memory cache for run payloads to avoid repeated expensive computation
 # Key: (run_id, ui_index_mtime), Value: (cached_payload, cached_promotions)
@@ -113,9 +162,6 @@ _LATEST_PACK_DIR_NAME = "latest"
 
 # Scripts directory
 _SCRIPTS_DIR = PROJECT_ROOT / "scripts"
-
-# Slow request threshold in milliseconds
-_SLOW_REQUEST_THRESHOLD_MS = 1000
 
 
 def _single_flight_acquire(key: str, request_path: str = "", cache_key: str = "") -> tuple[bool, tuple[object, list] | None, float]:
@@ -253,185 +299,13 @@ def _single_flight_wait(event_holder: tuple[object, list], wait_start: float) ->
     return None, wait_duration_ms
 
 
-def _log_request_access(
-    method: str,
-    path: str,
-    query: str,
-    status_code: int,
-    duration_ms: float,
-    response_bytes: int,
-    client_ip: str,
-    run_label: str = "",
-    is_static_asset: bool = False,
-    request_id: str = "",
-    route_return_ms: float = 0.0,
-    client_request_id: str = "",
-) -> None:
-    """Log structured HTTP access event with latency telemetry.
-
-    Args:
-        method: HTTP method (GET, POST, etc.)
-        path: Request path (e.g., /api/run)
-        query: Query string (e.g., run_id=abc)
-        status_code: HTTP response status code
-        duration_ms: Request handling duration in milliseconds
-        response_bytes: Response body size in bytes
-        client_ip: Client IP address
-        run_label: Run label when known, else empty string
-        is_static_asset: Whether this is a static asset request
-        request_id: Correlation ID for linking access log to route timing logs
-        route_return_ms: Time from request start to route handler returning (before send)
-        client_request_id: Client-generated request ID from X-K9B-Client-Request-Id header
-    """
-    # Determine severity based on status code and latency
-    if status_code >= 500:
-        severity = "ERROR"
-    elif status_code >= 400:
-        severity = "WARNING"
-    elif duration_ms >= _SLOW_REQUEST_THRESHOLD_MS:
-        severity = "WARNING"
-    elif is_static_asset:
-        # Use DEBUG for static assets to reduce noise
-        severity = "DEBUG"
-    else:
-        severity = "INFO"
-
-    # Build message
-    message = f"{method} {path}"
-    if query:
-        message += f"?{query}"
-
-    metadata = {
-        "method": method,
-        "path": path,
-        "query": query,
-        "status_code": status_code,
-        "duration_ms": round(duration_ms, 2),
-        "response_bytes": response_bytes,
-        "client_ip": client_ip,
-        "run_label": run_label,
-    }
-
-    # Add correlation fields if available
-    if request_id:
-        metadata["request_id"] = request_id
-    if client_request_id:
-        metadata["client_request_id"] = client_request_id
-    if route_return_ms > 0:
-        metadata["route_return_ms"] = round(route_return_ms, 2)
-        # Compute network/flush overhead for debugging
-        send_overhead = duration_ms - route_return_ms
-        if send_overhead > 0:
-            metadata["send_overhead_ms"] = round(send_overhead, 2)
-
-    emit_structured_log(
-        component="ui-access",
-        message=message,
-        severity=severity,
-        run_label=run_label,
-        run_id="",
-        metadata=metadata,
-    )
-
-
 # NOTE: _refresh_diagnostic_pack_latest and _export_usefulness_review_for_run
 # are imported from server_execution_side_effects for backward compatibility.
 # See import section above.
 
-
-# Safe loopback hosts that don't require --unsafe-bind
-_SAFE_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
-
-
-def _is_exposed_host(host: str) -> bool:
-    """Check if the host is exposed (non-loopback).
-
-    Safe loopback hosts: 127.0.0.1, localhost, ::1
-    Unsafe/exposed hosts: 0.0.0.0, ::, external IPs, non-loopback hostnames.
-    """
-    return host.lower() not in _SAFE_LOOPBACK_HOSTS
-
-
-def start_ui_server(
-    runs_dir: Path,
-    host: str = "127.0.0.1",
-    port: int = 8080,
-    static_dir: Path | None = None,
-    unsafe_bind: bool = False,
-    auth_token: str | None = None,
-) -> None:
-    # Check for exposed host binding
-    if _is_exposed_host(host):
-        if not unsafe_bind:
-            print(
-                f"ERROR: Refusing to bind to exposed address '{host}' without --unsafe-bind.",
-                file=sys.stderr,
-            )
-            print(
-                "The UI/API has mutation endpoints (POST /api/next-check-approval, "
-                "/api/next-check-execution, /api/deterministic-next-check/promote, etc.)",
-                file=sys.stderr,
-            )
-            print(
-                "To bind to non-loopback addresses, use --unsafe-bind to acknowledge the risk.",
-                file=sys.stderr,
-            )
-            print(
-                "Alternatively, bind to a loopback address (127.0.0.1, localhost, or ::1) "
-                "and use port-forwarding for remote access.",
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-
-        # Host is exposed and unsafe_bind is True - print security warning
-        print(
-            f"WARNING: Starting operator UI on exposed address '{host}:{port}'.",
-            file=sys.stderr,
-        )
-        print(
-            "The UI/API has mutation endpoints that can modify cluster state.",
-            file=sys.stderr,
-        )
-        # Strong warning if no token configured
-        if not auth_token:
-            print(
-                "WARNING: No K9B_UI_TOKEN configured. Mutation endpoints are unprotected.",
-                file=sys.stderr,
-            )
-            print(
-                "Set the K9B_UI_TOKEN environment variable or --auth-token CLI flag to protect them.",
-                file=sys.stderr,
-            )
-        print(
-            "Ensure this host is only accessible from trusted networks, "
-            "or use a reverse proxy with authentication in front of this service.",
-            file=sys.stderr,
-        )
-        print(file=sys.stderr)
-
-    # Normalize and validate runs_dir
-    normalized_runs_dir = _normalize_runs_dir(runs_dir)
-    _validate_runs_dir(normalized_runs_dir)
-
-    assets = static_dir or DEFAULT_STATIC_DIR
-    handler = functools.partial(
-        HealthUIRequestHandler,
-        runs_dir=normalized_runs_dir,
-        static_dir=assets,
-        auth_token=auth_token,
-    )
-    server = ThreadingHTTPServer((host, port), handler)
-    print(
-        f"Operator UI listening on http://{host}:{port}/ (runs: {normalized_runs_dir}, assets: {assets})",
-        file=sys.stderr,
-    )
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("Shutting down operator UI server", file=sys.stderr)
-        server.shutdown()
-    finally:
-        server.server_close()
+# NOTE: start_ui_server, _log_request_access, _is_exposed_host, _SAFE_LOOPBACK_HOSTS,
+# PROJECT_ROOT, and DEFAULT_STATIC_DIR are imported from server_runtime for
+# backward compatibility. See import section above.
 
 
 class HealthUIRequestHandler(BaseHTTPRequestHandler):
