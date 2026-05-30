@@ -14,9 +14,6 @@ from ..external_analysis.artifact import (
     ExternalAnalysisArtifact,
     ExternalAnalysisStatus,
 )
-from ..external_analysis.deterministic_next_check_promotion import (
-    collect_promoted_queue_entries,
-)
 from ..structured_logging import emit_structured_log
 from .model import UIIndexContext, build_ui_context, load_ui_index
 
@@ -298,6 +295,7 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
     def _handle_api(self, route: str, query: str) -> None:
         """Handle API GET requests by delegating to server_reads module."""
         from .server_reads import handle_api as _handle_api_reads
+
         _handle_api_reads(self, route, query)
 
     def _resolve_plan_candidate(
@@ -306,37 +304,11 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         requested_candidate_id: str | None,
         requested_candidate_index: int | None,
     ) -> tuple[Mapping[str, object] | None, int | None]:
-        if not isinstance(candidates, Sequence):
-            return None, None
-        entries = list(candidates)
-        found_entry: Mapping[str, object] | None = None
-        found_position: int | None = None
-        if requested_candidate_id:
-            for idx, entry in enumerate(entries):
-                if not isinstance(entry, Mapping):
-                    continue
-                entry_id = entry.get("candidateId")
-                if isinstance(entry_id, str) and entry_id == requested_candidate_id:
-                    found_entry = dict(entry)
-                    found_position = idx
-                    break
-        if found_entry is None and requested_candidate_index is not None:
-            if 0 <= requested_candidate_index < len(entries):
-                entry = entries[requested_candidate_index]
-                if isinstance(entry, Mapping):
-                    found_entry = dict(entry)
-                    found_position = requested_candidate_index
-        if found_entry is None:
-            return None, None
-        candidate_index_value: int | None = None
-        explicit_index = found_entry.get("candidateIndex")
-        if isinstance(explicit_index, int):
-            candidate_index_value = explicit_index
-        elif found_position is not None:
-            candidate_index_value = found_position
-        elif requested_candidate_index is not None:
-            candidate_index_value = requested_candidate_index
-        return found_entry, candidate_index_value
+        """Resolve a plan candidate by ID or index (delegates to server_next_check_utils)."""
+        from .server_next_check_utils import resolve_plan_candidate as _resolve
+
+        entry, idx = _resolve(candidates, requested_candidate_id, requested_candidate_index)
+        return (entry, idx) if entry is not None else (None, None)
 
     def _find_candidate_in_all_plan_artifacts(
         self,
@@ -344,64 +316,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         candidate_id: str | None,
         candidate_index: int | None,
     ) -> tuple[dict[str, object] | None, int | None, Path | None]:
-        """Search for a candidate across all planner artifacts for the given run.
+        """Search for a candidate across all planner artifacts (delegates to server_next_check_utils)."""
+        from .server_next_check_utils import find_candidate_in_all_plan_artifacts as _find
 
-        This handles cases where the plan artifact path in the queue may differ from
-        the current next_check_plan.artifact_path (e.g., due to plan regeneration).
-
-        Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
-        """
-        # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
-        from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
-
-        try:
-            validated_run_id = validate_run_id(run_id)
-        except SecurityError:
-            # Invalid run_id - cannot safely search, return empty result
-            return None, None, None
-
-        # SECURITY: run_id validated by validate_run_id() before glob construction
-        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
-
-        # First try the promoted entries (deterministic checks)
-        promotions = collect_promoted_queue_entries(self._health_root, validated_run_id)
-        if promotions:
-            entry, idx = self._resolve_plan_candidate(
-                promotions,
-                candidate_id,
-                candidate_index,
-            )
-            if entry is not None and idx is not None:
-                return dict(entry), idx, None
-
-        # Scan all external-analysis artifacts for planner artifacts
-        external_analysis_dir = self._health_root / "external-analysis"
-        if external_analysis_dir.exists():
-            # SECURITY: run_id validated by validate_run_id() before glob construction
-            for artifact_file in external_analysis_dir.glob(glob_pattern):
-                try:
-                    artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
-                    # Check if this is a planning artifact
-                    purpose = artifact_data.get("purpose")
-                    if purpose != "next-check-planning":
-                        continue
-
-                    payload = artifact_data.get("payload", {})
-                    candidates = payload.get("candidates", [])
-                    entry, idx = self._resolve_plan_candidate(
-                        candidates if isinstance(candidates, Sequence) else (),
-                        candidate_id,
-                        candidate_index,
-                    )
-                    if entry is not None and idx is not None:
-                        # Return full relative path within runs_dir (external-analysis/filename)
-                        return dict(entry), idx, Path("external-analysis") / artifact_file.name
-                except (OSError, json.JSONDecodeError):
-                    # Skip malformed/unreadable artifacts, continue searching
-                    # File I/O errors (OSError) and JSON parse errors (JSONDecodeError) are non-fatal
-                    continue
-
-        return None, None, None
+        return _find(self._health_root, run_id, candidate_id, candidate_index)
 
     def _find_candidate_in_all_plan_artifacts_from_health_root(
         self,
@@ -410,64 +328,10 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         candidate_id: str | None,
         candidate_index: int | None,
     ) -> tuple[dict[str, object] | None, int | None, Path | None]:
-        """Search for a candidate across all planner artifacts in health_root for the given run.
+        """Search for a candidate in health_root (delegates to server_next_check_utils)."""
+        from .server_next_check_utils import find_candidate_in_all_plan_artifacts as _find
 
-        This is the fixed version that uses health_root (runs/health/external-analysis/)
-        instead of runs_root (runs/external-analysis/).
-
-        Returns tuple of (candidate_entry, resolved_index, plan_path) if found.
-        """
-        # SECURITY: Validate run_id before using in glob pattern to prevent path traversal
-        from ..security.path_validation import SecurityError, safe_run_artifact_glob, validate_run_id
-
-        try:
-            validated_run_id = validate_run_id(run_id)
-        except SecurityError:
-            # Invalid run_id - cannot safely search, return empty result
-            return None, None, None
-
-        # SECURITY: run_id validated by validate_run_id() before glob construction
-        glob_pattern = safe_run_artifact_glob(validated_run_id, "-next-check-plan*.json")
-
-        # First try the promoted entries (deterministic checks) from health_root
-        promotions = collect_promoted_queue_entries(health_root, validated_run_id)
-        if promotions:
-            entry, idx = self._resolve_plan_candidate(
-                promotions,
-                candidate_id,
-                candidate_index,
-            )
-            if entry is not None and idx is not None:
-                return dict(entry), idx, None
-
-        # Scan all external-analysis artifacts for planner artifacts in health_root
-        external_analysis_dir = health_root / "external-analysis"
-        if external_analysis_dir.exists():
-            # SECURITY: run_id validated by validate_run_id() before glob construction
-            for artifact_file in external_analysis_dir.glob(glob_pattern):
-                try:
-                    artifact_data = json.loads(artifact_file.read_text(encoding="utf-8"))
-                    # Check if this is a planning artifact
-                    purpose = artifact_data.get("purpose")
-                    if purpose != "next-check-planning":
-                        continue
-
-                    payload = artifact_data.get("payload", {})
-                    candidates = payload.get("candidates", [])
-                    entry, idx = self._resolve_plan_candidate(
-                        candidates if isinstance(candidates, Sequence) else (),
-                        candidate_id,
-                        candidate_index,
-                    )
-                    if entry is not None and idx is not None:
-                        # Return full relative path within health_root (external-analysis/filename)
-                        return dict(entry), idx, Path("external-analysis") / artifact_file.name
-                except (OSError, json.JSONDecodeError):
-                    # Skip malformed/unreadable artifacts, continue searching
-                    # File I/O errors (OSError) and JSON parse errors (JSONDecodeError) are non-fatal
-                    continue
-
-        return None, None, None
+        return _find(health_root, run_id, candidate_id, candidate_index)
 
     def _load_context(self, requested_run_id: str | None = None) -> UIIndexContext | None:
         """Load the UI context, optionally for a specific run.

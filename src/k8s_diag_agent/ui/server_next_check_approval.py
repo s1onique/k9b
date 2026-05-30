@@ -26,9 +26,9 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
         handler: The HealthUIRequestHandler instance
     """
     from ..external_analysis.next_check_approval import log_next_check_approval_event, record_next_check_approval
-    from .server import _relative_path
     from .server_next_check_utils import (
         find_candidate_in_all_plan_artifacts,
+        relative_path,
         resolve_plan_candidate,
     )
     from .server_shared import _validate_json_mutation_request
@@ -177,7 +177,7 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
         )
         handler._send_json({"error": f"Approval failed: {exc}"}, 500)
         return
-    artifact_path = _relative_path(handler.runs_dir, artifact.artifact_path)
+    artifact_path = relative_path(handler.runs_dir, artifact.artifact_path)
     response = {
         "status": artifact.status.value,
         "summary": artifact.summary,

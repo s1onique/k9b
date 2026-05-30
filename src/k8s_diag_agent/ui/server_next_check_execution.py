@@ -33,10 +33,11 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
     from ..external_analysis.manual_next_check import ManualNextCheckError
     from ..health.ui_next_check_execution import _derive_outcome_status
     from ..structured_logging import emit_structured_log
-    from .server import _compute_health_root, _invalidate_runs_list_cache, _refresh_diagnostic_pack_latest, _relative_path
+    from .server import _compute_health_root, _invalidate_runs_list_cache, _refresh_diagnostic_pack_latest
     from .server_next_check_utils import (
         determine_execution_state_from_artifact,
         find_candidate_in_all_plan_artifacts,
+        relative_path,
         resolve_plan_candidate,
     )
     from .server_shared import _validate_json_mutation_request
@@ -322,7 +323,7 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
     except Exception as exc:
         handler._send_json({"error": f"Execution failed: {exc}"}, 500)
         return
-    artifact_path = _relative_path(handler.runs_dir, artifact.artifact_path)
+    artifact_path = relative_path(handler.runs_dir, artifact.artifact_path)
 
     execution_state = determine_execution_state_from_artifact(artifact)
     approval_status = str(candidate.get("approvalStatus") or candidate.get("approvalState") or "not-required")

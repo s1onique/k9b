@@ -142,3 +142,23 @@ def determine_execution_state_from_artifact(artifact: Any) -> str:
     if artifact.status == ExternalAnalysisStatus.SUCCESS:
         return "executed-success"
     return "executed-failed"
+
+
+def relative_path(base: Path, target: object | None) -> str | None:
+    """Compute relative path from base to target, returning None if target is None.
+
+    Args:
+        base: The base path to compute relative path from.
+        target: The target path (or None).
+
+    Returns:
+        Relative path string from base to target, or str(target) if not relative.
+        Returns None if target is None.
+    """
+    if target is None:
+        return None
+    candidate = Path(str(target))
+    try:
+        return str(candidate.relative_to(base))
+    except ValueError:
+        return str(candidate)
