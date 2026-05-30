@@ -115,6 +115,54 @@ _MAX_CACHE_ENTRIES = 10
 
 
 # --------------------------------------------------------------------
+# Access-log compatibility wrapper (preserves server.emit_structured_log patch point)
+# --------------------------------------------------------------------
+
+
+def _log_request_access(
+    method: str,
+    path: str,
+    query: str,
+    status_code: int,
+    duration_ms: float,
+    response_bytes: int,
+    client_ip: str,
+    run_label: str = "",
+    is_static_asset: bool = False,
+    request_id: str = "",
+    route_return_ms: float = 0.0,
+    client_request_id: str = "",
+) -> None:
+    """Compatibility wrapper for access-log emission.
+
+    Preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
+    for backward compatibility with tests. We access emit_structured_log from the
+    module's global namespace at call time, not import time, to allow test mocks to work.
+
+    Similarly, _SLOW_REQUEST_THRESHOLD_MS is passed as a parameter so tests can
+    patch k8s_diag_agent.ui.server._SLOW_REQUEST_THRESHOLD_MS directly.
+    """
+    from .server_runtime import _log_request_access_with_emit
+
+    _log_request_access_with_emit(
+        emit_fn=emit_structured_log,
+        slow_request_threshold_ms=_SLOW_REQUEST_THRESHOLD_MS,
+        method=method,
+        path=path,
+        query=query,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        response_bytes=response_bytes,
+        client_ip=client_ip,
+        run_label=run_label,
+        is_static_asset=is_static_asset,
+        request_id=request_id,
+        route_return_ms=route_return_ms,
+        client_request_id=client_request_id,
+    )
+
+
+# --------------------------------------------------------------------
 # Single-flight compatibility wrappers (inject server.emit_structured_log patch point)
 # --------------------------------------------------------------------
 
