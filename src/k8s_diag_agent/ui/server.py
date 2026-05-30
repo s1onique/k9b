@@ -8,7 +8,6 @@ import time
 from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from threading import Lock
 from typing import Any, cast
 
 from ..external_analysis.artifact import (
@@ -91,8 +90,22 @@ from .server_runtime import (  # noqa: E402, F401
     start_ui_server,
 )
 from .server_shared import _compute_health_root
+from .server_singleflight import (  # noqa: E402, F401
+    _notifications_cache,
+    _notifications_cache_lock,
+    _run_payload_cache,
+    _run_payload_cache_lock,
+    _single_flight_acquire_impl,
+    _single_flight_events,
+    _single_flight_lock,
+    _single_flight_release_impl,
+    _single_flight_wait,
+)
 
 logger = logging.getLogger(__name__)
+
+# Maximum cache entries to prevent unbounded memory growth
+_MAX_CACHE_ENTRIES = 10
 
 
 def _log_request_access(
@@ -136,176 +149,66 @@ def _log_request_access(
     )
 
 
-# NOTE: PROJECT_ROOT, DEFAULT_STATIC_DIR are imported from server_runtime
-# for backward compatibility. See import section above.
-
-# In-memory cache for run payloads to avoid repeated expensive computation
-# Key: (run_id, ui_index_mtime), Value: (cached_payload, cached_promotions)
-_run_payload_cache: dict[tuple[str, float], tuple[dict[str, Any], list[dict[str, object]]]] = {}
-_run_payload_cache_lock = Lock()
-# Maximum cache entries to prevent unbounded memory growth
-_MAX_CACHE_ENTRIES = 10
-
-# In-memory cache for notifications - keyed by (notifications_dir_mtime, query_params)
-# This avoids scanning all notification files on every request
-_notifications_cache: dict[str, tuple[dict[str, Any], float]] = {}  # key -> (payload, mtime)
-_notifications_cache_lock = Lock()
-
-# Single-flight locks to prevent duplicate concurrent builds for the same cache key
-# Key: cache key, Value: tuple of (threading.Event, result_holder list)
-# result_holder: list with one element to hold the result when ready
-_single_flight_events: dict[str, tuple[object, list]] = {}
-_single_flight_lock = Lock()
-
-# Directory name for stable "latest" diagnostic pack mirror files
-_LATEST_PACK_DIR_NAME = "latest"
-
-# Scripts directory
-_SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+# --------------------------------------------------------------------
+# Single-flight compatibility wrappers (inject server.emit_structured_log patch point)
+# --------------------------------------------------------------------
 
 
-def _single_flight_acquire(key: str, request_path: str = "", cache_key: str = "") -> tuple[bool, tuple[object, list] | None, float]:
-    """Acquire single-flight lock for the given key.
+def _single_flight_acquire(
+    key: str,
+    request_path: str = "",
+    cache_key: str = "",
+) -> tuple[bool, tuple[object, list] | None, float]:
+    """Compatibility wrapper that injects emit_structured_log for test mock compatibility.
 
-    Returns:
-        Tuple of (should_build, result_holder_or_event, wait_start_time).
-        - should_build=True means this caller should build the result
-        - should_build=False means wait for the in-flight build and use its result
-        - wait_start_time is the timestamp when waiting started (for measuring wait duration)
+    This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
+    for backward compatibility with tests.
     """
-    import time as time_module
-
-    wait_start = time_module.perf_counter()
-    with _single_flight_lock:
-        if key in _single_flight_events:
-            # There's already an in-flight request - return event to wait on
-            # Emit structured log for waiter acquire
-            emit_structured_log(
-                component="single-flight",
-                message="Single-flight waiter acquiring",
-                run_id="",
-                run_label="",
-                severity="DEBUG",
-                metadata={
-                    "single_flight_key": key[:100],
-                    "acquire_result": "waiter",
-                    "cache_key": cache_key[:100] if cache_key else "",
-                    "request_path": request_path,
-                },
-            )
-            return False, _single_flight_events[key], wait_start
-        else:
-            # Create new in-flight state
-            # result_holder: list with one element to hold result when ready
-            result_holder: list = [None]
-            event = result_holder  # Use list as mutable container for result
-            _single_flight_events[key] = (event, result_holder)
-            # Emit structured log for builder acquire
-            emit_structured_log(
-                component="single-flight",
-                message="Single-flight builder acquiring",
-                run_id="",
-                run_label="",
-                severity="DEBUG",
-                metadata={
-                    "single_flight_key": key[:100],
-                    "acquire_result": "builder",
-                    "cache_key": cache_key[:100] if cache_key else "",
-                    "request_path": request_path,
-                },
-            )
-            return True, (event, result_holder), wait_start
+    return _single_flight_acquire_impl(
+        emit_fn=emit_structured_log,
+        key=key,
+        request_path=request_path,
+        cache_key=cache_key,
+    )
 
 
-def _single_flight_release(key: str, result: object, success: bool = True, result_type: str = "built") -> None:
-    """Release single-flight lock and set result.
+def _single_flight_release(
+    key: str,
+    result: object,
+    success: bool = True,
+    result_type: str = "built",
+) -> None:
+    """Compatibility wrapper that injects emit_structured_log for test mock compatibility.
 
-    Args:
-        key: The single-flight key
-        result: The result to store (can be None on failure)
-        success: Whether the build succeeded - if False, also clean up the entry
-        result_type: Type of result - "built" (freshly built), "cached" (served from cache), "error" (build failed)
+    This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
+    for backward compatibility with tests.
     """
-    import time as time_module
-
-    with _single_flight_lock:
-        if key in _single_flight_events:
-            event, result_holder = _single_flight_events[key]
-            result_holder[0] = result  # Store result in the holder
-
-            # Give waiters a moment to read the result before cleaning up
-            # This prevents the race where a waiter checks right after we set result but before it reads
-            # We keep the entry in the dict with a sentinel marker to indicate "ready"
-            result_holder.append("_READY_")  # Marker to indicate result is ready
-
-            # Brief delay to allow waiters to pick up the result (max 50ms)
-            # This is a tradeoff - we trade a small delay for correctness
-            time_module.sleep(0.005)  # 5ms to let waiters wake up and read
-
-            # Now delete to allow retries after waiters have had a chance
-            del _single_flight_events[key]
-
-            # Emit structured log for release
-            emit_structured_log(
-                component="single-flight",
-                message="Single-flight released",
-                run_id="",
-                run_label="",
-                severity="DEBUG",
-                metadata={
-                    "single_flight_key": key[:100],
-                    "release_success": success,
-                    "result_type": result_type,
-                },
-            )
-
-            # Log release for debugging
-            logger.debug(
-                f"Single-flight released for key: {key[:50]}...",
-                extra={"key": key[:100], "action": "release", "success": success},
-            )
+    return _single_flight_release_impl(
+        emit_fn=emit_structured_log,
+        key=key,
+        result=result,
+        success=success,
+        result_type=result_type,
+    )
 
 
-def _single_flight_wait(event_holder: tuple[object, list], wait_start: float) -> tuple[object | None, float]:
-    """Wait for single-flight result to be ready.
-
-    Args:
-        event_holder: Tuple of (event, result_holder) from _single_flight_acquire
-        wait_start: Timestamp when waiting started (from _single_flight_acquire)
-
-    Returns:
-        Tuple of (result, wait_duration_ms)
-    """
-    import time as time_module
-
-    # Brief spin-wait for result (max ~100ms)
-    # Check for both result[0] being non-None AND the _READY_ marker
-    for i in range(10):
-        time_module.sleep(0.01)
-        result_holder = event_holder[1]
-        # Check if result is ready: either marker present or result is not None
-        if len(result_holder) >= 2 and result_holder[-1] == "_READY_":
-            # Result is ready, return it
-            wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
-            # Return the actual result (first element)
-            return result_holder[0], wait_duration_ms
-        if result_holder[0] is not None:
-            # Fallback: result was set but marker not yet added (race condition)
-            wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
-            return result_holder[0], wait_duration_ms
-
-    # If still not ready, return None (caller will handle)
-    wait_duration_ms = (time_module.perf_counter() - wait_start) * 1000
-    return None, wait_duration_ms
-
-
+# NOTE: Single-flight helpers (_single_flight_acquire, _single_flight_release,
+# _single_flight_wait, _single_flight_events, _single_flight_lock) are imported from
+# server_singleflight for backward compatibility. See import section above.
+#
+# NOTE: Run-payload cache (_run_payload_cache, _run_payload_cache_lock) is imported from
+# server_singleflight for backward compatibility. See import section above.
+#
+# NOTE: Notifications cache (_notifications_cache, _notifications_cache_lock) is imported
+# from server_singleflight for backward compatibility. See import section above.
+#
+# NOTE: PROJECT_ROOT, DEFAULT_STATIC_DIR, _log_request_access_with_emit, _is_exposed_host,
+# _SAFE_LOOPBACK_HOSTS, _SLOW_REQUEST_THRESHOLD_MS, start_ui_server are imported from
+# server_runtime for backward compatibility. See import section above.
+#
 # NOTE: _refresh_diagnostic_pack_latest and _export_usefulness_review_for_run
 # are imported from server_execution_side_effects for backward compatibility.
 # See import section above.
-
-# NOTE: start_ui_server, _log_request_access, _is_exposed_host, _SAFE_LOOPBACK_HOSTS,
-# PROJECT_ROOT, and DEFAULT_STATIC_DIR are imported from server_runtime for
-# backward compatibility. See import section above.
 
 
 class HealthUIRequestHandler(BaseHTTPRequestHandler):

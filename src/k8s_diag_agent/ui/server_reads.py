@@ -66,11 +66,13 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     from .api import build_cluster_detail_payload, build_fleet_payload, build_proposals_payload
     from .notifications import query_notifications
     from .server import (
-        _notifications_cache,
-        _notifications_cache_lock,
         _single_flight_acquire,
         _single_flight_release,
         _single_flight_wait,
+    )
+    from .server_singleflight import (
+        _notifications_cache,
+        _notifications_cache_lock,
     )
 
     if route == "/api/runs":

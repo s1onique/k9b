@@ -41,11 +41,13 @@ def handle_run_detail_route(handler: HealthUIRequestHandler, query: str) -> None
     from ..structured_logging import emit_structured_log
     from .api import build_run_payload
     from .server import (
-        _run_payload_cache,
-        _run_payload_cache_lock,
         _single_flight_acquire,
         _single_flight_release,
         _single_flight_wait,
+    )
+    from .server_singleflight import (
+        _run_payload_cache,
+        _run_payload_cache_lock,
     )
 
     params = parse_qs(query)
