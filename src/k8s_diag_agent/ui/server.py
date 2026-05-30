@@ -43,6 +43,13 @@ from .server_feedback import (  # noqa: E402, F401
     handle_alertmanager_relevance_feedback,
     handle_usefulness_feedback,
 )
+from .server_handler_state import (  # noqa: E402, F401
+    get_client_ip,
+    get_run_label,
+    log_access_completion,
+    reset_request_state,
+    set_request_timing_state,
+)
 from .server_next_checks import (  # noqa: E402, F401
     handle_deterministic_promotion,
     handle_next_check_approval,
@@ -86,7 +93,6 @@ from .server_runtime import (  # noqa: E402, F401
     DEFAULT_STATIC_DIR,
     PROJECT_ROOT,
     _is_exposed_host,
-    _log_request_access_with_emit,
     start_ui_server,
 )
 from .server_shared import _compute_health_root
@@ -106,47 +112,6 @@ logger = logging.getLogger(__name__)
 
 # Maximum cache entries to prevent unbounded memory growth
 _MAX_CACHE_ENTRIES = 10
-
-
-def _log_request_access(
-    method: str,
-    path: str,
-    query: str,
-    status_code: int,
-    duration_ms: float,
-    response_bytes: int,
-    client_ip: str,
-    run_label: str = "",
-    is_static_asset: bool = False,
-    request_id: str = "",
-    route_return_ms: float = 0.0,
-    client_request_id: str = "",
-) -> None:
-    """Thin wrapper that injects server.emit_structured_log for test mock compatibility.
-
-    This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
-    for backward compatibility with tests. We access emit_structured_log from the
-    module's global namespace at call time, not import time, to allow test mocks to work.
-
-    Similarly, _SLOW_REQUEST_THRESHOLD_MS is passed as a parameter so tests can
-    patch k8s_diag_agent.ui.server._SLOW_REQUEST_THRESHOLD_MS directly.
-    """
-    _log_request_access_with_emit(
-        emit_fn=emit_structured_log,
-        slow_request_threshold_ms=_SLOW_REQUEST_THRESHOLD_MS,
-        method=method,
-        path=path,
-        query=query,
-        status_code=status_code,
-        duration_ms=duration_ms,
-        response_bytes=response_bytes,
-        client_ip=client_ip,
-        run_label=run_label,
-        is_static_asset=is_static_asset,
-        request_id=request_id,
-        route_return_ms=route_return_ms,
-        client_request_id=client_request_id,
-    )
 
 
 # --------------------------------------------------------------------
@@ -202,12 +167,16 @@ def _single_flight_release(
 # NOTE: Notifications cache (_notifications_cache, _notifications_cache_lock) is imported
 # from server_singleflight for backward compatibility. See import section above.
 #
-# NOTE: PROJECT_ROOT, DEFAULT_STATIC_DIR, _log_request_access_with_emit, _is_exposed_host,
+# NOTE: PROJECT_ROOT, DEFAULT_STATIC_DIR, _is_exposed_host,
 # _SAFE_LOOPBACK_HOSTS, _SLOW_REQUEST_THRESHOLD_MS, start_ui_server are imported from
 # server_runtime for backward compatibility. See import section above.
 #
 # NOTE: _refresh_diagnostic_pack_latest and _export_usefulness_review_for_run
 # are imported from server_execution_side_effects for backward compatibility.
+# See import section above.
+#
+# NOTE: reset_request_state, get_client_ip, get_run_label, set_request_timing_state,
+# log_access_completion are imported from server_handler_state for backward compatibility.
 # See import section above.
 
 
@@ -240,48 +209,19 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
         self._reset_request_state()
 
     def _reset_request_state(self) -> None:
-        """Reset all per-request state to measure actual request processing time.
-
-        This must be called at the start of each do_GET/do_POST to ensure
-        duration_ms reflects request processing, not connection idle time.
-        """
-        self._start_time = time.perf_counter()
-        self._request_id = ""
-        self._route_return_ms = 0.0
-        self._response_bytes = 0
-        self._status_code = 200
+        """Reset all per-request state to measure actual request processing time."""
+        reset_request_state(self)
 
     def _get_client_ip(self) -> str:
         """Extract client IP from request."""
-        # Check for forwarded headers (reverse proxy)
-        forwarded = self.headers.get("X-Forwarded-For")
-        if forwarded:
-            # Take the first IP in the chain
-            return forwarded.split(",")[0].strip()
-        # Fall back to direct connection
-        client = self.client_address
-        if isinstance(client, tuple):
-            return client[0]
-        return str(client)
+        return get_client_ip(self)
 
     def _get_run_label(self) -> str:
         """Extract run_label from the current context if available."""
-        # Try to get run_label from the loaded context
-        # This is a best-effort attempt; if context can't be loaded, return empty
-        try:
-            context = self._load_context()
-            if context and context.run:
-                return context.run.run_label or ""
-        except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError):
-            # Narrowed: _load_context already handles file/JSON errors;
-            # remaining candidates are simple attribute accesses
-            pass
-        return ""
+        return get_run_label(self)
 
     def do_GET(self) -> None:
         # CRITICAL: Reset timing state FIRST to measure actual request processing time
-        # This fixes the bug where duration_ms included connection/handler lifetime
-        # instead of just the request processing time
         self._reset_request_state()
 
         # Delegate to extracted route handler (re-exported at module level)
@@ -289,51 +229,20 @@ class HealthUIRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         # CRITICAL: Reset timing state FIRST to measure actual request processing time
-        # This fixes the bug where duration_ms included connection/handler lifetime
-        # instead of just the request processing time
         self._reset_request_state()
 
         # Delegate to extracted route handler (re-exported at module level)
         handle_post_request(self)
 
     def set_request_timing(self, request_id: str, route_return_ms: float) -> None:
-        """Set correlation and timing info for access log from server_reads.
-
-        Called by server_reads.py after building the route payload but before
-        sending the response. This allows the access log to include correlation
-        IDs and route timing alongside the actual request duration.
-
-        Args:
-            request_id: Correlation ID for linking access log to route timing logs
-            route_return_ms: Time from request start to route handler returning (before send)
-        """
-        self._request_id = request_id
-        self._route_return_ms = route_return_ms
+        """Set correlation and timing info for access log from server_reads."""
+        set_request_timing_state(self, request_id, route_return_ms)
 
     def _log_access_completion(self) -> None:
         """Log access completion with latency and status."""
-        if self._start_time == 0.0:
-            return
-
-        duration_ms = (time.perf_counter() - self._start_time) * 1000
-
-        # Read client_request_id from request headers
-        client_request_id = self.headers.get("X-K9B-Client-Request-Id", "")
-
-        _log_request_access(
-            method=self._request_method,
-            path=self._request_path,
-            query=self._request_query,
-            status_code=self._status_code,
-            duration_ms=duration_ms,
-            response_bytes=self._response_bytes,
-            client_ip=self._get_client_ip(),
-            run_label=self._get_run_label() if self._request_path.startswith("/api/") else "",
-            is_static_asset=self._is_static,
-            request_id=self._request_id,
-            route_return_ms=self._route_return_ms,
-            client_request_id=client_request_id,
-        )
+        # Inject emit_structured_log at call time to preserve test mock compatibility
+        # via server.emit_structured_log patch point
+        log_access_completion(self, emit_fn=emit_structured_log, slow_request_threshold_ms=_SLOW_REQUEST_THRESHOLD_MS)
 
     def log_message(self, format: str, *args: object) -> None:
         return
