@@ -42,6 +42,7 @@ from .server_batch_execution import (  # noqa: E402, F401
     handle_run_batch_next_check_execution,
 )
 from .server_execution_side_effects import (  # noqa: E402, F401
+    _export_usefulness_review_for_run,
     _invalidate_runs_list_cache,
     _persist_batch_execution_history_to_ui_index,
     _refresh_diagnostic_pack_latest,

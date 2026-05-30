@@ -131,11 +131,12 @@ def _export_usefulness_review_for_run(run_id: str, runs_dir: Path) -> bool:
             },
         )
         return True
-
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, ImportError, ModuleNotFoundError, AttributeError) as exc:
+        # REVIEWED: Script import boundary - narrowing would risk silent failures in export flow
+        # ImportErrors from scripts/export_next_check_usefulness_review are non-fatal
         emit_structured_log(
             component="pack-refresh",
-            message="Failed to export usefulness review artifact",
+            message="Failed to export run-scoped usefulness review artifact",
             run_id=run_id,
             run_label="",
             severity="WARNING",
@@ -144,10 +145,11 @@ def _export_usefulness_review_for_run(run_id: str, runs_dir: Path) -> bool:
                 "runs_root": str(runs_dir),
                 "health_root": str(runs_dir / "health"),
                 "operation": "export_usefulness_review",
-                "error_summary": str(exc),
+                "error": str(exc),
             },
         )
         return False
+
 
 
 def _refresh_diagnostic_pack_latest(run_id: str, runs_dir: Path) -> bool:
