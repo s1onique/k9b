@@ -6,15 +6,12 @@ It handles POST /api/run-batch-next-check-execution requests.
 Keep behavior exact: dry-run parsing, error messages, status codes, and
 post-execution side effects (pack refresh, cache invalidation) are preserved.
 
-Transitional coupling:
-- Imports HealthUIRequestHandler type from .server (TYPE_CHECKING) for type hints
-- Imports _validate_json_mutation_request from .server_shared for request validation
-- Imports _refresh_diagnostic_pack_latest, _persist_batch_execution_history_to_ui_index,
-  and _invalidate_runs_list_cache from .server for post-execution side effects
-- Imports run_batch_next_checks from k8s_diag_agent.batch for actual execution
-
-These imports will be refactored in future extractions as more server routes move
-out of server.py into focused modules.
+Imports:
+- HealthUIRequestHandler type from .server (TYPE_CHECKING) for type hints
+- _validate_json_mutation_request from .server_shared for request validation
+- _refresh_diagnostic_pack_latest, _persist_batch_execution_history_to_ui_index,
+  and _invalidate_runs_list_cache from .server_execution_side_effects for post-execution side effects
+- run_batch_next_checks from k8s_diag_agent.batch for actual execution
 """
 
 from __future__ import annotations
@@ -42,7 +39,11 @@ def handle_run_batch_next_check_execution(handler: HealthUIRequestHandler) -> No
         handler: The HealthUIRequestHandler instance
     """
     from ..structured_logging import emit_structured_log
-    from .server import _invalidate_runs_list_cache, _persist_batch_execution_history_to_ui_index, _refresh_diagnostic_pack_latest
+    from .server_execution_side_effects import (
+        _invalidate_runs_list_cache,
+        _persist_batch_execution_history_to_ui_index,
+        _refresh_diagnostic_pack_latest,
+    )
     from .server_shared import _validate_json_mutation_request
 
     # Validate Content-Type and request size, parse JSON body
