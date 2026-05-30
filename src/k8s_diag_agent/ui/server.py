@@ -94,7 +94,11 @@ from .server_runtime import (  # noqa: E402, F401
     _is_exposed_host,
     start_ui_server,
 )
-from .server_shared import _compute_health_root
+from .server_shared import (  # noqa: E402, F401
+    _compute_health_root,
+    _normalize_runs_dir,
+    _validate_runs_dir,
+)
 from .server_singleflight import (  # noqa: E402, F401
     _notifications_cache,
     _notifications_cache_lock,
