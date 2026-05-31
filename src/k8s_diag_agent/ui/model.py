@@ -107,9 +107,9 @@ from .model_next_check_execution import (  # noqa: F401 - re-exported for import
     _build_execution_history_view,
 )
 
-# Backward-compatibility aliases: _build_orphaned_approval_view and _build_outcome_count_view
-# are re-exported from model_next_check_plan.py so that callers who import these builders
-# from model.py continue to work.
+# Backward-compatibility aliases: _build_orphaned_approval_view, _build_outcome_count_view,
+# and _build_next_check_plan_view are re-exported from model_next_check_plan.py so that
+# callers who import these builders from model.py continue to work.
 # noqa: F401 - re-exported from model_next_check_plan.py
 from .model_next_check_plan import (  # noqa: F401 - re-exported for import compatibility
     NextCheckCandidateView,
@@ -117,6 +117,7 @@ from .model_next_check_plan import (  # noqa: F401 - re-exported for import comp
     NextCheckOutcomeCountView,
     NextCheckPlanView,
     _build_next_check_candidate_view_from_plan,
+    _build_next_check_plan_view,
     _build_orphaned_approval_view,  # noqa: F401
     _build_outcome_count_view,  # noqa: F401
 )
@@ -410,42 +411,6 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
 
 # _build_diagnostic_pack_review_view and _build_diagnostic_pack_view are re-exported from
 # model_diagnostic_pack.py for import compatibility.
-
-
-def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
-    if not isinstance(raw, Mapping):
-        return None
-    candidates_raw = raw.get("candidates") or ()
-    candidates = tuple(
-        _build_next_check_candidate_view(entry)
-        for entry in candidates_raw
-        if isinstance(entry, Mapping)
-    )
-    orphaned_raw = raw.get("orphanedApprovals") or ()
-    orphaned = tuple(
-        _build_orphaned_approval_view(entry)
-        for entry in orphaned_raw
-        if isinstance(entry, Mapping)
-    )
-    outcome_counts_raw = raw.get("outcomeCounts") or ()
-    outcome_counts = tuple(
-        _build_outcome_count_view(entry)
-        for entry in outcome_counts_raw
-        if isinstance(entry, Mapping)
-    )
-    orphaned_count = _coerce_int(raw.get("orphanedApprovalCount"))
-    return NextCheckPlanView(
-        status=_coerce_str(raw.get("status")),
-        summary=_coerce_optional_str(raw.get("summary")),
-        artifact_path=_coerce_optional_str(raw.get("artifactPath")),
-        review_path=_coerce_optional_str(raw.get("reviewPath")),
-        enrichment_artifact_path=_coerce_optional_str(raw.get("enrichmentArtifactPath")),
-        candidate_count=_coerce_int(raw.get("candidateCount")),
-        candidates=candidates,
-        orphaned_approvals=orphaned,
-        outcome_counts=outcome_counts,
-        orphaned_approval_count=orphaned_count,
-    )
 
 
 def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:

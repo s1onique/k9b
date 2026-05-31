@@ -157,12 +157,20 @@ def _build_next_check_plan_view(raw: object | None) -> NextCheckPlanView | None:
     Returns None for non-Mapping input to signal missing plan.
     Silently skips non-Mapping entries in candidates/orphaned/outcome lists.
     Handles both camelCase keys (from planner artifacts) and snake_case variants.
+
+    This function uses the full _build_next_check_candidate_view from model.py
+    which derives priority_rationale and ranking_reason via ui_planner_queue helpers.
     """
+    # Import here to avoid circular dependency at module level.
+    # model_next_check_plan.py imports from model.py, but model.py imports from
+    # model_next_check_plan.py, so this is deferred until function call time.
+    from .model import _build_next_check_candidate_view
+
     if not isinstance(raw, Mapping):
         return None
     candidates_raw = raw.get("candidates") or raw.get("candidates") or ()
     candidates = tuple(
-        _build_next_check_candidate_view_from_plan(entry)
+        _build_next_check_candidate_view(entry)
         for entry in candidates_raw
         if isinstance(entry, Mapping)
     )
@@ -200,7 +208,8 @@ def _build_next_check_candidate_view_from_plan(raw: Mapping[str, object]) -> Nex
 
     This is a simplified builder for use in plan views. It does NOT include
     priority_rationale or ranking_reason derivation (those require ui_planner_queue).
-    The full builder with ranking reason/priority rationale remains in model.py.
+    The full builder with ranking reason/priority rationale is _build_next_check_candidate_view
+    in model.py.
 
     Handles both camelCase keys (from planner artifacts) and snake_case variants.
     """
