@@ -59,9 +59,9 @@ __all__ = [
     "NotificationDetail",  # noqa: F401 - re-exported
     "NotificationEntry",  # noqa: F401 - re-exported
     "NotificationsPayload",  # noqa: F401 - re-exported
-    # Remaining contracts
-    "FreshnessPayload",
-    "RunStatsPayload",
+    # Fleet status contracts (moved to api_payloads_fleet.py)
+    "FreshnessPayload",  # noqa: F401 - re-exported
+    "RunStatsPayload",  # noqa: F401 - re-exported
     # LLM/provider activity contracts (moved to api_payloads_llm.py)
     "LLMActivityEntryPayload",  # noqa: F401 - re-exported
     "LLMActivityPayload",  # noqa: F401 - re-exported
@@ -89,10 +89,10 @@ __all__ = [
     "LifecycleEntry",  # noqa: F401 - re-exported
     "ProposalEntry",  # noqa: F401 - re-exported
     "ProposalsPayload",  # noqa: F401 - re-exported
-    # Fleet status contracts (remain in api_payloads.py)
-    "FleetStatusPayload",
-    "ClusterSummaryPayload",
-    "FleetPayload",
+    # Fleet status contracts (moved to api_payloads_fleet.py)
+    "FleetStatusPayload",  # noqa: F401 - re-exported
+    "ClusterSummaryPayload",  # noqa: F401 - re-exported
+    "FleetPayload",  # noqa: F401 - re-exported
     "FindingEntry",
     "HypothesisEntry",
     "NextCheckEntry",
@@ -138,6 +138,13 @@ from .api_payloads_diagnostics import (  # noqa: F401 - re-exported for backward
     DrilldownCoveragePayload,
     DrilldownInterpretationPayload,
     DrilldownSummaryPayload,
+)
+from .api_payloads_fleet import (  # noqa: F401 - re-exported for backward compatibility
+    ClusterSummaryPayload,
+    FleetPayload,
+    FleetStatusPayload,
+    FreshnessPayload,
+    RunStatsPayload,
 )
 from .api_payloads_llm import (  # noqa: F401 - re-exported for backward compatibility
     AutoDrilldownPolicyPayload,
@@ -209,27 +216,8 @@ from .api_payloads_vmalert import (  # noqa: F401 - re-exported for backward com
     VmalertSourcesPayload,
 )
 
-# Next-check contracts are re-exported from api_payloads_next_checks.py
+# Fleet status contracts are re-exported from api_payloads_fleet.py
 # (see imports above). The actual definitions live in that module.
-
-
-class FreshnessPayload(TypedDict, total=False):
-    """Payload for run freshness indicator."""
-
-    ageSeconds: int | None
-    expectedIntervalSeconds: int | None
-    status: str | None
-
-
-class RunStatsPayload(TypedDict):
-    """Payload for run statistics."""
-
-    lastRunDurationSeconds: int | None
-    totalRuns: int
-    p50RunDurationSeconds: int | None
-    p95RunDurationSeconds: int | None
-    p99RunDurationSeconds: int | None
-
 
 # LLM/provider activity contracts are re-exported from api_payloads_llm.py
 # (see imports above). The actual definitions live in that module.
@@ -245,45 +233,6 @@ class RunStatsPayload(TypedDict):
 
 # Proposal/lifecycle contracts are re-exported from api_payloads_proposals.py
 # (see imports above). The actual definitions live in that module.
-
-
-class FleetStatusPayload(TypedDict):
-    """Payload for fleet-level status summary."""
-
-    ratingCounts: list[RatingCount]
-    degradedClusters: list[str]
-
-
-class ClusterSummaryPayload(TypedDict):
-    """Payload for cluster summary in fleet view."""
-
-    label: str
-    context: str
-    clusterClass: str
-    clusterRole: str
-    baselineCohort: str
-    controlPlaneVersion: str
-    healthRating: str
-    warnings: int
-    nonRunningPods: int
-    latestRunTimestamp: str
-    topTriggerReason: str | None
-    drilldownAvailable: bool
-    drilldownTimestamp: str | None
-    missingEvidence: list[str]
-
-
-class FleetPayload(TypedDict):
-    """Payload for the fleet overview response."""
-
-    runId: str
-    runLabel: str
-    lastRunTimestamp: str
-    topProblem: ProblemSummary
-    fleetStatus: FleetStatusPayload
-    clusters: list[ClusterSummaryPayload]
-    proposalSummary: ProposalSummaryPayload
-
 
 # Notification contracts are re-exported from api_payloads_notifications.py
 # (see imports above). The actual definitions live in that module.
