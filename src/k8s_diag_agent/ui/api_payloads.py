@@ -49,6 +49,12 @@ __all__ = [
     "NextCheckOutcomeCountPayload",  # noqa: F401 - re-exported
     "NextCheckPlanPayload",  # noqa: F401 - re-exported
     "PlannerAvailabilityPayload",  # noqa: F401 - re-exported
+    # Review/enrichment contracts (moved to api_payloads_review.py)
+    "AlertmanagerEvidenceReferencePayload",  # noqa: F401 - re-exported
+    "ReviewEnrichmentPayload",  # noqa: F401 - re-exported
+    "ReviewEnrichmentStatusPayload",  # noqa: F401 - re-exported
+    "DiagnosticPackReviewCandidatePayload",  # noqa: F401 - re-exported
+    "DiagnosticPackReviewPayload",  # noqa: F401 - re-exported
     # Remaining contracts
     "FreshnessPayload",
     "RunStatsPayload",
@@ -59,11 +65,6 @@ __all__ = [
     "LLMActivityEntryPayload",
     "LLMActivitySummaryPayload",
     "LLMActivityPayload",
-    "AlertmanagerEvidenceReferencePayload",
-    "ReviewEnrichmentPayload",
-    "ReviewEnrichmentStatusPayload",
-    "DiagnosticPackReviewCandidatePayload",
-    "DiagnosticPackReviewPayload",
     "DiagnosticPackPayload",
     "ClusterAlertSummaryPayload",
     "AlertmanagerCompactPayload",
@@ -136,6 +137,13 @@ from .api_payloads_next_checks import (  # noqa: F401 - re-exported for backward
     NextCheckQueueItemPayload,
     PlannerAvailabilityPayload,
     StalenessClass,
+)
+from .api_payloads_review import (  # noqa: F401 - re-exported for backward compatibility
+    AlertmanagerEvidenceReferencePayload,
+    DiagnosticPackReviewCandidatePayload,
+    DiagnosticPackReviewPayload,
+    ReviewEnrichmentPayload,
+    ReviewEnrichmentStatusPayload,
 )
 from .api_payloads_runs import (  # noqa: F401 - re-exported for backward compatibility
     BatchExecutionSummary,
@@ -250,72 +258,6 @@ class LLMActivityPayload(TypedDict):
 
     entries: list[LLMActivityEntryPayload]
     summary: LLMActivitySummaryPayload
-
-
-class AlertmanagerEvidenceReferencePayload(TypedDict, total=False):
-    """Payload for an Alertmanager evidence reference in review enrichment."""
-
-    cluster: str
-    matchedDimensions: list[str]
-    reason: str
-    usedFor: str
-
-
-class ReviewEnrichmentPayload(TypedDict, total=False):
-    """Payload for review enrichment data."""
-
-    status: str
-    provider: str | None
-    timestamp: str | None
-    summary: str | None
-    triageOrder: list[str]
-    topConcerns: list[str]
-    evidenceGaps: list[str]
-    nextChecks: list[str]
-    focusNotes: list[str]
-    alertmanagerEvidenceReferences: list[AlertmanagerEvidenceReferencePayload] | None
-    artifactPath: str | None
-    errorSummary: str | None
-    skipReason: str | None
-
-
-class ReviewEnrichmentStatusPayload(TypedDict, total=False):
-    """Payload for review enrichment status."""
-
-    status: str
-    reason: str | None
-    provider: str | None
-    policyEnabled: bool
-    providerConfigured: bool
-    adapterAvailable: bool | None
-    runEnabled: bool | None
-    runProvider: str | None
-
-
-class DiagnosticPackReviewCandidatePayload(TypedDict, total=False):
-    """Payload for a single diagnostic-pack review candidate."""
-
-    providerReview: dict[str, object] | None
-
-
-class DiagnosticPackReviewPayload(TypedDict, total=False):
-    """Payload for diagnostic-pack review summary."""
-
-    timestamp: str | None
-    summary: str | None
-    majorDisagreements: list[str]
-    missingChecks: list[str]
-    rankingIssues: list[str]
-    genericChecks: list[str]
-    recommendedNextActions: list[str]
-    driftMisprioritized: bool
-    confidence: str | None
-    providerStatus: str | None
-    providerSummary: str | None
-    providerErrorSummary: str | None
-    providerSkipReason: str | None
-    providerReview: dict[str, object] | None
-    artifactPath: str | None
 
 
 class DiagnosticPackPayload(TypedDict, total=False):
