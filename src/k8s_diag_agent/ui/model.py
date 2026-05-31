@@ -71,7 +71,6 @@ from .model_external_analysis import (  # noqa: F401 - re-exported for import co
 from .model_feedback import (
     FeedbackAdaptationProvenanceView,  # noqa: F401 - re-exported for import compatibility
     FeedbackSummaryView,  # noqa: F401 - re-exported for import compatibility
-    _build_feedback_adaptation_provenance_view,
     _build_feedback_summary_view,  # noqa: F401 - re-exported for import compatibility
 )
 from .model_fleet import (  # noqa: F401 - re-exported for import compatibility
@@ -102,14 +101,20 @@ from .model_llm_stats import (  # noqa: F401 - re-exported for import compatibil
     _build_llm_stats_view,
     _build_optional_llm_stats_view,
 )
+
+# noqa: F401 - re-exported for backward compatibility
+from .model_next_check_candidate import (  # noqa: F401
+    _build_next_check_candidate_view,
+)
 from .model_next_check_execution import (  # noqa: F401 - re-exported for import compatibility
     NextCheckExecutionHistoryEntryView,
     _build_execution_history_view,
 )
 
 # Backward-compatibility aliases: _build_orphaned_approval_view, _build_outcome_count_view,
-# and _build_next_check_plan_view are re-exported from model_next_check_plan.py so that
-# callers who import these builders from model.py continue to work.
+# _build_next_check_plan_view are re-exported from model_next_check_plan.py and
+# _build_next_check_candidate_view is re-exported from model_next_check_candidate.py
+# so that callers who import these builders from model.py continue to work.
 # noqa: F401 - re-exported from model_next_check_plan.py
 from .model_next_check_plan import (  # noqa: F401 - re-exported for import compatibility
     NextCheckCandidateView,
@@ -140,7 +145,6 @@ from .model_primitives import (
     _coerce_int,
     _coerce_optional_bool,  # noqa: F401 - re-exported for test compatibility
     _coerce_optional_int,
-    _coerce_optional_str,
     _coerce_sequence,  # noqa: F401 - re-exported for test compatibility
     _coerce_str,
     _coerce_str_tuple,  # noqa: F401 - re-exported for test compatibility
@@ -408,58 +412,6 @@ def build_ui_context(index: Mapping[str, object]) -> UIIndexContext:
 # LLMPolicyView, AutoDrilldownPolicyView, ProviderExecutionBranchView, ProviderExecutionView,
 # _build_llm_policy_view, _build_auto_drilldown_policy_view, _build_provider_execution_view,
 # and _build_execution_branch_view are re-exported from model_llm_policy.py for import compatibility.
-
-# _build_diagnostic_pack_review_view and _build_diagnostic_pack_view are re-exported from
-# model_diagnostic_pack.py for import compatibility.
-
-
-def _build_next_check_candidate_view(raw: Mapping[str, object]) -> NextCheckCandidateView:
-    # Import here to avoid circular dependency at module level
-    from ..health.ui_planner_queue import _derive_priority_rationale, _derive_ranking_reason
-
-    provenance_raw = raw.get("alertmanagerProvenance") or raw.get("alertmanager_provenance")
-    provenance = _build_alertmanager_provenance_view(provenance_raw)
-    feedback_provenance_raw = raw.get("feedbackAdaptationProvenance") or raw.get("feedback_adaptation_provenance")
-    feedback_provenance = _build_feedback_adaptation_provenance_view(feedback_provenance_raw)
-
-    return NextCheckCandidateView(
-        alertmanager_provenance=provenance,
-        feedback_adaptation_provenance=feedback_provenance,
-        candidate_id=_coerce_optional_str(raw.get("candidateId")),
-        description=_coerce_str(raw.get("description")),
-        target_cluster=_coerce_optional_str(raw.get("targetCluster")),
-        source_reason=_coerce_optional_str(raw.get("sourceReason")),
-        expected_signal=_coerce_optional_str(raw.get("expectedSignal")),
-        suggested_command_family=_coerce_optional_str(raw.get("suggestedCommandFamily")),
-        safe_to_automate=bool(raw.get("safeToAutomate")),
-        requires_operator_approval=bool(raw.get("requiresOperatorApproval")),
-        risk_level=_coerce_str(raw.get("riskLevel")),
-        estimated_cost=_coerce_str(raw.get("estimatedCost")),
-        confidence=_coerce_str(raw.get("confidence")),
-        gating_reason=_coerce_optional_str(raw.get("gatingReason")),
-        duplicate_of_existing_evidence=bool(raw.get("duplicateOfExistingEvidence")),
-        duplicate_evidence_description=_coerce_optional_str(
-            raw.get("duplicateEvidenceDescription")
-        ),
-        approval_status=_coerce_optional_str(raw.get("approvalStatus")),
-        approval_artifact_path=_coerce_optional_str(raw.get("approvalArtifactPath")),
-        approval_timestamp=_coerce_optional_str(raw.get("approvalTimestamp")),
-        candidate_index=_coerce_optional_int(raw.get("candidateIndex")),
-        normalization_reason=_coerce_optional_str(raw.get("normalizationReason")),
-        safety_reason=_coerce_optional_str(raw.get("safetyReason")),
-        approval_reason=_coerce_optional_str(raw.get("approvalReason")),
-        duplicate_reason=_coerce_optional_str(raw.get("duplicateReason")),
-        blocking_reason=_coerce_optional_str(raw.get("blockingReason")),
-        approval_state=_coerce_optional_str(raw.get("approvalState")),
-        execution_state=_coerce_optional_str(raw.get("executionState")),
-        outcome_status=_coerce_optional_str(raw.get("outcomeStatus")),
-        latest_artifact_path=_coerce_optional_str(raw.get("latestArtifactPath")),
-        latest_timestamp=_coerce_optional_str(raw.get("latestTimestamp")),
-        priority_label=_coerce_optional_str(raw.get("priorityLabel")),
-        priority_rationale=_derive_priority_rationale(raw),
-        ranking_reason=_derive_ranking_reason(raw),
-    )
-
 
 # _build_external_analysis_view is re-exported from model_external_analysis.py.
 
