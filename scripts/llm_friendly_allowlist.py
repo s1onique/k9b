@@ -164,7 +164,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/health/ui_next_check_execution.py", "[EXTRACTION] UI execution - complex extraction"),
     ("src/k8s_diag_agent/security/anonymizer.py", "[EXTRACTION] Anonymizer - complex extraction"),
     ("src/k8s_diag_agent/ui/model.py", "[EXTRACTION] UI model - complex extraction"),
-    # notifications.py extracted to notifications_loaders.py + notifications_payloads.py (2026-05-31)
 
     # [TEST FIXTURES] Additional test fixture files
     ("tests/fixtures/incident_report_cross_cluster_fixtures.py", "[TEST] Cross-cluster fixtures - large data"),
