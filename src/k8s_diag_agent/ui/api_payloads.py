@@ -19,12 +19,37 @@ Extraction rationale:
 
 from __future__ import annotations
 
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, TypedDict
 
 __all__ = [
+    # Shared primitives
     "ArtifactLink",
     "ProblemSummary",
-    "NextCheckExecutionHistoryEntry",
+    # Runs-list contracts (moved to api_payloads_runs.py)
+    "BatchExecutionSummary",  # noqa: F401 - re-exported
+    "RunsListEntry",  # noqa: F401 - re-exported
+    "RunsListPayload",  # noqa: F401 - re-exported
+    "RunsListTimings",  # noqa: F401 - re-exported
+    # Next-check contracts (moved to api_payloads_next_checks.py)
+    "NextCheckExecutionHistoryEntry",  # noqa: F401 - re-exported
+    "AdaptationEffect",  # noqa: F401 - re-exported
+    "StalenessClass",  # noqa: F401 - re-exported
+    "FeedbackSummaryPayload",  # noqa: F401 - re-exported
+    "FeedbackAdaptationProvenancePayload",  # noqa: F401 - re-exported
+    "AlertmanagerProvenancePayload",  # noqa: F401 - re-exported
+    "NextCheckCandidatePayload",  # noqa: F401 - re-exported
+    "NextCheckQueueItemPayload",  # noqa: F401 - re-exported
+    "NextCheckQueueCandidateAccountingPayload",  # noqa: F401 - re-exported
+    "NextCheckQueueClusterStatePayload",  # noqa: F401 - re-exported
+    "NextCheckQueueExplanationPayload",  # noqa: F401 - re-exported
+    "DeterministicNextCheckSummaryPayload",  # noqa: F401 - re-exported
+    "DeterministicNextCheckClusterPayload",  # noqa: F401 - re-exported
+    "DeterministicNextChecksPayload",  # noqa: F401 - re-exported
+    "NextCheckOrphanedApprovalPayload",  # noqa: F401 - re-exported
+    "NextCheckOutcomeCountPayload",  # noqa: F401 - re-exported
+    "NextCheckPlanPayload",  # noqa: F401 - re-exported
+    "PlannerAvailabilityPayload",  # noqa: F401 - re-exported
+    # Remaining contracts
     "FreshnessPayload",
     "RunStatsPayload",
     "LLMProviderEntry",
@@ -36,23 +61,6 @@ __all__ = [
     "LLMActivityPayload",
     "AlertmanagerEvidenceReferencePayload",
     "ReviewEnrichmentPayload",
-    "FeedbackSummaryPayload",
-    "AdaptationEffect",
-    "FeedbackAdaptationProvenancePayload",
-    "StalenessClass",
-    "AlertmanagerProvenancePayload",
-    "NextCheckCandidatePayload",
-    "NextCheckQueueItemPayload",
-    "NextCheckQueueCandidateAccountingPayload",
-    "NextCheckQueueClusterStatePayload",
-    "NextCheckQueueExplanationPayload",
-    "DeterministicNextCheckSummaryPayload",
-    "DeterministicNextCheckClusterPayload",
-    "DeterministicNextChecksPayload",
-    "NextCheckOrphanedApprovalPayload",
-    "NextCheckOutcomeCountPayload",
-    "NextCheckPlanPayload",
-    "PlannerAvailabilityPayload",
     "ReviewEnrichmentStatusPayload",
     "DiagnosticPackReviewCandidatePayload",
     "DiagnosticPackReviewPayload",
@@ -103,14 +111,32 @@ __all__ = [
     "VmalertRuleStateRuleGroupPayload",
     "VmalertRuleStateFetchErrorPayload",
     "RunPayload",
-    # Re-exported from api_payloads_runs for backward compatibility
-    "BatchExecutionSummary",  # noqa: F401 - re-exported
-    "RunsListEntry",  # noqa: F401 - re-exported
-    "RunsListPayload",  # noqa: F401 - re-exported
-    "RunsListTimings",  # noqa: F401 - re-exported
 ]
 
-# === Runs-list contracts moved to api_payloads_runs.py ===
+# === Re-exports for backward compatibility ===
+
+# Runs-list contracts (moved to api_payloads_runs.py)
+# Next-check contracts (moved to api_payloads_next_checks.py)
+from .api_payloads_next_checks import (  # noqa: F401 - re-exported for backward compatibility
+    AdaptationEffect,
+    AlertmanagerProvenancePayload,
+    DeterministicNextCheckClusterPayload,
+    DeterministicNextChecksPayload,
+    DeterministicNextCheckSummaryPayload,
+    FeedbackAdaptationProvenancePayload,
+    FeedbackSummaryPayload,
+    NextCheckCandidatePayload,
+    NextCheckExecutionHistoryEntry,
+    NextCheckOrphanedApprovalPayload,
+    NextCheckOutcomeCountPayload,
+    NextCheckPlanPayload,
+    NextCheckQueueCandidateAccountingPayload,
+    NextCheckQueueClusterStatePayload,
+    NextCheckQueueExplanationPayload,
+    NextCheckQueueItemPayload,
+    PlannerAvailabilityPayload,
+    StalenessClass,
+)
 from .api_payloads_runs import (  # noqa: F401 - re-exported for backward compatibility
     BatchExecutionSummary,
     RunsListEntry,
@@ -133,43 +159,8 @@ class ProblemSummary(TypedDict):
     detail: str
 
 
-class NextCheckExecutionHistoryEntry(TypedDict, total=False):
-    """Payload for a single next-check execution history entry."""
-
-    timestamp: str
-    clusterLabel: str | None
-    candidateDescription: str | None
-    commandFamily: str | None
-    status: str
-    durationMs: int | None
-    artifactPath: str | None
-    timedOut: bool | None
-    stdoutTruncated: bool | None
-    stderrTruncated: bool | None
-    outputBytesCaptured: int | None
-    packRefreshStatus: str | None
-    packRefreshWarning: str | None
-    failureClass: str | None
-    failureSummary: str | None
-    suggestedNextOperatorMove: str | None
-    resultClass: str | None
-    resultSummary: str | None
-    usefulnessClass: str | None
-    usefulnessSummary: str | None
-    # Provenance fields for traceability
-    candidateId: str | None
-    candidateIndex: int | None
-    # Alertmanager provenance and relevance judgment
-    alertmanagerProvenance: dict[str, object] | None
-    alertmanagerRelevance: str | None
-    alertmanagerRelevanceSummary: str | None
-    # Artifact identity for immutability traceability
-    artifactId: str | None
-    # Usefulness review artifact identity fields
-    usefulnessArtifactId: str | None
-    usefulnessArtifactPath: str | None
-    usefulnessReviewedAt: str | None
-
+# Next-check contracts are re-exported from api_payloads_next_checks.py
+# (see imports above). The actual definitions live in that module.
 
 class FreshnessPayload(TypedDict, total=False):
     """Payload for run freshness indicator."""
@@ -286,269 +277,6 @@ class ReviewEnrichmentPayload(TypedDict, total=False):
     artifactPath: str | None
     errorSummary: str | None
     skipReason: str | None
-
-
-class FeedbackSummaryPayload(TypedDict):
-    """Structured payload for feedback summary in provenance display."""
-
-    totalEntries: int
-    namespacesWithFeedback: list[str]
-    clustersWithFeedback: list[str]
-    servicesWithFeedback: list[str]
-
-
-# Adaptation effect taxonomy for feedback provenance
-# These describe what changed in the diagnosis or worklist because of execution feedback
-AdaptationEffect = Literal[
-    "hypothesis_strengthened",
-    "hypothesis_weakened",
-    "unknown_resolved",
-    "recommendation_promoted",
-    "recommendation_deprioritized",
-    "no_material_change",
-]
-
-
-# Staleness class taxonomy for temporal context
-# Derivation rules:
-# - fresh: < 5 minutes since first recommendation
-# - aging: 5-30 minutes since first recommendation
-# - stale: > 30 minutes since first recommendation
-# - unknown: timing data insufficient
-StalenessClass = Literal["fresh", "aging", "stale", "unknown"]
-
-
-class FeedbackAdaptationProvenancePayload(TypedDict, total=False):
-    """Payload for feedback adaptation provenance data on next-check candidates/queue items.
-
-    Surfaces what execution feedback changed in the diagnosis and operator worklist,
-    so operators can understand how completed checks affected the system's current
-    understanding and next recommendations.
-
-    Adaptation effects are derived-only (stateless) from execution results and
-    usefulness feedback. They do not introduce new persistence; they are projections
-    from existing execution history and usefulness feedback artifacts.
-
-    Contract invariants:
-    - adaptationEffect is present when feedbackAdaptation is True
-    - adaptationSummary is concise and operator-readable
-    - no_material_change is used for noisy/inconclusive executions
-    - adaptation does not overclaim causality from execution feedback
-    """
-
-    feedbackAdaptation: bool
-    adaptationReason: str | None
-    adaptationEffect: AdaptationEffect | None
-    adaptationSummary: str | None  # Concise operator-readable description of what changed
-    originalBonus: int
-    suppressedBonus: int
-    penaltyApplied: int
-    explanation: str | None
-    feedbackSummary: FeedbackSummaryPayload | None
-
-
-class AlertmanagerProvenancePayload(TypedDict, total=False):
-    """Payload for alertmanager provenance data on next-check candidates/queue items."""
-
-    matchedDimensions: list[str]
-    matchedValues: dict[str, list[str]]
-    appliedBonus: int
-    baseBonus: int
-    severitySummary: dict[str, int] | None
-    signalStatus: str | None
-
-
-class NextCheckCandidatePayload(TypedDict, total=False):
-    """Payload for a next-check candidate."""
-
-    description: str
-    targetCluster: str | None
-    sourceReason: str | None
-    expectedSignal: str | None
-    suggestedCommandFamily: str | None
-    safeToAutomate: bool
-    requiresOperatorApproval: bool
-    riskLevel: str
-    estimatedCost: str
-    confidence: str
-    priorityLabel: str | None
-    gatingReason: str | None
-    duplicateOfExistingEvidence: bool
-    duplicateEvidenceDescription: str | None
-    normalizationReason: str | None
-    safetyReason: str | None
-    approvalReason: str | None
-    duplicateReason: str | None
-    blockingReason: str | None
-    approvalStatus: str | None
-    approvalArtifactPath: str | None
-    approvalTimestamp: str | None
-    approvalState: str | None
-    executionState: str | None
-    outcomeStatus: str | None
-    latestArtifactPath: str | None
-    latestTimestamp: str | None
-    candidateId: str | None
-    candidateIndex: int | None
-    targetContext: str | None
-    commandPreview: str | None
-    priorityRationale: str | None
-    rankingReason: str | None
-
-    alertmanagerProvenance: AlertmanagerProvenancePayload | None
-    feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
-
-
-class NextCheckQueueItemPayload(TypedDict, total=False):
-    """Payload for a next-check queue item."""
-
-    candidateId: str | None
-    candidateIndex: int | None
-    description: str
-    targetCluster: str | None
-    priorityLabel: str | None
-    suggestedCommandFamily: str | None
-    safeToAutomate: bool
-    requiresOperatorApproval: bool
-    approvalState: str | None
-    executionState: str | None
-    outcomeStatus: str | None
-    latestArtifactPath: str | None
-    queueStatus: str
-    sourceReason: str | None
-    expectedSignal: str | None
-    normalizationReason: str | None
-    safetyReason: str | None
-    approvalReason: str | None
-    duplicateReason: str | None
-    blockingReason: str | None
-    targetContext: str | None
-    commandPreview: str | None
-    planArtifactPath: str | None
-    sourceType: str | None
-    failureClass: str | None
-    failureSummary: str | None
-    suggestedNextOperatorMove: str | None
-    resultClass: str | None
-    resultSummary: str | None
-    workstream: str | None
-    alertmanagerProvenance: AlertmanagerProvenancePayload | None
-    feedbackAdaptationProvenance: FeedbackAdaptationProvenancePayload | None
-
-
-class NextCheckQueueCandidateAccountingPayload(TypedDict):
-    """Payload for queue candidate accounting summary."""
-
-    generated: int
-    safe: int
-    approvalNeeded: int
-    duplicate: int
-    completed: int
-    staleOrphaned: int
-    orphanedApprovals: int
-
-
-class NextCheckQueueClusterStatePayload(TypedDict):
-    """Payload for queue cluster state snapshot."""
-
-    degradedClusterCount: int
-    degradedClusterLabels: list[str]
-    deterministicNextCheckCount: int
-    deterministicClusterCount: int
-    drilldownReadyCount: int
-
-
-class NextCheckQueueExplanationPayload(TypedDict, total=False):
-    """Payload for queue explanation and planner availability context."""
-
-    status: str
-    reason: str | None
-    hint: str | None
-    plannerArtifactPath: str | None
-    clusterState: NextCheckQueueClusterStatePayload
-    candidateAccounting: NextCheckQueueCandidateAccountingPayload
-    deterministicNextChecksAvailable: bool
-    recommendedNextActions: list[str]
-
-
-class DeterministicNextCheckSummaryPayload(TypedDict):
-    """Payload for a single deterministic next-check summary."""
-
-    description: str
-    owner: str
-    method: str
-    evidenceNeeded: list[str]
-    workstream: str
-    urgency: str
-    isPrimaryTriage: bool
-    whyNow: str
-    priorityScore: NotRequired[int | None]
-
-
-class DeterministicNextCheckClusterPayload(TypedDict):
-    """Payload for a cluster's deterministic next-check view."""
-
-    label: str
-    context: str
-    topProblem: str | None
-    deterministicNextCheckCount: int
-    deterministicNextCheckSummaries: list[DeterministicNextCheckSummaryPayload]
-    drilldownAvailable: bool
-    assessmentArtifactPath: str | None
-    drilldownArtifactPath: str | None
-
-
-class DeterministicNextChecksPayload(TypedDict):
-    """Payload for the full deterministic next-check view."""
-
-    clusterCount: int
-    totalNextCheckCount: int
-    clusters: list[DeterministicNextCheckClusterPayload]
-
-
-class NextCheckOrphanedApprovalPayload(TypedDict, total=False):
-    """Payload for an orphaned next-check approval."""
-
-    approvalStatus: str | None
-    candidateId: str | None
-    candidateIndex: int | None
-    candidateDescription: str | None
-    targetCluster: str | None
-    planArtifactPath: str | None
-    approvalArtifactPath: str | None
-    approvalTimestamp: str | None
-
-
-class NextCheckOutcomeCountPayload(TypedDict):
-    """Payload for an outcome count bucket in the next-check plan."""
-
-    status: str
-    count: int
-
-
-class NextCheckPlanPayload(TypedDict, total=False):
-    """Payload for the next-check plan view."""
-
-    status: str
-    summary: str | None
-    artifactPath: str | None
-    reviewPath: str | None
-    enrichmentArtifactPath: str | None
-    candidateCount: int
-    candidates: list[NextCheckCandidatePayload]
-    orphanedApprovals: list[NextCheckOrphanedApprovalPayload]
-    outcomeCounts: list[NextCheckOutcomeCountPayload]
-    orphanedApprovalCount: int
-
-
-class PlannerAvailabilityPayload(TypedDict, total=False):
-    """Payload for planner availability state."""
-
-    status: str
-    reason: str | None
-    hint: str | None
-    artifactPath: str | None
-    nextActionHint: str | None
 
 
 class ReviewEnrichmentStatusPayload(TypedDict, total=False):
