@@ -78,16 +78,17 @@ __all__ = [
     "AlertmanagerCompactPayload",  # noqa: F401 - re-exported
     "AlertmanagerSourcePayload",  # noqa: F401 - re-exported
     "AlertmanagerSourcesPayload",  # noqa: F401 - re-exported
-    # Shared count buckets (used by fleet/proposals)
-    "RatingCount",
-    "StatusCount",
+    # Proposal/lifecycle contracts (moved to api_payloads_proposals.py)
+    "RatingCount",  # noqa: F401 - re-exported
+    "StatusCount",  # noqa: F401 - re-exported
+    "ProposalSummaryPayload",  # noqa: F401 - re-exported
+    "LifecycleEntry",  # noqa: F401 - re-exported
+    "ProposalEntry",  # noqa: F401 - re-exported
+    "ProposalsPayload",  # noqa: F401 - re-exported
+    # Fleet status contracts (remain in api_payloads.py)
     "FleetStatusPayload",
     "ClusterSummaryPayload",
-    "ProposalSummaryPayload",
     "FleetPayload",
-    "LifecycleEntry",
-    "ProposalEntry",
-    "ProposalsPayload",
     "DrilldownCoveragePayload",
     "DrilldownInterpretationPayload",
     "DrilldownSummaryPayload",
@@ -165,6 +166,14 @@ from .api_payloads_notifications import (  # noqa: F401 - re-exported for backwa
     NotificationDetail,
     NotificationEntry,
     NotificationsPayload,
+)
+from .api_payloads_proposals import (  # noqa: F401 - re-exported for backward compatibility
+    LifecycleEntry,
+    ProposalEntry,
+    ProposalsPayload,
+    ProposalSummaryPayload,
+    RatingCount,
+    StatusCount,
 )
 from .api_payloads_review import (  # noqa: F401 - re-exported for backward compatibility
     AlertmanagerEvidenceReferencePayload,
@@ -252,19 +261,8 @@ class DiagnosticPackPayload(TypedDict, total=False):
 # vmalert contracts are re-exported from api_payloads_vmalert.py
 # (see imports above). The actual definitions live in that module.
 
-
-class RatingCount(TypedDict):
-    """A rating count bucket."""
-
-    rating: str
-    count: int
-
-
-class StatusCount(TypedDict):
-    """A status count bucket."""
-
-    status: str
-    count: int
+# Proposal/lifecycle contracts are re-exported from api_payloads_proposals.py
+# (see imports above). The actual definitions live in that module.
 
 
 class FleetStatusPayload(TypedDict):
@@ -293,14 +291,6 @@ class ClusterSummaryPayload(TypedDict):
     missingEvidence: list[str]
 
 
-class ProposalSummaryPayload(TypedDict):
-    """Payload for proposal summary in fleet view."""
-
-    pending: int
-    total: int
-    statusCounts: list[StatusCount]
-
-
 class FleetPayload(TypedDict):
     """Payload for the fleet overview response."""
 
@@ -311,38 +301,6 @@ class FleetPayload(TypedDict):
     fleetStatus: FleetStatusPayload
     clusters: list[ClusterSummaryPayload]
     proposalSummary: ProposalSummaryPayload
-
-
-class LifecycleEntry(TypedDict):
-    """A single lifecycle status entry for a proposal."""
-
-    status: str
-    timestamp: str
-    note: str | None
-
-
-class ProposalEntry(TypedDict):
-    """Payload for a single proposal entry."""
-
-    proposalId: str
-    target: str
-    status: str
-    confidence: str
-    rationale: str
-    expectedBenefit: str
-    sourceRunId: str
-    latestNote: str | None
-    lifecycle: list[LifecycleEntry]
-    artifacts: list[ArtifactLink]
-    # Immutable artifact identity (UUIDv7); None for legacy artifacts
-    artifactId: str | None
-
-
-class ProposalsPayload(TypedDict):
-    """Payload for the proposals list response."""
-
-    statusSummary: list[StatusCount]
-    proposals: list[ProposalEntry]
 
 
 # Notification contracts are re-exported from api_payloads_notifications.py
