@@ -55,6 +55,10 @@ __all__ = [
     "ReviewEnrichmentStatusPayload",  # noqa: F401 - re-exported
     "DiagnosticPackReviewCandidatePayload",  # noqa: F401 - re-exported
     "DiagnosticPackReviewPayload",  # noqa: F401 - re-exported
+    # Notification contracts (moved to api_payloads_notifications.py)
+    "NotificationDetail",  # noqa: F401 - re-exported
+    "NotificationEntry",  # noqa: F401 - re-exported
+    "NotificationsPayload",  # noqa: F401 - re-exported
     # Remaining contracts
     "FreshnessPayload",
     "RunStatsPayload",
@@ -84,9 +88,6 @@ __all__ = [
     "LifecycleEntry",
     "ProposalEntry",
     "ProposalsPayload",
-    "NotificationDetail",
-    "NotificationEntry",
-    "NotificationsPayload",
     "DrilldownCoveragePayload",
     "DrilldownInterpretationPayload",
     "DrilldownSummaryPayload",
@@ -159,6 +160,11 @@ from .api_payloads_next_checks import (  # noqa: F401 - re-exported for backward
     NextCheckQueueItemPayload,
     PlannerAvailabilityPayload,
     StalenessClass,
+)
+from .api_payloads_notifications import (  # noqa: F401 - re-exported for backward compatibility
+    NotificationDetail,
+    NotificationEntry,
+    NotificationsPayload,
 )
 from .api_payloads_review import (  # noqa: F401 - re-exported for backward compatibility
     AlertmanagerEvidenceReferencePayload,
@@ -339,32 +345,8 @@ class ProposalsPayload(TypedDict):
     proposals: list[ProposalEntry]
 
 
-class NotificationDetail(TypedDict):
-    """A key-value detail pair in a notification."""
-
-    label: str
-    value: str
-
-
-class NotificationEntry(TypedDict):
-    """Payload for a single notification entry."""
-
-    kind: str
-    summary: str
-    timestamp: str
-    runId: str | None
-    clusterLabel: str | None
-    context: str | None
-    details: list[NotificationDetail]
-    artifactPath: str | None
-    # Immutable artifact identity (UUIDv7); None for legacy artifacts
-    artifactId: str | None
-
-
-class NotificationsPayload(TypedDict):
-    """Payload for the notifications list response."""
-
-    notifications: list[NotificationEntry]
+# Notification contracts are re-exported from api_payloads_notifications.py
+# (see imports above). The actual definitions live in that module.
 
 
 class DrilldownCoveragePayload(TypedDict):
