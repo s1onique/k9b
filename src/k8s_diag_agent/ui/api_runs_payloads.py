@@ -175,7 +175,9 @@ def build_runs_list(
 
     # === SUPER FAST PATH: No expensive operations needed ===
     if not include_expensive and not include_status and not include_batch_eligibility:
-        return _build_runs_list_super_fast(runs_dir, limit=limit, _timings=_timings)
+        if _timings:
+            return _build_runs_list_super_fast(runs_dir, limit=limit, _timings=True)
+        return _build_runs_list_super_fast(runs_dir, limit=limit, _timings=False)
 
     # === INDEX-BACKED BATCH ELIGIBILITY PATH ===
     if include_batch_eligibility and not include_status and not include_expensive:

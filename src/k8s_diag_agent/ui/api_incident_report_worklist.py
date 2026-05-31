@@ -262,15 +262,15 @@ def _build_operator_worklist_payload(
                 usefulness_summary=usefulness_summary,
                 execution_result_summary=result_summary,
             )
-        first_recommended_at: str | None = None
+        candidate_first_recommended_at: str | None = None
         if hasattr(queue_item, "plan_artifact_timestamp") and queue_item.plan_artifact_timestamp:
-            first_recommended_at = queue_item.plan_artifact_timestamp
-        last_state_changed_at: str | None = None
+            candidate_first_recommended_at = queue_item.plan_artifact_timestamp
+        candidate_last_state_changed_at: str | None = None
         if hasattr(queue_item, "latest_timestamp") and queue_item.latest_timestamp:
-            last_state_changed_at = queue_item.latest_timestamp
+            candidate_last_state_changed_at = queue_item.latest_timestamp
         first_rec, last_change, age_sec, staleness = _derive_temporal_context(
-            first_recommended_at=first_recommended_at,
-            last_state_changed_at=last_state_changed_at,
+            first_recommended_at=candidate_first_recommended_at,
+            last_state_changed_at=candidate_last_state_changed_at,
             current_run_timestamp=run_timestamp,
         )
         items.append({

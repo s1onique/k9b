@@ -1523,6 +1523,7 @@ class RunsListTimings(TypedDict, total=False):
     review_fast_path_failure_json: int
     review_fast_path_failure_missing_field: int
     review_fast_path_failure_other: int
+    review_fast_path_other: int  # Non-failure other count for telemetry restoration
     # Stage 2 sub-stages (breakdown of execution_artifacts_glob_ms)
     execution_glob_only_ms: float
     execution_parse_ms: float

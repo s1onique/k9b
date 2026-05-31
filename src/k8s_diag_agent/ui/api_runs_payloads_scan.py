@@ -234,7 +234,8 @@ def build_runs_list_scan_stage(
     entries_to_build = sorted_entries[:rows_to_return] if limit is not None else sorted_entries
 
     for entry in entries_to_build:
-        run_id = entry["run_id"]
+        raw_run_id = entry["run_id"]
+        run_id = raw_run_id if isinstance(raw_run_id, str) else ""
 
         row_start = time.perf_counter()
         execution_count = cast(int, entry.get("execution_count", 0))
