@@ -161,7 +161,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/external_analysis/alertmanager_durable_learning.py", "[EXTRACTION] Durable learning - complex extraction"),
     ("src/k8s_diag_agent/external_analysis/alertmanager_source_registry.py", "[EXTRACTION] Alertmanager registry - complex extraction"),
     ("src/k8s_diag_agent/external_analysis/vmalert_rule_state.py", "[EXTRACTION] vmalert rule state - complex extraction"),
-    # ui_next_check_execution.py split into _history (480) and _classification (82); facade now 70 lines
 
     # [TEST FIXTURES] Additional test fixture files
     ("tests/fixtures/incident_report_cross_cluster_fixtures.py", "[TEST] Cross-cluster fixtures - large data"),
