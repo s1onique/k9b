@@ -162,7 +162,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/external_analysis/alertmanager_source_registry.py", "[EXTRACTION] Alertmanager registry - complex extraction"),
     ("src/k8s_diag_agent/external_analysis/vmalert_rule_state.py", "[EXTRACTION] vmalert rule state - complex extraction"),
     ("src/k8s_diag_agent/health/ui_next_check_execution.py", "[EXTRACTION] UI execution - complex extraction"),
-    ("src/k8s_diag_agent/security/anonymizer.py", "[EXTRACTION] Anonymizer - complex extraction"),
 
     # [TEST FIXTURES] Additional test fixture files
     ("tests/fixtures/incident_report_cross_cluster_fixtures.py", "[TEST] Cross-cluster fixtures - large data"),
