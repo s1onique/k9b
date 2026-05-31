@@ -213,4 +213,9 @@ Use this file together with:
 - `AGENTS.md`
 - `.kilocode/rules/00-global.md`
 - `.kilocode/rules/memory-bank/*.md`
-- `docs/doctrine/*`
+- `docs/doctrine/constitution.md` — core foundational governance
+- `docs/doctrine/precedence.md` — conflict resolution
+- `docs/doctrine/seed_rules.md` — operational rule catalog
+- `docs/doctrine/blockstor-derived-rules.md` — Factory review doctrine
+- `docs/doctrine/llm-friendly-files.md` — file size limits
+- `docs/doctrine/path-security-doctrine.md` — path traversal prevention

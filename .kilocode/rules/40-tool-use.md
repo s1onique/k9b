@@ -15,7 +15,14 @@ Use this together with:
 - `.kilocode/rules/30-output-contracts.md`
 - `.kilocode/rules/50-kubernetes-monitoring-domain.md`
 - `.kilocode/rules/memory-bank/*.md`
-- `docs/doctrine/*`
+- `docs/doctrine/constitution.md` — core governance
+- `docs/doctrine/precedence.md` — conflict resolution
+- `docs/doctrine/seed_rules.md` — operational rules
+- `docs/doctrine/path-security-doctrine.md` — path traversal prevention
+- `docs/doctrine/llm-friendly-files.md` — file size limits
+- `docs/doctrine/bug-fossils.md` — bug regression (planned)
+- `docs/doctrine/executable-claims.md` — claim standards (planned)
+- `docs/doctrine/testing-doctrine.md` — test guidance (planned)
 
 ## Default operating posture
 

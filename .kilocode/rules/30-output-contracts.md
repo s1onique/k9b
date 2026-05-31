@@ -8,7 +8,13 @@ Its purpose is to make outputs:
 - operationally useful,
 - and consistent across planning, coding, debugging, and architecture work.
 
-Detailed rationale belongs in `docs/doctrine/`.
+Detailed rationale belongs in:
+- `docs/doctrine/constitution.md` — core governance
+- `docs/doctrine/precedence.md` — conflict resolution
+- `docs/doctrine/seed_rules.md` — operational rules
+- `docs/doctrine/executable-claims.md` — claim standards (planned)
+- `docs/doctrine/operator-path-truth.md` — UI/reporting truth (planned)
+
 Project context belongs in `.kilocode/rules/memory-bank/`.
 
 ## Global output rules

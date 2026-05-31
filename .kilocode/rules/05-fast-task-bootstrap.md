@@ -53,11 +53,70 @@ For routine implementation tasks:
 4. read `docs/data-model.md` only if artifact/UI/API/persistence contracts are involved
 5. do not read `README.md`, doctrine playbooks, or all memory-bank files unless the task specifically needs them
 
+## Task-type bootstrap table
+
+Based on the task type, load additional doctrine before implementing:
+
+### Security-path work (static serving, artifact serving, file downloads, path validation)
+
+If task touches:
+- static file serving
+- artifact serving
+- file downloads
+- path validation
+- user-controlled path segments
+
+Then also read:
+- `docs/doctrine/path-security-doctrine.md`
+- `src/k8s_diag_agent/security/path_validation.py`
+- `tests/test_security_path_validation.py`
+
+Required checks:
+- Run targeted path traversal tests
+- Add regression test for new path boundary
+- Close report must include trust-boundary statement
+
+### Bug fix
+
+If task is a bug fix, also read:
+- `docs/doctrine/bug-fossils.md` (if exists; apply manifest checks and mention missing planned doctrine in close report)
+
+Required checks:
+- Regression test for the bug class exists
+- Root cause documented in test or comment
+
+### UI/reporting work
+
+If task touches:
+- UI claims
+- Report generation
+- Operator conclusions
+
+Then also read:
+- `docs/doctrine/operator-path-truth.md` (if exists; apply manifest checks and mention missing planned doctrine in close report)
+- `docs/doctrine/executable-claims.md` (if exists; apply manifest checks and mention missing planned doctrine in close report)
+
+Required checks:
+- Claims backed by artifacts
+- Uncertainty is explicit
+
+### File creation or large file work
+
+If task creates new files or modifies large files, also read:
+- `docs/doctrine/llm-friendly-files.md`
+
+Required checks:
+- New files < 300 lines (warning threshold)
+- New files < 500 lines (failure threshold)
+- Splitting plan if over threshold
+
 ## Output rule
 
 When implementation finishes, report:
 1. Summary
 2. Files changed
-3. Tests updated
-4. Verification run
-5. Remaining risks / edge cases
+3. Doctrines read (from bootstrap table above)
+4. Tests updated
+5. Verification run
+6. Remaining risks / edge cases
+

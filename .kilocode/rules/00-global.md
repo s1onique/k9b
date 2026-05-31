@@ -12,10 +12,31 @@ Before doing substantial work, consult in this order:
 1. `AGENTS.md`
 2. `.kilocode/rules/00-global.md` (this file)
 3. `.kilocode/rules/20-architecture-doctrine.md`
-4. relevant files under `.kilocode/rules/memory-bank/`
-5. relevant files under `docs/doctrine/`
+4. `.kilocode/rules/05-fast-task-bootstrap.md` (for task-type bootstrap table)
+5. relevant files under `.kilocode/rules/memory-bank/`
+6. relevant files under `docs/doctrine/`
 
 Do not assume the current task is context-free.
+
+## Doctrine system
+
+All canonical doctrines are registered in:
+- `docs/doctrine/manifest.yaml` — canonical doctrine index
+
+Doctrines must be registered in the manifest to be considered "active".
+The manifest also defines task-type bootstrap requirements.
+
+Key doctrines:
+- `constitution.md` — core foundational governance (always)
+- `precedence.md` — conflict resolution (always)
+- `seed_rules.md` — operational rule catalog (always)
+- `blockstor-derived-rules.md` — Factory review doctrine
+- `llm-friendly-files.md` — required for file creation or large file work
+- `path-security-doctrine.md` — required for static/artifact/file-serving work
+- `operator-path-truth.md` — required for UI/reporting work (planned)
+- `executable-claims.md` — required for capability/safety claims (planned)
+- `bug-fossils.md` — required for bug fixes (planned)
+- `testing-doctrine.md` — guides test design (planned)
 
 ## Default posture
 
@@ -107,3 +128,4 @@ Escalate instead of acting confidently when:
 
 Behave like a careful platform engineer building a long-lived Kubernetes diagnostics system:
 truthful, structured, evidence-driven, testable, and biased toward safe evolution.
+

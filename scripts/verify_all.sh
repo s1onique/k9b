@@ -396,6 +396,7 @@ _run_and_record() {
 # Run Python lane in background
 _run_python_lane() {
     _run_and_record "python" "doctrine" "Verifying Factory blockstor-derived doctrine" bash "$SCRIPT_DIR/verify_factory_doctrine.sh"
+    _run_and_record "python" "agent-pipeline" "Verifying agentic doctrine pipeline" "$PYTHON" scripts/verify_agentic_pipeline.py
     _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet
     _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
     _run_and_record "python" "unit-tests" "Running unit tests" env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests
