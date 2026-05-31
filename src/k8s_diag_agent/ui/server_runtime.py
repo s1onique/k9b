@@ -16,7 +16,6 @@ from __future__ import annotations
 import functools
 import sys
 from collections.abc import Callable
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +70,9 @@ def _build_startup_security_message(host: str, port: int, auth_token: str | None
     return messages
 
 
-def start_ui_server(
+def start_ui_server_impl(
+    *,
+    server_factory: type,
     runs_dir: Path,
     host: str = "127.0.0.1",
     port: int = 8080,
@@ -82,6 +83,7 @@ def start_ui_server(
     """Start the UI HTTP server with the given configuration.
 
     Args:
+        server_factory: HTTP server class (e.g., ThreadingHTTPServer) - injected for test mock compatibility
         runs_dir: Directory containing run health data
         host: Host address to bind to (default: 127.0.0.1)
         port: Port to bind to (default: 8080)
@@ -132,7 +134,7 @@ def start_ui_server(
         static_dir=assets,
         auth_token=auth_token,
     )
-    server = ThreadingHTTPServer((host, port), handler)
+    server = server_factory((host, port), handler)
     print(
         f"Operator UI listening on http://{host}:{port}/ (runs: {normalized_runs_dir}, assets: {assets})",
         file=sys.stderr,
@@ -144,6 +146,42 @@ def start_ui_server(
         server.shutdown()
     finally:
         server.server_close()
+
+
+def start_ui_server(
+    runs_dir: Path,
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    static_dir: Path | None = None,
+    unsafe_bind: bool = False,
+    auth_token: str | None = None,
+) -> None:
+    """Start the UI HTTP server with the given configuration.
+
+    This is a compatibility wrapper that injects the default ThreadingHTTPServer.
+    Tests should patch k8s_diag_agent.ui.server.ThreadingHTTPServer before calling
+    this function to intercept server startup.
+
+    Args:
+        runs_dir: Directory containing run health data
+        host: Host address to bind to (default: 127.0.0.1)
+        port: Port to bind to (default: 8080)
+        static_dir: Directory containing static assets (default: frontend/dist)
+        unsafe_bind: Allow binding to non-loopback addresses
+        auth_token: Bearer token for mutation endpoint authentication
+    """
+    # Import here to allow tests to patch server.ThreadingHTTPServer before this runs
+    from .server import ThreadingHTTPServer as _ThreadingHTTPServer
+
+    start_ui_server_impl(
+        server_factory=_ThreadingHTTPServer,
+        runs_dir=runs_dir,
+        host=host,
+        port=port,
+        static_dir=static_dir,
+        unsafe_bind=unsafe_bind,
+        auth_token=auth_token,
+    )
 
 
 def _log_request_access_with_emit(
