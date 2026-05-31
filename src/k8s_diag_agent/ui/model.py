@@ -71,6 +71,7 @@ from .model_external_analysis import (  # noqa: F401 - re-exported for import co
 from .model_feedback import (
     FeedbackAdaptationProvenanceView,  # noqa: F401 - re-exported for import compatibility
     FeedbackSummaryView,  # noqa: F401 - re-exported for import compatibility
+    _build_feedback_adaptation_provenance_view,  # noqa: F401 - re-exported for import compatibility
     _build_feedback_summary_view,  # noqa: F401 - re-exported for import compatibility
 )
 from .model_fleet import (  # noqa: F401 - re-exported for import compatibility
@@ -145,6 +146,7 @@ from .model_primitives import (
     _coerce_int,
     _coerce_optional_bool,  # noqa: F401 - re-exported for test compatibility
     _coerce_optional_int,
+    _coerce_optional_str,  # noqa: F401 - re-exported for test compatibility
     _coerce_sequence,  # noqa: F401 - re-exported for test compatibility
     _coerce_str,
     _coerce_str_tuple,  # noqa: F401 - re-exported for test compatibility
