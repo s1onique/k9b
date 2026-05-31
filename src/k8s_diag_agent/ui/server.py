@@ -105,10 +105,8 @@ from .server_singleflight import (  # noqa: E402, F401
     _notifications_cache_lock,
     _run_payload_cache,
     _run_payload_cache_lock,
-    _single_flight_acquire_impl,
     _single_flight_events,
     _single_flight_lock,
-    _single_flight_release_impl,
     _single_flight_wait,
 )
 
@@ -119,8 +117,10 @@ _MAX_CACHE_ENTRIES = 10
 
 
 # --------------------------------------------------------------------
-# Access-log compatibility wrapper (preserves server.emit_structured_log patch point)
+# Compatibility wrappers (preserve server.emit_structured_log patch point)
 # --------------------------------------------------------------------
+# These live in server.py so tests can mock k8s_diag_agent.ui.server.emit_structured_log.
+# Implementation helpers are in server_compat.py.
 
 
 def _log_request_access(
@@ -142,13 +142,10 @@ def _log_request_access(
     Preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
     for backward compatibility with tests. We access emit_structured_log from the
     module's global namespace at call time, not import time, to allow test mocks to work.
-
-    Similarly, _SLOW_REQUEST_THRESHOLD_MS is passed as a parameter so tests can
-    patch k8s_diag_agent.ui.server._SLOW_REQUEST_THRESHOLD_MS directly.
     """
-    from .server_runtime import _log_request_access_with_emit
+    from .server_compat import _log_request_access_with_emit as _impl
 
-    _log_request_access_with_emit(
+    _impl(
         emit_fn=emit_structured_log,
         slow_request_threshold_ms=_SLOW_REQUEST_THRESHOLD_MS,
         method=method,
@@ -166,11 +163,6 @@ def _log_request_access(
     )
 
 
-# --------------------------------------------------------------------
-# Single-flight compatibility wrappers (inject server.emit_structured_log patch point)
-# --------------------------------------------------------------------
-
-
 def _single_flight_acquire(
     key: str,
     request_path: str = "",
@@ -181,7 +173,9 @@ def _single_flight_acquire(
     This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
     for backward compatibility with tests.
     """
-    return _single_flight_acquire_impl(
+    from .server_compat import _single_flight_acquire_with_emit as _impl
+
+    return _impl(
         emit_fn=emit_structured_log,
         key=key,
         request_path=request_path,
@@ -200,7 +194,9 @@ def _single_flight_release(
     This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log
     for backward compatibility with tests.
     """
-    return _single_flight_release_impl(
+    from .server_compat import _single_flight_release_with_emit as _impl
+
+    return _impl(
         emit_fn=emit_structured_log,
         key=key,
         result=result,
@@ -209,9 +205,9 @@ def _single_flight_release(
     )
 
 
-# NOTE: Single-flight helpers (_single_flight_acquire, _single_flight_release,
-# _single_flight_wait, _single_flight_events, _single_flight_lock) are imported from
-# server_singleflight for backward compatibility. See import section above.
+# NOTE: Single-flight helpers (_single_flight_wait, _single_flight_events,
+# _single_flight_lock) are imported from server_singleflight for backward
+# compatibility. See import section above.
 #
 # NOTE: Run-payload cache (_run_payload_cache, _run_payload_cache_lock) is imported from
 # server_singleflight for backward compatibility. See import section above.
