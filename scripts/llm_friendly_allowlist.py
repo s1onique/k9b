@@ -163,7 +163,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/external_analysis/vmalert_rule_state.py", "[EXTRACTION] vmalert rule state - complex extraction"),
     ("src/k8s_diag_agent/health/ui_next_check_execution.py", "[EXTRACTION] UI execution - complex extraction"),
     ("src/k8s_diag_agent/security/anonymizer.py", "[EXTRACTION] Anonymizer - complex extraction"),
-    # api_debug.py extracted to api_debug_helpers.py (230 lines, below threshold)
     ("src/k8s_diag_agent/ui/model.py", "[EXTRACTION] UI model - complex extraction"),
     ("src/k8s_diag_agent/ui/notifications.py", "[EXTRACTION] Notifications - complex extraction"),
 

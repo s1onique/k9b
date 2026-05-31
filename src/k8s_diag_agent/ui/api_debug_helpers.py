@@ -17,8 +17,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .api import _compute_execution_summary_indexed
-
 
 def _is_debug_enabled() -> bool:
     """Check if debug endpoints are enabled via environment variable.
@@ -209,6 +207,7 @@ def get_worklist_payload(
 
     # Compute execution summary
     if plan_data:
+        from .api import _compute_execution_summary_indexed
         exec_summary = _compute_execution_summary_indexed(plan_data, execution_indices)
         result["execution_summary"] = {
             "totalCandidates": exec_summary["totalCandidates"],
