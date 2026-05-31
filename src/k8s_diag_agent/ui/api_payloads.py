@@ -72,7 +72,11 @@ __all__ = [
     "LLMStatsPayload",  # noqa: F401 - re-exported
     "ProviderExecutionBranchPayload",  # noqa: F401 - re-exported
     "ProviderExecutionPayload",  # noqa: F401 - re-exported
-    "DiagnosticPackPayload",
+    # Diagnostic/drilldown contracts (moved to api_payloads_diagnostics.py)
+    "DiagnosticPackPayload",  # noqa: F401 - re-exported
+    "DrilldownCoveragePayload",  # noqa: F401 - re-exported
+    "DrilldownInterpretationPayload",  # noqa: F401 - re-exported
+    "DrilldownSummaryPayload",  # noqa: F401 - re-exported
     # Alertmanager contracts (moved to api_payloads_alertmanager.py)
     "ClusterAlertSummaryPayload",  # noqa: F401 - re-exported
     "AlertmanagerCompactPayload",  # noqa: F401 - re-exported
@@ -89,9 +93,6 @@ __all__ = [
     "FleetStatusPayload",
     "ClusterSummaryPayload",
     "FleetPayload",
-    "DrilldownCoveragePayload",
-    "DrilldownInterpretationPayload",
-    "DrilldownSummaryPayload",
     "FindingEntry",
     "HypothesisEntry",
     "NextCheckEntry",
@@ -131,6 +132,12 @@ from .api_payloads_alertmanager import (  # noqa: F401 - re-exported for backwar
     AlertmanagerSourcePayload,
     AlertmanagerSourcesPayload,
     ClusterAlertSummaryPayload,
+)
+from .api_payloads_diagnostics import (  # noqa: F401 - re-exported for backward compatibility
+    DiagnosticPackPayload,
+    DrilldownCoveragePayload,
+    DrilldownInterpretationPayload,
+    DrilldownSummaryPayload,
 )
 from .api_payloads_llm import (  # noqa: F401 - re-exported for backward compatibility
     AutoDrilldownPolicyPayload,
@@ -227,24 +234,8 @@ class RunStatsPayload(TypedDict):
 # LLM/provider activity contracts are re-exported from api_payloads_llm.py
 # (see imports above). The actual definitions live in that module.
 
-
-class DiagnosticPackPayload(TypedDict, total=False):
-    """Payload for diagnostic pack metadata."""
-
-    path: str | None
-    timestamp: str | None
-    label: str | None
-    reviewBundlePath: str | None
-    reviewInput14bPath: str | None
-    # Semantic metadata: indicates whether reviewBundlePath/reviewInput14bPath point to
-    # the mutable latest/ mirror (true) or immutable run-scoped artifacts (false).
-    # Consumers should NOT treat isMirror=true paths as immutable references.
-    isMirror: bool | None
-    # Immutable source-of-truth reference: the pack ZIP path that corresponds to
-    # the mirror paths when isMirror=true. Exposed so operators can reference
-    # the exact immutable pack that generated the current mirror content.
-    sourcePackPath: str | None
-
+# Diagnostic/drilldown contracts are re-exported from api_payloads_diagnostics.py
+# (see imports above). The actual definitions live in that module.
 
 # Alertmanager contracts are re-exported from api_payloads_alertmanager.py
 # (see imports above). The actual definitions live in that module.
@@ -296,40 +287,6 @@ class FleetPayload(TypedDict):
 
 # Notification contracts are re-exported from api_payloads_notifications.py
 # (see imports above). The actual definitions live in that module.
-
-
-class DrilldownCoveragePayload(TypedDict):
-    """Payload for drilldown coverage of a single cluster."""
-
-    label: str
-    context: str
-    available: bool
-    timestamp: str | None
-    artifactPath: str | None
-
-
-class DrilldownInterpretationPayload(TypedDict, total=False):
-    """Payload for an auto-interpretation of drilldown data."""
-
-    adapter: str
-    status: str
-    summary: str | None
-    timestamp: str
-    artifactPath: str | None
-    provider: str | None
-    durationMs: int | None
-    payload: dict[str, object] | None
-    errorSummary: str | None
-    skipReason: str | None
-
-
-class DrilldownSummaryPayload(TypedDict):
-    """Payload for drilldown availability summary."""
-
-    totalClusters: int
-    available: int
-    missing: int
-    missingClusters: list[str]
 
 
 class FindingEntry(TypedDict):
