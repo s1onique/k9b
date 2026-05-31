@@ -21,7 +21,10 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from .api_payloads_primitives import ArtifactLink
+
 __all__ = [
+    "ArtifactLink",
     "RatingCount",
     "StatusCount",
     "ProposalSummaryPayload",
@@ -29,17 +32,6 @@ __all__ = [
     "ProposalEntry",
     "ProposalsPayload",
 ]
-
-
-class ArtifactLink(TypedDict):
-    """Shared artifact link in a run or proposal.
-
-    Note: This is duplicated here to avoid circular imports with api_payloads.py.
-    The canonical definition is in api_payloads.ArtifactLink.
-    """
-
-    label: str
-    path: str
 
 
 class RatingCount(TypedDict):

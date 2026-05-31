@@ -22,9 +22,9 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 __all__ = [
-    # Shared primitives
-    "ArtifactLink",
-    "ProblemSummary",
+    # Shared primitives (moved to api_payloads_primitives.py)
+    "ArtifactLink",  # noqa: F401 - re-exported
+    "ProblemSummary",  # noqa: F401 - re-exported
     # Runs-list contracts (moved to api_payloads_runs.py)
     "BatchExecutionSummary",  # noqa: F401 - re-exported
     "RunsListEntry",  # noqa: F401 - re-exported
@@ -123,6 +123,7 @@ __all__ = [
 
 # === Re-exports for backward compatibility ===
 
+# Shared primitives (moved to api_payloads_primitives.py)
 # Runs-list contracts (moved to api_payloads_runs.py)
 # Next-check contracts (moved to api_payloads_next_checks.py)
 from .api_payloads_alertmanager import (  # noqa: F401 - re-exported for backward compatibility
@@ -167,6 +168,10 @@ from .api_payloads_notifications import (  # noqa: F401 - re-exported for backwa
     NotificationEntry,
     NotificationsPayload,
 )
+from .api_payloads_primitives import (  # noqa: F401 - re-exported for backward compatibility
+    ArtifactLink,
+    ProblemSummary,
+)
 from .api_payloads_proposals import (  # noqa: F401 - re-exported for backward compatibility
     LifecycleEntry,
     ProposalEntry,
@@ -197,23 +202,9 @@ from .api_payloads_vmalert import (  # noqa: F401 - re-exported for backward com
     VmalertSourcesPayload,
 )
 
-
-class ArtifactLink(TypedDict):
-    """Shared artifact link in a run or proposal."""
-
-    label: str
-    path: str
-
-
-class ProblemSummary(TypedDict):
-    """Top-problem summary shown in fleet and cluster detail views."""
-
-    title: str
-    detail: str
-
-
 # Next-check contracts are re-exported from api_payloads_next_checks.py
 # (see imports above). The actual definitions live in that module.
+
 
 class FreshnessPayload(TypedDict, total=False):
     """Payload for run freshness indicator."""
@@ -787,4 +778,3 @@ class RunPayload(TypedDict):
     vmalertRuleState: VmalertRuleStatePayload | None
     incidentReport: IncidentReportPayload | None
     operatorWorklist: OperatorWorklistPayload | None
-
