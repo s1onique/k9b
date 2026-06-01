@@ -1,7 +1,7 @@
 # LLM-Friendly Production Burn-Down: Closeout
 
 **Date**: 2026-01-06
-**Status**: COMPLETE
+**Status**: PHASE COMPLETE — HEALTH LOOP EXTRACTION REMAINS
 
 ## Scope
 
@@ -9,7 +9,7 @@ Production Python files under `src/k8s_diag_agent` against the 500-line LLM-frie
 
 ## Result
 
-No production Python file under `src/k8s_diag_agent` exceeds the threshold. The burn-down is complete.
+The focused production burn-down phase is complete for the recently targeted UI, external-analysis, security, and collect modules. The LLM-friendly checker reports 0 failures. Two large health-loop production files remain intentionally allowlisted for future extraction.
 
 ## Remaining Allowlist Categories
 
@@ -33,7 +33,7 @@ Two files legitimately exceed the threshold and are intentionally allowlisted pe
 | `src/k8s_diag_agent/health/loop.py` | 3,345 | `[EXTRACTION]` — extract by concern |
 | `src/k8s_diag_agent/health/loop_scheduler.py` | 743 | `[EXTRACTION]` — compatibility surface remains |
 
-No stale production entries remain in the allowlist. Changelog-only comments have been removed.
+No stale production entries remain in the allowlist. The remaining production entries are intentional health-loop extraction targets. Changelog-only comments have been removed.
 
 ## Stale Entry Removed This Session
 
