@@ -45,6 +45,7 @@ from .loop_alertmanager_port_forward import (
     stop_alertmanager_port_forward,
 )
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
+from .loop_assessment_baseline import assess_baseline_policy
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
 from .loop_comparison_policy import (  # noqa: F401
     BaselineRegistry,  # noqa: F401 - re-exported for backward compatibility
@@ -764,30 +765,19 @@ def build_health_assessment(
             Layer.ROLLOUT,
             [signal.id],
         )
-    control_plane_expectation = baseline.control_plane_expectation
-    if control_plane_expectation and has_control_plane_version and not baseline.is_drift_allowed(BaselineDriftCategory.CONTROL_PLANE_VERSION) and not control_plane_expectation.allows(control_plane_version):
+    baseline_assessment = assess_baseline_policy(
+        snapshot=snapshot,
+        watched_helm_releases=target.watched_helm_releases,
+        watched_crd_families=target.watched_crd_families,
+        baseline=baseline,
+        signal_adder=add_signal,
+        finding_recorder=record_finding,
+    )
+    baseline_reasons.extend(baseline_assessment.baseline_reasons)
+    baseline_next_checks.extend(baseline_assessment.baseline_next_checks)
+    references.extend(baseline_assessment.references)
+    if baseline_assessment.baseline_reasons:
         issues_detected = True
-        expectation_desc = control_plane_expectation.describe()
-        signal = add_signal(
-            f"Control plane version {control_plane_version} falls outside baseline ({expectation_desc}).",
-            "medium",
-            Layer.ROLLOUT,
-        )
-        record_finding(
-            (f"Control plane version {control_plane_version} violates the baseline expectation ({expectation_desc}). {control_plane_expectation.why}"),
-            Layer.ROLLOUT,
-            [signal.id],
-        )
-        baseline_next_checks.append(
-            NextCheck(
-                description=control_plane_expectation.next_check,
-                owner="platform engineer",
-                method="kubectl",
-                evidence_needed=["control plane version"],
-            )
-        )
-        baseline_reasons.append(control_plane_expectation.why)
-        references.append("control plane baseline")
     if previous:
         previous_version = previous.control_plane_version or "unknown"
         if previous_version != control_plane_version:
@@ -862,31 +852,6 @@ def build_health_assessment(
             )
             baseline_reasons.append(policy.why)
             references.append(f"baseline release {release_key}")
-    if baseline.required_crds and not baseline.is_drift_allowed(BaselineDriftCategory.WATCHED_CRD):
-        for family, crd_policy in baseline.required_crds.items():
-            if snapshot.crds.get(family):
-                continue
-            issues_detected = True
-            signal = add_signal(
-                f"Required CRD family {family} is missing from the snapshot.",
-                "medium",
-                Layer.STORAGE,
-            )
-            record_finding(
-                (f"Baseline expects CRD family {family} to exist. {crd_policy.why}"),
-                Layer.STORAGE,
-                [signal.id],
-            )
-            baseline_next_checks.append(
-                NextCheck(
-                    description=crd_policy.next_check,
-                    owner="platform engineer",
-                    method="kubectl",
-                    evidence_needed=[f"CRD {family}"],
-                )
-            )
-            baseline_reasons.append(crd_policy.why)
-            references.append(f"baseline CRD {family}")
     if previous:
         previous_release_versions = previous.watched_helm_releases
         for release_key in sorted(set(watched_release_versions) | set(previous_release_versions)):
