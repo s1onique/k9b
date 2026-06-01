@@ -84,10 +84,10 @@ def check_regression_from_history(
         nonlocal has_regression, workload_regression, node_regression
         if current > previous_value:
             has_regression = True
-            if layer == Layer.NODE:
-                node_regression = True
-            else:
+            if layer == Layer.WORKLOAD:
                 workload_regression = True
+            elif layer == Layer.NODE:
+                node_regression = True
             references.append("regression")
             signal = Signal(
                 id=signal_id_generator(),

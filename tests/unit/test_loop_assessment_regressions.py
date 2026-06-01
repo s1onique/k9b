@@ -445,6 +445,10 @@ class TestCheckRegressionFromHistory:
         # All 7 regressions detected
         assert result.has_regression is True
         assert len(signals) == 7
+        # Warning events don't set workload/node flags
+        assert result.workload_regression is True
+        assert result.node_regression is True
+        assert result.references == ["regression"] * 7
         assert len(findings) == 7
 
     def test_signal_ids_are_unique_across_signals_and_findings(self) -> None:
@@ -473,3 +477,65 @@ class TestCheckRegressionFromHistory:
         # All IDs should be unique
         all_ids = [s.id for s in signals] + [f.id for f in findings]
         assert len(all_ids) == len(set(all_ids))
+
+    def test_warning_event_regression_does_not_set_workload_or_node_flags(self) -> None:
+        """Warning event regression should not set workload or node regression flags."""
+        snapshot = _make_snapshot(warning_event_count=10)
+        history = _make_history(warning_event_count=3)
+        signals: list[Signal] = []
+        findings: list[Finding] = []
+        gen = _signal_id_generator()
+
+        result = check_regression_from_history(
+            snapshot=snapshot,
+            previous=history,
+            warning_event_count=10,
+            signals=signals,
+            signal_id_generator=gen,
+            findings=findings,
+        )
+
+        assert result.has_regression is True
+        assert result.workload_regression is False
+        assert result.node_regression is False
+        assert len(signals) == 1
+
+    def test_references_has_one_per_detected_regression(self) -> None:
+        """References should have one 'regression' per detected regression."""
+        snapshot = _make_snapshot(
+            not_ready_nodes=1,
+            non_running_pods=1,
+            pending_pods=1,
+            crash_loop_pods=1,
+            image_pull_backoff_pods=1,
+            job_failures=1,
+            warning_event_count=1,
+        )
+        history = _make_history(
+            not_ready_nodes=0,
+            non_running_pods=0,
+            pending_pods=0,
+            crash_loop_pods=0,
+            image_pull_backoff_pods=0,
+            job_failures=0,
+            warning_event_count=0,
+        )
+        signals: list[Signal] = []
+        findings: list[Finding] = []
+        gen = _signal_id_generator()
+
+        result = check_regression_from_history(
+            snapshot=snapshot,
+            previous=history,
+            warning_event_count=1,
+            signals=signals,
+            signal_id_generator=gen,
+            findings=findings,
+        )
+
+        # All 7 regressions detected
+        assert result.has_regression is True
+        # Warning events don't set workload/node flags
+        assert result.workload_regression is True
+        assert result.node_regression is True
+        assert result.references == ["regression"] * 7
