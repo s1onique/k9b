@@ -122,65 +122,109 @@ The following methods in `HealthLoopRunner` already delegate to extracted module
 
 ## 5. Recommended First Extraction Seam
 
-**Option E: Assessment Building**
+**Selected: Warning Event Pattern Matching (Sub-Seam)**
 
-**New module**: `src/k8s_diag_agent/health/loop_assessment.py`
+**New module**: `src/k8s_diag_agent/health/loop_assessment_warning_events.py`
 
-**Rationale**:
-1. `build_health_assessment()` is ~790 lines, the largest standalone function
-2. Function is already well-isolated (takes snapshot, target, history as inputs)
-3. Produces `HealthAssessmentResult` which is a simple dataclass
-4. Already has indirect test coverage via integration tests
-5. Extracting it reduces `loop.py` by ~790 lines (~24% reduction)
-6. No circular import risk: only depends on `collect`, `models`, `baseline` modules
+### Blocker Avoided
+The original recommendation proposed extracting `build_health_assessment()` wholesale (~790 lines), which would create a new module exceeding the 500-line threshold. The revised approach extracts a coherent sub-seam within that function instead.
 
-**What to extract**:
-- `build_health_assessment()` function (lines 666-1455)
+### Rationale
+1. **Cohesive block**: Warning event pattern matching (lines 1101-1332, ~231 lines)
+2. **Clear boundary**: Nested helper functions operate only on `warning_events` and `signals`
+3. **Pure logic**: No dependencies on `HealthTarget`, `BaselinePolicy`, or `image_pull_secret_insight`
+4. **Testable**: Pattern matching logic can be unit tested independently
+5. **Below threshold**: ~250 lines extraction, well under 500-line limit
+6. **Reduces loop.py**: ~231 lines (~7% reduction), building toward eventual full extraction
+
+### Internal Inventory of `build_health_assessment()` (lines 666-1453, ~787 lines)
+
+| Nested Function | Lines | Concern | Extractable |
+|-----------------|-------|---------|-------------|
+| `add_signal()` | 687-696 | Signal creation | No (uses generator) |
+| `record_finding()` | 698-708 | Finding creation | No (uses generator) |
+| `_record_issue()` | 710-713 | Combined signal+Finding | No (uses above) |
+| `_check_regression()` | 1065-1074 | Regression detection | Marginal |
+| `_unused_warning_events()` | 1102-1104 | Event filtering | **Yes** (pattern block) |
+| `_capture_namespaces()` | 1107-1115 | Namespace collection | **Yes** (pattern block) |
+| `_record_pattern()` | 1122-1177 | Pattern recording | **Yes** (pattern block) |
+| `_mark_events()` | 1184-1187 | Event marking | **Yes** (pattern block) |
+| `_describe_namespace()` | 1194-1203 | Namespace description | **Yes** (pattern block) |
+| `_match_probe_events()` | 1210-1249 | Probe pattern | **Yes** (pattern block) |
+| `_match_scheduling_events()` | 1256-1285 | Scheduling pattern | **Yes** (pattern block) |
+| `_match_metrics_events()` | 1291-1294 | Metrics pattern | **Yes** (pattern block) |
+| `_match_pvc_events()` | 1297-1302 | PVC pattern | **Yes** (pattern block) |
+| `_match_ingress_events()` | 1305-1326 | Ingress pattern | **Yes** (pattern block) |
+| `_pick_layer()` | 1334-1337 | Layer selection | Marginal (used at end) |
+
+### What to Extract
 - `HealthAssessmentResult` dataclass (lines 156-162)
-- Helper constants used only by assessment logic
+- All warning-event-related nested functions
+- Pattern constants if any
 
-**What stays in `loop.py`**:
+### What Stays in `loop.py`
+- `build_health_assessment()` function (now calls extracted module)
+- Non-pattern helper functions
 - Caller (`HealthLoopRunner._build_assessments`)
-- Import compatibility re-export: `from .loop_assessment import build_health_assessment`
 
-**Estimated extracted size**: ~800 lines
+### Estimated Extracted Size
+~250 lines (well below 500-line threshold)
 
 ## 6. Next Implementation ACT Prompt
 
-```
-## ACT: Extract health assessment building to loop_assessment.py
+**Title**: `[Open] ACT: Extract build_health_assessment warning-event pattern sub-seam`
 
 ### Objective
-Extract `build_health_assessment()` function from `loop.py` into a new module `loop_assessment.py`.
+Extract warning-event pattern matching logic from `build_health_assessment()` into `loop_assessment_warning_events.py`.
 
 ### Constraints
-- No behavior changes to `build_health_assessment()`
+- No behavior changes to `build_health_assessment()` pattern matching output
 - No JSON artifact shape changes
 - No timestamp semantics changes
 - Preserve structured logging messages and metadata keys
-- Preserve existing import compatibility via re-exports
-- New module must remain below 500 lines (may need to split if larger)
+- New module must remain below 500 lines
 - Do not remove `loop.py` from allowlist
+- Pattern matching calls return the same results as before extraction
+
+### Pre-flight: Internal Line/Block Inventory
+Before code movement, document the exact line boundaries for each pattern-matching function:
+- `_unused_warning_events()`: lines 1102-1104
+- `_capture_namespaces()`: lines 1107-1115
+- `_record_pattern()`: lines 1122-1177
+- `_mark_events()`: lines 1184-1187
+- `_describe_namespace()`: lines 1194-1203
+- `_match_probe_events()`: lines 1210-1249
+- `_match_scheduling_events()`: lines 1256-1285
+- `_match_metrics_events()`: lines 1291-1294
+- `_match_pvc_events()`: lines 1297-1302
+- `_match_ingress_events()`: lines 1305-1326
 
 ### Steps
-1. Create `src/k8s_diag_agent/health/loop_assessment.py`
-2. Move `build_health_assessment()` function
-3. Move `HealthAssessmentResult` dataclass
-4. Add necessary imports
-5. Add re-export in `loop.py`: `from .loop_assessment import build_health_assessment, HealthAssessmentResult`
-6. Verify tests pass:
+1. Create `src/k8s_diag_agent/health/loop_assessment_warning_events.py`
+2. Move pattern-matching nested functions
+3. Add necessary imports (models, typing, etc.)
+4. Export main function: `match_warning_events(signals, generator, warning_events, matched_event_ids)`
+5. Update `build_health_assessment()` to call the extracted function
+6. Add re-export in `loop.py` if needed for backward compatibility
+7. Verify tests pass:
    ```
-   .venv/bin/python -m pytest tests/test_health_loop.py -q
-   .venv/bin/python -m pytest tests/unit/test_health_assessment_artifact_readers.py -q
+   .venv/bin/python -m pytest tests/unit/test_health_loop*.py -q
+   .venv/bin/python -m pytest tests/unit/test_loop_vmalert_rule_state.py -q
    ```
-7. Verify checker: `python scripts/check_llm_friendly_files.py --quiet`
-8. Run ruff: `.venv/bin/python -m ruff check src/k8s_diag_agent/health/loop_assessment.py`
-9. Commit with message: "Extract health assessment building to loop_assessment.py"
+8. Verify checker: `python scripts/check_llm_friendly_files.py --quiet`
+9. Run ruff: `.venv/bin/python -m ruff check src/k8s_diag_agent/health/loop_assessment_warning_events.py`
+10. Run mypy: `.venv/bin/python -m mypy src/k8s_diag_agent/health/loop_assessment_warning_events.py`
+11. Commit with message: "Extract warning event pattern matching from build_health_assessment"
 
 ### Test Coverage
-- Direct test: Add `test_build_health_assessment.py` if gap analysis shows need
-- Indirect coverage: `test_health_loop.py`, `test_health_assessment_artifact_readers.py`
-```
+- Direct test: Add `test_loop_assessment_warning_events.py` for pattern matching
+- Indirect coverage: `test_health_loop.py` (integration test via HealthLoopRunner)
+- Target coverage: pattern matching functions return same results
+
+### Expected Result
+- New module: ~250 lines (below 500-line threshold)
+- `loop.py` reduction: ~231 lines (~7% reduction)
+- Pattern matching behavior unchanged
 
 ## 7. Verification Output
 
