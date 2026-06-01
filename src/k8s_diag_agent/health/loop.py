@@ -46,6 +46,13 @@ from .loop_alertmanager_port_forward import (
 )
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
 from .loop_assessment_baseline import assess_baseline_policy
+from .loop_assessment_counts import assess_count_issues
+from .loop_assessment_history_drift import assess_previous_run_drift
+from .loop_assessment_image_pull import assess_image_pull_issues
+from .loop_assessment_missing_evidence import assess_missing_evidence
+from .loop_assessment_regressions import check_regression_from_history
+from .loop_assessment_summary import derive_assessment_summary
+from .loop_assessment_warning_events import match_warning_event_patterns
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
 from .loop_comparison_policy import (  # noqa: F401
     BaselineRegistry,  # noqa: F401 - re-exported for backward compatibility
@@ -738,8 +745,6 @@ def build_health_assessment(
     pattern_hypotheses: list[Hypothesis] = []
     matched_event_ids: set[int] = set()
 
-    from .loop_assessment_missing_evidence import assess_missing_evidence
-
     missing_evidence_assessment = assess_missing_evidence(
         missing=missing,
         previous=previous,
@@ -778,8 +783,6 @@ def build_health_assessment(
     if baseline_assessment.baseline_reasons:
         issues_detected = True
 
-    from .loop_assessment_history_drift import assess_previous_run_drift
-
     history_drift_assessment = assess_previous_run_drift(
         previous=previous,
         control_plane_version=control_plane_version,
@@ -795,8 +798,6 @@ def build_health_assessment(
 
     workload_issue_present = False
     node_issue_present = False
-
-    from .loop_assessment_counts import assess_count_issues
 
     count_issue_assessment = assess_count_issues(
         node_conditions=node_conditions,
@@ -823,7 +824,6 @@ def build_health_assessment(
             "high",
             Layer.WORKLOAD,
         )
-        from .loop_assessment_image_pull import assess_image_pull_issues
 
         returned_hypothesis, image_pull_issues_detected = assess_image_pull_issues(
             image_pull_secret_insight=image_pull_secret_insight,
@@ -862,7 +862,6 @@ def build_health_assessment(
             "low",
             Layer.OBSERVABILITY,
         )
-    from .loop_assessment_regressions import check_regression_from_history
 
     regression_assessment = check_regression_from_history(
         snapshot=snapshot,
@@ -876,8 +875,6 @@ def build_health_assessment(
     workload_issue_present = workload_issue_present or regression_assessment.workload_regression
     node_issue_present = node_issue_present or regression_assessment.node_regression
     references.extend(regression_assessment.references)
-
-    from .loop_assessment_warning_events import match_warning_event_patterns
 
     warning_event_patterns_matched = match_warning_event_patterns(
         warning_events=warning_events,
@@ -893,8 +890,6 @@ def build_health_assessment(
     )
 
     issues_detected = issues_detected or warning_event_patterns_matched
-
-    from .loop_assessment_summary import derive_assessment_summary
 
     summary = derive_assessment_summary(
         signals=signals,
@@ -2905,3 +2900,4 @@ def run_health_loop(
     assessments, triggers, drilldowns = runner.execute()
     external_artifacts = runner.latest_external_artifacts
     return 0, assessments, triggers, drilldowns, external_artifacts, runner.config.external_analysis
+
