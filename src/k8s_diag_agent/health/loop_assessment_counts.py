@@ -65,23 +65,18 @@ def assess_count_issues(
     *,
     node_conditions: NodeConditionCounts,
     pod_counts: PodHealthCounts,
-    job_failures: int,
     warning_events: Sequence[object],
-    warning_event_threshold: int,
     issue_recorder: Callable[[str, str, Layer], object],
 ) -> CountIssueAssessment:
     """Assess count and condition issues from health signals.
 
     This function extracts count/condition issue classification from build_health_assessment().
-    It checks node conditions, pod counts, job failures, and warning event thresholds,
-    creating signals and findings for any issues.
+    It checks node conditions and pod counts, creating signals and findings for any issues.
 
     Args:
         node_conditions: Node condition counts from cluster health signals.
         pod_counts: Pod health counts from cluster health signals.
-        job_failures: Number of failed jobs.
-        warning_events: Sequence of warning events (accessed for count and latest).
-        warning_event_threshold: Threshold for warning event count trigger.
+        warning_events: Sequence of warning events (accessed for count only).
         issue_recorder: Callable that records a signal and finding.
                         Signature: (description, severity, layer) -> None
 

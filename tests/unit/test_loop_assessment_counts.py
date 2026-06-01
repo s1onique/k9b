@@ -43,9 +43,7 @@ class TestCountIssueAssessment:
         result = assess_count_issues(
             node_conditions=NodeConditionCounts.empty(),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
         assert result.issues_detected is False
@@ -59,9 +57,7 @@ class TestCountIssueAssessment:
         result = assess_count_issues(
             node_conditions=NodeConditionCounts.empty(),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=[MockWarningEvent("default", "TestReason")],
-            warning_event_threshold=0,
+            warning_events=[MockWarningEvent('default', 'TestReason')],
             issue_recorder=lambda d, s, layer: None,
         )
         assert result.warning_event_count == 1
@@ -83,9 +79,7 @@ class TestNodeConditionIssues:
                 disk_pressure=0, pid_pressure=0, network_unavailable=0,
             ),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -109,9 +103,7 @@ class TestNodeConditionIssues:
                 disk_pressure=1, pid_pressure=0, network_unavailable=1,
             ),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -134,9 +126,7 @@ class TestNodeConditionIssues:
                 disk_pressure=0, pid_pressure=0, network_unavailable=0,
             ),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -159,9 +149,7 @@ class TestPodCountIssues:
                 non_running=3, pending=0, crash_loop_backoff=0,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -184,9 +172,7 @@ class TestPodCountIssues:
                 non_running=0, pending=2, crash_loop_backoff=0,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -207,9 +193,7 @@ class TestPodCountIssues:
                 non_running=0, pending=0, crash_loop_backoff=4,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -229,9 +213,7 @@ class TestPodCountIssues:
                 non_running=1, pending=2, crash_loop_backoff=3,
                 image_pull_backoff=4, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -261,9 +243,7 @@ class TestMultipleIssueTypes:
                 non_running=2, pending=0, crash_loop_backoff=0,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -293,9 +273,7 @@ class TestSignalFindingOrder:
                 non_running=1, pending=1, crash_loop_backoff=1,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=1,  # Not handled by helper
             warning_events=[MockWarningEvent("default", "Reason")],  # Not handled by helper
-            warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
@@ -330,9 +308,7 @@ class TestReferencesReturned:
                 non_running=1, pending=2, crash_loop_backoff=3,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -349,9 +325,7 @@ class TestReferencesReturned:
         result = assess_count_issues(
             node_conditions=NodeConditionCounts.empty(),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -365,9 +339,7 @@ class TestReferencesReturned:
                 non_running=0, pending=0, crash_loop_backoff=2,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -381,9 +353,7 @@ class TestReferencesReturned:
                 non_running=0, pending=0, crash_loop_backoff=0,
                 image_pull_backoff=3, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -394,9 +364,7 @@ class TestReferencesReturned:
         result = assess_count_issues(
             node_conditions=NodeConditionCounts.empty(),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=5,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -407,9 +375,7 @@ class TestReferencesReturned:
         result = assess_count_issues(
             node_conditions=NodeConditionCounts.empty(),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=[MockWarningEvent("default", "Reason")],
-            warning_event_threshold=0,
+            warning_events=[],
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -423,9 +389,7 @@ class TestReferencesReturned:
                 disk_pressure=0, pid_pressure=0, network_unavailable=0,
             ),
             pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -439,9 +403,7 @@ class TestReferencesReturned:
                 non_running=3, pending=0, crash_loop_backoff=0,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 
@@ -455,9 +417,7 @@ class TestReferencesReturned:
                 non_running=0, pending=2, crash_loop_backoff=0,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=0,
             warning_events=[],
-            warning_event_threshold=0,
             issue_recorder=lambda d, s, layer: None,
         )
 

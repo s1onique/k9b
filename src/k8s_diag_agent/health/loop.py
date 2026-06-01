@@ -802,9 +802,7 @@ def build_health_assessment(
     count_issue_assessment = assess_count_issues(
         node_conditions=node_conditions,
         pod_counts=pod_counts,
-        job_failures=job_failures,
         warning_events=warning_events,
-        warning_event_threshold=warning_event_threshold,
         issue_recorder=_record_issue,
     )
 
