@@ -795,61 +795,26 @@ def build_health_assessment(
 
     workload_issue_present = False
     node_issue_present = False
-    warning_event_count = len(warning_events)
-    warning_threshold = warning_event_threshold
-    warning_triggered = warning_event_count > 0 if warning_threshold <= 0 else warning_event_count >= warning_threshold
-    node_components: list[str] = []
-    node_severity = "medium"
-    if node_conditions.not_ready > 0:
-        node_components.append(f"{node_conditions.not_ready} nodes NotReady")
-        node_severity = "high"
-    if node_conditions.memory_pressure:
-        node_components.append(f"{node_conditions.memory_pressure} nodes with MemoryPressure")
-    if node_conditions.disk_pressure:
-        node_components.append(f"{node_conditions.disk_pressure} nodes with DiskPressure")
-    if node_conditions.pid_pressure:
-        node_components.append(f"{node_conditions.pid_pressure} nodes with PIDPressure")
-    if node_conditions.network_unavailable:
-        node_components.append(f"{node_conditions.network_unavailable} nodes with NetworkUnavailable")
-    if node_components:
-        node_issue_present = True
-        issues_detected = True
-        references.append("node health")
-        _record_issue(
-            f"Node health signals: {', '.join(node_components)}.",
-            node_severity,
-            Layer.NODE,
-        )
-    if pod_counts.non_running > 0:
-        workload_issue_present = True
-        issues_detected = True
-        references.append("pod readiness")
-        _record_issue(
-            f"{pod_counts.non_running} pods are not running.",
-            "medium",
-            Layer.WORKLOAD,
-        )
-    if pod_counts.pending > 0:
-        workload_issue_present = True
-        issues_detected = True
-        references.append("pod scheduling")
-        _record_issue(
-            f"{pod_counts.pending} pods are pending scheduling.",
-            "medium",
-            Layer.WORKLOAD,
-        )
-    if pod_counts.crash_loop_backoff > 0:
-        workload_issue_present = True
-        issues_detected = True
-        references.append("CrashLoopBackOff")
-        _record_issue(
-            f"{pod_counts.crash_loop_backoff} pods in CrashLoopBackOff.",
-            "high",
-            Layer.WORKLOAD,
-        )
+
+    from .loop_assessment_counts import assess_count_issues
+
+    count_issue_assessment = assess_count_issues(
+        node_conditions=node_conditions,
+        pod_counts=pod_counts,
+        job_failures=job_failures,
+        warning_events=warning_events,
+        warning_event_threshold=warning_event_threshold,
+        issue_recorder=_record_issue,
+    )
+
+    issues_detected = issues_detected or count_issue_assessment.issues_detected
+    workload_issue_present = workload_issue_present or count_issue_assessment.workload_issue_present
+    node_issue_present = node_issue_present or count_issue_assessment.node_issue_present
+    warning_event_count = count_issue_assessment.warning_event_count
+    references.extend(count_issue_assessment.references)
+
+    # ImagePullBackOff count issue (recorded here to preserve order before assess_image_pull_issues)
     if pod_counts.image_pull_backoff > 0:
-        workload_issue_present = True
-        issues_detected = True
         references.append("ImagePullBackOff")
         _record_issue(
             f"{pod_counts.image_pull_backoff} pods in ImagePullBackOff.",
@@ -868,27 +833,6 @@ def build_health_assessment(
         if returned_hypothesis is not None:
             insight_hypothesis = returned_hypothesis
         issues_detected = issues_detected or image_pull_issues_detected
-    if job_failures > 0:
-        workload_issue_present = True
-        issues_detected = True
-        references.append("job failures")
-        _record_issue(
-            f"{job_failures} failed job(s) observed.",
-            "medium",
-            Layer.WORKLOAD,
-        )
-    if warning_triggered:
-        workload_issue_present = True
-        issues_detected = True
-        latest_warning = warning_events[0]
-        warning_desc = f" {latest_warning.reason} in {latest_warning.namespace}" if latest_warning.namespace and latest_warning.reason else ""
-        references.append("warning events")
-        threshold_note = f" (threshold {warning_threshold})" if warning_threshold > 0 else ""
-        _record_issue(
-            f"{warning_event_count} warning events recorded{threshold_note}{warning_desc}.",
-            "low",
-            Layer.OBSERVABILITY,
-        )
     from .loop_assessment_regressions import check_regression_from_history
 
     regression_assessment = check_regression_from_history(
