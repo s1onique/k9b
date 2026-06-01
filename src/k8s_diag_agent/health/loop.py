@@ -30,7 +30,7 @@ from ..identity.artifact import new_artifact_id
 from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
-from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, SafetyLevel, Signal
+from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, Signal
 from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
@@ -1068,13 +1068,25 @@ def build_health_assessment(
 
     issues_detected = issues_detected or warning_event_patterns_matched
 
-    def _pick_layer() -> Layer:
-        ranking = {"high": 0, "medium": 1, "low": 2}
-        best = min(signals, key=lambda signal: ranking.get(signal.severity, 2))
-        return best.layer
+    from .loop_assessment_summary import derive_assessment_summary
 
-    rating = HealthRating.DEGRADED if issues_detected else HealthRating.HEALTHY
-    dominant_layer = _pick_layer()
+    summary = derive_assessment_summary(
+        signals=signals,
+        issues_detected=issues_detected,
+        workload_issue_present=workload_issue_present,
+        node_issue_present=node_issue_present,
+        references=references,
+        helm_error=status.helm_error,
+        has_missing_evidence=bool(missing),
+        has_image_pull_secret_insight=bool(image_pull_secret_insight),
+        pattern_refs=pattern_refs,
+    )
+
+    rating = summary.rating
+    dominant_layer = summary.dominant_layer or Layer.OBSERVABILITY
+    safety_level = summary.safety_level
+    references = list(summary.references)
+
     findings = [
         Finding(
             id=generator.next_id(),
@@ -1103,7 +1115,6 @@ def build_health_assessment(
         if insight_hypothesis:
             detailed_hypotheses.append(insight_hypothesis)
         hypotheses = detailed_hypotheses + [base_hypothesis]
-        safety_level = SafetyLevel.LOW_RISK
     else:
         hypotheses = [
             Hypothesis(
@@ -1114,7 +1125,6 @@ def build_health_assessment(
                 what_would_falsify="A new control plane drift, missing evidence, or Helm error appears.",
             )
         ]
-        safety_level = SafetyLevel.OBSERVE_ONLY
 
     next_checks: list[NextCheck] = []
     if missing:
@@ -1147,17 +1157,6 @@ def build_health_assessment(
     next_checks.extend(pattern_next_checks)
     next_checks.extend(baseline_next_checks)
     next_checks.extend(image_pull_secret_next_checks)
-
-    if status.helm_error:
-        references.append("helm collection error")
-    if missing:
-        references.append("missing evidence")
-    if image_pull_secret_insight:
-        references.append("image pull secret supply chain")
-    references.extend(pattern_refs)
-    if not references:
-        references.append("routine health monitoring")
-    references = list(dict.fromkeys(references))
 
     assessment_action = RecommendedAction(
         type="observation",
