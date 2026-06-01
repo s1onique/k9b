@@ -777,88 +777,21 @@ def build_health_assessment(
     references.extend(baseline_assessment.references)
     if baseline_assessment.baseline_reasons:
         issues_detected = True
-    if previous:
-        previous_version = previous.control_plane_version or "unknown"
-        if previous_version != control_plane_version:
-            issues_detected = True
-        signal = add_signal(
-            f"Control plane version changed since last run ({previous_version} -> {control_plane_version}).",
-            "medium",
-            Layer.ROLLOUT,
-        )
-        record_finding(
-            f"Control plane version changed since last run ({previous_version} -> {control_plane_version}).",
-            Layer.ROLLOUT,
-            [signal.id],
-        )
-    if previous and snapshot.metadata.node_count != previous.node_count:
-        issues_detected = True
-        signal = add_signal(
-            f"Node count changed since last run ({previous.node_count} -> {snapshot.metadata.node_count}).",
-            "medium",
-            Layer.NODE,
-        )
-        record_finding(
-            f"Node count changed since last run ({previous.node_count} -> {snapshot.metadata.node_count}).",
-            Layer.NODE,
-            [signal.id],
-        )
-    if previous and snapshot.metadata.pod_count != previous.pod_count:
-        issues_detected = True
-        prev_label = str(previous.pod_count) if previous.pod_count is not None else "unknown"
-        curr_label = str(snapshot.metadata.pod_count) if snapshot.metadata.pod_count is not None else "unknown"
-        signal = add_signal(
-            f"Pod count changed since last run ({prev_label} -> {curr_label}).",
-            "medium",
-            Layer.WORKLOAD,
-        )
-        record_finding(
-            f"Pod count changed since last run ({prev_label} -> {curr_label}).",
-            Layer.WORKLOAD,
-            [signal.id],
-        )
 
-    watched_release_versions = _watched_release_versions(snapshot, target.watched_helm_releases)
-    watched_crd_versions = _watched_crd_versions(snapshot, target.watched_crd_families)
-    if previous:
-        previous_release_versions = previous.watched_helm_releases
-        for release_key in sorted(set(watched_release_versions) | set(previous_release_versions)):
-            release_current_version: str | None = watched_release_versions.get(release_key)
-            release_previous_version: str | None = previous_release_versions.get(release_key)
-            if release_current_version == release_previous_version:
-                continue
-            issues_detected = True
-            release_prev_label: str = release_previous_version if release_previous_version is not None else "missing"
-            release_curr_label: str = release_current_version if release_current_version is not None else "missing"
-            signal = add_signal(
-                f"Watched Helm release {release_key} changed since last run ({release_prev_label} -> {release_curr_label}).",
-                "medium",
-                Layer.ROLLOUT,
-            )
-            record_finding(
-                f"Watched Helm release {release_key} changed since last run ({release_prev_label} -> {release_curr_label}).",
-                Layer.ROLLOUT,
-                [signal.id],
-            )
-        previous_crd_versions = previous.watched_crd_families
-        for crd_key in sorted(set(watched_crd_versions) | set(previous_crd_versions)):
-            crd_current_version: str | None = watched_crd_versions.get(crd_key)
-            crd_previous_version: str | None = previous_crd_versions.get(crd_key)
-            if crd_current_version == crd_previous_version:
-                continue
-            issues_detected = True
-            crd_prev_label: str = crd_previous_version if crd_previous_version is not None else "missing"
-            crd_curr_label: str = crd_current_version if crd_current_version is not None else "missing"
-            signal = add_signal(
-                f"Watched CRD {crd_key} storage version changed since last run ({crd_prev_label} -> {crd_curr_label}).",
-                "medium",
-                Layer.ROLLOUT,
-            )
-            record_finding(
-                f"Watched CRD {crd_key} storage version changed since last run ({crd_prev_label} -> {crd_curr_label}).",
-                Layer.ROLLOUT,
-                [signal.id],
-            )
+    from .loop_assessment_history_drift import assess_previous_run_drift
+
+    history_drift_assessment = assess_previous_run_drift(
+        previous=previous,
+        control_plane_version=control_plane_version,
+        snapshot_node_count=snapshot.metadata.node_count,
+        snapshot_pod_count=snapshot.metadata.pod_count,
+        watched_helm_releases=target.watched_helm_releases,
+        watched_crd_families=target.watched_crd_families,
+        snapshot=snapshot,
+        signal_adder=add_signal,
+        finding_recorder=record_finding,
+    )
+    issues_detected = issues_detected or history_drift_assessment.has_drift
 
     workload_issue_present = False
     node_issue_present = False
