@@ -30,18 +30,9 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("docs/security-exception-audit.md", "[DOC] Audit document - historical record"),
     ("docs/artifact-immutability-audit.md", "[DOC] Audit document - historical record"),
 
-    # [CONTRACT] TypedDict contracts - large but coherent
-    ("src/k8s_diag_agent/ui/api_payloads.py", "[CONTRACT] TypedDict contracts - pending split"),
-
     # [EXTRACTION] Backend - extraction in progress
     ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
-    # server_read_support.py extracted - cluster/drilldown to server_read_clusters.py (495);
-    #   next-check to server_read_next_checks.py (379); execution history to server_read_execution_history.py (207);
-    #   llm-stats to server_read_llm_stats.py (388); now 390 lines, below 500 threshold
-    # vmalert_discovery.py extracted to models/sources/strategies modules (416 lines, below threshold)
-    # llamacpp_provider.py extracted to config/errors/payloads/response modules (143 lines)
     ("src/k8s_diag_agent/health/loop_scheduler.py", "[EXTRACTION] Loop scheduler - run loop extracted; compatibility surface remains"),
-
 
     # [TEST] Test fixtures - need split by behavior
     ("tests/fixtures/incident_report_fixtures.py", "[TEST] Fixture data - extract by test family"),
