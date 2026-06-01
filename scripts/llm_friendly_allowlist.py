@@ -159,7 +159,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [BACKEND] Additional backend files
     ("src/k8s_diag_agent/collect/live_snapshot.py", "[EXTRACTION] Live snapshot - complex extraction"),
     ("src/k8s_diag_agent/external_analysis/alertmanager_durable_learning.py", "[EXTRACTION] Durable learning - complex extraction"),
-    ("src/k8s_diag_agent/external_analysis/alertmanager_source_registry.py", "[EXTRACTION] Alertmanager registry - complex extraction"),
 
     # [TEST FIXTURES] Additional test fixture files
     ("tests/fixtures/incident_report_cross_cluster_fixtures.py", "[TEST] Cross-cluster fixtures - large data"),
