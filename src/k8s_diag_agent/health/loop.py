@@ -725,8 +725,6 @@ def build_health_assessment(
             Layer.OBSERVABILITY,
             [signal.id],
         )
-    missing_signal_ids: list[str] = []
-    missing_signal_map: dict[str, str] = {}
     baseline_next_checks: list[NextCheck] = []
     baseline_reasons: list[str] = []
     image_pull_secret_next_checks: list[NextCheck] = []
@@ -738,31 +736,20 @@ def build_health_assessment(
     pattern_refs: list[str] = []
     pattern_hypotheses: list[Hypothesis] = []
     matched_event_ids: set[int] = set()
-    for missing_item in missing:
-        issues_detected = True
-        signal = add_signal(
-            f"Missing evidence: {missing_item}.",
-            "medium",
-            Layer.OBSERVABILITY,
-        )
-        missing_signal_ids.append(signal.id)
-        missing_signal_map[missing_item] = signal.id
-    if missing_signal_ids:
-        record_finding(
-            f"Snapshot is missing telemetry: {', '.join(sorted(missing))}.",
-            Layer.OBSERVABILITY,
-            missing_signal_ids,
-        )
-        if previous:
-            prev_missing = set(previous.missing_evidence)
-            new_missing = sorted(set(missing) - prev_missing)
-            new_signal_ids = [missing_signal_map[item] for item in new_missing if item in missing_signal_map]
-            if new_missing and new_signal_ids:
-                record_finding(
-                    f"New missing telemetry since last run: {', '.join(new_missing)}.",
-                    Layer.OBSERVABILITY,
-                    new_signal_ids,
-                )
+
+    from .loop_assessment_missing_evidence import assess_missing_evidence
+
+    missing_evidence_assessment = assess_missing_evidence(
+        missing=missing,
+        previous=previous,
+        signal_adder=add_signal,
+        finding_recorder=record_finding,
+    )
+    # If any missing evidence was detected, mark that an issue was found.
+    # This preserves the original behavior: every missing item would set
+    # issues_detected = True in the loop.
+    issues_detected = issues_detected or bool(missing_evidence_assessment.signal_ids)
+
     control_plane_version = snapshot.metadata.control_plane_version or "unknown"
     has_control_plane_version = bool(control_plane_version.strip()) and control_plane_version.lower() != "unknown"
     if not has_control_plane_version:
