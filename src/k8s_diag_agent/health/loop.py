@@ -815,6 +815,8 @@ def build_health_assessment(
 
     # ImagePullBackOff count issue (recorded here to preserve order before assess_image_pull_issues)
     if pod_counts.image_pull_backoff > 0:
+        workload_issue_present = True
+        issues_detected = True
         references.append("ImagePullBackOff")
         _record_issue(
             f"{pod_counts.image_pull_backoff} pods in ImagePullBackOff.",
@@ -833,6 +835,33 @@ def build_health_assessment(
         if returned_hypothesis is not None:
             insight_hypothesis = returned_hypothesis
         issues_detected = issues_detected or image_pull_issues_detected
+
+    # Job failures (after ImagePullBackOff to preserve original ordering)
+    if job_failures > 0:
+        workload_issue_present = True
+        issues_detected = True
+        references.append("job failures")
+        _record_issue(
+            f"{job_failures} failed job(s) observed.",
+            "medium",
+            Layer.WORKLOAD,
+        )
+
+    # Warning event threshold (after job failures to preserve original ordering)
+    warning_threshold = warning_event_threshold
+    warning_triggered = warning_event_count > 0 if warning_threshold <= 0 else warning_event_count >= warning_threshold
+    if warning_triggered:
+        workload_issue_present = True
+        issues_detected = True
+        references.append("warning events")
+        latest_warning = warning_events[0] if warning_events else None
+        warning_desc = f" {latest_warning.reason} in {latest_warning.namespace}" if latest_warning and latest_warning.namespace and latest_warning.reason else ""
+        threshold_note = f" (threshold {warning_threshold})" if warning_threshold > 0 else ""
+        _record_issue(
+            f"{warning_event_count} warning events recorded{threshold_note}{warning_desc}.",
+            "low",
+            Layer.OBSERVABILITY,
+        )
     from .loop_assessment_regressions import check_regression_from_history
 
     regression_assessment = check_regression_from_history(

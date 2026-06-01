@@ -94,7 +94,6 @@ def assess_count_issues(
     references: list[str] = []
 
     warning_event_count = len(warning_events)
-    warning_triggered = warning_event_count > 0 if warning_event_threshold <= 0 else warning_event_count >= warning_event_threshold
 
     # Node condition issues
     node_components: list[str] = []
@@ -154,37 +153,10 @@ def assess_count_issues(
             Layer.WORKLOAD,
         )
 
-    # ImagePullBackOff pods - NOT recorded here, handled by caller to preserve order
-    # before assess_image_pull_issues(). The caller will append "ImagePullBackOff" reference.
-
-    # Job failures
-    if job_failures > 0:
-        workload_issue_present = True
-        issues_detected = True
-        references.append("job failures")
-        issue_recorder(
-            f"{job_failures} failed job(s) observed.",
-            "medium",
-            Layer.WORKLOAD,
-        )
-
-    # Warning event threshold
-    if warning_triggered:
-        workload_issue_present = True
-        issues_detected = True
-        references.append("warning events")
-        # Access first warning event for description
-        latest_warning = warning_events[0] if warning_events else None
-        # Get namespace and reason attributes if available
-        warning_namespace = getattr(latest_warning, "namespace", None) if latest_warning else None
-        warning_reason = getattr(latest_warning, "reason", None) if latest_warning else None
-        warning_desc = f" {warning_reason} in {warning_namespace}" if warning_namespace and warning_reason else ""
-        threshold_note = f" (threshold {warning_event_threshold})" if warning_event_threshold > 0 else ""
-        issue_recorder(
-            f"{warning_event_count} warning events recorded{threshold_note}{warning_desc}.",
-            "low",
-            Layer.OBSERVABILITY,
-        )
+    # NOTE: ImagePullBackOff, job failures, and warning events are NOT handled here.
+    # They are handled by the caller in loop.py to preserve the original ordering:
+    #   node health, pod readiness, pod scheduling, CrashLoopBackOff, ImagePullBackOff,
+    #   job failures, warning events
 
     return CountIssueAssessment(
         issues_detected=issues_detected,

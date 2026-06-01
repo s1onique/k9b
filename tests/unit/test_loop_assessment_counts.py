@@ -1,6 +1,8 @@
 """Tests for loop_assessment_counts module.
 
 Verifies count/condition issue classification behavior in isolation.
+The helper handles: node health, pod readiness, pod scheduling, CrashLoopBackOff.
+The caller handles: ImagePullBackOff, job failures, warning events.
 """
 
 from __future__ import annotations
@@ -50,6 +52,7 @@ class TestCountIssueAssessment:
         assert result.workload_issue_present is False
         assert result.node_issue_present is False
         assert result.warning_event_count == 0
+        assert result.references == []
 
     def test_warning_event_count_returned(self) -> None:
         """warning_event_count is correctly returned."""
@@ -213,32 +216,8 @@ class TestPodCountIssues:
         assert issues[0].severity == "high"
         assert "4 pods in CrashLoopBackOff" in issues[0].description
 
-    def test_image_pull_backoff_not_recorded_in_helper(self) -> None:
-        """ImagePullBackOff is NOT recorded by the helper - caller handles it."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts(
-                non_running=0, pending=0, crash_loop_backoff=0,
-                image_pull_backoff=2, completed_job_pods=0,
-            ),
-            job_failures=0,
-            warning_events=[],
-            warning_event_threshold=0,
-            issue_recorder=record_issue,
-        )
-
-        # ImagePullBackOff should NOT be recorded by the helper
-        # (caller handles it to preserve order before assess_image_pull_issues)
-        assert len(issues) == 0
-        assert not any("ImagePullBackOff" in issue.description for issue in issues)
-
     def test_multiple_pod_issues_preserve_order(self) -> None:
-        """Multiple pod issues are recorded in expected order (excluding ImagePullBackOff)."""
+        """Multiple pod issues are recorded in expected order."""
         issues: list[RecordedIssue] = []
 
         def record_issue(desc: str, sev: str, layer: Layer) -> None:
@@ -261,147 +240,6 @@ class TestPodCountIssues:
         assert "1 pods are not running" in issues[0].description
         assert "2 pods are pending scheduling" in issues[1].description
         assert "3 pods in CrashLoopBackOff" in issues[2].description
-
-
-class TestJobFailureIssues:
-    """Tests for job failure detection."""
-
-    def test_job_failures_set_workload_issue(self) -> None:
-        """Failed jobs set workload_issue_present flag."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        result = assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts.empty(),
-            job_failures=5,
-            warning_events=[],
-            warning_event_threshold=0,
-            issue_recorder=record_issue,
-        )
-
-        assert result.workload_issue_present is True
-        assert result.issues_detected is True
-        assert "5 failed job(s) observed" in issues[0].description
-        assert issues[0].severity == "medium"
-        assert issues[0].layer == Layer.WORKLOAD
-
-
-class TestWarningEventThreshold:
-    """Tests for warning event threshold behavior."""
-
-    def test_warning_events_trigger_at_threshold(self) -> None:
-        """Warning events trigger when count >= threshold."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        events = [
-            MockWarningEvent("default", "TestReason"),
-            MockWarningEvent("kube-system", "AnotherReason"),
-        ]
-
-        result = assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=events,
-            warning_event_threshold=2,  # exact match triggers
-            issue_recorder=record_issue,
-        )
-
-        assert result.workload_issue_present is True
-        assert result.issues_detected is True
-        assert len(issues) == 1
-        assert "2 warning events recorded" in issues[0].description
-        assert issues[0].severity == "low"
-        assert issues[0].layer == Layer.OBSERVABILITY
-
-    def test_warning_events_below_threshold_no_issue(self) -> None:
-        """Warning events below threshold do not trigger."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        result = assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=[MockWarningEvent("default", "Reason")],
-            warning_event_threshold=5,  # 1 < 5
-            issue_recorder=record_issue,
-        )
-
-        assert result.workload_issue_present is False
-        assert result.issues_detected is False
-        assert len(issues) == 0
-
-    def test_warning_events_with_zero_threshold_trigger(self) -> None:
-        """With threshold=0, any warning event triggers."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        result = assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=[MockWarningEvent("default", "Reason")],
-            warning_event_threshold=0,  # any > 0 triggers
-            issue_recorder=record_issue,
-        )
-
-        assert result.workload_issue_present is True
-        assert len(issues) == 1
-
-    def test_warning_event_includes_latest_event_info(self) -> None:
-        """Warning event description includes latest event details."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        events = [
-            MockWarningEvent("default", "TestReason"),
-        ]
-
-        assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=events,
-            warning_event_threshold=0,
-            issue_recorder=record_issue,
-        )
-
-        assert "TestReason in default" in issues[0].description
-
-    def test_warning_event_threshold_note_included(self) -> None:
-        """Warning threshold is noted in description when threshold > 0."""
-        issues: list[RecordedIssue] = []
-
-        def record_issue(desc: str, sev: str, layer: Layer) -> None:
-            issues.append(RecordedIssue(desc, sev, layer))
-
-        assess_count_issues(
-            node_conditions=NodeConditionCounts.empty(),
-            pod_counts=PodHealthCounts.empty(),
-            job_failures=0,
-            warning_events=[
-                MockWarningEvent("default", "Reason"),
-                MockWarningEvent("kube-system", "Reason2"),
-                MockWarningEvent("monitoring", "Reason3"),
-            ],
-            warning_event_threshold=3,  # 3 >= 3 triggers
-            issue_recorder=record_issue,
-        )
-
-        assert "(threshold 3)" in issues[0].description
 
 
 class TestMultipleIssueTypes:
@@ -455,14 +293,15 @@ class TestSignalFindingOrder:
                 non_running=1, pending=1, crash_loop_backoff=1,
                 image_pull_backoff=0, completed_job_pods=0,
             ),
-            job_failures=1,
-            warning_events=[MockWarningEvent("default", "Reason")],
+            job_failures=1,  # Not handled by helper
+            warning_events=[MockWarningEvent("default", "Reason")],  # Not handled by helper
             warning_event_threshold=0,
             issue_recorder=record_issue,
         )
 
-        # Order: node, non_running, pending, crash_loop, job_failures, warnings
-        assert len(issues) == 6
+        # Order: node, non_running, pending, crash_loop
+        # (job failures and warning events are NOT handled by the helper)
+        assert len(issues) == 4
         assert issues[0].layer == Layer.NODE  # Node issues first
         assert "2 nodes NotReady" in issues[0].description
         assert "1 nodes with MemoryPressure" in issues[0].description
@@ -476,9 +315,150 @@ class TestSignalFindingOrder:
         assert issues[3].layer == Layer.WORKLOAD
         assert "CrashLoopBackOff" in issues[3].description
 
-        assert issues[4].layer == Layer.WORKLOAD
-        assert "1 failed job" in issues[4].description
 
-        assert issues[5].layer == Layer.OBSERVABILITY
-        assert "warning events" in issues[5].description
+class TestReferencesReturned:
+    """Tests for references returned in CountIssueAssessment."""
 
+    def test_references_collected_in_order(self) -> None:
+        """References are returned in the same order as issue detection."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts(
+                total=3, ready=1, not_ready=2, memory_pressure=0,
+                disk_pressure=0, pid_pressure=0, network_unavailable=0,
+            ),
+            pod_counts=PodHealthCounts(
+                non_running=1, pending=2, crash_loop_backoff=3,
+                image_pull_backoff=0, completed_job_pods=0,
+            ),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        # References in order: node health, pod readiness, pod scheduling, CrashLoopBackOff
+        assert result.references == [
+            "node health",
+            "pod readiness",
+            "pod scheduling",
+            "CrashLoopBackOff",
+        ]
+
+    def test_references_empty_when_no_issues(self) -> None:
+        """References are empty when no issues detected."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts.empty(),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert result.references == []
+
+    def test_references_include_crash_loop_backoff(self) -> None:
+        """CrashLoopBackOff is included in references."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts(
+                non_running=0, pending=0, crash_loop_backoff=2,
+                image_pull_backoff=0, completed_job_pods=0,
+            ),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "CrashLoopBackOff" in result.references
+
+    def test_references_exclude_image_pull_backoff(self) -> None:
+        """ImagePullBackOff is NOT in references (caller handles it)."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts(
+                non_running=0, pending=0, crash_loop_backoff=0,
+                image_pull_backoff=3, completed_job_pods=0,
+            ),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "ImagePullBackOff" not in result.references
+
+    def test_references_exclude_job_failures(self) -> None:
+        """Job failures is NOT in references (caller handles it)."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts.empty(),
+            job_failures=5,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "job failures" not in result.references
+
+    def test_references_exclude_warning_events(self) -> None:
+        """Warning events is NOT in references (caller handles it)."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts.empty(),
+            job_failures=0,
+            warning_events=[MockWarningEvent("default", "Reason")],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "warning events" not in result.references
+
+    def test_references_include_node_health(self) -> None:
+        """Node health is included in references when nodes have issues."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts(
+                total=5, ready=3, not_ready=2, memory_pressure=1,
+                disk_pressure=0, pid_pressure=0, network_unavailable=0,
+            ),
+            pod_counts=PodHealthCounts.empty(),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "node health" in result.references
+
+    def test_references_include_pod_readiness(self) -> None:
+        """Pod readiness is included when non_running > 0."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts(
+                non_running=3, pending=0, crash_loop_backoff=0,
+                image_pull_backoff=0, completed_job_pods=0,
+            ),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "pod readiness" in result.references
+
+    def test_references_include_pod_scheduling(self) -> None:
+        """Pod scheduling is included when pending > 0."""
+        result = assess_count_issues(
+            node_conditions=NodeConditionCounts.empty(),
+            pod_counts=PodHealthCounts(
+                non_running=0, pending=2, crash_loop_backoff=0,
+                image_pull_backoff=0, completed_job_pods=0,
+            ),
+            job_failures=0,
+            warning_events=[],
+            warning_event_threshold=0,
+            issue_recorder=lambda d, s, layer: None,
+        )
+
+        assert "pod scheduling" in result.references
