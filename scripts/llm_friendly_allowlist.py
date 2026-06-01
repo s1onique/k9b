@@ -156,9 +156,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("frontend/src/__tests__/run-overview-dashboard.test.tsx", "[FRONTEND TEST] Dashboard tests"),
     ("frontend/src/__tests__/selected-run-refresh-regression.test.tsx", "[FRONTEND TEST] Refresh regression tests"),
 
-    # [BACKEND] Additional backend files
-    ("src/k8s_diag_agent/collect/live_snapshot.py", "[EXTRACTION] Live snapshot - complex extraction"),
-
     # [TEST FIXTURES] Additional test fixture files
     ("tests/fixtures/incident_report_cross_cluster_fixtures.py", "[TEST] Cross-cluster fixtures - large data"),
     ("tests/fixtures/ui_index_sample.py", "[TEST] UI index fixtures - large data"),
