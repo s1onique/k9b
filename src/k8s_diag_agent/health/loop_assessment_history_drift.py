@@ -97,8 +97,8 @@ def assess_previous_run_drift(
             [signal.id],
         )
 
-    # 2. Node count drift - direct comparison, no None guard
-    if previous and snapshot_node_count is not None and snapshot.metadata.node_count != previous.node_count:
+    # 2. Node count drift - direct comparison matching original behavior
+    if previous and snapshot.metadata.node_count != previous.node_count:
         has_drift = True
         signal = signal_adder(
             f"Node count changed since last run ({previous.node_count} -> {snapshot.metadata.node_count}).",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from unittest.mock import MagicMock
 
@@ -33,7 +33,7 @@ class SimpleHelmRelease:
     chart_version: str | None = "1.0.0"
 
 
-def make_signal_adder() -> tuple[list[Signal], callable]:
+def make_signal_adder() -> tuple[list[Signal], Callable[..., Signal]]:
     signals: list[Signal] = []
     call_count = [0]
 
@@ -50,7 +50,7 @@ def make_signal_adder() -> tuple[list[Signal], callable]:
     return signals, adder
 
 
-def make_finding_recorder() -> tuple[list[Finding], callable]:
+def make_finding_recorder() -> tuple[list[Finding], Callable[..., None]]:
     findings: list[Finding] = []
 
     def recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:

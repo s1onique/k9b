@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 from k8s_diag_agent.health.loop_assessment_history_drift import HistoryDriftAssessment
-from k8s_diag_agent.models import NextCheck
 
 
 class TestHistoryDriftAssessmentDataclass:
