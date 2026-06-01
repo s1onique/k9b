@@ -49,6 +49,16 @@ def check_regression_from_history(
     Returns:
         RegressionAssessment with regression status and affected layers.
     """
+    # Skip regression checks when there's no previous history
+    # (first run has no baseline to compare against)
+    if previous is None:
+        return RegressionAssessment(
+            has_regression=False,
+            workload_regression=False,
+            node_regression=False,
+            references=[],
+        )
+
     health_signals = snapshot.health_signals
     node_conditions = health_signals.node_conditions
     pod_counts = health_signals.pod_counts
