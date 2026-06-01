@@ -23,7 +23,6 @@ class TestAssessBaselinePolicy:
         result = assess_baseline_policy(
             snapshot=snapshot,
             watched_helm_releases=(),
-            watched_crd_families=(),
             baseline=BaselinePolicy.empty(),
             signal_adder=_make_signal_adder(signals),
             finding_recorder=_make_finding_recorder(findings),
@@ -62,7 +61,6 @@ class TestAssessBaselinePolicy:
         result = assess_baseline_policy(
             snapshot=snapshot,
             watched_helm_releases=(),
-            watched_crd_families=(),
             baseline=baseline,
             signal_adder=_make_signal_adder(signals),
             finding_recorder=_make_finding_recorder(findings),
@@ -106,7 +104,6 @@ class TestAssessBaselinePolicy:
         result = assess_baseline_policy(
             snapshot=snapshot,
             watched_helm_releases=(),
-            watched_crd_families=(),
             baseline=baseline,
             signal_adder=_make_signal_adder(signals),
             finding_recorder=_make_finding_recorder(findings),
@@ -142,7 +139,6 @@ class TestAssessBaselinePolicy:
         result = assess_baseline_policy(
             snapshot=snapshot,
             watched_helm_releases=(),
-            watched_crd_families=(),
             baseline=baseline,
             signal_adder=_make_signal_adder(signals),
             finding_recorder=_make_finding_recorder(findings),

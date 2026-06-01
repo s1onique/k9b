@@ -47,7 +47,6 @@ def assess_baseline_policy(
     *,
     snapshot: ClusterSnapshot,
     watched_helm_releases: tuple[str, ...],
-    watched_crd_families: tuple[str, ...],
     baseline: BaselinePolicy,
     signal_adder: Callable[[str, str, Layer], Signal],
     finding_recorder: Callable[[str, Layer, Sequence[str]], None],
@@ -61,7 +60,6 @@ def assess_baseline_policy(
     Args:
         snapshot: Current cluster snapshot with metadata and resources.
         watched_helm_releases: Tuple of watched Helm release names.
-        watched_crd_families: Tuple of watched CRD family names.
         baseline: Baseline policy to check against.
         signal_adder: Callable that adds a signal and returns it.
                      Signature: (description, severity, layer) -> Signal

@@ -768,7 +768,6 @@ def build_health_assessment(
     baseline_assessment = assess_baseline_policy(
         snapshot=snapshot,
         watched_helm_releases=target.watched_helm_releases,
-        watched_crd_families=target.watched_crd_families,
         baseline=baseline,
         signal_adder=add_signal,
         finding_recorder=record_finding,
@@ -821,37 +820,6 @@ def build_health_assessment(
 
     watched_release_versions = _watched_release_versions(snapshot, target.watched_helm_releases)
     watched_crd_versions = _watched_crd_versions(snapshot, target.watched_crd_families)
-    if baseline.release_policies and not baseline.is_drift_allowed(BaselineDriftCategory.WATCHED_HELM_RELEASE):
-        for release_key in sorted(target.watched_helm_releases):
-            policy = baseline.release_policy(release_key)
-            if not policy:
-                continue
-            current_version = watched_release_versions.get(release_key)
-            if policy.allows(current_version):
-                continue
-            issues_detected = True
-            actual_label = current_version if current_version is not None else "missing"
-            expectation_desc = policy.describe()
-            signal = add_signal(
-                (f"Watched Helm release {release_key} ({actual_label}) violates baseline policy ({expectation_desc})."),
-                "medium",
-                Layer.ROLLOUT,
-            )
-            record_finding(
-                (f"Watched Helm release {release_key} reported {actual_label} but baseline requires {expectation_desc}. {policy.why}"),
-                Layer.ROLLOUT,
-                [signal.id],
-            )
-            baseline_next_checks.append(
-                NextCheck(
-                    description=policy.next_check,
-                    owner="platform engineer",
-                    method="helm",
-                    evidence_needed=[f"Helm release {release_key}"],
-                )
-            )
-            baseline_reasons.append(policy.why)
-            references.append(f"baseline release {release_key}")
     if previous:
         previous_release_versions = previous.watched_helm_releases
         for release_key in sorted(set(watched_release_versions) | set(previous_release_versions)):
