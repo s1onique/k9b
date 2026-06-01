@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
 
 from k8s_diag_agent.health.loop_assessment_missing_evidence import (
     MissingEvidenceAssessment,
@@ -13,8 +12,8 @@ from k8s_diag_agent.health.loop_history import HealthHistoryEntry
 from k8s_diag_agent.models import Finding, Layer, Signal
 
 
-@dataclass
 class _FakeHealthRating:
+    """Fake HealthRating for testing - not actually a HealthRating enum."""
     value: str = "healthy"
 
 
@@ -83,7 +82,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -124,7 +123,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -167,7 +166,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -209,7 +208,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -249,7 +248,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -292,7 +291,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -333,7 +332,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             pass  # No-op for this test
 
         result = assess_missing_evidence(
@@ -364,7 +363,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             pass  # No-op for this test
 
         result = assess_missing_evidence(
@@ -393,7 +392,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             findings.append(
                 Finding(
                     id=generator(),
@@ -429,7 +428,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             pass  # No-op for this test
 
         # Note: duplicates would create multiple signals for the same item
@@ -461,7 +460,7 @@ class TestAssessMissingEvidence:
             signals.append(signal)
             return signal
 
-        def finding_recorder(description: str, layer: Layer, signal_ids: list[str]) -> None:
+        def finding_recorder(description: str, layer: Layer, signal_ids: Sequence[str]) -> None:
             pass  # No-op for this test
 
         result = assess_missing_evidence(

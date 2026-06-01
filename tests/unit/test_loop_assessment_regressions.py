@@ -1,11 +1,8 @@
-"""Tests for loop_assessment_regressions module."""
+"""Tests for loop_assessment_regressions module (detection tests)."""
 
 from __future__ import annotations
 
-from k8s_diag_agent.health.loop_assessment_regressions import (
-    RegressionAssessment,
-    check_regression_from_history,
-)
+from k8s_diag_agent.health.loop_assessment_regressions import check_regression_from_history
 from k8s_diag_agent.health.loop_history import HealthHistoryEntry
 from k8s_diag_agent.models import Finding, Layer, Signal
 
@@ -119,46 +116,6 @@ def _signal_id_generator() -> callable:
         return f"sig-{_counter[0]}"
 
     return generator
-
-
-class TestRegressionAssessment:
-    """Tests for RegressionAssessment class."""
-
-    def test_no_regression(self) -> None:
-        """RegressionAssessment with no regression detected."""
-        result = RegressionAssessment(has_regression=False)
-        assert result.has_regression is False
-        assert result.workload_regression is False
-        assert result.node_regression is False
-        assert result.references == []
-
-    def test_workload_regression(self) -> None:
-        """RegressionAssessment with workload regression."""
-        result = RegressionAssessment(
-            has_regression=True,
-            workload_regression=True,
-        )
-        assert result.has_regression is True
-        assert result.workload_regression is True
-        assert result.node_regression is False
-
-    def test_node_regression(self) -> None:
-        """RegressionAssessment with node regression."""
-        result = RegressionAssessment(
-            has_regression=True,
-            node_regression=True,
-        )
-        assert result.has_regression is True
-        assert result.workload_regression is False
-        assert result.node_regression is True
-
-    def test_references_tracked(self) -> None:
-        """RegressionAssessment tracks references."""
-        result = RegressionAssessment(
-            has_regression=True,
-            references=["regression"],
-        )
-        assert result.references == ["regression"]
 
 
 class TestCheckRegressionFromHistory:
