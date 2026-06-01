@@ -178,6 +178,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=None,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -204,6 +205,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -223,6 +225,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -246,6 +249,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -268,6 +272,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -288,6 +293,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -308,6 +314,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -329,6 +336,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=10,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -356,6 +364,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -389,6 +398,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -426,6 +436,7 @@ class TestCheckRegressionFromHistory:
         result = check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=1,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,
@@ -453,6 +464,7 @@ class TestCheckRegressionFromHistory:
         check_regression_from_history(
             snapshot=snapshot,
             previous=history,
+            warning_event_count=0,
             signals=signals,
             signal_id_generator=gen,
             findings=findings,

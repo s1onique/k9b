@@ -37,6 +37,7 @@ def check_regression_from_history(
     *,
     snapshot: ClusterSnapshot,
     previous: HealthHistoryEntry | None,
+    warning_event_count: int,
     signals: list[Signal],
     signal_id_generator: Callable[[], str],
     findings: list[Finding],
@@ -63,12 +64,11 @@ def check_regression_from_history(
     node_conditions = health_signals.node_conditions
     pod_counts = health_signals.pod_counts
     job_failures = health_signals.job_failures
-    warning_events = health_signals.warning_events
 
-    previous_node_conditions = previous.node_conditions if previous else {}
-    previous_pod_metrics = previous.pod_counts if previous else {}
-    previous_job_failures = previous.job_failures if previous else 0
-    previous_warning_count = previous.warning_event_count if previous else 0
+    previous_node_conditions = previous.node_conditions
+    previous_pod_metrics = previous.pod_counts
+    previous_job_failures = previous.job_failures
+    previous_warning_count = previous.warning_event_count
 
     has_regression = False
     workload_regression = False
@@ -143,9 +143,9 @@ def check_regression_from_history(
         Layer.WORKLOAD,
     )
     _check_regression(
-        len(warning_events),
+        warning_event_count,
         previous_warning_count,
-        f"Warning events increased ({previous_warning_count} -> {len(warning_events)}).",
+        f"Warning events increased ({previous_warning_count} -> {warning_event_count}).",
         Layer.OBSERVABILITY,
     )
 

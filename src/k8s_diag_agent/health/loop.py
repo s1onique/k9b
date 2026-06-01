@@ -1041,11 +1041,15 @@ def build_health_assessment(
     regression_assessment = check_regression_from_history(
         snapshot=snapshot,
         previous=previous,
+        warning_event_count=warning_event_count,
         signals=signals,
         signal_id_generator=generator.next_id,
         findings=issue_findings,
     )
     issues_detected = issues_detected or regression_assessment.has_regression
+    workload_issue_present = workload_issue_present or regression_assessment.workload_regression
+    node_issue_present = node_issue_present or regression_assessment.node_regression
+    references.extend(regression_assessment.references)
 
     from .loop_assessment_warning_events import match_warning_event_patterns
 
