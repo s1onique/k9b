@@ -1003,39 +1003,18 @@ def build_health_assessment(
             "high",
             Layer.WORKLOAD,
         )
-        if image_pull_secret_insight and image_pull_secret_insight.external_secrets:
-            details = image_pull_secret_insight
-            target_status = details.target_secret_status
-            primary_external = details.external_secrets[0]
-            issues_detected = True
-            signal = add_signal(
-                (f"Registry image pull secret {details.secret_name} supply chain is broken in {details.namespace}."),
-                "high",
-                Layer.WORKLOAD,
-            )
-            record_finding(
-                (f"ExternalSecret {primary_external.name} reports {primary_external.status_reason}: {primary_external.status_message or 'missing secret'} for {details.secret_name}."),
-                Layer.WORKLOAD,
-                [signal.id],
-            )
-            image_pull_secret_next_checks.append(
-                NextCheck(
-                    description="Review the ExternalSecret and backing Kubernetes secret for the failing image pull secret.",
-                    owner="platform engineer",
-                    method="kubectl",
-                    evidence_needed=[
-                        f"kubectl describe externalsecret {primary_external.name} -n {details.namespace}",
-                        f"kubectl describe secret {details.secret_name} -n {details.namespace}",
-                    ],
-                )
-            )
-            insight_hypothesis = Hypothesis(
-                id=generator.next_id(),
-                description=(f"Image pull secret {details.secret_name} is missing because ExternalSecret {primary_external.name} failed to update the secret ({primary_external.status_reason})."),
-                confidence=ConfidenceLevel.MEDIUM,
-                probable_layer=Layer.WORKLOAD,
-                what_would_falsify=(f"ExternalSecret {primary_external.name} reports Ready and secret {target_status.name or details.secret_name} exists."),
-            )
+        from .loop_assessment_image_pull import assess_image_pull_issues
+
+        returned_hypothesis, image_pull_issues_detected = assess_image_pull_issues(
+            image_pull_secret_insight=image_pull_secret_insight,
+            signals=signals,
+            signal_id_generator=generator.next_id,
+            findings=issue_findings,
+            next_checks=image_pull_secret_next_checks,
+        )
+        if returned_hypothesis is not None:
+            insight_hypothesis = returned_hypothesis
+        issues_detected = issues_detected or image_pull_issues_detected
     if job_failures > 0:
         workload_issue_present = True
         issues_detected = True
