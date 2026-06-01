@@ -51,6 +51,7 @@ from .loop_assessment_history_drift import assess_previous_run_drift
 from .loop_assessment_image_pull import assess_image_pull_issues
 from .loop_assessment_missing_evidence import assess_missing_evidence
 from .loop_assessment_regressions import check_regression_from_history
+from .loop_assessment_result import build_health_assessment_result
 from .loop_assessment_summary import derive_assessment_summary
 from .loop_assessment_warning_events import match_warning_event_patterns
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
@@ -995,7 +996,7 @@ def build_health_assessment(
         probable_layer_of_origin=dominant_layer,
         overall_confidence=overall_confidence,
     )
-    return HealthAssessmentResult(
+    return build_health_assessment_result(
         assessment=assessment,
         rating=rating,
         missing_evidence=missing,
