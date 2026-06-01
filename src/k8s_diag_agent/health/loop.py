@@ -1036,64 +1036,16 @@ def build_health_assessment(
             "low",
             Layer.OBSERVABILITY,
         )
-    previous_node_conditions = previous.node_conditions if previous else {}
-    previous_pod_metrics = previous.pod_counts if previous else {}
-    previous_job_failures = previous.job_failures if previous else 0
-    previous_warning_count = previous.warning_event_count if previous else 0
+    from .loop_assessment_regressions import check_regression_from_history
 
-    def _check_regression(current: int, previous_value: int, description: str, layer: Layer) -> None:
-        nonlocal issues_detected, workload_issue_present, node_issue_present
-        if current > previous_value:
-            issues_detected = True
-            if layer == Layer.WORKLOAD:
-                workload_issue_present = True
-            elif layer == Layer.NODE:
-                node_issue_present = True
-            references.append("regression")
-            _record_issue(description, "medium", layer)
-
-    _check_regression(
-        node_conditions.not_ready,
-        previous_node_conditions.get("not_ready", 0),
-        f"NotReady node count increased ({previous_node_conditions.get('not_ready', 0)} -> {node_conditions.not_ready}).",
-        Layer.NODE,
+    regression_assessment = check_regression_from_history(
+        snapshot=snapshot,
+        previous=previous,
+        signals=signals,
+        signal_id_generator=generator.next_id,
+        findings=issue_findings,
     )
-    _check_regression(
-        pod_counts.non_running,
-        previous_pod_metrics.get("non_running", 0),
-        f"Non-running pods increased ({previous_pod_metrics.get('non_running', 0)} -> {pod_counts.non_running}).",
-        Layer.WORKLOAD,
-    )
-    _check_regression(
-        pod_counts.pending,
-        previous_pod_metrics.get("pending", 0),
-        f"Pending pod count increased ({previous_pod_metrics.get('pending', 0)} -> {pod_counts.pending}).",
-        Layer.WORKLOAD,
-    )
-    _check_regression(
-        pod_counts.crash_loop_backoff,
-        previous_pod_metrics.get("crash_loop_backoff", 0),
-        f"CrashLoopBackOff pods increased ({previous_pod_metrics.get('crash_loop_backoff', 0)} -> {pod_counts.crash_loop_backoff}).",
-        Layer.WORKLOAD,
-    )
-    _check_regression(
-        pod_counts.image_pull_backoff,
-        previous_pod_metrics.get("image_pull_backoff", 0),
-        f"ImagePullBackOff pods increased ({previous_pod_metrics.get('image_pull_backoff', 0)} -> {pod_counts.image_pull_backoff}).",
-        Layer.WORKLOAD,
-    )
-    _check_regression(
-        job_failures,
-        previous_job_failures,
-        f"Job failure count increased ({previous_job_failures} -> {job_failures}).",
-        Layer.WORKLOAD,
-    )
-    _check_regression(
-        warning_event_count,
-        previous_warning_count,
-        f"Warning events increased ({previous_warning_count} -> {warning_event_count}).",
-        Layer.OBSERVABILITY,
-    )
+    issues_detected = issues_detected or regression_assessment.has_regression
 
     from .loop_assessment_warning_events import match_warning_event_patterns
 
