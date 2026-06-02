@@ -109,7 +109,7 @@ Assessment and comparison orchestration wrappers are already minimal. No further
 
 | Module | Lines | Function | Imports loop.py? | Imports HealthLoopRunner? |
 |--------|-------|----------|------------------|--------------------------|
-| `loop_runner_assessments.py` | 181 | `build_assessments_for_records` | Yes (TYPE_CHECKING only) | No |
+| `loop_runner_assessments.py` | 181 | `build_assessments_for_records` | No | No |
 | `loop_runner_drilldowns.py` | 147 | `build_drilldowns_for_records` | No | No |
 | `loop_runner_comparisons.py` | 290 | `evaluate_triggers_for_records` | No | No |
 
@@ -143,7 +143,7 @@ The extraction follows the standard pattern used throughout the health-loop epic
 2. **Helper modules own all logic**: `loop_runner_assessments.py`, `loop_runner_drilldowns.py`, `loop_runner_comparisons.py`
 3. **No `Any` at boundaries**: All parameters are typed with explicit types or duck-typed callbacks
 4. **No `type: ignore` comments**: Clean typing throughout
-5. **Helper modules import neither `loop.py` nor `HealthLoopRunner`** (except for TYPE_CHECKING imports in loop_runner_assessments.py)
+5. **Helper modules import neither `loop.py` nor `HealthLoopRunner`**
 6. **Comprehensive test coverage**: Integration and unit tests
 
 **Wrapper sizes confirm minimality:**

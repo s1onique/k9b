@@ -31,7 +31,8 @@ from .notifications import (
 from .validators import HealthAssessmentValidator
 
 if TYPE_CHECKING:
-    from .loop import HealthAssessmentArtifact, HealthAssessmentResult, HealthSnapshotRecord
+    from .loop_history import HealthAssessmentArtifact, HealthAssessmentResult
+    from .loop_types import HealthSnapshotRecord
 
 
 # Type alias for callbacks to avoid hard coupling to runner
@@ -82,10 +83,8 @@ def build_assessments_for_records(
     """
     # Import build_health_assessment locally to avoid import cycle
     from ..render.formatter import assessment_to_dict
-    from .loop import (
-        HealthAssessmentArtifact,
-        build_health_assessment,
-    )
+    from .loop_health_assessment import build_health_assessment
+    from .loop_history import HealthAssessmentArtifact
 
     artifacts: list[HealthAssessmentArtifact] = []
 
