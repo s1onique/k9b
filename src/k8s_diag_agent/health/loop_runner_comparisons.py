@@ -16,10 +16,19 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .loop_comparison_policy import BaselineRegistry, _policy_eligible_pair
-from .loop_history import _serialize_value, _write_json
+from .loop_comparison_types import (
+    ComparisonDecision,
+    ComparisonIntent,
+    ComparisonPeer,
+    ComparisonTriggerArtifact,
+    TriggerDetail,
+    TriggerPolicy,
+    determine_pair_trigger_reasons,
+)
+from .loop_history import HealthHistoryEntry, _serialize_value, _write_json
 from .loop_types import HealthSnapshotRecord
 from .notifications import NotificationArtifact, build_suspicious_comparison_notification
 from .validators import ComparisonDecisionValidator
@@ -27,11 +36,6 @@ from .validators import ComparisonDecisionValidator
 if TYPE_CHECKING:
     from ..collect.cluster_snapshot import ClusterSnapshot
     from ..compare.two_cluster import ClusterComparison
-    from .loop import (
-        ComparisonPeer,
-        ComparisonTriggerArtifact,
-        TriggerPolicy,
-    )
 
 
 # Type alias for callbacks to avoid hard coupling to runner
@@ -46,7 +50,7 @@ def evaluate_triggers_for_records(
     peers: tuple[ComparisonPeer, ...],
     trigger_policy: TriggerPolicy,
     baseline_registry: BaselineRegistry,
-    history: Mapping[str, Any],
+    history: Mapping[str, HealthHistoryEntry],
     run_id: str,
     run_label: str,
     manual_comparison_keys: set[tuple[str, str]],
@@ -84,25 +88,16 @@ def evaluate_triggers_for_records(
     """
     # Import locally to avoid circular imports at module level
     from ..identity.artifact import new_artifact_id
-    from .loop import (
-        ComparisonDecision,
-        ComparisonIntent,
-        ComparisonTriggerArtifact,
-        TriggerDetail,
-        determine_pair_trigger_reasons,
-    )
 
     triggers: list[ComparisonTriggerArtifact] = []
     decisions: list[ComparisonDecision] = []
 
     if not peers:
         if log_event_fn:
-            from .loop import _HEALTH_ONLY_MESSAGE
-
             log_event_fn(
                 "health-loop",
                 "INFO",
-                _HEALTH_ONLY_MESSAGE,
+                "No peer mappings configured; running health-only mode.",
                 event="health-only",
             )
         return triggers

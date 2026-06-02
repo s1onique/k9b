@@ -6,10 +6,9 @@ import json
 import subprocess
 import time
 import warnings
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4  # noqa: F401 - re-exported for backward compatibility
@@ -17,7 +16,6 @@ from uuid import uuid4  # noqa: F401 - re-exported for backward compatibility
 from ..collect.cluster_snapshot import ClusterSnapshot
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
-from ..datetime_utils import parse_iso_to_utc
 from ..external_analysis.adapter import ExternalAnalysisRequest, build_external_analysis_adapters, normalize_adapter_name
 from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInventory
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
@@ -31,7 +29,7 @@ from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROV
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
-from .baseline import BaselineDriftCategory, BaselinePolicy, resolve_baseline_policy_path
+from .baseline import BaselinePolicy, resolve_baseline_policy_path
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .drilldown_assessor import assess_drilldown_artifact
 from .image_pull_secret import ImagePullSecretInsight, ImagePullSecretInspector
@@ -47,6 +45,15 @@ from .loop_comparison_policy import (  # noqa: F401
     _policy_eligible_pair,  # noqa: F401 - re-exported for backward compatibility
     _resolve_peer_role,  # noqa: F401 - re-exported for backward compatibility
     _validate_suspicious_pairs,  # noqa: F401 - re-exported for backward compatibility
+)
+from .loop_comparison_types import (  # noqa: F401 - re-export for backward compatibility
+    ComparisonDecision,  # noqa: F401
+    ComparisonIntent,  # noqa: F401 - re-exported for backward compatibility
+    ComparisonPeer,  # noqa: F401 - re-exported for backward compatibility
+    ComparisonTriggerArtifact,  # noqa: F401 - re-exported for backward compatibility
+    TriggerDetail,  # noqa: F401 - re-exported for backward compatibility
+    TriggerPolicy,  # noqa: F401 - re-exported for backward compatibility
+    determine_pair_trigger_reasons,  # noqa: F401 - re-exported for backward compatibility
 )
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
@@ -101,30 +108,6 @@ _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 
 
 @dataclass(frozen=True)
-class ComparisonPeer:
-    primary: str
-    secondary: str
-    intent: ComparisonIntent
-    expected_drift_categories: tuple[str, ...] = field(default_factory=tuple)
-    notes: str | None = None
-
-
-class ComparisonIntent(StrEnum):
-    EXPECTED_DRIFT = "expected-drift"
-    SUSPICIOUS_DRIFT = "suspicious-drift"
-    IRRELEVANT_DRIFT = "irrelevant-drift"
-
-    def label(self) -> str:
-        if self == ComparisonIntent.EXPECTED_DRIFT:
-            return "expected drift"
-        if self == ComparisonIntent.SUSPICIOUS_DRIFT:
-            return "suspicious drift"
-        if self == ComparisonIntent.IRRELEVANT_DRIFT:
-            return "irrelevant drift"
-        return str(self)
-
-
-@dataclass(frozen=True)
 class ManualComparison:
     primary: str
     secondary: str
@@ -134,204 +117,6 @@ class ManualComparison:
 class ManualExternalAnalysisRequest:
     tool: str
     target: str
-
-
-@dataclass(frozen=True)
-class TriggerPolicy:
-    control_plane_version: bool
-    watched_helm_release: bool
-    watched_crd: bool
-    health_regression: bool
-    missing_evidence: bool
-    manual: bool
-    warning_event_threshold: int = 3
-
-
-# HealthAssessmentResult and HealthAssessmentArtifact are imported from loop_history
-# for consistency and to avoid duplication. See imports above.
-
-
-@dataclass(frozen=True)
-class TriggerDetail:
-    type: str
-    reason: str
-    baseline_expectation: str | None
-    actual_value: str
-    previous_run_value: str | None
-    why: str
-    next_check: str | None
-    peer_roles: str | None = None
-    classification: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        data = {
-            "type": self.type,
-            "reason": self.reason,
-            "baseline_expectation": self.baseline_expectation,
-            "actual_value": self.actual_value,
-            "previous_run_value": self.previous_run_value,
-            "why": self.why,
-            "next_check": self.next_check,
-        }
-        if self.peer_roles:
-            data["peer_roles"] = self.peer_roles
-        if self.classification:
-            data["classification"] = self.classification
-        return data
-
-
-@dataclass
-class ComparisonTriggerArtifact:
-    run_label: str
-    run_id: str
-    timestamp: datetime
-    primary: str
-    secondary: str
-    primary_label: str
-    secondary_label: str
-    trigger_reasons: tuple[str, ...]
-    comparison_summary: dict[str, int]
-    differences: dict[str, dict[str, Any]]
-    trigger_details: tuple[TriggerDetail, ...]
-    comparison_intent: str
-    expected_drift_categories: tuple[str, ...]
-    ignored_drift_categories: tuple[str, ...]
-    peer_notes: str | None = None
-    notes: str | None = None
-    artifact_id: str | None = None  # None for legacy artifacts, auto-generated for new artifacts
-
-    def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {
-            "run_label": self.run_label,
-            "run_id": self.run_id,
-            "timestamp": self.timestamp.isoformat(),
-            "primary": self.primary,
-            "secondary": self.secondary,
-            "primary_label": self.primary_label,
-            "secondary_label": self.secondary_label,
-            "trigger_reasons": list(self.trigger_reasons),
-            "comparison_summary": self.comparison_summary,
-            "differences": self.differences,
-            "trigger_details": [detail.to_dict() for detail in self.trigger_details],
-            "comparison_intent": self.comparison_intent,
-            "expected_drift_categories": list(self.expected_drift_categories),
-            "ignored_drift_categories": list(self.ignored_drift_categories),
-            "peer_notes": self.peer_notes,
-            "notes": self.notes,
-        }
-        # Include artifact_id when present (backward compat: legacy artifacts without it)
-        if self.artifact_id is not None:
-            data["artifact_id"] = self.artifact_id
-        return data
-
-    @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> ComparisonTriggerArtifact:
-        """Parse a trigger artifact from a dict, with backward compatibility for legacy artifacts."""
-        # Parse artifact_id for backward compatibility (legacy artifacts without it)
-        artifact_id_value = raw.get("artifact_id")
-        parsed_artifact_id: str | None = None
-        if artifact_id_value is not None and isinstance(artifact_id_value, str) and artifact_id_value:
-            parsed_artifact_id = artifact_id_value
-
-        # Parse timestamp
-        timestamp_value = raw.get("timestamp")
-        parsed_timestamp: datetime
-        if isinstance(timestamp_value, str):
-            parsed_timestamp = parse_iso_to_utc(timestamp_value) or datetime.now(UTC)
-        else:
-            parsed_timestamp = datetime.now(UTC)
-
-        # Parse trigger details
-        trigger_details_raw = raw.get("trigger_details") or []
-        parsed_trigger_details: list[TriggerDetail] = []
-        if isinstance(trigger_details_raw, list):
-            for detail_raw in trigger_details_raw:
-                if isinstance(detail_raw, Mapping):
-                    parsed_trigger_details.append(
-                        TriggerDetail(
-                            type=str(detail_raw.get("type", "")),
-                            reason=str(detail_raw.get("reason", "")),
-                            baseline_expectation=str(detail_raw.get("baseline_expectation")) if detail_raw.get("baseline_expectation") else None,
-                            actual_value=str(detail_raw.get("actual_value", "")),
-                            previous_run_value=str(detail_raw.get("previous_run_value")) if detail_raw.get("previous_run_value") else None,
-                            why=str(detail_raw.get("why", "")),
-                            next_check=str(detail_raw.get("next_check")) if detail_raw.get("next_check") else None,
-                            peer_roles=str(detail_raw.get("peer_roles")) if detail_raw.get("peer_roles") else None,
-                            classification=str(detail_raw.get("classification")) if detail_raw.get("classification") else None,
-                        )
-                    )
-
-        # Parse trigger_reasons
-        trigger_reasons_raw = raw.get("trigger_reasons") or []
-        parsed_trigger_reasons: tuple[str, ...]
-        if isinstance(trigger_reasons_raw, list):
-            parsed_trigger_reasons = tuple(str(item) for item in trigger_reasons_raw)
-        else:
-            parsed_trigger_reasons = ()
-
-        # Parse categories
-        def _parse_tuple(value: Any) -> tuple[str, ...]:
-            if isinstance(value, list):
-                return tuple(str(item) for item in value)
-            return ()
-
-        return cls(
-            run_label=str(raw.get("run_label", "")),
-            run_id=str(raw.get("run_id", "")),
-            timestamp=parsed_timestamp,
-            primary=str(raw.get("primary", "")),
-            secondary=str(raw.get("secondary", "")),
-            primary_label=str(raw.get("primary_label", "")),
-            secondary_label=str(raw.get("secondary_label", "")),
-            trigger_reasons=parsed_trigger_reasons,
-            comparison_summary=dict(raw.get("comparison_summary") or {}),
-            differences=dict(raw.get("differences") or {}),
-            trigger_details=tuple(parsed_trigger_details),
-            comparison_intent=str(raw.get("comparison_intent", "")),
-            expected_drift_categories=_parse_tuple(raw.get("expected_drift_categories")),
-            ignored_drift_categories=_parse_tuple(raw.get("ignored_drift_categories")),
-            peer_notes=str(raw.get("peer_notes")) if raw.get("peer_notes") else None,
-            notes=str(raw.get("notes")) if raw.get("notes") else None,
-            artifact_id=parsed_artifact_id,
-        )
-
-
-@dataclass(frozen=True)
-class ComparisonDecision:
-    primary_label: str
-    secondary_label: str
-    policy_eligible: bool
-    triggered: bool
-    comparison_intent: str
-    reason: str
-    primary_class: str | None
-    secondary_class: str | None
-    primary_role: str | None
-    secondary_role: str | None
-    primary_cohort: str | None
-    secondary_cohort: str | None
-    expected_drift_categories: tuple[str, ...]
-    ignored_drift_categories: tuple[str, ...]
-    notes: str | None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "primary_label": self.primary_label,
-            "secondary_label": self.secondary_label,
-            "policy_eligible": self.policy_eligible,
-            "triggered": self.triggered,
-            "comparison_intent": self.comparison_intent,
-            "reason": self.reason,
-            "primary_class": self.primary_class,
-            "secondary_class": self.secondary_class,
-            "primary_role": self.primary_role,
-            "secondary_role": self.secondary_role,
-            "primary_cohort": self.primary_cohort,
-            "secondary_cohort": self.secondary_cohort,
-            "expected_drift_categories": list(self.expected_drift_categories),
-            "ignored_drift_categories": list(self.ignored_drift_categories),
-            "notes": self.notes,
-        }
 
 
 @dataclass
@@ -575,248 +360,6 @@ def build_health_assessment(
         image_pull_secret_insight=image_pull_secret_insight,
     )
 
-
-def determine_pair_trigger_reasons(
-    primary: HealthSnapshotRecord,
-    secondary: HealthSnapshotRecord,
-    policy: TriggerPolicy,
-    history: dict[str, HealthHistoryEntry],
-    manual_keys: set[tuple[str, str]],
-    baseline_policy: BaselinePolicy,
-    baseline_registry: BaselineRegistry | None,
-    classification: str | None = None,
-) -> list[TriggerDetail]:
-    details: list[TriggerDetail] = []
-    primary_ref, _ = primary.refs()
-    secondary_ref, _ = secondary.refs()
-    pair_key = (primary_ref, secondary_ref)
-
-    def _peer_role_summary() -> str | None:
-        primary_role = baseline_registry.role_for(primary_ref) if baseline_registry else None
-        if not primary_role:
-            primary_role = baseline_registry.role_for(primary.target.label) if baseline_registry else None
-        secondary_role = baseline_registry.role_for(secondary_ref) if baseline_registry else None
-        if not secondary_role:
-            secondary_role = baseline_registry.role_for(secondary.target.label) if baseline_registry else None
-        if not primary_role and not secondary_role:
-            return None
-        summary_parts: list[str] = []
-        summary_parts.append(f"{primary.target.label} ({primary_role})" if primary_role else primary.target.label)
-        summary_parts.append(f"{secondary.target.label} ({secondary_role})" if secondary_role else secondary.target.label)
-        return " vs ".join(summary_parts)
-
-    role_summary = _peer_role_summary()
-
-    def _path_label(record: HealthSnapshotRecord) -> str:
-        return record.baseline_policy_path or "<default>"
-
-    primary_path = _path_label(primary)
-    secondary_path = _path_label(secondary)
-    if primary_path != secondary_path:
-        details.append(
-            TriggerDetail(
-                type="baseline_mismatch",
-                reason=(f"baseline mismatch ({primary_path} vs {secondary_path})" if primary_path and secondary_path else "baseline mismatch"),
-                baseline_expectation=None,
-                actual_value=f"{primary_path} vs {secondary_path}",
-                previous_run_value=None,
-                why=("Targets rely on different baseline policies, so expected parity between them may not hold."),
-                next_check="Confirm the cohorts and baseline policies align before treating drift as actionable.",
-                peer_roles=role_summary,
-                classification=classification,
-            )
-        )
-
-    def _format_previous_control_plane(cluster_id: str) -> str:
-        prev = history.get(cluster_id)
-        if not prev:
-            return "unknown"
-        return prev.control_plane_version or "unknown"
-
-    def _format_previous_release(cluster_id: str, release_key: str) -> str:
-        prev = history.get(cluster_id)
-        if not prev:
-            return "unknown"
-        return prev.watched_helm_releases.get(release_key) or "missing"
-
-    def _format_previous_crd(cluster_id: str, crd_key: str) -> str:
-        prev = history.get(cluster_id)
-        if not prev:
-            return "unknown"
-        return prev.watched_crd_families.get(crd_key) or "missing"
-
-    if policy.manual and pair_key in manual_keys:
-        details.append(
-            TriggerDetail(
-                type="manual",
-                reason="manual comparison requested",
-                baseline_expectation=None,
-                actual_value="manual comparison",
-                previous_run_value=None,
-                why="Manual comparison requested",
-                next_check=None,
-                peer_roles=role_summary,
-                classification=classification,
-            )
-        )
-    if policy.control_plane_version and not baseline_policy.is_drift_allowed(BaselineDriftCategory.CONTROL_PLANE_VERSION):
-        primary_version = primary.snapshot.metadata.control_plane_version or "unknown"
-        secondary_version = secondary.snapshot.metadata.control_plane_version or "unknown"
-        if primary_version != secondary_version:
-            expectation = baseline_policy.control_plane_expectation
-            expectation_desc = expectation.describe() if expectation else None
-            reason = f"control plane version drift ({primary_version} vs {secondary_version})"
-            previous_value = f"{primary.target.label}: {_format_previous_control_plane(primary.snapshot.metadata.cluster_id)} | {secondary.target.label}: {_format_previous_control_plane(secondary.snapshot.metadata.cluster_id)}"
-            why_parts = []
-            if expectation and expectation.why:
-                why_parts.append(expectation.why)
-            else:
-                why_parts.append("Control plane divergence can affect platform stability.")
-            if role_summary:
-                why_parts.append(role_summary)
-            details.append(
-                TriggerDetail(
-                    type=BaselineDriftCategory.CONTROL_PLANE_VERSION.value,
-                    reason=reason,
-                    baseline_expectation=expectation_desc,
-                    actual_value=f"{primary_version} vs {secondary_version}",
-                    previous_run_value=previous_value,
-                    why=" ".join(why_parts).strip(),
-                    next_check=expectation.next_check if expectation else None,
-                    peer_roles=role_summary,
-                    classification=classification,
-                )
-            )
-    if policy.watched_helm_release and not baseline_policy.is_drift_allowed(BaselineDriftCategory.WATCHED_HELM_RELEASE):
-        watched_releases = set(primary.target.watched_helm_releases) | set(secondary.target.watched_helm_releases)
-        for release_key in sorted(watched_releases):
-            primary_release = primary.snapshot.helm_releases.get(release_key)
-            secondary_release = secondary.snapshot.helm_releases.get(release_key)
-            if not primary_release and not secondary_release:
-                continue
-            primary_version = primary_release.chart_version if primary_release else "missing"
-            secondary_version = secondary_release.chart_version if secondary_release else "missing"
-            if primary_version == secondary_version:
-                continue
-            release_policy = baseline_policy.release_policy(release_key)
-            expectation_desc = release_policy.describe() if release_policy else None
-            next_check_value = release_policy.next_check if release_policy else None
-            reason = f"watched Helm release {release_key} drift ({primary_version} vs {secondary_version})"
-            previous_value = f"{primary.target.label}: {_format_previous_release(primary.snapshot.metadata.cluster_id, release_key)} | {secondary.target.label}: {_format_previous_release(secondary.snapshot.metadata.cluster_id, release_key)}"
-            why_parts = []
-            if release_policy:
-                if release_policy.why:
-                    why_parts.append(release_policy.why)
-            else:
-                why_parts.append(f"Watched Helm release {release_key} drift can cause workload unpredictability.")
-            if role_summary:
-                why_parts.append(role_summary)
-            details.append(
-                TriggerDetail(
-                    type=BaselineDriftCategory.WATCHED_HELM_RELEASE.value,
-                    reason=reason,
-                    baseline_expectation=expectation_desc,
-                    actual_value=f"{primary_version} vs {secondary_version}",
-                    previous_run_value=previous_value,
-                    why=" ".join(why_parts).strip(),
-                    next_check=next_check_value,
-                    peer_roles=role_summary,
-                    classification=classification,
-                )
-            )
-    if policy.watched_crd and not baseline_policy.is_drift_allowed(BaselineDriftCategory.WATCHED_CRD):
-        watched_crds = set(primary.target.watched_crd_families) | set(secondary.target.watched_crd_families)
-        for crd_name in sorted(watched_crds):
-            primary_crd = primary.snapshot.crds.get(crd_name)
-            secondary_crd = secondary.snapshot.crds.get(crd_name)
-            if not primary_crd and not secondary_crd:
-                continue
-            primary_storage = primary_crd.storage_version if primary_crd else "missing"
-            secondary_storage = secondary_crd.storage_version if secondary_crd else "missing"
-            if primary_storage == secondary_storage:
-                continue
-            crd_policy = baseline_policy.crd_policy(crd_name)
-            expectation_desc = f"CRD {crd_name} must exist" if crd_policy else None
-            next_crd_check = crd_policy.next_check if crd_policy else None
-            reason = f"watched CRD {crd_name} storage drift ({primary_storage} vs {secondary_storage})"
-            previous_value = f"{primary.target.label}: {_format_previous_crd(primary.snapshot.metadata.cluster_id, crd_name)} | {secondary.target.label}: {_format_previous_crd(secondary.snapshot.metadata.cluster_id, crd_name)}"
-            why_parts = []
-            if crd_policy:
-                if crd_policy.why:
-                    why_parts.append(crd_policy.why)
-            else:
-                why_parts.append(f"CRD {crd_name} drift can impact dependent controllers.")
-            if role_summary:
-                why_parts.append(role_summary)
-            details.append(
-                TriggerDetail(
-                    type=BaselineDriftCategory.WATCHED_CRD.value,
-                    reason=reason,
-                    baseline_expectation=expectation_desc,
-                    actual_value=f"{primary_storage} vs {secondary_storage}",
-                    previous_run_value=previous_value,
-                    why=" ".join(why_parts).strip(),
-                    next_check=next_crd_check,
-                    peer_roles=role_summary,
-                    classification=classification,
-                )
-            )
-    if policy.health_regression:
-        primary_prev = history.get(primary.snapshot.metadata.cluster_id)
-        if primary_prev and primary_prev.health_rating == HealthRating.HEALTHY and (primary.assessment and primary.assessment.rating == HealthRating.DEGRADED):
-            details.append(
-                TriggerDetail(
-                    type="health_regression",
-                    reason=f"health regression detected for {primary.target.label}",
-                    baseline_expectation=None,
-                    actual_value="health regression",
-                    previous_run_value=None,
-                    why="Health rating degraded since last healthy run.",
-                    next_check=None,
-                    peer_roles=role_summary,
-                    classification=classification,
-                )
-            )
-        secondary_prev = history.get(secondary.snapshot.metadata.cluster_id)
-        if secondary_prev and secondary_prev.health_rating == HealthRating.HEALTHY and (secondary.assessment and secondary.assessment.rating == HealthRating.DEGRADED):
-            details.append(
-                TriggerDetail(
-                    type="health_regression",
-                    reason=f"health regression detected for {secondary.target.label}",
-                    baseline_expectation=None,
-                    actual_value="health regression",
-                    previous_run_value=None,
-                    why="Health rating degraded since last healthy run.",
-                    next_check=None,
-                    peer_roles=role_summary,
-                    classification=classification,
-                )
-            )
-    if policy.missing_evidence:
-
-        def _missing_delta(entry: HealthSnapshotRecord) -> None:
-            prev = history.get(entry.snapshot.metadata.cluster_id)
-            prev_missing = set(prev.missing_evidence) if prev else set()
-            current_missing = set(entry.assessment.missing_evidence) if entry.assessment else set()
-            new_missing = current_missing - prev_missing
-            if new_missing:
-                details.append(
-                    TriggerDetail(
-                        type="missing_evidence",
-                        reason=(f"missing evidence anomaly for {entry.target.label}: {', '.join(sorted(new_missing))}"),
-                        baseline_expectation=None,
-                        actual_value=", ".join(sorted(new_missing)),
-                        previous_run_value=None,
-                        why="Missing telemetry appeared since last run.",
-                        next_check=None,
-                        peer_roles=role_summary,
-                        classification=classification,
-                    )
-                )
-
-        _missing_delta(primary)
-        _missing_delta(secondary)
-    return details
 
 
 class HealthLoopRunner:
@@ -1470,8 +1013,8 @@ class HealthLoopRunner:
             # Log LLM call result with deterministic call ID for correlation
             result_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
             # Extract failure details from failure_metadata if available (check top-level and nested prompt_diagnostics)
-            result_failure_class: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "failure_class")
-            result_exception_type: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "exception_type")
+            result_failure_class: str | None = self._failure_metadata_field(failure_metadata, "failure_class")
+            result_exception_type: str | None = self._failure_metadata_field(failure_metadata, "exception_type")
             result_skip_reason: str | None = None
             if failure_metadata:
                 nested_diags = failure_metadata.get("prompt_diagnostics")
@@ -1503,8 +1046,8 @@ class HealthLoopRunner:
                 max_tokens=result_max_tokens,
                 failure_class=result_failure_class,
                 exception_type=result_exception_type,
-                finish_reason=HealthLoopRunner._failure_metadata_field(failure_metadata, "finish_reason"),
-                completion_stopped_by_length=HealthLoopRunner._failure_metadata_field(
+                finish_reason=self._failure_metadata_field(failure_metadata, "finish_reason"),
+                completion_stopped_by_length=self._failure_metadata_field(
                     failure_metadata,
                     "completion_stopped_by_length",
                 ),
