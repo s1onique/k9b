@@ -25,7 +25,6 @@ from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnaly
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..external_analysis.vmalert_discovery import VmalertSourceInventory
-from ..identity.artifact import new_artifact_id
 from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
@@ -53,12 +52,13 @@ from .loop_config_helpers import _parse_comparison_intent, _parse_manual_externa
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_failure_metadata import extract_failure_metadata_field
 from .loop_health_assessment import build_health_assessment as _build_health_assessment_impl
-from .loop_history import HealthAssessmentArtifact, HealthAssessmentResult, HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _write_json
+from .loop_history import HealthAssessmentArtifact, HealthAssessmentResult, HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _str_or_none, _write_json
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
 from .loop_runner_assessments import build_assessments_for_records
+from .loop_runner_comparisons import evaluate_triggers_for_records
 from .loop_runner_drilldowns import build_drilldowns_for_records
 from .loop_runner_history import load_runner_history, persist_runner_history
 from .loop_runner_next_check_planning import run_next_check_planning
@@ -77,10 +77,9 @@ from .loop_types import HealthSnapshotRecord as _HealthSnapshotRecord
 from .loop_types import HealthTarget as _HealthTarget
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
-from .notifications import NotificationArtifact, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
+from .notifications import NotificationArtifact, build_external_analysis_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
-from .validators import ComparisonDecisionValidator
 
 # Re-export for backward compatibility with existing imports
 HealthTarget = _HealthTarget
@@ -1876,157 +1875,25 @@ class HealthLoopRunner:
         history: dict[str, HealthHistoryEntry],
         directories: dict[str, Path],
     ) -> list[ComparisonTriggerArtifact]:
-        triggers: list[ComparisonTriggerArtifact] = []
-        decisions: list[ComparisonDecision] = []
-        if not self.config.peers:
-            self._log_event(
-                "health-loop",
-                "INFO",
-                _HEALTH_ONLY_MESSAGE,
-                event="health-only",
-            )
-            return triggers
-        record_lookup: dict[str, HealthSnapshotRecord] = {}
-        for record in records:
-            primary_ref, label_ref = record.refs()
-            record_lookup[primary_ref] = record
-            record_lookup[label_ref] = record
-        for peer in self.config.peers:
-            primary_record = record_lookup.get(peer.primary)
-            if not primary_record:
-                continue
-            secondary_record = record_lookup.get(peer.secondary)
-            if not secondary_record:
-                continue
-            expected_categories = tuple(sorted(peer.expected_drift_categories))
-            ignored_categories = tuple(sorted(set(primary_record.baseline_policy.ignored_drift_categories) | set(secondary_record.baseline_policy.ignored_drift_categories)))
-            peer_notes = peer.notes
-            (
-                policy_eligible,
-                policy_reason,
-                primary_class,
-                secondary_class,
-                primary_role,
-                secondary_role,
-                primary_cohort,
-                secondary_cohort,
-            ) = _policy_eligible_pair(
-                primary_record,
-                secondary_record,
-                peer.intent,
-                self.baseline_registry,
-            )
-            classification_label = peer.intent.label()
-            trigger_details: list[TriggerDetail] = []
-            if policy_eligible:
-                trigger_details = determine_pair_trigger_reasons(
-                    primary_record,
-                    secondary_record,
-                    self.config.trigger_policy,
-                    history,
-                    self._manual_keys,
-                    primary_record.baseline_policy,
-                    self.baseline_registry,
-                    classification_label,
-                )
-            triggered = bool(trigger_details)
-            if not policy_eligible:
-                self._log_event(
-                    "health-loop",
-                    "INFO",
-                    "Comparison skipped",
-                    cluster_label=primary_record.target.label,
-                    comparison_target=secondary_record.target.label,
-                    comparison_intent=classification_label,
-                    policy_eligible=False,
-                    severity_reason=policy_reason,
-                    primary_class=primary_class,
-                    secondary_class=secondary_class,
-                    primary_role=primary_role,
-                    secondary_role=secondary_role,
-                    primary_cohort=primary_cohort,
-                    secondary_cohort=secondary_cohort,
-                    expected_drift_categories=list(expected_categories),
-                    ignored_drift_categories=list(ignored_categories),
-                    event="comparison-skip",
-                )
-            decision_reason = policy_reason if not policy_eligible else "; ".join(detail.reason for detail in trigger_details) if triggered else "policy compatible but no triggers fired"
-            decisions.append(
-                ComparisonDecision(
-                    primary_label=primary_record.target.label,
-                    secondary_label=secondary_record.target.label,
-                    policy_eligible=policy_eligible,
-                    triggered=triggered,
-                    comparison_intent=classification_label,
-                    reason=decision_reason,
-                    primary_class=primary_class,
-                    secondary_class=secondary_class,
-                    primary_role=primary_role,
-                    secondary_role=secondary_role,
-                    primary_cohort=primary_cohort,
-                    secondary_cohort=secondary_cohort,
-                    expected_drift_categories=expected_categories,
-                    ignored_drift_categories=ignored_categories,
-                    notes=peer_notes,
-                )
-            )
-            if not policy_eligible or not triggered:
-                continue
-            comparison = self.comparison_fn(primary_record.snapshot, secondary_record.snapshot)
-            summary = {key: len(value) for key, value in comparison.differences.items()}
-            comparison_path = directories["comparisons"] / f"{self.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-comparison.json"
-            _write_json(
-                {
-                    "differences": _serialize_value(comparison.differences),
-                    "trigger_reasons": [detail.reason for detail in trigger_details],
-                    "trigger_details": [detail.to_dict() for detail in trigger_details],
-                    "comparison_intent": classification_label,
-                    "expected_drift_categories": list(expected_categories),
-                    "ignored_drift_categories": list(ignored_categories),
-                    "peer_notes": peer_notes,
-                },
-                comparison_path,
-            )
-            artifact = ComparisonTriggerArtifact(
-                run_label=self.run_label,
-                run_id=self.run_id,
-                timestamp=datetime.now(UTC),
-                primary=primary_record.target.context,
-                secondary=secondary_record.target.context,
-                primary_label=primary_record.target.label,
-                secondary_label=secondary_record.target.label,
-                trigger_reasons=tuple(detail.reason for detail in trigger_details),
-                comparison_summary=summary,
-                differences=_serialize_value(comparison.differences),
-                trigger_details=tuple(trigger_details),
-                comparison_intent=classification_label,
-                expected_drift_categories=expected_categories,
-                ignored_drift_categories=ignored_categories,
-                peer_notes=peer_notes,
-                notes="; ".join(detail.reason for detail in trigger_details),
-                artifact_id=new_artifact_id(),
-            )
-            triggers.append(artifact)
-            trigger_path = directories["triggers"] / f"{self.run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-trigger.json"
-            _write_json(artifact.to_dict(), trigger_path)
-            self._log_event(
-                "health-loop",
-                "INFO",
-                "Comparison trigger artifact recorded",
-                cluster_label=primary_record.target.label,
-                comparison_target=secondary_record.target.label,
-                artifact_path=str(trigger_path),
-                event="comparison-trigger",
-                severity_reason="; ".join(detail.reason for detail in trigger_details),
-            )
-            if triggered and peer.intent == ComparisonIntent.SUSPICIOUS_DRIFT:
-                notification = build_suspicious_comparison_notification(artifact)
-                self._record_notification(directories["notifications"], notification)
-        decision_path = directories["root"] / f"{self.run_id}-comparison-decisions.json"
-        for decision in decisions:
-            ComparisonDecisionValidator.validate(decision.to_dict())
-        _write_json([decision.to_dict() for decision in decisions], decision_path)
-        return triggers
+        """Evaluate comparison triggers for peer pairs and build trigger artifacts.
+
+        Delegates to the extracted loop_runner_comparisons module for the core logic.
+        Preserves behavior exactly - no schema or artifact contract changes.
+        """
+        return evaluate_triggers_for_records(
+            records=records,
+            peers=self.config.peers,
+            trigger_policy=self.config.trigger_policy,
+            baseline_registry=self.baseline_registry,
+            history=history,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            manual_comparison_keys=self._manual_keys,
+            comparison_fn=self.comparison_fn,
+            record_notification_fn=self._record_notification,
+            log_event_fn=self._log_event,
+            directories=directories,
+        )
 
     def _load_history(self, history_path: Path) -> dict[str, HealthHistoryEntry]:
         return load_runner_history(history_path=history_path)
