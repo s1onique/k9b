@@ -125,7 +125,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
                     side_effect=parse_error,
                 ):
                     with patch(
-                        "k8s_diag_agent.health.drilldown_assessor.resolve_drilldown_max_tokens",
+                        "k8s_diag_agent.health.loop_runner_drilldown_analysis.resolve_drilldown_max_tokens",
                         return_value=768,
                     ):
                         artifacts = runner._run_auto_drilldown_analysis([drilldown], {"external_analysis": Path(tmpdir) / "external_analysis"})
@@ -178,7 +178,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
                     side_effect=parse_error,
                 ):
                     with patch(
-                        "k8s_diag_agent.health.drilldown_assessor.resolve_drilldown_max_tokens",
+                        "k8s_diag_agent.health.loop_runner_drilldown_analysis.resolve_drilldown_max_tokens",
                         return_value=768,
                     ):
                         runner._run_auto_drilldown_analysis([drilldown], {"external_analysis": Path(tmpdir) / "external_analysis"})
@@ -222,7 +222,7 @@ class TestSchemaValidationValueErrorProductionPath(unittest.TestCase):
                     side_effect=validation_error,
                 ):
                     with patch(
-                        "k8s_diag_agent.health.drilldown_assessor.resolve_drilldown_max_tokens",
+                        "k8s_diag_agent.health.loop_runner_drilldown_analysis.resolve_drilldown_max_tokens",
                         return_value=768,
                     ):
                         artifacts = runner._run_auto_drilldown_analysis([drilldown], {"external_analysis": Path(tmpdir) / "external_analysis"})

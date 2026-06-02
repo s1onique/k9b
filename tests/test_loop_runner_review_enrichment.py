@@ -9,6 +9,7 @@ import shutil
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisAdapter, ExternalAnalysisRequest
 from k8s_diag_agent.external_analysis.artifact import (
@@ -28,7 +29,7 @@ class _StubAdapter(ExternalAnalysisAdapter):
         name: str = "stub-review",
         *,
         fail: bool = False,
-        payload: dict | None = None,
+        payload: dict[str, Any] | None = None,
         preflight_fail: bool = False,
         preflight_reason: str = "configuration error",
     ) -> None:
@@ -61,7 +62,7 @@ class _StubAdapter(ExternalAnalysisAdapter):
             payload=self.payload,
         )
 
-    def preflight_check(self, **kwargs) -> "StubPreflightResult":
+    def preflight_check(self, **kwargs: object) -> "StubPreflightResult":
         if self.preflight_fail:
             return StubPreflightResult(ok=False, reason=self.preflight_reason)
         return StubPreflightResult(ok=True)
@@ -93,12 +94,12 @@ class TestRunReviewEnrichment(unittest.TestCase):
         if self.tmp_dir.exists():
             shutil.rmtree(self.tmp_dir)
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
-        self.directories = {
+        self.directories: dict[str, Path] = {
             "root": self.tmp_dir,
             "external_analysis": self.tmp_dir / "external-analysis",
         }
         self.directories["external_analysis"].mkdir(parents=True, exist_ok=True)
-        self.log_events: list[dict] = []
+        self.log_events: list[dict[str, Any]] = []
 
     def tearDown(self) -> None:
         if self.tmp_dir.exists():
@@ -178,6 +179,7 @@ class TestRunReviewEnrichment(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.status, ExternalAnalysisStatus.SKIPPED)
         self.assertIsNotNone(result.skip_reason)
+        assert result.skip_reason is not None
         self.assertIn("No review enrichment provider configured", result.skip_reason)
 
     def test_missing_adapter_skips(self) -> None:
@@ -199,6 +201,7 @@ class TestRunReviewEnrichment(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.status, ExternalAnalysisStatus.SKIPPED)
         self.assertIsNotNone(result.skip_reason)
+        assert result.skip_reason is not None
         self.assertIn("not registered for review enrichment", result.skip_reason)
 
     def test_successful_enrichment(self) -> None:
@@ -267,6 +270,7 @@ class TestRunReviewEnrichment(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.status, ExternalAnalysisStatus.FAILED)
         self.assertIsNotNone(result.error_summary)
+        assert result.failure_metadata is not None
         self.assertEqual(result.failure_metadata.get("preflight_failed"), True)
         self.assertEqual(result.failure_metadata.get("reason"), "missing API key")
 
@@ -288,9 +292,11 @@ class TestRunReviewEnrichment(unittest.TestCase):
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertIn("test-run-123", result.artifact_path)
-        self.assertIn("review-enrichment", result.artifact_path)
-        self.assertTrue(result.artifact_path.endswith(".json"))
+        artifact_path_str = result.artifact_path
+        assert artifact_path_str is not None
+        self.assertIn("test-run-123", artifact_path_str)
+        self.assertIn("review-enrichment", artifact_path_str)
+        self.assertTrue(artifact_path_str.endswith(".json"))
 
     def test_artifact_written_to_disk(self) -> None:
         """Artifact is written to the expected path on disk."""
@@ -310,7 +316,9 @@ class TestRunReviewEnrichment(unittest.TestCase):
 
         self.assertIsNotNone(result)
         assert result is not None
-        artifact_path = Path(result.artifact_path)
+        artifact_path_str = result.artifact_path
+        assert artifact_path_str is not None
+        artifact_path = Path(artifact_path_str)
         self.assertTrue(artifact_path.exists())
         # Verify it's valid JSON
         with open(artifact_path, encoding="utf-8") as f:
@@ -398,8 +406,10 @@ class TestRunReviewEnrichment(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIsNotNone(result.duration_ms)
+        duration = result.duration_ms
+        assert duration is not None
         # Duration may be 0 in fast test execution, but it is set
-        self.assertGreaterEqual(result.duration_ms, 0)
+        self.assertGreaterEqual(duration, 0)
 
     def test_next_checks_count_extracted_from_payload(self) -> None:
         """Next checks count is extracted for logging."""

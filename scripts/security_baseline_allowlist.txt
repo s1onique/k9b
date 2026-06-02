@@ -23,6 +23,10 @@ external_analysis/llamacpp_adapter_http.py run_http_assessment LLM HTTP assessme
 external_analysis/llamacpp_adapter_http.py build_generic_failure_metadata LLM failure metadata build catch-all - graceful failure reporting, no credential exposure
 
 
+# === Extracted Health Loop Helpers ===
+health/loop_runner_drilldown_analysis.py run_auto_drilldown_analysis LLM call boundary in extracted auto-drilldown helper - artifact/logging isolation boundary, no credential exposure
+health/loop_runner_review_enrichment.py run_review_enrichment review enrichment LLM call boundary in extracted helper - artifact/logging isolation boundary, no credential exposure
+
 # === Subprocess Boundaries ===
 health/loop_alertmanager_port_forward.py stop_alertmanager_port_forward port-forward cleanup final containment - docs/security-exception-audit.md ~222
 
@@ -75,3 +79,4 @@ ui/server_run_detail_reads.py handle_run_detail_route graceful run detail route 
 
 # === Manual Next Check Execution ===
 ui/server_next_check_execution.py execute_manual_next_check manual execution fallback boundary - docs/security-exception-audit.md ~322
+ui/server_next_check_execution.py handle_next_check_execution execution endpoint catch-all boundary - HTTP endpoint error isolation, no credential exposure
