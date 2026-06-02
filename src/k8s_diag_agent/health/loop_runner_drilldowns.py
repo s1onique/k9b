@@ -15,11 +15,11 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .image_pull_secret import ImagePullSecretInsight
 from .loop_history import HealthHistoryEntry, _write_json
+from .loop_types import HealthSnapshotRecord
 from .validators import DrilldownArtifactValidator
 
 # Type alias for log event callback to avoid hard coupling to runner
@@ -28,7 +28,7 @@ LogEventFn = Callable[..., None]
 
 def build_drilldowns_for_records(
     *,
-    records: Sequence[Any],
+    records: Sequence[HealthSnapshotRecord],
     previous_history: dict[str, HealthHistoryEntry],
     directory: Path,
     run_id: str,

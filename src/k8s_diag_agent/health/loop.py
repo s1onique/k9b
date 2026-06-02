@@ -71,12 +71,20 @@ from .loop_scheduler_locking import (  # noqa: F401 - re-exported for backward c
     LockFileSnapshot,
     ProcessIdentity,
 )
+
+# Import shared types from loop_types.py for this module and re-export for backward compatibility
+from .loop_types import HealthSnapshotRecord as _HealthSnapshotRecord
+from .loop_types import HealthTarget as _HealthTarget
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
 from .notifications import NotificationArtifact, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
 from .validators import ComparisonDecisionValidator
+
+# Re-export for backward compatibility with existing imports
+HealthTarget = _HealthTarget
+HealthSnapshotRecord = _HealthSnapshotRecord
 
 
 def _is_openai_compatible_provider(provider_name: str) -> bool:
@@ -91,19 +99,6 @@ def _is_openai_compatible_provider(provider_name: str) -> bool:
 _HISTORY_FILENAME = loop_history._HISTORY_FILENAME
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
-
-
-@dataclass(frozen=True)
-class HealthTarget:
-    context: str
-    label: str
-    monitor_health: bool
-    watched_helm_releases: tuple[str, ...]
-    watched_crd_families: tuple[str, ...]
-    cluster_class: str | None = None
-    cluster_role: str | None = None
-    baseline_cohort: str | None = None
-    baseline_policy_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -580,22 +575,6 @@ def build_health_assessment(
         warning_event_threshold=warning_event_threshold,
         image_pull_secret_insight=image_pull_secret_insight,
     )
-
-
-@dataclass
-class HealthSnapshotRecord:
-    target: HealthTarget
-    snapshot: ClusterSnapshot
-    path: Path
-    baseline_policy: BaselinePolicy
-    baseline_policy_path: str | None = None
-    assessment: HealthAssessmentResult | None = None
-    pattern_reasons: tuple[str, ...] = field(default_factory=tuple)
-    pattern_metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    image_pull_secret_insight: ImagePullSecretInsight | None = None
-
-    def refs(self) -> tuple[str, str]:
-        return (normalize_ref(self.target.context), normalize_ref(self.target.label))
 
 
 def determine_pair_trigger_reasons(

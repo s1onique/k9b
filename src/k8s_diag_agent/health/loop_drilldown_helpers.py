@@ -12,15 +12,14 @@ These are pure helpers with no runner orchestration logic.
 
 from __future__ import annotations
 
-from typing import Any
-
 from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON
 from .loop_history import HealthHistoryEntry, HealthRating
+from .loop_types import HealthSnapshotRecord
 from .utils import normalize_ref
 
 
 def determine_drilldown_reasons(
-    record: Any,
+    record: HealthSnapshotRecord,
     previous_history: dict[str, HealthHistoryEntry],
     manual_drilldown_contexts: set[str],
     warning_event_threshold: int,
