@@ -1244,7 +1244,7 @@ class HealthLoopTests(unittest.TestCase):
         )
         snapshots = {"cluster-ui": snapshot}
         runner = self._build_auto_runner(snapshots)
-        with patch("k8s_diag_agent.health.loop.assess_drilldown_artifact", side_effect=RuntimeError("boom")):
+        with patch("k8s_diag_agent.health.loop_runner_drilldown_analysis.assess_drilldown_artifact", side_effect=RuntimeError("boom")):
             runner.execute()
         auto_artifacts = [
             art for art in runner.latest_external_artifacts if art.purpose == ExternalAnalysisPurpose.AUTO_DRILLDOWN

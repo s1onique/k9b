@@ -121,7 +121,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
 
             with patch.object(runner, "_log_event"):
                 with patch(
-                    "k8s_diag_agent.health.loop.assess_drilldown_artifact",
+                    "k8s_diag_agent.health.loop_runner_drilldown_analysis.assess_drilldown_artifact",
                     side_effect=parse_error,
                 ):
                     with patch(
@@ -174,7 +174,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
 
             with patch.object(runner, "_log_event", side_effect=capture_log):
                 with patch(
-                    "k8s_diag_agent.health.loop.assess_drilldown_artifact",
+                    "k8s_diag_agent.health.loop_runner_drilldown_analysis.assess_drilldown_artifact",
                     side_effect=parse_error,
                 ):
                     with patch(
@@ -218,7 +218,7 @@ class TestSchemaValidationValueErrorProductionPath(unittest.TestCase):
 
             with patch.object(runner, "_log_event", side_effect=capture_log):
                 with patch(
-                    "k8s_diag_agent.health.loop.assess_drilldown_artifact",
+                    "k8s_diag_agent.health.loop_runner_drilldown_analysis.assess_drilldown_artifact",
                     side_effect=validation_error,
                 ):
                     with patch(
