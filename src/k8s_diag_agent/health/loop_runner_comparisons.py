@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .loop_comparison_policy import BaselineRegistry, _policy_eligible_pair
+from .loop_comparison_triggers import determine_pair_trigger_reasons
 from .loop_comparison_types import (
     ComparisonDecision,
     ComparisonIntent,
@@ -26,7 +27,6 @@ from .loop_comparison_types import (
     ComparisonTriggerArtifact,
     TriggerDetail,
     TriggerPolicy,
-    determine_pair_trigger_reasons,
 )
 from .loop_history import HealthHistoryEntry, _serialize_value, _write_json
 from .loop_types import HealthSnapshotRecord

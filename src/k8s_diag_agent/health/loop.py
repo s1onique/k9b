@@ -46,6 +46,7 @@ from .loop_comparison_policy import (  # noqa: F401
     _resolve_peer_role,  # noqa: F401 - re-exported for backward compatibility
     _validate_suspicious_pairs,  # noqa: F401 - re-exported for backward compatibility
 )
+from .loop_comparison_triggers import determine_pair_trigger_reasons  # noqa: F401 - re-exported for backward compatibility
 from .loop_comparison_types import (  # noqa: F401 - re-export for backward compatibility
     ComparisonDecision,  # noqa: F401
     ComparisonIntent,  # noqa: F401 - re-exported for backward compatibility
@@ -53,7 +54,6 @@ from .loop_comparison_types import (  # noqa: F401 - re-export for backward comp
     ComparisonTriggerArtifact,  # noqa: F401 - re-exported for backward compatibility
     TriggerDetail,  # noqa: F401 - re-exported for backward compatibility
     TriggerPolicy,  # noqa: F401 - re-exported for backward compatibility
-    determine_pair_trigger_reasons,  # noqa: F401 - re-exported for backward compatibility
 )
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
@@ -1013,8 +1013,8 @@ class HealthLoopRunner:
             # Log LLM call result with deterministic call ID for correlation
             result_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
             # Extract failure details from failure_metadata if available (check top-level and nested prompt_diagnostics)
-            result_failure_class: str | None = self._failure_metadata_field(failure_metadata, "failure_class")
-            result_exception_type: str | None = self._failure_metadata_field(failure_metadata, "exception_type")
+            result_failure_class: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "failure_class")
+            result_exception_type: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "exception_type")
             result_skip_reason: str | None = None
             if failure_metadata:
                 nested_diags = failure_metadata.get("prompt_diagnostics")
@@ -1046,8 +1046,8 @@ class HealthLoopRunner:
                 max_tokens=result_max_tokens,
                 failure_class=result_failure_class,
                 exception_type=result_exception_type,
-                finish_reason=self._failure_metadata_field(failure_metadata, "finish_reason"),
-                completion_stopped_by_length=self._failure_metadata_field(
+                finish_reason=HealthLoopRunner._failure_metadata_field(failure_metadata, "finish_reason"),
+                completion_stopped_by_length=HealthLoopRunner._failure_metadata_field(
                     failure_metadata,
                     "completion_stopped_by_length",
                 ),
