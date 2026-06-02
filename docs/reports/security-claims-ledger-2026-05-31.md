@@ -31,7 +31,7 @@
 | **SUBPROC-04** | Namespace/context validation | **Enforced** | `path_validation.py`: `validate_kube_context_name()`, `validate_kubernetes_namespace()`, `validate_kubernetes_resource_name()` | None |
 | **SUBPROC-06** | Output sanitization | **Enforced** | `subprocess_helpers.py`: `_sanitize_output()`, `sanitize_subprocess_error()`; integrated into all error paths | None |
 | **REM-S3** | External adapter command validation | **Enforced** | `adapter.py`: `_validate_command_for_execution()`; allowlist `k8sgpt`, `llamacpp`; blocklist shell interpreters | None |
-| **LLM01** | Prompt injection resistance | **Partially Enforced** | `sanitizer.py`: regex patterns; `prompt_boundaries.py`: boundary markers; `test_llm_evidence_boundaries.py`: regression tests; `scripts/verify_llm_evidence_boundaries.py`: CI gate | Gap: Boundary discipline enforced, active semantic injection detection remains open |
+| **LLM01** | Prompt injection resistance | **Partially Enforced** | `sanitizer.py`: regex patterns; `prompt_boundaries.py`: boundary markers; `semantic_injection_detector.py`: deterministic local detection; `test_llm_evidence_boundaries.py`: regression tests; `scripts/verify_llm_evidence_boundaries.py`: CI gate; `scripts/verify_llm_semantic_injection_detection.py`: semantic injection gate | Gap-P3 (active semantic injection detection) implemented as deterministic local detector; detection is conservative and heuristic, not complete semantic security |
 | **LLM02** | Insecure output handling | **Enforced** | Schema validation on LLM responses | None |
 | **LLM06** | Sensitive information disclosure | **Enforced** | `sanitizer.py`; `MetadataAnonymizer` with enhanced label/annotation anonymization; 22 new tests in `test_anonymizer_label_annotation.py` | None |
 | **SLSA-L1** | Provenance generated | **Implemented** | Git commit available | Gap: No SLSA attestation |
@@ -86,7 +86,7 @@
 - CIS-5.4.1, CIS-7.2
 
 ### Partially Enforced (1 claim)
-- LLM01 (prompt/evidence boundary discipline enforced, active injection detection open)
+- LLM01 (prompt/evidence boundary discipline enforced, GAP-P3 active injection detection implemented as deterministic local detector; detection is conservative and heuristic, not complete semantic security)
 
 ### Tested Only (1 claim)
 - GOAL-2
