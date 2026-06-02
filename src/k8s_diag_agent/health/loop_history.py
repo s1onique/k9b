@@ -7,6 +7,7 @@ This module provides the history management logic that:
 1. Loads and persists health history entries
 2. Serializes/deserializes health state
 3. Provides pure helper functions for history-related formatting
+4. Contains shared types: HealthRating, HealthAssessmentArtifact, HealthAssessmentResult
 
 These are pure helpers with no runner logic.
 """
@@ -15,15 +16,18 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
 from ..identity.artifact import new_artifact_id as _new_artifact_id
+
+if TYPE_CHECKING:
+    from ..models import Assessment
 
 # Module constants
 _LABEL_RE = re.compile(r"[^a-zA-Z0-9_-]+")
@@ -359,3 +363,121 @@ def persist_history_fact_artifacts(
         written_paths.append(path)
 
     return written_paths
+
+
+# =============================================================================
+# Health assessment types - shared across loop and assessment helpers
+# These types are defined here to avoid circular imports between loop.py
+# and assessment helper modules.
+# =============================================================================
+
+
+@dataclass
+class HealthAssessmentResult:
+    """Result of a health assessment computation."""
+    assessment: Assessment
+    rating: HealthRating
+    missing_evidence: tuple[str, ...]
+    node_count: int
+    pod_count: int | None
+    control_plane_version: str
+    pattern_reasons: tuple[str, ...] = field(default_factory=tuple)
+    pattern_metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+@dataclass
+class HealthAssessmentArtifact:
+    """Health assessment artifact written to disk."""
+    run_label: str
+    run_id: str
+    timestamp: datetime
+    context: str
+    label: str
+    cluster_id: str
+    snapshot_path: str
+    assessment: dict[str, Any]
+    missing_evidence: tuple[str, ...]
+    health_rating: HealthRating
+    notes: str | None = None
+    artifact_path: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "run_label": self.run_label,
+            "run_id": self.run_id,
+            "timestamp": self.timestamp.isoformat(),
+            "context": self.context,
+            "label": self.label,
+            "cluster_id": self.cluster_id,
+            "snapshot_path": self.snapshot_path,
+            "assessment": self.assessment,
+            "missing_evidence": list(self.missing_evidence),
+            "health_rating": self.health_rating.value,
+            "notes": self.notes,
+        }
+        if self.artifact_path:
+            data["artifact_path"] = self.artifact_path
+        return data
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> HealthAssessmentArtifact:
+        """Parse a HealthAssessmentArtifact from a dict (e.g., from JSON).
+
+        Preserves permissive behavior for backward compatibility with
+        legacy artifacts that may have partial data.
+        """
+        if not isinstance(raw, Mapping):
+            raise TypeError(f"HealthAssessmentArtifact.from_dict expects a mapping, got {type(raw).__name__}")
+
+        # Parse timestamp
+        timestamp_raw = raw.get("timestamp")
+        parsed_timestamp: datetime
+        if isinstance(timestamp_raw, str):
+            from ..datetime_utils import parse_iso_to_utc
+            parsed_timestamp = parse_iso_to_utc(timestamp_raw) or datetime.now(UTC)
+        else:
+            parsed_timestamp = datetime.now(UTC)
+
+        # Parse health_rating
+        rating_raw = raw.get("health_rating")
+        parsed_rating: HealthRating
+        if isinstance(rating_raw, HealthRating):
+            parsed_rating = rating_raw
+        elif isinstance(rating_raw, str):
+            try:
+                parsed_rating = HealthRating(rating_raw)
+            except ValueError:
+                parsed_rating = HealthRating.UNKNOWN
+        else:
+            parsed_rating = HealthRating.UNKNOWN
+
+        # Parse missing_evidence
+        missing_raw = raw.get("missing_evidence")
+        parsed_missing: tuple[str, ...]
+        if isinstance(missing_raw, (list, tuple)):
+            parsed_missing = tuple(str(item) for item in missing_raw if item is not None)
+        else:
+            parsed_missing = ()
+
+        # assessment field can be a dict or None (partial/legacy artifacts)
+        assessment_raw = raw.get("assessment")
+        parsed_assessment: dict[str, Any]
+        if isinstance(assessment_raw, dict):
+            parsed_assessment = dict(assessment_raw)
+        else:
+            parsed_assessment = {}
+
+        return cls(
+            run_label=str(raw.get("run_label", "")),
+            run_id=str(raw.get("run_id", "")),
+            timestamp=parsed_timestamp,
+            context=str(raw.get("context", "")),
+            label=str(raw.get("label", "")),
+            cluster_id=str(raw.get("cluster_id", "")),
+            snapshot_path=str(raw.get("snapshot_path", "")),
+            assessment=parsed_assessment,
+            missing_evidence=parsed_missing,
+            health_rating=parsed_rating,
+            notes=str(raw.get("notes")) if raw.get("notes") else None,
+            artifact_path=str(raw.get("artifact_path")) if raw.get("artifact_path") else None,
+        )

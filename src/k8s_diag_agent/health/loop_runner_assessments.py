@@ -92,12 +92,8 @@ def build_assessments_for_records(
     for record in records:
         cluster_id = record.snapshot.metadata.cluster_id
         previous = history.get(cluster_id)
-        watched_release_versions = _watched_release_versions(
-            record.snapshot, record.target.watched_helm_releases
-        )
-        watched_crd_versions = _watched_crd_versions(
-            record.snapshot, record.target.watched_crd_families
-        )
+        watched_release_versions = _watched_release_versions(record.snapshot, record.target.watched_helm_releases)
+        watched_crd_versions = _watched_crd_versions(record.snapshot, record.target.watched_crd_families)
         assessment_result: HealthAssessmentResult | None = None
         insight: ImagePullSecretInsight | None = None
         pod_counts = record.snapshot.health_signals.pod_counts
