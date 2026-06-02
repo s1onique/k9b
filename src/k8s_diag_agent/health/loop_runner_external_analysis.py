@@ -13,8 +13,8 @@ These helpers do NOT import loop.py or HealthLoopRunner.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ..external_analysis.adapter import ExternalAnalysisAdapter, ExternalAnalysisRequest
 from ..external_analysis.artifact import (
@@ -23,12 +23,9 @@ from ..external_analysis.artifact import (
     write_external_analysis_artifact,
 )
 from ..external_analysis.config import ExternalAnalysisPolicy
+from .loop_types import HealthSnapshotRecord, ManualExternalAnalysisRequest
 from .notifications import NotificationArtifact, build_external_analysis_notification
 from .utils import normalize_ref
-
-if TYPE_CHECKING:
-    from .loop import HealthSnapshotRecord
-
 
 # Type alias for callbacks to avoid hard coupling to runner
 RecordNotificationFn = Callable[[Path, NotificationArtifact], Path]
@@ -38,7 +35,7 @@ LogEventFn = Callable[..., None]
 def run_external_analysis_for_records(
     *,
     records: list[HealthSnapshotRecord],
-    manual_requests: tuple[object, ...],
+    manual_requests: tuple[ManualExternalAnalysisRequest, ...],
     external_analysis_policy: ExternalAnalysisPolicy,
     analysis_adapters: dict[str, ExternalAnalysisAdapter],
     run_id: str,
@@ -98,19 +95,8 @@ def run_external_analysis_for_records(
     }
 
     for request in manual_requests:
-        # Access attributes dynamically to avoid importing ManualExternalAnalysisRequest
-        tool = getattr(request, "tool", None)
-        target = getattr(request, "target", None)
-
-        if not tool or not target:
-            if log_event_fn:
-                log_event_fn(
-                    "external-analysis",
-                    "WARNING",
-                    "External analysis request has missing tool or target",
-                    request=request,
-                )
-            continue
+        tool = request.tool
+        target = request.target
 
         adapter = analysis_adapters.get(tool)
         if not adapter:
@@ -151,7 +137,7 @@ def run_external_analysis_for_records(
 
         # Build artifact path: {run_id}-{cluster_label}-{adapter_name}.json
         artifact_path = directories["external_analysis"] / (f"{run_id}-{record.target.label}-{adapter.name}.json")
-        artifact_with_path = artifact.replace({"artifact_path": str(artifact_path)})
+        artifact_with_path = replace(artifact, artifact_path=str(artifact_path))
 
         # Write artifact
         write_external_analysis_artifact(artifact_path, artifact_with_path)

@@ -20,12 +20,7 @@ from k8s_diag_agent.external_analysis.artifact import (
 from k8s_diag_agent.external_analysis.config import ExternalAnalysisPolicy
 from k8s_diag_agent.health.loop import HealthSnapshotRecord, HealthTarget
 from k8s_diag_agent.health.loop_runner_external_analysis import run_external_analysis_for_records
-
-
-@dataclass(frozen=True)
-class MockRequest:
-    tool: str
-    target: str
+from k8s_diag_agent.health.loop_types import ManualExternalAnalysisRequest
 
 
 @dataclass(frozen=True)
@@ -122,10 +117,10 @@ class TestRunExternalAnalysisForRecords:
             _create_mock_record("cluster-b"),  # No assessment, uses path
         ]
 
-        # Create mock requests
+        # Create mock requests using ManualExternalAnalysisRequest
         self.requests = (
-            MockRequest(tool="mock-adapter", target="cluster-a"),
-            MockRequest(tool="mock-adapter", target="cluster-b"),
+            ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-a"),
+            ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-b"),
         )
 
         # Log events and notifications for verification
@@ -207,12 +202,15 @@ class TestRunExternalAnalysisForRecords:
 
     def test_adapter_unavailable_logs_warning(self) -> None:
         """Adapter not found for request logs warning."""
+        # Provide a different adapter so early-return is skipped, then request
+        # an adapter that doesn't exist to trigger the warning.
+        adapter = MockAdapter()
         policy = ExternalAnalysisPolicy(manual=True)
         result = run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="missing-adapter", target="cluster-a"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="missing-adapter", target="cluster-a"),),
             external_analysis_policy=policy,
-            analysis_adapters={},
+            analysis_adapters={"other-adapter": adapter},  # Different adapter name
             run_id="run-1",
             run_label="test",
             record_notification_fn=self.record_notification_fn,
@@ -232,7 +230,7 @@ class TestRunExternalAnalysisForRecords:
         policy = ExternalAnalysisPolicy(manual=True)
         result = run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="missing-cluster"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="missing-cluster"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id="run-1",
@@ -254,7 +252,7 @@ class TestRunExternalAnalysisForRecords:
         policy = ExternalAnalysisPolicy(manual=True)
         result = run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="cluster-a"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-a"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id="run-1",
@@ -282,7 +280,7 @@ class TestRunExternalAnalysisForRecords:
         run_id = "test-run-123"
         result = run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="cluster-a"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-a"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id=run_id,
@@ -303,7 +301,7 @@ class TestRunExternalAnalysisForRecords:
         policy = ExternalAnalysisPolicy(manual=True)
         run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="cluster-a"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-a"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id="run-1",
@@ -322,7 +320,7 @@ class TestRunExternalAnalysisForRecords:
         policy = ExternalAnalysisPolicy(manual=True)
         run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="cluster-b"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-b"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id="run-1",
@@ -341,7 +339,7 @@ class TestRunExternalAnalysisForRecords:
         policy = ExternalAnalysisPolicy(manual=True)
         result = run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="cluster-a"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-a"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id="run-1",
@@ -362,7 +360,7 @@ class TestRunExternalAnalysisForRecords:
         policy = ExternalAnalysisPolicy(manual=True)
         result = run_external_analysis_for_records(
             records=self.records,
-            manual_requests=(MockRequest(tool="mock-adapter", target="cluster-a"),),
+            manual_requests=(ManualExternalAnalysisRequest(tool="mock-adapter", target="cluster-a"),),
             external_analysis_policy=policy,
             analysis_adapters={"mock-adapter": adapter},
             run_id="run-1",

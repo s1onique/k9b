@@ -83,6 +83,7 @@ from .loop_scheduler_locking import (  # noqa: F401 - re-exported for backward c
 # Import shared types from loop_types.py for this module and re-export for backward compatibility
 from .loop_types import HealthSnapshotRecord as _HealthSnapshotRecord
 from .loop_types import HealthTarget as _HealthTarget
+from .loop_types import ManualExternalAnalysisRequest
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
 from .notifications import NotificationArtifact, write_notification_artifact
@@ -112,12 +113,6 @@ _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 class ManualComparison:
     primary: str
     secondary: str
-
-
-@dataclass(frozen=True)
-class ManualExternalAnalysisRequest:
-    tool: str
-    target: str
 
 
 @dataclass

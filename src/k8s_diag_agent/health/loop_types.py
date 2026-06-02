@@ -65,3 +65,15 @@ class HealthSnapshotRecord:
         from .utils import normalize_ref
 
         return (normalize_ref(self.target.context), normalize_ref(self.target.label))
+
+
+@dataclass(frozen=True)
+class ManualExternalAnalysisRequest:
+    """Manual external analysis request with tool and target.
+
+    This dataclass is shared across loop.py and loop_runner_external_analysis.py.
+    Moved here to break circular imports and enable proper type checking.
+    """
+
+    tool: str
+    target: str
