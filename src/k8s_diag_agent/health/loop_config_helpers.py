@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING, Any
 from .utils import normalize_ref
 
 if TYPE_CHECKING:
-    from .loop import ComparisonIntent, ManualComparison, ManualExternalAnalysisRequest
+    from .loop_comparison_types import ComparisonIntent, ManualComparison
+    from .loop_types import ManualExternalAnalysisRequest
 
 
 def _parse_manual_triggers(values: Sequence[str]) -> list[ManualComparison]:
@@ -74,8 +75,7 @@ def _parse_threshold(value: Any | None) -> int:
 
 def _parse_comparison_intent(value: Any | None) -> ComparisonIntent:
     """Parse a comparison intent from config, defaulting to SUSPICIOUS_DRIFT."""
-    # Import at runtime to avoid circular imports - ComparisonIntent is a StrEnum defined in loop.py
-    from .loop import ComparisonIntent
+    from .loop_comparison_types import ComparisonIntent
 
     if value is None:
         return ComparisonIntent.SUSPICIOUS_DRIFT

@@ -28,7 +28,7 @@ from ..external_analysis.vmalert_discovery import (
 )
 
 if TYPE_CHECKING:
-    from .loop import HealthSnapshotRecord
+    from .loop_types import HealthSnapshotRecord
 
 
 def run_vmalert_discovery(

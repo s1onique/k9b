@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 from .baseline import BaselinePolicy
 
 if TYPE_CHECKING:
-    from .loop import ComparisonIntent, ComparisonPeer, HealthSnapshotRecord, HealthTarget
+    from .loop_comparison_types import ComparisonIntent, ComparisonPeer
+    from .loop_types import HealthSnapshotRecord, HealthTarget
 
 
 class BaselineRegistry:
@@ -58,7 +59,7 @@ def _validate_suspicious_pairs(
     baseline: BaselinePolicy,
 ) -> None:
     """Validate that all suspicious-drift peer mappings are within the same class/cohort."""
-    from .loop import ComparisonIntent  # runtime import to avoid circular at module level
+    from .loop_comparison_types import ComparisonIntent  # runtime import for type
 
     issues: list[str] = []
     for peer in peers:
@@ -115,7 +116,7 @@ def _policy_eligible_pair(
         Tuple of (eligible, reason, primary_class, secondary_class, primary_role,
                  secondary_role, primary_cohort, secondary_cohort)
     """
-    from .loop import ComparisonIntent  # runtime import to avoid circular at module level
+    from .loop_comparison_types import ComparisonIntent  # runtime import for enum comparison
 
     primary_class = primary.target.cluster_class
     secondary_class = secondary.target.cluster_class

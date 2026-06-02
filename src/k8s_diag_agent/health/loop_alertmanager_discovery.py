@@ -33,7 +33,7 @@ from ..external_analysis.alertmanager_source_registry import (
 )
 
 if TYPE_CHECKING:
-    from .loop import HealthSnapshotRecord
+    from .loop_types import HealthSnapshotRecord
 
 
 def run_alertmanager_discovery(

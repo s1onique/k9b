@@ -33,7 +33,7 @@ from .review_feedback import build_health_review
 from .validators import HealthProposalValidator
 
 if TYPE_CHECKING:
-    from .loop import HealthAssessmentArtifact
+    from .loop_history import HealthAssessmentArtifact
 
 
 def write_review_and_proposals(

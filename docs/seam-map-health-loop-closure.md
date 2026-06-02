@@ -60,7 +60,7 @@ The health-loop extraction epic is **ready to close**. All non-LLM mechanical se
 
 ## Extracted Helper Boundary Status
 
-All helper modules created or touched in this epic:
+All helper modules created or touched in this epic have been verified to import neither `loop.py` nor `HealthLoopRunner`.
 
 | Module | Imports `loop.py`? | Imports `HealthLoopRunner`? | Notes |
 |--------|-------------------|---------------------------|-------|
@@ -74,28 +74,28 @@ All helper modules created or touched in this epic:
 | `loop_drilldown_helpers.py` | No | No | ✓ Clean |
 | `loop_comparison_types.py` | No | No | ✓ Clean |
 | `loop_comparison_triggers.py` | No | No | ✓ Clean |
-| `loop_review_pipeline.py` | TYPE_CHECKING only | No | ✓ Clean |
-| `loop_alertmanager_discovery.py` | TYPE_CHECKING only | No | ✓ Clean |
+| `loop_review_pipeline.py` | No | No | ✓ Clean (types from `loop_history`) |
+| `loop_alertmanager_discovery.py` | No | No | ✓ Clean (types from `loop_types`) |
 | `loop_alertmanager_snapshot.py` | No | No | ✓ Clean |
 | `loop_alertmanager_port_forward.py` | No | No | ✓ Clean |
-| `loop_vmalert_discovery.py` | TYPE_CHECKING only | No | ✓ Clean |
+| `loop_vmalert_discovery.py` | No | No | ✓ Clean (types from `loop_types`) |
 | `loop_vmalert_rule_state.py` | No | No | ✓ Clean |
 | `loop_types.py` | No | No | ✓ Clean |
-| `loop_comparison_policy.py` | TYPE_CHECKING only | No | ✓ Clean |
-| `loop_config_helpers.py` | TYPE_CHECKING only | No | ✓ Clean |
+| `loop_comparison_policy.py` | No | No | ✓ Clean (types from `loop_comparison_types`, `loop_types`) |
+| `loop_config_helpers.py` | No | No | ✓ Clean (types from `loop_comparison_types`, `loop_types`) |
 
 ### Boundary Check Result: PASS
 
-All extracted helper modules are clean. The only modules that import from `loop.py` are:
+All extracted helper modules are clean. The only modules that import from `loop.py` are supporting infrastructure (not extracted helpers):
 
 | Module | Import | Type | Reason |
 |--------|--------|------|--------|
-| `loop_config_logging.py` | `HealthRunConfig` | Runtime | For scheduler config logging - this is intentional |
-| `loop_scheduler.py` | `HealthRunConfig` | TYPE_CHECKING | For type hints |
-| `artifact_readers.py` | `HealthAssessmentArtifact` | Runtime | For reading artifacts - this is a reader module |
-| `__init__.py` | `run_health_loop` | Runtime | For package-level exports |
+| `loop_config_logging.py` | `HealthRunConfig` | Runtime | Scheduler config logging - not a helper module |
+| `loop_scheduler.py` | `HealthRunConfig` | TYPE_CHECKING | Scheduler type hints - not a helper module |
+| `artifact_readers.py` | `HealthAssessmentArtifact` | Runtime | Artifact reader - not a helper module |
+| `__init__.py` | `run_health_loop` | Runtime | Package exports - not a helper module |
 
-These are not helper modules - they are supporting infrastructure. The boundary check applies to the extracted helper modules only.
+The boundary check applies to extracted helper modules only.
 
 ---
 
@@ -192,7 +192,7 @@ The size is acceptable given the module is a compatibility surface and scheduler
 
 - [x] All non-LLM small seams extracted or documented as minimal wrappers
 - [x] Remaining large methods are explicitly LLM-heavy and deferred
-- [x] Helper modules import neither `loop.py` nor `HealthLoopRunner` (except TYPE_CHECKING)
+- [x] Helper modules import neither `loop.py` nor `HealthLoopRunner`
 - [x] No new allowlist entries added
 - [x] Existing allowlist entries documented with rationale
 - [x] Tests and verification pass
@@ -245,7 +245,7 @@ Expected: All checks pass. If any check fails, investigate before closing.
 ```
 Summary:
 - Mapped HealthLoopRunner method inventory (28 methods)
-- Verified helper boundary compliance (all clean)
+- Verified helper boundary compliance (all 18 helper modules clean)
 - Reviewed allowlist status for loop.py and loop_scheduler.py
 - All non-LLM mechanical seams extracted
 - Two LLM-heavy methods remain (deferred to follow-up epics)
@@ -254,6 +254,11 @@ Summary:
 Files changed:
 - docs/seam-map-drilldown-reason-wrapper.md (hygiene: final newline)
 - docs/seam-map-health-loop-closure.md (new)
+- loop_review_pipeline.py (TYPE_CHECKING import from loop_types)
+- loop_alertmanager_discovery.py (TYPE_CHECKING import from loop_types)
+- loop_vmalert_discovery.py (TYPE_CHECKING import from loop_types)
+- loop_comparison_policy.py (TYPE_CHECKING imports from loop_comparison_types, loop_types)
+- loop_config_helpers.py (TYPE_CHECKING imports from loop_comparison_types, loop_types)
 
 Decision:
 - Close epic
@@ -266,8 +271,8 @@ Inventory result:
 
 Helper boundaries:
 - All 18 extracted helper modules verified clean
+- All TYPE_CHECKING imports from loop.py removed
 - No circular imports introduced
-- TYPE_CHECKING imports are acceptable
 
 Allowlist status:
 - loop.py (1602 lines): Intentionally allowlisted [EXTRACTION]
