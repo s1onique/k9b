@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any
 
 from .drilldown import DrilldownArtifact, DrilldownCollector
 from .image_pull_secret import ImagePullSecretInsight
@@ -26,125 +26,9 @@ from .validators import DrilldownArtifactValidator
 LogEventFn = Callable[..., None]
 
 
-# Protocol for record types that can be used in drilldown building.
-# This defines the minimal interface needed by build_drilldowns_for_records
-# and determine_drilldown_reasons. It avoids importing loop.py while
-# maintaining type safety through duck typing with runtime_checkable.
-
-
-@runtime_checkable
-class DrilldownRecordLike(Protocol):
-    """Protocol for record types that can be used in drilldown building.
-
-    This protocol defines the minimal interface needed by build_drilldowns_for_records
-    and determine_drilldown_reasons. It allows the function to work with
-    HealthSnapshotRecord without importing loop.py.
-    """
-
-    @property
-    def target(self) -> DrilldownTargetLike:
-        ...
-
-    @property
-    def snapshot(self) -> DrilldownSnapshotLike:
-        ...
-
-    @property
-    def assessment(self) -> DrilldownAssessmentLike | None:
-        ...
-
-    @property
-    def pattern_reasons(self) -> tuple[str, ...]:
-        ...
-
-    @property
-    def pattern_metadata(self) -> dict[str, tuple[str, ...]]:
-        ...
-
-    @property
-    def image_pull_secret_insight(self) -> ImagePullSecretInsight | None:
-        ...
-
-
-class DrilldownTargetLike(Protocol):
-    """Protocol for target types in drilldown records."""
-
-    @property
-    def context(self) -> str:
-        ...
-
-    @property
-    def label(self) -> str:
-        ...
-
-
-class DrilldownSnapshotLike(Protocol):
-    """Protocol for snapshot types in drilldown records."""
-
-    @property
-    def metadata(self) -> DrilldownMetadataLike:
-        ...
-
-    @property
-    def health_signals(self) -> DrilldownHealthSignalsLike:
-        ...
-
-
-class DrilldownMetadataLike(Protocol):
-    """Protocol for snapshot metadata in drilldown records."""
-
-    @property
-    def captured_at(self) -> datetime:
-        ...
-
-    @property
-    def cluster_id(self) -> str:
-        ...
-
-
-class DrilldownHealthSignalsLike(Protocol):
-    """Protocol for health signals in drilldown records."""
-
-    @property
-    def pod_counts(self) -> DrilldownPodCountsLike:
-        ...
-
-    @property
-    def warning_events(self) -> list[object]:
-        ...
-
-    @property
-    def job_failures(self) -> int:
-        ...
-
-
-class DrilldownPodCountsLike(Protocol):
-    """Protocol for pod counts in drilldown records."""
-
-    @property
-    def crash_loop_backoff(self) -> int:
-        ...
-
-    @property
-    def image_pull_backoff(self) -> int:
-        ...
-
-
-class DrilldownAssessmentLike(Protocol):
-    """Protocol for assessment types in drilldown records."""
-
-    @property
-    def rating(self) -> object:
-        ...
-
-    @property
-    def missing_evidence(self) -> tuple[str, ...] | list[str]:
-        ...
-
-
 def build_drilldowns_for_records(
     *,
-    records: Sequence[DrilldownRecordLike],
+    records: Sequence[Any],
     previous_history: dict[str, HealthHistoryEntry],
     directory: Path,
     run_id: str,
@@ -164,6 +48,10 @@ def build_drilldowns_for_records(
 
     Args:
         records: Sequence of health snapshot records with assessment data.
+            Expected to have: target (with context, label), snapshot (with metadata.cluster_id,
+            metadata.captured_at, health_signals.pod_counts, health_signals.warning_events,
+            health_signals.job_failures), assessment (with rating, missing_evidence), pattern_reasons,
+            pattern_metadata, image_pull_secret_insight
         previous_history: Prior health entries indexed by cluster_id.
         directory: Directory for writing drilldown artifacts.
         run_id: Current run identifier.
@@ -179,8 +67,7 @@ def build_drilldowns_for_records(
     # Import new_artifact_id locally to avoid import cycle at module level
     from ..identity.artifact import new_artifact_id
 
-    # Import determine_drilldown_reasons - this module imports from loop_drilldown_helpers
-    # which has its own protocol definitions. We use our own protocol here for consistency.
+    # Import determine_drilldown_reasons from loop_drilldown_helpers
     from .loop_drilldown_helpers import determine_drilldown_reasons
 
     collector = drilldown_collector or DrilldownCollector()
@@ -196,11 +83,14 @@ def build_drilldowns_for_records(
         if not reasons:
             continue
 
+        # Get image_pull_secret_insight with fallback to None
+        insight: ImagePullSecretInsight | None = record.image_pull_secret_insight if hasattr(record, 'image_pull_secret_insight') else None
+
         try:
             evidence = collector.collect(
                 record.target.context,
                 (record.target.context,),
-                record.image_pull_secret_insight,
+                insight,
                 pattern_reasons=record.pattern_reasons,
                 pattern_metadata=record.pattern_metadata,
             )

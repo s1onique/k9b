@@ -40,9 +40,17 @@ class HealthAssessmentTarget(Protocol):
     Avoids importing HealthTarget from .loop, keeping this module independent of loop.py.
     """
 
-    label: str
-    watched_helm_releases: Sequence[str]
-    watched_crd_families: Sequence[str]
+    @property
+    def label(self) -> str:
+        ...
+
+    @property
+    def watched_helm_releases(self) -> Sequence[str]:
+        ...
+
+    @property
+    def watched_crd_families(self) -> Sequence[str]:
+        ...
 
 
 HealthTarget = HealthAssessmentTarget
@@ -167,7 +175,7 @@ def build_health_assessment(
         )
     baseline_assessment = assess_baseline_policy(
         snapshot=snapshot,
-        watched_helm_releases=target.watched_helm_releases,
+        watched_helm_releases=tuple(target.watched_helm_releases),
         baseline=baseline,
         signal_adder=add_signal,
         finding_recorder=record_finding,
@@ -183,8 +191,8 @@ def build_health_assessment(
         control_plane_version=control_plane_version,
         snapshot_node_count=snapshot.metadata.node_count,
         snapshot_pod_count=snapshot.metadata.pod_count,
-        watched_helm_releases=target.watched_helm_releases,
-        watched_crd_families=target.watched_crd_families,
+        watched_helm_releases=tuple(target.watched_helm_releases),
+        watched_crd_families=tuple(target.watched_crd_families),
         snapshot=snapshot,
         signal_adder=add_signal,
         finding_recorder=record_finding,
