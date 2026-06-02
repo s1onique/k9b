@@ -30,7 +30,6 @@ from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
 from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, Signal
-from ..render.formatter import assessment_to_dict
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
@@ -63,11 +62,12 @@ from .loop_comparison_policy import (  # noqa: F401
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_failure_metadata import extract_failure_metadata_field
-from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _watched_crd_versions, _watched_release_versions, _write_json
+from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _write_json
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
+from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_history import load_runner_history, persist_runner_history
 from .loop_runner_next_check_planning import run_next_check_planning
 from .loop_scheduler import (
@@ -82,10 +82,10 @@ from .loop_scheduler_locking import (  # noqa: F401 - re-exported for backward c
 from .loop_signal_id import _SignalIdGenerator
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
-from .notifications import NotificationArtifact, build_degraded_health_notification, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
+from .notifications import NotificationArtifact, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
-from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator, HealthAssessmentValidator
+from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator
 
 
 def _is_openai_compatible_provider(provider_name: str) -> bool:
@@ -1563,89 +1563,18 @@ class HealthLoopRunner:
         root_dir: Path,
         notification_dir: Path,
     ) -> list[HealthAssessmentArtifact]:
-        artifacts: list[HealthAssessmentArtifact] = []
-        for record in records:
-            cluster_id = record.snapshot.metadata.cluster_id
-            previous = history.get(cluster_id)
-            watched_release_versions = _watched_release_versions(record.snapshot, record.target.watched_helm_releases)
-            watched_crd_versions = _watched_crd_versions(record.snapshot, record.target.watched_crd_families)
-            assessment_result: HealthAssessmentResult | None = None
-            insight: ImagePullSecretInsight | None = None
-            pod_counts = record.snapshot.health_signals.pod_counts
-            if record.target.monitor_health and pod_counts.image_pull_backoff > 0:
-                try:
-                    insight = self._image_pull_secret_inspector.inspect(
-                        record.target.context,
-                        (),
-                        record.snapshot.health_signals.warning_events,
-                    )
-                # REVIEWED: kubectl inspection subprocess boundary.
-                # ImagePullSecretInspector.inspect() runs kubectl get commands against cluster.
-                # Exceptions: OSError (kubectl not found), RuntimeError (kubectl command failure),
-                # TimeoutError (cluster unreachable). All non-fatal -- inspection is best-effort,
-                # health assessment continues regardless. No credential exposure.
-                except (OSError, RuntimeError, TimeoutError) as exc:
-                    self._log_event(
-                        "health-loop",
-                        "WARNING",
-                        "Image pull secret inspection failed",
-                        cluster_label=record.target.label,
-                        cluster_context=record.target.context,
-                        severity_reason=str(exc),
-                        event="image-pull-secret-inspection",
-                    )
-            if record.target.monitor_health:
-                assessment_result = build_health_assessment(
-                    record.snapshot,
-                    record.target,
-                    previous,
-                    record.baseline_policy,
-                    self.config.trigger_policy.warning_event_threshold,
-                    image_pull_secret_insight=insight,
-                )
-                record.assessment = assessment_result
-                record.pattern_reasons = assessment_result.pattern_reasons
-                record.pattern_metadata = assessment_result.pattern_metadata
-                assessment_path = assessment_dir / f"{self.run_id}-{record.target.label}-assessment.json"
-                artifact = HealthAssessmentArtifact(
-                    run_label=self.run_label,
-                    run_id=self.run_id,
-                    timestamp=datetime.now(UTC),
-                    context=record.target.context,
-                    label=record.target.label,
-                    cluster_id=cluster_id,
-                    snapshot_path=str(record.path),
-                    assessment=assessment_to_dict(assessment_result.assessment),
-                    missing_evidence=assessment_result.missing_evidence,
-                    health_rating=assessment_result.rating,
-                    artifact_path=str(assessment_path),
-                )
-                HealthAssessmentValidator.validate(artifact.to_dict())
-                _write_json(artifact.to_dict(), assessment_path)
-                artifacts.append(artifact)
-                if artifact.health_rating == HealthRating.DEGRADED:
-                    notification = build_degraded_health_notification(self.run_id, record, artifact)
-                    self._record_notification(notification_dir, notification)
-            history[cluster_id] = HealthHistoryEntry(
-                cluster_id=cluster_id,
-                node_count=record.snapshot.metadata.node_count,
-                pod_count=record.snapshot.metadata.pod_count,
-                control_plane_version=record.snapshot.metadata.control_plane_version or "",
-                health_rating=assessment_result.rating if assessment_result else HealthRating.HEALTHY,
-                missing_evidence=assessment_result.missing_evidence if assessment_result else (),
-                watched_helm_releases=watched_release_versions,
-                watched_crd_families=watched_crd_versions,
-                node_conditions=record.snapshot.health_signals.node_conditions.to_dict(),
-                pod_counts=record.snapshot.health_signals.pod_counts.to_dict(),
-                job_failures=record.snapshot.health_signals.job_failures,
-                warning_event_count=len(record.snapshot.health_signals.warning_events),
-                cluster_class=record.target.cluster_class,
-                cluster_role=record.target.cluster_role,
-                baseline_cohort=record.target.baseline_cohort,
-                baseline_policy_path=record.baseline_policy_path,
-            )
-            record.image_pull_secret_insight = insight
-        return artifacts
+        return build_assessments_for_records(
+            records=records,
+            history=history,
+            assessment_dir=assessment_dir,
+            notification_dir=notification_dir,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            warning_event_threshold=self.config.trigger_policy.warning_event_threshold,
+            record_notification_fn=self._record_notification,
+            image_pull_inspector=self._image_pull_secret_inspector,
+            log_event_fn=self._log_event,
+        )
 
     def _build_drilldowns(
         self,
