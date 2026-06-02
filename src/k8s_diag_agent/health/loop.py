@@ -63,11 +63,12 @@ from .loop_comparison_policy import (  # noqa: F401
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_failure_metadata import extract_failure_metadata_field
-from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _watched_crd_versions, _watched_release_versions, _write_json, persist_history_fact_artifacts
+from .loop_history import HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _watched_crd_versions, _watched_release_versions, _write_json
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
+from .loop_runner_history import load_runner_history, persist_runner_history
 from .loop_runner_next_check_planning import run_next_check_planning
 from .loop_scheduler import (
     _HEALTH_ONLY_MESSAGE,  # noqa: F401
@@ -2596,48 +2597,15 @@ class HealthLoopRunner:
         return triggers
 
     def _load_history(self, history_path: Path) -> dict[str, HealthHistoryEntry]:
-        if not history_path.exists():
-            return {}
-        raw = json.loads(history_path.read_text(encoding="utf-8"))
-        history: dict[str, HealthHistoryEntry] = {}
-        for cluster_id, entry in raw.items():
-            if isinstance(entry, dict):
-                history[cluster_id] = HealthHistoryEntry.from_dict(cluster_id, entry)
-        return history
+        return load_runner_history(history_path=history_path)
 
     def _persist_history(self, history: dict[str, HealthHistoryEntry], directories: dict[str, Path]) -> None:
-        # First, write immutable fact artifacts for each cluster
-        history_facts_dir = directories.get("history_facts")
-        if history_facts_dir:
-            try:
-                persist_history_fact_artifacts(
-                    history=history,
-                    run_id=self.run_id,
-                    history_dir=history_facts_dir,
-                    artifact_id_fn=new_artifact_id,
-                )
-                self._log_event(
-                    "health-loop",
-                    "INFO",
-                    "History fact artifacts written",
-                    artifact_count=len(history),
-                    history_facts_dir=str(history_facts_dir),
-                    event="history-facts-written",
-                )
-            except OSError as exc:
-                # Fact artifact write failure is non-fatal; log and continue
-                self._log_event(
-                    "health-loop",
-                    "WARNING",
-                    "Failed to write history fact artifacts",
-                    severity_reason=str(exc),
-                    event="history-facts-failed",
-                )
-
-        # Then, write the mutable aggregate history.json (backward compatibility)
-        history_path = directories["history"]
-        data = {cluster_id: entry.to_dict() for cluster_id, entry in history.items()}
-        _write_json(data, history_path)
+        return persist_runner_history(
+            history=history,
+            directories=directories,
+            run_id=self.run_id,
+            log_event_fn=self._log_event,
+        )
 
     def _run_alertmanager_discovery(
         self,
