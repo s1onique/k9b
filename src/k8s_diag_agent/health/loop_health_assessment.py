@@ -11,7 +11,7 @@ No runner logic - this is a pure function with no HealthLoopRunner dependency.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from .baseline import BaselinePolicy
 from .image_pull_secret import ImagePullSecretInsight
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from ..models import Finding, Hypothesis, Layer, NextCheck, Signal
 
 
-class HealthAssessmentTarget:
+class HealthAssessmentTarget(Protocol):
     """Minimal protocol for the fields build_health_assessment uses from HealthTarget.
 
     Avoids importing HealthTarget from .loop, keeping this module independent of loop.py.
