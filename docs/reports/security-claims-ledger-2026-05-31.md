@@ -31,7 +31,7 @@
 | **SUBPROC-04** | Namespace/context validation | **Enforced** | `path_validation.py`: `validate_kube_context_name()`, `validate_kubernetes_namespace()`, `validate_kubernetes_resource_name()` | None |
 | **SUBPROC-06** | Output sanitization | **Enforced** | `subprocess_helpers.py`: `_sanitize_output()`, `sanitize_subprocess_error()`; integrated into all error paths | None |
 | **REM-S3** | External adapter command validation | **Enforced** | `adapter.py`: `_validate_command_for_execution()`; allowlist `k8sgpt`, `llamacpp`; blocklist shell interpreters | None |
-| **LLM01** | Prompt injection resistance | **Tested Only** | `sanitizer.py`: regex patterns; `prompt_boundaries.py`: boundary markers; GAP-P3 open (basic patterns only) | Gap: No active injection detection |
+| **LLM01** | Prompt injection resistance | **Partially Enforced** | `sanitizer.py`: regex patterns; `prompt_boundaries.py`: boundary markers; `test_llm_evidence_boundaries.py`: regression tests; `scripts/verify_llm_evidence_boundaries.py`: CI gate | Gap: Boundary discipline enforced, active semantic injection detection remains open |
 | **LLM02** | Insecure output handling | **Enforced** | Schema validation on LLM responses | None |
 | **LLM06** | Sensitive information disclosure | **Tested Only** | `sanitizer.py`; `MetadataAnonymizer`; GAP-P2 partially mitigated | Gap: Label/annotation values deferred |
 | **SLSA-L1** | Provenance generated | **Implemented** | Git commit available | Gap: No SLSA attestation |
@@ -84,8 +84,11 @@
 - LLM02
 - CIS-5.4.1, CIS-7.2
 
+### Partially Enforced (1 claim)
+- LLM01 (prompt/evidence boundary discipline enforced, active injection detection open)
+
 ### Tested Only (4 claims)
-- INV-4, GOAL-2, GOAL-4, LLM01, LLM06
+- INV-4, GOAL-2, GOAL-4, LLM06
 
 ### Implemented but Weakly Evidenced (3 claims)
 - GOAL-3 (no SHA256), GOAL-7 (read operations not audited), SUBPROC-05 (timeouts added)
