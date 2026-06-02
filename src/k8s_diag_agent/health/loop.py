@@ -67,6 +67,7 @@ from .loop_run_config_helpers import _resolve_collector_version, _resolve_output
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records
 from .loop_runner_drilldowns import build_drilldowns_for_records
+from .loop_runner_external_analysis import run_external_analysis_for_records
 from .loop_runner_history import load_runner_history, persist_runner_history
 from .loop_runner_next_check_planning import run_next_check_planning
 from .loop_scheduler import (
@@ -84,7 +85,7 @@ from .loop_types import HealthSnapshotRecord as _HealthSnapshotRecord
 from .loop_types import HealthTarget as _HealthTarget
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
-from .notifications import NotificationArtifact, build_external_analysis_notification, write_notification_artifact
+from .notifications import NotificationArtifact, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
 
@@ -689,71 +690,22 @@ class HealthLoopRunner:
         )
 
     def _run_external_analysis(self, records: list[HealthSnapshotRecord], directories: dict[str, Path]) -> list[ExternalAnalysisArtifact]:
-        artifacts: list[ExternalAnalysisArtifact] = []
-        if not self._analysis_adapters:
-            return artifacts
-        if not self._manual_external_analysis_requests:
-            return artifacts
-        if not self._analysis_policy.manual:
-            self._log_event(
-                "external-analysis",
-                "INFO",
-                "Manual external analysis ignored",
-                event="manual-disabled",
-                manual_request_count=len(self._manual_external_analysis_requests),
-            )
-            return artifacts
-        record_lookup = {normalize_ref(record.target.label): record for record in records}
-        for request in self._manual_external_analysis_requests:
-            adapter = self._analysis_adapters.get(request.tool)
-            if not adapter:
-                self._log_event(
-                    "external-analysis",
-                    "WARNING",
-                    "External analysis adapter unavailable",
-                    tool=request.tool,
-                    cluster_label=request.target,
-                )
-                continue
-            record = record_lookup.get(request.target)
-            if not record:
-                self._log_event(
-                    "external-analysis",
-                    "WARNING",
-                    "External analysis target missing",
-                    tool=request.tool,
-                    cluster_label=request.target,
-                )
-                continue
-            source_artifact = record.assessment.artifact_path if record.assessment else str(record.path)
-            analysis_request = ExternalAnalysisRequest(
-                run_id=self.run_id,
-                cluster_label=record.target.label,
-                source_artifact=source_artifact,
-            )
-            artifact = adapter.run(analysis_request)
-            artifact_path = directories["external_analysis"] / (f"{self.run_id}-{record.target.label}-{adapter.name}.json")
-            artifact_with_path = replace(artifact, artifact_path=str(artifact_path))
-            write_external_analysis_artifact(artifact_path, artifact_with_path)
-            if artifact_with_path.status == ExternalAnalysisStatus.SUCCESS:
-                severity = "INFO"
-            elif artifact_with_path.status == ExternalAnalysisStatus.FAILED:
-                severity = "ERROR"
-            else:
-                severity = "WARNING"
-            self._log_event(
-                "external-analysis",
-                severity,
-                "External analysis result recorded",
-                tool=adapter.name,
-                cluster_label=record.target.label,
-                status=artifact_with_path.status.value,
-                artifact_path=str(artifact_path),
-            )
-            notification = build_external_analysis_notification(artifact_with_path)
-            self._record_notification(directories["notifications"], notification)
-            artifacts.append(artifact_with_path)
-        return artifacts
+        """Run manual external analysis for snapshot records.
+
+        Delegates to the extracted loop_runner_external_analysis module.
+        Preserves behavior exactly - no schema or artifact contract changes.
+        """
+        return run_external_analysis_for_records(
+            records=records,
+            manual_requests=self._manual_external_analysis_requests,
+            external_analysis_policy=self._analysis_policy,
+            analysis_adapters=self._analysis_adapters,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            record_notification_fn=self._record_notification,
+            log_event_fn=self._log_event,
+            directories=directories,
+        )
 
     def _run_auto_drilldown_analysis(self, drilldowns: list[DrilldownArtifact], directories: dict[str, Path]) -> list[ExternalAnalysisArtifact]:
         policy = self.config.external_analysis.auto_drilldown
