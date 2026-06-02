@@ -13,11 +13,11 @@
 | **INV-1** | UI server MUST bind to localhost by default | **Enforced** | `cli.py`: `--host default=127.0.0.1`; `server_runtime.py`: `_SAFE_LOOPBACK_HOSTS`; `--unsafe-bind` flag required for exposed addresses | None |
 | **INV-2** | No autonomous cluster mutations without operator approval | **Enforced** | `manual_next_check.py`: `_DANGEROUS_CHARS`, `MUTATION_KEYWORDS` blocklist; `next_check_planner.py`: mutation keyword detection; approval artifacts required | None |
 | **INV-3** | LLM output is advisory only; never directly influences cluster state | **Enforced** | All LLM output requires operator review; approval gate before execution; no auto-exec path | None |
-| **INV-4** | Credentials/tokens/secrets MUST NOT appear in LLM prompts | **Tested Only** | `sanitizer.py`: `_PROMPT_SENSITIVE_PATTERNS`; GAP-P1 mitigated; GAP-P2 partially mitigated (metadata anonymization done); no gate test | Gap: GAP-P3 injection detection incomplete |
+| **INV-4** | Credentials/tokens/secrets MUST NOT appear in LLM prompts | **Enforced** | `sanitizer.py`: `_PROMPT_SENSITIVE_PATTERNS`; GAP-P1 mitigated; GAP-P2 mitigated (label/annotation anonymization complete); 214 security tests including label/annotation tests | None |
 | **GOAL-1** | Prevent unauthorized cluster mutations | **Enforced** | `subprocess_helpers.py`: output sanitization; `manual_next_check.py`: command family allowlist (5 types) | None |
-| **GOAL-2** | Protect secrets and credentials from leakage | **Tested Only** | `sanitizer.py`: pattern-based redaction; `tests/security/`: 192 tests pass; no integration test with credentials in prompts | Gap: GAP-P1 verified in unit tests only |
+| **GOAL-2** | Protect secrets and credentials from leakage | **Tested Only** | `sanitizer.py`: pattern-based redaction; `tests/security/`: 214 tests pass; no integration test with credentials in prompts | Gap: GAP-P1 verified in unit tests only |
 | **GOAL-3** | Maintain artifact integrity and provenance | **Implemented** | `identity/artifact.py`: `new_artifact_id()` UUIDv7; `write_append_only_json_artifact()`; `safe_child_path()` containment check | Gap: No SHA256 verification |
-| **GOAL-4** | Bound LLM prompt data exposure | **Tested Only** | `MetadataAnonymizer` implemented; `prompt_boundaries.py`: boundary markers; `test_prompt_boundaries.py` tests | Gap: Label/annotation values not fully anonymized |
+| **GOAL-4** | Bound LLM prompt data exposure | **Enforced** | `MetadataAnonymizer` with enhanced label/annotation anonymization; `prompt_boundaries.py`: boundary markers; `test_prompt_boundaries.py` tests; 214 security tests including 22 new label/annotation anonymization tests | None |
 | **GOAL-5** | Enforce identifier validation throughout | **Enforced** | `path_validation.py`: `validate_run_id()`, `validate_kube_context_name()`, `validate_kubernetes_namespace()`, `validate_kubernetes_resource_name()`; `tests/security/`: 192 path traversal tests | None |
 | **GOAL-6** | Prevent path traversal attacks | **Enforced** | `safe_child_path()`: `is_relative_to()` containment; `safe_run_artifact_glob()`; all API handlers use validated paths | None |
 | **GOAL-7** | Maintain operational auditability | **Implemented** | `structured_logging.py`; execution history artifacts; provenance fields in artifacts | Gap: Read operations not audited |
@@ -33,7 +33,7 @@
 | **REM-S3** | External adapter command validation | **Enforced** | `adapter.py`: `_validate_command_for_execution()`; allowlist `k8sgpt`, `llamacpp`; blocklist shell interpreters | None |
 | **LLM01** | Prompt injection resistance | **Partially Enforced** | `sanitizer.py`: regex patterns; `prompt_boundaries.py`: boundary markers; `test_llm_evidence_boundaries.py`: regression tests; `scripts/verify_llm_evidence_boundaries.py`: CI gate | Gap: Boundary discipline enforced, active semantic injection detection remains open |
 | **LLM02** | Insecure output handling | **Enforced** | Schema validation on LLM responses | None |
-| **LLM06** | Sensitive information disclosure | **Tested Only** | `sanitizer.py`; `MetadataAnonymizer`; GAP-P2 partially mitigated | Gap: Label/annotation values deferred |
+| **LLM06** | Sensitive information disclosure | **Enforced** | `sanitizer.py`; `MetadataAnonymizer` with enhanced label/annotation anonymization; 22 new tests in `test_anonymizer_label_annotation.py` | None |
 | **SLSA-L1** | Provenance generated | **Implemented** | Git commit available | Gap: No SLSA attestation |
 | **SLSA-L2** | Provenance signed | **Documented Only** | No signing infrastructure | Gap: REM-L1 backlog |
 | **Supply** | Dependency vulnerability scanning | **Documented Only** | RISK-10: Gap-08 noted | Gap: No CI scanning |
@@ -58,10 +58,11 @@
 ## Evidence Summary
 
 ### Security Tests Coverage
-- **192 security tests** in `tests/security/`
+- **214 security tests** in `tests/security/` (including 22 new label/annotation anonymization tests)
 - All path traversal tests PASS
 - All symlink escape prevention tests PASS
 - All regression tests PASS
+- All label/annotation anonymization tests PASS
 
 ### Lint/Mypy
 - `ruff check src/k8s_diag_agent/security/`: **All checks passed**
@@ -77,18 +78,18 @@
 
 ## Claims by Status
 
-### Enforced (19 claims)
-- INV-1, INV-2, INV-3, GOAL-1, GOAL-5, GOAL-6
+### Enforced (22 claims)
+- INV-1, INV-2, INV-3, INV-4, GOAL-1, GOAL-4, GOAL-5, GOAL-6
 - API-R1, API-R2, AUTH-01, AUTH-02, AUTH-10
 - SUBPROC-04, SUBPROC-06, REM-S3
-- LLM02
+- LLM02, LLM06
 - CIS-5.4.1, CIS-7.2
 
 ### Partially Enforced (1 claim)
 - LLM01 (prompt/evidence boundary discipline enforced, active injection detection open)
 
-### Tested Only (4 claims)
-- INV-4, GOAL-2, GOAL-4, LLM06
+### Tested Only (1 claim)
+- GOAL-2
 
 ### Implemented but Weakly Evidenced (3 claims)
 - GOAL-3 (no SHA256), GOAL-7 (read operations not audited), SUBPROC-05 (timeouts added)

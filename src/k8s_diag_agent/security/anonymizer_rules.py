@@ -14,7 +14,9 @@ from typing import Any
 # Label/annotation keys that suggest name-like values requiring anonymization
 _LABEL_NAME_PATTERNS = re.compile(
     r"^(app|application|name|instance|component|version|environment|"
-    r"part-of|managed-by|owner|team|department|project|tier)$",
+    r"part-of|managed-by|owner|team|department|project|tier|"
+    r"contact|docs|runbook|description|image|artifact|container_image|"
+    r"backup_source|documentation|support-url)$",
     re.IGNORECASE,
 )
 
@@ -76,6 +78,22 @@ _PRESERVE_FIELDS = frozenset((
 ))
 
 
+# Patterns for sensitive content in values
+_URL_PATTERN = re.compile(
+    r"https?://[^\s]+",
+    re.IGNORECASE,
+)
+
+_EMAIL_PATTERN = re.compile(
+    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+)
+
+_REGISTRY_PATH_PATTERN = re.compile(
+    r"(?:docker\.io|ghcr\.io|registry\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}|[a-zA-Z0-9-]+\.azurecr\.io|[a-zA-Z0-9-]+\.gcr\.io|[a-zA-Z0-9-]+\.ecr\.[a-zA-Z0-9-]+\.amazonaws\.com|s3://[a-zA-Z0-9-]+)",
+    re.IGNORECASE,
+)
+
+
 def _looks_like_hostname(value: str) -> bool:
     """Check if a string looks like a hostname or domain."""
     if not isinstance(value, str):
@@ -85,6 +103,22 @@ def _looks_like_hostname(value: str) -> bool:
         return True
     # Contains common TLD patterns
     if re.search(r"\.(com|org|net|io|app|dev|internal|local)$", value, re.IGNORECASE):
+        return True
+    return False
+
+
+def _contains_sensitive_pattern(value: str) -> bool:
+    """Check if a string contains sensitive patterns requiring anonymization."""
+    if not isinstance(value, str):
+        return False
+    # Check for URLs
+    if _URL_PATTERN.search(value):
+        return True
+    # Check for email addresses
+    if _EMAIL_PATTERN.search(value):
+        return True
+    # Check for registry paths
+    if _REGISTRY_PATH_PATTERN.search(value):
         return True
     return False
 

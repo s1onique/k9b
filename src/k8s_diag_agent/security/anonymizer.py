@@ -19,6 +19,7 @@ from k8s_diag_agent.security.anonymizer_rules import (
     _LABEL_NAME_PATTERNS,
     _METADATA_FIELD_NAMES,
     _PRESERVE_FIELDS,
+    _contains_sensitive_pattern,
     _detect_category,
     _looks_like_hostname,
     _looks_like_name,
@@ -299,7 +300,10 @@ class MetadataAnonymizer:
         """Anonymize label and annotation values that contain name-like data.
 
         This is a specialized method that processes labels/annotations dicts
-        to anonymize values where the key suggests name-like content.
+        to anonymize values where:
+        1. The key suggests name-like content (app, name, component, etc.) AND
+           the value looks like a name or hostname
+        2. The value contains sensitive patterns (URLs, emails, registry paths)
 
         Args:
             data: A dict that may contain 'labels' and/or 'annotations' keys
@@ -317,14 +321,27 @@ class MetadataAnonymizer:
                     if isinstance(label_value, str) and self._is_anonymizable_string(label_value):
                         # Check if the key suggests name-like content
                         safe_key = label_key.lower().replace("-", "_").replace(".", "_")
-                        if _LABEL_NAME_PATTERNS.match(safe_key):
-                            # Check if value looks like a name
+                        key_matches = _LABEL_NAME_PATTERNS.match(safe_key)
+                        
+                        # Determine if value should be anonymized
+                        should_anonymize = False
+                        category = "label"
+                        
+                        if key_matches:
+                            # Key matches name patterns - check value type
                             if _looks_like_name(label_value):
-                                anonymized[label_key] = self._get_or_create_alias(label_value, "label")
+                                should_anonymize = True
                             elif _looks_like_hostname(label_value):
-                                anonymized[label_key] = self._get_or_create_alias(label_value, "host")
-                            else:
-                                anonymized[label_key] = label_value
+                                should_anonymize = True
+                                category = "host"
+                        
+                        # Also anonymize if value contains sensitive patterns (URLs, emails, registry)
+                        if _contains_sensitive_pattern(label_value):
+                            should_anonymize = True
+                            category = "host"
+                        
+                        if should_anonymize:
+                            anonymized[label_key] = self._get_or_create_alias(label_value, category)
                         else:
                             anonymized[label_key] = label_value
                     else:
