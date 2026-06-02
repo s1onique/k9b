@@ -1,73 +1,35 @@
 # Seam Map: LLM Auto-Drilldown Analysis
 
-**Status**: ACT 1 - Seam mapped (extraction candidate identified)  
-**Inspected**: `_run_auto_drilldown_analysis`  
+**Status**: ACT 2 - Extraction complete  
+**Extracted**: `_run_auto_drilldown_analysis` → `loop_runner_drilldown_analysis.py`  
 **Epic**: Extract health loop LLM auto-drilldown analysis
 
 ---
 
 ## Current State
 
-The LLM auto-drilldown analysis seam has **partial extraction**. Core responsibilities are already separated into focused modules, but **orchestration remains embedded in `loop.py`**.
+The LLM auto-drilldown analysis seam has **full extraction complete**. Orchestration has been moved from `loop.py` to `loop_runner_drilldown_analysis.py`. `loop.py` now delegates to the extracted helper.
 
 ---
 
-## 1. Orchestration Remaining in loop.py
+## 1. Orchestration Extracted to loop_runner_drilldown_analysis.py
 
-**Location**: `src/k8s_diag_agent/health/loop.py` lines 705-1006
+**Location**: `src/k8s_diag_agent/health/loop_runner_drilldown_analysis.py`
 
-**Size**: ~300 lines
+**Size**: ~400 lines
 
-**Shape** (pseudocode):
-
+**Public API**:
 ```python
-def _run_auto_drilldown_analysis(self, drilldowns, directories):
-    policy = self.config.external_analysis.auto_drilldown
-    if not policy.enabled or policy.max_per_run <= 0 or not drilldowns:
-        return []
-    
-    artifacts = []
-    attempts = 0
-    for drilldown in drilldowns:
-        if attempts >= policy.max_per_run:
-            break
-        attempts += 1
-        
-        # Timing
-        start = time.perf_counter()
-        
-        # Prompt measurement (calls external build_drilldown_prompt)
-        actual_prompt = build_drilldown_prompt(drilldown)
-        actual_prompt_chars = len(actual_prompt)
-        
-        # LLM call start logging
-        self._log_event("llm-call", "INFO", "LLM call started", ...)
-        
-        # Call external assess_drilldown_artifact
-        try:
-            assessment = assess_drilldown_artifact(drilldown, provider_name=...)
-            # Extract findings, next_checks, summary from assessment
-            status = ExternalAnalysisStatus.SUCCESS
-        except LLMResponseParseError as exc:
-            # Build failure metadata, diagnostics
-            status = ExternalAnalysisStatus.FAILED
-        except ValueError as exc:
-            status = ExternalAnalysisStatus.SKIPPED
-        except Exception as exc:
-            # Classify failure, build diagnostics
-            status = ExternalAnalysisStatus.FAILED
-        
-        # Create ExternalAnalysisArtifact
-        artifact = ExternalAnalysisArtifact(...)
-        
-        # Write artifact
-        write_external_analysis_artifact(artifact_path, artifact)
-        
-        # Result logging
-        self._log_event("external-analysis", ...)
-        self._log_event("llm-call", ...)
-    
-    return artifacts
+def run_auto_drilldown_analysis(
+    *,
+    drilldowns: list[DrilldownArtifact],
+    directories: dict[str, Path],
+    run_id: str,
+    run_label: str,
+    auto_drilldown_policy: AutoDrilldownPolicy,
+    provider_name: str,
+    log_event_fn: LogEventFn | None = None,
+) -> list[ExternalAnalysisArtifact]:
 ```
 
 **Responsibilities**:
@@ -81,9 +43,40 @@ def _run_auto_drilldown_analysis(self, drilldowns, directories):
 - Artifact path naming
 - Artifact persistence via `write_external_analysis_artifact`
 
+**Status**: **Extracted** ✓ (ACT 2 complete)
+
 ---
 
-## 2. Extractable: LLM Prompt/Context Assembly
+## 2. loop.py Delegation
+
+**Location**: `src/k8s_diag_agent/health/loop.py` lines 705-720
+
+**Implementation**:
+```python
+def _run_auto_drilldown_analysis(self, drilldowns, directories):
+    """Run LLM-based auto-drilldown analysis on drilldown artifacts.
+
+    Delegates to the extracted loop_runner_drilldown_analysis module.
+    Preserves behavior exactly - no schema or artifact contract changes.
+    """
+    from .loop_runner_drilldown_analysis import run_auto_drilldown_analysis as _run_auto_drilldown_impl
+
+    return _run_auto_drilldown_impl(
+        drilldowns=drilldowns,
+        directories=directories,
+        run_id=self.run_id,
+        run_label=self.run_label,
+        auto_drilldown_policy=self.config.external_analysis.auto_drilldown,
+        provider_name=self.config.external_analysis.auto_drilldown.provider or "default",
+        log_event_fn=self._log_event,
+    )
+```
+
+**Status**: **Delegating** ✓
+
+---
+
+## 3. LLM Prompt/Context Assembly
 
 **Module**: `src/k8s_diag_agent/llm/drilldown_prompts.py`
 
@@ -107,7 +100,7 @@ def build_drilldown_prompt(artifact: DrilldownArtifact) -> str:
 
 ---
 
-## 3. Extractable: LLM Response Parsing/Validation
+## 4. LLM Response Parsing/Validation
 
 **Module**: `src/k8s_diag_agent/llm/assessor_schema.py`
 
@@ -132,7 +125,7 @@ class AssessorAssessment:
 
 ---
 
-## 4. Extractable: LLM Provider Interaction
+## 5. LLM Provider Interaction
 
 **Module**: `src/k8s_diag_agent/llm/llamacpp_provider.py`
 
@@ -168,7 +161,7 @@ class LlamaCppProvider(LLMProvider):
 
 ---
 
-## 5. Extractable: Drilldown Assessment Orchestration
+## 6. Drilldown Assessment Orchestration
 
 **Module**: `src/k8s_diag_agent/health/drilldown_assessor.py`
 
@@ -202,7 +195,7 @@ def extract_drilldown_prompt_sections(artifact: DrilldownArtifact) -> list[Promp
 
 ---
 
-## 6. Fallback/Error Behavior
+## 7. Fallback/Error Behavior
 
 **Module**: `src/k8s_diag_agent/llm/llamacpp_provider_errors.py`
 
@@ -227,62 +220,26 @@ class LLMResponseParseError(ValueError):
 
 ---
 
-## Proposed Module Names for Extraction
+## Module Extraction Decision
 
-### Option A: Extract to `loop_runner_drilldown_analysis.py`
+**Selected**: Option A - `loop_runner_drilldown_analysis.py`
 
-Create new module under `health/`:
-
-```
-src/k8s_diag_agent/health/loop_runner_drilldown_analysis.py
-```
-
-**Responsibilities**:
-- Policy check (enabled, max_per_run)
-- Loop iteration with attempt counting
-- Timing measurement
-- Prompt character measurement
-- LLM call logging (start/result)
-- ExternalAnalysisArtifact construction
-- Artifact path naming
-- Artifact persistence
-- Failure metadata assembly
-
-**Interface**:
-```python
-from .loop_types import HealthSnapshotRecord
-
-def run_auto_drilldown_analysis_for_records(
-    drilldowns: list[DrilldownArtifact],
-    directories: dict[str, Path],
-    run_id: str,
-    run_label: str,
-    auto_drilldown_policy: AutoDrilldownPolicy,
-    provider_name: str,
-    log_event_fn: LogEventFn | None = None,
-) -> list[ExternalAnalysisArtifact]:
-```
-
-### Option B: Extract to `llm/drilldown_analysis.py`
-
-Create new module under `llm/`:
-
-```
-src/k8s_diag_agent/llm/drilldown_analysis.py
-```
-
-**Responsibilities**:
-- Same as Option A but places orchestration closer to LLM seam
+Rationale:
+- Follows existing extraction pattern (`loop_runner_comparisons.py`, `loop_runner_drilldowns.py`)
+- Places orchestration near other health loop runner helpers
+- Minimal coupling to runner via explicit dependency injection
 
 ---
 
-## Call Site
+## Call Sites
 
 Single call site at `loop.py` line 469:
 
 ```python
 auto_artifacts = self._run_auto_drilldown_analysis(drilldowns, directories)
 ```
+
+`HealthLoopRunner._run_auto_drilldown_analysis` now delegates to `loop_runner_drilldown_analysis.run_auto_drilldown_analysis()`.
 
 ---
 
@@ -304,7 +261,7 @@ auto_artifacts = self._run_auto_drilldown_analysis(drilldowns, directories)
 Minimal coupling:
 
 - Passes `run_id` and `run_label` for logging metadata
-- Uses `self._log_event` callback for structured logging
+- Uses `log_event_fn` callback for structured logging
 - No state mutation beyond logging
 
 ---
@@ -347,38 +304,16 @@ These are already properly abstracted through module seams.
 | `llm-call` (start) | INFO | Before LLM call |
 | `llm-call` (result) | INFO/WARNING/ERROR | After LLM call |
 | `llm-prompt-diagnostics` | ERROR | On parse/classification failure |
-| `auto-drilldown` | INFO/WARNING/ERROR | Based on status |
+| `external-analysis` | INFO/WARNING/ERROR | Based on status |
 
 ---
 
-## Why Extraction Should Proceed
+## Why Extraction Proceeded
 
 1. **Separation of concerns**: Loop orchestration (`loop.py`) should coordinate, not implement LLM pipeline details
 2. **Testability**: Extracted module can be unit tested without health loop runner
 3. **Parallel extraction pattern**: Follows existing pattern (e.g., `loop_runner_comparisons.py`, `loop_runner_drilldowns.py`)
 4. **Minimal blast radius**: The orchestration is already decoupled via module seams
-
----
-
-## Non-Goals for ACT 1
-
-- No behavior changes to `_run_auto_drilldown_analysis`
-- No new features
-- No test additions (verification only)
-
----
-
-## Next Recommended ACT
-
-**ACT 2**: Extract `_run_auto_drilldown_analysis` orchestration to `loop_runner_drilldown_analysis.py`
-
-**Steps**:
-1. Create `loop_runner_drilldown_analysis.py` module
-2. Move orchestration logic (timing, logging, artifact construction, persistence)
-3. Keep external calls to `assess_drilldown_artifact()`, `build_drilldown_prompt_diagnostics()`
-4. Update `loop.py` to import and delegate
-5. Run verification gate
-6. Commit with seam map update
 
 ---
 
@@ -389,7 +324,44 @@ These are already properly abstracted through module seams.
 - [x] LLM module files inspected (prompts.py, drilldown_prompts.py, etc.)
 - [x] Extractable responsibilities identified
 - [x] Seam map document produced under `docs/`
-- [ ] Proposed module names finalized
-- [ ] Extraction performed (deferred to ACT 2)
-- [ ] Verification gate run
-- [ ] Commit if verification passes
+- [x] Proposed module names finalized
+- [x] Extraction performed (ACT 2 complete)
+- [x] Verification gate run
+- [x] Commit if verification passes
+
+---
+
+## ACT 2 Summary
+
+**Files created**:
+- `src/k8s_diag_agent/health/loop_runner_drilldown_analysis.py` - Extraction target
+- `tests/test_loop_runner_drilldown_analysis.py` - Unit tests
+
+**Files modified**:
+- `src/k8s_diag_agent/health/loop.py` - Delegates to extracted helper
+- `docs/seam-map-llm-auto-drilldown-analysis.md` - Updated status
+
+**Behavior preserved**:
+- Policy check (enabled, max_per_run)
+- Loop iteration with attempt counting
+- Timing measurement
+- Prompt character measurement
+- LLM call logging (start/result/diagnostics)
+- Status mapping (SUCCESS/FAILED/SKIPPED)
+- Artifact construction and persistence
+- Failure metadata assembly
+- Skip on SKIPPED with reason
+
+**Tests added**:
+- `test_disabled_policy_returns_no_artifacts`
+- `test_max_per_run_zero_returns_no_artifacts`
+- `test_empty_drilldowns_returns_no_artifacts`
+- `test_max_per_run_limits_attempts`
+- `test_successful_assessment_writes_artifact_and_logs_result`
+- `test_parse_failure_produces_failed_artifact_and_diagnostics_logging`
+- `test_validation_valueerror_maps_to_skipped_non_fatal_behavior`
+- `test_network_error_produces_failed_artifact`
+- `test_no_log_fn_does_not_fail`
+- `test_artifact_path_format_preserved`
+- `test_skipped_stops_loop_early`
+- `test_external_analysis_log_emitted`

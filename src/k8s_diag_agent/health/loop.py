@@ -23,15 +23,12 @@ from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnaly
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
 from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..external_analysis.vmalert_discovery import VmalertSourceInventory
-from ..llm.call_labels import build_llm_call_id
-from ..llm.llamacpp_provider import classify_llm_failure
 from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
 from .baseline import BaselinePolicy, resolve_baseline_policy_path
 from .drilldown import DrilldownArtifact, DrilldownCollector
-from .drilldown_assessor import assess_drilldown_artifact
 from .image_pull_secret import ImagePullSecretInsight, ImagePullSecretInspector
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
 from .loop_alertmanager_port_forward import (
@@ -703,307 +700,22 @@ class HealthLoopRunner:
         )
 
     def _run_auto_drilldown_analysis(self, drilldowns: list[DrilldownArtifact], directories: dict[str, Path]) -> list[ExternalAnalysisArtifact]:
-        policy = self.config.external_analysis.auto_drilldown
-        if not policy.enabled or policy.max_per_run <= 0 or not drilldowns:
-            return []
-        provider_name = policy.provider or "default"
-        artifacts: list[ExternalAnalysisArtifact] = []
-        attempts = 0
-        for drilldown in drilldowns:
-            if attempts >= policy.max_per_run:
-                break
-            attempts += 1
-            artifact_path = directories["external_analysis"] / (f"{self.run_id}-{drilldown.label}-auto-{provider_name}.json")
-            start = time.perf_counter()
-            status = ExternalAnalysisStatus.FAILED
-            summary: str | None = None
-            findings: tuple[str, ...] = ()
-            next_checks: tuple[str, ...] = ()
-            payload: dict[str, object] | None = None
-            error_summary: str | None = None
-            skip_reason: str | None = None
-            failure_metadata: dict[str, object] | None = None
-            # Build actual prompt first for exact measurement.
-            # Note: assess_drilldown_artifact() also builds the prompt internally.
-            # Since build_drilldown_prompt() is deterministic, the measured chars
-            # should match the actual prompt sent to the LLM.
-            from ..llm.drilldown_prompts import build_drilldown_prompt
+        """Run LLM-based auto-drilldown analysis on drilldown artifacts.
 
-            actual_prompt = build_drilldown_prompt(drilldown)
-            actual_prompt_chars = len(actual_prompt) if actual_prompt else 0
-            # Build deterministic call ID for start log
-            start_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
-            # Resolve max_tokens for llama.cpp provider
-            start_max_tokens: int | None = None
-            if _is_openai_compatible_provider(provider_name):
-                from .drilldown_assessor import resolve_drilldown_max_tokens
+        Delegates to the extracted loop_runner_drilldown_analysis module.
+        Preserves behavior exactly - no schema or artifact contract changes.
+        """
+        from .loop_runner_drilldown_analysis import run_auto_drilldown_analysis as _run_auto_drilldown_impl
 
-                start_max_tokens = resolve_drilldown_max_tokens(provider_name)
-            # Log LLM call start
-            self._log_event(
-                "llm-call",
-                "INFO",
-                "LLM call started",
-                llm_call=True,
-                llm_call_id=start_call_id,
-                llm_provider=provider_name,
-                llm_operation="auto-drilldown",
-                llm_phase="start",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                cluster_label=drilldown.label,
-                max_tokens=start_max_tokens,
-                timeout_seconds=None,
-                actual_prompt_chars=actual_prompt_chars,
-            )
-            try:
-                # max_tokens will be resolved by assess_drilldown_artifact using provider config
-                assessment = assess_drilldown_artifact(drilldown, provider_name=provider_name)
-                payload = assessment.to_dict()
-                summary = assessment.recommended_action.description if assessment.recommended_action else (assessment.hypotheses[0].description if assessment.hypotheses else "Auto drilldown interpretation")
-                findings = tuple(entry.description for entry in assessment.findings)
-                next_checks = tuple(entry.description for entry in assessment.next_evidence_to_collect)
-                status = ExternalAnalysisStatus.SUCCESS
-            except ValueError as exc:
-                # LLMResponseParseError is a ValueError subclass: handle it with structured failure metadata
-                from ..llm.llamacpp_provider import LLMResponseParseError
-                from .drilldown_assessor import build_drilldown_prompt_diagnostics
-
-                if isinstance(exc, LLMResponseParseError):
-                    status = ExternalAnalysisStatus.FAILED
-                    summary = str(exc)
-                    error_summary = str(exc)
-                    payload = None
-                    skip_reason = None
-                    elapsed_ms = int((time.perf_counter() - start) * 1000)
-                    # Determine failure class based on length cap
-                    if exc.completion_stopped_by_length is True:
-                        failure_class_value = "llm_response_parse_error_length_capped"
-                    else:
-                        failure_class_value = "llm_response_parse_error"
-                    # Build structured top-level failure metadata
-                    exc_diags = exc.to_diagnostics()
-                    max_toks: int | None = None
-                    if _is_openai_compatible_provider(provider_name):
-                        from .drilldown_assessor import resolve_drilldown_max_tokens
-
-                        max_toks = resolve_drilldown_max_tokens(provider_name)
-                    prompt_diags = build_drilldown_prompt_diagnostics(
-                        drilldown,
-                        provider_name=provider_name,
-                        actual_prompt_chars=actual_prompt_chars,
-                        max_tokens=max_toks,
-                        elapsed_ms=elapsed_ms,
-                        failure_class=failure_class_value,
-                        exception_type="LLMResponseParseError",
-                    )
-                    llm_call_id_val = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
-                    failure_metadata = {
-                        "failure_class": failure_class_value,
-                        "exception_type": "LLMResponseParseError",
-                        "finish_reason": exc_diags.get("finish_reason"),
-                        "completion_stopped_by_length": exc_diags.get("completion_stopped_by_length"),
-                        "response_content_chars": exc_diags.get("response_content_chars"),
-                        "response_content_prefix": exc_diags.get("response_content_prefix"),
-                        "max_tokens": exc_diags.get("max_tokens"),
-                        "provider": provider_name,
-                        "operation": "auto-drilldown",
-                        "llm_call_id": llm_call_id_val,
-                        "llm_call": True,
-                        "prompt_diagnostics": prompt_diags,
-                    }
-                    self._log_event(
-                        "llm-prompt-diagnostics",
-                        "ERROR",
-                        "Auto-drilldown LLM call failed",
-                        llm_call=True,
-                        llm_call_id=llm_call_id_val,
-                        llm_provider=provider_name,
-                        llm_operation="auto-drilldown",
-                        llm_phase="diagnostics",
-                        operation=prompt_diags.get("operation"),
-                        provider=prompt_diags.get("provider"),
-                        prompt_chars=prompt_diags.get("prompt_chars"),
-                        prompt_tokens_estimate=prompt_diags.get("prompt_tokens_estimate"),
-                        actual_prompt_chars=prompt_diags.get("actual_prompt_chars"),
-                        actual_prompt_tokens_estimate=prompt_diags.get("actual_prompt_tokens_estimate"),
-                        section_coverage_ratio=prompt_diags.get("section_coverage_ratio"),
-                        prompt_section_count=prompt_diags.get("prompt_section_count"),
-                        top_prompt_sections=[s.get("name") for s in prompt_diags.get("top_prompt_sections", [])],
-                        elapsed_ms=elapsed_ms,
-                        failure_class=failure_class_value,
-                        exception_type="LLMResponseParseError",
-                    )
-                else:
-                    # Non-LLM ValueError (including schema validation): preserve SKIPPED behavior
-                    # but set explicit failure metadata for observability
-                    status = ExternalAnalysisStatus.SKIPPED
-                    summary = str(exc)
-                    skip_reason = str(exc)
-                    error_summary = None
-                    payload = None
-                    failure_metadata = {
-                        "failure_class": "llm_response_schema_validation_error",
-                        "exception_type": "ValueError",
-                        "provider": provider_name,
-                        "operation": "auto-drilldown",
-                        "llm_call_id": build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label),
-                        "llm_call": True,
-                        "max_tokens": start_max_tokens,
-                        "actual_prompt_chars": actual_prompt_chars,
-                    }
-            # REVIEWED: LLM call boundary in auto-drilldown.
-            # assess_drilldown_artifact() calls the provider and may raise exceptions from:
-            # - provider network/HTTP errors (requests.RequestException, httpx.HTTPError, etc.)
-            # - LLM parsing errors (ValueError subclasses, already handled above)
-            # - unexpected provider SDK errors
-            # Non-fatal fallback: FAILED status with failure_metadata (when available).
-            # No credential exposure: failure_metadata uses bounded field extraction, not raw response.
-            except Exception as exc:
-                status = ExternalAnalysisStatus.FAILED
-                summary = str(exc)
-                error_summary = str(exc)
-                payload = None
-                # Build prompt diagnostics for failure logging and artifact
-                failure_metadata = None
-                elapsed_ms = int((time.perf_counter() - start) * 1000)
-                from .drilldown_assessor import build_drilldown_prompt_diagnostics
-
-                try:
-                    # Classify the exception properly - check __cause__ and __context__ for wrapped exceptions
-                    classified_failure_class, classified_exc_type = classify_llm_failure(exc)
-                    # Resolve max_tokens for diagnostics using the drilldown_assessor helper
-                    diagnostic_max_tokens: int | None = None
-                    if _is_openai_compatible_provider(provider_name):
-                        from .drilldown_assessor import resolve_drilldown_max_tokens
-
-                        diagnostic_max_tokens = resolve_drilldown_max_tokens(provider_name)
-                    prompt_diags = build_drilldown_prompt_diagnostics(
-                        drilldown,
-                        provider_name=provider_name,
-                        actual_prompt_chars=actual_prompt_chars,
-                        max_tokens=diagnostic_max_tokens,
-                        elapsed_ms=elapsed_ms,
-                        failure_class=classified_failure_class.value,
-                        exception_type=classified_exc_type,
-                    )
-                    # Build deterministic call ID for correlation across logs and artifacts
-                    call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
-                    # Log structured diagnostics for failure observability
-                    self._log_event(
-                        "llm-prompt-diagnostics",
-                        "ERROR",
-                        "Auto-drilldown LLM call failed",
-                        llm_call=True,
-                        llm_call_id=call_id,
-                        llm_provider=provider_name,
-                        llm_operation="auto-drilldown",
-                        llm_phase="diagnostics",
-                        operation=prompt_diags.get("operation"),
-                        provider=prompt_diags.get("provider"),
-                        prompt_chars=prompt_diags.get("prompt_chars"),
-                        prompt_tokens_estimate=prompt_diags.get("prompt_tokens_estimate"),
-                        actual_prompt_chars=prompt_diags.get("actual_prompt_chars"),
-                        actual_prompt_tokens_estimate=prompt_diags.get("actual_prompt_tokens_estimate"),
-                        section_coverage_ratio=prompt_diags.get("section_coverage_ratio"),
-                        prompt_section_count=prompt_diags.get("prompt_section_count"),
-                        top_prompt_sections=[s.get("name") for s in prompt_diags.get("top_prompt_sections", [])],
-                        elapsed_ms=elapsed_ms,
-                        failure_class=classified_failure_class.value,
-                        exception_type=classified_exc_type,
-                    )
-                    failure_metadata = {"prompt_diagnostics": prompt_diags}
-                # REVIEWED: internal diagnostics extraction boundary.
-                # Narrowed to TypeError/AttributeError/KeyError/ValueError: these are
-                # the expected exceptions when accessing dict fields or calling helpers
-                # during prompt diagnostics extraction. Non-fatal fallback: no diagnostics.
-                except (TypeError, AttributeError, KeyError, ValueError):
-                    failure_metadata = None
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            artifact = ExternalAnalysisArtifact(
-                tool_name="llm-autodrilldown",
-                run_id=self.run_id,
-                cluster_label=drilldown.label,
-                run_label=self.run_label,
-                source_artifact=drilldown.artifact_path,
-                summary=summary,
-                findings=findings,
-                suggested_next_checks=next_checks,
-                status=status,
-                raw_output=None,
-                timestamp=datetime.now(UTC),
-                artifact_path=str(artifact_path),
-                provider=provider_name,
-                duration_ms=duration_ms,
-                purpose=ExternalAnalysisPurpose.AUTO_DRILLDOWN,
-                payload=payload,
-                error_summary=error_summary,
-                skip_reason=skip_reason,
-                failure_metadata=failure_metadata,
-            )
-            write_external_analysis_artifact(artifact_path, artifact)
-            severity = "INFO" if status == ExternalAnalysisStatus.SUCCESS else "WARNING" if status == ExternalAnalysisStatus.SKIPPED else "ERROR"
-            # Build status-appropriate log message
-            _interp_label = "Auto drilldown interpretation failed" if status == ExternalAnalysisStatus.FAILED else "Auto drilldown interpretation skipped" if status == ExternalAnalysisStatus.SKIPPED else "Auto drilldown interpretation recorded"
-            self._log_event(
-                "external-analysis",
-                severity,
-                _interp_label,
-                tool=provider_name,
-                cluster_label=drilldown.label,
-                status=status.value,
-                artifact_path=str(artifact_path),
-                error_summary=error_summary,
-                duration_ms=duration_ms,
-                event="auto-drilldown",
-            )
-            # Log LLM call result with deterministic call ID for correlation
-            result_call_id = build_llm_call_id(self.run_id, "auto-drilldown", provider_name, cluster_label=drilldown.label)
-            # Extract failure details from failure_metadata if available (check top-level and nested prompt_diagnostics)
-            result_failure_class: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "failure_class")
-            result_exception_type: str | None = HealthLoopRunner._failure_metadata_field(failure_metadata, "exception_type")
-            result_skip_reason: str | None = None
-            if failure_metadata:
-                nested_diags = failure_metadata.get("prompt_diagnostics")
-                if isinstance(nested_diags, dict):
-                    result_skip_reason = str(nested_diags.get("skip_reason")) if nested_diags.get("skip_reason") else None
-            if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
-                result_skip_reason = skip_reason
-            # Resolve max_tokens for openai-compatible provider
-            result_max_tokens: int | None = None
-            if _is_openai_compatible_provider(provider_name):
-                from .drilldown_assessor import resolve_drilldown_max_tokens
-
-                result_max_tokens = resolve_drilldown_max_tokens(provider_name)
-            self._log_event(
-                "llm-call",
-                severity,
-                "LLM call completed" if status == ExternalAnalysisStatus.SUCCESS else ("LLM call skipped" if status == ExternalAnalysisStatus.SKIPPED else "LLM call failed"),
-                llm_call=True,
-                llm_call_id=result_call_id,
-                llm_provider=provider_name,
-                llm_operation="auto-drilldown",
-                llm_phase="result",
-                run_id=self.run_id,
-                run_label=self.run_label,
-                cluster_label=drilldown.label,
-                status=status.value,
-                duration_ms=duration_ms,
-                artifact_path=str(artifact_path),
-                max_tokens=result_max_tokens,
-                failure_class=result_failure_class,
-                exception_type=result_exception_type,
-                finish_reason=HealthLoopRunner._failure_metadata_field(failure_metadata, "finish_reason"),
-                completion_stopped_by_length=HealthLoopRunner._failure_metadata_field(
-                    failure_metadata,
-                    "completion_stopped_by_length",
-                ),
-                skip_reason=result_skip_reason,
-            )
-            artifacts.append(artifact)
-            if status == ExternalAnalysisStatus.SKIPPED and skip_reason:
-                break
-        return artifacts
+        return _run_auto_drilldown_impl(
+            drilldowns=drilldowns,
+            directories=directories,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            auto_drilldown_policy=self.config.external_analysis.auto_drilldown,
+            provider_name=self.config.external_analysis.auto_drilldown.provider or "default",
+            log_event_fn=self._log_event,
+        )
 
     def _run_review_enrichment(self, review_path: Path | None, directories: dict[str, Path]) -> ExternalAnalysisArtifact | None:
         policy = self.config.external_analysis.review_enrichment
