@@ -23,7 +23,6 @@ from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInvento
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose, ExternalAnalysisStatus, write_external_analysis_artifact
 from ..external_analysis.config import ExternalAnalysisSettings, parse_external_analysis_settings
-from ..external_analysis.next_check_planner import plan_next_checks
 from ..external_analysis.review_schema import classify_review_enrichment_shape
 from ..external_analysis.vmalert_discovery import VmalertSourceInventory
 from ..identity.artifact import new_artifact_id
@@ -69,6 +68,7 @@ from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_r
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
+from .loop_runner_next_check_planning import run_next_check_planning
 from .loop_scheduler import (
     _HEALTH_ONLY_MESSAGE,  # noqa: F401
     HealthLoopScheduler,  # noqa: F401 - re-exported for backward compatibility
@@ -2347,71 +2347,15 @@ class HealthLoopRunner:
         directories: dict[str, Path],
         execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
     ) -> ExternalAnalysisArtifact | None:
-        if not review_path or not enrichment_artifact:
-            # Log that planner was skipped because no enrichment artifact
-            self._log_event(
-                "next-check-planner",
-                "DEBUG",
-                "Next-check planner skipped",
-                run_label=self.run_label,
-                run_id=self.run_id,
-                source_enrichment_artifact_path=str(enrichment_artifact.artifact_path) if enrichment_artifact else None,
-                reason="no_enrichment_artifact",
-                event="next-check-planning-skipped",
-            )
-            return None
-        plan = plan_next_checks(review_path, self.run_id, enrichment_artifact, execution_artifacts)
-        if not plan:
-            # Log that planner produced no candidates
-            self._log_event(
-                "next-check-planner",
-                "INFO",
-                "Next-check planner produced no candidates",
-                run_label=self.run_label,
-                run_id=self.run_id,
-                source_enrichment_artifact_path=str(enrichment_artifact.artifact_path),
-                source_next_checks_count=len(enrichment_artifact.suggested_next_checks) if enrichment_artifact.suggested_next_checks else 0,
-                candidate_count=0,
-                reason="no_candidates_from_planner",
-                event="next-check-planning-no-candidates",
-            )
-            return None
-        artifact_path = directories["external_analysis"] / (f"{self.run_id}-next-check-plan.json")
-        candidate_count = len(plan.candidates)
-        summary = f"Planned {candidate_count} next-check candidate(s)" if candidate_count else "No actionable next checks"
-        artifact = ExternalAnalysisArtifact(
-            tool_name="next-check-planner",
+        return run_next_check_planning(
+            review_path=review_path,
+            enrichment_artifact=enrichment_artifact,
+            directories=directories,
             run_id=self.run_id,
-            cluster_label=self.run_label,
             run_label=self.run_label,
-            source_artifact=str(review_path),
-            summary=summary,
-            findings=(),
-            suggested_next_checks=(),
-            status=ExternalAnalysisStatus.SUCCESS,
-            raw_output=None,
-            timestamp=datetime.now(UTC),
-            artifact_path=str(artifact_path),
-            provider=enrichment_artifact.provider,
-            duration_ms=0,
-            purpose=ExternalAnalysisPurpose.NEXT_CHECK_PLANNING,
-            payload=plan.to_payload(),
+            log_event=self._log_event,
+            execution_artifacts=execution_artifacts,
         )
-        write_external_analysis_artifact(artifact_path, artifact)
-        self._log_event(
-            "next-check-planner",
-            "INFO",
-            "Next-check plan recorded",
-            run_label=self.run_label,
-            run_id=self.run_id,
-            source_enrichment_artifact_path=str(enrichment_artifact.artifact_path),
-            source_next_checks_count=len(enrichment_artifact.suggested_next_checks) if enrichment_artifact.suggested_next_checks else 0,
-            candidate_count=candidate_count,
-            plan_artifact_path=str(artifact_path),
-            reason="plan_recorded" if candidate_count > 0 else "no_candidates",
-            event="next-check-planning",
-        )
-        return artifact
 
     def _write_review_artifact(
         self,
