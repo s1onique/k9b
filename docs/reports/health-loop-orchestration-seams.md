@@ -1,7 +1,7 @@
 # Health Loop Orchestration Seams — Post Result Extraction
 
 **ACT**: Reconnaissance for next health-loop extraction  
-**Date**: 2026-05-13  
+**Date**: 2026-06-02  
 **Commit**: d42a304f1ae58b4b5d8124a643f625f3115533f4  
 **Status**: Reconnaissance complete
 
@@ -304,16 +304,7 @@ Checked 893 files
 
 **Expected caller shape**:
 ```python
-# In loop.py, HealthLoopRunner.execute() replaces:
-review_path, proposals = self._write_review_artifact(...)
-enrichment_artifact = self._run_review_enrichment(review_path, directories)
-plan_artifact = self._run_next_check_planning(review_path, enrichment_artifact, directories, execution_artifacts)
-
-# With:
-from .loop_runner_next_check_planning import run_next_check_planning
-...
-review_path, proposals = _write_review_and_proposals_impl(...)
-enrichment_artifact = self._run_review_enrichment(review_path, directories)
+# In loop.py, HealthLoopRunner._run_next_check_planning delegates to:
 plan_artifact = run_next_check_planning(
     review_path=review_path,
     enrichment_artifact=enrichment_artifact,
@@ -327,9 +318,10 @@ plan_artifact = run_next_check_planning(
 **Function signature**:
 ```python
 def run_next_check_planning(
+    *,
     review_path: Path | None,
     enrichment_artifact: ExternalAnalysisArtifact | None,
-    directories: dict[str, Path],
+    directories: Mapping[str, Path],
     run_id: str,
     log_event: Callable[..., None],
     execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
@@ -388,7 +380,7 @@ def run_next_check_planning(
 
 ## 9. Findings
 
-1. **`build_health_assessment()` is substantially decomposed** — 9 helper modules cover signal/finding/hypothesis/next-check logic. Only final result assembly remains.
+1. **`build_health_assessment()` is substantially decomposed** — 9 helper modules cover signal/finding/hypothesis/next-check logic. Final result assembly has also been extracted; remaining value is likely in HealthLoopRunner orchestration.
 
 2. **`HealthLoopRunner` is the primary extraction target** — 1574 lines across 27 methods. Largest methods are LLM call handlers and trigger evaluation.
 
