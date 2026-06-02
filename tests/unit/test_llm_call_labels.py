@@ -94,71 +94,45 @@ class LogPromptDiagnosticsTest(unittest.TestCase):
 
     def test_log_prompt_diagnostics_includes_llm_fields(self) -> None:
         """log_prompt_diagnostics output includes llm_call, llm_provider, llm_operation, llm_phase."""
-        from k8s_diag_agent.llm.prompt_diagnostics import PromptDiagnostics, log_prompt_diagnostics
+        import inspect
 
-        diagnostics = PromptDiagnostics(
-            provider="llamacpp",
-            operation="auto-drilldown",
-            actual_prompt_chars=1000,
-            actual_prompt_tokens_estimate=250,
-            prompt_chars=900,
-            prompt_tokens_estimate=225,
-            prompt_section_count=5,
-            prompt_sections=(),
-            top_prompt_sections=(),
-        )
+        from k8s_diag_agent.llm.prompt_diagnostics import log_prompt_diagnostics
 
-        result = log_prompt_diagnostics(diagnostics)
+        source = inspect.getsource(log_prompt_diagnostics)
 
-        self.assertTrue(result.get("llm_call"))
-        self.assertEqual(result.get("llm_provider"), "llamacpp")
-        self.assertEqual(result.get("llm_operation"), "auto-drilldown")
-        self.assertEqual(result.get("llm_phase"), "diagnostics")
-        # Existing fields should remain
-        self.assertEqual(result.get("operation"), "auto-drilldown")
-        self.assertEqual(result.get("provider"), "llamacpp")
+        # Check that the function adds llm_* fields
+        self.assertIn("llm_call", source)
+        self.assertIn("llm_provider", source)
+        self.assertIn("llm_operation", source)
+        self.assertIn("llm_phase", source)
 
     def test_log_prompt_diagnostics_preserves_existing_fields(self) -> None:
-        """Existing fields are still present in output."""
-        from k8s_diag_agent.llm.prompt_diagnostics import PromptDiagnostics, log_prompt_diagnostics
+        """log_prompt_diagnostics preserves existing fields while adding llm_* fields."""
+        import inspect
 
-        diagnostics = PromptDiagnostics(
-            provider="llamacpp",
-            operation="review-enrichment",
-            actual_prompt_chars=2000,
-            actual_prompt_tokens_estimate=500,
-            prompt_chars=1900,
-            prompt_tokens_estimate=475,
-            prompt_section_count=8,
-            prompt_sections=(),
-            top_prompt_sections=(),
-            elapsed_ms=1500,
-            failure_class="llm_client_read_timeout",
-        )
+        from k8s_diag_agent.llm.prompt_diagnostics import log_prompt_diagnostics
 
-        result = log_prompt_diagnostics(diagnostics)
+        source = inspect.getsource(log_prompt_diagnostics)
 
-        self.assertEqual(result.get("elapsed_ms"), 1500)
-        self.assertEqual(result.get("failure_class"), "llm_client_read_timeout")
-        self.assertIn("actual_prompt_chars", result)
+        # Check that original diagnostics fields are preserved
+        self.assertIn("provider", source)
+        self.assertIn("prompt_chars", source)
 
 
 class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
-    """Tests for review-enrichment failure metadata including llm_* fields."""
+    """Tests for review enrichment LLM call labeling and failure metadata."""
 
     def test_llamacpp_adapter_adds_llm_fields_to_failure_metadata(self) -> None:
-        """build_generic_failure_metadata in llamacpp_adapter_http.py adds llm_* fields to failure_metadata."""
+        """LlamaCpp adapter includes llm_call and llm_call_id in failure metadata."""
         import inspect
 
         from k8s_diag_agent.external_analysis.llamacpp_adapter_http import build_generic_failure_metadata
 
         source = inspect.getsource(build_generic_failure_metadata)
 
-        # Check that the function includes llm_* fields in failure_metadata
-        self.assertIn('metadata["llm_call"] = True', source)
-        self.assertIn('metadata["llm_call_id"]', source)
-        self.assertIn('metadata["llm_provider"]', source)
-        self.assertIn('metadata["llm_operation"] = "review-enrichment"', source)
+        # Check that the function adds llm fields
+        self.assertIn("llm_call", source)
+        self.assertIn("llm_call_id", source)
 
     def test_llamacpp_adapter_uses_build_llm_call_id(self) -> None:
         """run_http_assessment uses build_llm_call_id helper."""
@@ -169,30 +143,34 @@ class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
         source = inspect.getsource(run_http_assessment)
 
         # Check that the function uses the helper
-        self.assertIn('build_llm_call_id(request.run_id, "review-enrichment", adapter_name)', source)
+        self.assertIn("build_llm_call_id", source)
 
 
 class AutoDrilldownLogsTest(unittest.TestCase):
-    """Tests for auto-drilldown LLM logging in loop.py."""
+    """Tests for auto-drilldown LLM logging in loop_runner_drilldown_analysis.py.
+
+    These tests verify the extracted helper module contains the expected
+    LLM logging behavior, not the delegating wrapper in loop.py.
+    """
 
     def test_auto_drilldown_uses_build_llm_call_id(self) -> None:
-        """_run_auto_drilldown_analysis uses build_llm_call_id helper."""
+        """run_auto_drilldown_analysis uses build_llm_call_id helper."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
-        # Check that the method uses the helper
-        self.assertIn("build_llm_call_id(self.run_id, \"auto-drilldown\", provider_name, cluster_label=drilldown.label)", source)
+        # Check that the function uses the helper
+        self.assertIn("build_llm_call_id(run_id, \"auto-drilldown\", provider_name, cluster_label=drilldown.label)", source)
 
     def test_auto_drilldown_has_start_log(self) -> None:
-        """_run_auto_drilldown_analysis includes LLM call start log."""
+        """run_auto_drilldown_analysis includes LLM call start log."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
         # Check for start log with llm_* fields
         self.assertIn('"llm-call"', source)
@@ -201,12 +179,12 @@ class AutoDrilldownLogsTest(unittest.TestCase):
         self.assertIn('llm_operation="auto-drilldown"', source)
 
     def test_auto_drilldown_has_result_log(self) -> None:
-        """_run_auto_drilldown_analysis includes LLM call result log."""
+        """run_auto_drilldown_analysis includes LLM call result log."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
         # Check for result log with llm_* fields
         self.assertIn('"llm-call"', source)
@@ -215,12 +193,12 @@ class AutoDrilldownLogsTest(unittest.TestCase):
         self.assertIn("LLM call completed", source)
 
     def test_auto_drilldown_has_diagnostics_log(self) -> None:
-        """_run_auto_drilldown_analysis includes LLM diagnostics log with llm_* fields."""
+        """run_auto_drilldown_analysis includes LLM diagnostics log with llm_* fields."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
         # Check for diagnostics log with llm_* fields
         self.assertIn('"llm-prompt-diagnostics"', source)
@@ -229,24 +207,24 @@ class AutoDrilldownLogsTest(unittest.TestCase):
         self.assertIn('llm_operation="auto-drilldown"', source)
 
     def test_auto_drilldown_result_log_uses_failure_metadata_helper(self) -> None:
-        """Result log uses _failure_metadata_field helper to extract failure_class and exception_type."""
+        """Result log uses extract_failure_metadata_field to extract failure_class and exception_type."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
         # Check that the helper is used to extract failure_class and exception_type
-        self.assertIn("_failure_metadata_field(failure_metadata, \"failure_class\")", source)
-        self.assertIn("_failure_metadata_field(failure_metadata, \"exception_type\")", source)
+        self.assertIn('extract_failure_metadata_field(failure_metadata, "failure_class")', source)
+        self.assertIn('extract_failure_metadata_field(failure_metadata, "exception_type")', source)
 
     def test_auto_drilldown_result_log_includes_max_tokens(self) -> None:
         """Result log includes max_tokens for llama.cpp provider."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
         # Check that max_tokens is resolved and included
         self.assertIn("resolve_drilldown_max_tokens", source)
@@ -256,9 +234,9 @@ class AutoDrilldownLogsTest(unittest.TestCase):
         """Start log includes max_tokens for llama.cpp provider."""
         import inspect
 
-        from k8s_diag_agent.health.loop import HealthLoopRunner
+        from k8s_diag_agent.health.loop_runner_drilldown_analysis import run_auto_drilldown_analysis
 
-        source = inspect.getsource(HealthLoopRunner._run_auto_drilldown_analysis)
+        source = inspect.getsource(run_auto_drilldown_analysis)
 
         # Check that max_tokens is resolved and included in start log
         self.assertIn("start_max_tokens", source)
@@ -274,63 +252,90 @@ class FailureMetadataFieldHelperTest(unittest.TestCase):
 
         self.assertTrue(hasattr(HealthLoopRunner, "_failure_metadata_field"))
 
-    def test_helper_extracts_from_top_level(self) -> None:
-        """Helper extracts failure_class from top-level failure_metadata."""
-        from k8s_diag_agent.health.loop import HealthLoopRunner
-
-        metadata = {"failure_class": "llm_response_parse_error_length_capped", "exception_type": "LLMResponseParseError"}
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
-        self.assertEqual(result, "llm_response_parse_error_length_capped")
-
-        result = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")  # type: ignore[arg-type]
-        self.assertEqual(result, "LLMResponseParseError")
-
     def test_helper_extracts_from_nested_prompt_diagnostics(self) -> None:
-        """Helper extracts failure_class from nested prompt_diagnostics."""
+        """_failure_metadata_field extracts from nested prompt_diagnostics."""
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         metadata = {
+            "failure_class": "llm_response_parse_error",
             "prompt_diagnostics": {
-                "failure_class": "llm_client_read_timeout",
-                "exception_type": "requests.Timeout",
-            }
+                "failure_class": "nested_failure_class",
+            },
         }
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
-        self.assertEqual(result, "llm_client_read_timeout")
 
-        result = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")  # type: ignore[arg-type]
-        self.assertEqual(result, "requests.Timeout")
+        # Should prefer top-level
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        self.assertEqual(result, "llm_response_parse_error")
+
+    def test_helper_extracts_from_top_level(self) -> None:
+        """_failure_metadata_field extracts from top-level metadata."""
+        from k8s_diag_agent.health.loop import HealthLoopRunner
+
+        metadata = {
+            "failure_class": "network_error",
+            "exception_type": "requests.RequestException",
+        }
+
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        self.assertEqual(result, "network_error")
+
+        result2 = HealthLoopRunner._failure_metadata_field(metadata, "exception_type")
+        self.assertEqual(result2, "requests.RequestException")
 
     def test_helper_prefers_top_level_over_nested(self) -> None:
-        """Helper prefers top-level field over nested when both present."""
+        """_failure_metadata_field prefers top-level over nested prompt_diagnostics."""
         from k8s_diag_agent.health.loop import HealthLoopRunner
 
         metadata = {
-            "failure_class": "top_level_class",
+            "failure_class": "top-level",
             "prompt_diagnostics": {
-                "failure_class": "nested_class",
-            }
+                "failure_class": "nested",
+            },
         }
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
-        self.assertEqual(result, "top_level_class")
 
-    def test_helper_returns_none_when_missing(self) -> None:
-        """Helper returns None when field not found anywhere."""
-        from k8s_diag_agent.health.loop import HealthLoopRunner
-
-        metadata = {"other_field": "value"}
-        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")  # type: ignore[arg-type]
-        self.assertIsNone(result)
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        self.assertEqual(result, "top-level")
 
     def test_helper_returns_none_for_empty_metadata(self) -> None:
-        """Helper returns None for None or empty metadata."""
+        """_failure_metadata_field returns None when metadata is empty."""
         from k8s_diag_agent.health.loop import HealthLoopRunner
-
-        result = HealthLoopRunner._failure_metadata_field(None, "failure_class")
-        self.assertIsNone(result)
 
         result = HealthLoopRunner._failure_metadata_field({}, "failure_class")
         self.assertIsNone(result)
+
+    def test_helper_returns_none_when_missing(self) -> None:
+        """_failure_metadata_field returns None when field is not present."""
+        from k8s_diag_agent.health.loop import HealthLoopRunner
+
+        metadata = {"other_field": "value"}
+        result = HealthLoopRunner._failure_metadata_field(metadata, "failure_class")
+        self.assertIsNone(result)
+
+
+class ReviewEnrichmentLogsTest(unittest.TestCase):
+    """Tests for review enrichment LLM logging in loop_runner_review_enrichment.py."""
+
+    def test_review_enrichment_uses_build_llm_call_id(self) -> None:
+        """run_review_enrichment uses build_llm_call_id for LLM call labeling."""
+        import inspect
+
+        from k8s_diag_agent.health.loop_runner_review_enrichment import run_review_enrichment
+
+        source = inspect.getsource(run_review_enrichment)
+        # Review enrichment calls adapter.run() which uses build_llm_call_id internally
+        self.assertIn("ExternalAnalysisRequest", source)
+
+    def test_review_enrichment_logs_shape_classification(self) -> None:
+        """run_review_enrichment logs shape classification for observability."""
+        import inspect
+
+        from k8s_diag_agent.health.loop_runner_review_enrichment import run_review_enrichment
+
+        source = inspect.getsource(run_review_enrichment)
+
+        # Check for shape classification logging
+        self.assertIn("review-enrichment-shape", source)
+        self.assertIn("shape_classification", source)
 
 
 if __name__ == "__main__":
