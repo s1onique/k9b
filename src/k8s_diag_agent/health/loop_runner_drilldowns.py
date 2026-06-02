@@ -12,12 +12,13 @@ These helpers do NOT import loop.py or HealthLoopRunner.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from .drilldown import DrilldownArtifact, DrilldownCollector
+from .image_pull_secret import ImagePullSecretInsight
 from .loop_history import HealthHistoryEntry, _write_json
 from .validators import DrilldownArtifactValidator
 
@@ -61,7 +62,7 @@ class DrilldownRecordLike(Protocol):
         ...
 
     @property
-    def image_pull_secret_insight(self) -> object | None:
+    def image_pull_secret_insight(self) -> ImagePullSecretInsight | None:
         ...
 
 
@@ -143,7 +144,7 @@ class DrilldownAssessmentLike(Protocol):
 
 def build_drilldowns_for_records(
     *,
-    records: list[DrilldownRecordLike],
+    records: Sequence[DrilldownRecordLike],
     previous_history: dict[str, HealthHistoryEntry],
     directory: Path,
     run_id: str,
@@ -162,7 +163,7 @@ def build_drilldowns_for_records(
     4. Write artifact to directory and log the event
 
     Args:
-        records: List of health snapshot records with assessment data.
+        records: Sequence of health snapshot records with assessment data.
         previous_history: Prior health entries indexed by cluster_id.
         directory: Directory for writing drilldown artifacts.
         run_id: Current run identifier.
@@ -199,7 +200,7 @@ def build_drilldowns_for_records(
             evidence = collector.collect(
                 record.target.context,
                 (record.target.context,),
-                record.image_pull_secret_insight,  # type: ignore[arg-type]  # duck-typed: ImagePullSecretInsight has same interface as object | None
+                record.image_pull_secret_insight,
                 pattern_reasons=record.pattern_reasons,
                 pattern_metadata=record.pattern_metadata,
             )

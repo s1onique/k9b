@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON
+from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON, ImagePullSecretInsight
 from .loop_history import HealthHistoryEntry, HealthRating
 from .utils import normalize_ref
 
@@ -30,7 +30,7 @@ class DrilldownRecordProtocol(Protocol):
         ...
 
     @property
-    def image_pull_secret_insight(self) -> object | None:
+    def image_pull_secret_insight(self) -> ImagePullSecretInsight | None:
         ...
 
     @property

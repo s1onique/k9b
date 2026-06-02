@@ -1156,7 +1156,7 @@ class HealthLoopRunner:
         directory: Path,
     ) -> list[DrilldownArtifact]:
         return build_drilldowns_for_records(
-            records=records,  # type: ignore[arg-type]  # DrilldownRecordLike is duck-compatible with HealthSnapshotRecord
+            records=records,
             previous_history=previous_history,
             directory=directory,
             run_id=self.run_id,
