@@ -29,7 +29,6 @@ from ..identity.artifact import new_artifact_id
 from ..llm.call_labels import build_llm_call_id
 from ..llm.llamacpp_provider import classify_llm_failure
 from ..llm.provider import LEGACY_LLAMACPP_PROVIDER_NAME, OPENAI_COMPATIBLE_PROVIDER_NAME
-from ..models import Assessment, ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, RecommendedAction, Signal
 from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .adaptation import HealthProposal
@@ -43,15 +42,6 @@ from .loop_alertmanager_port_forward import (
     stop_alertmanager_port_forward,
 )
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
-from .loop_assessment_baseline import assess_baseline_policy
-from .loop_assessment_counts import assess_count_issues
-from .loop_assessment_history_drift import assess_previous_run_drift
-from .loop_assessment_image_pull import assess_image_pull_issues
-from .loop_assessment_missing_evidence import assess_missing_evidence
-from .loop_assessment_regressions import check_regression_from_history
-from .loop_assessment_result import build_health_assessment_result
-from .loop_assessment_summary import derive_assessment_summary
-from .loop_assessment_warning_events import match_warning_event_patterns
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
 from .loop_comparison_policy import (  # noqa: F401
     BaselineRegistry,  # noqa: F401 - re-exported for backward compatibility
@@ -62,12 +52,12 @@ from .loop_comparison_policy import (  # noqa: F401
 from .loop_config_helpers import _parse_comparison_intent, _parse_manual_external_analysis_requests, _parse_manual_triggers, _parse_threshold
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
 from .loop_failure_metadata import extract_failure_metadata_field
+from .loop_health_assessment import build_health_assessment as _build_health_assessment_impl
 from .loop_history import HealthAssessmentArtifact, HealthAssessmentResult, HealthHistoryEntry, HealthRating, _build_runtime_run_id, _format_snapshot_filename, _safe_label, _serialize_value, _str_or_none, _write_json
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
-from .loop_health_assessment import build_health_assessment as _build_health_assessment_impl
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_history import load_runner_history, persist_runner_history
 from .loop_runner_next_check_planning import run_next_check_planning
@@ -80,7 +70,6 @@ from .loop_scheduler_locking import (  # noqa: F401 - re-exported for backward c
     LockFileSnapshot,
     ProcessIdentity,
 )
-from .loop_signal_id import _SignalIdGenerator
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
 from .notifications import NotificationArtifact, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
@@ -1610,7 +1599,12 @@ class HealthLoopRunner:
             if not provider_requested:
                 raise ValueError("No review enrichment provider configured")
             # Use normalized name first for adapter lookup, then requested as fallback
-            adapter = self._analysis_adapters.get(provider_normalized) or self._analysis_adapters.get(provider_normalized.lower()) or self._analysis_adapters.get(provider_requested) or self._analysis_adapters.get(provider_requested.lower())
+            adapter = (
+                self._analysis_adapters.get(provider_normalized)
+                or self._analysis_adapters.get(provider_normalized.lower())
+                or self._analysis_adapters.get(provider_requested)
+                or self._analysis_adapters.get(provider_requested.lower())
+            )
             if not adapter:
                 raise ValueError(f"Adapter '{provider_requested}' (normalized: '{provider_normalized}') is not registered for review enrichment")
             # Run preflight check to validate provider configuration before execution

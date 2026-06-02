@@ -24,13 +24,28 @@ from .loop_assessment_regressions import check_regression_from_history
 from .loop_assessment_result import build_health_assessment_result
 from .loop_assessment_summary import derive_assessment_summary
 from .loop_assessment_warning_events import match_warning_event_patterns
-from .loop_history import HealthAssessmentResult, HealthHistoryEntry, HealthRating
+from .loop_history import HealthAssessmentResult, HealthHistoryEntry
 from .loop_signal_id import _SignalIdGenerator
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from ..collect.cluster_snapshot import ClusterSnapshot
-    from ..models import ConfidenceLevel, Finding, Hypothesis, Layer, NextCheck, Signal
-    from .loop import HealthTarget
+    from ..models import Finding, Hypothesis, Layer, NextCheck, Signal
+
+
+class HealthAssessmentTarget:
+    """Minimal protocol for the fields build_health_assessment uses from HealthTarget.
+
+    Avoids importing HealthTarget from .loop, keeping this module independent of loop.py.
+    """
+
+    label: str
+    watched_helm_releases: Sequence[str]
+    watched_crd_families: Sequence[str]
+
+
+HealthTarget = HealthAssessmentTarget
 
 __all__ = ["build_health_assessment"]
 
@@ -48,7 +63,6 @@ def build_health_assessment(
     Preserves exact behavior from the original loop.py implementation.
     """
     # Import here to avoid circular imports at module level
-    from ..collect.cluster_snapshot import ClusterSnapshot
     from ..models import (
         Assessment,
         ConfidenceLevel,
