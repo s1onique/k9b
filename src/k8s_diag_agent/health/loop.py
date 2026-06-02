@@ -59,6 +59,7 @@ from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
 from .loop_runner_assessments import build_assessments_for_records
+from .loop_runner_drilldowns import build_drilldowns_for_records
 from .loop_runner_history import load_runner_history, persist_runner_history
 from .loop_runner_next_check_planning import run_next_check_planning
 from .loop_scheduler import (
@@ -75,7 +76,7 @@ from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_v
 from .notifications import NotificationArtifact, build_external_analysis_notification, build_suspicious_comparison_notification, write_notification_artifact
 from .ui import write_health_ui_index
 from .utils import normalize_ref
-from .validators import ComparisonDecisionValidator, DrilldownArtifactValidator
+from .validators import ComparisonDecisionValidator
 
 
 def _is_openai_compatible_provider(provider_name: str) -> bool:
@@ -1154,66 +1155,17 @@ class HealthLoopRunner:
         previous_history: dict[str, HealthHistoryEntry],
         directory: Path,
     ) -> list[DrilldownArtifact]:
-        collector = self._drilldown_collector or DrilldownCollector()
-        artifacts: list[DrilldownArtifact] = []
-        for record in records:
-            reasons = self._determine_drilldown_reasons(record, previous_history)
-            if not reasons:
-                continue
-            try:
-                evidence = collector.collect(
-                    record.target.context,
-                    (record.target.context,),
-                    record.image_pull_secret_insight,
-                    pattern_reasons=record.pattern_reasons,
-                    pattern_metadata=record.pattern_metadata,
-                )
-            except RuntimeError as exc:
-                self._log_event(
-                    "drilldown-collector",
-                    "WARNING",
-                    "Drilldown collection failed",
-                    cluster_label=record.target.label,
-                    cluster_context=record.target.context,
-                    severity_reason=str(exc),
-                    event="drilldown-failed",
-                )
-                continue
-            path = directory / f"{self.run_id}-{record.target.label}-drilldown.json"
-            artifact = DrilldownArtifact(
-                run_label=self.run_label,
-                run_id=self.run_id,
-                timestamp=datetime.now(UTC),
-                snapshot_timestamp=record.snapshot.metadata.captured_at,
-                context=record.target.context,
-                label=record.target.label,
-                cluster_id=record.snapshot.metadata.cluster_id,
-                trigger_reasons=reasons,
-                missing_evidence=tuple(record.assessment.missing_evidence if record.assessment else ()),
-                evidence_summary=evidence.summary,
-                affected_namespaces=evidence.affected_namespaces,
-                affected_workloads=evidence.affected_workloads,
-                warning_events=evidence.warning_events,
-                non_running_pods=evidence.non_running_pods,
-                pod_descriptions=evidence.pod_descriptions,
-                rollout_status=evidence.rollouts,
-                collection_timestamps=evidence.collection_timestamps,
-                pattern_details=evidence.pattern_details,
-                artifact_path=str(path),
-                artifact_id=new_artifact_id(),
-            )
-            DrilldownArtifactValidator.validate(artifact.to_dict())
-            _write_json(artifact.to_dict(), path)
-            artifacts.append(artifact)
-            self._log_event(
-                "drilldown-collector",
-                "INFO",
-                "Drilldown artifact created",
-                cluster_label=record.target.label,
-                artifact_path=str(path),
-                event="drilldown",
-            )
-        return artifacts
+        return build_drilldowns_for_records(
+            records=records,  # type: ignore[arg-type]  # DrilldownRecordLike is duck-compatible with HealthSnapshotRecord
+            previous_history=previous_history,
+            directory=directory,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            drilldown_collector=self._drilldown_collector,
+            manual_drilldown_contexts=self._manual_drilldown_contexts,
+            warning_event_threshold=self.config.trigger_policy.warning_event_threshold,
+            log_event_fn=self._log_event,
+        )
 
     def _run_external_analysis(self, records: list[HealthSnapshotRecord], directories: dict[str, Path]) -> list[ExternalAnalysisArtifact]:
         artifacts: list[ExternalAnalysisArtifact] = []

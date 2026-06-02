@@ -12,18 +12,106 @@ These are pure helpers with no runner orchestration logic.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Protocol, runtime_checkable
 
 from .image_pull_secret import BROKEN_IMAGE_PULL_SECRET_REASON
 from .loop_history import HealthHistoryEntry, HealthRating
 from .utils import normalize_ref
 
-if TYPE_CHECKING:
-    from .loop import HealthSnapshotRecord
+
+# Protocol for record types that can be used in drilldown reason determination
+# This avoids importing loop.py while maintaining type safety
+@runtime_checkable
+class DrilldownRecordProtocol(Protocol):
+    """Protocol for health snapshot records used in drilldown determination."""
+
+    @property
+    def assessment(self) -> DrilldownAssessmentProtocol | None:
+        ...
+
+    @property
+    def image_pull_secret_insight(self) -> object | None:
+        ...
+
+    @property
+    def pattern_reasons(self) -> tuple[str, ...]:
+        ...
+
+    @property
+    def target(self) -> DrilldownTargetProtocol:
+        ...
+
+    @property
+    def snapshot(self) -> DrilldownSnapshotProtocol:
+        ...
+
+
+class DrilldownTargetProtocol(Protocol):
+    """Protocol for target in drilldown records."""
+
+    @property
+    def context(self) -> str:
+        ...
+
+
+class DrilldownSnapshotProtocol(Protocol):
+    """Protocol for snapshot in drilldown records."""
+
+    @property
+    def metadata(self) -> DrilldownMetadataProtocol:
+        ...
+
+    @property
+    def health_signals(self) -> DrilldownHealthSignalsProtocol:
+        ...
+
+
+class DrilldownMetadataProtocol(Protocol):
+    """Protocol for snapshot metadata in drilldown records."""
+
+    @property
+    def cluster_id(self) -> str:
+        ...
+
+
+class DrilldownHealthSignalsProtocol(Protocol):
+    """Protocol for health signals in drilldown records."""
+
+    @property
+    def pod_counts(self) -> DrilldownPodCountsProtocol:
+        ...
+
+    @property
+    def warning_events(self) -> list[object]:
+        ...
+
+    @property
+    def job_failures(self) -> int:
+        ...
+
+
+class DrilldownPodCountsProtocol(Protocol):
+    """Protocol for pod counts in drilldown records."""
+
+    @property
+    def crash_loop_backoff(self) -> int:
+        ...
+
+    @property
+    def image_pull_backoff(self) -> int:
+        ...
+
+
+class DrilldownAssessmentProtocol(Protocol):
+    """Protocol for assessment in drilldown records."""
+
+    @property
+    def rating(self) -> object:
+        ...
 
 
 def determine_drilldown_reasons(
-    record: HealthSnapshotRecord,
+    record: DrilldownRecordProtocol,
     previous_history: dict[str, HealthHistoryEntry],
     manual_drilldown_contexts: set[str],
     warning_event_threshold: int,
