@@ -1,0 +1,343 @@
+/**
+ * Demo Shell Card Layout Styles
+ *
+ * Dashboard screen, finding detail panel, action panel layouts.
+ * ========================================================================== */
+
+/* ==========================================================================
+   Dashboard Screen
+   ========================================================================== */
+
+.demo-screen--dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--color-bg-elevated, #1e293b);
+  border-radius: 8px;
+}
+
+.demo-cluster-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.demo-cluster-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0;
+}
+
+.demo-status-indicator {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.demo-status--connected {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+}
+
+.demo-status--healthy {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.demo-dashboard-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.demo-dashboard-content {
+  flex: 1;
+}
+
+.demo-clean-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.demo-empty-state {
+  text-align: center;
+  max-width: 500px;
+  padding: 2rem;
+}
+
+.demo-empty-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0 0 1rem;
+}
+
+.demo-empty-message {
+  font-size: 0.9rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0 0 1.5rem;
+}
+
+.demo-empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.demo-empty-note {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #94a3b8);
+  font-style: italic;
+  margin: 0;
+}
+
+.demo-finding-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.demo-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0;
+}
+
+.demo-section-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0;
+}
+
+.demo-finding-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.demo-finding-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--color-bg-elevated, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.demo-finding-card:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: var(--color-bg-surface, #0f172a);
+}
+
+.demo-finding-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.demo-finding-card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0;
+}
+
+.demo-finding-card-resource {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0;
+}
+
+.demo-dashboard-footer {
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border, #334155);
+}
+
+/* ==========================================================================
+   Finding Detail Panel
+   ========================================================================== */
+
+.demo-screen--finding-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-panel-header {
+  margin-bottom: 1rem;
+}
+
+.demo-back-button {
+  background: transparent;
+  border: none;
+  color: rgba(59, 130, 246, 0.9);
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0.5rem 0;
+  transition: color 0.15s ease;
+}
+
+.demo-back-button:hover {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.demo-finding-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-finding-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.demo-finding-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.demo-finding-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0;
+}
+
+.demo-finding-resource {
+  font-size: 0.9rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0;
+}
+
+.demo-finding-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.demo-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.demo-section-content {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #cbd5e1);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.demo-finding-actions {
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border, #334155);
+}
+
+/* ==========================================================================
+   Action Panel
+   ========================================================================== */
+
+.demo-screen--action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-action-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border, #334155);
+}
+
+.demo-action-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0;
+}
+
+.demo-action-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-action-description {
+  font-size: 1rem;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.demo-command-preview {
+  padding: 1rem;
+  background: var(--color-bg-surface, #0f172a);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: 8px;
+}
+
+.demo-command-code {
+  font-family: "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  color: #a5f3fc;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.demo-action-safety {
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+}
+
+.demo-safety-statement {
+  font-size: 0.9rem;
+  color: #93c5fd;
+  margin: 0 0 0.5rem;
+}
+
+.demo-action-disclaimer {
+  padding: 1rem;
+  background: var(--color-bg-elevated, #1e293b);
+  border-radius: 8px;
+}
+
+.demo-action-disclaimer p {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0;
+  text-align: center;
+}
