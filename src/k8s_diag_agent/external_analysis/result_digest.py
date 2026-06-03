@@ -9,9 +9,10 @@ next-check planning context.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from .result_digest_signals import classify_failure, extract_signal_markers
 
 if TYPE_CHECKING:
     from .artifact import ExternalAnalysisArtifact
@@ -29,40 +30,6 @@ def _coerce_optional_int(value: object | None) -> int | None:
         except ValueError:
             return None
     return None
-
-
-# Signal markers to extract from K8s diagnostic output
-_SIGNAL_MARKERS: list[tuple[str, str]] = [
-    # Pod status issues
-    (r"CrashLoopBackOff", "CrashLoopBackOff"),
-    (r"ImagePullBackOff", "ImagePullBackOff"),
-    (r"ErrImagePull", "ErrImagePull"),
-    (r"Evicted", "Evicted"),
-    (r"OOMKilled", "OOMKilled"),
-    (r"Terminating", "Terminating"),
-    (r"FailedScheduling", "FailedScheduling"),
-    # Probe/ readiness issues
-    (r"ReadinessProbeFailed", "ReadinessProbeFailed"),
-    (r"LivenessProbeFailed", "LivenessProbeFailed"),
-    (r"StartupProbeFailed", "StartupProbeFailed"),
-    (r"probe\s+fail", "ProbeFailed"),
-    # Permission/ security issues
-    (r"forbidden", "Forbidden"),
-    (r"unauthorized", "Unauthorized"),
-    (r"permission denied", "PermissionDenied"),
-    # Not found / missing
-    (r"not found", "NotFound"),
-    (r"doesn't exist", "NotFound"),
-    (r"no such host", "DNSError"),
-    (r"connection refused", "ConnectionRefused"),
-    # TLS / cert errors
-    (r"TLS|certificate|ssl", "TLSCertError"),
-    # Timeout
-    (r"timeout|timed out", "Timeout"),
-    # Resource issues
-    (r"insufficient|quota", "ResourceQuota"),
-    (r"memory limit|cpu limit", "ResourceLimit"),
-]
 
 
 @dataclass(frozen=True)
@@ -98,66 +65,6 @@ class ResultDigest:
 
     stderr_truncated: bool | None
     """Whether stderr was truncated during capture."""
-
-
-def _extract_signal_markers(output: str | None) -> tuple[str, ...]:
-    """Extract diagnostic signal markers from output text.
-
-    Args:
-        output: Combined output text to scan
-
-    Returns:
-        Tuple of detected marker names (deduplicated, order-stable)
-    """
-    if not output:
-        return ()
-
-    markers: list[str] = []
-    seen: set[str] = set()
-
-    for pattern_str, marker_name in _SIGNAL_MARKERS:
-        if marker_name in seen:
-            continue
-        if re.search(pattern_str, output, re.IGNORECASE):
-            markers.append(marker_name)
-            seen.add(marker_name)
-
-    return tuple(markers)
-
-
-def _classify_failure(stderr: str | None, exit_code: int | None, timed_out: bool | None) -> str | None:
-    """Classify the failure reason from execution context.
-
-    Args:
-        stderr: Stderr output text
-        exit_code: Command exit code
-        timed_out: Whether command timed out
-
-    Returns:
-        Failure classification string or None
-    """
-    if timed_out:
-        return "timeout"
-
-    if stderr:
-        stderr_lower = stderr.lower()
-        if "not found" in stderr_lower or "no such host" in stderr_lower:
-            return "not_found"
-        if "forbidden" in stderr_lower or "permission" in stderr_lower:
-            return "permission_denied"
-        if "timeout" in stderr_lower or "timed out" in stderr_lower:
-            return "timeout"
-        if "connection refused" in stderr_lower:
-            return "connection_refused"
-        if "tls" in stderr_lower or "certificate" in stderr_lower:
-            return "tls_error"
-        if "error" in stderr_lower:
-            return "command_error"
-
-    if exit_code is not None and exit_code != 0:
-        return f"exit_{exit_code}"
-
-    return None
 
 
 def _build_result_digest(
@@ -286,10 +193,10 @@ def build_result_digest(artifact: ExternalAnalysisArtifact) -> ResultDigest:
             stdout_digest = non_error_lines[0][:100]
 
     # Extract signal markers from raw output
-    signal_markers = _extract_signal_markers(artifact.raw_output)
+    signal_markers = extract_signal_markers(artifact.raw_output)
 
     # Classify failure
-    failure_class = _classify_failure(
+    failure_class = classify_failure(
         stderr=artifact.error_summary,
         exit_code=exit_code,
         timed_out=artifact.timed_out,
@@ -454,7 +361,7 @@ class ExecutionResultDigest:
             summary = summary[:_MAX_SUMMARY_LENGTH] if len(summary) > _MAX_SUMMARY_LENGTH else summary
 
         # Extract signal markers from raw output
-        signals = _extract_signal_markers(artifact.raw_output)[:_MAX_SIGNALS_COUNT]
+        signals = extract_signal_markers(artifact.raw_output)[:_MAX_SIGNALS_COUNT]
 
         return cls(
             artifact_path=artifact.artifact_path,
