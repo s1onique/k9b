@@ -100,7 +100,10 @@
 @import url('./components/operator-worklist-card.css');
 @import url('./components/command-text.css');
 @import url('./components/expandable-text.css');
-@import url('./components/demo-shell.css');
+@import url('./components/demo-shell-layout.css');
+@import url('./components/demo-shell-steps.css');
+@import url('./components/demo-shell-cards.css');
+@import url('./components/demo-shell-responsive.css');
 
 /* 5. Legacy component styles (remaining monolith) */
 @import url('../index.css');

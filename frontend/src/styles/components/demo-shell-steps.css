@@ -1,0 +1,187 @@
+/**
+ * Demo Shell Steps Styles
+ *
+ * Step/screen content styles: start, onboarding, and form elements.
+ * ========================================================================== */
+
+/* ==========================================================================
+   Demo Screens - Base
+   ========================================================================== */
+
+.demo-screen {
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   Start Screen
+   ========================================================================== */
+
+.demo-screen--start {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.demo-hero {
+  max-width: 600px;
+  margin-bottom: 2rem;
+}
+
+.demo-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+}
+
+.demo-subtitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f1f5f9);
+  margin: 0 0 1rem;
+}
+
+.demo-value-prop {
+  font-size: 1.125rem;
+  color: var(--color-text-secondary, #cbd5e1);
+  margin: 0 0 1.5rem;
+}
+
+.demo-description {
+  font-size: 0.9rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+.demo-cta-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.demo-cta-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0;
+}
+
+.demo-safety-note {
+  max-width: 400px;
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+}
+
+.demo-safety-note p {
+  font-size: 0.8rem;
+  color: #93c5fd;
+  margin: 0;
+}
+
+/* ==========================================================================
+   Onboarding Screen
+   ========================================================================== */
+
+.demo-screen--onboarding {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.demo-onboarding-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.demo-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #f1f5f9);
+}
+
+.demo-select {
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-elevated, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: 6px;
+  color: var(--color-text-primary, #f1f5f9);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.demo-select:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.demo-safety-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.demo-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--color-bg-elevated, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.demo-radio-label:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.demo-radio-label input[type="radio"] {
+  margin-top: 0.25rem;
+  accent-color: rgba(59, 130, 246, 0.8);
+}
+
+.demo-radio-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.demo-radio-text strong {
+  font-size: 0.875rem;
+  color: var(--color-text-primary, #f1f5f9);
+}
+
+.demo-radio-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #94a3b8);
+}
+
+.demo-safety-indicator {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--color-bg-surface, #0f172a);
+  border-radius: 8px;
+}
+
+.demo-safety-description {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #94a3b8);
+}

@@ -1,0 +1,101 @@
+/**
+ * Demo Shell Responsive/Theme Styles
+ *
+ * Solarized Light Theme Overrides for demo shell.
+ * ========================================================================== */
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+[data-theme="solarized-light"] .demo-shell-container {
+  background: #fdf6e3;
+  border-color: #eee8d5;
+}
+
+[data-theme="solarized-light"] .demo-shell-header {
+  background: #eee8d5;
+  border-color: #ddd6c4;
+}
+
+[data-theme="solarized-light"] .demo-title,
+[data-theme="solarized-light"] .demo-subtitle,
+[data-theme="solarized-light"] .demo-finding-title,
+[data-theme="solarized-light"] .demo-action-title {
+  color: #073642;
+}
+
+[data-theme="solarized-light"] .demo-value-prop,
+[data-theme="solarized-light"] .demo-description,
+[data-theme="solarized-light"] .demo-action-description,
+[data-theme="solarized-light"] .demo-section-content {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .demo-shell-footer,
+[data-theme="solarized-light"] .demo-footer-note,
+[data-theme="solarized-light"] .demo-step-indicator {
+  background: #eee8d5;
+  color: #839496;
+}
+
+[data-theme="solarized-light"] .demo-select,
+[data-theme="solarized-light"] .demo-radio-label,
+[data-theme="solarized-light"] .demo-finding-card {
+  background: #f5f0e6;
+  border-color: #ddd6c4;
+}
+
+[data-theme="solarized-light"] .demo-safety-note,
+[data-theme="solarized-light"] .demo-action-safety {
+  background: rgba(38, 139, 210, 0.08);
+  border-color: rgba(38, 139, 210, 0.2);
+}
+
+[data-theme="solarized-light"] .demo-safety-note p,
+[data-theme="solarized-light"] .demo-safety-statement {
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .demo-badge--live {
+  background: rgba(133, 153, 0, 0.15);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .demo-badge--historical {
+  background: rgba(181, 137, 0, 0.15);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .demo-severity-critical {
+  background: rgba(220, 50, 47, 0.15);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.3);
+}
+
+[data-theme="solarized-light"] .demo-severity-warning {
+  background: rgba(181, 137, 0, 0.15);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .demo-button--primary {
+  background: #268bd2;
+}
+
+[data-theme="solarized-light"] .demo-button--primary:hover:not(:disabled) {
+  background: #1a6ba3;
+  box-shadow: 0 4px 12px rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .demo-button--secondary {
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.4);
+}
+
+[data-theme="solarized-light"] .demo-button--secondary:hover {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.6);
+}
