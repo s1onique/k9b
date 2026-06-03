@@ -303,12 +303,22 @@ def main() -> int:
         all_passed = False
     print()
 
-    # Check 8: Review enrichment prompt tests
+    # Check 8: Review enrichment prompt tests (split into detection and boundaries)
     print("[8/8] Running review enrichment prompt injection tests...")
-    test_file = repo_root / "tests" / "test_semantic_injection_review_enrichment.py"
-    code, output = run_test_file(test_file, args.verbose)
-    all_output.append(output)
-    if code == 0:
+    review_test_files = [
+        repo_root / "tests" / "test_semantic_injection_review_enrichment_detection.py",
+        repo_root / "tests" / "test_semantic_injection_review_enrichment_boundaries.py",
+    ]
+    review_all_passed = True
+    for test_file in review_test_files:
+        code, output = run_test_file(test_file, args.verbose)
+        all_output.append(output)
+        if code != 0:
+            review_all_passed = False
+            print(f"      FAIL: {test_file.name}")
+        else:
+            print(f"      PASS: {test_file.name}")
+    if review_all_passed:
         print("      PASS: Review enrichment prompt injection tests")
     else:
         print("      FAIL: Review enrichment prompt injection tests")
