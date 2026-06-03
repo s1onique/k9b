@@ -33,6 +33,7 @@ __all__ = [
     "IncidentReportInferencePayload",
     "IncidentReportRecommendationPayload",
     "IncidentReportUnknownPayload",
+    "DiagnosticExecutionEvidencePayload",
     "IncidentReportPayload",
     "OperatorWorklistItemPayload",
     "OperatorWorklistPayload",
@@ -303,6 +304,50 @@ class IncidentReportUnknownPayload(TypedDict, total=False):
     ownershipConfidence: EvidenceOwnershipConfidence | None  # high | medium | low | unknown
 
 
+class DiagnosticExecutionEvidencePayload(TypedDict, total=False):
+    """Compact diagnostic execution evidence for incident reports.
+
+    Projects diagnostic command execution artifacts as evidence without exposing
+    raw stdout/stderr. This is a read-only projection; there is no new persistence.
+
+    Design constraints:
+    - Use compact digest-style evidence, not raw command output
+    - Keep evidence boring, deterministic, and schema-friendly
+    - Do not infer root cause from execution output
+    - Failed/truncated executions are still evidence and must be represented honestly
+    - Provenance: artifact path and/or artifact ID, execution status, candidate info,
+      usefulness class, truncation flags, and compact diagnostic signals
+
+    Language constraints (per design):
+    - "Diagnostic command executed" / "Execution returned useful signal"
+    - "Execution failed" / "Execution output was truncated" / "Execution produced no useful signal"
+    - NOT "Root cause proven" / "Incident resolved" / "Cluster is healthy"
+    """
+
+    # Identity and provenance
+    artifactPath: str | None  # Path to the execution artifact on disk
+    artifactId: str | None  # Artifact ID when available
+
+    # Execution context
+    status: str  # Execution status: success | failed | timed-out | skipped | unknown
+    candidateId: str | None  # ID of the candidate that produced this execution
+    candidateDescription: str | None  # Description of the command executed
+    targetCluster: str | None  # Target cluster where command was executed
+
+    # Usefulness assessment
+    usefulnessClass: str | None  # useful | partial | noisy | empty | None
+
+    # Compact signals extracted from output (no raw output)
+    signals: list[str]  # Extracted diagnostic signal markers (e.g., CrashLoopBackOff, NotFound)
+
+    # Truncation flags - explicit marking so operators know claim is based on partial output
+    stdoutTruncated: bool | None  # True when stdout was truncated during capture
+    stderrTruncated: bool | None  # True when stderr was truncated during capture
+
+    # Source artifact reference for provenance chain
+    sourceArtifactRefs: list[ArtifactLink]
+
+
 class IncidentReportPayload(TypedDict, total=False):
     """Canonical incident report projection for a selected health run.
 
@@ -344,6 +389,10 @@ class IncidentReportPayload(TypedDict, total=False):
     # Present when vmalert rule state artifact exists; None when missing
     # Non-fatal: fetch errors and pending alerts are visible but not escalated
     vmalertRuleStateContext: VmalertRuleStateContextPayload | None
+    # Diagnostic execution evidence: projects execution artifacts as evidence
+    # Present when next-check execution artifacts exist; None when missing
+    # Non-fatal: execution failures are still represented as evidence
+    diagnosticExecutionEvidence: list[DiagnosticExecutionEvidencePayload] | None
 
 
 class OperatorWorklistItemPayload(TypedDict, total=False):

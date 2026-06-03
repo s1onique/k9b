@@ -107,6 +107,7 @@ __all__ = [
     "IncidentReportInferencePayload",  # noqa: F401 - re-exported
     "IncidentReportRecommendationPayload",  # noqa: F401 - re-exported
     "IncidentReportUnknownPayload",  # noqa: F401 - re-exported
+    "DiagnosticExecutionEvidencePayload",  # noqa: F401 - re-exported
     "IncidentReportPayload",  # noqa: F401 - re-exported
     "OperatorWorklistItemPayload",  # noqa: F401 - re-exported
     "OperatorWorklistPayload",  # noqa: F401 - re-exported
@@ -156,6 +157,7 @@ from .api_payloads_incident import (  # noqa: F401 - re-exported for backward co
     ClaimType,
     ClusterDetailPayload,
     CrossClusterFindingPayload,
+    DiagnosticExecutionEvidencePayload,
     EvidenceOwnershipConfidence,
     FindingEntry,
     HypothesisEntry,

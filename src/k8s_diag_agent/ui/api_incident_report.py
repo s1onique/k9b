@@ -25,8 +25,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from pathlib import Path
 from typing import cast
 
+from .api_incident_report_execution_evidence import _build_diagnostic_execution_evidence
 from .api_incident_report_facts import (  # noqa: F401 - re-exported for backward compatibility
     _build_assessment_derived_claims,
     _build_cross_cluster_findings_payload,
@@ -72,10 +74,16 @@ logger = logging.getLogger(__name__)
 def _build_incident_report_payload(
     context: UIIndexContext,
     freshness: Mapping[str, object] | None,
+    health_root: Path | None = None,
 ) -> IncidentReportPayload | None:
     """Derive an incident report from the existing UI context.
 
     Returns None when there is no meaningful incident state to report.
+
+    Args:
+        context: The UI index context
+        freshness: Optional freshness payload for stale evidence warnings
+        health_root: Optional path to health root for loading execution artifacts
     """
     # Gather degraded clusters and top problems from fleet status and clusters
     degraded_labels = list(context.fleet_status.degraded_clusters)
@@ -150,6 +158,15 @@ def _build_incident_report_payload(
     # Build vmalert rule state context for firing/pending alert diagnostics
     vmalert_rule_state_context = _build_vmalert_rule_state_context(context)
 
+    # Build diagnostic execution evidence from execution artifacts
+    run_id = context.run.run_id if hasattr(context.run, "run_id") else ""
+    diagnostic_execution_evidence: list[dict[str, object]] | None = None
+    if health_root is not None and run_id:
+        external_analysis_dir = health_root / "external-analysis"
+        evidence_list = _build_diagnostic_execution_evidence(external_analysis_dir, run_id)
+        if evidence_list:
+            diagnostic_execution_evidence = evidence_list
+
     return {
         "title": title,
         "status": status,
@@ -169,5 +186,6 @@ def _build_incident_report_payload(
         "crossClusterFindings": cross_cluster_findings,
         "vmalertDiscoveryContext": vmalert_context,
         "vmalertRuleStateContext": vmalert_rule_state_context,
+        "diagnosticExecutionEvidence": diagnostic_execution_evidence,
     }
 

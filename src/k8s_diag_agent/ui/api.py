@@ -229,7 +229,7 @@ def build_run_payload(
         "alertmanagerSources": _serialize_alertmanager_sources(context.alertmanager_sources),
         "vmalertSources": _serialize_vmalert_sources(context.vmalert_sources),
         "vmalertRuleState": _serialize_vmalert_rule_state(context.vmalert_rule_state),
-        "incidentReport": _build_incident_report_payload(context, freshness),
+        "incidentReport": _build_incident_report_payload(context, freshness, health_root=health_root),
         "operatorWorklist": _build_operator_worklist_payload(context, health_root=health_root),
     }
 
