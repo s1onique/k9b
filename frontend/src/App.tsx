@@ -60,6 +60,7 @@ import { QueuePanel } from "./components/QueuePanel";
 import type { QueuePanelProps } from "./components/QueuePanel";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { DemoShell } from "./components/DemoShell";
+import { useDemoShellModel } from "./demo-shell/useDemoShellModel";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
@@ -412,9 +413,8 @@ const App = () => {
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
 
   // Demo shell state - ACT 9.5: Mount K8s Accelerator demo shell in UI
-  const [isDemoOpen, setIsDemoOpen] = useState(false);
-  const openDemo = useCallback(() => setIsDemoOpen(true), []);
-  const closeDemo = useCallback(() => setIsDemoOpen(false), []);
+  // Elm-ish model extracted for clean hook ordering
+  const demoShell = useDemoShellModel();
 
   // Run selection causal chain:
   // - runControlSelectRun triggers RunControl to fetch /api/run for the selected run.
@@ -1133,7 +1133,7 @@ const App = () => {
           <button
             type="button"
             className="demo-entry-button"
-            onClick={openDemo}
+            onClick={demoShell.openDemo}
             title="Launch the guided K8s Accelerator demo"
             data-testid="start-demo-button"
           >
@@ -1566,9 +1566,9 @@ const App = () => {
         </section>
       )}
       {/* ACT 9.5: K8s Accelerator demo shell overlay */}
-      {isDemoOpen && (
+      {demoShell.state.isOpen && (
         <DemoShell
-          onClose={closeDemo}
+          onClose={demoShell.closeDemo}
           findingSelectionInput={findingSelectionInput}
         />
       )}
