@@ -21,6 +21,12 @@ export type SeverityLevel = "critical" | "warning" | "info";
 /** Safety mode for action panel */
 export type SafetyMode = "read-only" | "operator-approved" | "preview-only";
 
+/** Action risk level */
+export type ActionRiskLevel = "low" | "medium" | "high" | "unknown";
+
+/** Action type classification */
+export type ActionType = "diagnostic" | "configuration" | "restart" | "scale" | "unknown";
+
 /** Demo finding placeholder */
 export interface DemoFinding {
   id: string;
@@ -31,7 +37,16 @@ export interface DemoFinding {
   probableCause: string;
   diagnosticEvidence: string;
   recommendedAction: string;
+  /** Optional command preview for remediation */
   commandPreview?: string;
+  /** Expected outcome description */
+  expectedOutcome?: string;
+  /** Risk level for the recommended action */
+  riskLevel?: ActionRiskLevel;
+  /** Scope of the action (e.g., "namespace", "pod", "cluster") */
+  actionScope?: string;
+  /** Type of action being recommended */
+  actionType?: ActionType;
   safetyMode: SafetyMode;
 }
 

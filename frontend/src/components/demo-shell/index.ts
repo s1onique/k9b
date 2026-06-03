@@ -24,6 +24,13 @@ export {
   containsForbiddenPhrase,
   getStepName,
   getSafetyModeDescription,
+  getActionSafetyCopy,
+  getActionCta,
+  getActionRiskLabel,
+  getActionTypeLabel,
+  isActionExecutableInDemo,
+  FORBIDDEN_CTA_LABELS,
+  isForbiddenCtaLabel,
 } from "./DemoShellData";
 
 // Badges

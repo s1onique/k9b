@@ -170,8 +170,10 @@ describe("DemoShell finding selection integration", () => {
       findingSelectionInput,
     });
 
-    // Should show preview-only safety mode
-    expect(screen.getByText(/Preview only/i)).toBeInTheDocument();
+    // Should show preview-only safety mode badge
+    const badgeElement = document.querySelector(".demo-badge--safety-previewonly");
+    expect(badgeElement).toBeInTheDocument();
+    expect(badgeElement).toHaveTextContent("Preview only");
   });
 
   it("does not contain forbidden phrases in finding selection", () => {
