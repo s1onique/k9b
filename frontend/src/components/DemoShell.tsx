@@ -14,10 +14,9 @@
  * - Read-only safety mode by default
  */
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type {
   DemoFinding,
-  DemoShellProps,
   DemoStep,
   EvidenceSource,
   SeverityLevel,
@@ -31,23 +30,103 @@ import {
   FindingDetailPanel,
   ActionPanel,
 } from "./demo-shell";
+import { selectDemoFindings, selectHistoricalFindings, getCleanClusterFallback } from "../features/demo";
 
 // Re-export types for backward compatibility
 export type { DemoStep, EvidenceSource, SeverityLevel, SafetyMode, DemoFinding };
-export type { DemoShellProps };
 
 // Re-export DEFAULT_CONNECTION_DELAY_MS for backward compatibility
 export { DEFAULT_CONNECTION_DELAY_MS };
+
+// Extended props including finding selection input
+export interface DemoShellProps {
+  /** Callback when demo shell is closed */
+  onClose?: () => void;
+  /** Initial step for testing */
+  initialStep?: DemoStep;
+  /** Input for finding selection (incident report, worklist, freshness) */
+  findingSelectionInput?: {
+    incidentReport?: {
+      status?: "critical" | "degraded" | "warning" | "healthy";
+      severity?: SeverityLevel;
+      resource?: string;
+      findingType?: string;
+    };
+    operatorWorklist?: Array<{
+      severity?: SeverityLevel;
+      resource?: string;
+      status?: string;
+      message?: string;
+    }>;
+    freshness?: {
+      age?: number;
+      isStale?: boolean;
+    };
+    runId?: string;
+    clusterLabel?: string;
+  };
+  /** Pre-selected historical findings for fallback */
+  historicalFindings?: DemoFinding[];
+}
 
 // =============================================================================
 // Main Component
 // =============================================================================
 
-export const DemoShell = ({ onClose, initialStep = "start" }: DemoShellProps) => {
+export const DemoShell = ({
+  onClose,
+  initialStep = "start",
+  findingSelectionInput,
+  historicalFindings,
+}: DemoShellProps) => {
   const [currentStep, setCurrentStep] = useState<DemoStep>(initialStep);
   const [isConnecting, setIsConnecting] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<DemoFinding | null>(null);
   const [isCleanCluster, setIsCleanCluster] = useState(false);
+
+  // Compute findings based on input data
+  const { findings, evidenceSource, explanation } = useMemo(() => {
+    // If no input provided, return empty result
+    if (!findingSelectionInput) {
+      return {
+        findings: [] as DemoFinding[],
+        evidenceSource: "none" as EvidenceSource,
+        explanation: "No finding selection input provided",
+      };
+    }
+
+    // Try to select live findings first
+    const liveResult = selectDemoFindings(findingSelectionInput);
+
+    // If live selection has findings, use them
+    if (liveResult.findings.length > 0) {
+      return {
+        findings: liveResult.findings,
+        evidenceSource: liveResult.source,
+        explanation: liveResult.explanation,
+      };
+    }
+
+    // Fall back to historical findings if no live findings
+    if (historicalFindings && historicalFindings.length > 0) {
+      const historicalResult = selectHistoricalFindings(historicalFindings);
+      return {
+        findings: historicalResult.findings,
+        evidenceSource: historicalResult.source,
+        explanation: historicalResult.explanation,
+      };
+    }
+
+    // No findings available, return clean cluster fallback
+    const fallbackResult = getCleanClusterFallback({
+      hasHistoricalEvidence: (historicalFindings?.length ?? 0) > 0,
+    });
+    return {
+      findings: fallbackResult.findings,
+      evidenceSource: fallbackResult.source,
+      explanation: fallbackResult.explanation,
+    };
+  }, [findingSelectionInput, historicalFindings]);
 
   const handleStartDemo = () => {
     setCurrentStep("onboarding");
@@ -85,6 +164,32 @@ export const DemoShell = ({ onClose, initialStep = "start" }: DemoShellProps) =>
     setCurrentStep("dashboard");
   };
 
+  // Sync clean cluster state based on findings availability (only when findingSelectionInput is provided)
+  useEffect(() => {
+    if (findings.length === 0 && currentStep === "dashboard" && findingSelectionInput) {
+      setIsCleanCluster(true);
+    }
+  }, [findings.length, currentStep, findingSelectionInput]);
+
+  // Auto-select first finding when starting at finding-detail or action-panel step
+  useEffect(() => {
+    if ((initialStep === "finding-detail" || initialStep === "action-panel") && findings.length > 0) {
+      setSelectedFinding(findings[0]);
+    }
+  }, [initialStep, findings]);
+
+  const renderDashboard = () => (
+    <DashboardScreen
+      clusterName="minikube"
+      findings={findings}
+      evidenceSource={evidenceSource}
+      explanation={explanation}
+      onSelectFinding={handleSelectFinding}
+      onCleanClusterFallback={handleCleanClusterFallback}
+      isCleanCluster={isCleanCluster}
+    />
+  );
+
   const renderStep = () => {
     switch (currentStep) {
       case "start":
@@ -97,14 +202,7 @@ export const DemoShell = ({ onClose, initialStep = "start" }: DemoShellProps) =>
           />
         );
       case "dashboard":
-        return (
-          <DashboardScreen
-            clusterName="minikube"
-            onSelectFinding={handleSelectFinding}
-            onCleanClusterFallback={handleCleanClusterFallback}
-            isCleanCluster={isCleanCluster}
-          />
-        );
+        return renderDashboard();
       case "finding-detail":
         return selectedFinding ? (
           <FindingDetailPanel
@@ -113,23 +211,13 @@ export const DemoShell = ({ onClose, initialStep = "start" }: DemoShellProps) =>
             onViewAction={handleViewAction}
           />
         ) : (
-          <DashboardScreen
-            clusterName="minikube"
-            onSelectFinding={handleSelectFinding}
-            onCleanClusterFallback={handleCleanClusterFallback}
-            isCleanCluster={isCleanCluster}
-          />
+          renderDashboard()
         );
       case "action-panel":
         return selectedFinding ? (
           <ActionPanel finding={selectedFinding} onBack={handleBackToFinding} />
         ) : (
-          <DashboardScreen
-            clusterName="minikube"
-            onSelectFinding={handleSelectFinding}
-            onCleanClusterFallback={handleCleanClusterFallback}
-            isCleanCluster={isCleanCluster}
-          />
+          renderDashboard()
         );
       default:
         return <StartScreen onConnect={handleStartDemo} />;

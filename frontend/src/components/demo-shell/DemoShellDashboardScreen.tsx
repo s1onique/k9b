@@ -4,13 +4,19 @@
  * Shows cluster connection status and findings list.
  */
 
-import type { DemoFinding } from "./DemoShellTypes";
+import type { DemoFinding, EvidenceSource } from "./DemoShellTypes";
 import { EvidenceSourceBadge } from "./DemoShellBadges";
 import { SafetyModeLabel } from "./DemoShellBadges";
 import { SeverityBadge } from "./DemoShellBadges";
 
 interface DashboardScreenProps {
   clusterName: string;
+  /** Selected findings from demo finding selection */
+  findings?: DemoFinding[];
+  /** Evidence source for the findings */
+  evidenceSource?: EvidenceSource;
+  /** Human-readable explanation from selection */
+  explanation?: string;
   onSelectFinding: (finding: DemoFinding) => void;
   onCleanClusterFallback: () => void;
   isCleanCluster: boolean;
@@ -18,24 +24,33 @@ interface DashboardScreenProps {
 
 export const DashboardScreen = ({
   clusterName,
+  findings = [],
+  evidenceSource = "none",
+  explanation,
   onSelectFinding,
   onCleanClusterFallback,
   isCleanCluster,
 }: DashboardScreenProps) => {
-  // Placeholder findings for demo shell - no fake data, just UI structure
-  const placeholderFindings: DemoFinding[] = [
-    {
-      id: "placeholder-1",
-      title: "No live finding selected yet",
-      severity: "info",
-      affectedResource: "—",
-      evidenceSource: "none",
-      probableCause: "Select a finding from live health run or historical evidence",
-      diagnosticEvidence: "Waiting for live health run",
-      recommendedAction: "Connect cluster to start diagnostic collection",
-      safetyMode: "read-only",
-    },
-  ];
+  // Use provided findings or show placeholder if empty
+  const displayFindings =
+    findings.length > 0
+      ? findings
+      : [
+          {
+            id: "placeholder-empty",
+            title: "No live finding selected yet",
+            severity: "info" as const,
+            affectedResource: "—",
+            evidenceSource: "none" as const,
+            probableCause: "Select a finding from live health run or historical evidence",
+            diagnosticEvidence: "Waiting for live health run",
+            recommendedAction: "Connect cluster to start diagnostic collection",
+            safetyMode: "read-only" as const,
+          },
+        ];
+
+  // Determine evidence source for badge
+  const badgeSource = findings.length > 0 ? evidenceSource : "none";
 
   return (
     <div className="demo-screen demo-screen--dashboard">
@@ -82,7 +97,7 @@ export const DashboardScreen = ({
               Live health run evidence · Click to view analysis
             </p>
             <div className="demo-finding-list">
-              {placeholderFindings.map((finding) => (
+              {displayFindings.map((finding) => (
                 <button
                   type="button"
                   key={finding.id}
