@@ -14,6 +14,11 @@ from typing import TYPE_CHECKING, Any
 
 from .result_digest_signals import classify_failure, extract_signal_markers
 
+# Backward-compatible aliases for older tests/imports that exercised these
+# previously-private helpers from this module before the LLM-friendly split.
+_classify_failure = classify_failure
+_extract_signal_markers = extract_signal_markers
+
 if TYPE_CHECKING:
     from .artifact import ExternalAnalysisArtifact
 
