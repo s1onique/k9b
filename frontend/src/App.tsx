@@ -792,6 +792,56 @@ const App = () => {
     }
   };
 
+  // Derive header display metadata - MUST be before early return for hook consistency
+  // These computations only use data that's available before the loading guard
+  const selectedRunListEntry = runsList.find((r) => r.runId === selectedRunId) ?? null;
+  const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run?.timestamp ?? "";
+  const runFresh = !isStaleTimestamp(headerRunTimestamp);
+  const runAgeMinutes = headerRunTimestamp
+    ? Math.floor(dayjs().diff(headerRunTimestamp, "minute"))
+    : 0;
+
+  // Build finding selection input from real/current run data
+  // Maps run, incident report, and worklist to demo finding selection format
+  // ACT 9.5: Real-derived input for DemoShell
+  // NOTE: Moved BEFORE early return to fix hook-order consistency
+  const findingSelectionInput = useMemo(() => {
+    if (!run) {
+      return undefined;
+    }
+
+    // Extract incident report status from run data
+    const incidentReport = run.incidentReport
+      ? {
+          status: run.incidentReport.status as "critical" | "degraded" | "warning" | "healthy" | undefined,
+          resource: run.incidentReport.topFinding?.affectedResource,
+          findingType: run.incidentReport.topFinding?.findingType,
+        }
+      : undefined;
+
+    // Extract operator worklist items
+    const operatorWorklist = run.operatorWorklist?.map((item) => ({
+      severity: item.severity as "critical" | "warning" | "info" | undefined,
+      resource: item.resource,
+      status: item.status,
+      message: item.message,
+    })) ?? undefined;
+
+    // Extract run freshness
+    const freshness = {
+      age: runAgeMinutes * 60, // Convert to seconds
+      isStale: !runFresh,
+    };
+
+    return {
+      incidentReport,
+      operatorWorklist,
+      freshness,
+      runId: selectedRunId ?? undefined,
+      clusterLabel: selectedClusterLabel ?? undefined,
+    };
+  }, [run, runAgeMinutes, runFresh, selectedRunId, selectedClusterLabel]);
+
   // Progressive loading: only wait for CRITICAL data (fleet + proposals).
   // Run detail is non-critical - shell renders immediately, run panels show local loading.
   if (!fleet || !proposals) {
@@ -805,21 +855,13 @@ const App = () => {
     );
   }
 
-  // Derive header display metadata directly from the runs list so that clicking
-  // "← Latest" or selecting a different run updates the header immediately, before
-  // the async run-detail fetch completes. runsList is always populated before this
-  // point (we are past the loading guard) and is updated on every refresh cycle.
-  const selectedRunListEntry = runsList.find((r) => r.runId === selectedRunId) ?? null;
   const headerRunId = selectedRunListEntry?.runId ?? run?.runId ?? "—";
   const headerRunLabel = selectedRunListEntry?.runLabel ?? run?.label ?? "—";
-  const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run?.timestamp ?? "";
   const runRecency = headerRunTimestamp ? relativeRecency(headerRunTimestamp) : "—";
-  const latestRunTimestamp = latestRunId 
-    ? runsList.find(r => r.runId === latestRunId)?.timestamp ?? headerRunTimestamp 
+  const latestRunTimestamp = latestRunId
+    ? runsList.find(r => r.runId === latestRunId)?.timestamp ?? headerRunTimestamp
     : headerRunTimestamp;
   const latestRunRecency = latestRunTimestamp ? relativeRecency(latestRunTimestamp) : "—";
-  const runFresh = !isStaleTimestamp(headerRunTimestamp);
-  const runAgeMinutes = Math.floor(dayjs().diff(headerRunTimestamp, "minute"));
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
   const hasDegradedClusters = degradedCount > 0;
@@ -1017,46 +1059,6 @@ const App = () => {
     formatAlertmanagerPromotion,
     onRefresh: refresh,
   };
-
-  // Build finding selection input from real/current run data
-  // Maps run, incident report, and worklist to demo finding selection format
-  // ACT 9.5: Real-derived input for DemoShell
-  const findingSelectionInput = useMemo(() => {
-    if (!run) {
-      return undefined;
-    }
-
-    // Extract incident report status from run data
-    const incidentReport = run.incidentReport
-      ? {
-          status: run.incidentReport.status as "critical" | "degraded" | "warning" | "healthy" | undefined,
-          resource: run.incidentReport.topFinding?.affectedResource,
-          findingType: run.incidentReport.topFinding?.findingType,
-        }
-      : undefined;
-
-    // Extract operator worklist items
-    const operatorWorklist = run.operatorWorklist?.map((item) => ({
-      severity: item.severity as "critical" | "warning" | "info" | undefined,
-      resource: item.resource,
-      status: item.status,
-      message: item.message,
-    })) ?? undefined;
-
-    // Extract run freshness
-    const freshness = {
-      age: runAgeMinutes * 60, // Convert to seconds
-      isStale: !runFresh,
-    };
-
-    return {
-      incidentReport,
-      operatorWorklist,
-      freshness,
-      runId: selectedRunId ?? undefined,
-      clusterLabel: selectedClusterLabel ?? undefined,
-    };
-  }, [run, runAgeMinutes, runFresh, selectedRunId, selectedClusterLabel]);
 
   return (
     <div className="app-shell">
