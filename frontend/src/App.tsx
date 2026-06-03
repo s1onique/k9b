@@ -59,6 +59,7 @@ import { DeterministicNextChecksPanel } from "./components/DeterministicNextChec
 import { QueuePanel } from "./components/QueuePanel";
 import type { QueuePanelProps } from "./components/QueuePanel";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
+import { DemoShell } from "./components/DemoShell";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
@@ -409,6 +410,11 @@ const App = () => {
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
+
+  // Demo shell state - ACT 9.5: Mount K8s Accelerator demo shell in UI
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
+  const openDemo = useCallback(() => setIsDemoOpen(true), []);
+  const closeDemo = useCallback(() => setIsDemoOpen(false), []);
 
   // Run selection causal chain:
   // - runControlSelectRun triggers RunControl to fetch /api/run for the selected run.
@@ -1012,6 +1018,46 @@ const App = () => {
     onRefresh: refresh,
   };
 
+  // Build finding selection input from real/current run data
+  // Maps run, incident report, and worklist to demo finding selection format
+  // ACT 9.5: Real-derived input for DemoShell
+  const findingSelectionInput = useMemo(() => {
+    if (!run) {
+      return undefined;
+    }
+
+    // Extract incident report status from run data
+    const incidentReport = run.incidentReport
+      ? {
+          status: run.incidentReport.status as "critical" | "degraded" | "warning" | "healthy" | undefined,
+          resource: run.incidentReport.topFinding?.affectedResource,
+          findingType: run.incidentReport.topFinding?.findingType,
+        }
+      : undefined;
+
+    // Extract operator worklist items
+    const operatorWorklist = run.operatorWorklist?.map((item) => ({
+      severity: item.severity as "critical" | "warning" | "info" | undefined,
+      resource: item.resource,
+      status: item.status,
+      message: item.message,
+    })) ?? undefined;
+
+    // Extract run freshness
+    const freshness = {
+      age: runAgeMinutes * 60, // Convert to seconds
+      isStale: !runFresh,
+    };
+
+    return {
+      incidentReport,
+      operatorWorklist,
+      freshness,
+      runId: selectedRunId ?? undefined,
+      clusterLabel: selectedClusterLabel ?? undefined,
+    };
+  }, [run, runAgeMinutes, runFresh, selectedRunId, selectedClusterLabel]);
+
   return (
     <div className="app-shell">
       <header className="panel hero compact">
@@ -1083,6 +1129,16 @@ const App = () => {
               </select>
             </div>
           </div>
+          {/* ACT 9.5: K8s Accelerator demo entry point */}
+          <button
+            type="button"
+            className="demo-entry-button"
+            onClick={openDemo}
+            title="Launch the guided K8s Accelerator demo"
+            data-testid="start-demo-button"
+          >
+            Start demo
+          </button>
           <ThemeSwitch />
         </div>
       </header>
@@ -1259,30 +1315,30 @@ const App = () => {
       <VmalertDiscoveryPanel vmalertSources={run?.vmalertSources} />
       {/* VictoriaMetrics vmalert alert state - compact display of alert counts and firing alerts */}
       <VmalertAlertStatePanel vmalertRuleState={run?.vmalertRuleState} />
-    {run ? (
-      <DeterministicNextChecksPanel
-        deterministicChecks={deterministicChecks}
-        deterministicSummary={deterministicSummary}
-        hookPromotionStatus={hookPromotionStatus}
-        incidentExpandedClusters={incidentExpandedClusters}
-        onPromoteCheck={handlePromoteDeterministicCheck}
-        onToggleIncidentExpansion={toggleIncidentExpansion}
-        onFocusClusterForNextChecks={focusClusterForNextChecks}
-        onSetQueueStatusFilter={setQueueStatusFilter}
-        onSetQueueClusterFilter={setQueueClusterFilter}
-        onScrollToSection={scrollToSection}
-        artifactUrl={artifactUrl}
-        hasDegradedClusters={hasDegradedClusters}
-      />
-    ) : (
-      <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
-        <div className="section-head">
-          <h2>Deterministic checks</h2>
-          <p className="muted">Loading selected run…</p>
-        </div>
-      </section>
-    )}
-    <WorkNextChecksLane
+      {run ? (
+        <DeterministicNextChecksPanel
+          deterministicChecks={deterministicChecks}
+          deterministicSummary={deterministicSummary}
+          hookPromotionStatus={hookPromotionStatus}
+          incidentExpandedClusters={incidentExpandedClusters}
+          onPromoteCheck={handlePromoteDeterministicCheck}
+          onToggleIncidentExpansion={toggleIncidentExpansion}
+          onFocusClusterForNextChecks={focusClusterForNextChecks}
+          onSetQueueStatusFilter={setQueueStatusFilter}
+          onSetQueueClusterFilter={setQueueClusterFilter}
+          onScrollToSection={scrollToSection}
+          artifactUrl={artifactUrl}
+          hasDegradedClusters={hasDegradedClusters}
+        />
+      ) : (
+        <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
+          <div className="section-head">
+            <h2>Deterministic checks</h2>
+            <p className="muted">Loading selected run…</p>
+          </div>
+        </section>
+      )}
+      <WorkNextChecksLane
       run={run}
       history={executionHistory}
       queueCandidateCount={runQueue.length}
@@ -1508,6 +1564,13 @@ const App = () => {
             <p className="muted">Loading selected run…</p>
           </div>
         </section>
+      )}
+      {/* ACT 9.5: K8s Accelerator demo shell overlay */}
+      {isDemoOpen && (
+        <DemoShell
+          onClose={closeDemo}
+          findingSelectionInput={findingSelectionInput}
+        />
       )}
     </div>
   );
