@@ -31,7 +31,7 @@ class TestSemanticInjectionPromptIntegration:
     """Tests for semantic injection detection in prompt integration."""
 
     @staticmethod
-    def _create_mock_artifact(with_trigger_reason: str | None = None) -> DrilldownArtifact:  # type: ignore[name-defined]
+    def _create_mock_artifact(with_trigger_reason: str | None = None) -> DrilldownArtifact:  
         """Create a mock DrilldownArtifact for testing.
 
         Uses MagicMock to avoid importing the actual class which may have

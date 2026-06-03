@@ -17,6 +17,10 @@ from ..llm.prompt_boundaries import (
     END_OUTPUT_SCHEMA,
     END_UNTRUSTED_CLUSTER_DATA,
 )
+from ..llm.semantic_injection_detector import (
+    build_security_note,
+    detect_semantic_injection,
+)
 from ..security import sanitize_prompt
 from ..security.anonymizer import MetadataAnonymizer
 from ..security.deanonymization import flatten_alias_mappings
@@ -127,12 +131,35 @@ def compose_review_enrichment_prompt(
     instruction_header = build_instruction_header(run_id, cluster_label, anonymizer)
     untrusted_data = "\n".join(build_untrusted_parts(context, anonymizer))
 
+    # Detect semantic injection patterns in untrusted data
+    # This is deterministic and does NOT make LLM calls
+    injection_findings = detect_semantic_injection(untrusted_data)
+
+    # Build security note if suspicious patterns detected
+    # The note is placed OUTSIDE the untrusted boundary (in trusted instruction area)
+    # to ensure the LLM sees it as a directive, not as untrusted data
+    # Security note format: [UNTRUSTED_EVIDENCE_SECURITY_NOTE] ... [/UNTRUSTED_EVIDENCE_SECURITY_NOTE]
+    security_note = build_security_note(injection_findings)
+
     # === COMPOSE PROMPT WITH EXPLICIT BOUNDARIES ===
-    prompt = (
-        instruction_header
-        + f"\n\n{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
-        + f"{BEGIN_OUTPUT_SCHEMA}\n{OUTPUT_SCHEMA_TEMPLATE}\n{END_OUTPUT_SCHEMA}\n"
-    )
+    # 1. Instruction header (trusted)
+    # 2. Optional security note (trusted instruction area, only if injection patterns detected)
+    # 3. Untrusted data section (wrapped with boundary markers, preserved verbatim)
+    # 4. Output schema section (trusted)
+    prompt_parts = [instruction_header]
+
+    # Add security note if injection patterns detected
+    # This warns the LLM to treat suspicious evidence as data only
+    if security_note:
+        prompt_parts.append(f"\n{security_note}\n")
+
+    # Add untrusted data section (suspicious content preserved verbatim)
+    prompt_parts.append(f"\n{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n")
+
+    # Add output schema section
+    prompt_parts.append(f"{BEGIN_OUTPUT_SCHEMA}\n{OUTPUT_SCHEMA_TEMPLATE}\n{END_OUTPUT_SCHEMA}\n")
+
+    prompt = "".join(prompt_parts)
     # Extract ALL alias mappings for de-anonymization at UI boundary
     all_mappings = anonymizer.get_all_alias_mappings()
     alias_mapping = flatten_alias_mappings(all_mappings) if all_mappings else None

@@ -16,6 +16,10 @@ from .prompt_boundaries import (
     END_OUTPUT_SCHEMA,
     END_UNTRUSTED_CLUSTER_DATA,
 )
+from .semantic_injection_detector import (
+    build_security_note,
+    detect_semantic_injection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -322,15 +326,37 @@ def build_assessment_prompt(
         """
     )
 
+    # Detect semantic injection patterns in untrusted data
+    # This is deterministic and does NOT make LLM calls
+    injection_findings = detect_semantic_injection(untrusted_data)
+
+    # Build security note if suspicious patterns detected
+    # The note is placed OUTSIDE the untrusted boundary (in trusted instruction area)
+    # to ensure the LLM sees it as a directive, not as untrusted data
+    # Security note format: [UNTRUSTED_EVIDENCE_SECURITY_NOTE] ... [/UNTRUSTED_EVIDENCE_SECURITY_NOTE]
+    security_note = build_security_note(injection_findings)
+
     # Compose prompt with explicit boundaries:
     # 1. Trusted instruction header
-    # 2. Untrusted data section (wrapped with boundary markers)
-    # 3. Trusted output schema section (outside untrusted markers)
-    prompt = (
-        "You are a careful Kubernetes diagnostician.\n"
-        + f"{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n"
-        + f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n"
-    )
+    # 2. Optional security note (only if injection patterns detected)
+    # 3. Untrusted data section (wrapped with boundary markers, preserved verbatim)
+    # 4. Trusted output schema section (outside untrusted markers)
+    prompt_parts = [
+        "You are a careful Kubernetes diagnostician.\n",
+    ]
+
+    # Add security note if injection patterns detected
+    # This warns the LLM to treat suspicious evidence as data only
+    if security_note:
+        prompt_parts.append(f"\n{security_note}\n")
+
+    # Add untrusted data section (suspicious content preserved verbatim)
+    prompt_parts.append(f"{BEGIN_UNTRUSTED_CLUSTER_DATA}\n{untrusted_data}\n{END_UNTRUSTED_CLUSTER_DATA}\n")
+
+    # Add output schema section
+    prompt_parts.append(f"{BEGIN_OUTPUT_SCHEMA}\n{output_schema}\n{END_OUTPUT_SCHEMA}\n")
+
+    prompt = "".join(prompt_parts)
     sanitized = sanitize_prompt(prompt)
     logger.info(
         "LLM prompt prepared: helm_diffs=%d, crd_diffs=%d, prompt_chars=%d",

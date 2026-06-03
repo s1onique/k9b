@@ -91,6 +91,9 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("tests/security/test_deanonymization.py", "[TEST] Security tests - complex scenarios"),
     ("tests/test_index_batch_eligibility_cache_freshness.py", "[TEST] Cache tests - complex scenarios"),
 
+    # [TEST] Semantic injection detector tests - comprehensive test coverage
+    ("tests/test_semantic_injection_detector.py", "[TEST] Semantic injection detector - extensive test cases"),
+
     # [SCRIPT] Standalone utility scripts
     ("scripts/build_diagnostic_pack.py", "[SCRIPT] Build tool - single-purpose"),
     ("scripts/import_next_check_usefulness_feedback.py", "[SCRIPT] Import tool - single-purpose"),

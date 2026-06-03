@@ -133,23 +133,28 @@ def check_detector_module() -> tuple[int, str]:
     return 0, f"OK: Detector module contains all required items ({len(required_items)})"
 
 
-def check_integration_in_prompt_builder() -> tuple[int, str]:
-    """Verify the detector is integrated into the prompt builder.
+def check_integration_in_prompt_builder(
+    prompt_file: Path,
+    builder_name: str,
+) -> tuple[int, str]:
+    """Verify the detector is integrated into a prompt builder.
+
+    Args:
+        prompt_file: Path to the prompt builder file
+        builder_name: Human-readable name for the builder
 
     Returns:
         Tuple of (exit_code, output)
     """
-    repo_root = Path(__file__).parent.parent
-    prompt_file = repo_root / "src" / "k8s_diag_agent" / "llm" / "drilldown_prompts.py"
-
     if not prompt_file.exists():
         return 1, f"ERROR: Prompt builder not found: {prompt_file}"
 
     content = prompt_file.read_text()
 
-    # Check for integration
+    # Check for integration - allow both single and double dot imports
+    # (single dot for llm/ subdirectory, double dot for external_analysis/)
     required_items = [
-        "from .semantic_injection_detector import",
+        ("import marker", lambda c: "semantic_injection_detector import" in c),
         "detect_semantic_injection",
         "build_security_note",
         "injection_findings",
@@ -158,10 +163,53 @@ def check_integration_in_prompt_builder() -> tuple[int, str]:
     ]
 
     for item in required_items:
-        if item not in content:
-            return 1, f"ERROR: Missing required integration item in prompt builder: {item}"
+        if isinstance(item, tuple):
+            check_name, check_fn = item
+            if not check_fn(content):
+                return 1, f"ERROR: Missing required integration item in {builder_name}: {check_name}"
+        elif item not in content:
+            return 1, f"ERROR: Missing required integration item in {builder_name}: {item}"
 
-    return 0, f"OK: Prompt builder integrates detector ({len(required_items)} items)"
+    return 0, f"OK: {builder_name} integrates detector ({len(required_items)} items)"
+
+
+def run_test_file(test_file: Path, verbose: bool = False) -> tuple[int, str]:
+    """Run a single test file.
+
+    Args:
+        test_file: Path to the test file
+        verbose: Whether to show verbose output
+
+    Returns:
+        Tuple of (exit_code, output)
+    """
+    if not test_file.exists():
+        return 1, f"ERROR: Test file not found: {test_file}"
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(test_file),
+        "-v",
+        "--tb=short",
+    ]
+
+    if verbose:
+        cmd.append("-s")
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).parent.parent),
+    )
+
+    output = result.stdout
+    if result.stderr:
+        output += "\nSTDERR:\n" + result.stderr
+
+    return result.returncode, output
 
 
 def main() -> int:
@@ -177,6 +225,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    repo_root = Path(__file__).parent.parent
+
     print("=" * 60)
     print("Semantic Injection Detection Verification Gate")
     print("=" * 60)
@@ -186,23 +236,41 @@ def main() -> int:
     all_output: list[str] = []
 
     # Check 1: Detector module exists and has required items
-    print("[1/5] Checking detector module...")
+    print("[1/8] Checking detector module...")
     code, output = check_detector_module()
     print(f"      {output}")
     if code != 0:
         all_passed = False
     print()
 
-    # Check 2: Detector integrated into prompt builder
-    print("[2/5] Checking prompt builder integration...")
-    code, output = check_integration_in_prompt_builder()
-    print(f"      {output}")
-    if code != 0:
-        all_passed = False
-    print()
+    # Check 2-4: Verify integration in all protected prompt builders
+    prompt_builders = [
+        (
+            repo_root / "src" / "k8s_diag_agent" / "llm" / "drilldown_prompts.py",
+            "build_drilldown_prompt()",
+        ),
+        (
+            repo_root / "src" / "k8s_diag_agent" / "llm" / "prompts.py",
+            "build_assessment_prompt()",
+        ),
+        (
+            repo_root / "src" / "k8s_diag_agent" / "external_analysis" / "llamacpp_adapter_prompt.py",
+            "compose_review_enrichment_prompt()",
+        ),
+    ]
 
-    # Check 3: Unit tests
-    print("[3/5] Running semantic injection detector unit tests...")
+    check_num = 2
+    for prompt_file, builder_name in prompt_builders:
+        print(f"[{check_num}/8] Checking {builder_name} integration...")
+        code, output = check_integration_in_prompt_builder(prompt_file, builder_name)
+        print(f"      {output}")
+        if code != 0:
+            all_passed = False
+        print()
+        check_num += 1
+
+    # Check 5: Unit tests
+    print("[5/8] Running semantic injection detector unit tests...")
     code, output = run_unit_tests(args.verbose)
     all_output.append(output)
     if code == 0:
@@ -212,36 +280,39 @@ def main() -> int:
         all_passed = False
     print()
 
-    # Check 4: Prompt integration tests
-    print("[4/5] Running prompt integration tests...")
+    # Check 6: Drilldown prompt integration tests
+    print("[6/8] Running drilldown prompt integration tests...")
     code, output = run_prompt_integration_tests(args.verbose)
     all_output.append(output)
     if code == 0:
-        print("      PASS: Prompt integration tests")
+        print("      PASS: Drilldown prompt integration tests")
     else:
-        print("      FAIL: Prompt integration tests")
+        print("      FAIL: Drilldown prompt integration tests")
         all_passed = False
     print()
 
-    # Check 5: Run existing evidence boundary tests (regression)
-    print("[5/5] Running existing LLM evidence boundary tests (regression)...")
-    test_file = Path(__file__).parent.parent / "tests" / "test_llm_evidence_boundaries.py"
-    if test_file.exists():
-        cmd = [sys.executable, "-m", "pytest", str(test_file), "-v", "--tb=short"]
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=str(Path(__file__).parent.parent),
-        )
-        all_output.append(result.stdout)
-        if result.returncode == 0:
-            print("      PASS: Existing evidence boundary tests")
-        else:
-            print("      FAIL: Existing evidence boundary tests")
-            all_passed = False
+    # Check 7: Assessment prompt tests
+    print("[7/8] Running assessment prompt injection tests...")
+    test_file = repo_root / "tests" / "test_semantic_injection_assessment_prompt.py"
+    code, output = run_test_file(test_file, args.verbose)
+    all_output.append(output)
+    if code == 0:
+        print("      PASS: Assessment prompt injection tests")
     else:
-        print("      SKIP: Test file not found")
+        print("      FAIL: Assessment prompt injection tests")
+        all_passed = False
+    print()
+
+    # Check 8: Review enrichment prompt tests
+    print("[8/8] Running review enrichment prompt injection tests...")
+    test_file = repo_root / "tests" / "test_semantic_injection_review_enrichment.py"
+    code, output = run_test_file(test_file, args.verbose)
+    all_output.append(output)
+    if code == 0:
+        print("      PASS: Review enrichment prompt injection tests")
+    else:
+        print("      FAIL: Review enrichment prompt injection tests")
+        all_passed = False
     print()
 
     # Summary
@@ -250,12 +321,15 @@ def main() -> int:
         print("VERIFICATION GATE: PASSED")
         print("=" * 60)
         print()
-        print("Semantic injection detection regression tests:")
+        print("Semantic injection detection coverage:")
         print("  - Detector module exists and is properly defined")
-        print("  - Detector integrated into prompt builder")
+        print("  - build_drilldown_prompt() integrates detector")
+        print("  - build_assessment_prompt() integrates detector")
+        print("  - compose_review_enrichment_prompt() integrates detector")
         print("  - Detector unit tests pass")
-        print("  - Prompt integration tests pass")
-        print("  - Existing evidence boundary tests still pass")
+        print("  - Drilldown prompt integration tests pass")
+        print("  - Assessment prompt tests pass")
+        print("  - Review enrichment prompt tests pass")
         return 0
     else:
         print("VERIFICATION GATE: FAILED")
