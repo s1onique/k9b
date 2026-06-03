@@ -123,7 +123,7 @@ def _scan_execution_artifacts_for_incident_report(
             # Extract run_id: use artifact field as primary, filename as fallback
             artifact_run_id = raw.get("run_id")
             if isinstance(artifact_run_id, str) and artifact_run_id:
-                file_run_id = artifact_run_id
+                file_run_id: str | None = artifact_run_id
             else:
                 file_run_id = _extract_run_id_from_filename(artifact_file.name)
 

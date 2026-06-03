@@ -60,6 +60,7 @@ from .api_incident_report_worklist import (  # noqa: F401 - re-exported for back
 )
 from .api_payloads import (
     ArtifactLink,
+    DiagnosticExecutionEvidencePayload,
     FreshnessPayload,
     IncidentReportPayload,
 )
@@ -160,14 +161,14 @@ def _build_incident_report_payload(
 
     # Build diagnostic execution evidence from execution artifacts
     run_id = context.run.run_id if hasattr(context.run, "run_id") else ""
-    diagnostic_execution_evidence: list[dict[str, object]] | None = None
+    diagnostic_execution_evidence: list[DiagnosticExecutionEvidencePayload] | None = None
     if health_root is not None and run_id:
         external_analysis_dir = health_root / "external-analysis"
         evidence_list = _build_diagnostic_execution_evidence(external_analysis_dir, run_id)
         if evidence_list:
             diagnostic_execution_evidence = evidence_list
 
-    return {
+    payload: IncidentReportPayload = {
         "title": title,
         "status": status,
         "affectedScope": ", ".join(degraded_labels) if degraded_labels else None,
@@ -188,4 +189,5 @@ def _build_incident_report_payload(
         "vmalertRuleStateContext": vmalert_rule_state_context,
         "diagnosticExecutionEvidence": diagnostic_execution_evidence,
     }
+    return payload
 
