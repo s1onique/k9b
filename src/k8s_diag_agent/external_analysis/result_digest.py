@@ -2,13 +2,16 @@
 
 This module provides deterministic, compact digests of execution results
 for external reviewer judgment without dumping full stdout/stderr.
+
+Also provides ExecutionResultDigest for feeding execution results into
+next-check planning context.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .artifact import ExternalAnalysisArtifact
@@ -327,3 +330,201 @@ def digest_to_dict(digest: ResultDigest) -> dict[str, object]:
         "stdout_truncated": digest.stdout_truncated,
         "stderr_truncated": digest.stderr_truncated,
     }
+
+
+# =============================================================================
+# ExecutionResultDigest - for planning context
+# =============================================================================
+
+# Maximum command description length for planning digest
+_MAX_COMMAND_DESC_LENGTH = 200
+# Maximum summary length for planning digest
+_MAX_SUMMARY_LENGTH = 300
+# Maximum signals count for planning digest
+_MAX_SIGNALS_COUNT = 10
+
+
+@dataclass(frozen=True)
+class ExecutionResultDigest:
+    """Compact digest of execution result for next-check planning context.
+
+    This is a smaller, structured digest designed for feeding execution
+    results into follow-up next-check planning. Unlike ResultDigest (for
+    reviewer inspection), this includes provenance and context needed
+    by the planner.
+
+    Design constraints:
+    - Keep digest small and boring
+    - No raw 512KB command output in planning context
+    - Include enough context for the planner to reason about next steps
+    """
+
+    # Provenance
+    artifact_path: str | None
+    """Path to the execution artifact on disk."""
+
+    candidate_id: str | None
+    """ID of the candidate that produced this execution."""
+
+    candidate_description: str | None
+    """Description of the command that was executed."""
+
+    # Execution result
+    status: str
+    """Execution status (success, failed, etc.)."""
+
+    usefulness_class: str | None
+    """Usefulness classification (useful, partial, noisy, empty)."""
+
+    # Target context
+    target_cluster: str | None
+    """Target cluster where command was executed."""
+
+    target_context: str | None
+    """Target context (usually namespace) for the command."""
+
+    # Extracted content
+    summary: str | None
+    """Short summary of the result outcome."""
+
+    signals: tuple[str, ...]
+    """Extracted diagnostic signal markers from output."""
+
+    # Truncation flags
+    stdout_truncated: bool | None
+    """Whether stdout was truncated during capture."""
+
+    stderr_truncated: bool | None
+    """Whether stderr was truncated during capture."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to serializable dict for planning context."""
+        return {
+            "artifactPath": self.artifact_path,
+            "candidateId": self.candidate_id,
+            "candidateDescription": self.candidate_description,
+            "status": self.status,
+            "usefulnessClass": self.usefulness_class,
+            "targetCluster": self.target_cluster,
+            "targetContext": self.target_context,
+            "summary": self.summary,
+            "signals": list(self.signals),
+            "stdoutTruncated": self.stdout_truncated,
+            "stderrTruncated": self.stderr_truncated,
+        }
+
+    @classmethod
+    def from_artifact(
+        cls,
+        artifact: ExternalAnalysisArtifact,
+        candidate_id: str | None = None,
+        candidate_description: str | None = None,
+    ) -> ExecutionResultDigest:
+        """Build ExecutionResultDigest from an ExternalAnalysisArtifact.
+
+        Args:
+            artifact: The execution artifact to digest
+            candidate_id: Optional ID of the candidate that produced this execution
+            candidate_description: Optional description of the command executed
+
+        Returns:
+            ExecutionResultDigest with compact, planning-friendly fields
+        """
+        # Extract command from payload if available
+        command: str | None = None
+        if artifact.payload:
+            raw_command = artifact.payload.get("command") or artifact.payload.get("commandText")
+            if isinstance(raw_command, str):
+                command = raw_command
+
+        # Use provided description or derive from command/summary
+        description = candidate_description
+        if description is None and command:
+            description = command if len(command) <= _MAX_COMMAND_DESC_LENGTH else command[:_MAX_COMMAND_DESC_LENGTH] + "…"
+        elif description is None and artifact.summary:
+            description = artifact.summary[:_MAX_COMMAND_DESC_LENGTH]
+
+        # Build compact summary
+        summary: str | None = None
+        if artifact.usefulness_class:
+            usefulness = artifact.usefulness_class.value if hasattr(artifact.usefulness_class, 'value') else str(artifact.usefulness_class)
+            summary = f"[{usefulness}]"
+        if artifact.summary:
+            summary = f"{summary} {artifact.summary}" if summary else artifact.summary
+            summary = summary[:_MAX_SUMMARY_LENGTH] if len(summary) > _MAX_SUMMARY_LENGTH else summary
+
+        # Extract signal markers from raw output
+        signals = _extract_signal_markers(artifact.raw_output)[:_MAX_SIGNALS_COUNT]
+
+        return cls(
+            artifact_path=artifact.artifact_path,
+            candidate_id=candidate_id,
+            candidate_description=description,
+            status=artifact.status.value if artifact.status else "unknown",
+            usefulness_class=(
+                artifact.usefulness_class.value if artifact.usefulness_class and hasattr(artifact.usefulness_class, 'value')
+                else str(artifact.usefulness_class) if artifact.usefulness_class else None
+            ),
+            target_cluster=artifact.cluster_label or None,
+            target_context=None,  # Would need to extract from payload/context
+            summary=summary,
+            signals=signals,
+            stdout_truncated=artifact.stdout_truncated,
+            stderr_truncated=artifact.stderr_truncated,
+        )
+
+
+def build_execution_result_digest(
+    artifact: ExternalAnalysisArtifact,
+    candidate_id: str | None = None,
+    candidate_description: str | None = None,
+) -> ExecutionResultDigest:
+    """Build compact execution result digest for planning context.
+
+    This function creates a small, structured digest from an execution
+    artifact suitable for feeding into next-check planning. It extracts
+    key information while avoiding large raw output.
+
+    Args:
+        artifact: The execution artifact to digest
+        candidate_id: Optional ID of the candidate that produced this execution
+        candidate_description: Optional description of the command executed
+
+    Returns:
+        ExecutionResultDigest with compact, planning-friendly fields
+
+    Example:
+        >>> artifact = ExternalAnalysisArtifact(...)
+        >>> digest = build_execution_result_digest(artifact)
+        >>> # digest.candidate_description
+        >>> # digest.signals
+        >>> # digest.summary
+    """
+    return ExecutionResultDigest.from_artifact(artifact, candidate_id, candidate_description)
+
+
+def build_execution_result_digests(
+    artifacts: tuple[ExternalAnalysisArtifact, ...] | list[ExternalAnalysisArtifact],
+    candidate_ids: tuple[str | None, ...] | None = None,
+    candidate_descriptions: tuple[str | None, ...] | None = None,
+) -> tuple[ExecutionResultDigest, ...]:
+    """Build execution result digests from multiple artifacts.
+
+    Args:
+        artifacts: Sequence of execution artifacts to digest
+        candidate_ids: Optional tuple of candidate IDs corresponding to artifacts
+        candidate_descriptions: Optional tuple of candidate descriptions
+
+    Returns:
+        Tuple of ExecutionResultDigest for each artifact
+
+    Note:
+        If candidate_ids or candidate_descriptions are provided, they must have
+        the same length as artifacts. Missing values are treated as None.
+    """
+    digests: list[ExecutionResultDigest] = []
+    for i, artifact in enumerate(artifacts):
+        cid = candidate_ids[i] if candidate_ids and i < len(candidate_ids) else None
+        cdesc = candidate_descriptions[i] if candidate_descriptions and i < len(candidate_descriptions) else None
+        digests.append(build_execution_result_digest(artifact, cid, cdesc))
+    return tuple(digests)

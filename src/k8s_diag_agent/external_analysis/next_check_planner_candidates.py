@@ -26,10 +26,108 @@ from .next_check_planner_models import (
     detect_command_family,
     detect_expected_signal,
 )
+from .result_digest import ExecutionResultDigest
 from .review_input import ReviewEnrichmentInput, ReviewSelectionContext, build_review_enrichment_input
 
 if TYPE_CHECKING:
     from .next_check_planner import AlertmanagerRankingProvenance
+
+
+def _find_execution_result_for_candidate(
+    candidate_text: str,
+    execution_context: tuple[ExecutionResultDigest, ...],
+) -> ExecutionResultDigest | None:
+    """Find execution result that relates to the candidate.
+    
+    Attaches provenance only when there is meaningful overlap:
+    - description overlap, or
+    - signal overlap
+    
+    Cluster-only match is not sufficient for provenance attachment.
+    
+    Args:
+        candidate_text: The candidate description text
+        execution_context: Current execution context digests
+    
+    Returns:
+        ExecutionResultDigest if a related execution was found, else None
+    """
+    if not execution_context:
+        return None
+    
+    # Normalize candidate text for comparison
+    candidate_lower = candidate_text.lower()
+    
+    for digest in execution_context:
+        # Check description overlap (most reliable provenance signal)
+        if digest.candidate_description:
+            desc_lower = digest.candidate_description.lower()
+            if candidate_lower in desc_lower or desc_lower in candidate_lower:
+                return digest
+        
+        # Check signal overlap (second reliable signal)
+        if digest.signals:
+            for signal in digest.signals:
+                if signal.lower() in candidate_lower:
+                    return digest
+    
+    return None
+
+
+def _build_execution_provenance(
+    execution_digest: ExecutionResultDigest,
+) -> dict[str, Any]:
+    """Build execution provenance dict from execution digest.
+    
+    Args:
+        execution_digest: The execution result digest to convert
+    
+    Returns:
+        Dictionary with execution provenance for candidate
+    """
+    return {
+        "priorArtifact": execution_digest.artifact_path,
+        "priorCandidateId": execution_digest.candidate_id,
+        "priorCandidateDescription": execution_digest.candidate_description,
+        "priorStatus": execution_digest.status,
+        "priorUsefulnessClass": execution_digest.usefulness_class,
+        "priorSummary": execution_digest.summary,
+        "priorSignals": list(execution_digest.signals),
+    }
+
+
+def _check_duplicate_against_execution(
+    candidate_text: str,
+    execution_context: tuple[ExecutionResultDigest, ...],
+) -> tuple[bool, str | None]:
+    """Check if candidate duplicates prior execution result.
+    
+    Args:
+        candidate_text: The candidate description text
+        execution_context: Current execution context digests
+    
+    Returns:
+        (is_duplicate, duplicate_description)
+    """
+    if not execution_context:
+        return False, None
+    
+    candidate_normalized = _normalize_for_dedup(candidate_text)
+    
+    for digest in execution_context:
+        if not digest.candidate_description:
+            continue
+        
+        # Check exact dedup signature match
+        exec_normalized = _normalize_for_dedup(digest.candidate_description)
+        if candidate_normalized == exec_normalized:
+            return True, digest.candidate_description
+        
+        # Check overlap
+        if candidate_normalized in exec_normalized or exec_normalized in candidate_normalized:
+            return True, digest.candidate_description
+    
+    return False, None
 
 # Generic phrase patterns for detecting low-specificity candidates.
 # These indicate the model is being cautious/non-specific rather than providing targeted guidance.
@@ -197,6 +295,9 @@ class NextCheckCandidate:
     # Run-scoped provenance for feedback-based Alertmanager bonus suppression
     # Set when operator marked Alertmanager relevance as not_relevant/noisy in this run
     feedback_adaptation_provenance: dict[str, Any] | None = None
+    # Execution result provenance for follow-up planning
+    # Set when this candidate is derived from or related to a prior execution result
+    execution_provenance: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, object | str | bool]:
         result: dict[str, object | str | bool] = {
@@ -228,6 +329,8 @@ class NextCheckCandidate:
             result["alertmanagerProvenance"] = self.alertmanager_provenance.to_dict()
         if self.feedback_adaptation_provenance is not None:
             result["feedbackAdaptationProvenance"] = self.feedback_adaptation_provenance
+        if self.execution_provenance is not None:
+            result["executionProvenance"] = self.execution_provenance
         return result
 
 
@@ -249,11 +352,21 @@ def build_candidates_from_enrichment(
     review_path: str,
     run_id: str,
     enrichment_artifact: ExternalAnalysisArtifact,
+    execution_context: tuple[ExecutionResultDigest, ...] = (),
 ) -> tuple[NextCheckCandidate, ...] | None:
     """Build candidates from enrichment artifact.
     
-    Returns None if enrichment is not successful or no checks available.
-    Silently returns None on context building failure (non-fatal).
+    Args:
+        review_path: Path to the review artifact
+        run_id: Run identifier
+        enrichment_artifact: The enrichment artifact with suggested next checks
+        execution_context: Optional tuple of ExecutionResultDigest from prior
+            executions. When provided, candidates can include execution provenance
+            based on description/signal overlap. No module-level state is used.
+    
+    Returns:
+        Tuple of NextCheckCandidate if enrichment is successful and checks available.
+        Returns None on context building failure (non-fatal).
     """
     if enrichment_artifact.status != ExternalAnalysisStatus.SUCCESS:
         return None
@@ -358,6 +471,16 @@ def build_candidates_from_enrichment(
             source_reason,
             family,
         )
+        # Attach execution provenance if candidate relates to prior execution
+        # Provenance is attached only on description/signal overlap, not cluster-only
+        execution_provenance: dict[str, Any] | None = None
+        if execution_context:
+            related_digest = _find_execution_result_for_candidate(
+                candidate_text, execution_context
+            )
+            if related_digest:
+                execution_provenance = _build_execution_provenance(related_digest)
+        
         candidate = NextCheckCandidate(
             candidate_id=candidate_id,
             description=candidate_text.strip(),
@@ -381,6 +504,7 @@ def build_candidates_from_enrichment(
             blocking_reason=blocking_reason.value if blocking_reason else None,
             priority_label=priority_label,
             generic_candidate=is_generic,
+            execution_provenance=execution_provenance,
         )
         candidates.append(candidate)
     return tuple(candidates) if candidates else None

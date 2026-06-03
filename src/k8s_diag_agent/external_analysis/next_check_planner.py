@@ -41,6 +41,7 @@ from .next_check_planner_ranking import (
     _rank_candidates,
     rank_candidates,
 )
+from .result_digest import ExecutionResultDigest
 
 # Re-export for backward compatibility with modules that import from next_check_planner
 __all__ = [
@@ -105,13 +106,26 @@ def plan_next_checks(
     Delegates candidate construction to build_candidates_from_enrichment
     in next_check_planner_candidates module, then applies ranking policy
     including Alertmanager-influenced bonus and CRD demotion.
+    
+    If execution_artifacts are provided, their digests are passed to
+    candidate building for provenance and contextual reasoning.
     """
-    # Build candidates using the candidates module
+    # Build execution context digests from execution artifacts
+    # These digests are passed explicitly to candidate building
+    execution_digests: tuple[ExecutionResultDigest, ...] = ()
+    if execution_artifacts:
+        from .review_input import build_execution_context
+        execution_digests = build_execution_context(execution_artifacts)
+    
+    # Build candidates with explicit execution context
+    # No module-level state is used - execution context is passed directly
     raw_candidates = build_candidates_from_enrichment(
         str(review_path),
         run_id,
         enrichment_artifact,
+        execution_context=execution_digests,
     )
+    
     if not raw_candidates:
         return None
     

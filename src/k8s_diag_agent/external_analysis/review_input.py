@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from .alertmanager_artifact import alertmanager_artifacts_exist, read_alertmanager_compact
+from .artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose, ExternalAnalysisStatus
+from .result_digest import ExecutionResultDigest, build_execution_result_digest
 
 
 @dataclass(frozen=True)
@@ -182,3 +184,60 @@ def _load_json(path: Path | None) -> dict[str, Any] | None:
     if not isinstance(data, Mapping):
         return None
     return dict(data)
+
+
+# =============================================================================
+# Execution Context for Planning
+# =============================================================================
+
+def build_execution_context(
+    artifacts: tuple[ExternalAnalysisArtifact, ...] | None,
+) -> tuple[ExecutionResultDigest, ...]:
+    """Build execution result digests for next-check planning.
+
+    This function filters execution artifacts (NEXT_CHECK_EXECUTION purpose)
+    and builds compact digests suitable for feeding into planning context.
+
+    Args:
+        artifacts: Optional tuple of external analysis artifacts from the run
+
+    Returns:
+        Tuple of ExecutionResultDigest for each execution artifact.
+        Returns empty tuple if no artifacts or no execution artifacts found.
+
+    Example:
+        >>> artifacts = load_execution_artifacts(run_dir, run_id)
+        >>> digests = build_execution_context(artifacts)
+        >>> # Use digests in planning context
+    """
+    if not artifacts:
+        return ()
+
+    digests: list[ExecutionResultDigest] = []
+    for artifact in artifacts:
+        # Only process execution artifacts
+        if artifact.purpose != ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION:
+            continue
+
+        # Skip pending or skipped artifacts (no useful result)
+        if artifact.status in (ExternalAnalysisStatus.PENDING, ExternalAnalysisStatus.SKIPPED):
+            continue
+
+        digest = build_execution_result_digest(artifact)
+        digests.append(digest)
+
+    return tuple(digests)
+
+
+def execution_context_to_dict(
+    digests: tuple[ExecutionResultDigest, ...],
+) -> list[dict[str, Any]]:
+    """Convert execution context digests to serializable list for prompts.
+
+    Args:
+        digests: Tuple of ExecutionResultDigest to convert
+
+    Returns:
+        List of dicts suitable for inclusion in prompt context
+    """
+    return [digest.to_dict() for digest in digests]
