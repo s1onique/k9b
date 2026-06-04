@@ -52,6 +52,7 @@ import { AppFleetSection } from "./app/AppFleetSection";
 import { AppProposalsSection } from "./app/AppProposalsSection";
 import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
 import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
+import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -843,6 +844,17 @@ const App = () => {
     deterministicSummary,
   } = buildDeterministicChecksProps({ run });
 
+  // Extract cluster focus handler - must be called before useAppRunSummaryProps to preserve hook order
+  // Note: discoveryClusters must be computed above this line
+  const { focusClusterForNextChecks } = useAppClusterFocusHandler({
+    discoveryClusters,
+    selectedClusterLabel,
+    fleet,
+    handleClusterSelection,
+    highlightCluster,
+    scrollToSection,
+  });
+
   // Build props for RunSummaryPanel using the extracted hook
   const {
     runSummaryLoadedProps,
@@ -856,20 +868,7 @@ const App = () => {
     selectedRunError,
     onRetrySelectedRun: retrySelectedRun,
     selectedClusterLabel,
-    onFocusClusterForNextChecks: (clusterLabel?: string | null) => {
-      const target =
-        clusterLabel ||
-        discoveryClusters[0] ||
-        selectedClusterLabel ||
-        fleet.clusters[0]?.label ||
-        null;
-      if (!target) {
-        return;
-      }
-      handleClusterSelection(target, { expand: true });
-      highlightCluster(target);
-      scrollToSection("cluster");
-    },
+    onFocusClusterForNextChecks: focusClusterForNextChecks,
     fleet,
     headerStats,
     runPlan,
