@@ -119,3 +119,37 @@ Factory should distinguish:
 
 - [Release Certification template](../templates/release-certification.md)
 - [Cold Resume template](../templates/cold-resume.md)
+
+---
+
+## 7. Impact Scan Before Broad Edits
+
+### Rejection trigger: `broad_edit_without_impact_scan`
+
+When reviewing non-trivial or cross-module edits, enforce an impact map.
+
+**Reviewer check:** If the edit affects shared symbols, interfaces, cross-module state, test coverage, public contracts, or architectural seams, the proposal must include a structured impact map:
+
+```text
+- target symbol / file
+- definitions
+- direct references
+- likely tests
+- intended edit surface
+- reason if broader exploration is needed
+```
+
+**Allowed without impact map:** Trivial edits where the reason is obvious — typo fixes, comment-only cleanup, one-line local fixes, mechanical formatting already scoped by tooling, emergency hotfix with explicit follow-up.
+
+**Reject or block when:** The edit is non-trivial, no impact map is provided, and no equivalent rationale explains why a scan was unnecessary.
+
+**Bootstrap helper:** `scripts/impact_scan.sh <target>` may be used to generate a starting point, but manual correction is required. The output is **derived evidence, not source of truth**.
+
+**Prohibited:** Do not add databases, file watchers, MCP integration, committed code graphs, or third-party analysis tools to satisfy this rule.
+
+### Doctrine linkage
+
+- **Manifest trigger:** `broad_edit_without_impact_scan` (already registered)
+- **Agent guidance:** `.kilocode/rules/40-tool-use.md` → Impact Scan Doctrine
+- **Script:** `scripts/impact_scan.sh`
+- **Policy:** Impact scans are derived evidence, not source of truth
