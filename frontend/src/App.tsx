@@ -57,7 +57,7 @@ import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHi
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
 import { QueuePanel } from "./components/QueuePanel";
-import type { QueuePanelProps } from "./components/QueuePanel";
+import { buildQueuePanelProps } from "./components/QueuePanel/buildQueuePanelProps";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { DemoShell } from "./components/DemoShell";
 import { useDemoShellModel } from "./demo-shell/useDemoShellModel";
@@ -973,9 +973,7 @@ const App = () => {
     providers: run.llmStats.providerBreakdown,
   } : null;
 
-  // Queue wiring props - packaged for QueuePanel call site reduction
-  // This creates a clean seam for future extraction without changing behavior
-  const queuePanelProps: QueuePanelProps = {
+  const queuePanelProps = buildQueuePanelProps({
     queueClusterFilter,
     queueStatusFilter,
     queueCommandFamilyFilter,
@@ -1007,14 +1005,14 @@ const App = () => {
     approvalResults,
     executingCandidate,
     approvingCandidate,
-    onToggleQueueFocusPreset: toggleQueueFocusPreset,
-    onResetQueueFilters: resetQueueFilters,
-    onResetQueueView: resetQueueView,
-    onBackToQueue: handleBackToQueue,
-    onManualExecution: handleManualExecution,
-    onApproveCandidate: handleApproveCandidate,
-    onQueueClusterJump: handleQueueClusterJump,
-    onQueueExecutionJump: handleQueueExecutionJump,
+    toggleQueueFocusPreset,
+    resetQueueFilters,
+    resetQueueView,
+    handleBackToQueue,
+    handleManualExecution,
+    handleApproveCandidate,
+    handleQueueClusterJump,
+    handleQueueExecutionJump,
     buildCandidateKey,
     findExecutionHistoryEntry,
     isManualExecutionAllowed,
@@ -1025,8 +1023,8 @@ const App = () => {
     formatFeedbackAdaptationProvenance,
     getAlertmanagerPromotionSubtext,
     formatAlertmanagerPromotion,
-    onRefresh: refresh,
-  };
+    refresh,
+  });
 
   return (
     <div className="app-shell">
