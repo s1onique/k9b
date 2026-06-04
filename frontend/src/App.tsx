@@ -56,6 +56,7 @@ import { ProviderExecutionPanel } from "./components/ProviderExecutionComponents
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
+import { buildDeterministicChecksProps } from "./components/DeterministicNextChecksPanel/buildDeterministicChecksProps";
 import { QueuePanel } from "./components/QueuePanel";
 import { buildQueuePanelProps } from "./components/QueuePanel/buildQueuePanelProps";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
@@ -872,14 +873,12 @@ const App = () => {
     )
   );
 
-  const deterministicChecks = run?.deterministicNextChecks;
-  const deterministicClusters = deterministicChecks?.clusters ?? [];
-  const hasDeterministicNextChecks = deterministicClusters.length > 0;
-  const deterministicSummary = hasDeterministicNextChecks
-    ? `${deterministicChecks?.totalNextCheckCount ?? 0} candidate check${
-        (deterministicChecks?.totalNextCheckCount ?? 0) === 1 ? "" : "s"
-      } to review and promote to the work list`
-    : "Review the cluster detail to generate candidate checks.";
+  const {
+    deterministicChecks,
+    deterministicClusters,
+    hasDeterministicNextChecks,
+    deterministicSummary,
+  } = buildDeterministicChecksProps({ run });
 
   const focusClusterForNextChecks = (clusterLabel?: string | null) => {
     const target =
