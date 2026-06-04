@@ -1,7 +1,37 @@
 # App.tsx Source Map — Remaining Ownership Analysis
 
 **Generated:** 2026-06-05  
-**Status:** ACT 4 Completed — Source map refresh and DCE
+**Status:** ACT 5 Completed — Strict TypeScript DCE scan
+
+---
+
+## Strict TypeScript DCE Scan
+
+**Scan command:** `tsc --noEmit --noUnusedLocals --noUnusedParameters src/App.tsx`
+
+**Findings:** 79 unused locals/imports detected (strict mode, single-file scope)
+
+| Category | Count | Action |
+|----------|------:|--------|
+| Unused type imports | 19 | Keep (compatibility exports for tests) |
+| Unused value imports | 41 | Keep (compatibility exports for tests) |
+| Unused hook imports | 3 | Keep (compatibility exports, not re-exported) |
+| Unused local variables | 13 | Keep (needed by extracted hooks) |
+| Unused inline locals | 3 | Keep (compatibility, future removal candidates) |
+
+**Safe DCE removed:**
+- `useAppClusterPlanProps` import (line 51) — imported but never used in App.tsx
+
+**Non-removable (test compatibility):**
+- All type imports (lines 12-32) — re-exported for test compatibility
+- `confidenceWeight`, `getPageFreshnessLevel`, etc. — re-exported for test compatibility
+- `formatAgeDuration`, `AUTOREFRESH_STORAGE_KEY`, etc. — re-exported for test compatibility
+- `parseNextCheckEntry` re-export — used by `AdvisorySections.tsx`
+- `QUEUE_VIEW_STORAGE_KEY`, `SELECTED_RUN_STORAGE_KEY`, etc. — test imports
+
+**Note:** TypeScript strict flags cannot be enabled project-wide due to:
+- `tsconfig.json` references `tsconfig.node.json` without `composite: true`
+- Build passes with Vite; TSC strict mode requires tsconfig fix (out of scope)
 
 ---
 
@@ -10,7 +40,7 @@
 | File | Lines | Change from start |
 |------|------:|-----------------:|
 | `frontend/src/App.tsx` (start) | 1,455 | — |
-| `frontend/src/App.tsx` (current) | 747 | **-708 (49%)** |
+| `frontend/src/App.tsx` (ACT 5) | 746 | **-709 (49%)** |
 
 ---
 

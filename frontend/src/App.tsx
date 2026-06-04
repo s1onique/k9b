@@ -48,7 +48,6 @@ import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
-import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
 import { useApprovalFlowController } from "./app/approvalFlow";
