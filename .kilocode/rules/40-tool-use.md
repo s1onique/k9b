@@ -208,6 +208,8 @@ The impact scan is **derived evidence, not source of truth**. It guides edits an
 rg + git grep + existing tests > AST > tree-sitter > local DB > external tool
 ```
 
+**Retrospective evidence:** For repeated impact-scan use, record lightweight retrospective evidence in `docs/reports/impact-scan-ledger.md` when it helps evaluate whether the discipline reduces surprise. The ledger is optional retrospective evidence, not a mandatory blocker for every trivial edit.
+
 ### Prohibited
 
 Do not install or add for impact scanning:
