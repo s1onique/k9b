@@ -61,6 +61,7 @@ import { buildQueuePanelProps } from "./components/QueuePanel/buildQueuePanelPro
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { DemoShell } from "./components/DemoShell";
 import { useDemoShellModel } from "./demo-shell/useDemoShellModel";
+import { buildDemoShellFindingInput } from "./demo-shell/buildDemoShellFindingInput";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
@@ -781,55 +782,13 @@ const App = () => {
   // Maps run, incident report, and worklist to demo finding selection format
   // ACT 9.5: Real-derived input for DemoShell
   // NOTE: Moved BEFORE early return to fix hook-order consistency
-  const findingSelectionInput = useMemo(() => {
-    if (!run) {
-      return undefined;
-    }
-
-    // Extract incident report status from run data
-    const incidentReport = run.incidentReport
-      ? {
-          status: run.incidentReport.status as "critical" | "degraded" | "warning" | "healthy" | undefined,
-          resource: run.incidentReport.topFinding?.affectedResource,
-          findingType: run.incidentReport.topFinding?.findingType,
-        }
-      : undefined;
-
-    // Extract operator worklist items
-    // NOTE: run.operatorWorklist is OperatorWorklistPayload (object with items array), NOT a direct array.
-    // Guard against non-array shapes to prevent TypeError at runtime.
-    const worklistPayload = run.operatorWorklist;
-    const worklistItems = Array.isArray(worklistPayload)
-      ? worklistPayload
-      : Array.isArray(worklistPayload?.items)
-        ? worklistPayload.items
-        : Array.isArray(worklistPayload?.candidates)
-          ? worklistPayload.candidates
-          : [];
-
-    const operatorWorklist = worklistItems.length > 0
-      ? worklistItems.map((item) => ({
-          severity: item.severity as "critical" | "warning" | "info" | undefined,
-          resource: item.resource,
-          status: item.status,
-          message: item.message,
-        }))
-      : undefined;
-
-    // Extract run freshness
-    const freshness = {
-      age: runAgeMinutes * 60, // Convert to seconds
-      isStale: !runFresh,
-    };
-
-    return {
-      incidentReport,
-      operatorWorklist,
-      freshness,
-      runId: selectedRunId ?? undefined,
-      clusterLabel: selectedClusterLabel ?? undefined,
-    };
-  }, [run, runAgeMinutes, runFresh, selectedRunId, selectedClusterLabel]);
+  const findingSelectionInput = buildDemoShellFindingInput({
+    run,
+    selectedRunId,
+    selectedClusterLabel,
+    runAgeMinutes,
+    runFresh,
+  });
 
   // Progressive loading: only wait for CRITICAL data (fleet + proposals).
   // Run detail is non-critical - shell renders immediately, run panels show local loading.
