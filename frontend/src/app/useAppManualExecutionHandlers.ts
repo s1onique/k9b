@@ -17,11 +17,8 @@
 import { useCallback, useRef, useState } from "react";
 import type { NextCheckPlanCandidate, NextCheckExecutionResponse } from "../types";
 import { executeNextCheckCandidate } from "../api";
-import {
-  ALLOWED_MANUAL_FAMILIES,
-  humanizeReason,
-  isItemExecuted,
-} from "../utils";
+import { isItemExecuted } from "../utils";
+import { humanizeReason, ALLOWED_MANUAL_FAMILIES } from "../utils/selectors";
 
 export interface ExecutionErrorResult {
   status: "error";

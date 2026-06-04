@@ -4,7 +4,6 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import {
   approveNextCheckCandidate,
-  executeNextCheckCandidate,
   fetchNotifications,
   runBatchExecution,
   submitUsefulnessFeedback,
@@ -57,6 +56,7 @@ import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
+import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -81,7 +81,6 @@ import {
   relativeRecency,
   statusClass,
   truncateText,
-  isItemExecuted,
 } from "./utils";
 import {
   confidenceWeight,
@@ -99,9 +98,7 @@ import {
   buildClusterRecommendedArtifacts,
   safetyClass,
   formatSourceType,
-  humanizeReason,
   formatCandidatePriority,
-  ALLOWED_MANUAL_FAMILIES,
   approvalStatusLabels,
   determineNextCheckStatusVariant,
   nextCheckStatusLabel,
@@ -374,12 +371,8 @@ const App = () => {
   } = useQueueState({ runQueue });
 
   // Execution/approval transient state - stays in App.tsx (per-execution lifecycle)
-  const [executionResults, setExecutionResults] = useState<Record<string, ExecutionResult>>({});
-  const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
   const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
-  // Track the last executed candidate key so we can highlight it after refresh
-  const lastExecutedCandidateKey = useRef<string | null>(null);
 
   // Execution history derived from run data - needed by useAppNavigationHighlights
   const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
@@ -497,25 +490,33 @@ const App = () => {
     getSelectedClusterLabel: () => selectedClusterLabel,
   });
 
+  // Manual execution handlers - extracted to hook to reduce App.tsx size
+  // Note: Placed after useAppNavigationHighlights so highlightQueueCard is available (TDZ fix)
+  const {
+    executionResults,
+    executingCandidate,
+    handleManualExecution,
+    getNotRunnableExplanation,
+    isManualExecutionAllowed,
+    buildCandidateKey,
+    clearExecutionResults,
+    handlePostExecutionHighlight,
+  } = useAppManualExecutionHandlers({
+    selectedClusterLabel: hookSelectedClusterLabel,
+    highlightQueueCard,
+  });
+
   // App-level refresh wrapper - calls hook refresh and handles App-specific side effects
   const refresh = useCallback(async () => {
     await refreshAppData();
     // Clear local execution results after successful refresh reconciliation.
     // This allows the UI to transition from transient local execution state
     // to refreshed artifact-backed payload as the durable source of truth.
-    setExecutionResults({});
+    clearExecutionResults();
     // After successful refresh reconciliation, highlight the last executed candidate
     // if we have a tracked key from a recent manual execution.
-    if (lastExecutedCandidateKey.current) {
-      const keyToHighlight = lastExecutedCandidateKey.current;
-      // Clear the ref so we don't keep highlighting on subsequent auto-refreshes
-      lastExecutedCandidateKey.current = null;
-      // Trigger the highlight after state updates have settled
-      requestAnimationFrame(() => {
-        highlightQueueCard(keyToHighlight);
-      });
-    }
-  }, [refreshAppData]);
+    handlePostExecutionHighlight();
+  }, [refreshAppData, clearExecutionResults, handlePostExecutionHighlight]);
 
   // Build promotion key helper
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
@@ -528,11 +529,6 @@ const App = () => {
       [label]: !current[label],
     }));
   };
-
-  const buildCandidateKey = (candidate: NextCheckPlanCandidate, index: number) =>
-    `next-check-${candidate.candidateId ?? candidate.candidateIndex ?? index}-${
-      candidate.targetCluster ?? selectedClusterLabel ?? "global"
-    }`;
 
   const queueExplanation = run?.nextCheckQueueExplanation ?? null;
 
@@ -554,129 +550,6 @@ const App = () => {
   const resetQueueView = () => {
     resetQueueFilters();
     clearStoredQueueViewState();
-  };
-
-  const isManualExecutionAllowed = (candidate: NextCheckPlanCandidate) => {
-    const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
-    if (!hasCandidateIdentifier) {
-      return false;
-    }
-    if (!candidate.safeToAutomate) {
-      return false;
-    }
-    if (candidate.requiresOperatorApproval && candidate.approvalStatus !== "approved") {
-      return false;
-    }
-    if (candidate.duplicateOfExistingEvidence) {
-      return false;
-    }
-    if (!candidate.suggestedCommandFamily) {
-      return false;
-    }
-    if (!ALLOWED_MANUAL_FAMILIES.has(candidate.suggestedCommandFamily)) {
-      return false;
-    }
-    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
-    if (!targetLabel) {
-      return false;
-    }
-    // CRITICAL: Do not allow re-execution of already executed items
-    // Use canonical execution state derivation to prevent contradictions
-    if (isItemExecuted(candidate)) {
-      return false;
-    }
-    return true;
-  };
-
-  const getNotRunnableExplanation = (candidate: NextCheckPlanCandidate): string | null => {
-    // Check in the same order as isManualExecutionAllowed to ensure consistency
-    // 1. Candidate identifier
-    const hasCandidateIdentifier = Boolean(candidate.candidateId?.trim()) || candidate.candidateIndex != null;
-    if (!hasCandidateIdentifier) {
-      return "Not runnable: missing candidate identifier";
-    }
-
-    // 2. Safe to automate
-    if (!candidate.safeToAutomate) {
-      const reason = candidate.safetyReason || "not marked safe to automate";
-      return `Not runnable: ${humanizeReason(reason) || reason}`;
-    }
-
-    // 3. Approval required
-    if (candidate.requiresOperatorApproval && candidate.approvalStatus !== "approved") {
-      const reason = candidate.approvalReason || "approval required";
-      return `Not runnable: ${humanizeReason(reason) || reason}`;
-    }
-
-    // 4. Duplicate
-    if (candidate.duplicateOfExistingEvidence) {
-      const reason = candidate.duplicateReason || "duplicate of existing evidence";
-      return `Not runnable: ${humanizeReason(reason) || reason}`;
-    }
-
-    // 5. Command family exists
-    if (!candidate.suggestedCommandFamily) {
-      return "Not runnable: no command family specified";
-    }
-
-    // 6. Command family allowed
-    if (!ALLOWED_MANUAL_FAMILIES.has(candidate.suggestedCommandFamily)) {
-      return `Not runnable: unsupported command family '${candidate.suggestedCommandFamily}'`;
-    }
-
-    // 7. Target cluster resolved
-    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
-    if (!targetLabel) {
-      return "Not runnable: target cluster unresolved";
-    }
-
-    // Fallback - should not reach here if logic is correct
-    return "Not eligible for manual execution";
-  };
-
-  const handleManualExecution = async (candidate: NextCheckPlanCandidate, candidateKey: string) => {
-    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
-    const candidateId = candidate.candidateId?.trim() ? candidate.candidateId : undefined;
-    const candidateIndex = candidate.candidateIndex;
-    const planArtifactPath = candidate.planArtifactPath?.trim() ? candidate.planArtifactPath : undefined;
-    if (!targetLabel || (candidateIndex == null && !candidateId)) {
-      setExecutionResults((prev) => ({
-        ...prev,
-        [candidateKey]: { status: "error", summary: "Unable to determine candidate target." },
-      }));
-      return;
-    }
-    setExecutingCandidate(candidateKey);
-    // Track the candidate key so we can highlight it after refresh reconciliation
-    lastExecutedCandidateKey.current = candidateKey;
-    try {
-      const result = await executeNextCheckCandidate({
-        candidateId,
-        candidateIndex: candidateIndex ?? undefined,
-        clusterLabel: targetLabel,
-        planArtifactPath: planArtifactPath ?? null,
-      });
-      setExecutionResults((prev) => ({
-        ...prev,
-        [candidateKey]: result,
-      }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Manual execution failed";
-      const blockingReason =
-        err instanceof Error && "blockingReason" in err
-          ? (err as ExecutionErrorResult).blockingReason
-          : undefined;
-      setExecutionResults((prev) => ({
-        ...prev,
-        [candidateKey]: {
-          status: "error",
-          summary: message,
-          blockingReason: blockingReason ?? null,
-        },
-      }));
-    } finally {
-      setExecutingCandidate((current) => (current === candidateKey ? null : current));
-    }
   };
 
   const handleApproveCandidate = async (
