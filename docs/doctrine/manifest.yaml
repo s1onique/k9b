@@ -260,3 +260,4 @@ reviewer:
     - bug_fix_without_bug_fossil_evidence
     - unsupported_production_ready_claim
     - llm_unfriendly_file_without_justification
+    - broad_edit_without_impact_scan

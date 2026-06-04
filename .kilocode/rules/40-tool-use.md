@@ -185,6 +185,67 @@ Prefer changing:
 
 before adding broad overlapping instructions.
 
+## Impact Scan Doctrine
+
+Before non-trivial code edits, produce a small impact map:
+
+```text
+- target symbol / file
+- definitions
+- direct references
+- likely tests
+- intended edit surface
+- reason if broader exploration is needed
+```
+
+The impact scan is **derived evidence, not source of truth**. It guides edits and reviewer scrutiny, not a committed graph, database, watcher, MCP dependency, or runtime service.
+
+**Working rule (search path):**
+
+```bash
+rg + git grep + existing tests > AST > tree-sitter > local DB > external tool
+```
+
+### Prohibited
+
+Do not install or add for impact scanning:
+- databases
+- file watchers
+- MCP integration
+- committed code graphs
+- third-party analysis tools
+
+### When required
+
+Apply impact scan when the edit is non-trivial and affects:
+- shared symbols or interfaces
+- cross-module state or behavior
+- test coverage or evals
+- public contracts
+- architectural seams
+
+### Example: App.tsx/component split refactor
+
+**Target:** `App.tsx` (originally 6782 lines)
+
+**Impact scan:**
+
+```text
+- Target: frontend/src/App.tsx
+- Definitions: 1 root component, ~50 hooks, ~30 derived values
+- Direct references: hooks/useRunSelection.ts, hooks/useAppData.ts, hooks/useUIState.ts, app/*.tsx, components/*.tsx
+- Likely tests: __tests__/app-*.test.tsx, __tests__/useRunSelection-*.test.tsx
+- Edit surface: Extract inline handlers → hooks; Extract JSX sections → components
+- Reason for broader: App.tsx touched by most UI tests; need to preserve prop wiring
+```
+
+**Approach:**
+1. `rg "App\.tsx" frontend/src/` — find all App.tsx references
+2. `rg "useState.*App" frontend/src/` — find state owned by App
+3. Identify hooks to extract (e.g., useRunSelection, useUIState)
+4. Extract in order: data hooks → state hooks → handler hooks → component sections
+5. Run targeted tests: `npm test -- --grep App`
+
 ## Refactor rules
 
 Before refactoring:
