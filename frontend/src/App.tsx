@@ -51,6 +51,7 @@ import { AppRunSummarySection } from "./app/AppRunSummarySection";
 import { AppFleetSection } from "./app/AppFleetSection";
 import { AppProposalsSection } from "./app/AppProposalsSection";
 import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
+import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -92,12 +93,10 @@ import {
   FRESHNESS_THRESHOLD_MINUTES,
   isStaleTimestamp,
   formatAgeDuration,
-  WORKFLOW_LANES,
   AUTOREFRESH_STORAGE_KEY,
   AUTOREFRESH_OPTIONS,
   getLlmScopeLabel,
   buildClusterRecommendedArtifacts,
-  sortDeterministicSummaries,
   safetyClass,
   formatSourceType,
   humanizeReason,
@@ -173,10 +172,7 @@ export {
   SELECTED_RUN_STORAGE_KEY,
 } from "./utils/persistence";
 
-import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
-import { renderLlmStatsLine } from "./components/run-summary/renderLlmStatsLine";
 import { useRunHeaderModel } from "./components/run-summary/useRunHeaderModel";
-import { buildRunSummaryProps } from "./components/run-summary/buildRunSummaryProps";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -774,13 +770,6 @@ const App = () => {
   // headerRunTimestamp already computed above (before early return) for findingSelectionInput
   // Reuse it here for the freshness indicator; hook returns latestRunTimestamp but not headerRunTimestamp
 
-  // Derive RunSummaryPanel-specific props from extracted builder
-  const { runStatsSummary, runSummaryStats, degradedCount, hasDegradedClusters } = buildRunSummaryProps({
-    run,
-    fleet,
-    headerStats,
-  });
-
   // Derive ClusterDetailSection-specific display props from extracted builder
   const {
     selectedCluster,
@@ -854,40 +843,48 @@ const App = () => {
     deterministicSummary,
   } = buildDeterministicChecksProps({ run });
 
-  const focusClusterForNextChecks = (clusterLabel?: string | null) => {
-    const target =
-      clusterLabel ||
-      discoveryClusters[0] ||
-      selectedClusterLabel ||
-      fleet.clusters[0]?.label ||
-      null;
-    if (!target) {
-      return;
-    }
-    handleClusterSelection(target, { expand: true });
-    highlightCluster(target);
-    scrollToSection("cluster");
-  };
-
-  const runLlmStatsLine = run ? renderLlmStatsLine(run.llmStats) : null;
-  const historicalLlmStatsLine = run?.historicalLlmStats
-    ? renderLlmStatsLine(run.historicalLlmStats, "llm-stats-line-historical")
-    : null;
-  const providerBreakdown = run?.llmStats.providerBreakdown
-    .map((entry) => `${entry.provider} ${entry.calls} (${entry.failedCalls} failed)`)
-    .join(" · ") ?? null;
-
-  // Create structured telemetry data for LlmTelemetryPreviewCard
-  const telemetryData: LlmTelemetryPreviewData | null = run ? {
-    totalCalls: run.llmStats.totalCalls,
-    successfulCalls: run.llmStats.successfulCalls,
-    failedCalls: run.llmStats.failedCalls,
-    lastCallRecency: run.llmStats.lastCallTimestamp ? relativeRecency(run.llmStats.lastCallTimestamp) : null,
-    p50LatencyMs: run.llmStats.p50LatencyMs,
-    p95LatencyMs: run.llmStats.p95LatencyMs,
-    p99LatencyMs: run.llmStats.p99LatencyMs,
-    providers: run.llmStats.providerBreakdown,
-  } : null;
+  // Build props for RunSummaryPanel using the extracted hook
+  const {
+    runSummaryLoadedProps,
+    runSummaryUnavailableProps,
+    hasDegradedClusters,
+  } = useAppRunSummaryProps({
+    run,
+    isSelectedRunLatest,
+    selectedRunId,
+    runOwnedPanelState,
+    selectedRunError,
+    onRetrySelectedRun: retrySelectedRun,
+    selectedClusterLabel,
+    onFocusClusterForNextChecks: (clusterLabel?: string | null) => {
+      const target =
+        clusterLabel ||
+        discoveryClusters[0] ||
+        selectedClusterLabel ||
+        fleet.clusters[0]?.label ||
+        null;
+      if (!target) {
+        return;
+      }
+      handleClusterSelection(target, { expand: true });
+      highlightCluster(target);
+      scrollToSection("cluster");
+    },
+    fleet,
+    headerStats,
+    runPlan,
+    runPlanCandidates,
+    planSummaryText,
+    planStatusText,
+    plannerReasonText,
+    plannerHint,
+    plannerNextActionHint,
+    plannerArtifactUrl,
+    planCandidateCountLabel,
+    discoveryVariantOrder,
+    discoveryVariantCounts,
+    discoveryClusters,
+  });
 
   const queuePanelProps = buildQueuePanelProps({
     queueClusterFilter,
@@ -942,51 +939,6 @@ const App = () => {
     refresh,
   });
 
-  // Build props for RunSummaryPanel using ComponentProps pattern
-  const runSummaryLoadedProps = {
-    run,
-    isSelectedRunLatest,
-    selectedClusterLabel,
-    onFocusClusterForNextChecks: focusClusterForNextChecks,
-    runSummaryStats,
-    runStatsSummary,
-    runLlmStatsLine,
-    historicalLlmStatsLine,
-    providerBreakdown,
-    telemetryData,
-    runPlan,
-    runPlanCandidates,
-    planSummaryText,
-    planStatusText,
-    plannerReasonText,
-    plannerHint,
-    plannerNextActionHint,
-    plannerArtifactUrl,
-    planCandidateCountLabel,
-    discoveryVariantOrder,
-    discoveryVariantCounts,
-    discoveryClusters,
-    runOwnedPanelState,
-    selectedRunError,
-    onRetrySelectedRun: retrySelectedRun,
-    selectedRunId,
-  };
-
-  const runSummaryUnavailableProps = {
-    ...runSummaryLoadedProps,
-    run: null,
-    runPlan: null,
-    runPlanCandidates: [],
-    planSummaryText: "",
-    planStatusText: null,
-    plannerReasonText: "",
-    plannerHint: null,
-    plannerNextActionHint: null,
-    plannerArtifactUrl: null,
-    planCandidateCountLabel: "",
-    discoveryClusters: [],
-  };
-
   return (
     <div className="app-shell">
       <AppHeader
@@ -1028,7 +980,7 @@ const App = () => {
         onRunSelection={handleRunSelectionViaRunControl}
         onBatchExecution={handleBatchExecution}
         onShowSelectedRun={handleShowSelectedRun}
-        onFocusClusterForNextChecks={focusClusterForNextChecks}
+        onFocusClusterForNextChecks={runSummaryLoadedProps.onFocusClusterForNextChecks}
       />
       <AppRunSummarySection
         run={run}
@@ -1045,7 +997,7 @@ const App = () => {
         onFocusQueueReview={() => setQueueFocusMode("review")}
         onPromoteCheck={handlePromoteDeterministicCheck}
         onToggleIncidentExpansion={toggleIncidentExpansion}
-        onFocusClusterForNextChecks={focusClusterForNextChecks}
+        onFocusClusterForNextChecks={runSummaryLoadedProps.onFocusClusterForNextChecks}
         onSetQueueStatusFilter={setQueueStatusFilter}
         onSetQueueClusterFilter={setQueueClusterFilter}
         onScrollToSection={scrollToSection}
