@@ -48,9 +48,8 @@ import {
   fetchNotifications,
   fetchProposals,
   promoteDeterministicNextCheck,
-  submitAlertmanagerRelevanceFeedback,
-  submitUsefulnessFeedback,
 } from "../api";
+import { useAppExecutionFeedbackHandlers } from "../app/useAppExecutionFeedbackHandlers";
 
 export interface UseAppDataParams {
   selectedRunId: string | null;
@@ -301,43 +300,14 @@ export const useAppData = ({
     [refreshAppData]
   );
 
-  // Handle usefulness feedback
-  const handleUsefulnessFeedback = useCallback(
-    async (
-      artifactPath: string,
-      usefulnessClass: string,
-      summary: string | undefined
-    ) => {
-      await submitUsefulnessFeedback({
-        artifactPath,
-        usefulnessClass: usefulnessClass as "useful" | "partial" | "noisy" | "empty",
-        usefulnessSummary: summary,
-      });
-      // Refresh to get updated data
-      await refreshAppData();
-    },
-    [refreshAppData]
-  );
-
-  // Handle Alertmanager relevance feedback
-  // Phase 5: Now uses refreshAppData() instead of refreshRuns (which is no longer needed)
-  // RunControl owns runs refresh; useAppData owns fleet/proposals refresh
-  const handleAlertmanagerRelevanceFeedback = useCallback(
-    async (
-      artifactPath: string,
-      relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
-      summary: string | undefined
-    ) => {
-      await submitAlertmanagerRelevanceFeedback({
-        artifactPath,
-        alertmanagerRelevance: relevance,
-        alertmanagerRelevanceSummary: summary,
-      });
-      // Refresh to get updated data
-      await refreshAppData();
-    },
-    [refreshAppData]
-  );
+  // Execution feedback handlers - extracted to dedicated hook
+  // This hook owns the handler logic and state for feedback submission
+  const {
+    handleUsefulnessFeedback,
+    handleAlertmanagerRelevanceFeedback,
+  } = useAppExecutionFeedbackHandlers({
+    refreshAppData,
+  });
 
   // Handle toggle proposal expansion
   const handleToggleProposal = (id: string) => {
