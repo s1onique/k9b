@@ -16,6 +16,12 @@ export interface UseAppNavigationHighlightsArgs {
   onClusterSelect: (clusterLabel: string, options?: { expand?: boolean }) => void;
   /** Find matching execution history entry for a queue candidate */
   findExecutionHistoryEntry: (candidate: NextCheckQueueItem) => NextCheckExecutionHistoryEntry | null;
+  /** Get available discovery clusters for fallback selection */
+  getDiscoveryClusters: () => string[];
+  /** Get the currently selected cluster label */
+  getSelectedClusterLabel: () => string | null;
+  /** Get the first cluster from fleet for ultimate fallback */
+  getFleetFirstClusterLabel: () => string | null;
 }
 
 export interface AppNavigationHighlights {
@@ -44,6 +50,9 @@ export function useAppNavigationHighlights(
     setQueueHighlightKey,
     onClusterSelect,
     findExecutionHistoryEntry,
+    getDiscoveryClusters,
+    getSelectedClusterLabel,
+    getFleetFirstClusterLabel,
   } = args;
 
   const clusterHighlightTimer = useRef<number | null>(null);
@@ -122,13 +131,21 @@ export function useAppNavigationHighlights(
 
   const handleQueueClusterJump = useCallback(
     (candidate: NextCheckQueueItem) => {
-      if (candidate.targetCluster) {
-        onClusterSelect(candidate.targetCluster, { expand: true });
-        highlightCluster(candidate.targetCluster);
-        scrollToSection("cluster");
+      // Fallback chain: candidate target -> discovery clusters -> selected -> fleet first
+      const target =
+        candidate.targetCluster ||
+        getDiscoveryClusters()[0] ||
+        getSelectedClusterLabel() ||
+        getFleetFirstClusterLabel() ||
+        null;
+      if (!target) {
+        return;
       }
+      onClusterSelect(target, { expand: true });
+      highlightCluster(target);
+      scrollToSection("cluster");
     },
-    [onClusterSelect, highlightCluster, scrollToSection],
+    [onClusterSelect, highlightCluster, scrollToSection, getDiscoveryClusters, getSelectedClusterLabel, getFleetFirstClusterLabel],
   );
 
   const handleQueueExecutionJump = useCallback(

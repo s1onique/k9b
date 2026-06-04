@@ -502,6 +502,9 @@ const App = () => {
     setQueueHighlightKey,
     onClusterSelect: handleClusterSelection,
     findExecutionHistoryEntry,
+    getDiscoveryClusters: () => discoveryClusters,
+    getSelectedClusterLabel: () => selectedClusterLabel,
+    getFleetFirstClusterLabel: () => fleet.clusters[0]?.label ?? null,
   });
 
   // App-level refresh wrapper - calls hook refresh and handles App-specific side effects
