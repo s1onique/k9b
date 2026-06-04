@@ -200,6 +200,8 @@ Before non-trivial code edits, produce a small impact map:
 
 The impact scan is **derived evidence, not source of truth**. It guides edits and reviewer scrutiny, not a committed graph, database, watcher, MCP dependency, or runtime service.
 
+**Bootstrap helper:** Use `scripts/impact_scan.sh <target>` when available to generate a starting point for the impact map, then correct it manually. Script output is derived evidence and may be incomplete. The script uses only `rg`/`git grep` and pattern-based test discovery; it does not perform semantic analysis.
+
 **Working rule (search path):**
 
 ```bash
