@@ -63,7 +63,7 @@ import { NotificationHistoryTable } from "./components/NotificationHistoryTable"
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
 import { buildDeterministicChecksProps } from "./components/DeterministicNextChecksPanel/buildDeterministicChecksProps";
 import { QueuePanel } from "./components/QueuePanel";
-import { buildQueuePanelProps } from "./components/QueuePanel/buildQueuePanelProps";
+import { useAppQueuePanelProps } from "./app/useAppQueuePanelProps";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
@@ -866,7 +866,7 @@ const App = () => {
     discoveryClusters,
   });
 
-  const queuePanelProps = buildQueuePanelProps({
+  const queuePanelProps = useAppQueuePanelProps({
     queueClusterFilter,
     queueStatusFilter,
     queueCommandFamilyFilter,
