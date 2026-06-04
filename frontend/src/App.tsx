@@ -171,6 +171,7 @@ export {
 
 import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
 import { renderLlmStatsLine } from "./components/run-summary/renderLlmStatsLine";
+import { useRunHeaderModel } from "./components/run-summary/useRunHeaderModel";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -305,6 +306,14 @@ const App = () => {
   
   // isSelectedRunLatest derived from RunControl's selectedRunId vs latestRunId
   const isSelectedRunLatest = selectedRunId !== null && selectedRunId === latestRunId;
+
+  // Derive header display model from extracted hook
+  const headerModel = useRunHeaderModel({
+    run,
+    runsList,
+    selectedRunId,
+    latestRunId,
+  });
 
   // UI state - extracted to useUIState hook
   const {
@@ -834,24 +843,15 @@ const App = () => {
     );
   }
 
-  const headerRunId = selectedRunListEntry?.runId ?? run?.runId ?? "—";
-  const headerRunLabel = selectedRunListEntry?.runLabel ?? run?.label ?? "—";
-  const runRecency = headerRunTimestamp ? relativeRecency(headerRunTimestamp) : "—";
-  const latestRunTimestamp = latestRunId
-    ? runsList.find(r => r.runId === latestRunId)?.timestamp ?? headerRunTimestamp
-    : headerRunTimestamp;
-  const latestRunRecency = latestRunTimestamp ? relativeRecency(latestRunTimestamp) : "—";
+  // Use header model values from extracted hook
+  const { headerRunId, headerRunLabel, runRecency, latestRunTimestamp, latestRunRecency, headerStats } = headerModel;
+
+  // headerRunTimestamp already computed above (before early return) for findingSelectionInput
+  // Reuse it here for the freshness indicator; hook returns latestRunTimestamp but not headerRunTimestamp
+
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
   const hasDegradedClusters = degradedCount > 0;
-  // Only compute run-specific stats when run data is available
-  const headerStats = run ? [
-    { label: "Last", value: formatDuration(run.runStats.lastRunDurationSeconds) },
-    { label: "Runs", value: String(run.runStats.totalRuns) },
-    { label: "P50", value: formatDuration(run.runStats.p50RunDurationSeconds) },
-    { label: "P95", value: formatDuration(run.runStats.p95RunDurationSeconds) },
-    { label: "P99", value: formatDuration(run.runStats.p99RunDurationSeconds) },
-  ] : [];
   const runStatsSummary = headerStats.map((stat) => `${stat.label} ${stat.value}`).join(" · ");
   // Use fleet cluster count instead of run.clusterCount when run is null
   const runSummaryStats = run ? [
