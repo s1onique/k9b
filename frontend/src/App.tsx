@@ -9,6 +9,7 @@ import {
   runBatchExecution,
   submitUsefulnessFeedback,
 } from "./api";
+import { useAppNavigationHighlights } from "./hooks/useAppNavigationHighlights";
 import { useAppData } from "./hooks/useAppData";
 import { useRunSelection } from "./hooks/useRunSelection";
 import { useUIState } from "./hooks/useUIState";
@@ -382,11 +383,46 @@ const App = () => {
   const [executingCandidate, setExecutingCandidate] = useState<string | null>(null);
   const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
   const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
-  const clusterHighlightTimer = useRef<number | null>(null);
-  const executionHighlightTimer = useRef<number | null>(null);
-  const queueHighlightTimer = useRef<number | null>(null);
   // Track the last executed candidate key so we can highlight it after refresh
   const lastExecutedCandidateKey = useRef<string | null>(null);
+
+  // Execution history derived from run data - needed by useAppNavigationHighlights
+  const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
+
+  // findExecutionHistoryEntry must be defined before useAppNavigationHighlights hook
+  const findExecutionHistoryEntry = (candidate: NextCheckQueueItem) => {
+    if (!executionHistory.length) {
+      return null;
+    }
+    if (candidate.latestArtifactPath) {
+      const artifactMatch = executionHistory.find(
+        (entry) => entry.artifactPath === candidate.latestArtifactPath
+      );
+      if (artifactMatch) {
+        return artifactMatch;
+      }
+    }
+    const normalizedDescription = candidate.description?.trim();
+    if (candidate.targetCluster && normalizedDescription) {
+      const contextMatch = executionHistory.find(
+        (entry) =>
+          entry.clusterLabel === candidate.targetCluster &&
+          entry.candidateDescription === normalizedDescription
+      );
+      if (contextMatch) {
+        return contextMatch;
+      }
+    }
+    if (normalizedDescription) {
+      const descriptionMatch = executionHistory.find(
+        (entry) => entry.candidateDescription === normalizedDescription
+      );
+      if (descriptionMatch) {
+        return descriptionMatch;
+      }
+    }
+    return null;
+  };
 
   // Batch execution state for recent runs
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
@@ -452,6 +488,22 @@ const App = () => {
     }
   };
 
+  const {
+    scrollToSection,
+    highlightCluster,
+    highlightExecutionEntry,
+    highlightQueueCard,
+    handleBackToQueue,
+    handleQueueClusterJump,
+    handleQueueExecutionJump,
+  } = useAppNavigationHighlights({
+    setHighlightedClusterLabel,
+    setExecutionHistoryHighlightKey,
+    setQueueHighlightKey,
+    onClusterSelect: handleClusterSelection,
+    findExecutionHistoryEntry,
+  });
+
   // App-level refresh wrapper - calls hook refresh and handles App-specific side effects
   const refresh = useCallback(async () => {
     await refreshAppData();
@@ -476,63 +528,7 @@ const App = () => {
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
     `${clusterLabel}::${description}::${index}`;
 
-  const scrollToSection = (id: string) => {
-    if (typeof document === "undefined") {
-      return;
-    }
-    const section = document.getElementById(id);
-    if (!section) {
-      return;
-    }
-    section.scrollIntoView?.({ behavior: "smooth", block: "start" });
-  };
-
-  const highlightCluster = (label: string | null) => {
-    setHighlightedClusterLabel(label);
-    if (clusterHighlightTimer.current) {
-      window.clearTimeout(clusterHighlightTimer.current);
-    }
-    if (!label) {
-      return;
-    }
-    clusterHighlightTimer.current = window.setTimeout(() => {
-      setHighlightedClusterLabel(null);
-    }, NAVIGATION_HIGHLIGHT_DURATION_MS);
-  };
-
-  const highlightExecutionEntry = (key: string | null) => {
-    setExecutionHistoryHighlightKey(key);
-    if (executionHighlightTimer.current) {
-      window.clearTimeout(executionHighlightTimer.current);
-    }
-    if (!key) {
-      return;
-    }
-    executionHighlightTimer.current = window.setTimeout(() => {
-      setExecutionHistoryHighlightKey(null);
-    }, NAVIGATION_HIGHLIGHT_DURATION_MS);
-  };
-
-  const highlightQueueCard = (key: string | null) => {
-    setQueueHighlightKey(key);
-    if (queueHighlightTimer.current) {
-      window.clearTimeout(queueHighlightTimer.current);
-    }
-    if (!key) {
-      return;
-    }
-    queueHighlightTimer.current = window.setTimeout(() => {
-      setQueueHighlightKey(null);
-    }, NAVIGATION_HIGHLIGHT_DURATION_MS);
-    // Scroll the highlighted queue card into view
-    requestAnimationFrame(() => {
-      const element = document.querySelector(`[data-queue-key="${CSS.escape(key)}"]`);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
-  };
-
+  // toggleIncidentExpansion remains in App.tsx - more coupled to incident expansion state
   const toggleIncidentExpansion = (label: string) => {
     setIncidentExpandedClusters((current) => ({
       ...current,
@@ -545,42 +541,7 @@ const App = () => {
       candidate.targetCluster ?? selectedClusterLabel ?? "global"
     }`;
 
-  const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
   const queueExplanation = run?.nextCheckQueueExplanation ?? null;
-
-  const findExecutionHistoryEntry = (candidate: NextCheckQueueItem) => {
-    if (!executionHistory.length) {
-      return null;
-    }
-    if (candidate.latestArtifactPath) {
-      const artifactMatch = executionHistory.find(
-        (entry) => entry.artifactPath === candidate.latestArtifactPath
-      );
-      if (artifactMatch) {
-        return artifactMatch;
-      }
-    }
-    const normalizedDescription = candidate.description?.trim();
-    if (candidate.targetCluster && normalizedDescription) {
-      const contextMatch = executionHistory.find(
-        (entry) =>
-          entry.clusterLabel === candidate.targetCluster &&
-          entry.candidateDescription === normalizedDescription
-      );
-      if (contextMatch) {
-        return contextMatch;
-      }
-    }
-    if (normalizedDescription) {
-      const descriptionMatch = executionHistory.find(
-        (entry) => entry.candidateDescription === normalizedDescription
-      );
-      if (descriptionMatch) {
-        return descriptionMatch;
-      }
-    }
-    return null;
-  };
 
   const toggleQueueFocusPreset = (mode: QueueFocusMode) => {
     setQueueFocusMode((current) => (current === mode ? "none" : mode));
@@ -904,23 +865,7 @@ const App = () => {
     }
     handleClusterSelection(target, { expand: true });
     highlightCluster(target);
-    if (typeof document !== "undefined") {
-      scrollToSection("cluster");
-    }
-  };
-
-  const handleBackToQueue = () => {
-    scrollToSection("next-check-queue");
-  };
-
-  const handleQueueClusterJump = (candidate: NextCheckQueueItem) => {
-    focusClusterForNextChecks(candidate.targetCluster ?? undefined);
-  };
-
-  const handleQueueExecutionJump = (candidate: NextCheckQueueItem) => {
-    const entry = findExecutionHistoryEntry(candidate);
-    highlightExecutionEntry(entry ? buildExecutionEntryKey(entry) : null);
-    scrollToSection("execution-history");
+    scrollToSection("cluster");
   };
 
   const runLlmStatsLine = run ? renderLlmStatsLine(run.llmStats) : null;
