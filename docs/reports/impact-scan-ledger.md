@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-05 — Queue filter handlers extraction
+
+- **Change:** Extracted queue filter/reset handlers from `App.tsx` into `frontend/src/app/useQueueFilterHandlers.ts`.
+- **Impact map present:** Yes. ACT prompt identified queue focus preset, filter reset, view reset, and persisted queue view clearing behavior.
+- **Scope drift:** `frontend/src/App.tsx` (modified), `frontend/src/app/useQueueFilterHandlers.ts` (new, 114 lines).
+- **Behavior risk:** Queue status/cluster filters, focus preset behavior, queue highlighted key reset, and persisted queue view clearing must remain unchanged.
+- **Targeted tests:** Queue filter tests (3 files, 25 tests), App tests (10 files, 132 tests).
+- **Result:** All tests passed. App.tsx reduced from 760 to 753 lines (-7). Hook preserves exact toggleQueueFocusPreset/resetQueueFilters/resetQueueView behavior.
+- **Lesson:** No surprises; extraction stayed surgical. Hook preserves exact handler behavior including persisted queue view clearing.
+
+---
+
 ### 2026-06-05 — ClusterDetailSection props extraction
 
 - **Change:** Extracted ClusterDetailSection prop wiring from `App.tsx` into `frontend/src/app/useAppClusterDetailSectionProps.ts`. The hook delegates to `useAppClusterPlanProps` and combines it with direct JSX props.

@@ -55,6 +55,7 @@ import { useApprovalFlowController } from "./app/approvalFlow";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
+import { useQueueFilterHandlers } from "./app/useQueueFilterHandlers";
 import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
 import { useAppDiagnosePanelsProps } from "./app/useAppDiagnosePanelsProps";
 import { useAppClusterDetailSectionProps } from "./app/useAppClusterDetailSectionProps";
@@ -428,25 +429,17 @@ const App = () => {
 
   const queueExplanation = run?.nextCheckQueueExplanation ?? null;
 
-  const toggleQueueFocusPreset = (mode: QueueFocusMode) => {
-    setQueueFocusMode((current) => (current === mode ? "none" : mode));
-  };
-
-  const resetQueueFilters = () => {
-    setQueueClusterFilter(DEFAULT_QUEUE_VIEW_STATE.clusterFilter);
-    setQueueStatusFilter(DEFAULT_QUEUE_VIEW_STATE.statusFilter);
-    setQueueCommandFamilyFilter(DEFAULT_QUEUE_VIEW_STATE.commandFamilyFilter);
-    setQueuePriorityFilter(DEFAULT_QUEUE_VIEW_STATE.priorityFilter);
-    setQueueWorkstreamFilter(DEFAULT_QUEUE_VIEW_STATE.workstreamFilter);
-    setQueueSearch(DEFAULT_QUEUE_VIEW_STATE.searchText);
-    setQueueSortOption(DEFAULT_QUEUE_VIEW_STATE.sortOption);
-    setQueueFocusMode(DEFAULT_QUEUE_VIEW_STATE.focusMode);
-  };
-
-  const resetQueueView = () => {
-    resetQueueFilters();
-    clearStoredQueueViewState();
-  };
+  // Queue filter handlers - extracted to hook
+  const { toggleQueueFocusPreset, resetQueueFilters, resetQueueView } = useQueueFilterHandlers({
+    setQueueClusterFilter,
+    setQueueStatusFilter,
+    setQueueCommandFamilyFilter,
+    setQueuePriorityFilter,
+    setQueueWorkstreamFilter,
+    setQueueSearch,
+    setQueueSortOption,
+    setQueueFocusMode,
+  });
 
   // Extract header props - MUST be before early return for hook consistency
   // Also extracts freshness-related values needed by useAppDemoShellOverlayProps
