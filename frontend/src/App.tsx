@@ -174,18 +174,6 @@ dayjs.extend(relativeTime);
 dayjs.extend(utc);
 
 
-// ==========================================================================
-// Specialized lower advisory section components
-// ==========================================================================
-
-/** Top concerns - compact concern rows with left accent */
-
-/** Evidence gaps - uncertainty-oriented rows with gap marker */
-
-/** Next checks - action rows with parsed intent, cluster badge, and command preview */
-
-/** Focus notes - demoted secondary guidance hints */
-
 const App = () => {
   // Phase 3: Run Control Plane - source of truth for selected-run causal chain
   // Single useRunControl call provides all selected-run state and actions
