@@ -170,6 +170,7 @@ export {
 } from "./utils/persistence";
 
 import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
+import { renderLlmStatsLine } from "./components/run-summary/renderLlmStatsLine";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -177,41 +178,6 @@ dayjs.extend(utc);
 type SortKey = "proposalId" | "confidence" | "status";
 
 const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
-
-// renderLlmStatsLine needs buildLlmStatEntries with formatLatency applied
-// Keep it here since it uses formatLatency which is not in selectors.ts
-const renderLlmStatsLine = (stats: LLMStats, modifier?: string) => {
-  const scopeLabel = getLlmScopeLabel(stats.scope ?? null);
-  const lastCallValue = stats.lastCallTimestamp ? relativeRecency(stats.lastCallTimestamp) : "—";
-  const entries = [
-    { label: `${scopeLabel} calls`, value: String(stats.totalCalls) },
-    { label: "OK", value: String(stats.successfulCalls) },
-    { label: "Failed", value: String(stats.failedCalls) },
-    { label: "P50", value: formatLatency(stats.p50LatencyMs) },
-    { label: "P95", value: formatLatency(stats.p95LatencyMs) },
-    { label: "P99", value: formatLatency(stats.p99LatencyMs) },
-    { label: "Last call", value: lastCallValue },
-  ];
-  const classNames = [
-    "run-header-inline-stats",
-    "llm-stats-line",
-    "muted",
-    "small",
-    modifier,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <p className={classNames}>
-      {entries.map((stat) => (
-        <span key={`${stat.label}-${stat.value}`}>
-          <span className="run-stat-label">{stat.label}: </span>
-          <strong>{stat.value}</strong>
-        </span>
-      ))}
-    </p>
-  );
-};
 
 // ==========================================================================
 // Specialized lower advisory section components
