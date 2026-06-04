@@ -53,6 +53,7 @@ import { AppProposalsSection } from "./app/AppProposalsSection";
 import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
 import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
+import { useAppDemoShellProps } from "./app/useAppDemoShellProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -938,6 +939,17 @@ const App = () => {
     refresh,
   });
 
+  // Extract demo shell overlay props
+  const demoShellOverlayProps = useAppDemoShellProps({
+    isOpen: demoShell.state.isOpen,
+    onClose: demoShell.closeDemo,
+    findingSelectionInput,
+    selectedRunId,
+    selectedClusterLabel,
+    runFresh,
+    headerRunTimestamp,
+  });
+
   return (
     <div className="app-shell">
       <AppHeader
@@ -1065,21 +1077,7 @@ const App = () => {
         onToggleProposal={handleToggleProposal}
       />
       <AppImprovePanels run={run} />
-      <AppDemoShellOverlay
-        isOpen={demoShell.state.isOpen}
-        onClose={demoShell.closeDemo}
-        findingSelectionInput={findingSelectionInput}
-        realContext={
-          selectedRunId
-            ? {
-                runId: selectedRunId,
-                clusterLabel: selectedClusterLabel ?? undefined,
-                isFresh: runFresh,
-                runCapturedAt: headerRunTimestamp || undefined,
-              }
-            : undefined
-        }
-      />
+      <AppDemoShellOverlay {...demoShellOverlayProps} />
     </div>
   );
 };
