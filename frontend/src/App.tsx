@@ -66,6 +66,7 @@ import { buildDemoShellFindingInput } from "./demo-shell/buildDemoShellFindingIn
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 import { buildClusterDetailSectionProps } from "./components/ClusterDetailSection/buildClusterDetailSectionProps";
+import { buildClusterPlanSectionProps } from "./components/ClusterDetailSection/buildClusterPlanSectionProps";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
 import { VmalertAlertStatePanel } from "./components/VmalertAlertStatePanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
@@ -832,6 +833,21 @@ const App = () => {
     fleet,
   });
 
+  const nextCheckPlanSectionProps = buildClusterPlanSectionProps({
+    clusterDetail,
+    run,
+    selectedClusterLabel,
+    executionResults,
+    approvalResults,
+    executingCandidate,
+    approvingCandidate,
+    handleApproveCandidate,
+    handleManualExecution,
+    onRefresh: refresh,
+    buildCandidateKey,
+    isManualExecutionAllowed,
+  });
+
   const autoRefreshSelectValue = autoRefreshInterval ? String(autoRefreshInterval) : "off";
   const autoRefreshStatusText = autoRefreshInterval
     ? `Auto refresh every ${autoRefreshInterval}s`
@@ -1386,27 +1402,7 @@ const App = () => {
         artifactUrl={artifactUrl}
         formatTimestamp={formatTimestamp}
         statusClass={statusClass}
-        nextCheckPlanSectionProps={{
-          planCandidates,
-          orphanedApprovals,
-          planArtifactLink,
-          planSummaryText,
-          planCandidateCountLabel,
-          planStatusText,
-          outcomeSummary,
-          selectedClusterLabel,
-          executionResults,
-          approvalResults,
-          executingCandidate,
-          approvingCandidate,
-          handleApproveCandidate,
-          handleManualExecution,
-          onRefresh: refresh,
-          buildCandidateKey,
-          isManualExecutionAllowed,
-          artifactUrl,
-          relativeRecency,
-        }}
+        nextCheckPlanSectionProps={nextCheckPlanSectionProps}
       />
     {/* Workflow Lane: Improve the System */}
     <div className="workflow-lane-header">
