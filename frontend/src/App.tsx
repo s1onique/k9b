@@ -55,6 +55,7 @@ import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
+import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -66,8 +67,6 @@ import { buildQueuePanelProps } from "./components/QueuePanel/buildQueuePanelPro
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
-import { buildClusterDetailSectionProps } from "./components/ClusterDetailSection/buildClusterDetailSectionProps";
-import { buildClusterPlanSectionProps } from "./components/ClusterDetailSection/buildClusterPlanSectionProps";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
 import { VmalertAlertStatePanel } from "./components/VmalertAlertStatePanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
@@ -765,31 +764,19 @@ const App = () => {
   // headerRunTimestamp already computed above (before early return) for findingSelectionInput
   // Reuse it here for the freshness indicator; hook returns latestRunTimestamp but not headerRunTimestamp
 
-  // Derive ClusterDetailSection-specific display props from extracted builder
-  const {
-    selectedCluster,
-    clusterTriggerReason,
-    drilldownSummary,
-    recencyTimestamp,
-    clusterFresh,
-    clusterRecency,
-  } = buildClusterDetailSectionProps({
-    selectedClusterLabel,
+  // Derive ClusterDetailSection props from extracted hook
+  const clusterPlanProps = useAppClusterPlanProps({
     clusterDetail,
+    selectedClusterLabel,
     fleet,
-  });
-
-  const nextCheckPlanSectionProps = buildClusterPlanSectionProps({
-    clusterDetail,
     run,
-    selectedClusterLabel,
     executionResults,
     approvalResults,
     executingCandidate,
     approvingCandidate,
     handleApproveCandidate,
     handleManualExecution,
-    onRefresh: refresh,
+    refresh,
     buildCandidateKey,
     isManualExecutionAllowed,
   });
@@ -1041,23 +1028,17 @@ const App = () => {
       <ClusterDetailSection
         clusterDetail={clusterDetail}
         selectedClusterLabel={selectedClusterLabel}
-        selectedCluster={selectedCluster}
+        {...clusterPlanProps}
         fleet={fleet}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         clusterDetailExpanded={clusterDetailExpanded}
         setClusterDetailExpanded={setClusterDetailExpanded}
         highlightedClusterLabel={highlightedClusterLabel}
-        clusterTriggerReason={clusterTriggerReason}
-        drilldownSummary={drilldownSummary}
-        recencyTimestamp={recencyTimestamp}
-        clusterFresh={clusterFresh}
-        clusterRecency={clusterRecency}
         handleClusterSelection={handleClusterSelection}
         artifactUrl={artifactUrl}
         formatTimestamp={formatTimestamp}
         statusClass={statusClass}
-        nextCheckPlanSectionProps={nextCheckPlanSectionProps}
       />
     <WorkflowLaneHeader type="improve" />
       <AppProposalsSection {...proposalSectionProps} />
