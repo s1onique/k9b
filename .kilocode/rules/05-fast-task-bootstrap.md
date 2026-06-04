@@ -121,5 +121,5 @@ When implementation finishes, report:
 6. Remaining risks / edge cases
 7. **Impact Scan Ledger:** For non-trivial edits, include:
    - `Updated: docs/reports/impact-scan-ledger.md`
-   - or `Skipped: <short rationale>` if the edit was trivial (docs-only, pure formatting, generated artifact, lockfile-only with no runtime behavior change)
+   - or `Skipped: <short rationale>` if no ledger entry is needed (e.g., docs-only patch, pure formatting, generated artifact, lockfile-only with no runtime behavior change)
 
