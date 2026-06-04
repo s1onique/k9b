@@ -1,12 +1,10 @@
 /**
- * useRunSummaryProps - Pure props derivation for RunSummaryPanel from App.tsx
+ * buildRunSummaryProps - Pure props derivation for RunSummaryPanel from App.tsx
  *
  * This module computes the pure values used by <RunSummaryPanel> that are not
  * derived elsewhere or consumed by other components.
  *
  * Uses a pure function (not a hook) to avoid React hooks rule violations in tests.
- *
- * ACT 2: Extract run summary props builder from App shell
  */
 
 import type { FleetPayload, RunPayload } from "../../types";
@@ -23,7 +21,7 @@ export interface RunSummaryPropsModel {
   hasDegradedClusters: boolean;
 }
 
-export interface UseRunSummaryPropsArgs {
+export interface BuildRunSummaryPropsArgs {
   run: RunPayload | null;
   fleet: FleetPayload;
   headerStats: Array<{ label: string; value: string }>;
@@ -47,11 +45,11 @@ export interface UseRunSummaryPropsArgs {
  * @param args - The run payload, fleet data, and header stats
  * @returns The derived RunSummaryPanel props model
  */
-export function useRunSummaryProps({
+export function buildRunSummaryProps({
   run,
   fleet,
   headerStats,
-}: UseRunSummaryPropsArgs): RunSummaryPropsModel {
+}: BuildRunSummaryPropsArgs): RunSummaryPropsModel {
   // Degraded cluster count from fleet rating counts
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")

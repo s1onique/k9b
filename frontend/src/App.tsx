@@ -172,7 +172,7 @@ export {
 import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
 import { renderLlmStatsLine } from "./components/run-summary/renderLlmStatsLine";
 import { useRunHeaderModel } from "./components/run-summary/useRunHeaderModel";
-import { useRunSummaryProps } from "./components/run-summary/useRunSummaryProps";
+import { buildRunSummaryProps } from "./components/run-summary/buildRunSummaryProps";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -850,8 +850,8 @@ const App = () => {
   // headerRunTimestamp already computed above (before early return) for findingSelectionInput
   // Reuse it here for the freshness indicator; hook returns latestRunTimestamp but not headerRunTimestamp
 
-  // Derive RunSummaryPanel-specific props from extracted hook
-  const { runStatsSummary, runSummaryStats, degradedCount, hasDegradedClusters } = useRunSummaryProps({
+  // Derive RunSummaryPanel-specific props from extracted builder
+  const { runStatsSummary, runSummaryStats, degradedCount, hasDegradedClusters } = buildRunSummaryProps({
     run,
     fleet,
     headerStats,
