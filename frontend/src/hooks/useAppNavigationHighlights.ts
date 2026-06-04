@@ -20,8 +20,6 @@ export interface UseAppNavigationHighlightsArgs {
   getDiscoveryClusters: () => string[];
   /** Get the currently selected cluster label */
   getSelectedClusterLabel: () => string | null;
-  /** Get the first cluster from fleet for ultimate fallback */
-  getFleetFirstClusterLabel: () => string | null;
 }
 
 export interface AppNavigationHighlights {
@@ -52,7 +50,6 @@ export function useAppNavigationHighlights(
     findExecutionHistoryEntry,
     getDiscoveryClusters,
     getSelectedClusterLabel,
-    getFleetFirstClusterLabel,
   } = args;
 
   const clusterHighlightTimer = useRef<number | null>(null);
@@ -131,12 +128,11 @@ export function useAppNavigationHighlights(
 
   const handleQueueClusterJump = useCallback(
     (candidate: NextCheckQueueItem) => {
-      // Fallback chain: candidate target -> discovery clusters -> selected -> fleet first
+      // Fallback chain: candidate target -> discovery clusters -> selected
       const target =
         candidate.targetCluster ||
         getDiscoveryClusters()[0] ||
         getSelectedClusterLabel() ||
-        getFleetFirstClusterLabel() ||
         null;
       if (!target) {
         return;
@@ -145,7 +141,7 @@ export function useAppNavigationHighlights(
       highlightCluster(target);
       scrollToSection("cluster");
     },
-    [onClusterSelect, highlightCluster, scrollToSection, getDiscoveryClusters, getSelectedClusterLabel, getFleetFirstClusterLabel],
+    [onClusterSelect, highlightCluster, scrollToSection, getDiscoveryClusters, getSelectedClusterLabel],
   );
 
   const handleQueueExecutionJump = useCallback(
