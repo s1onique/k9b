@@ -56,10 +56,10 @@ import { useAppApprovalHandlers } from "./app/useAppApprovalHandlers";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
+import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
-import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
 import { buildDeterministicChecksProps } from "./components/DeterministicNextChecksPanel/buildDeterministicChecksProps";
 import { QueuePanel } from "./components/QueuePanel";
@@ -67,18 +67,13 @@ import { useAppQueuePanelProps } from "./app/useAppQueuePanelProps";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
-import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
-import { VmalertAlertStatePanel } from "./components/VmalertAlertStatePanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
 import { RecentRunsPanel, RunSummaryPanel } from "./components/RunsPanel";
 export type { RecentRunsPanelProps, RunSummaryPanelProps } from "./components/RunsPanel";
 import {
   artifactUrl,
   formatTimestamp,
-  formatLatency,
-  normalizeFilterValue,
   statusClass,
-  truncateText,
 } from "./utils";
 import {
   confidenceWeight,
@@ -223,7 +218,6 @@ const App = () => {
     handleRunsFilterChange,
     handleRunsPageSizeChange,
     handleRunsPageChange,
-    computePageForRunId,
     navigateToPageContainingRun,
     handleShowSelectedRun,
   } = useRunSelection({
@@ -277,11 +271,6 @@ const App = () => {
     // The runs list is refreshed via RunControl's poll() which is called by the App.tsx timer.
   });
 
-  // Derive combined loading and error state (using RunControl for selected run state)
-  // isLoading is no longer tied to run detail fetch - fleet/proposals are the critical path
-  const isLoading = runsListLoading;
-  const isError = error;
-  
   // isSelectedRunLatest derived from RunControl's selectedRunId vs latestRunId
   const isSelectedRunLatest = selectedRunId !== null && selectedRunId === latestRunId;
 
@@ -407,7 +396,6 @@ const App = () => {
   const {
     scrollToSection,
     highlightCluster,
-    highlightExecutionEntry,
     highlightQueueCard,
     handleBackToQueue,
     handleQueueClusterJump,
@@ -562,16 +550,8 @@ const App = () => {
     isManualExecutionAllowed,
   });
 
-  const autoRefreshSelectValue = autoRefreshInterval ? String(autoRefreshInterval) : "off";
-  const autoRefreshStatusText = autoRefreshInterval
-    ? `Auto refresh every ${autoRefreshInterval}s`
-    : "Auto refresh is off";
-  const interpretation: AutoInterpretation | null = clusterDetail?.autoInterpretation || null;
-  const recommendedArtifacts = buildClusterRecommendedArtifacts(clusterDetail);
   const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
   const runPlan = run?.nextCheckPlan;
-  const orphanedApprovals = runPlan?.orphanedApprovals ?? [];
-  const planArtifactLink = runPlan?.artifactPath ? artifactUrl(runPlan.artifactPath) : null;
   const plannerAvailability = run?.plannerAvailability ?? null;
   const plannerReason = plannerAvailability?.reason;
   const plannerHint = plannerAvailability?.hint;
@@ -586,7 +566,6 @@ const App = () => {
       ? `${runPlan.candidateCount} candidate${runPlan.candidateCount === 1 ? "" : "s"}`
       : `${planCandidates.length} candidate${planCandidates.length === 1 ? "" : "s"}`;
   const planStatusText = runPlan?.status ?? null;
-  const outcomeSummary = runPlan?.outcomeCounts ?? [];
 
   const runPlanCandidates: NextCheckPlanCandidate[] = runPlan?.candidates ?? [];
   const discoveryVariantOrder: NextCheckStatusVariant[] = DISCOVERY_VARIANT_ORDER;
@@ -601,8 +580,6 @@ const App = () => {
 
   const {
     deterministicChecks,
-    deterministicClusters,
-    hasDeterministicNextChecks,
     deterministicSummary,
   } = buildDeterministicChecksProps({ run });
 
@@ -728,36 +705,38 @@ const App = () => {
     queuePanelProps,
   });
 
+  // Extract recent runs panel props
+  const recentRunsPanelProps = useAppRecentRunsPanelProps({
+    runsList,
+    selectedRunId,
+    runsFilter,
+    runsFilterCounts,
+    paginatedRunsList,
+    filteredRunsList,
+    runsListLoading,
+    runsListError,
+    runsPage,
+    totalRunsPages,
+    runsPageSize,
+    isRunsListFollowingSelection,
+    isSelectedRunVisibleOnCurrentRunsPage,
+    executingBatchRunId,
+    batchExecutionError,
+    onRunsFilterChange: handleRunsFilterChange,
+    onRunsPageChange: handleRunsPageChange,
+    onRunsPageSizeChange: handleRunsPageSizeChange,
+    onRunSelection: handleRunSelectionViaRunControl,
+    onBatchExecution: handleBatchExecution,
+    onShowSelectedRun: handleShowSelectedRun,
+    onFocusClusterForNextChecks: runSummaryLoadedProps.onFocusClusterForNextChecks,
+  });
+
   return (
     <div className="app-shell">
       <AppHeader {...appHeaderProps} />
       <AppNavigation run={run} />
       {error && <div className="alert">{error}</div>}
-      <RecentRunsPanel
-        runsList={runsList}
-        selectedRunId={selectedRunId}
-        runsFilter={runsFilter}
-        runsFilterCounts={runsFilterCounts}
-        paginatedRunsList={paginatedRunsList}
-        filteredRunsList={filteredRunsList}
-        runsListLoading={runsListLoading}
-        runsListError={runsListError}
-        runsListRefreshing={runsListLoading && runsList.length > 0}
-        runsPage={runsPage}
-        totalRunsPages={totalRunsPages}
-        runsPageSize={runsPageSize}
-        isRunsListFollowingSelection={isRunsListFollowingSelection}
-        isSelectedRunVisibleOnCurrentRunsPage={isSelectedRunVisibleOnCurrentRunsPage}
-        executingBatchRunId={executingBatchRunId}
-        batchExecutionError={batchExecutionError}
-        onRunsFilterChange={handleRunsFilterChange}
-        onRunsPageChange={handleRunsPageChange}
-        onRunsPageSizeChange={handleRunsPageSizeChange}
-        onRunSelection={handleRunSelectionViaRunControl}
-        onBatchExecution={handleBatchExecution}
-        onShowSelectedRun={handleShowSelectedRun}
-        onFocusClusterForNextChecks={runSummaryLoadedProps.onFocusClusterForNextChecks}
-      />
+      <RecentRunsPanel {...recentRunsPanelProps} />
       <AppRunSummarySection
         run={run}
         runOwnedPanelState={runOwnedPanelState}

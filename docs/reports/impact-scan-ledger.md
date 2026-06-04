@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-05 — Recent runs panel props extraction
+
+- **Change:** Extracted RecentRunsPanel prop wiring from `App.tsx` into `frontend/src/app/useAppRecentRunsPanelProps.ts`.
+- **Impact map present:** Yes. ACT prompt identified run selection, selected-run status, pagination, and batch execution prop wiring.
+- **Scope drift:** `frontend/src/App.tsx` (modified), `frontend/src/app/useAppRecentRunsPanelProps.ts` (new, 117 lines).
+- **Behavior risk:** Recent run selection, selected-run pagination, RunControl fetch ownership, batch execution button state, and selected-run error/status rendering must remain unchanged.
+- **Targeted tests:** `app.test.tsx` (120 tests), recent-runs execution status tests, recent-runs execute button tests, demo-shell regression tests.
+- **Result:** All 1422 tests passed. App.tsx reduced from 821 to 800 lines (-21). Removed dead code: NotificationHistoryTable, VmalertDiscoveryPanel, VmalertAlertStatePanel imports; computePageForRunId, highlightExecutionEntry, isLoading, isError, orphanedApprovals, planArtifactLink, outcomeSummary, autoRefreshSelectValue, autoRefreshStatusText, recommendedArtifacts variables.
+- **Lesson:** No surprises; extraction stayed surgical. Hook preserves exact RecentRunsPanel lifecycle including stale-while-refresh derivation.
+
+---
+
 ### 2026-06-04 — App header props extraction
 
 - **Change:** Extracted App header derived props from `App.tsx` into `frontend/src/app/useAppHeaderProps.ts`.
