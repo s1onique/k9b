@@ -344,6 +344,34 @@ class PipelineVerifier:
                 
         return all_found
 
+    def verify_impact_scan_ledger_rule_in_tool_use(self) -> bool:
+        """Verify impact-scan ledger close report requirement exists in tool-use rules."""
+        tool_use_rules = self.repo_root / ".kilocode" / "rules" / "40-tool-use.md"
+        
+        if not tool_use_rules.exists():
+            self.log_error("40-tool-use.md not found")
+            return False
+            
+        with open(tool_use_rules) as f:
+            content = f.read()
+            
+        # Check for the impact scan ledger close report requirement
+        required_phrases = [
+            'Impact Scan Ledger',
+            'Updated: docs/reports/impact-scan-ledger.md',
+            'Skipped:',
+        ]
+        
+        all_found = True
+        for phrase in required_phrases:
+            if phrase in content:
+                self.log_pass(f"Impact scan ledger rule includes: {phrase}")
+            else:
+                self.log_error(f"Impact scan ledger rule missing: {phrase}")
+                all_found = False
+                
+        return all_found
+
     def run_all_checks(self) -> bool:
         """Run all verification checks."""
         print("=" * 60)
@@ -364,6 +392,7 @@ class PipelineVerifier:
             ("Global rules reference manifest", self.verify_00_global_references_manifest),
             ("Path security doctrine content", self.verify_path_security_doctrine_content),
             ("Close report section in rules", self.verify_close_report_section_in_rules),
+            ("Impact scan ledger rule in tool-use", self.verify_impact_scan_ledger_rule_in_tool_use),
         ]
         
         all_passed = True

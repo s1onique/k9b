@@ -119,4 +119,7 @@ When implementation finishes, report:
 4. Tests updated
 5. Verification run
 6. Remaining risks / edge cases
+7. **Impact Scan Ledger:** For non-trivial edits, include:
+   - `Updated: docs/reports/impact-scan-ledger.md`
+   - or `Skipped: <short rationale>` if the edit was trivial (docs-only, pure formatting, generated artifact, lockfile-only with no runtime behavior change)
 

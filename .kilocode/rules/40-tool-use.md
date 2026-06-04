@@ -210,6 +210,30 @@ rg + git grep + existing tests > AST > tree-sitter > local DB > external tool
 
 **Retrospective evidence:** For repeated impact-scan use, record lightweight retrospective evidence in `docs/reports/impact-scan-ledger.md` when it helps evaluate whether the discipline reduces surprise. The ledger is optional retrospective evidence, not a mandatory blocker for every trivial edit.
 
+### Impact Scan Ledger Close Report Requirement
+
+For non-trivial behavior-affecting edits, the agent close report must include an **"Impact Scan Ledger"** section with one of:
+
+- `Updated: docs/reports/impact-scan-ledger.md`
+- `Skipped: <short rationale>`
+
+**Examples of non-trivial edits requiring ledger or explicit skip:**
+- extracting handlers/hooks from App.tsx
+- moving state ownership
+- changing queue, run selection, cluster selection, approval, manual execution, or demo shell behavior
+- modifying CI/gate scripts
+- changing prompt/security/evidence boundaries
+- adding/removing tests that alter verification scope
+- handler extractions that affect UI navigation causal chains
+
+**Examples of valid skip rationale:**
+- `docs-only typo fix`
+- `pure formatting change`
+- `generated artifact only`
+- `dependency lockfile-only update with no runtime behavior change`
+
+**Why:** The impact-scan effectiveness ledger measures whether the discipline reduces surprise, scope drift, reviewer friction, and missed test targeting. Non-trivial edits that skip the ledger without explicit rationale break the evidence loop needed to evaluate and improve the discipline.
+
 ### Prohibited
 
 Do not install or add for impact scanning:

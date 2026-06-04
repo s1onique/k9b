@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-04 — Run selection handler extraction
+
+- **Change:** Extracted `handleRunSelectionViaRunControl` from `App.tsx` into `frontend/src/app/useAppRunSelectionHandlers.ts`.
+- **Impact map present:** Partial. The ACT prompt described impacted behavior, but the impact-scan ledger was not updated before close.
+- **Scope drift:** No unexpected files. Changed `frontend/src/App.tsx` and added `frontend/src/app/useAppRunSelectionHandlers.ts`.
+- **Behavior risk:** Run-selection causal chain must remain `runControlSelectRun(runId)` followed by `navigateToPageContainingRun(runId)`.
+- **Targeted tests:** `app.test.tsx`, recent-runs navigation sync, selected-run pagination sync, run-control app fetch ownership.
+- **Result:** Focused tests passed; TypeScript issue was reported as pre-existing if encountered.
+- **Lesson:** Handler extractions affecting UI navigation must update this ledger or include an explicit skip rationale in the close report.
+
+---
+
 ### 2026-06-04 — Trial impact scan on App.tsx/component split workflow
 
 - Target: `frontend/src/App.tsx`
