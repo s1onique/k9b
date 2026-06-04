@@ -56,6 +56,7 @@ import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
 import { useQueueFilterHandlers } from "./app/useQueueFilterHandlers";
+import { usePlannerDataProps } from "./app/usePlannerDataProps";
 import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
 import { useAppDiagnosePanelsProps } from "./app/useAppDiagnosePanelsProps";
 import { useAppClusterDetailSectionProps } from "./app/useAppClusterDetailSectionProps";
@@ -97,8 +98,6 @@ import {
   determineNextCheckStatusVariant,
   nextCheckStatusLabel,
   getPlanStatusLabel,
-  buildDiscoveryVariantCounts,
-  DISCOVERY_VARIANT_ORDER,
   NEXT_CHECK_QUEUE_STATUS_LABELS,
   NEXT_CHECK_QUEUE_STATUS_ORDER,
   QUEUE_SORT_OPTIONS,
@@ -515,33 +514,28 @@ const App = () => {
     statusClass,
   });
 
-  const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
-  const runPlan = run?.nextCheckPlan;
-  const plannerAvailability = run?.plannerAvailability ?? null;
-  const plannerReason = plannerAvailability?.reason;
-  const plannerHint = plannerAvailability?.hint;
-  const plannerArtifactPath = plannerAvailability?.artifactPath ?? runPlan?.artifactPath ?? null;
-  const plannerArtifactUrl = plannerArtifactPath ? artifactUrl(plannerArtifactPath) : null;
-  const plannerNextActionHint = plannerAvailability?.nextActionHint;
-  const planSummaryText =
-    runPlan?.summary ?? plannerReason ?? "Provider-assisted next-check candidates are available.";
-  const plannerReasonText = plannerReason ?? "Planner data is not available for this run.";
-  const planCandidateCountLabel =
-    runPlan?.candidateCount != null
-      ? `${runPlan.candidateCount} candidate${runPlan.candidateCount === 1 ? "" : "s"}`
-      : `${planCandidates.length} candidate${planCandidates.length === 1 ? "" : "s"}`;
-  const planStatusText = runPlan?.status ?? null;
-
-  const runPlanCandidates: NextCheckPlanCandidate[] = runPlan?.candidates ?? [];
-  const discoveryVariantOrder: NextCheckStatusVariant[] = DISCOVERY_VARIANT_ORDER;
-  const discoveryVariantCounts = buildDiscoveryVariantCounts(runPlanCandidates);
-  const discoveryClusters = Array.from(
-    new Set(
-      runPlanCandidates
-        .map((candidate) => candidate.targetCluster)
-        .filter((label): label is string => Boolean(label))
-    )
-  );
+  // Extract planner data derivation - all planner-derived values in one place
+  const {
+    planCandidates,
+    runPlan,
+    plannerAvailability,
+    plannerReason,
+    plannerHint,
+    plannerArtifactPath,
+    plannerArtifactUrl,
+    plannerNextActionHint,
+    planSummaryText,
+    plannerReasonText,
+    planCandidateCountLabel,
+    planStatusText,
+    runPlanCandidates,
+    discoveryVariantOrder,
+    discoveryVariantCounts,
+    discoveryClusters,
+  } = usePlannerDataProps({
+    run,
+    clusterDetail,
+  });
 
   const {
     deterministicChecks,

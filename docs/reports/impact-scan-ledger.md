@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-05 — Planner data derivation extraction
+
+- **Change:** Extracted planner data derivation from `App.tsx` into `frontend/src/app/usePlannerDataProps.ts`.
+- **Impact map present:** Yes. ACT prompt identified planner availability, candidate counts, plan status, run plan candidates, discovery variant ordering, and discovered cluster derivation.
+- **Scope drift:** `frontend/src/App.tsx` (modified), `frontend/src/app/usePlannerDataProps.ts` (new, 160 lines), `frontend/src/app/usePlannerDataProps.test.ts` (new, 34 tests).
+- **Behavior risk:** Planner availability text, candidate count labels, status text, discovered clusters, and discovery variant counts/order must remain unchanged.
+- **Targeted tests:** `usePlannerDataProps.test.ts` (34 tests), `app.test.tsx` (120 tests).
+- **Result:** All 1544 tests passed. App.tsx reduced from 753 to 747 lines (-6). Build succeeds. Hook preserves all exact planner data derivation behavior.
+- **Lesson:** No surprises; extraction stayed surgical. Hook preserves exact plan candidate counts (singular/plural), discovery variant counts, and discovered cluster derivation.
+
+---
+
 ### 2026-06-05 — Queue filter handlers extraction
 
 - **Change:** Extracted queue filter/reset handlers from `App.tsx` into `frontend/src/app/useQueueFilterHandlers.ts`.
