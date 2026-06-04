@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-04 — Cluster selection handler extraction
+
+- **Change:** Extracted cluster selection / cluster detail expansion handlers from `App.tsx` into `frontend/src/app/useAppClusterSelectionHandlers.ts`.
+- **Impact map present:** Yes. ACT prompt identified fleet selection, cluster detail expansion, row highlighting, and focusClusterForNextChecks interactions.
+- **Scope drift:** No unexpected files. Changed `frontend/src/App.tsx` and added `frontend/src/app/useAppClusterSelectionHandlers.ts`.
+- **Behavior risk:** Cluster row selection, keyboard selection, cluster detail expansion, highlighted row timing, and focus-to-cluster behavior must remain unchanged.
+- **Targeted tests:** `app.test.tsx`, fleet table tests, ClusterDetailSection tests, cluster navigation tests, demo-shell smoke.
+- **Result:** All 70 test files (1422 tests) passed. App.tsx reduced from 866 to 863 lines. New hook is 60 lines.
+- **Lesson:** No surprises; extraction stayed surgical. Hook preserves exact delegation behavior.
+
+---
+
 ### 2026-06-04 — Run selection handler extraction
 
 - **Change:** Extracted `handleRunSelectionViaRunControl` from `App.tsx` into `frontend/src/app/useAppRunSelectionHandlers.ts`.

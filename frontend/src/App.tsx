@@ -57,6 +57,7 @@ import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLanePro
 import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
 import { useAppApprovalHandlers } from "./app/useAppApprovalHandlers";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
+import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -434,16 +435,12 @@ const App = () => {
     }
   }, [selectedRunId, poll, retrySelectedRun]);
 
-  // Derive selectedClusterLabel from hook (with local clusterDetailExpanded handling)
-  const selectedClusterLabel = hookSelectedClusterLabel;
-
-  // Handle cluster selection - combines hook logic with local clusterDetailExpanded state
-  const handleClusterSelection = (label: string, options?: { expand?: boolean }) => {
-    hookHandleClusterSelection(label, options);
-    if (options?.expand) {
-      setClusterDetailExpanded(true);
-    }
-  };
+  // Cluster selection handlers - extracted to hook
+  const { selectedClusterLabel, handleClusterSelection } = useAppClusterSelectionHandlers({
+    hookHandleClusterSelection,
+    hookSelectedClusterLabel,
+    setClusterDetailExpanded,
+  });
 
   const {
     scrollToSection,
