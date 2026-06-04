@@ -54,6 +54,7 @@ import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
 import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellProps } from "./app/useAppDemoShellProps";
+import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -950,6 +951,20 @@ const App = () => {
     headerRunTimestamp,
   });
 
+  // Extract proposal section props
+  const proposalSectionProps = useAppProposalSectionProps({
+    proposals,
+    statusFilter,
+    sortKey,
+    searchText,
+    statusOptions,
+    expandedProposals,
+    setStatusFilter,
+    setSortKey,
+    setSearchText,
+    handleToggleProposal,
+  });
+
   return (
     <div className="app-shell">
       <AppHeader
@@ -1064,18 +1079,7 @@ const App = () => {
         nextCheckPlanSectionProps={nextCheckPlanSectionProps}
       />
     <WorkflowLaneHeader type="improve" />
-      <AppProposalsSection
-        proposals={proposals.proposals}
-        statusFilter={statusFilter}
-        sortKey={sortKey}
-        searchText={searchText}
-        statusOptions={statusOptions}
-        expandedProposals={expandedProposals}
-        onStatusFilterChange={(event) => setStatusFilter(event.target.value)}
-        onSortKeyChange={(event) => setSortKey(event.target.value as SortKey)}
-        onSearchTextChange={(event) => setSearchText(event.target.value)}
-        onToggleProposal={handleToggleProposal}
-      />
+      <AppProposalsSection {...proposalSectionProps} />
       <AppImprovePanels run={run} />
       <AppDemoShellOverlay {...demoShellOverlayProps} />
     </div>
