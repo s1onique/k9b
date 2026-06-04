@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-05 — ClusterDetailSection props extraction
+
+- **Change:** Extracted ClusterDetailSection prop wiring from `App.tsx` into `frontend/src/app/useAppClusterDetailSectionProps.ts`. The hook delegates to `useAppClusterPlanProps` and combines it with direct JSX props.
+- **Impact map present:** Yes. ACT prompt identified ClusterDetailSection JSX block (14 props) and clusterPlanProps hook call (14 args) as candidates for consolidation.
+- **Scope drift:** `frontend/src/App.tsx` (modified), `frontend/src/app/useAppClusterDetailSectionProps.ts` (new, 128 lines).
+- **Behavior risk:** Cluster detail display, cluster selection, tab switching, cluster detail expansion, artifact links, and next-check plan section must remain unchanged.
+- **Targeted tests:** `app.test.tsx` (120 tests), cluster detail tests, fleet table tests, demo-shell regression tests.
+- **Result:** All 1493 tests passed. App.tsx reduced from 798 to 794 lines (-4). Build succeeds. Hook delegates to existing useAppClusterPlanProps, preserving all behavior.
+- **Lesson:** Small but meaningful extraction; the hook overhead is minimal relative to the prop block size. The hook delegates to existing code rather than duplicating logic.
+
+---
+
 ### 2026-06-05 — Recent runs panel props extraction
 
 - **Change:** Extracted RecentRunsPanel prop wiring from `App.tsx` into `frontend/src/app/useAppRecentRunsPanelProps.ts`.

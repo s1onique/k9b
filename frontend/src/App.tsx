@@ -57,6 +57,7 @@ import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHand
 import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
 import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
 import { useAppDiagnosePanelsProps } from "./app/useAppDiagnosePanelsProps";
+import { useAppClusterDetailSectionProps } from "./app/useAppClusterDetailSectionProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { formatDuration } from "./components/ExecutionHistoryPanel";
@@ -529,8 +530,8 @@ const App = () => {
     );
   }
 
-  // Derive ClusterDetailSection props from extracted hook
-  const clusterPlanProps = useAppClusterPlanProps({
+  // Extract cluster detail section props
+  const clusterDetailSectionProps = useAppClusterDetailSectionProps({
     clusterDetail,
     selectedClusterLabel,
     fleet,
@@ -544,6 +545,15 @@ const App = () => {
     refresh,
     buildCandidateKey,
     isManualExecutionAllowed,
+    activeTab,
+    setActiveTab,
+    clusterDetailExpanded,
+    setClusterDetailExpanded,
+    highlightedClusterLabel,
+    handleClusterSelection,
+    artifactUrl,
+    formatTimestamp,
+    statusClass,
   });
 
   const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
@@ -772,21 +782,7 @@ const App = () => {
         highlightedClusterLabel={highlightedClusterLabel}
         onClusterSelect={handleClusterSelection}
       />
-      <ClusterDetailSection
-        clusterDetail={clusterDetail}
-        selectedClusterLabel={selectedClusterLabel}
-        {...clusterPlanProps}
-        fleet={fleet}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        clusterDetailExpanded={clusterDetailExpanded}
-        setClusterDetailExpanded={setClusterDetailExpanded}
-        highlightedClusterLabel={highlightedClusterLabel}
-        handleClusterSelection={handleClusterSelection}
-        artifactUrl={artifactUrl}
-        formatTimestamp={formatTimestamp}
-        statusClass={statusClass}
-      />
+      <ClusterDetailSection {...clusterDetailSectionProps} />
     <WorkflowLaneHeader type="improve" />
       <AppProposalsSection {...proposalSectionProps} />
       <AppImprovePanels run={run} />
