@@ -53,7 +53,7 @@ import { AppProposalsSection } from "./app/AppProposalsSection";
 import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
 import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
-import { useAppDemoShellProps } from "./app/useAppDemoShellProps";
+import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 
 import { ProposalList } from "./components/ProposalList";
@@ -64,9 +64,6 @@ import { buildDeterministicChecksProps } from "./components/DeterministicNextChe
 import { QueuePanel } from "./components/QueuePanel";
 import { buildQueuePanelProps } from "./components/QueuePanel/buildQueuePanelProps";
 import { WorkNextChecksLane } from "./components/WorkNextChecksLane";
-import { DemoShell } from "./components/DemoShell";
-import { useDemoShellModel } from "./demo-shell/useDemoShellModel";
-import { buildDemoShellFindingInput } from "./demo-shell/buildDemoShellFindingInput";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
 import { buildClusterDetailSectionProps } from "./components/ClusterDetailSection/buildClusterDetailSectionProps";
@@ -426,10 +423,6 @@ const App = () => {
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
 
-  // Demo shell state - ACT 9.5: Mount K8s Accelerator demo shell in UI
-  // Elm-ish model extracted for clean hook ordering
-  const demoShell = useDemoShellModel();
-
   // Run selection causal chain:
   // - runControlSelectRun triggers RunControl to fetch /api/run for the selected run.
   // - navigateToPageContainingRun keeps the Recent Runs list page in sync with the selected run.
@@ -742,16 +735,15 @@ const App = () => {
     ? Math.floor(dayjs().diff(headerRunTimestamp, "minute"))
     : 0;
 
-  // Build finding selection input from real/current run data
-  // Maps run, incident report, and worklist to demo finding selection format
-  // ACT 9.5: Real-derived input for DemoShell
-  // NOTE: Moved BEFORE early return to fix hook-order consistency
-  const findingSelectionInput = buildDemoShellFindingInput({
+  // Extract demo shell overlay props - MUST be before early return to maintain consistent hook order
+  // This hook uses useDemoShellModel (useReducer) which must always be called in the same order
+  const { onOpen: demoShellOpen, overlayProps: demoShellOverlayProps } = useAppDemoShellOverlayProps({
     run,
-    selectedRunId,
-    selectedClusterLabel,
     runAgeMinutes,
     runFresh,
+    selectedRunId,
+    selectedClusterLabel,
+    headerRunTimestamp,
   });
 
   // Progressive loading: only wait for CRITICAL data (fleet + proposals).
@@ -940,17 +932,6 @@ const App = () => {
     refresh,
   });
 
-  // Extract demo shell overlay props
-  const demoShellOverlayProps = useAppDemoShellProps({
-    isOpen: demoShell.state.isOpen,
-    onClose: demoShell.closeDemo,
-    findingSelectionInput,
-    selectedRunId,
-    selectedClusterLabel,
-    runFresh,
-    headerRunTimestamp,
-  });
-
   // Extract proposal section props
   const proposalSectionProps = useAppProposalSectionProps({
     proposals,
@@ -979,7 +960,7 @@ const App = () => {
         autoRefreshInterval={autoRefreshInterval}
         onAutoRefreshChange={handleAutoRefreshChange}
         onClickLatest={clickLatest}
-        onOpenDemo={demoShell.openDemo}
+        onOpenDemo={demoShellOpen}
       />
       <AppNavigation run={run} />
       {error && <div className="alert">{error}</div>}
