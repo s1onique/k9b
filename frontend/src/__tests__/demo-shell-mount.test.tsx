@@ -12,8 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, fireEvent, cleanup, act, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import App from "../App";
 
@@ -39,14 +38,6 @@ const defaultPayloads = {
   "/api/debug/execution-diagnostics-enabled": { debugExecutionDiagnosticsEnabled: false },
 };
 
-// Helper to render App with mocks
-const renderApp = () => {
-  vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-  vi.stubGlobal("localStorage", createStorageMock());
-  render(<App />);
-  return { fetchMock: createFetchMock(defaultPayloads) };
-};
-
 describe("Demo Shell Mount (ACT 9.5)", () => {
   let setIntervalSpy: ReturnType<typeof vi.fn>;
   let clearIntervalSpy: ReturnType<typeof vi.fn>;
@@ -64,6 +55,10 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     cleanup();
+    // CRITICAL: Always restore real timers to prevent test isolation failures.
+    // Tests using vi.useFakeTimers() may fail before reaching vi.useRealTimers(),
+    // leaving fake timers active for subsequent tests and causing timeouts.
+    vi.useRealTimers();
   });
 
   describe("Demo entry point visibility", () => {
@@ -142,7 +137,6 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       fireEvent.click(startDemoButton);
 
       // The demo shell should exist and show the start screen
-      // (The findingSelectionInput is passed internally; we're verifying the shell opens correctly)
       expect(screen.getByTestId("demo-shell")).toBeInTheDocument();
     });
   });
@@ -195,8 +189,6 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
 
   describe("Demo shell navigation flow", () => {
     it("can proceed through demo flow after opening", async () => {
-      vi.useFakeTimers();
-
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
 
@@ -217,15 +209,10 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const connectButton = screen.getByTestId("demo-connect-button");
       fireEvent.click(connectButton);
 
-      // Advance timers
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+      // Wait for the 1500ms connection delay to complete
+      await waitFor(() => {
+        expect(screen.getByText("minikube")).toBeInTheDocument();
       });
-
-      // Should show dashboard
-      expect(screen.getByText("minikube")).toBeInTheDocument();
-
-      vi.useRealTimers();
     });
   });
 
@@ -240,9 +227,9 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      // Verify no forbidden phrases
-      const demoContent = document.querySelector(".demo-shell-overlay");
-      expect(demoContent?.textContent).not.toMatch(/\bself-healing\b/i);
+      // Wait for demo shell to appear and verify content
+      const demoShell = await screen.findByTestId("demo-shell");
+      expect(demoShell.textContent).not.toMatch(/\bself-healing\b/i);
     });
 
     it("does not contain 'guaranteed root cause' in demo shell content", async () => {
@@ -254,8 +241,8 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      const demoContent = document.querySelector(".demo-shell-overlay");
-      expect(demoContent?.textContent).not.toMatch(/\bguaranteed root cause\b/i);
+      const demoShell = await screen.findByTestId("demo-shell");
+      expect(demoShell.textContent).not.toMatch(/\bguaranteed root cause\b/i);
     });
 
     it("does not contain 'automatic production fix' in demo shell content", async () => {
@@ -267,8 +254,8 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      const demoContent = document.querySelector(".demo-shell-overlay");
-      expect(demoContent?.textContent).not.toMatch(/\bautomatic production fix\b/i);
+      const demoShell = await screen.findByTestId("demo-shell");
+      expect(demoShell.textContent).not.toMatch(/\bautomatic production fix\b/i);
     });
 
     it("does not contain 'fixes any Kubernetes issue' in demo shell content", async () => {
@@ -280,8 +267,8 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      const demoContent = document.querySelector(".demo-shell-overlay");
-      expect(demoContent?.textContent).not.toMatch(/\bfixes any Kubernetes issue\b/i);
+      const demoShell = await screen.findByTestId("demo-shell");
+      expect(demoShell.textContent).not.toMatch(/\bfixes any Kubernetes issue\b/i);
     });
 
     it("does not contain 'fully autonomous' in demo shell content", async () => {
@@ -293,8 +280,8 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      const demoContent = document.querySelector(".demo-shell-overlay");
-      expect(demoContent?.textContent).not.toMatch(/\bfully autonomous\b/i);
+      const demoShell = await screen.findByTestId("demo-shell");
+      expect(demoShell.textContent).not.toMatch(/\bfully autonomous\b/i);
     });
   });
 
@@ -308,7 +295,10 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      expect(screen.getByText(/No fake incidents/i)).toBeInTheDocument();
+      // Wait for demo shell to appear
+      const demoShell = await screen.findByTestId("demo-shell");
+      // The demo shell should contain "No fake incidents" text
+      expect(demoShell.textContent).toMatch(/No fake incidents/i);
     });
 
     it("start screen shows safety disclaimers", async () => {
@@ -320,20 +310,22 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
+      // Wait for demo shell to appear
+      const demoShell = await screen.findByTestId("demo-shell");
+
       // Safety first message
-      expect(screen.getByText(/Safety first/i)).toBeInTheDocument();
+      expect(demoShell.textContent).toMatch(/Safety first/i);
       // Preview-only or operator approval requirement
-      expect(screen.getByText(/preview-only|require operator approval/i)).toBeInTheDocument();
+      expect(demoShell.textContent).toMatch(/preview-only|require operator approval/i);
     });
 
     it("dashboard shows evidence source badge", async () => {
-      vi.useFakeTimers();
-
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
 
       await screen.findByRole("heading", { name: /Fleet overview/i });
 
+      // Open demo
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
@@ -344,14 +336,11 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const connectButton = screen.getByTestId("demo-connect-button");
       fireEvent.click(connectButton);
 
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+      // Wait for the 1500ms connection delay to complete
+      await waitFor(() => {
+        const demoShell = screen.getByTestId("demo-shell");
+        expect(demoShell.textContent).toMatch(/Evidence source:/i);
       });
-
-      // Evidence source badge should be visible
-      expect(screen.getByText(/Evidence source:/i)).toBeInTheDocument();
-
-      vi.useRealTimers();
     });
   });
 
@@ -365,19 +354,12 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       const startDemoButton = screen.getByTestId("start-demo-button");
       fireEvent.click(startDemoButton);
 
-      // The demo start screen should not claim any real incidents
-      // It should show "No fake incidents, no fabricated samples"
-      const startScreenText = document.querySelector(".demo-shell-overlay")?.textContent ?? "";
+      // Wait for demo shell to appear
+      const demoShell = await screen.findByTestId("demo-shell");
+      const startScreenText = demoShell.textContent ?? "";
       
       // Verify explicit no-fake statement
       expect(startScreenText).toMatch(/No fake incidents|no fabricated samples/i);
-      
-      // If there are findings shown, they should be from live scan or have honest labeling
-      // The presence of evidence source badges indicates honest labeling
-      const hasEvidenceLabel = document.querySelector(".demo-badge--source-live") || 
-                               document.querySelector(".demo-badge--source-historical") ||
-                               document.querySelector(".demo-badge--source-none");
-      // This test verifies the UI has evidence source labeling (truth boundary preserved)
     });
   });
 });
