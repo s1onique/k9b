@@ -172,6 +172,7 @@ export {
 import type { LlmTelemetryPreviewData } from "./components/run-summary/RunOverviewDashboard";
 import { renderLlmStatsLine } from "./components/run-summary/renderLlmStatsLine";
 import { useRunHeaderModel } from "./components/run-summary/useRunHeaderModel";
+import { useRunSummaryProps } from "./components/run-summary/useRunSummaryProps";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -849,24 +850,12 @@ const App = () => {
   // headerRunTimestamp already computed above (before early return) for findingSelectionInput
   // Reuse it here for the freshness indicator; hook returns latestRunTimestamp but not headerRunTimestamp
 
-  const degradedCount =
-    fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")?.count ?? 0;
-  const hasDegradedClusters = degradedCount > 0;
-  const runStatsSummary = headerStats.map((stat) => `${stat.label} ${stat.value}`).join(" · ");
-  // Use fleet cluster count instead of run.clusterCount when run is null
-  const runSummaryStats = run ? [
-    { label: "Clusters", value: run.clusterCount },
-    { label: "Degraded", value: degradedCount },
-    { label: "Proposals", value: run.proposalCount },
-    { label: "Notifications", value: run.notificationCount },
-    { label: "Drilldowns", value: run.drilldownCount },
-  ] : [
-    { label: "Clusters", value: fleet.clusters.length },
-    { label: "Degraded", value: degradedCount },
-    { label: "Proposals", value: "—" },
-    { label: "Notifications", value: "—" },
-    { label: "Drilldowns", value: "—" },
-  ];
+  // Derive RunSummaryPanel-specific props from extracted hook
+  const { runStatsSummary, runSummaryStats, degradedCount, hasDegradedClusters } = useRunSummaryProps({
+    run,
+    fleet,
+    headerStats,
+  });
   const selectedCluster = fleet.clusters.find((cluster) => cluster.label === selectedClusterLabel) ?? null;
   const clusterRecency = selectedCluster?.latestRunTimestamp
     ? relativeRecency(selectedCluster.latestRunTimestamp)
