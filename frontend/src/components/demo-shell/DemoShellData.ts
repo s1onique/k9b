@@ -50,13 +50,18 @@ export const containsForbiddenPhrase = (text: string): boolean => {
 export const getStepName = (step: DemoStep): string => {
   const names: Record<DemoStep, string> = {
     start: "Start",
-    onboarding: "Connect Cluster",
+    onboarding: "Selected Real Run",
     dashboard: "Dashboard",
     "finding-detail": "Finding Detail",
     "action-panel": "Recommended Action",
   };
   return names[step];
 };
+
+/** Get freshness label for context display */
+export function getFreshnessLabel(isFresh: boolean): string {
+  return isFresh ? "Fresh" : "Stale";
+}
 
 /** Get safety mode description */
 export const getSafetyModeDescription = (mode: SafetyMode): string => {

@@ -12,6 +12,7 @@ export type {
   SafetyMode,
   DemoFinding,
   DemoShellProps,
+  DemoShellRealContext,
 } from "./DemoShellTypes";
 
 // Data and constants
@@ -24,6 +25,7 @@ export {
   containsForbiddenPhrase,
   getStepName,
   getSafetyModeDescription,
+  getFreshnessLabel,
   getActionSafetyCopy,
   getActionCta,
   getActionRiskLabel,

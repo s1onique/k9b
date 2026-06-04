@@ -50,10 +50,26 @@ export interface DemoFinding {
   safetyMode: SafetyMode;
 }
 
+/** Real context metadata when DemoShell is launched from the main app */
+export interface DemoShellRealContext {
+  /** Selected run ID */
+  runId: string;
+  /** Selected cluster label */
+  clusterLabel?: string;
+  /** Whether the run data is fresh */
+  isFresh: boolean;
+  /** Timestamp when the run was captured (ISO string) */
+  runCapturedAt?: string;
+  /** Initial safety mode for the demo */
+  initialSafetyMode?: SafetyMode;
+}
+
 /** Props for DemoShell component */
 export interface DemoShellProps {
   /** Callback when demo shell is closed */
   onClose?: () => void;
   /** Initial step for testing */
   initialStep?: DemoStep;
+  /** Real context metadata when launched from the main app */
+  realContext?: DemoShellRealContext;
 }

@@ -1,49 +1,85 @@
 /**
  * Demo Shell Onboarding Screen Component
  *
- * Cluster connection and safety mode selection screen.
+ * Shows real run context summary when launched from the main app.
+ * This replaces the fake cluster connection step.
  */
 
 import { useState } from "react";
-import type { SafetyMode } from "./DemoShellTypes";
+import type { DemoShellRealContext, SafetyMode } from "./DemoShellTypes";
 import { SafetyModeLabel } from "./DemoShellBadges";
-import { getSafetyModeDescription } from "./DemoShellData";
+import { getSafetyModeDescription, getFreshnessLabel } from "./DemoShellData";
 
 interface OnboardingScreenProps {
   onConnected: () => void;
   isConnecting: boolean;
+  /** Real context metadata when launched from the main app */
+  realContext?: DemoShellRealContext;
 }
 
-export const OnboardingScreen = ({ onConnected, isConnecting }: OnboardingScreenProps) => {
-  const [safetyMode, setSafetyMode] = useState<SafetyMode>("read-only");
+/**
+ * Format a run ID for display (truncate if too long)
+ */
+function formatRunId(runId: string | undefined): string {
+  if (!runId) return "—";
+  if (runId.length <= 12) return runId;
+  return `${runId.slice(0, 8)}...`;
+}
+
+export const OnboardingScreen = ({ onConnected, isConnecting, realContext }: OnboardingScreenProps) => {
+  const [safetyMode, setSafetyMode] = useState<SafetyMode>(realContext?.initialSafetyMode ?? "read-only");
+  const hasRealContext = Boolean(realContext?.runId);
 
   return (
     <div className="demo-screen demo-screen--onboarding">
       <div className="demo-hero">
-        <h2 className="demo-subtitle">Connect your cluster</h2>
+        <h2 className="demo-subtitle">
+          {hasRealContext ? "Selected real run" : "Ready to start demo"}
+        </h2>
         <p className="demo-description">
-          Select a Kubernetes context and connect in read-only mode.
-          The system will collect real diagnostic evidence.
+          {hasRealContext
+            ? "View findings from the currently selected real run and cluster."
+            : "No real run selected. You can still explore the demo shell."}
         </p>
       </div>
 
       <div className="demo-onboarding-form">
-        <div className="demo-form-group">
-          <label htmlFor="kube-context" className="demo-label">
-            Kubernetes context
-          </label>
-          <select
-            id="kube-context"
-            className="demo-select"
-            defaultValue="minikube"
-            disabled={isConnecting}
-          >
-            <option value="minikube">minikube</option>
-            <option value="kind-dev">kind-dev</option>
-            <option value="prod-cluster">prod-cluster</option>
-          </select>
-        </div>
+        {/* Real context summary - shown when launched from main app */}
+        {hasRealContext && (
+          <div className="demo-context-summary">
+            <div className="demo-context-row">
+              <span className="demo-context-label">Run ID</span>
+              <span className="demo-context-value" data-testid="demo-context-run-id">
+                {formatRunId(realContext.runId)}
+              </span>
+            </div>
+            {realContext.clusterLabel && (
+              <div className="demo-context-row">
+                <span className="demo-context-label">Cluster</span>
+                <span className="demo-context-value" data-testid="demo-context-cluster">
+                  {realContext.clusterLabel}
+                </span>
+              </div>
+            )}
+            <div className="demo-context-row">
+              <span className="demo-context-label">State</span>
+              <span
+                className={`demo-context-value demo-context-freshness ${
+                  realContext.isFresh ? "demo-context-fresh" : "demo-context-stale"
+                }`}
+                data-testid="demo-context-freshness"
+              >
+                {getFreshnessLabel(realContext.isFresh)}
+              </span>
+            </div>
+            <div className="demo-context-row">
+              <span className="demo-context-label">Safety mode</span>
+              <SafetyModeLabel mode={safetyMode} />
+            </div>
+          </div>
+        )}
 
+        {/* Safety mode selection */}
         <div className="demo-form-group">
           <label className="demo-label">Safety mode</label>
           <div className="demo-safety-modes">
@@ -106,7 +142,7 @@ export const OnboardingScreen = ({ onConnected, isConnecting }: OnboardingScreen
           disabled={isConnecting}
           data-testid="demo-connect-button"
         >
-          {isConnecting ? "Connecting..." : "Connect in read-only mode"}
+          {isConnecting ? "Loading..." : "Continue with selected run"}
         </button>
       </div>
     </div>

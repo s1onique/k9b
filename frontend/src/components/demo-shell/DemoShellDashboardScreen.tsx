@@ -1,16 +1,19 @@
 /**
  * Demo Shell Dashboard Screen Component
  *
- * Shows cluster connection status and findings list.
+ * Shows real context summary and findings list.
+ * Uses real cluster/run info instead of fake cluster names.
  */
 
-import type { DemoFinding, EvidenceSource } from "./DemoShellTypes";
+import type { DemoFinding, DemoShellRealContext, EvidenceSource } from "./DemoShellTypes";
 import { EvidenceSourceBadge } from "./DemoShellBadges";
 import { SafetyModeLabel } from "./DemoShellBadges";
 import { SeverityBadge } from "./DemoShellBadges";
+import { getFreshnessLabel } from "./DemoShellData";
 
 interface DashboardScreenProps {
-  clusterName: string;
+  /** Real context metadata when launched from the main app */
+  realContext?: DemoShellRealContext;
   /** Selected findings from demo finding selection */
   findings?: DemoFinding[];
   /** Evidence source for the findings */
@@ -22,8 +25,17 @@ interface DashboardScreenProps {
   isCleanCluster: boolean;
 }
 
+/**
+ * Format a run ID for display (truncate if too long)
+ */
+function formatRunId(runId: string | undefined): string {
+  if (!runId) return "—";
+  if (runId.length <= 12) return runId;
+  return `${runId.slice(0, 8)}...`;
+}
+
 export const DashboardScreen = ({
-  clusterName,
+  realContext,
   findings = [],
   evidenceSource = "none",
   explanation,
@@ -31,6 +43,8 @@ export const DashboardScreen = ({
   onCleanClusterFallback,
   isCleanCluster,
 }: DashboardScreenProps) => {
+  const hasRealContext = Boolean(realContext?.runId);
+
   // Use provided findings or show placeholder if empty
   const displayFindings =
     findings.length > 0
@@ -52,20 +66,68 @@ export const DashboardScreen = ({
   // Determine evidence source for badge
   const badgeSource = findings.length > 0 ? evidenceSource : "none";
 
+  // Determine display name - use real cluster label or placeholder
+  const displayClusterName = realContext?.clusterLabel ?? (hasRealContext ? "Selected cluster" : "—");
+
   return (
     <div className="demo-screen demo-screen--dashboard">
       <div className="demo-dashboard-header">
         <div className="demo-cluster-info">
-          <h2 className="demo-cluster-name">{clusterName}</h2>
+          <h2 className="demo-cluster-name" data-testid="demo-cluster-name">
+            {displayClusterName}
+          </h2>
           <span className={`demo-status-indicator ${isCleanCluster ? "demo-status--healthy" : "demo-status--connected"}`}>
             {isCleanCluster ? "Healthy" : "Connected"}
           </span>
         </div>
         <div className="demo-dashboard-meta">
-          <EvidenceSourceBadge source={isCleanCluster ? "none" : "live"} />
+          {/* Show real context badges when available */}
+          {hasRealContext ? (
+            <>
+              <span
+                className={`demo-badge demo-badge--freshness ${realContext.isFresh ? "demo-badge--fresh" : "demo-badge--stale"}`}
+                data-testid="demo-context-badge"
+              >
+                {getFreshnessLabel(realContext.isFresh)}
+              </span>
+              <span className="demo-badge demo-badge--run-id" data-testid="demo-run-id-badge">
+                Run {formatRunId(realContext.runId)}
+              </span>
+            </>
+          ) : (
+            <EvidenceSourceBadge source={isCleanCluster ? "none" : "live"} />
+          )}
           <SafetyModeLabel mode="read-only" />
         </div>
       </div>
+
+      {/* Real context detail section */}
+      {hasRealContext && (
+        <div className="demo-context-detail" data-testid="demo-context-detail">
+          <div className="demo-context-item">
+            <span className="demo-context-item-label">Run ID</span>
+            <span className="demo-context-item-value">{realContext.runId}</span>
+          </div>
+          {realContext.clusterLabel && (
+            <div className="demo-context-item">
+              <span className="demo-context-item-label">Cluster</span>
+              <span className="demo-context-item-value">{realContext.clusterLabel}</span>
+            </div>
+          )}
+          <div className="demo-context-item">
+            <span className="demo-context-item-label">State</span>
+            <span className={`demo-context-item-value ${realContext.isFresh ? "demo-context-item-value--fresh" : "demo-context-item-value--stale"}`}>
+              {getFreshnessLabel(realContext.isFresh)}
+            </span>
+          </div>
+          {explanation && (
+            <div className="demo-context-item demo-context-item--full">
+              <span className="demo-context-item-label">Findings</span>
+              <span className="demo-context-item-value">{explanation}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="demo-dashboard-content">
         {isCleanCluster ? (
@@ -120,7 +182,9 @@ export const DashboardScreen = ({
 
       <div className="demo-dashboard-footer">
         <p className="demo-footer-note">
-          Evidence source: {isCleanCluster ? "No findings" : "Live scan"} · Last scan: Just now
+          {hasRealContext
+            ? `Real run evidence · Run ${formatRunId(realContext.runId)} · ${getFreshnessLabel(realContext.isFresh)}`
+            : `Evidence source: ${isCleanCluster ? "No findings" : "Live scan"} · Last scan: Just now`}
         </p>
       </div>
     </div>

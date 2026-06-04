@@ -19,7 +19,6 @@ import type {
   DemoFinding,
   DemoStep,
   EvidenceSource,
-  SeverityLevel,
   SafetyMode,
 } from "./demo-shell/DemoShellTypes";
 import { DEFAULT_CONNECTION_DELAY_MS, getStepName } from "./demo-shell/DemoShellData";
@@ -33,12 +32,12 @@ import {
 import { selectDemoFindings, selectHistoricalFindings, getCleanClusterFallback } from "../features/demo";
 
 // Re-export types for backward compatibility
-export type { DemoStep, EvidenceSource, SeverityLevel, SafetyMode, DemoFinding };
+export type { DemoStep, EvidenceSource, SeverityLevel, SafetyMode, DemoFinding, DemoShellRealContext };
 
 // Re-export DEFAULT_CONNECTION_DELAY_MS for backward compatibility
 export { DEFAULT_CONNECTION_DELAY_MS };
 
-// Extended props including finding selection input
+// Extended props including finding selection input and real context
 export interface DemoShellProps {
   /** Callback when demo shell is closed */
   onClose?: () => void;
@@ -67,6 +66,14 @@ export interface DemoShellProps {
   };
   /** Pre-selected historical findings for fallback */
   historicalFindings?: DemoFinding[];
+  /** Real context metadata when launched from the main app */
+  realContext?: {
+    runId: string;
+    clusterLabel?: string;
+    isFresh: boolean;
+    runCapturedAt?: string;
+    initialSafetyMode?: SafetyMode;
+  };
 }
 
 // =============================================================================
@@ -78,6 +85,7 @@ export const DemoShell = ({
   initialStep = "start",
   findingSelectionInput,
   historicalFindings,
+  realContext,
 }: DemoShellProps) => {
   const [currentStep, setCurrentStep] = useState<DemoStep>(initialStep);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -180,7 +188,7 @@ export const DemoShell = ({
 
   const renderDashboard = () => (
     <DashboardScreen
-      clusterName="minikube"
+      realContext={realContext}
       findings={findings}
       evidenceSource={evidenceSource}
       explanation={explanation}
@@ -199,6 +207,7 @@ export const DemoShell = ({
           <OnboardingScreen
             onConnected={handleConnect}
             isConnecting={isConnecting}
+            realContext={realContext}
           />
         );
       case "dashboard":

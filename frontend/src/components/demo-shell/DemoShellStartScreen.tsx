@@ -2,6 +2,7 @@
  * Demo Shell Start Screen Component
  *
  * Initial entry point for the demo shell.
+ * Updated CTA to reflect real run context when launched from main app.
  */
 
 interface StartScreenProps {
@@ -16,7 +17,7 @@ export const StartScreen = ({ onConnect }: StartScreenProps) => (
         Transform Kubernetes operational signals into operator-ready actions
       </p>
       <p className="demo-description">
-        Connect to a real Kubernetes cluster and see live diagnostic evidence.
+        Use the selected real run to see live diagnostic evidence.
         No fake incidents, no fabricated samples.
       </p>
     </div>
@@ -27,7 +28,7 @@ export const StartScreen = ({ onConnect }: StartScreenProps) => (
         onClick={onConnect}
         data-testid="demo-start-button"
       >
-        Start real-cluster demo
+        Use selected real run
       </button>
       <p className="demo-cta-hint">Read-only mode · No cluster mutations</p>
     </div>

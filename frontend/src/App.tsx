@@ -1431,10 +1431,21 @@ const App = () => {
         </section>
       )}
       {/* ACT 9.5: K8s Accelerator demo shell overlay */}
+      {/* Pass real context metadata so the demo shell shows real run/cluster info */}
       {demoShell.state.isOpen && (
         <DemoShell
           onClose={demoShell.closeDemo}
           findingSelectionInput={findingSelectionInput}
+          realContext={
+            selectedRunId
+              ? {
+                  runId: selectedRunId,
+                  clusterLabel: selectedClusterLabel ?? undefined,
+                  isFresh: runFresh,
+                  runCapturedAt: headerRunTimestamp || undefined,
+                }
+              : undefined
+          }
         />
       )}
     </div>
