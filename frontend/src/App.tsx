@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import {
-  fetchNotifications,
   runBatchExecution,
   submitUsefulnessFeedback,
 } from "./api";
@@ -174,9 +173,6 @@ import { useRunHeaderModel } from "./components/run-summary/useRunHeaderModel";
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
 
-type SortKey = "proposalId" | "confidence" | "status";
-
-const NAVIGATION_HIGHLIGHT_DURATION_MS = 2200;
 
 // ==========================================================================
 // Specialized lower advisory section components
