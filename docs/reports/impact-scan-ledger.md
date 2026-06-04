@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-04 — Batch execution handler extraction
+
+- **Change:** Extracted batch execution state and handler logic from `App.tsx` into `frontend/src/app/useAppBatchExecutionHandlers.ts`.
+- **Impact map present:** Yes. ACT prompt identified executingBatchRunId, batchExecutionError, handleBatchExecution, runBatchExecution API, and poll/retrySelectedRun interactions.
+- **Scope drift:** No unexpected files. Changed `frontend/src/App.tsx` and added `frontend/src/app/useAppBatchExecutionHandlers.ts`.
+- **Behavior risk:** Batch execution must preserve run ID loading state, error keying, API payload, and post-execution refresh/poll behavior.
+- **Targeted tests:** `app.test.tsx` (120 tests), `recent-runs-execution-status-regression.test.tsx` (12 tests), `recent-runs-execute-button.test.tsx` (6 tests), `recent-runs-navigation-sync.test.tsx` (4 tests).
+- **Result:** All 142 tests passed. App.tsx reduced from 863 to 837 lines. New hook is 122 lines. Removed stale `runBatchExecution` import and `useState` from App.tsx imports.
+- **Lesson:** No surprises; extraction stayed surgical. Hook preserves exact batch execution lifecycle including API call, poll, retrySelectedRun, and error handling.
+
+---
+
 ### 2026-06-04 — Cluster selection handler extraction
 
 - **Change:** Extracted cluster selection / cluster detail expansion handlers from `App.tsx` into `frontend/src/app/useAppClusterSelectionHandlers.ts`.

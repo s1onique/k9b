@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
-import {
-  runBatchExecution,
-  submitUsefulnessFeedback,
-} from "./api";
+import { submitUsefulnessFeedback } from "./api";
 import { useAppNavigationHighlights } from "./hooks/useAppNavigationHighlights";
 import { useAppData } from "./hooks/useAppData";
 import { useRunSelection } from "./hooks/useRunSelection";
@@ -58,6 +55,7 @@ import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandle
 import { useAppApprovalHandlers } from "./app/useAppApprovalHandlers";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
+import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -394,46 +392,22 @@ const App = () => {
     return null;
   };
 
-  // Batch execution state for recent runs
-  const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
-  const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
+  // Batch execution handlers - extracted to hook
+  const {
+    executingBatchRunId,
+    batchExecutionError,
+    handleBatchExecution,
+  } = useAppBatchExecutionHandlers({
+    selectedRunId,
+    poll,
+    retrySelectedRun,
+  });
 
   // Run selection handlers - extracted to hook
   const { handleRunSelectionViaRunControl } = useAppRunSelectionHandlers({
     runControlSelectRun,
     navigateToPageContainingRun,
   });
-
-  // Handle batch execution for a run - refreshes runs list and selected run via hooks
-  // Phase 5: Uses RunControl's poll() to refresh runs after batch execution completes
-  const handleBatchExecution = useCallback(async (runId: string) => {
-    setExecutingBatchRunId(runId);
-    setBatchExecutionError((prev) => {
-      const next = { ...prev };
-      delete next[runId];
-      return next;
-    });
-    try {
-      // Explicitly send dryRun: false for actual execution
-      // The backend defaults to False, but being explicit improves clarity and debugging
-      await runBatchExecution({ runId, dryRun: false });
-      // Refresh runs list via RunControl's poll() - single authoritative path
-      poll();
-      // If the executed run is currently selected, refresh its data through RunControl
-      // This ensures the execution history / next-check state is up to date
-      if (selectedRunId === runId) {
-        retrySelectedRun();
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Batch execution failed";
-      setBatchExecutionError((prev) => ({
-        ...prev,
-        [runId]: message,
-      }));
-    } finally {
-      setExecutingBatchRunId((current) => (current === runId ? null : current));
-    }
-  }, [selectedRunId, poll, retrySelectedRun]);
 
   // Cluster selection handlers - extracted to hook
   const { selectedClusterLabel, handleClusterSelection } = useAppClusterSelectionHandlers({
