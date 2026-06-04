@@ -56,6 +56,7 @@ import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
+import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -933,6 +934,20 @@ const App = () => {
     handleToggleProposal,
   });
 
+  // Extract work next checks lane props
+  const workNextChecksLaneProps = useAppWorkNextChecksLaneProps({
+    run,
+    executionHistory,
+    runQueue,
+    executionHistoryHighlightKey,
+    handleUsefulnessFeedback,
+    handleAlertmanagerRelevanceFeedback,
+    executionHistoryFilter,
+    setExecutionHistoryFilter,
+    highlightQueueCard,
+    queuePanelProps,
+  });
+
   return (
     <div className="app-shell">
       <AppHeader
@@ -1006,19 +1021,7 @@ const App = () => {
         vmalertSources={run?.vmalertSources}
         vmalertRuleState={run?.vmalertRuleState}
       />
-      <WorkNextChecksLane
-        run={run}
-        history={executionHistory}
-        queueCandidateCount={runQueue.length}
-        executionHistoryHighlightKey={executionHistoryHighlightKey}
-        onSubmitFeedback={handleUsefulnessFeedback}
-        onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
-        executionHistoryFilter={executionHistoryFilter}
-        onExecutionHistoryFilterChange={setExecutionHistoryFilter}
-        runQueue={runQueue}
-        onHighlightQueueCard={highlightQueueCard}
-        queuePanelProps={queuePanelProps}
-      />
+      <WorkNextChecksLane {...workNextChecksLaneProps} />
       <AppFleetSection
         fleet={fleet}
         selectedClusterLabel={selectedClusterLabel}
