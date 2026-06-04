@@ -3,7 +3,6 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import {
-  approveNextCheckCandidate,
   fetchNotifications,
   runBatchExecution,
   submitUsefulnessFeedback,
@@ -57,6 +56,7 @@ import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
+import { useAppApprovalHandlers } from "./app/useAppApprovalHandlers";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -370,10 +370,6 @@ const App = () => {
     queueGroups,
   } = useQueueState({ runQueue });
 
-  // Execution/approval transient state - stays in App.tsx (per-execution lifecycle)
-  const [approvalResults, setApprovalResults] = useState<Record<string, ApprovalResult>>({});
-  const [approvingCandidate, setApprovingCandidate] = useState<string | null>(null);
-
   // Execution history derived from run data - needed by useAppNavigationHighlights
   const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
 
@@ -506,7 +502,8 @@ const App = () => {
     highlightQueueCard,
   });
 
-  // App-level refresh wrapper - calls hook refresh and handles App-specific side effects
+  // App-level refresh wrapper - must be defined BEFORE useAppApprovalHandlers
+  // because the hook receives refresh as a dependency.
   const refresh = useCallback(async () => {
     await refreshAppData();
     // Clear local execution results after successful refresh reconciliation.
@@ -517,6 +514,18 @@ const App = () => {
     // if we have a tracked key from a recent manual execution.
     handlePostExecutionHighlight();
   }, [refreshAppData, clearExecutionResults, handlePostExecutionHighlight]);
+
+  // Approval handlers - extracted to hook to reduce App.tsx size
+  // Note: The hook receives refresh so it can call it after approval success.
+  const {
+    approvalResults,
+    approvingCandidate,
+    handleApproveCandidate,
+    clearApprovalResults,
+  } = useAppApprovalHandlers({
+    selectedClusterLabel: hookSelectedClusterLabel,
+    refresh,
+  });
 
   // Build promotion key helper
   const buildPromotionKey = (clusterLabel: string, description: string, index: number) =>
@@ -550,53 +559,6 @@ const App = () => {
   const resetQueueView = () => {
     resetQueueFilters();
     clearStoredQueueViewState();
-  };
-
-  const handleApproveCandidate = async (
-    candidate: NextCheckPlanCandidate,
-    candidateKey: string
-  ) => {
-    const targetLabel = candidate.targetCluster ?? selectedClusterLabel;
-    const candidateId = candidate.candidateId?.trim() ? candidate.candidateId : undefined;
-    const candidateIndex = candidate.candidateIndex;
-    if (!targetLabel || (candidateIndex == null && !candidateId)) {
-      setApprovalResults((prev) => ({
-        ...prev,
-        [candidateKey]: {
-          status: "error",
-          summary: "Unable to determine candidate target",
-        },
-      }));
-      return;
-    }
-    setApprovingCandidate(candidateKey);
-    try {
-      const result = await approveNextCheckCandidate({
-        candidateId,
-        candidateIndex: candidateIndex ?? undefined,
-        clusterLabel: targetLabel,
-      });
-      setApprovalResults((prev) => ({
-        ...prev,
-        [candidateKey]: {
-          status: result.status === "success" ? "success" : "error",
-          summary:
-            result.summary ||
-            (result.status === "success" ? "Candidate approved" : "Approval failed"),
-          artifactPath: result.artifactPath,
-          approvalTimestamp: result.approvalTimestamp,
-        },
-      }));
-      await refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Approval failed";
-      setApprovalResults((prev) => ({
-        ...prev,
-        [candidateKey]: { status: "error", summary: message },
-      }));
-    } finally {
-      setApprovingCandidate((current) => (current === candidateKey ? null : current));
-    }
   };
 
   // Derive header display metadata - MUST be before early return for hook consistency
