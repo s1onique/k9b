@@ -2,7 +2,6 @@ import { useCallback, useEffect } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
-import { submitUsefulnessFeedback } from "./api";
 import { useAppNavigationHighlights } from "./hooks/useAppNavigationHighlights";
 import { useAppData } from "./hooks/useAppData";
 import { useRunSelection } from "./hooks/useRunSelection";
@@ -57,9 +56,10 @@ import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
 import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
+import { useAppDiagnosePanelsProps } from "./app/useAppDiagnosePanelsProps";
 
 import { ProposalList } from "./components/ProposalList";
-import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
+import { formatDuration } from "./components/ExecutionHistoryPanel";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
 import { buildDeterministicChecksProps } from "./components/DeterministicNextChecksPanel/buildDeterministicChecksProps";
 import { QueuePanel } from "./components/QueuePanel";
@@ -138,9 +138,6 @@ export { ProposalList } from "./components/ProposalList";
 import {
   clearStoredQueueViewState,
   DEFAULT_QUEUE_VIEW_STATE,
-  persistQueueViewState,
-  persistRunsPageSize,
-  persistRunsReviewFilter,
   persistSelectedRunId,
   QUEUE_VIEW_STORAGE_KEY,
   readStoredQueueViewState,
@@ -730,6 +727,26 @@ const App = () => {
     onFocusClusterForNextChecks: runSummaryLoadedProps.onFocusClusterForNextChecks,
   });
 
+  // Extract diagnose panels props
+  const diagnosePanelsProps = useAppDiagnosePanelsProps({
+    run,
+    selectedClusterLabel,
+    onRefresh: refresh,
+    scrollToSection,
+    setQueueFocusMode,
+    onPromoteCheck: handlePromoteDeterministicCheck,
+    onToggleIncidentExpansion: toggleIncidentExpansion,
+    onFocusClusterForNextChecks: runSummaryLoadedProps.onFocusClusterForNextChecks,
+    onSetQueueStatusFilter: setQueueStatusFilter,
+    onSetQueueClusterFilter: setQueueClusterFilter,
+    incidentExpandedClusters,
+    deterministicChecks,
+    deterministicSummary,
+    hookPromotionStatus,
+    hasDegradedClusters,
+    artifactUrl,
+  });
+
   return (
     <div className="app-shell">
       <AppHeader {...appHeaderProps} />
@@ -743,25 +760,7 @@ const App = () => {
         unavailableProps={runSummaryUnavailableProps}
       />
       <WorkflowLaneHeader type="diagnose" />
-      <AppDiagnosePanels
-        run={run}
-        selectedClusterLabel={selectedClusterLabel}
-        onRefresh={refresh}
-        onNavigateToQueue={() => scrollToSection("next-check-queue")}
-        onFocusQueueReview={() => setQueueFocusMode("review")}
-        onPromoteCheck={handlePromoteDeterministicCheck}
-        onToggleIncidentExpansion={toggleIncidentExpansion}
-        onFocusClusterForNextChecks={runSummaryLoadedProps.onFocusClusterForNextChecks}
-        onSetQueueStatusFilter={setQueueStatusFilter}
-        onSetQueueClusterFilter={setQueueClusterFilter}
-        onScrollToSection={scrollToSection}
-        artifactUrl={artifactUrl}
-        hasDegradedClusters={hasDegradedClusters}
-        hookPromotionStatus={hookPromotionStatus}
-        incidentExpandedClusters={incidentExpandedClusters}
-        deterministicChecks={deterministicChecks}
-        deterministicSummary={deterministicSummary}
-      />
+      <AppDiagnosePanels {...diagnosePanelsProps} />
       <VmAlertPanels
         vmalertSources={run?.vmalertSources}
         vmalertRuleState={run?.vmalertRuleState}
