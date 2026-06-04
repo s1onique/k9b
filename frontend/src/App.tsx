@@ -58,6 +58,7 @@ import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers
 import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
 import { useAppDiagnosePanelsProps } from "./app/useAppDiagnosePanelsProps";
 import { useAppClusterDetailSectionProps } from "./app/useAppClusterDetailSectionProps";
+import { findExecutionHistoryEntry } from "./app/findExecutionHistoryEntry";
 
 import { ProposalList } from "./components/ProposalList";
 import { formatDuration } from "./components/ExecutionHistoryPanel";
@@ -332,41 +333,6 @@ const App = () => {
   // Execution history derived from run data - needed by useAppNavigationHighlights
   const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
 
-  // findExecutionHistoryEntry must be defined before useAppNavigationHighlights hook
-  const findExecutionHistoryEntry = (candidate: NextCheckQueueItem) => {
-    if (!executionHistory.length) {
-      return null;
-    }
-    if (candidate.latestArtifactPath) {
-      const artifactMatch = executionHistory.find(
-        (entry) => entry.artifactPath === candidate.latestArtifactPath
-      );
-      if (artifactMatch) {
-        return artifactMatch;
-      }
-    }
-    const normalizedDescription = candidate.description?.trim();
-    if (candidate.targetCluster && normalizedDescription) {
-      const contextMatch = executionHistory.find(
-        (entry) =>
-          entry.clusterLabel === candidate.targetCluster &&
-          entry.candidateDescription === normalizedDescription
-      );
-      if (contextMatch) {
-        return contextMatch;
-      }
-    }
-    if (normalizedDescription) {
-      const descriptionMatch = executionHistory.find(
-        (entry) => entry.candidateDescription === normalizedDescription
-      );
-      if (descriptionMatch) {
-        return descriptionMatch;
-      }
-    }
-    return null;
-  };
-
   // Batch execution handlers - extracted to hook
   const {
     executingBatchRunId,
@@ -403,7 +369,7 @@ const App = () => {
     setExecutionHistoryHighlightKey,
     setQueueHighlightKey,
     onClusterSelect: handleClusterSelection,
-    findExecutionHistoryEntry,
+    findExecutionHistoryEntry: (candidate) => findExecutionHistoryEntry(candidate, executionHistory),
     getDiscoveryClusters: () => discoveryClusters,
     getSelectedClusterLabel: () => selectedClusterLabel,
   });
@@ -671,7 +637,7 @@ const App = () => {
     handleQueueClusterJump,
     handleQueueExecutionJump,
     buildCandidateKey,
-    findExecutionHistoryEntry,
+    findExecutionHistoryEntry: (candidate) => findExecutionHistoryEntry(candidate, executionHistory),
     isManualExecutionAllowed,
     getNotRunnableExplanation,
     getAlertmanagerProvenanceSubtext,
