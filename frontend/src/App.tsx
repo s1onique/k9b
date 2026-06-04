@@ -65,6 +65,7 @@ import { useDemoShellModel } from "./demo-shell/useDemoShellModel";
 import { buildDemoShellFindingInput } from "./demo-shell/buildDemoShellFindingInput";
 import { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel } from "./components/AlertmanagerPanel";
 import { ClusterDetailSection } from "./components/ClusterDetailSection";
+import { buildClusterDetailSectionProps } from "./components/ClusterDetailSection/buildClusterDetailSectionProps";
 import { VmalertDiscoveryPanel } from "./components/VmalertDiscoveryPanel";
 import { VmalertAlertStatePanel } from "./components/VmalertAlertStatePanel";
 export { AlertmanagerSnapshotPanel, AlertmanagerSourcesPanel };
@@ -816,32 +817,27 @@ const App = () => {
     fleet,
     headerStats,
   });
-  const selectedCluster = fleet.clusters.find((cluster) => cluster.label === selectedClusterLabel) ?? null;
-  const clusterRecency = selectedCluster?.latestRunTimestamp
-    ? relativeRecency(selectedCluster.latestRunTimestamp)
-    : null;
-  const clusterFresh = selectedCluster ? !isStaleTimestamp(selectedCluster.latestRunTimestamp) : true;
+
+  // Derive ClusterDetailSection-specific display props from extracted builder
+  const {
+    selectedCluster,
+    clusterTriggerReason,
+    drilldownSummary,
+    recencyTimestamp,
+    clusterFresh,
+    clusterRecency,
+  } = buildClusterDetailSectionProps({
+    selectedClusterLabel,
+    clusterDetail,
+    fleet,
+  });
+
   const autoRefreshSelectValue = autoRefreshInterval ? String(autoRefreshInterval) : "off";
   const autoRefreshStatusText = autoRefreshInterval
     ? `Auto refresh every ${autoRefreshInterval}s`
     : "Auto refresh is off";
   const interpretation: AutoInterpretation | null = clusterDetail?.autoInterpretation || null;
   const recommendedArtifacts = buildClusterRecommendedArtifacts(clusterDetail);
-  const clusterTriggerReason =
-    selectedCluster?.topTriggerReason ||
-    clusterDetail?.findings?.[0]?.triggerReasons?.[0] ||
-    clusterDetail?.topProblem?.title ||
-    "Trigger reason pending";
-
-  const drilldownAvailability = clusterDetail?.drilldownAvailability;
-  const drilldownSummary = drilldownAvailability
-    ? `${drilldownAvailability.available}/${drilldownAvailability.totalClusters} drilldown${
-        drilldownAvailability.available === 1 ? "" : "s"
-      } ready`
-    : "Drilldown data pending";
-  const recencyTimestamp = selectedCluster?.latestRunTimestamp
-    ? formatTimestamp(selectedCluster.latestRunTimestamp)
-    : "Awaiting run";
   const planCandidates: NextCheckPlanCandidate[] = clusterDetail?.nextCheckPlan ?? [];
   const runPlan = run?.nextCheckPlan;
   const orphanedApprovals = runPlan?.orphanedApprovals ?? [];
