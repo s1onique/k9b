@@ -820,12 +820,25 @@ const App = () => {
       : undefined;
 
     // Extract operator worklist items
-    const operatorWorklist = run.operatorWorklist?.map((item) => ({
-      severity: item.severity as "critical" | "warning" | "info" | undefined,
-      resource: item.resource,
-      status: item.status,
-      message: item.message,
-    })) ?? undefined;
+    // NOTE: run.operatorWorklist is OperatorWorklistPayload (object with items array), NOT a direct array.
+    // Guard against non-array shapes to prevent TypeError at runtime.
+    const worklistPayload = run.operatorWorklist;
+    const worklistItems = Array.isArray(worklistPayload)
+      ? worklistPayload
+      : Array.isArray(worklistPayload?.items)
+        ? worklistPayload.items
+        : Array.isArray(worklistPayload?.candidates)
+          ? worklistPayload.candidates
+          : [];
+
+    const operatorWorklist = worklistItems.length > 0
+      ? worklistItems.map((item) => ({
+          severity: item.severity as "critical" | "warning" | "info" | undefined,
+          resource: item.resource,
+          status: item.status,
+          message: item.message,
+        }))
+      : undefined;
 
     // Extract run freshness
     const freshness = {

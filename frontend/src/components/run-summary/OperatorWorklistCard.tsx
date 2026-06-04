@@ -295,7 +295,8 @@ const WorklistSummary = ({
 export const OperatorWorklistCard = ({ operatorWorklist }: OperatorWorklistCardProps) => {
   // CRITICAL: Early return MUST be before all hooks to maintain consistent hook order
   // React throws "Rendered fewer hooks than expected" if hook count differs between renders
-  if (!operatorWorklist) {
+  // Guard against null, undefined, and objects without items array (wrong shape)
+  if (!operatorWorklist || !Array.isArray(operatorWorklist.items)) {
     return (
       <div className="run-overview-card operator-worklist-card" data-testid="operator-worklist-card">
         <div className="preview-card-header">
