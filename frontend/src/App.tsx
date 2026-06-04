@@ -39,21 +39,20 @@ import type {
   DeterministicNextCheckPromotionRequest,
 } from "./types";
 import "./index.css";
-import { ThemeSwitch } from "./ThemeSwitch";
-import { HeaderBranding } from "./components/HeaderBranding";
-import { RunDiagnosticPackPanel } from "./components/RunDiagnosticPackPanel";
-import { LLMActivityPanel } from "./components/LLMActivityPanel";
-import { LLMPolicyPanel } from "./components/LLMPolicyPanel";
-import {
-  AdvisoryTopConcernsSection,
-  AdvisoryEvidenceGapsSection,
-  AdvisoryNextChecksSection,
-  AdvisoryFocusNotesSection,
-} from "./components/AdvisorySections";
+
+// Extracted components
+import { AppHeader } from "./app/AppHeader";
+import { AppNavigation } from "./app/AppNavigation";
+import { WorkflowLaneHeader } from "./app/WorkflowLaneHeader";
+import { VmAlertPanels } from "./app/VmAlertPanels";
+import { AppDiagnosePanels } from "./app/AppDiagnosePanels";
+import { AppImprovePanels } from "./app/AppImprovePanels";
+import { AppRunSummarySection } from "./app/AppRunSummarySection";
+import { AppFleetSection } from "./app/AppFleetSection";
+import { AppProposalsSection } from "./app/AppProposalsSection";
+import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
+
 import { ProposalList } from "./components/ProposalList";
-import { ReviewEnrichmentPanel } from "./components/ReviewEnrichmentPanel";
-import { DiagnosticPackReviewPanel } from "./components/DiagnosticPackReviewPanel";
-import { ProviderExecutionPanel } from "./components/ProviderExecutionComponents";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
 import { NotificationHistoryTable } from "./components/NotificationHistoryTable";
 import { DeterministicNextChecksPanel } from "./components/DeterministicNextChecksPanel";
@@ -943,109 +942,68 @@ const App = () => {
     refresh,
   });
 
+  // Build props for RunSummaryPanel using ComponentProps pattern
+  const runSummaryLoadedProps = {
+    run,
+    isSelectedRunLatest,
+    selectedClusterLabel,
+    onFocusClusterForNextChecks: focusClusterForNextChecks,
+    runSummaryStats,
+    runStatsSummary,
+    runLlmStatsLine,
+    historicalLlmStatsLine,
+    providerBreakdown,
+    telemetryData,
+    runPlan,
+    runPlanCandidates,
+    planSummaryText,
+    planStatusText,
+    plannerReasonText,
+    plannerHint,
+    plannerNextActionHint,
+    plannerArtifactUrl,
+    planCandidateCountLabel,
+    discoveryVariantOrder,
+    discoveryVariantCounts,
+    discoveryClusters,
+    runOwnedPanelState,
+    selectedRunError,
+    onRetrySelectedRun: retrySelectedRun,
+    selectedRunId,
+  };
+
+  const runSummaryUnavailableProps = {
+    ...runSummaryLoadedProps,
+    run: null,
+    runPlan: null,
+    runPlanCandidates: [],
+    planSummaryText: "",
+    planStatusText: null,
+    plannerReasonText: "",
+    plannerHint: null,
+    plannerNextActionHint: null,
+    plannerArtifactUrl: null,
+    planCandidateCountLabel: "",
+    discoveryClusters: [],
+  };
+
   return (
     <div className="app-shell">
-      <header className="panel hero compact">
-        <div className="hero-content">
-          <HeaderBranding />
-          <div className="hero-run">
-            <div className="hero-run-identity">
-              <div className="hero-run-header">
-                <p className="eyebrow hero-run-label">Selected run</p>
-                <span className={`run-badge run-badge--${isSelectedRunLatest ? "latest" : "past"}`}>
-                  {isSelectedRunLatest ? "Latest" : "Past run"}
-                </span>
-              </div>
-              <div className="hero-run-title">
-                <strong>Run {headerRunLabel}</strong>
-                <span className="hero-run-id">ID {headerRunId}</span>
-              </div>
-              <p className="hero-run-captured">Captured {runRecency}</p>
-            </div>
-            <div className="hero-run-freshness">
-              {isSelectedRunLatest && (
-                <span className={`freshness-indicator freshness-indicator--${getRunFreshnessLevel(headerRunTimestamp)}`}>
-                  <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[getRunFreshnessLevel(headerRunTimestamp)]}</span>
-                  <span className="freshness-indicator__label">{FRESHNESS_LABEL[getRunFreshnessLevel(headerRunTimestamp)]}</span>
-                </span>
-              )}
-              {!isSelectedRunLatest && (
-                <button
-                  type="button"
-                  className="link tiny"
-                  onClick={clickLatest}
-                  title="Jump back to the latest run"
-                >
-                  ← Latest
-                </button>
-              )}
-            </div>
-            {!isSelectedRunLatest && (
-              <p className="hero-run-latest-hint">
-                Latest run available: {latestRunRecency}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="hero-actions">
-          <div className="refresh-controls">
-            <span
-              className={`page-freshness-indicator page-freshness-indicator--${getPageFreshnessLevel(lastRefresh)}`}
-              title={`Page data refreshed ${relativeRecency(lastRefresh.toISOString())}`}
-              aria-label={`Page data freshness: ${getPageFreshnessLevel(lastRefresh)}`}
-            >
-              {FRESHNESS_EMOJI[getPageFreshnessLevel(lastRefresh)]}
-            </span>
-            <button type="button" onClick={refresh}>
-              Refresh
-            </button>
-            <div className="autorefresh-control">
-              <label htmlFor="auto-refresh-interval">Auto</label>
-              <select
-                id="auto-refresh-interval"
-                value={autoRefreshSelectValue}
-                onChange={(event) => handleAutoRefreshChange(event.target.value)}
-              >
-                {AUTOREFRESH_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {/* ACT 9.5: K8s Accelerator demo entry point */}
-          <button
-            type="button"
-            className="demo-entry-button"
-            onClick={demoShell.openDemo}
-            title="Launch the guided K8s Accelerator demo"
-            data-testid="start-demo-button"
-          >
-            Start demo
-          </button>
-          <ThemeSwitch />
-        </div>
-      </header>
-      <nav className="cockpit-nav" aria-label="Fleet cockpit sections">
-        <a className="cockpit-nav__item" href="#recent-runs">Recent runs</a>
-        <a className="cockpit-nav__item" href="#run-detail">Run summary</a>
-        <a className="cockpit-nav__item" href="#review-enrichment">Provider advisory</a>
-        <a className="cockpit-nav__item" href="#provider-execution">Provider branches</a>
-        <a className="cockpit-nav__item" href="#diagnostic-pack-download">Diagnostic package</a>
-        {run?.diagnosticPackReview && (
-          <a className="cockpit-nav__item" href="#diagnostic-pack-review">Diagnostic pack review</a>
-        )}
-        <a className="cockpit-nav__item" href="#deterministic-next-checks">Deterministic checks</a>
-        <a className="cockpit-nav__item" href="#execution-history">Execution review</a>
-        <a className="cockpit-nav__item" href="#next-check-queue">Work list</a>
-        <a className="cockpit-nav__item" href="#fleet">Fleet overview</a>
-        <a className="cockpit-nav__item" href="#cluster">Cluster detail</a>
-        <a className="cockpit-nav__item" href="#proposals">Action proposals</a>
-        <a className="cockpit-nav__item" href="#notifications">Notifications</a>
-        <a className="cockpit-nav__item" href="#llm-policy">LLM policy</a>
-        <a className="cockpit-nav__item" href="#llm-activity">LLM activity</a>
-      </nav>
+      <AppHeader
+        headerRunId={headerRunId}
+        headerRunLabel={headerRunLabel}
+        headerRunTimestamp={headerRunTimestamp}
+        isSelectedRunLatest={isSelectedRunLatest}
+        latestRunRecency={latestRunRecency}
+        runRecency={runRecency}
+        lastRefresh={lastRefresh}
+        onRefresh={refresh}
+        autoRefreshInterval={autoRefreshInterval}
+        onAutoRefreshChange={handleAutoRefreshChange}
+        onClickLatest={clickLatest}
+        onOpenDemo={demoShell.openDemo}
+      />
+      <AppNavigation run={run} />
       {error && <div className="alert">{error}</div>}
       <RecentRunsPanel
         runsList={runsList}
@@ -1072,264 +1030,55 @@ const App = () => {
         onShowSelectedRun={handleShowSelectedRun}
         onFocusClusterForNextChecks={focusClusterForNextChecks}
       />
-      {run ? (
-        <RunSummaryPanel
-          run={run}
-          isSelectedRunLatest={isSelectedRunLatest}
-          selectedClusterLabel={selectedClusterLabel}
-          onFocusClusterForNextChecks={focusClusterForNextChecks}
-          runSummaryStats={runSummaryStats}
-          runStatsSummary={runStatsSummary}
-          runLlmStatsLine={runLlmStatsLine}
-          historicalLlmStatsLine={historicalLlmStatsLine}
-          providerBreakdown={providerBreakdown}
-          telemetryData={telemetryData}
-          runPlan={runPlan}
-          runPlanCandidates={runPlanCandidates}
-          planSummaryText={planSummaryText}
-          planStatusText={planStatusText}
-          plannerReasonText={plannerReasonText}
-          plannerHint={plannerHint}
-          plannerNextActionHint={plannerNextActionHint}
-          plannerArtifactUrl={plannerArtifactUrl}
-          planCandidateCountLabel={planCandidateCountLabel}
-          discoveryVariantOrder={discoveryVariantOrder}
-          discoveryVariantCounts={discoveryVariantCounts}
-          discoveryClusters={discoveryClusters}
-          // Phase 3: Wire RunControl-derived state for progressive loading UI
-          runOwnedPanelState={runOwnedPanelState}
-          selectedRunError={selectedRunError}
-          onRetrySelectedRun={retrySelectedRun}
-          selectedRunId={selectedRunId}
-        />
-      ) : (
-        // Phase 3: When no run payload yet, check for slow/failed states from RunControl
-        runOwnedPanelState === "slow" || runOwnedPanelState === "failed" ? (
-          <RunSummaryPanel
-            run={null}
-            isSelectedRunLatest={isSelectedRunLatest}
-            selectedClusterLabel={selectedClusterLabel}
-            onFocusClusterForNextChecks={focusClusterForNextChecks}
-            runSummaryStats={runSummaryStats}
-            runStatsSummary={runStatsSummary}
-            runLlmStatsLine={runLlmStatsLine}
-            historicalLlmStatsLine={historicalLlmStatsLine}
-            providerBreakdown={providerBreakdown}
-            telemetryData={telemetryData}
-            runPlan={null}
-            runPlanCandidates={[]}
-            planSummaryText=""
-            planStatusText={null}
-            plannerReasonText=""
-            plannerHint={null}
-            plannerNextActionHint={null}
-            plannerArtifactUrl={null}
-            planCandidateCountLabel=""
-            discoveryVariantOrder={discoveryVariantOrder}
-            discoveryVariantCounts={discoveryVariantCounts}
-            discoveryClusters={[]}
-            // Phase 3: Wire RunControl-derived state for progressive loading UI
-            runOwnedPanelState={runOwnedPanelState}
-            selectedRunError={selectedRunError}
-            onRetrySelectedRun={retrySelectedRun}
-            selectedRunId={selectedRunId}
-          />
-        ) : (
-          <section className="panel" id="run-detail">
-            <div className="section-head">
-              <h2>Run summary</h2>
-              <p className="muted">Loading selected run…</p>
-            </div>
-          </section>
-        )
-      )}
-      {/* Workflow Lane: Diagnose Now */}
-      <div className="workflow-lane-header">
-        <div className="workflow-lane-label">
-          <span className="workflow-lane-icon">🔍</span>
-          <span className="workflow-lane-title">{WORKFLOW_LANES.diagnose.label}</span>
-        </div>
-        <p className="workflow-lane-description muted small">{WORKFLOW_LANES.diagnose.description}</p>
-      </div>
-      {run ? (
-        <ReviewEnrichmentPanel
-          reviewEnrichment={run.reviewEnrichment}
-          reviewEnrichmentStatus={run.reviewEnrichmentStatus}
-          nextCheckPlan={run.nextCheckPlan}
-          onNavigateToQueue={() => scrollToSection("next-check-queue")}
-          onFocusQueueReview={() => setQueueFocusMode("review")}
-        />
-      ) : (
-        <section className="panel" id="review-enrichment">
-          <p className="muted">Provider advisory — Loading selected run…</p>
-        </section>
-      )}
-      {run ? (
-        <ProviderExecutionPanel execution={run.providerExecution} />
-      ) : (
-        <section className="panel" id="provider-execution">
-          <p className="muted">Provider branches — Loading selected run…</p>
-        </section>
-      )}
-      {run ? (
-        <RunDiagnosticPackPanel diagnosticPack={run.diagnosticPack} />
-      ) : (
-        <section className="panel" id="diagnostic-pack-download">
-          <p className="muted">Diagnostic package — Loading selected run…</p>
-        </section>
-      )}
-      {run?.diagnosticPackReview && (
-        <DiagnosticPackReviewPanel review={run.diagnosticPackReview} />
-      )}
-      {run ? (
-        <AlertmanagerSnapshotPanel compact={run.alertmanagerCompact} clusterLabel={selectedClusterLabel} />
-      ) : (
-        <section className="panel" id="alertmanager-snapshot">
-          <p className="muted">Alertmanager snapshot — Loading selected run…</p>
-        </section>
-      )}
-      {run?.alertmanagerSources && (
-        <AlertmanagerSourcesPanel
-          sources={run.alertmanagerSources}
-          runId={run.runId}
-          clusterLabel={selectedClusterLabel}
-          onRefresh={refresh}
-        />
-      )}
-      {/* VictoriaMetrics vmalert discovery - compact display only, no actions */}
-      <VmalertDiscoveryPanel vmalertSources={run?.vmalertSources} />
-      {/* VictoriaMetrics vmalert alert state - compact display of alert counts and firing alerts */}
-      <VmalertAlertStatePanel vmalertRuleState={run?.vmalertRuleState} />
-      {run ? (
-        <DeterministicNextChecksPanel
-          deterministicChecks={deterministicChecks}
-          deterministicSummary={deterministicSummary}
-          hookPromotionStatus={hookPromotionStatus}
-          incidentExpandedClusters={incidentExpandedClusters}
-          onPromoteCheck={handlePromoteDeterministicCheck}
-          onToggleIncidentExpansion={toggleIncidentExpansion}
-          onFocusClusterForNextChecks={focusClusterForNextChecks}
-          onSetQueueStatusFilter={setQueueStatusFilter}
-          onSetQueueClusterFilter={setQueueClusterFilter}
-          onScrollToSection={scrollToSection}
-          artifactUrl={artifactUrl}
-          hasDegradedClusters={hasDegradedClusters}
-        />
-      ) : (
-        <section className="panel deterministic-next-checks-panel" id="deterministic-next-checks">
-          <div className="section-head">
-            <h2>Deterministic checks</h2>
-            <p className="muted">Loading selected run…</p>
-          </div>
-        </section>
-      )}
+      <AppRunSummarySection
+        run={run}
+        runOwnedPanelState={runOwnedPanelState}
+        loadedProps={runSummaryLoadedProps}
+        unavailableProps={runSummaryUnavailableProps}
+      />
+      <WorkflowLaneHeader type="diagnose" />
+      <AppDiagnosePanels
+        run={run}
+        selectedClusterLabel={selectedClusterLabel}
+        onRefresh={refresh}
+        onNavigateToQueue={() => scrollToSection("next-check-queue")}
+        onFocusQueueReview={() => setQueueFocusMode("review")}
+        onPromoteCheck={handlePromoteDeterministicCheck}
+        onToggleIncidentExpansion={toggleIncidentExpansion}
+        onFocusClusterForNextChecks={focusClusterForNextChecks}
+        onSetQueueStatusFilter={setQueueStatusFilter}
+        onSetQueueClusterFilter={setQueueClusterFilter}
+        onScrollToSection={scrollToSection}
+        artifactUrl={artifactUrl}
+        hasDegradedClusters={hasDegradedClusters}
+        hookPromotionStatus={hookPromotionStatus}
+        incidentExpandedClusters={incidentExpandedClusters}
+        deterministicChecks={deterministicChecks}
+        deterministicSummary={deterministicSummary}
+      />
+      <VmAlertPanels
+        vmalertSources={run?.vmalertSources}
+        vmalertRuleState={run?.vmalertRuleState}
+      />
       <WorkNextChecksLane
-      run={run}
-      history={executionHistory}
-      queueCandidateCount={runQueue.length}
-      executionHistoryHighlightKey={executionHistoryHighlightKey}
-      onSubmitFeedback={handleUsefulnessFeedback}
-      onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
-      executionHistoryFilter={executionHistoryFilter}
-      onExecutionHistoryFilterChange={setExecutionHistoryFilter}
-      runQueue={runQueue}
-      onHighlightQueueCard={highlightQueueCard}
-      queuePanelProps={queuePanelProps}
-    />
-      <section className="panel" id="fleet">
-        <div className="section-head">
-          <div>
-            <h2>Fleet overview</h2>
-            <p className="muted">Top problem: {fleet.topProblem.detail}</p>
-          </div>
-          <div className="status-badges">
-            {fleet.fleetStatus.ratingCounts.map((entry) => (
-              <span key={entry.rating} className={statusClass(entry.rating)}>
-                {entry.rating} · {entry.count}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="fleet-metrics">
-          <article>
-            <p className="eyebrow">Pending proposals</p>
-            <strong>{fleet.proposalSummary.pending}</strong>
-          </article>
-          <article>
-            <p className="eyebrow">Total proposals</p>
-            <strong>{fleet.proposalSummary.total}</strong>
-          </article>
-        </div>
-        <div className="fleet-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Cluster</th>
-                <th>Rating</th>
-                <th>Latest run</th>
-                <th>Trigger</th>
-                <th>Drilldown</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fleet.clusters.map((cluster) => {
-                const isSelected = cluster.label === selectedClusterLabel;
-                const isFleetRowHighlighted = cluster.label === highlightedClusterLabel;
-                const clusterRowFresh = !isStaleTimestamp(cluster.latestRunTimestamp);
-                const clusterRowRecency = relativeRecency(cluster.latestRunTimestamp);
-                return (
-                  <tr
-                    key={cluster.label}
-                    className={
-                      [
-                        isSelected ? "row-selected" : null,
-                        isFleetRowHighlighted ? "highlighted-row" : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" ") || undefined
-                    }
-                    data-highlighted={isFleetRowHighlighted ? "true" : undefined}
-                    onClick={() => handleClusterSelection(cluster.label)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        handleClusterSelection(cluster.label);
-                      }
-                    }}
-                    tabIndex={0}
-                  >
-                    <td>
-                      <strong>{cluster.label}</strong>
-                      <p className="small compact">{cluster.context}</p>
-                      <p className="tiny compact">
-                        {cluster.clusterClass}/{cluster.clusterRole} · {cluster.baselineCohort}
-                      </p>
-                    </td>
-                    <td>
-                      <span className={statusClass(cluster.healthRating)}>{cluster.healthRating}</span>
-                    </td>
-                    <td>
-                      <span className={`recency-pill ${clusterRowFresh ? "fresh" : "stale"}`}>
-                        {clusterRowRecency}
-                      </span>
-                      <p className="small compact">{formatTimestamp(cluster.latestRunTimestamp)}</p>
-                    </td>
-                    <td>
-                      <p className="small">{cluster.topTriggerReason || "Awaiting trigger"}</p>
-                    </td>
-                    <td>
-                      <span className="small">
-                        {cluster.drilldownAvailable ? "Ready" : "Missing"}
-                      </span>
-                      <p className="small compact">{cluster.drilldownTimestamp || "pending"}</p>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        run={run}
+        history={executionHistory}
+        queueCandidateCount={runQueue.length}
+        executionHistoryHighlightKey={executionHistoryHighlightKey}
+        onSubmitFeedback={handleUsefulnessFeedback}
+        onSubmitAlertmanagerRelevanceFeedback={handleAlertmanagerRelevanceFeedback}
+        executionHistoryFilter={executionHistoryFilter}
+        onExecutionHistoryFilterChange={setExecutionHistoryFilter}
+        runQueue={runQueue}
+        onHighlightQueueCard={highlightQueueCard}
+        queuePanelProps={queuePanelProps}
+      />
+      <AppFleetSection
+        fleet={fleet}
+        selectedClusterLabel={selectedClusterLabel}
+        highlightedClusterLabel={highlightedClusterLabel}
+        onClusterSelect={handleClusterSelection}
+      />
       <ClusterDetailSection
         clusterDetail={clusterDetail}
         selectedClusterLabel={selectedClusterLabel}
@@ -1351,103 +1100,35 @@ const App = () => {
         statusClass={statusClass}
         nextCheckPlanSectionProps={nextCheckPlanSectionProps}
       />
-    {/* Workflow Lane: Improve the System */}
-    <div className="workflow-lane-header">
-      <div className="workflow-lane-label">
-        <span className="workflow-lane-icon">📈</span>
-        <span className="workflow-lane-title">{WORKFLOW_LANES.improve.label}</span>
-      </div>
-      <p className="workflow-lane-description muted small">{WORKFLOW_LANES.improve.description}</p>
-    </div>
-      <section className="panel" id="proposals">
-        <div className="section-head">
-          <h2>Action proposals</h2>
-          <span className="muted tiny">
-            Findings surfaced for triage; actionable improvements for the system.
-          </span>
-        </div>
-        <div className="proposal-controls">
-          <label>
-            Status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sort
-            <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-              <option value="proposalId">Proposal ID</option>
-              <option value="confidence">Confidence</option>
-              <option value="status">Status</option>
-            </select>
-          </label>
-          <label>
-            Search
-            <input
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Target or rationale"
-            />
-          </label>
-        </div>
-        <ProposalList
-          proposals={proposals.proposals}
-          filter={statusFilter}
-          sortKey={sortKey}
-          searchText={searchText}
-          expanded={expandedProposals}
-          toggle={handleToggleProposal}
-        />
-      </section>
-      <section className="panel" id="notifications">
-        <div className="section-head">
-          <h2>Notification history</h2>
-          <p className="small">Filtering applies to the entire retained archive.</p>
-        </div>
-        <NotificationHistoryTable />
-      </section>
-      {run ? (
-        <LLMPolicyPanel policy={run.llmPolicy} />
-      ) : (
-        <section className="panel llm-policy-panel" id="llm-policy">
-          <div className="section-head">
-            <h2>LLM policy</h2>
-            <p className="muted">Loading selected run…</p>
-          </div>
-        </section>
-      )}
-      {run ? (
-        <LLMActivityPanel activity={run.llmActivity} />
-      ) : (
-        <section className="panel llm-activity-panel" id="llm-activity">
-          <div className="section-head">
-            <h2>LLM activity</h2>
-            <p className="muted">Loading selected run…</p>
-          </div>
-        </section>
-      )}
-      {/* ACT 9.5: K8s Accelerator demo shell overlay */}
-      {/* Pass real context metadata so the demo shell shows real run/cluster info */}
-      {demoShell.state.isOpen && (
-        <DemoShell
-          onClose={demoShell.closeDemo}
-          findingSelectionInput={findingSelectionInput}
-          realContext={
-            selectedRunId
-              ? {
-                  runId: selectedRunId,
-                  clusterLabel: selectedClusterLabel ?? undefined,
-                  isFresh: runFresh,
-                  runCapturedAt: headerRunTimestamp || undefined,
-                }
-              : undefined
-          }
-        />
-      )}
+    <WorkflowLaneHeader type="improve" />
+      <AppProposalsSection
+        proposals={proposals.proposals}
+        statusFilter={statusFilter}
+        sortKey={sortKey}
+        searchText={searchText}
+        statusOptions={statusOptions}
+        expandedProposals={expandedProposals}
+        onStatusFilterChange={(event) => setStatusFilter(event.target.value)}
+        onSortKeyChange={(event) => setSortKey(event.target.value as SortKey)}
+        onSearchTextChange={(event) => setSearchText(event.target.value)}
+        onToggleProposal={handleToggleProposal}
+      />
+      <AppImprovePanels run={run} />
+      <AppDemoShellOverlay
+        isOpen={demoShell.state.isOpen}
+        onClose={demoShell.closeDemo}
+        findingSelectionInput={findingSelectionInput}
+        realContext={
+          selectedRunId
+            ? {
+                runId: selectedRunId,
+                clusterLabel: selectedClusterLabel ?? undefined,
+                isFresh: runFresh,
+                runCapturedAt: headerRunTimestamp || undefined,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 };
