@@ -60,6 +60,18 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-06-04 — App header props extraction
+
+- **Change:** Extracted App header derived props from `App.tsx` into `frontend/src/app/useAppHeaderProps.ts`.
+- **Impact map present:** Yes. ACT prompt identified run identity (headerRunId, headerRunLabel, headerRunTimestamp), freshness (runFresh, runAgeMinutes), latest/past semantics (latestRunRecency, runRecency, isSelectedRunLatest), auto-refresh (autoRefreshInterval, handleAutoRefreshChange), refresh handlers, clickLatest, demo shell realContext dependencies (headerRunTimestamp, runFresh, runAgeMinutes).
+- **Scope drift:** `frontend/src/App.tsx` (modified), `frontend/src/app/useAppHeaderProps.ts` (new, 154 lines).
+- **Behavior risk:** Header run identity, freshness labels, latest/past badge, refresh/auto-refresh controls, and demo shell `runCapturedAt`/`isFresh` metadata must remain unchanged.
+- **Targeted tests:** `app.test.tsx`, demo-shell tests (10 files, 131 tests).
+- **Result:** All 1422 tests passed. App.tsx reduced from 837 to 827 lines. New hook is 154 lines. Removed `showLatestJump`, `useRunHeaderModel` import, and direct AppHeader prop construction from App.tsx. Fixed double demo-shell hook call bug (called hook once, combined header props in App.tsx).
+- **Lesson:** Hook preserves exact header/freshness/demo metadata behavior. Demo shell now shares single demo-shell state between AppHeader and overlay.
+
+---
+
 ### 2026-06-04 — Batch execution handler extraction
 
 - **Change:** Extracted batch execution state and handler logic from `App.tsx` into `frontend/src/app/useAppBatchExecutionHandlers.ts`.

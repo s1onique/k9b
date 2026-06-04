@@ -77,7 +77,6 @@ import {
   formatTimestamp,
   formatLatency,
   normalizeFilterValue,
-  relativeRecency,
   statusClass,
   truncateText,
 } from "./utils";
@@ -88,8 +87,6 @@ import {
   getRunFreshnessLevel,
   FRESHNESS_EMOJI,
   FRESHNESS_LABEL,
-  FRESHNESS_THRESHOLD_MINUTES,
-  isStaleTimestamp,
   formatAgeDuration,
   AUTOREFRESH_STORAGE_KEY,
   AUTOREFRESH_OPTIONS,
@@ -168,7 +165,7 @@ export {
   SELECTED_RUN_STORAGE_KEY,
 } from "./utils/persistence";
 
-import { useRunHeaderModel } from "./components/run-summary/useRunHeaderModel";
+import { useAppHeaderProps } from "./app/useAppHeaderProps";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -184,7 +181,6 @@ const App = () => {
     selectedRunStatus,
     selectedRunError,
     runOwnedPanelState,
-    showLatestJump,
     clickLatest,
     poll,
     retrySelectedRun,
@@ -288,14 +284,6 @@ const App = () => {
   
   // isSelectedRunLatest derived from RunControl's selectedRunId vs latestRunId
   const isSelectedRunLatest = selectedRunId !== null && selectedRunId === latestRunId;
-
-  // Derive header display model from extracted hook
-  const headerModel = useRunHeaderModel({
-    run,
-    runsList,
-    selectedRunId,
-    latestRunId,
-  });
 
   // UI state - extracted to useUIState hook
   const {
@@ -509,17 +497,26 @@ const App = () => {
     clearStoredQueueViewState();
   };
 
-  // Derive header display metadata - MUST be before early return for hook consistency
-  // These computations only use data that's available before the loading guard
-  const selectedRunListEntry = runsList.find((r) => r.runId === selectedRunId) ?? null;
-  const headerRunTimestamp = selectedRunListEntry?.timestamp ?? run?.timestamp ?? "";
-  const runFresh = !isStaleTimestamp(headerRunTimestamp);
-  const runAgeMinutes = headerRunTimestamp
-    ? Math.floor(dayjs().diff(headerRunTimestamp, "minute"))
-    : 0;
+  // Extract header props - MUST be before early return for hook consistency
+  // Also extracts freshness-related values needed by useAppDemoShellOverlayProps
+  // Must compute freshness values BEFORE calling useAppDemoShellOverlayProps
+  // because headerRunTimestamp is needed by both hooks
+  const { headerDerivedProps, headerRunTimestamp, runFresh, runAgeMinutes, headerStats } = useAppHeaderProps({
+    run,
+    runsList,
+    selectedRunId,
+    isSelectedRunLatest,
+    latestRunId,
+    lastRefresh,
+    autoRefreshInterval,
+    refresh,
+    handleAutoRefreshChange,
+    clickLatest,
+  });
 
-  // Extract demo shell overlay props - MUST be before early return to maintain consistent hook order
+  // Extract demo shell overlay props - MUST be before early return to maintain hook order
   // This hook uses useDemoShellModel (useReducer) which must always be called in the same order
+  // Call it only ONCE to avoid creating duplicate demo-shell state
   const { onOpen: demoShellOpen, overlayProps: demoShellOverlayProps } = useAppDemoShellOverlayProps({
     run,
     runAgeMinutes,
@@ -528,6 +525,12 @@ const App = () => {
     selectedClusterLabel,
     headerRunTimestamp,
   });
+
+  // Build appHeaderProps by combining header derived props with demo shell open handler
+  const appHeaderProps = {
+    ...headerDerivedProps,
+    onOpenDemo: demoShellOpen,
+  };
 
   // Progressive loading: only wait for CRITICAL data (fleet + proposals).
   // Run detail is non-critical - shell renders immediately, run panels show local loading.
@@ -541,12 +544,6 @@ const App = () => {
       </div>
     );
   }
-
-  // Use header model values from extracted hook
-  const { headerRunId, headerRunLabel, runRecency, latestRunTimestamp, latestRunRecency, headerStats } = headerModel;
-
-  // headerRunTimestamp already computed above (before early return) for findingSelectionInput
-  // Reuse it here for the freshness indicator; hook returns latestRunTimestamp but not headerRunTimestamp
 
   // Derive ClusterDetailSection props from extracted hook
   const clusterPlanProps = useAppClusterPlanProps({
@@ -733,20 +730,7 @@ const App = () => {
 
   return (
     <div className="app-shell">
-      <AppHeader
-        headerRunId={headerRunId}
-        headerRunLabel={headerRunLabel}
-        headerRunTimestamp={headerRunTimestamp}
-        isSelectedRunLatest={isSelectedRunLatest}
-        latestRunRecency={latestRunRecency}
-        runRecency={runRecency}
-        lastRefresh={lastRefresh}
-        onRefresh={refresh}
-        autoRefreshInterval={autoRefreshInterval}
-        onAutoRefreshChange={handleAutoRefreshChange}
-        onClickLatest={clickLatest}
-        onOpenDemo={demoShellOpen}
-      />
+      <AppHeader {...appHeaderProps} />
       <AppNavigation run={run} />
       {error && <div className="alert">{error}</div>}
       <RecentRunsPanel
