@@ -52,7 +52,7 @@ import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
-import { useAppApprovalHandlers } from "./app/useAppApprovalHandlers";
+import { useApprovalFlowController } from "./app/approvalFlow";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
@@ -426,8 +426,8 @@ const App = () => {
     highlightQueueCard,
   });
 
-  // App-level refresh wrapper - must be defined BEFORE useAppApprovalHandlers
-  // because the hook receives refresh as a dependency.
+  // App-level refresh wrapper - must be defined BEFORE the approval flow controller
+  // because the controller receives refresh as a dependency.
   const refresh = useCallback(async () => {
     await refreshAppData();
     // Clear local execution results after successful refresh reconciliation.
@@ -439,14 +439,13 @@ const App = () => {
     handlePostExecutionHighlight();
   }, [refreshAppData, clearExecutionResults, handlePostExecutionHighlight]);
 
-  // Approval handlers - extracted to hook to reduce App.tsx size
-  // Note: The hook receives refresh so it can call it after approval success.
+  // Approval flow - Elm-ish state machine for candidate approval
   const {
     approvalResults,
     approvingCandidate,
     handleApproveCandidate,
     clearApprovalResults,
-  } = useAppApprovalHandlers({
+  } = useApprovalFlowController({
     selectedClusterLabel: hookSelectedClusterLabel,
     refresh,
   });

@@ -14,7 +14,7 @@
  * NOT owned by this hook:
  * - Run selection (useAppRunSelectionHandlers)
  * - Manual execution (useAppManualExecutionHandlers)
- * - Approval (useAppApprovalHandlers)
+ * - Approval (useApprovalFlowController)
  * - Cluster selection (useAppClusterSelectionHandlers)
  */
 import { useCallback, useState } from "react";
