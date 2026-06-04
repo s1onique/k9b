@@ -56,6 +56,7 @@ import { useAppClusterPlanProps } from "./app/useAppClusterPlanProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
 import { useAppApprovalHandlers } from "./app/useAppApprovalHandlers";
+import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 
 import { ProposalList } from "./components/ProposalList";
 import { buildExecutionEntryKey, formatDuration } from "./components/ExecutionHistoryPanel";
@@ -396,19 +397,11 @@ const App = () => {
   const [executingBatchRunId, setExecutingBatchRunId] = useState<string | null>(null);
   const [batchExecutionError, setBatchExecutionError] = useState<Record<string, string>>({});
 
-  // Run selection causal chain:
-  // - runControlSelectRun triggers RunControl to fetch /api/run for the selected run.
-  // - navigateToPageContainingRun keeps the Recent Runs list page in sync with the selected run.
-  // Keep these actions together: RunControl owns selected-run data; useRunSelection owns list navigation.
-  //
-  // Phase 3: Wire RecentRunsPanel's onRunSelection to use RunControl
-  // This ensures the causal chain goes through RunControl: selection -> fetch -> payload
-  const handleRunSelectionViaRunControl = useCallback((runId: string) => {
-    // Select run in RunControl (fetches run payload, updates header)
-    runControlSelectRun(runId);
-    // Navigate to the page containing the selected run so it becomes visible in the list
-    navigateToPageContainingRun(runId);
-  }, [runControlSelectRun, navigateToPageContainingRun]);
+  // Run selection handlers - extracted to hook
+  const { handleRunSelectionViaRunControl } = useAppRunSelectionHandlers({
+    runControlSelectRun,
+    navigateToPageContainingRun,
+  });
 
   // Handle batch execution for a run - refreshes runs list and selected run via hooks
   // Phase 5: Uses RunControl's poll() to refresh runs after batch execution completes
