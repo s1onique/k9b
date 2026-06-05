@@ -53,7 +53,7 @@ import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandle
 import { useApprovalFlowController } from "./app/approvalFlow";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
-import { useAppBatchExecutionHandlers } from "./app/useAppBatchExecutionHandlers";
+import { useBatchExecutionController } from "./app/batchExecution";
 import { useQueueFilterHandlers } from "./app/useQueueFilterHandlers";
 import { usePlannerDataProps } from "./app/usePlannerDataProps";
 import { useAppRecentRunsPanelProps } from "./app/useAppRecentRunsPanelProps";
@@ -332,15 +332,14 @@ const App = () => {
   // Execution history derived from run data - needed by useAppNavigationHighlights
   const executionHistory: NextCheckExecutionHistoryEntry[] = run?.nextCheckExecutionHistory ?? [];
 
-  // Batch execution handlers - extracted to hook
+  // Batch execution handlers - Elm-ish controller
   const {
     executingBatchRunId,
     batchExecutionError,
     handleBatchExecution,
-  } = useAppBatchExecutionHandlers({
+  } = useBatchExecutionController({
     selectedRunId,
-    poll,
-    retrySelectedRun,
+    callbacks: { poll, retrySelectedRun },
   });
 
   // Run selection handlers - extracted to hook
