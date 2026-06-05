@@ -1,0 +1,34 @@
+/**
+ * Solarized Light - Theme Variables Override
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33a (Solarized Light split)
+ */
+
+[data-theme="solarized-light"] {
+  /* Hero/Header text hierarchy - stronger for readability */
+  --hero-title-color: #002b36;
+  --hero-run-text: #002b36;
+  --hero-run-id: #586e75;
+  --hero-run-muted: #839496;
+  
+  /* Nav integration with warm shell */
+  --nav-bg: rgba(238, 232, 213, 0.92);
+  --nav-border: rgba(147, 161, 161, 0.4);
+  
+  /* Table contrast */
+  --table-header-bg: rgba(238, 232, 213, 0.9);
+  --table-header-text: #586e75;
+  --table-body-text: #002b36;
+  --table-row-hover: rgba(147, 161, 161, 0.18);
+  --table-border: rgba(147, 161, 161, 0.3);
+  
+  /* Chip/pill contrast */
+  --chip-bg: rgba(147, 161, 161, 0.15);
+  --chip-border: rgba(147, 161, 161, 0.35);
+  --chip-text: #586e75;
+  
+  /* Status pill stronger definition */
+  --status-pill-border-width: 1px;
+  --status-pill-border-style: solid;
+}

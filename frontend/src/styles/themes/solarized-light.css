@@ -1,0 +1,38 @@
+/**
+ * Solarized Light Theme Aggregator
+ * 
+ * Central import file for all Solarized Light theme overrides.
+ * Imports split files in cascade order: tokens first, then components.
+ * 
+ * Phase: 33 (Solarized Light split from monolith)
+ * 
+ * Import order rationale:
+ * 1. tokens.css - Theme variable overrides (CSS custom properties)
+ * 2. tables.css - Table styling overrides
+ * 3. inputs.css - Form inputs, selects, buttons
+ * 4. status-pills.css - Status indicators, badges, pills
+ * 5. cards-panels.css - Card and panel component overrides
+ * 6. advisory.css - Advisory section styling
+ * 7. artifacts.css - Links, artifacts, and miscellaneous overrides
+ */
+
+/* 1. Theme variables override */
+@import url('./solarized-light/tokens.css');
+
+/* 2. Table overrides */
+@import url('./solarized-light/tables.css');
+
+/* 3. Input and form overrides */
+@import url('./solarized-light/inputs.css');
+
+/* 4. Status pill and badge overrides */
+@import url('./solarized-light/status-pills.css');
+
+/* 5. Card and panel overrides */
+@import url('./solarized-light/cards-panels.css');
+
+/* 6. Advisory section overrides */
+@import url('./solarized-light/advisory.css');
+
+/* 7. Artifact and link overrides */
+@import url('./solarized-light/artifacts.css');

@@ -1,0 +1,31 @@
+/**
+ * Solarized Light - Table Styles
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33b (Solarized Light split)
+ */
+
+/* Table improvements */
+[data-theme="solarized-light"] .runs-table th {
+  background: rgba(238, 232, 213, 0.9);
+  color: #586e75;
+  border-bottom-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .runs-table td {
+  color: #002b36;
+  border-bottom-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .runs-table td strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .runs-table tbody tr:hover {
+  background: rgba(147, 161, 161, 0.18);
+}
+
+[data-theme="solarized-light"] .runs-table .run-cell-timestamp .recency,
+[data-theme="solarized-light"] .runs-table .run-cell-timestamp .absolute {
+  color: #657b83;
+}

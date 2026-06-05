@@ -1,0 +1,235 @@
+/**
+ * Solarized Light - Cards and Panels
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33e (Solarized Light split)
+ */
+
+/* Provider execution cards - harmonized with light shell */
+[data-theme="solarized-light"] .provider-execution {
+  background: rgba(238, 232, 213, 0.85);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .provider-execution-line {
+  background: rgba(253, 246, 227, 0.9);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .provider-execution-summary {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .provider-execution-note {
+  color: #657b83;
+}
+
+/* Review enrichment panel */
+[data-theme="solarized-light"] .review-enrichment {
+  background: rgba(238, 232, 213, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .review-enrichment-summary {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .review-enrichment-grid strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .review-enrichment-item ul {
+  color: #586e75;
+}
+
+/* Cluster assessment */
+[data-theme="solarized-light"] .cluster-assessment {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .recommended-action {
+  background: rgba(181, 137, 0, 0.08);
+  border-color: rgba(181, 137, 0, 0.3);
+}
+
+[data-theme="solarized-light"] .recommended-action p {
+  color: #002b36;
+}
+
+/* Drilldown cards */
+[data-theme="solarized-light"] .drilldown-card {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .drilldown-card.available {
+  border-color: rgba(133, 153, 0, 0.4);
+  background: rgba(133, 153, 0, 0.06);
+}
+
+[data-theme="solarized-light"] .drilldown-card.missing {
+  border-color: rgba(220, 50, 47, 0.4);
+  background: rgba(220, 50, 47, 0.06);
+}
+
+/* Related cards */
+[data-theme="solarized-light"] .related-card {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+/* Cluster detail */
+[data-theme="solarized-light"] .cluster-detail-panel {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .cluster-summary-card {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .cluster-summary-card strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .cluster-detail-body {
+  color: #002b36;
+}
+
+/* Fleet metrics */
+[data-theme="solarized-light"] .fleet-metrics article {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+/* LLM historical */
+[data-theme="solarized-light"] .llm-historical {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .llm-historical summary {
+  color: #657b83;
+}
+
+/* Orphaned checks */
+[data-theme="solarized-light"] .next-check-orphaned {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .next-check-orphaned li {
+  color: #002b36;
+}
+
+/* Queue explanation block */
+[data-theme="solarized-light"] .queue-explanation-block {
+  background: rgba(238, 232, 213, 0.88);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .queue-explanation-actions__label {
+  color: #657b83;
+}
+
+/* Next check plan cards */
+[data-theme="solarized-light"] .next-check-plan-card {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .next-check-plan-meta strong {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-plan-flags {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .plan-gating {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .plan-normalization {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .plan-stale-note {
+  color: #657b83;
+}
+
+/* Advisory lower sections container */
+[data-theme="solarized-light"] .advisory-lower-sections {
+  background: rgba(238, 232, 213, 0.5);
+}
+
+/* Lower section base */
+[data-theme="solarized-light"] .advisory-lower-section {
+  background: rgba(253, 246, 227, 0.85);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+/* Section labels - readable secondary, not ghosted */
+[data-theme="solarized-light"] .advisory-lower-section-label {
+  color: #586e75;
+  font-weight: 600;
+}
+
+/* Proposal row actions - softer secondary actions */
+[data-theme="solarized-light"] .proposal-row-actions {
+  color: #586e75;
+}
+
+/* Proposal artifacts - softer chip styling */
+[data-theme="solarized-light"] .artifact-chip {
+  background: rgba(38, 139, 210, 0.06);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .artifact-chip:hover {
+  background: rgba(38, 139, 210, 0.12);
+  color: #1a5f8a;
+}
+
+/* Execution history filter */
+[data-theme="solarized-light"] .execution-history-filters {
+  background: rgba(238, 232, 213, 0.85);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .filter-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .filter-count {
+  color: #657b83;
+}
+
+/* Recent runs */
+[data-theme="solarized-light"] .recent-runs-list {
+  background: rgba(238, 232, 213, 0.85);
+}
+
+[data-theme="solarized-light"] .recent-runs-item {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .recent-runs-item:hover {
+  background: rgba(147, 161, 161, 0.15);
+}
+
+[data-theme="solarized-light"] .recent-runs-item.selected {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .recent-runs-label {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .recent-runs-time {
+  color: #657b83;
+}

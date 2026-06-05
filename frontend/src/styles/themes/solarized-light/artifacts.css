@@ -1,0 +1,188 @@
+/**
+ * Solarized Light - Artifacts and Links
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33g (Solarized Light split)
+ */
+
+/* Artifact links - Solarized palette */
+[data-theme="solarized-light"] .artifact-link {
+  background: rgba(38, 139, 210, 0.08);
+  border-color: rgba(38, 139, 210, 0.4);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .artifact-link:hover {
+  background: rgba(38, 139, 210, 0.15);
+  color: #1a5f8a;
+}
+
+[data-theme="solarized-light"] .run-artifact-link {
+  background: rgba(38, 139, 210, 0.08);
+  border-color: rgba(38, 139, 210, 0.4);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .cluster-summary-artifact-link {
+  background: rgba(181, 137, 0, 0.08);
+  border-color: rgba(181, 137, 0, 0.4);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .cluster-summary-artifact-link:hover {
+  background: rgba(181, 137, 0, 0.15);
+  color: #8a6800;
+}
+
+[data-theme="solarized-light"] .exec-summary-item:hover {
+  background: rgba(38, 139, 210, 0.08);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+/* Follow-up blocks */
+[data-theme="solarized-light"] .follow-up-block {
+  background: rgba(38, 139, 210, 0.06);
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .follow-up-summary {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .follow-up-action {
+  color: #586e75;
+}
+
+/* Action links - softer blue for Download, View artifact, Show details, Back to queue */
+[data-theme="solarized-light"] .toggle-details-button {
+  color: #268bd2;
+  opacity: 0.85;
+}
+
+[data-theme="solarized-light"] .toggle-details-button:hover {
+  opacity: 1;
+}
+
+/* Blue accent softening - reduce opacity slightly for better integration */
+[data-theme="solarized-light"] .eyebrow {
+  color: #268bd2;
+  opacity: 0.9;
+}
+
+/* Plan rationale */
+[data-theme="solarized-light"] .plan-rationale-item {
+  background: rgba(147, 161, 161, 0.1);
+  color: #586e75;
+}
+
+/* Primary reason */
+[data-theme="solarized-light"] .primary-reason {
+  background-color: rgba(181, 137, 0, 0.08);
+  color: #b58900;
+}
+
+/* Queue empty state */
+[data-theme="solarized-light"] .queue-empty-state .link {
+  color: #268bd2;
+}
+
+/* Approval note colors */
+[data-theme="solarized-light"] .next-check-approval-note {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-approval-note-success {
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .next-check-approval-note-error {
+  color: #dc322f;
+}
+
+/* Plan blocking reason */
+[data-theme="solarized-light"] .plan-blocking-reason {
+  color: #dc322f;
+}
+
+/* Not runnable explanation */
+[data-theme="solarized-light"] .not-runnable-explanation {
+  background: rgba(147, 161, 161, 0.1);
+  color: #657b83;
+}
+
+/* Next check execution */
+[data-theme="solarized-light"] .next-check-execution {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-execution-warning {
+  color: #b58900;
+}
+
+/* Run row */
+[data-theme="solarized-light"] .run-row-actions .action-primary {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .run-row-actions .action-secondary {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .run-row-actions .action-tertiary {
+  color: #839496;
+}
+
+/* Execution error in runs */
+[data-theme="solarized-light"] .runs-execution-error {
+  color: #dc322f;
+}
+
+/* Diagnostic pack review */
+[data-theme="solarized-light"] .diagnostic-pack-review-summary {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .diagnostic-pack-provider {
+  color: #586e75;
+}
+
+/* Review action hint */
+[data-theme="solarized-light"] .review-action-hint {
+  color: #657b83;
+}
+
+/* LLM stats */
+[data-theme="solarized-light"] .run-stat-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .llm-provider-breakdown {
+  color: #657b83;
+}
+
+/* Cluster controls */
+[data-theme="solarized-light"] .cluster-controls label,
+[data-theme="solarized-light"] .cluster-controls select {
+  color: #586e75;
+}
+
+/* Proposal controls */
+[data-theme="solarized-light"] .proposal-controls label {
+  color: #586e75;
+}
+
+/* Queue card title */
+[data-theme="solarized-light"] .queue-card-title {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-card-reason-label {
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .queue-card-signal {
+  color: #839496;
+}
+
+/* Runs list detached notice - moved to advisory.css */

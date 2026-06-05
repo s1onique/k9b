@@ -1,0 +1,341 @@
+/**
+ * Solarized Light - Status Pills and Badges
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33d (Solarized Light split)
+ */
+
+/* Triage pills */
+[data-theme="solarized-light"] .triage-pill.triaged {
+  background: rgba(133, 153, 0, 0.18);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .triage-pill.not-triaged {
+  background: rgba(181, 137, 0, 0.18);
+  color: #b58900;
+}
+
+/* Action state badges */
+[data-theme="solarized-light"] .action-state-badge {
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .action-state-ready {
+  background: rgba(133, 153, 0, 0.15);
+  border-color: rgba(133, 153, 0, 0.35);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .action-state-approval {
+  background: rgba(181, 137, 0, 0.15);
+  border-color: rgba(181, 137, 0, 0.35);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .action-state-inactive {
+  background: rgba(147, 161, 161, 0.12);
+  border-color: rgba(147, 161, 161, 0.3);
+  color: #657b83;
+}
+
+[data-theme="solarized-light"] .action-state-unknown {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #839496;
+}
+
+/* Queue status pills */
+[data-theme="solarized-light"] .queue-status-pill {
+  background: rgba(147, 161, 161, 0.1);
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-approved-ready {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-safe-ready {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-approval-needed {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-failed {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-completed {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .queue-status-pill-duplicate-or-stale {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #839496;
+}
+
+/* Plan status pills */
+[data-theme="solarized-light"] .plan-status-pill-safe {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-approval {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-duplicate {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #839496;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-approved {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .plan-status-pill-stale {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+/* Confidence badges */
+[data-theme="solarized-light"] .confidence-badge {
+  background: rgba(38, 139, 210, 0.12);
+  border: 1px solid rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-critical,
+[data-theme="solarized-light"] .confidence-badge.level-high {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-medium {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-low {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .confidence-badge.level-default {
+  background: rgba(147, 161, 161, 0.12);
+  border-color: rgba(147, 161, 161, 0.3);
+  color: #657b83;
+}
+
+/* Priority pills */
+[data-theme="solarized-light"] .priority-pill-primary {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .priority-pill-secondary {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.25);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .priority-pill-fallback {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #657b83;
+}
+
+/* Outcome pills */
+[data-theme="solarized-light"] .outcome-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .outcome-pill-executed-success {
+  background: rgba(133, 153, 0, 0.12);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .outcome-pill-executed-failed {
+  background: rgba(220, 50, 47, 0.12);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+[data-theme="solarized-light"] .outcome-pill-timed-out {
+  background: rgba(181, 137, 0, 0.12);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .outcome-pill-approval-required {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .outcome-pill-approved {
+  background: rgba(38, 139, 210, 0.12);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .outcome-pill-approval-stale {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.25);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .outcome-pill-approval-orphaned,
+[data-theme="solarized-light"] .outcome-pill-not-used,
+[data-theme="solarized-light"] .outcome-pill-unknown {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.25);
+  color: #839496;
+}
+
+/* Safety pills */
+[data-theme="solarized-light"] .safety-pill {
+  background: rgba(181, 137, 0, 0.15);
+  color: #b58900;
+}
+
+/* Discovery pills */
+[data-theme="solarized-light"] .next-check-discovery-pill {
+  background: rgba(253, 246, 227, 0.92);
+  border-color: rgba(147, 161, 161, 0.35);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-safe {
+  background: rgba(133, 153, 0, 0.1);
+  border-color: rgba(133, 153, 0, 0.3);
+  color: #859900;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-approval {
+  background: rgba(181, 137, 0, 0.1);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-approved {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.3);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-duplicate {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.3);
+  color: #839496;
+}
+
+[data-theme="solarized-light"] .next-check-discovery-pill-stale {
+  background: rgba(220, 50, 47, 0.1);
+  border-color: rgba(220, 50, 47, 0.3);
+  color: #dc322f;
+}
+
+/* Cluster badge */
+[data-theme="solarized-light"] .next-check-cluster-badge {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.35);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .next-check-cluster-badge:hover {
+  background: rgba(38, 139, 210, 0.18);
+}
+
+/* Lifecycle chip */
+[data-theme="solarized-light"] .lifecycle-chip {
+  background: rgba(38, 139, 210, 0.1);
+  border-color: rgba(38, 139, 210, 0.25);
+  color: #268bd2;
+}
+
+/* Focus preset button */
+[data-theme="solarized-light"] .focus-preset-button {
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .focus-preset-button.active,
+[data-theme="solarized-light"] .focus-preset-button:focus-visible {
+  border-color: rgba(38, 139, 210, 0.6);
+  background: rgba(38, 139, 210, 0.1);
+  color: #268bd2;
+}
+
+/* Status pills base */
+[data-theme="solarized-light"] .status-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="solarized-light"] .status-pill-degraded {
+  background: rgba(220, 50, 47, 0.18);
+  color: #dc322f;
+  border-color: rgba(220, 50, 47, 0.35);
+}
+
+[data-theme="solarized-light"] .status-pill-healthy {
+  background: rgba(133, 153, 0, 0.2);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.4);
+}
+
+[data-theme="solarized-light"] .status-pill-pending {
+  background: rgba(181, 137, 0, 0.2);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.4);
+}
+
+/* Review badges - stronger */
+[data-theme="solarized-light"] .status-pill-fully-reviewed {
+  background: rgba(133, 153, 0, 0.2);
+  color: #859900;
+  border-color: rgba(133, 153, 0, 0.4);
+}
+
+[data-theme="solarized-light"] .status-pill-unreviewed {
+  background: rgba(181, 137, 0, 0.2);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.4);
+}
+
+[data-theme="solarized-light"] .status-pill-partially-reviewed {
+  background: rgba(147, 161, 161, 0.15);
+  color: #657b83;
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .status-pill-no-executions {
+  background: rgba(38, 139, 210, 0.15);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.35);
+}

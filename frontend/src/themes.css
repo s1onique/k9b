@@ -191,6 +191,188 @@
 }
 
 /* ============================================================
+   ROSE PINE THEME (Operator-Safe Light)
+   Based on Rose Pine Dawn palette, tuned for operator dashboards:
+   - High contrast for operational clarity
+   - Distinct semantic colors for status states
+   - Warm, low-glare surfaces for extended viewing
+   - Preserves readability in bright environments
+   ============================================================ */
+
+[data-theme="rose-pine"] {
+  /* Background tokens - Rose Pine Dawn base */
+  --color-bg-page: #faf4ed;
+  --color-bg-page-gradient: linear-gradient(180deg, #faf4ed 0%, #f4ede4 100%);
+  --color-bg-surface: rgba(255, 250, 243, 0.95);
+  --color-bg-elevated: rgba(242, 233, 225, 0.92);
+  --color-bg-canvas: rgba(250, 244, 237, 0.88);
+  
+  /* Text tokens - Rose Pine palette, high contrast for operators */
+  --color-text-primary: #575279;
+  --color-text-secondary: #797593;
+  --color-text-muted: #9890a9;
+  --color-text-accent: #907aa9;
+  --color-text-link: #286983;
+  
+  /* Border tokens - subtle warm grays */
+  --color-border-default: rgba(144, 132, 156, 0.4);
+  --color-border-subtle: rgba(144, 132, 156, 0.25);
+  --color-border-emphasis: rgba(144, 132, 156, 0.6);
+  
+  /* Accent tokens - Rose Pine iris/pine */
+  --color-accent-primary: rgba(144, 122, 169, 0.15);
+  --color-accent-primary-border: rgba(144, 122, 169, 0.5);
+  --color-accent-primary-text: #6e5a8a;
+  
+  --color-accent-secondary: rgba(40, 105, 131, 0.15);
+  --color-accent-secondary-border: rgba(40, 105, 131, 0.4);
+  --color-accent-secondary-text: #286983;
+  
+  /* State tokens - HIGH CONTRAST for operator safety
+     Critical/error: strong rose-red, not decorative
+     Warning: deep gold/amber, urgent
+     Success: forest green, distinguishable from info
+     Info: clear blue, distinct from success */
+  --color-state-success-bg: rgba(86, 148, 127, 0.2);
+  --color-state-success-border: rgba(86, 148, 127, 0.45);
+  --color-state-success-text: #2d6a4f;
+  
+  --color-state-warning-bg: rgba(234, 157, 52, 0.2);
+  --color-state-warning-border: rgba(234, 157, 52, 0.45);
+  --color-state-warning-text: #b45309;
+  
+  --color-state-danger-bg: rgba(180, 99, 122, 0.2);
+  --color-state-danger-border: rgba(180, 99, 122, 0.5);
+  --color-state-danger-text: #9b2c4a;
+  
+  --color-state-info-bg: rgba(40, 105, 131, 0.15);
+  --color-state-info-border: rgba(40, 105, 131, 0.4);
+  --color-state-info-text: #1d4e5f;
+  
+  --color-state-neutral-bg: rgba(144, 132, 156, 0.15);
+  --color-state-neutral-border: rgba(144, 132, 156, 0.35);
+  --color-state-neutral-text: #797593;
+  
+  /* Interactive tokens */
+  --color-interactive-hover: rgba(144, 132, 156, 0.2);
+  --color-interactive-focus: #286983;
+  --color-interactive-active: rgba(40, 105, 131, 0.18);
+  --color-interactive-selected-bg: rgba(40, 105, 131, 0.12);
+  --color-interactive-selected-border: rgba(40, 105, 131, 0.35);
+  
+  /* Selection tokens */
+  --color-selection-bg: rgba(144, 122, 169, 0.15);
+  --color-selection-border: rgba(144, 122, 169, 0.45);
+  --color-selection-text: #6e5a8a;
+  
+  /* Panel and card tokens - warm cream surfaces */
+  --color-panel-bg: rgba(255, 250, 243, 0.95);
+  --color-panel-border: rgba(144, 132, 156, 0.4);
+  --color-card-bg: rgba(242, 233, 225, 0.92);
+  --color-card-border: rgba(144, 132, 156, 0.3);
+  
+  /* Nav tokens - integrated with warm shell */
+  --color-nav-bg: rgba(242, 233, 225, 0.9);
+  --color-nav-border: rgba(144, 132, 156, 0.35);
+  --color-nav-item-text: #797593;
+  --color-nav-item-hover-bg: rgba(40, 105, 131, 0.12);
+  --color-nav-item-hover-border: rgba(40, 105, 131, 0.3);
+  --color-nav-item-hover-text: #1d4e5f;
+  
+  /* Input tokens */
+  --color-input-bg: rgba(255, 250, 243, 0.95);
+  --color-input-border: rgba(144, 132, 156, 0.55);
+  --color-input-text: #575279;
+  --color-input-placeholder: #9890a9;
+  
+  /* Button tokens */
+  --color-btn-primary-bg: rgba(40, 105, 131, 0.15);
+  --color-btn-primary-border: rgba(40, 105, 131, 0.55);
+  --color-btn-primary-text: #1d4e5f;
+  --color-btn-primary-hover-bg: rgba(40, 105, 131, 0.25);
+  --color-btn-primary-hover-border: rgba(40, 105, 131, 0.7);
+  
+  --color-btn-secondary-bg: rgba(144, 132, 156, 0.15);
+  --color-btn-secondary-border: rgba(144, 132, 156, 0.45);
+  --color-btn-secondary-text: #797593;
+  --color-btn-secondary-hover-bg: rgba(144, 132, 156, 0.25);
+  --color-btn-secondary-hover-border: rgba(144, 132, 156, 0.6);
+  
+  /* Freshness indicator tokens - HIGH CONTRAST */
+  --color-freshness-fresh: #2d6a4f;
+  --color-freshness-warning: #b45309;
+  --color-freshness-stale: #9b2c4a;
+  
+  /* Status pill tokens - degraded */
+  --color-status-degraded-bg: rgba(180, 99, 122, 0.2);
+  --color-status-degraded-text: #9b2c4a;
+  
+  /* Status pill tokens - healthy */
+  --color-status-healthy-bg: rgba(86, 148, 127, 0.2);
+  --color-status-healthy-text: #2d6a4f;
+  
+  /* Status pill tokens - pending/warning */
+  --color-status-pending-bg: rgba(234, 157, 52, 0.2);
+  --color-status-pending-text: #b45309;
+  
+  /* Status pill tokens - review statuses */
+  --color-status-reviewed-bg: rgba(86, 148, 127, 0.2);
+  --color-status-reviewed-text: #2d6a4f;
+  --color-status-unreviewed-bg: rgba(234, 157, 52, 0.2);
+  --color-status-unreviewed-text: #b45309;
+  --color-status-partial-bg: rgba(144, 132, 156, 0.15);
+  --color-status-partial-text: #797593;
+  --color-status-no-exec-bg: rgba(40, 105, 131, 0.15);
+  --color-status-no-exec-text: #1d4e5f;
+  
+  /* Alert/warning tokens */
+  --color-alert-bg: rgba(180, 99, 122, 0.15);
+  --color-alert-border: rgba(180, 99, 122, 0.5);
+  --color-alert-text: #9b2c4a;
+  
+  /* Empty state tokens */
+  --color-empty-bg: rgba(242, 233, 225, 0.92);
+  --color-empty-border: rgba(144, 132, 156, 0.4);
+  --color-empty-text: #9890a9;
+  
+  /* Table tokens */
+  --color-table-header-bg: rgba(242, 233, 225, 0.88);
+  --color-table-row-hover: rgba(144, 132, 156, 0.18);
+  --color-table-row-selected: rgba(40, 105, 131, 0.1);
+  --color-table-border: rgba(144, 132, 156, 0.25);
+  --color-table-header-text: #797593;
+  
+  /* Card/panel selection tokens */
+  --color-card-selected-bg: rgba(40, 105, 131, 0.1);
+  --color-card-selected-border: rgba(40, 105, 131, 0.35);
+  
+  /* Advisory panel semantic tokens - Rose Pine adaptations
+     High contrast for operator readability */
+  --advisory-ok-fg: #2d6a4f;
+  --advisory-ok-bg: rgba(86, 148, 127, 0.12);
+  --advisory-ok-border: rgba(86, 148, 127, 0.35);
+  
+  --advisory-info-fg: #1d4e5f;
+  --advisory-info-bg: rgba(40, 105, 131, 0.1);
+  --advisory-info-border: rgba(40, 105, 131, 0.35);
+  
+  --advisory-warning-fg: #92400e;
+  --advisory-warning-bg: rgba(234, 157, 52, 0.1);
+  --advisory-warning-border: rgba(234, 157, 52, 0.35);
+  
+  --advisory-danger-fg: #9b2c4a;
+  --advisory-danger-bg: rgba(180, 99, 122, 0.1);
+  --advisory-danger-border: rgba(180, 99, 122, 0.35);
+  
+  --advisory-focus-fg: #6e5a8a;
+  --advisory-focus-bg: rgba(144, 122, 169, 0.1);
+  --advisory-focus-border: rgba(144, 122, 169, 0.35);
+  
+  --advisory-muted-fg: #797593;
+  --advisory-panel-border: rgba(144, 132, 156, 0.24);
+}
+
+/* ============================================================
    SOLARIZED LIGHT THEME
    Based on Solarized Light principles:
    - warm paper-like light background (cream/ivory base)

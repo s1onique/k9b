@@ -1,0 +1,73 @@
+/**
+ * Solarized Light - Advisory Sections
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33f (Solarized Light split)
+ */
+
+/* Top concerns section */
+[data-theme="solarized-light"] .advisory-concerns-section {
+  border-left-color: rgba(88, 110, 117, 0.4);
+}
+
+[data-theme="solarized-light"] .advisory-concern-row {
+  color: #002b36;
+  border-bottom-color: rgba(147, 161, 161, 0.15);
+}
+
+/* Evidence gaps section */
+[data-theme="solarized-light"] .advisory-gaps-section {
+  border-left-color: rgba(88, 110, 117, 0.4);
+}
+
+[data-theme="solarized-light"] .advisory-gap-row {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .advisory-gap-marker {
+  color: #657b83;
+}
+
+/* Next checks section - priority readability */
+[data-theme="solarized-light"] .advisory-next-checks-section {
+  border-left-color: rgba(88, 110, 117, 0.4);
+}
+
+[data-theme="solarized-light"] .advisory-check-row {
+  border-bottom-color: rgba(147, 161, 161, 0.15);
+}
+
+[data-theme="solarized-light"] .advisory-check-intent {
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .advisory-check-cluster {
+  background: rgba(147, 161, 161, 0.15);
+  color: #586e75;
+  border-color: rgba(147, 161, 161, 0.35);
+}
+
+[data-theme="solarized-light"] .advisory-check-cmd {
+  background: rgba(238, 232, 213, 0.8);
+  color: #073642;
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+/* Focus guidance section */
+[data-theme="solarized-light"] .advisory-focus-notes-section {
+  border-left-color: rgba(88, 110, 117, 0.35);
+}
+
+[data-theme="solarized-light"] .advisory-focus-note-row {
+  color: #586e75;
+}
+
+/* Runs list detached mode notice */
+[data-theme="solarized-light"] .runs-detached-notice {
+  background: rgba(147, 161, 161, 0.1);
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .runs-detached-notice .muted {
+  color: #586e75;
+}

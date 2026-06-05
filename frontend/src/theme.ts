@@ -7,7 +7,7 @@
  */
 
 export const THEME_STORAGE_KEY = "dashboard-theme";
-export const VALID_THEMES = ["dark", "solarized-light"] as const;
+export const VALID_THEMES = ["dark", "solarized-light", "rose-pine"] as const;
 export type ThemeName = (typeof VALID_THEMES)[number];
 
 // Default theme when nothing is stored

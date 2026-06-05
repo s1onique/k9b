@@ -1,0 +1,108 @@
+/**
+ * Solarized Light - Input and Form Styles
+ * 
+ * Extracted from: styles/themes/solarized-light-overrides.css
+ * Phase: 33c (Solarized Light split)
+ */
+
+/* Input/select in light theme - stronger contrast */
+[data-theme="solarized-light"] .autorefresh-control select,
+[data-theme="solarized-light"] .runs-filter-select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .autorefresh-control label,
+[data-theme="solarized-light"] .autorefresh-status {
+  color: #657b83;
+}
+
+/* Buttons in tables/actions */
+[data-theme="solarized-light"] .run-action-cell .btn-primary,
+[data-theme="solarized-light"] .run-action-cell button[class*='primary'] {
+  background: rgba(38, 139, 210, 0.15);
+  border-color: rgba(38, 139, 210, 0.5);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .run-action-cell .btn-secondary,
+[data-theme="solarized-light"] .run-action-cell a.btn,
+[data-theme="solarized-light"] .run-action-cell a[class*='btn'] {
+  background: rgba(147, 161, 161, 0.15);
+  border-color: rgba(147, 161, 161, 0.4);
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .run-action-cell .btn-secondary:hover,
+[data-theme="solarized-light"] .run-action-cell a.btn:hover,
+[data-theme="solarized-light"] .run-action-cell a[class*='btn']:hover {
+  background: rgba(147, 161, 161, 0.25);
+  color: #002b36;
+}
+
+/* Queue filter selects - soften to match warm paper shell */
+[data-theme="solarized-light"] .next-check-filter-row select,
+[data-theme="solarized-light"] .next-check-control-row select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .next-check-filter-row select:hover,
+[data-theme="solarized-light"] .next-check-control-row select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
+
+/* LLM activity filter selects - harmonize with warm shell */
+[data-theme="solarized-light"] .llm-activity-filters select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .llm-activity-filters select:hover {
+  border-color: rgba(147, 161, 161, 0.7);
+}
+
+/* Cluster controls selects - warm paper background (kept for backward compat) */
+[data-theme="solarized-light"] .cluster-controls select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+/* Queue search input - warm paper background */
+[data-theme="solarized-light"] .queue-search input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .queue-search input::placeholder {
+  color: #93a1a1;
+}
+
+[data-theme="solarized-light"] .queue-search input:focus {
+  border-color: rgba(38, 139, 210, 0.6);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.1);
+}
+
+/* Proposal controls inputs - warm paper */
+[data-theme="solarized-light"] .proposal-controls input {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.5);
+  color: #002b36;
+}
+
+/* Filter selects */
+[data-theme="solarized-light"] .filter-select {
+  background: rgba(253, 246, 227, 0.95);
+  border-color: rgba(147, 161, 161, 0.45);
+  color: #002b36;
+}
+
+[data-theme="solarized-light"] .filter-select:focus {
+  border-color: #268bd2;
+}

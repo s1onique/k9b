@@ -105,5 +105,8 @@
 @import url('./components/demo-shell-cards.css');
 @import url('./components/demo-shell-responsive.css');
 
-/* 5. Legacy component styles (remaining monolith) */
+/* 5. Theme-specific overrides (imported AFTER component base styles) */
+@import url('./themes/solarized-light.css');
+
+/* 6. Legacy component styles (remaining monolith) */
 @import url('../index.css');
