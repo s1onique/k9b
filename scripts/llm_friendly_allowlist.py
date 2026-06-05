@@ -133,6 +133,7 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [STYLES] CSS files - large but coherent
     ("frontend/src/index.css", "[STYLES] Main CSS - style collection"),
+    ("frontend/src/themes.css", "[STYLES] Theme variables - coherent collection"),
     ("frontend/src/styles/components/next-check-plan.css", "[STYLES] Plan styles - complex selectors"),
     ("frontend/src/styles/components/next-check-queue.css", "[STYLES] Queue styles - complex selectors"),
     ("frontend/src/styles/components/run-overview-dashboard.css", "[STYLES] Dashboard styles - complex selectors"),
