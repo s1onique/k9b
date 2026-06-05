@@ -49,7 +49,7 @@ import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
-import { useAppManualExecutionHandlers } from "./app/useAppManualExecutionHandlers";
+import { useManualExecutionController } from "./app/manualExecution";
 import { useApprovalFlowController } from "./app/approvalFlow";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
@@ -372,7 +372,7 @@ const App = () => {
     getSelectedClusterLabel: () => selectedClusterLabel,
   });
 
-  // Manual execution handlers - extracted to hook to reduce App.tsx size
+  // Manual execution handlers - Elm-ish controller
   // Note: Placed after useAppNavigationHighlights so highlightQueueCard is available (TDZ fix)
   const {
     executionResults,
@@ -383,7 +383,7 @@ const App = () => {
     buildCandidateKey,
     clearExecutionResults,
     handlePostExecutionHighlight,
-  } = useAppManualExecutionHandlers({
+  } = useManualExecutionController({
     selectedClusterLabel: hookSelectedClusterLabel,
     highlightQueueCard,
   });
