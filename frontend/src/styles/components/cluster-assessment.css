@@ -1,0 +1,148 @@
+/**
+ * Cluster Assessment & Related Components Styles
+ * 
+ * Extracted from: frontend/src/index.css
+ * Phase: 33 (Cluster Assessment extraction)
+ * 
+ * Scope:
+ * - .cluster-lists (grid layout for cluster lists)
+ * - .cluster-assessment, .cluster-assessment-heading (assessment panel)
+ * - .recommended-action (recommended action block)
+ * - .safety-pill (safety badge)
+ * - .provider-assisted-block (provider-assisted section)
+ * - .cluster-artifacts (cluster artifact links)
+ * - .assessment-meta (assessment meta info)
+ * - .drilldown-card, .drilldown-grid (drilldown cards)
+ * - .related-card (related cards)
+ * 
+ * NOTE: .next-check-plan and .next-check-plan-* family is owned by next-check-plan.css
+ * NOTE: .outcome-pill-* family is owned by next-check-plan.css
+ * NOTE: .plan-status-pill-* family is owned by next-check-plan.css
+ * NOTE: .priority-pill-* family is owned by next-check-plan.css
+ * NOTE: .next-check-approval-* family is owned by next-check-plan.css
+ * NOTE: .next-check-orphaned is owned by next-check-plan.css
+ * 
+ * Solarized Light overrides owned by: styles/themes/solarized-light/cards-panels.css
+ */
+
+/* ==========================================================================
+   Cluster Lists Grid
+   ========================================================================== */
+
+.cluster-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* ==========================================================================
+   Cluster Assessment Panel
+   ========================================================================== */
+
+.cluster-assessment {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(94, 234, 212, 0.25);
+  background: rgba(15, 23, 42, 0.95);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cluster-assessment-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Recommended Action & Safety Pill
+   ========================================================================== */
+
+.recommended-action {
+  border-radius: 0.85rem;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.safety-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+  margin-left: 0.35rem;
+}
+
+/* ==========================================================================
+   Provider Assisted Block
+   ========================================================================== */
+
+.provider-assisted-block {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ==========================================================================
+   Cluster Artifacts & Assessment Meta
+   ========================================================================== */
+
+.cluster-artifacts {
+  gap: 0.5rem;
+}
+
+.assessment-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* ==========================================================================
+   Drilldown Cards
+   ========================================================================== */
+
+.drilldown-card {
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.drilldown-card.available {
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.drilldown-card.missing {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.drilldown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+/* ==========================================================================
+   Related Card
+   ========================================================================== */
+
+.related-card {
+  border-radius: 0.8rem;
+  padding: 0.65rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}

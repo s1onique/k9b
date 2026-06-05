@@ -51,7 +51,9 @@
  * ✓ Phase 28: styles/components/shared-ui.css (shared UI primitives extracted)
  * ✓ Phase 29: styles/components/runs-table.css (runs table extracted)
  * ✓ Phase 30: styles/components/cluster-detail.css (cluster detail extracted)
- * → Phase 31: remaining monolith styles (future)
+ * ✓ Phase 32: styles/components/review-enrichment.css (review enrichment extracted)
+ * ✓ Phase 33: styles/components/cluster-assessment.css (cluster assessment extracted)
+ * → Phase 34: remaining monolith styles (future)
  */
 
 /* 1. Base tokens must load first */
@@ -104,6 +106,8 @@
 @import url('./components/demo-shell-steps.css');
 @import url('./components/demo-shell-cards.css');
 @import url('./components/demo-shell-responsive.css');
+@import url('./components/review-enrichment.css');
+@import url('./components/cluster-assessment.css');
 
 /* 5. Theme-specific overrides (imported AFTER component base styles) */
 @import url('./themes/solarized-light.css');
