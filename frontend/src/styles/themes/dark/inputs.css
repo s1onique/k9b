@@ -1,0 +1,66 @@
+/**
+ * Dark Theme - Input and Form Styles
+ * 
+ * Extracted from: styles/components/filters.css, inputs.css, row-actions.css
+ * Phase: Dark Theme Extraction (Phase D3)
+ * 
+ * Dark-specific input/form styling moved from implicit base to explicit theme package.
+ */
+
+/* Autorefresh and filter selects */
+[data-theme="dark"] .autorefresh-control select,
+[data-theme="dark"] .runs-filter-select,
+[data-theme="dark"] .next-check-filter-row select,
+[data-theme="dark"] .next-check-control-row select,
+[data-theme="dark"] .llm-activity-filters select,
+[data-theme="dark"] .cluster-controls select {
+  background: var(--color-input-bg, rgba(2, 6, 23, 0.85));
+  border-color: var(--color-input-border, rgba(148, 163, 184, 0.6));
+  color: var(--color-input-text, #f8fafc);
+}
+
+[data-theme="dark"] .autorefresh-control label,
+[data-theme="dark"] .autorefresh-status {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Buttons in dark theme */
+[data-theme="dark"] .run-action-cell .btn-primary,
+[data-theme="dark"] .run-action-cell button[class*='primary'] {
+  background: var(--color-btn-primary-bg, rgba(56, 189, 248, 0.1));
+  border-color: var(--color-btn-primary-border, rgba(56, 189, 248, 0.5));
+  color: var(--color-btn-primary-text, #bae6fd);
+}
+
+[data-theme="dark"] .run-action-cell .btn-secondary,
+[data-theme="dark"] .run-action-cell a.btn,
+[data-theme="dark"] .run-action-cell a[class*='btn'] {
+  background: var(--color-btn-secondary-bg, rgba(71, 85, 105, 0.3));
+  border-color: var(--color-btn-secondary-border, rgba(100, 116, 139, 0.4));
+  color: var(--color-btn-secondary-text, rgba(148, 163, 184, 0.9));
+}
+
+/* Queue search input */
+[data-theme="dark"] .queue-search input {
+  background: var(--color-input-bg, rgba(2, 6, 23, 0.85));
+  border-color: var(--color-input-border, rgba(148, 163, 184, 0.6));
+  color: var(--color-input-text, #f8fafc);
+}
+
+[data-theme="dark"] .queue-search input::placeholder {
+  color: var(--color-input-placeholder, rgba(148, 163, 184, 0.6));
+}
+
+/* Proposal controls inputs */
+[data-theme="dark"] .proposal-controls input {
+  background: var(--color-input-bg, rgba(2, 6, 23, 0.85));
+  border-color: var(--color-input-border, rgba(148, 163, 184, 0.6));
+  color: var(--color-input-text, #f8fafc);
+}
+
+/* Filter selects */
+[data-theme="dark"] .filter-select {
+  background: var(--color-input-bg, rgba(2, 6, 23, 0.85));
+  border-color: rgba(148, 163, 184, 0.5);
+  color: var(--color-input-text, #f8fafc);
+}

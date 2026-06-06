@@ -1,0 +1,403 @@
+/**
+ * Dark Theme - Status Pills and Badges
+ * 
+ * Extracted from: styles/components/badges-pills.css, next-check-plan.css
+ * Phase: Dark Theme Extraction (Phase D4)
+ * 
+ * Dark-specific status pill styling moved from implicit base to explicit theme package.
+ */
+
+/* Freshness pills */
+[data-theme="dark"] .freshness-pill {
+  background: rgba(56, 189, 248, 0.08);
+  color: rgba(148, 163, 184, 0.8);
+  border-color: rgba(56, 189, 248, 0.15);
+}
+
+[data-theme="dark"] .freshness-pill.stale {
+  background: rgba(248, 113, 113, 0.12);
+  color: rgba(248, 113, 113, 0.9);
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+[data-theme="dark"] .freshness-pill.fresh {
+  background: rgba(34, 197, 94, 0.08);
+  color: rgba(34, 197, 94, 0.85);
+  border-color: rgba(34, 197, 94, 0.15);
+}
+
+/* Triage pills */
+[data-theme="dark"] .triage-pill.triaged {
+  background: var(--color-state-success-bg, rgba(34, 197, 94, 0.15));
+  color: var(--color-state-success-text, #86efac);
+}
+
+[data-theme="dark"] .triage-pill.not-triaged {
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
+  color: var(--color-state-warning-text, #fde047);
+}
+
+/* Action state badges */
+[data-theme="dark"] .action-state-badge {
+  border: 1px solid transparent;
+}
+
+[data-theme="dark"] .action-state-ready {
+  background: var(--color-state-success-bg, rgba(34, 197, 94, 0.15));
+  border-color: var(--color-state-success-border, rgba(34, 197, 94, 0.35));
+  color: var(--color-state-success-text, #86efac);
+}
+
+[data-theme="dark"] .action-state-approval {
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
+  border-color: var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
+  color: var(--color-state-warning-text, #fde047);
+}
+
+[data-theme="dark"] .action-state-inactive {
+  background: var(--color-state-neutral-bg, rgba(148, 163, 184, 0.15));
+  border-color: var(--color-state-neutral-border, rgba(148, 163, 184, 0.35));
+  color: var(--color-state-neutral-text, #cbd5e1);
+}
+
+[data-theme="dark"] .action-state-unknown {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Queue status pills */
+[data-theme="dark"] .queue-status-pill {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid transparent;
+}
+
+[data-theme="dark"] .queue-status-pill-approved-ready {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .queue-status-pill-safe-ready {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+[data-theme="dark"] .queue-status-pill-approval-needed {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+}
+
+[data-theme="dark"] .queue-status-pill-failed {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .queue-status-pill-completed {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .queue-status-pill-duplicate-or-stale {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Plan status pills */
+[data-theme="dark"] .plan-status-pill-safe {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+[data-theme="dark"] .plan-status-pill-approval {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+}
+
+[data-theme="dark"] .plan-status-pill-duplicate {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .plan-status-pill-approved {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .plan-status-pill-stale {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+/* Confidence badges */
+[data-theme="dark"] .confidence-badge {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .confidence-badge.level-critical,
+[data-theme="dark"] .confidence-badge.level-high {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .confidence-badge.level-medium {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+}
+
+[data-theme="dark"] .confidence-badge.level-low {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+[data-theme="dark"] .confidence-badge.level-default {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+}
+
+/* Priority pills */
+[data-theme="dark"] .priority-pill-primary {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .priority-pill-secondary {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.25);
+  color: #fde047;
+}
+
+[data-theme="dark"] .priority-pill-fallback {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+}
+
+/* Outcome pills */
+[data-theme="dark"] .outcome-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="dark"] .outcome-pill-executed-success {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+[data-theme="dark"] .outcome-pill-executed-failed {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .outcome-pill-timed-out {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+}
+
+[data-theme="dark"] .outcome-pill-approval-required {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .outcome-pill-approved {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .outcome-pill-approval-stale {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.25);
+  color: #fde047;
+}
+
+[data-theme="dark"] .outcome-pill-approval-orphaned,
+[data-theme="dark"] .outcome-pill-not-used,
+[data-theme="dark"] .outcome-pill-unknown {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Safety pills */
+[data-theme="dark"] .safety-pill {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde047;
+}
+
+/* Discovery pills */
+[data-theme="dark"] .next-check-discovery-pill {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: rgba(148, 163, 184, 0.85);
+}
+
+[data-theme="dark"] .next-check-discovery-pill-safe {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+[data-theme="dark"] .next-check-discovery-pill-approval {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde047;
+}
+
+[data-theme="dark"] .next-check-discovery-pill-approved {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .next-check-discovery-pill-duplicate {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .next-check-discovery-pill-stale {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+}
+
+/* Cluster badge */
+[data-theme="dark"] .next-check-cluster-badge {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .next-check-cluster-badge:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+/* Lifecycle chip */
+[data-theme="dark"] .lifecycle-chip {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+/* Focus preset button */
+[data-theme="dark"] .focus-preset-button {
+  border-color: rgba(148, 163, 184, 0.4);
+  color: rgba(148, 163, 184, 0.85);
+}
+
+[data-theme="dark"] .focus-preset-button.active,
+[data-theme="dark"] .focus-preset-button:focus-visible {
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+}
+
+/* Status pills base */
+[data-theme="dark"] .status-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="dark"] .status-pill-degraded {
+  background: var(--color-status-degraded-bg, rgba(248, 113, 113, 0.2));
+  color: var(--color-status-degraded-text, #fecaca);
+}
+
+[data-theme="dark"] .status-pill-healthy {
+  background: var(--color-status-healthy-bg, rgba(34, 197, 94, 0.2));
+  color: var(--color-status-healthy-text, #86efac);
+}
+
+[data-theme="dark"] .status-pill-pending {
+  background: var(--color-status-pending-bg, rgba(251, 191, 36, 0.2));
+  color: var(--color-status-pending-text, #fde68a);
+}
+
+/* Review badges */
+[data-theme="dark"] .status-pill-fully-reviewed {
+  background: var(--color-status-reviewed-bg, rgba(34, 197, 94, 0.2));
+  color: var(--color-status-reviewed-text, #86efac);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .status-pill-unreviewed {
+  background: var(--color-status-unreviewed-bg, rgba(251, 191, 36, 0.2));
+  color: var(--color-status-unreviewed-text, #fde68a);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .status-pill-partially-reviewed {
+  background: var(--color-status-partial-bg, rgba(148, 163, 184, 0.15));
+  color: var(--color-status-partial-text, #cbd5e1);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .status-pill-no-executions {
+  background: var(--color-status-no-exec-bg, rgba(59, 130, 246, 0.15));
+  color: var(--color-status-no-exec-text, #bfdbfe);
+  font-weight: 600;
+}
+
+/* Recency pill */
+[data-theme="dark"] .recency-pill {
+  background: rgba(37, 99, 235, 0.2);
+  color: #bfdbfe;
+}
+
+[data-theme="dark"] .recency-pill.stale {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+}
+
+/* Execution state chips */
+[data-theme="dark"] .execution-state-chip--executed-success,
+[data-theme="dark"] .execution-state-chip--success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+[data-theme="dark"] .execution-state-chip--executed-failed,
+[data-theme="dark"] .execution-state-chip--failed {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+[data-theme="dark"] .execution-state-chip--timed-out {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde047;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+[data-theme="dark"] .execution-state-chip--completed {
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+[data-theme="dark"] .execution-state-chip--executed {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.3);
+}

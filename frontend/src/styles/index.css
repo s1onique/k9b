@@ -116,7 +116,13 @@
    selectors intentionally have higher specificity than the legacy untargeted
    .selector rules that follow.
    
-   If a new theme needs component overrides, add them here in the same pattern. */
+   Theme packages are structurally equal:
+   - themes/dark.css         → Dark theme (first-class, explicit)
+   - themes/solarized-light.css → Solarized Light theme
+   - themes/rose-pine.css   → Rose Pine theme
+   
+   All three use [data-theme="<theme>"] selectors for component overrides. */
+@import url('./themes/dark.css');
 @import url('./themes/solarized-light.css');
 @import url('./themes/rose-pine.css');
 

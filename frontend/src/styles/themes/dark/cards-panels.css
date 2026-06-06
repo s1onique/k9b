@@ -1,0 +1,260 @@
+/**
+ * Dark Theme - Cards and Panels
+ * 
+ * Extracted from: styles/components/fleet-summary.css, cluster-detail.css, 
+ *                  next-check-queue.css, next-check-plan.css
+ * Phase: Dark Theme Extraction (Phase D5)
+ * 
+ * Dark-specific card/panel styling moved from implicit base to explicit theme package.
+ */
+
+/* Provider execution cards */
+[data-theme="dark"] .provider-execution {
+  background: var(--color-card-bg, rgba(15, 23, 42, 0.85));
+  border-color: var(--color-card-border, rgba(148, 163, 184, 0.2));
+}
+
+[data-theme="dark"] .provider-execution-line {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .provider-execution-summary {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .provider-execution-note {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Review enrichment panel */
+[data-theme="dark"] .review-enrichment {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .review-enrichment-summary {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .review-enrichment-grid strong {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .review-enrichment-item ul {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Cluster assessment */
+[data-theme="dark"] .cluster-assessment {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .recommended-action {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+[data-theme="dark"] .recommended-action p {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+/* Drilldown cards */
+[data-theme="dark"] .drilldown-card {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .drilldown-card.available {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+[data-theme="dark"] .drilldown-card.missing {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+/* Related cards */
+[data-theme="dark"] .related-card {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* Cluster detail */
+[data-theme="dark"] .cluster-detail-panel {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .cluster-summary-card {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .cluster-summary-card strong {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .cluster-detail-body {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+/* Fleet metrics */
+[data-theme="dark"] .fleet-metrics article {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* LLM historical */
+[data-theme="dark"] .llm-historical {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .llm-historical summary {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Orphaned checks */
+[data-theme="dark"] .next-check-orphaned {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .next-check-orphaned li {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+/* Queue explanation block */
+[data-theme="dark"] .queue-explanation-block {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .queue-explanation-actions__label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Next check plan cards */
+[data-theme="dark"] .next-check-plan-card {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+[data-theme="dark"] .next-check-plan-meta strong {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .next-check-plan-flags {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .plan-gating {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .plan-normalization {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+[data-theme="dark"] .plan-stale-note {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Advisory lower sections container */
+[data-theme="dark"] .advisory-lower-sections {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+/* Lower section base */
+[data-theme="dark"] .advisory-lower-section {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* Section labels */
+[data-theme="dark"] .advisory-lower-section-label {
+  color: rgba(148, 163, 184, 0.85);
+  font-weight: 600;
+}
+
+/* Proposal row actions */
+[data-theme="dark"] .proposal-row-actions {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Proposal artifacts */
+[data-theme="dark"] .artifact-chip {
+  background: rgba(56, 189, 248, 0.06);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+}
+
+[data-theme="dark"] .artifact-chip:hover {
+  background: rgba(56, 189, 248, 0.12);
+  color: #bae6fd;
+}
+
+/* Execution history filter */
+[data-theme="dark"] .execution-history-filters {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .filter-label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .filter-count {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Recent runs in dark theme */
+[data-theme="dark"] .recent-runs-list {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+[data-theme="dark"] .recent-runs-item {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .recent-runs-item:hover {
+  background: rgba(71, 85, 105, 0.4);
+}
+
+[data-theme="dark"] .recent-runs-item.selected {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+[data-theme="dark"] .recent-runs-label {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .recent-runs-time {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+/* Run stat card */
+[data-theme="dark"] .run-stat-card {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="dark"] .run-stat-card strong {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .run-stat-card span {
+  color: rgba(248, 250, 252, 0.65);
+}
+
+[data-theme="dark"] .run-duration-summary {
+  color: rgba(248, 250, 252, 0.7);
+}
+
+[data-theme="dark"] .run-summary-collector {
+  color: rgba(148, 163, 184, 0.85);
+}

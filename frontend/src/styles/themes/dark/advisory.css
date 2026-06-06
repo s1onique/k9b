@@ -1,0 +1,134 @@
+/**
+ * Dark Theme - Advisory Sections
+ * 
+ * Extracted from: styles/components/advisory-summary.css, advisory-lower-sections.css
+ * Phase: Dark Theme Extraction (Phase D6)
+ * 
+ * Dark-specific advisory section styling moved from implicit base to explicit theme package.
+ */
+
+/* Advisory summary strip */
+[data-theme="dark"] .advisory-summary-strip {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: var(--advisory-panel-border, rgba(88, 110, 117, 0.24));
+}
+
+/* Top concerns section */
+[data-theme="dark"] .advisory-concerns-section {
+  border-left-color: rgba(88, 110, 117, 0.35);
+}
+
+[data-theme="dark"] .advisory-concern-row {
+  color: var(--color-text-primary, #f8fafc);
+  border-bottom-color: rgba(148, 163, 184, 0.15);
+}
+
+/* Evidence gaps section */
+[data-theme="dark"] .advisory-gaps-section {
+  border-left-color: rgba(88, 110, 117, 0.35);
+}
+
+[data-theme="dark"] .advisory-gap-row {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .advisory-gap-marker {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Next checks section */
+[data-theme="dark"] .advisory-next-checks-section {
+  border-left-color: rgba(88, 110, 117, 0.35);
+}
+
+[data-theme="dark"] .advisory-check-row {
+  border-bottom-color: rgba(148, 163, 184, 0.15);
+}
+
+[data-theme="dark"] .advisory-check-intent {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .advisory-check-cluster {
+  background: rgba(148, 163, 184, 0.15);
+  color: rgba(148, 163, 184, 0.85);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+[data-theme="dark"] .advisory-check-cmd {
+  background: rgba(15, 23, 42, 0.75);
+  color: rgba(148, 163, 184, 0.9);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+/* Focus guidance section */
+[data-theme="dark"] .advisory-focus-notes-section {
+  border-left-color: rgba(88, 110, 117, 0.3);
+}
+
+[data-theme="dark"] .advisory-focus-note-row {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Runs list detached notice */
+[data-theme="dark"] .runs-detached-notice {
+  background: rgba(100, 116, 139, 0.12);
+  border-color: rgba(100, 116, 139, 0.25);
+}
+
+[data-theme="dark"] .runs-detached-notice .muted {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Cluster card */
+[data-theme="dark"] .advisory-cluster-card {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .advisory-cluster-card:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+[data-theme="dark"] .advisory-cluster-rank {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .advisory-cluster-name {
+  color: rgba(248, 250, 252, 0.9);
+}
+
+[data-theme="dark"] .advisory-cluster-concern {
+  color: rgba(248, 250, 252, 0.7);
+}
+
+/* Provider metric */
+[data-theme="dark"] .provider-metric__value {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .provider-metric__label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Advisory metric label/value */
+[data-theme="dark"] .advisory-metric-value {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .advisory-metric-label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Collapsible summary */
+[data-theme="dark"] .advisory-summary-collapsible summary {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+[data-theme="dark"] .advisory-summary-collapsible .review-enrichment-summary {
+  background: rgba(15, 23, 42, 0.5);
+  color: rgba(248, 250, 252, 0.7);
+}

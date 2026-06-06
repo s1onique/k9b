@@ -1,0 +1,23 @@
+/**
+ * Dark Theme Package
+ * 
+ * Extracted from: styles/index.css component files
+ * Phase: Dark Theme Extraction
+ * 
+ * Dark theme is the default/base theme. This explicit package provides
+ * structural equality with rose-pine and solarized-light packages.
+ * 
+ * Theme architecture:
+ * - themes.css     → Token values (dark defaults, rose-pine overrides, solarized-light overrides)
+ * - themes/dark.css → Dark theme aggregator
+ * - themes/rose-pine.css → Rose theme aggregator
+ * - themes/solarized-light.css → Solarized Light theme aggregator
+ */
+
+@import url('./dark/tokens.css');
+@import url('./dark/tables.css');
+@import url('./dark/inputs.css');
+@import url('./dark/status-pills.css');
+@import url('./dark/cards-panels.css');
+@import url('./dark/advisory.css');
+@import url('./dark/artifacts.css');

@@ -1,0 +1,47 @@
+/**
+ * Dark Theme - Token Declarations
+ * 
+ * Extracted from: styles/index.css base selectors + themes.css :root declarations
+ * Phase: Dark Theme Extraction (Phase D1)
+ * 
+ * Token Ownership Model:
+ * 
+ * The dark theme uses a two-layer token architecture:
+ * 
+ * 1. BOOTSTRAP LAYER (themes.css :root)
+ *    - :root block contains all dark token values as the default
+ *    - This ensures correct first-paint before JS sets data-theme attribute
+ *    - Provides no-theme fallback for users without JS or before hydration
+ *    - Is intentional: dark is the "default without selection" theme
+ * 
+ * 2. COMPONENT OVERRIDE LAYER (themes/dark/*)
+ *    - [data-theme="dark"] selectors own component-level overrides
+ *    - Tables, inputs, status pills, cards, advisory, artifacts
+ *    - This provides structural equality with rose-pine and solarized-light
+ *    - Ensures dark theme is first-class in the theme tree
+ * 
+ * This separation allows:
+ * - Correct first-paint rendering (bootstrap tokens load with page)
+ * - First-class theme package structure (component overrides are explicit)
+ * - No visual change: same dark appearance as before extraction
+ * 
+ * Contrast with rose-pine/solarized-light:
+ * - Those themes override :root tokens under [data-theme="..."] selectors
+ * - Dark could do the same, but would break first-paint before hydration
+ * - The component-level extraction achieves the same ownership goal
+ */
+
+[data-theme="dark"] {
+  /* 
+   * Component-level dark overrides are distributed across:
+   * - dark/tables.css    → table element styling
+   * - dark/inputs.css    → form inputs and buttons
+   * - dark/status-pills.css → status indicators and pills
+   * - dark/cards-panels.css → card and panel components
+   * - dark/advisory.css  → advisory panel sections
+   * - dark/artifacts.css → artifact links and action elements
+   * 
+   * Token values (colors, gradients) remain in themes.css :root
+   * for bootstrap/first-paint compatibility.
+   */
+}

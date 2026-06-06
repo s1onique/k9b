@@ -1,0 +1,201 @@
+/**
+ * Dark Theme - Artifacts and Links
+ * 
+ * Extracted from: styles/components/review-enrichment.css, artifacts.css, row-actions.css
+ * Phase: Dark Theme Extraction (Phase D7)
+ * 
+ * Dark-specific artifact/link styling moved from implicit base to explicit theme package.
+ */
+
+/* Artifact links */
+[data-theme="dark"] .artifact-link {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+}
+
+[data-theme="dark"] .artifact-link:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #bae6fd;
+}
+
+[data-theme="dark"] .run-artifact-link {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+}
+
+[data-theme="dark"] .cluster-summary-artifact-link {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fde047;
+}
+
+[data-theme="dark"] .cluster-summary-artifact-link:hover {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fef08a;
+}
+
+[data-theme="dark"] .exec-summary-item:hover {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+}
+
+/* Follow-up blocks */
+[data-theme="dark"] .follow-up-block {
+  background: rgba(56, 189, 248, 0.06);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+[data-theme="dark"] .follow-up-summary {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .follow-up-action {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Action links */
+[data-theme="dark"] .toggle-details-button {
+  color: #38bdf8;
+  opacity: 0.85;
+}
+
+[data-theme="dark"] .toggle-details-button:hover {
+  opacity: 1;
+}
+
+/* Eyebrow text */
+[data-theme="dark"] .eyebrow {
+  color: var(--color-text-accent, #93c5fd);
+  opacity: 0.9;
+}
+
+/* Plan rationale */
+[data-theme="dark"] .plan-rationale-item {
+  background: rgba(148, 163, 184, 0.1);
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Primary reason */
+[data-theme="dark"] .primary-reason {
+  background-color: rgba(251, 191, 36, 0.08);
+  color: #fde047;
+}
+
+/* Queue empty state */
+[data-theme="dark"] .queue-empty-state .link {
+  color: var(--color-text-link, #38bdf8);
+}
+
+/* Approval note colors */
+[data-theme="dark"] .next-check-approval-note {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+[data-theme="dark"] .next-check-approval-note-success {
+  color: #86efac;
+}
+
+[data-theme="dark"] .next-check-approval-note-error {
+  color: #fca5a5;
+}
+
+/* Plan blocking reason */
+[data-theme="dark"] .plan-blocking-reason {
+  color: #fca5a5;
+}
+
+/* Not runnable explanation */
+[data-theme="dark"] .not-runnable-explanation {
+  background: rgba(148, 163, 184, 0.1);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Next check execution */
+[data-theme="dark"] .next-check-execution {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+[data-theme="dark"] .next-check-execution-warning {
+  color: #fde047;
+}
+
+/* Run row actions */
+[data-theme="dark"] .run-row-actions .action-primary {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .run-row-actions .action-secondary {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+[data-theme="dark"] .run-row-actions .action-tertiary {
+  color: rgba(148, 163, 184, 0.6);
+}
+
+/* Execution error in runs */
+[data-theme="dark"] .runs-execution-error {
+  color: #fca5a5;
+}
+
+/* Diagnostic pack review */
+[data-theme="dark"] .diagnostic-pack-review-summary {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .diagnostic-pack-provider {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Review action hint */
+[data-theme="dark"] .review-action-hint {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* LLM stats */
+[data-theme="dark"] .run-stat-label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .llm-provider-breakdown {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Cluster controls */
+[data-theme="dark"] .cluster-controls label,
+[data-theme="dark"] .cluster-controls select {
+  color: rgba(148, 163, 184, 0.85);
+}
+
+/* Proposal controls */
+[data-theme="dark"] .proposal-controls label {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* Queue card title */
+[data-theme="dark"] .queue-card-title {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .queue-card-reason-label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .queue-card-signal {
+  color: rgba(148, 163, 184, 0.6);
+}
+
+/* Run summary kicker */
+[data-theme="dark"] .run-summary-kicker {
+  color: var(--color-accent-primary-text, #bae6fd);
+}
+
+[data-theme="dark"] .run-summary-title {
+  color: var(--color-text-primary, #f8fafc);
+}
+
+[data-theme="dark"] .run-summary-meta {
+  color: rgba(148, 163, 184, 0.8);
+}
