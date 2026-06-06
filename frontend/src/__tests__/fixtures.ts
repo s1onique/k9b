@@ -14,6 +14,7 @@ import type {
   RunPayload,
   RunsListPayload,
 } from "../types";
+import type { RuntimeStatusPayload } from "../components/runtime-status/runtimeStatusTypes";
 
 // Helper to generate timestamps relative to test execution time.
 // All fixtures use dynamic timestamps so freshness tests always have predictable
@@ -987,6 +988,37 @@ export const sampleClusterDetail: ClusterDetailPayload = {
   topProblem: {
     title: "Control plane saturation",
     detail: "gRPC queues are growing",
+  },
+};
+
+// ============================================================
+// Runtime status fixture
+// ============================================================
+
+/**
+ * Sample runtime status payload for tests.
+ * Used by useRuntimeStatus hook which is called in App.tsx.
+ * MUST be included in fetch mock payloads to avoid unhandled promise rejections.
+ */
+export const sampleRuntimeStatus: RuntimeStatusPayload = {
+  log_windows: {
+    backend: {
+      "5m": { warning: 0, error: 0 },
+      "10m": { warning: 1, error: 0 },
+      "15m": { warning: 2, error: 0 },
+    },
+    scheduler: {
+      "5m": { warning: 0, error: 0 },
+      "10m": { warning: 0, error: 0 },
+      "15m": { warning: 0, error: 0 },
+    },
+  },
+  backend_pvc: {
+    name: "backend-data",
+    used_bytes: 3221225472,
+    free_bytes: 7516192768,
+    capacity_bytes: 10737418240,
+    used_percent: 30,
   },
 };
 

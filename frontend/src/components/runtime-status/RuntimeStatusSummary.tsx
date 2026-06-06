@@ -90,7 +90,8 @@ export const RuntimeStatusSummary = ({
   }
 
   // Error state - show unavailable for all data
-  if (isError || !runtimeStatus) {
+  // Also guard against malformed payload (empty object or missing log_windows)
+  if (isError || !runtimeStatus || !runtimeStatus.log_windows) {
     return (
       <div
         className="runtime-status-summary runtime-status-summary--error"

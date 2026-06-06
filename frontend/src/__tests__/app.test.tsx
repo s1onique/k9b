@@ -20,6 +20,7 @@ import {
   sampleNotifications,
   sampleProposals,
   sampleRun,
+  sampleRuntimeStatus,
   sampleRunsList,
   UI_STRINGS,
 } from "./fixtures";
@@ -38,6 +39,8 @@ const defaultPayloads = {
     artifactPath: "/artifacts/promoted.json",
     candidateId: "promo-1",
   },
+  // Runtime status - required by useRuntimeStatus hook in App.tsx
+  "/api/runtime-status": sampleRuntimeStatus,
 };
 
 const getQueuePanel = async () => {

@@ -9,6 +9,7 @@ import {
   sampleProposals,
   sampleRunsList,
   sampleClusterDetail,
+  sampleRuntimeStatus,
   makeRunWithOverrides,
   makeFetchResponse,
 } from "./fixtures";
@@ -185,6 +186,9 @@ const createFetchMock = (runPayload: RunPayload = sampleRun) => {
     }
     if (urlStr.includes("/api/cluster-detail")) {
       return makeFetchResponse(sampleClusterDetail);
+    }
+    if (urlStr.includes("/api/runtime-status")) {
+      return makeFetchResponse(sampleRuntimeStatus);
     }
     return makeFetchResponse({});
   });

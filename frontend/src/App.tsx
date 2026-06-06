@@ -475,6 +475,10 @@ const App = () => {
     onOpenDemo: demoShellOpen,
   };
 
+  // Runtime status - MUST be before early return to maintain consistent hook order.
+  // Hooks must always be called in the same order before any conditional returns.
+  const { runtimeStatus, isLoading: runtimeStatusLoading, isError: runtimeStatusError } = useRuntimeStatus();
+
   // Progressive loading: only wait for CRITICAL data (fleet + proposals).
   // Run detail is non-critical - shell renders immediately, run panels show local loading.
   if (!fleet || !proposals) {
@@ -689,9 +693,6 @@ const App = () => {
     onShowSelectedRun: handleShowSelectedRun,
     onFocusClusterForNextChecks: runSummaryLoadedProps.onFocusClusterForNextChecks,
   });
-
-  // Runtime status - extract props for the runtime status summary section
-  const { runtimeStatus, isLoading: runtimeStatusLoading, isError: runtimeStatusError } = useRuntimeStatus();
 
   // Extract diagnose panels props
   const diagnosePanelsProps = useAppDiagnosePanelsProps({

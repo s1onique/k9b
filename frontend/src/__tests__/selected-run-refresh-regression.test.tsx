@@ -32,6 +32,7 @@ import {
   sampleFleet,
   sampleNotifications,
   sampleProposals,
+  sampleRuntimeStatus,
 } from "./fixtures";
 
 // ---------------------------------------------------------------------------
@@ -127,6 +128,8 @@ const GLOBAL_PAYLOADS = {
   "/api/notifications": sampleNotifications,
   "/api/notifications?limit=50&page=1": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
+  // Runtime status - required by useRuntimeStatus hook in App.tsx
+  "/api/runtime-status": sampleRuntimeStatus,
 };
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import {
   sampleNotifications,
   sampleProposals,
   sampleRun,
+  sampleRuntimeStatus,
   sampleRunsList,
 } from "./fixtures";
 
@@ -27,6 +28,8 @@ const defaultPayloads = {
   "/api/proposals": sampleProposals,
   "/api/notifications": sampleNotifications,
   "/api/cluster-detail": sampleClusterDetail,
+  // Runtime status - required by useRuntimeStatus hook in App.tsx
+  "/api/runtime-status": sampleRuntimeStatus,
 };
 
 const getQueuePanelWithRunData = async () => {
