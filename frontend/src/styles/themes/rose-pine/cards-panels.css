@@ -6,29 +6,29 @@
  * Rose palette: warm cream surfaces, dusty rose borders, plum text
  */
 
-/* Provider execution cards - harmonized with warm cream shell */
+/* Provider execution cards - Rose blush ivory shell */
 [data-theme="rose-pine"] .provider-execution {
-  background: rgba(242, 233, 225, 0.85);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .provider-execution-line {
-  background: rgba(255, 250, 243, 0.9);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-subtle);
 }
 
 [data-theme="rose-pine"] .provider-execution-summary {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .provider-execution-note {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 /* Review enrichment panel */
 [data-theme="rose-pine"] .review-enrichment {
-  background: rgba(242, 233, 225, 0.92);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .review-enrichment-summary {
@@ -45,8 +45,8 @@
 
 /* Cluster assessment */
 [data-theme="rose-pine"] .cluster-assessment {
-  background: rgba(255, 250, 243, 0.92);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-elevated);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .recommended-action {
@@ -55,13 +55,13 @@
 }
 
 [data-theme="rose-pine"] .recommended-action p {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 /* Drilldown cards */
 [data-theme="rose-pine"] .drilldown-card {
-  background: rgba(255, 250, 243, 0.92);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-elevated);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .drilldown-card.available {
@@ -76,161 +76,162 @@
 
 /* Related cards */
 [data-theme="rose-pine"] .related-card {
-  background: rgba(242, 233, 225, 0.88);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-subtle);
 }
 
 /* Cluster detail */
 [data-theme="rose-pine"] .cluster-detail-panel {
-  background: rgba(255, 250, 243, 0.92);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-elevated);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .cluster-summary-card {
-  background: rgba(242, 233, 225, 0.88);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-subtle);
 }
 
 [data-theme="rose-pine"] .cluster-summary-card strong {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .cluster-detail-body {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 /* Fleet metrics */
 [data-theme="rose-pine"] .fleet-metrics article {
-  background: rgba(242, 233, 225, 0.88);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
 /* LLM historical */
 [data-theme="rose-pine"] .llm-historical {
-  background: rgba(242, 233, 225, 0.88);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .llm-historical summary {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 /* Orphaned checks */
 [data-theme="rose-pine"] .next-check-orphaned {
-  background: rgba(242, 233, 225, 0.88);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .next-check-orphaned li {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 /* Queue explanation block */
 [data-theme="rose-pine"] .queue-explanation-block {
-  background: rgba(242, 233, 225, 0.88);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .queue-explanation-actions__label {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 /* Next check plan cards */
 [data-theme="rose-pine"] .next-check-plan-card {
-  background: rgba(255, 250, 243, 0.92);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-elevated);
+  border-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .next-check-plan-meta strong {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .next-check-plan-flags {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 [data-theme="rose-pine"] .plan-gating {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 [data-theme="rose-pine"] .plan-normalization {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
 [data-theme="rose-pine"] .plan-stale-note {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 /* Advisory lower sections container */
 [data-theme="rose-pine"] .advisory-lower-sections {
-  background: rgba(242, 233, 225, 0.5);
+  background: rgba(248, 238, 235, 0.55);
 }
 
 /* Lower section base */
 [data-theme="rose-pine"] .advisory-lower-section {
-  background: rgba(255, 250, 243, 0.85);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-subtle);
 }
 
 /* Section labels - readable secondary, not ghosted */
 [data-theme="rose-pine"] .advisory-lower-section-label {
-  color: #797593;
+  color: var(--rose-text-secondary);
   font-weight: 600;
 }
 
 /* Proposal row actions - softer secondary actions */
 [data-theme="rose-pine"] .proposal-row-actions {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
-/* Proposal artifacts - softer chip styling with muted rose accent */
+/* Proposal artifacts - Rose identity, dusty rose accent */
 [data-theme="rose-pine"] .artifact-chip {
-  background: rgba(40, 105, 131, 0.06);
-  border-color: rgba(40, 105, 131, 0.35);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.1);
+  border-color: rgba(155, 114, 146, 0.4);
+  color: var(--rose-identity-secondary);
 }
 
 [data-theme="rose-pine"] .artifact-chip:hover {
-  background: rgba(40, 105, 131, 0.12);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.18);
+  color: var(--rose-identity-secondary);
 }
 
 /* Execution history filter */
 [data-theme="rose-pine"] .execution-history-filters {
-  background: rgba(242, 233, 225, 0.85);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-subtle);
 }
 
 [data-theme="rose-pine"] .filter-label {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 [data-theme="rose-pine"] .filter-count {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
-/* Recent runs */
+/* Recent runs - Rose-tinted selected state */
 [data-theme="rose-pine"] .recent-runs-list {
-  background: rgba(242, 233, 225, 0.85);
+  background: var(--rose-surface-cream);
 }
 
 [data-theme="rose-pine"] .recent-runs-item {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .recent-runs-item:hover {
-  background: rgba(144, 132, 156, 0.15);
+  background: rgba(155, 114, 146, 0.12);
 }
 
 [data-theme="rose-pine"] .recent-runs-item.selected {
-  background: rgba(40, 105, 131, 0.1);
-  border-color: rgba(40, 105, 131, 0.3);
+  background: rgba(155, 114, 146, 0.18);
+  border-color: rgba(155, 114, 146, 0.45);
+  border-left: 3px solid var(--rose-identity-primary);
 }
 
 [data-theme="rose-pine"] .recent-runs-label {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .recent-runs-time {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }

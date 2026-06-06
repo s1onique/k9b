@@ -20,25 +20,45 @@
      ROSE PALETTE CSS VARIABLES
      These variables centralize repeated Rose colors for easier tuning.
      Component overrides should consume these variables where applicable.
+     
+     Rose identity: warm ivory + dusty rose + plum
+     Teal is for links/actions only, not theme personality.
      ============================================================ */
   --rose-text-primary: #575279;
   --rose-text-secondary: #797593;
   --rose-text-muted: #9890a9;
   --rose-text-accent: #907aa9;
   
-  --rose-border-default: rgba(144, 132, 156, 0.4);
-  --rose-border-subtle: rgba(144, 132, 156, 0.25);
-  --rose-border-emphasis: rgba(144, 132, 156, 0.6);
+  /* Rose-tinted borders - dusty rose/mauve, not grey */
+  --rose-border-default: rgba(168, 145, 165, 0.45);
+  --rose-border-subtle: rgba(168, 145, 165, 0.3);
+  --rose-border-emphasis: rgba(168, 145, 165, 0.65);
   
-  --rose-surface-cream: rgba(242, 233, 225, 0.88);
-  --rose-surface-ivory: rgba(255, 250, 243, 0.95);
-  --rose-surface-warm: rgba(242, 233, 225, 0.92);
+  /* Blush/rose-tinted surfaces - NOT beige/grey */
+  --rose-surface-cream: rgba(248, 238, 235, 0.92);      /* warm blush ivory */
+  --rose-surface-ivory: rgba(255, 252, 249, 0.97);      /* rose-tinted white */
+  --rose-surface-warm: rgba(248, 238, 235, 0.95);       /* blush warm */
+  --rose-surface-elevated: rgba(255, 248, 243, 0.95);   /* subtle blush */
   
-  --rose-accent-primary: #1d4e5f;
-  --rose-accent-secondary: #907aa9;
+  /* Primary identity: dusty rose/plum, NOT teal */
+  --rose-identity-primary: #9b7292;     /* dusty rose - theme personality */
+  --rose-identity-secondary: #78607a;   /* plum - headings/emphasis */
+  --rose-identity-muted: #a89aab;       /* lavender-mauve - secondary text */
+  
+  /* Teal is only for links/primary actions, not theme personality */
+  --rose-accent-link: #286983;          /* teal - links only */
+  --rose-accent-action: #1d5270;        /* deep teal - primary buttons */
   --rose-accent-warning: #b45309;
   --rose-accent-success: #2d6a4f;
   --rose-accent-danger: #9b2c4a;
+  
+  /* Midnight rose surfaces - aubergine/plum, NOT navy */
+  --rose-midnight-surface: rgba(58, 40, 60, 0.88);      /* deep aubergine */
+  --rose-midnight-surface-elevated: rgba(68, 48, 72, 0.92);
+  --rose-midnight-border: rgba(168, 145, 165, 0.35);
+  --rose-midnight-text: rgba(248, 238, 235, 0.92);
+  --rose-midnight-muted: rgba(168, 145, 165, 0.8);
+  --rose-midnight-accent: rgba(220, 185, 210, 0.85);    /* soft rose on dark */
   
   /* ============================================================
      TOKEN ADOPTION STATUS

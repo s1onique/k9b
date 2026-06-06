@@ -1,8 +1,9 @@
 /**
  * Rose Theme - Advisory and Deterministic Checks
  * 
- * Phase: Rose Contrast Rescue Pass
+ * Phase: Rose Identity Pass
  * 
+ * Rose identity: blush surfaces, dusty rose accents
  * Owned surfaces: provider advisory, cluster cards, deterministic checks empty state
  */
 
@@ -10,7 +11,7 @@
    Provider Advisory - Summary Strip
    ========================================================================== */
 
-/* Advisory summary strip - large header block (dark/grey inherited fix) */
+/* Advisory summary strip - blush ivory */
 [data-theme="rose-pine"] .advisory-summary-strip {
   background: var(--rose-surface-cream);
   border-color: var(--rose-border-default);
@@ -27,7 +28,7 @@
 }
 
 [data-theme="rose-pine"] .provider-metric__value {
-  color: var(--rose-text-primary);
+  color: var(--rose-identity-secondary);
   font-size: 1.55rem;
   font-weight: 800;
 }
@@ -39,11 +40,11 @@
   text-transform: uppercase;
 }
 
-/* Provider metric variants - Rose-adapted */
+/* Provider metric variants - Rose identity */
 [data-theme="rose-pine"] .provider-metric--clusters {
-  background: rgba(40, 105, 131, 0.08);
-  border-color: rgba(40, 105, 131, 0.3);
-  color: var(--rose-accent-primary);
+  background: rgba(155, 114, 146, 0.1);
+  border-color: rgba(155, 114, 146, 0.35);
+  color: var(--rose-identity-secondary);
 }
 
 [data-theme="rose-pine"] .provider-metric--concerns {
@@ -53,9 +54,9 @@
 }
 
 [data-theme="rose-pine"] .provider-metric--checks {
-  background: rgba(40, 105, 131, 0.08);
-  border-color: rgba(40, 105, 131, 0.3);
-  color: var(--rose-accent-primary);
+  background: rgba(155, 114, 146, 0.1);
+  border-color: rgba(155, 114, 146, 0.35);
+  color: var(--rose-identity-secondary);
 }
 
 [data-theme="rose-pine"] .provider-metric--gaps {
@@ -82,22 +83,22 @@
 }
 
 [data-theme="rose-pine"] .advisory-chip--focus {
-  background: rgba(144, 132, 156, 0.12);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: rgba(168, 145, 165, 0.12);
+  border-color: rgba(168, 145, 165, 0.35);
   color: var(--rose-text-accent);
 }
 
-/* Advisory tag - concern tag in strip */
+/* Advisory tag - rose identity */
 [data-theme="rose-pine"] .advisory-tag {
-  background: rgba(40, 105, 131, 0.08);
-  border-color: rgba(40, 105, 131, 0.35);
-  color: var(--rose-accent-primary);
+  background: rgba(155, 114, 146, 0.1);
+  border-color: rgba(155, 114, 146, 0.4);
+  color: var(--rose-identity-secondary);
 }
 
 /* Advisory hint badge - focus hint */
 [data-theme="rose-pine"] .advisory-hint-badge {
-  background: rgba(144, 132, 156, 0.1);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: rgba(168, 145, 165, 0.1);
+  border-color: rgba(168, 145, 165, 0.3);
   color: var(--rose-text-accent);
 }
 

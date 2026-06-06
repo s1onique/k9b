@@ -1,8 +1,9 @@
 /**
  * Rose Theme - Runs and Recent Runs
  * 
- * Phase: Rose Contrast Rescue Pass
+ * Phase: Rose Identity Pass
  * 
+ * Rose identity: dusty rose accents, NOT teal
  * Owned surfaces: recent runs, runs table, run filters, execute buttons
  */
 
@@ -27,7 +28,7 @@
   color: var(--rose-text-muted);
 }
 
-/* Recent runs list container - warm cream */
+/* Recent runs list container - blush ivory */
 [data-theme="rose-pine"] .recent-runs-list {
   background: var(--rose-surface-cream);
   border-color: var(--rose-border-default);
@@ -39,16 +40,16 @@
   border-bottom-color: var(--rose-border-subtle);
 }
 
-/* Recent runs item hover - subtle mauve tint */
+/* Recent runs item hover - dusty rose tint */
 [data-theme="rose-pine"] .recent-runs-item:hover {
-  background: rgba(144, 132, 156, 0.15);
+  background: rgba(155, 114, 146, 0.12);
 }
 
-/* Recent runs selected item - Rose-tinted, NOT cyan */
+/* Recent runs selected item - dusty rose tint, NOT teal */
 [data-theme="rose-pine"] .recent-runs-item.selected {
-  background: rgba(40, 105, 131, 0.12);
-  border-color: rgba(40, 105, 131, 0.35);
-  border-left: 3px solid rgba(40, 105, 131, 0.5);
+  background: rgba(155, 114, 146, 0.18);
+  border-color: rgba(155, 114, 146, 0.45);
+  border-left: 3px solid var(--rose-identity-primary);
 }
 
 /* Recent runs label - primary text */
@@ -66,7 +67,7 @@
 /* Filter pills in recent runs */
 [data-theme="rose-pine"] .runs-filter-select {
   background: var(--rose-surface-ivory);
-  border-color: rgba(144, 132, 156, 0.5);
+  border-color: var(--rose-border-default);
   color: var(--rose-text-primary);
 }
 
@@ -74,10 +75,10 @@
    Runs Table
    ========================================================================== */
 
-/* Runs table selected row - Rose-tinted, NOT cyan */
+/* Runs table selected row - dusty rose tint, NOT teal */
 [data-theme="rose-pine"] .runs-table tbody tr.run-row-selected {
-  background: rgba(40, 105, 131, 0.12);
-  border-left: 3px solid rgba(40, 105, 131, 0.5);
+  background: rgba(155, 114, 146, 0.15);
+  border-left: 3px solid var(--rose-identity-primary);
 }
 
 /* ==========================================================================
@@ -103,7 +104,7 @@
 
 /* Runs detached notice */
 [data-theme="rose-pine"] .runs-detached-notice {
-  background: rgba(144, 132, 156, 0.1);
+  background: rgba(168, 145, 165, 0.1);
   border-color: var(--rose-border-default);
 }
 
@@ -115,18 +116,18 @@
    Execute / Action Buttons
    ========================================================================== */
 
-/* Execute button - Rose-themed primary */
+/* Execute button - Rose identity (plum) */
 [data-theme="rose-pine"] .run-action-cell .btn-primary,
 [data-theme="rose-pine"] .run-action-cell button[class*='primary'],
 [data-theme="rose-pine"] .execute-btn {
-  background: rgba(40, 105, 131, 0.15);
-  border-color: rgba(40, 105, 131, 0.5);
-  color: var(--rose-accent-primary);
+  background: rgba(155, 114, 146, 0.18);
+  border-color: rgba(155, 114, 146, 0.5);
+  color: var(--rose-identity-secondary);
   font-weight: 600;
 }
 
 [data-theme="rose-pine"] .run-action-cell .btn-primary:hover,
 [data-theme="rose-pine"] .execute-btn:hover {
-  background: rgba(40, 105, 131, 0.22);
-  color: var(--rose-accent-primary);
+  background: rgba(155, 114, 146, 0.25);
+  color: var(--rose-identity-secondary);
 }

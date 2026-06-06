@@ -1,8 +1,9 @@
 /**
  * Rose Theme - Advisory Lower Sections
  * 
- * Phase: Rose Final Polish Pass
+ * Phase: Rose Identity Pass
  * 
+ * Rose identity: dusty rose accents, blush surfaces
  * Owned surfaces: Top concerns, Evidence gaps, Next checks, Focus guidance
  */
 
@@ -10,20 +11,20 @@
    Advisory Lower Sections Container
    ========================================================================== */
 
-/* Advisory lower sections container - Rose warm surface */
+/* Advisory lower sections container - blush ivory */
 [data-theme="rose-pine"] .advisory-lower-sections {
-  background: rgba(242, 233, 225, 0.5);
+  background: rgba(248, 238, 235, 0.55);
 }
 
 /* Lower section base - Rose ivory background */
 [data-theme="rose-pine"] .advisory-lower-section {
-  background: rgba(255, 250, 243, 0.9);
-  border-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
 }
 
 /* Section labels - readable secondary, eyebrow style */
 [data-theme="rose-pine"] .advisory-lower-section-label {
-  color: #797593;
+  color: var(--rose-text-secondary);
   font-weight: 600;
 }
 
@@ -31,14 +32,14 @@
    Top Concerns Section
    ========================================================================== */
 
-/* Top concerns section - Rose border accent */
+/* Top concerns section - dusty rose border accent */
 [data-theme="rose-pine"] .advisory-concerns-section {
-  border-left-color: rgba(40, 105, 131, 0.5);
+  border-left-color: rgba(155, 114, 146, 0.55);
 }
 
 /* Concerns row text - primary readable, NOT muted */
 [data-theme="rose-pine"] .advisory-concern-row {
-  color: #575279;
+  color: var(--rose-text-primary);
   font-weight: 500;
 }
 
@@ -46,53 +47,53 @@
    Evidence Gaps Section
    ========================================================================== */
 
-/* Evidence gaps section - Rose border accent */
+/* Evidence gaps section - dusty rose border accent */
 [data-theme="rose-pine"] .advisory-gaps-section {
-  border-left-color: rgba(40, 105, 131, 0.5);
+  border-left-color: rgba(155, 114, 146, 0.55);
 }
 
 /* Gap row text - primary readable, NOT muted */
 [data-theme="rose-pine"] .advisory-gap-row {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 /* Gap marker - visible secondary */
 [data-theme="rose-pine"] .advisory-gap-marker {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
 /* ==========================================================================
    Next Checks Section
    ========================================================================== */
 
-/* Next checks section - Rose border accent */
+/* Next checks section - dusty rose border accent */
 [data-theme="rose-pine"] .advisory-next-checks-section {
-  border-left-color: rgba(40, 105, 131, 0.5);
+  border-left-color: rgba(155, 114, 146, 0.55);
 }
 
 /* Check row - subtle separator */
 [data-theme="rose-pine"] .advisory-check-row {
-  border-bottom-color: rgba(144, 132, 156, 0.2);
+  border-bottom-color: var(--rose-border-subtle);
 }
 
 /* Check intent text - primary readable, NOT muted */
 [data-theme="rose-pine"] .advisory-check-intent {
-  color: #575279;
+  color: var(--rose-text-primary);
   font-weight: 500;
 }
 
-/* Check cluster tag - Rose palette */
+/* Check cluster tag - Rose identity */
 [data-theme="rose-pine"] .advisory-check-cluster {
-  background: rgba(40, 105, 131, 0.1);
-  color: #1d4e5f;
-  border-color: rgba(40, 105, 131, 0.3);
+  background: rgba(155, 114, 146, 0.12);
+  color: var(--rose-identity-secondary);
+  border-color: rgba(155, 114, 146, 0.4);
 }
 
 /* Check command - Rose warm background, readable text */
 [data-theme="rose-pine"] .advisory-check-cmd {
-  background: rgba(242, 233, 225, 0.9);
-  border-color: rgba(144, 132, 156, 0.35);
-  color: #575279;
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-primary);
 }
 
 /* ==========================================================================
@@ -101,12 +102,12 @@
 
 /* Focus guidance section - Rose palette */
 [data-theme="rose-pine"] .advisory-focus-notes-section {
-  border-left-color: rgba(144, 132, 156, 0.5);
+  border-left-color: var(--rose-border-default);
 }
 
 /* Focus note row - secondary but readable */
 [data-theme="rose-pine"] .advisory-focus-note-row {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
 /* ==========================================================================
@@ -115,35 +116,35 @@
 
 /* Alert evidence section - Rose purple adaptation */
 [data-theme="rose-pine"] .advisory-alert-evidence-section {
-  border-left-color: rgba(144, 100, 170, 0.5);
+  border-left-color: rgba(168, 145, 165, 0.5);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-label {
-  color: #907aa9;
+  color: var(--rose-text-accent);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-disclaimer {
-  color: rgba(144, 116, 168, 0.8);
+  color: rgba(168, 145, 165, 0.8);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-row {
-  background: rgba(144, 132, 156, 0.08);
+  background: rgba(168, 145, 165, 0.08);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-cluster {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-used-for {
-  background: rgba(144, 132, 156, 0.12);
-  color: #907aa9;
+  background: rgba(168, 145, 165, 0.12);
+  color: var(--rose-text-accent);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-dimension {
-  color: #797593;
-  background: rgba(144, 132, 156, 0.12);
+  color: var(--rose-text-secondary);
+  background: rgba(168, 145, 165, 0.12);
 }
 
 [data-theme="rose-pine"] .advisory-alert-evidence-reason {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }

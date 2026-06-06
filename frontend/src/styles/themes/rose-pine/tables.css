@@ -1,30 +1,38 @@
 /**
  * Rose Theme - Table Styles
  * 
- * Phase: Rose Polishing (Production Quality)
+ * Phase: Rose Identity Pass
+ * 
+ * Rose identity: dusty rose selected rows, NOT teal
  */
 
-/* Table improvements - Rose palette */
+/* Table improvements - Rose palette with blush surfaces */
 [data-theme="rose-pine"] .runs-table th {
-  background: rgba(242, 233, 225, 0.9);
-  color: #797593;
-  border-bottom-color: rgba(144, 132, 156, 0.35);
+  background: var(--rose-surface-cream);
+  color: var(--rose-text-secondary);
+  border-bottom-color: var(--rose-border-default);
 }
 
 [data-theme="rose-pine"] .runs-table td {
-  color: #575279;
-  border-bottom-color: rgba(144, 132, 156, 0.25);
+  color: var(--rose-text-primary);
+  border-bottom-color: var(--rose-border-subtle);
 }
 
 [data-theme="rose-pine"] .runs-table td strong {
-  color: #575279;
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .runs-table tbody tr:hover {
-  background: rgba(144, 132, 156, 0.18);
+  background: rgba(155, 114, 146, 0.12);
 }
 
 [data-theme="rose-pine"] .runs-table .run-cell-timestamp .recency,
 [data-theme="rose-pine"] .runs-table .run-cell-timestamp .absolute {
-  color: #9890a9;
+  color: var(--rose-text-muted);
+}
+
+/* Rose-tinted selected row - NOT teal/cyan */
+[data-theme="rose-pine"] .runs-table tbody tr.run-row-selected {
+  background: rgba(155, 114, 146, 0.15);
+  border-left: 3px solid var(--rose-identity-primary);
 }

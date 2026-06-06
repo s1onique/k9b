@@ -1,31 +1,32 @@
 /**
- * Rose Theme - Worklist Cards (Midnight Rose Design Treatment)
+ * Rose Theme - Worklist Cards (Midnight Aubergine/Plum Design Treatment)
  * 
- * Phase: Rose Final Polish Pass
+ * Phase: Rose Identity Pass
  * 
  * Design rule: Rose uses light surfaces by default; 
  * executable/queue/action cards use midnight-rose surfaces.
  * These are intentionally dark to signal "command/queue/action" status.
+ * Midnight surfaces are aubergine/plum, NOT navy.
  * 
  * Owned surfaces: worklist summary, worklist items, state badges
  */
 
 /* ==========================================================================
-   Midnight Rose Command/Action Cards
+   Midnight Rose (Aubergine/Plum) Command/Action Cards
    ========================================================================== */
 
-/* Worklist summary - midnight rose with readable text */
+/* Worklist summary - deep aubergine with readable text */
 [data-theme="rose-pine"] .worklist-summary {
-  background: rgba(40, 30, 55, 0.85);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: var(--rose-midnight-surface);
+  border-color: var(--rose-midnight-border);
 }
 
 [data-theme="rose-pine"] .worklist-stat {
-  color: rgba(144, 132, 156, 0.9);
+  color: var(--rose-midnight-muted);
 }
 
 [data-theme="rose-pine"] .worklist-stat strong {
-  color: rgba(242, 233, 225, 0.95);
+  color: var(--rose-midnight-text);
 }
 
 [data-theme="rose-pine"] .worklist-stat-completed strong {
@@ -33,53 +34,54 @@
 }
 
 [data-theme="rose-pine"] .worklist-stat-pending strong {
-  color: rgba(144, 200, 220, 0.9);
+  color: var(--rose-midnight-accent);
 }
 
 [data-theme="rose-pine"] .worklist-stat-blocked strong {
   color: #fde047;
 }
 
-/* Worklist item - midnight rose with readable content */
+/* Worklist item - aubergine with readable content */
 [data-theme="rose-pine"] .worklist-item {
-  background: rgba(40, 30, 55, 0.75);
-  border-color: rgba(144, 132, 156, 0.25);
+  background: var(--rose-midnight-surface);
+  border-color: var(--rose-midnight-border);
 }
 
 [data-theme="rose-pine"] .worklist-item:hover {
-  border-color: rgba(144, 132, 156, 0.4);
+  background: var(--rose-midnight-surface-elevated);
+  border-color: rgba(220, 185, 210, 0.45);
 }
 
-/* Worklist rank - visible accent */
+/* Worklist rank - rose accent */
 [data-theme="rose-pine"] .worklist-rank {
-  color: rgba(144, 200, 220, 0.9);
+  color: var(--rose-midnight-accent);
 }
 
-/* Worklist workstream badge - muted rose */
+/* Worklist workstream badge - muted rose on midnight */
 [data-theme="rose-pine"] .worklist-workstream-badge {
-  background: rgba(144, 132, 156, 0.2);
-  color: rgba(200, 190, 210, 0.85);
+  background: rgba(168, 145, 165, 0.2);
+  color: rgba(200, 190, 210, 0.9);
 }
 
 /* Worklist title - primary readable */
 [data-theme="rose-pine"] .worklist-title {
-  color: rgba(242, 233, 225, 0.9);
+  color: var(--rose-midnight-text);
 }
 
-/* Worklist command section - slightly lighter than card for readability */
+/* Worklist command section - slightly lighter for readability */
 [data-theme="rose-pine"] .worklist-command-section {
-  background: rgba(40, 30, 55, 0.6);
-  border-color: rgba(144, 132, 156, 0.25);
+  background: rgba(68, 48, 72, 0.65);
+  border-color: var(--rose-midnight-border);
 }
 
-/* Worklist command text - readable on midnight rose */
+/* Worklist command text - readable on midnight */
 [data-theme="rose-pine"] .worklist-command {
-  color: rgba(242, 233, 225, 0.85);
+  color: var(--rose-midnight-text);
 }
 
 /* Worklist no-command - muted but visible */
 [data-theme="rose-pine"] .worklist-no-command {
-  color: rgba(144, 132, 156, 0.7);
+  color: var(--rose-midnight-muted);
 }
 
 /* Worklist labels - visible secondary */
@@ -87,7 +89,7 @@
 [data-theme="rose-pine"] .worklist-reason-label,
 [data-theme="rose-pine"] .worklist-evidence-label,
 [data-theme="rose-pine"] .worklist-safety-label {
-  color: rgba(144, 132, 156, 0.75);
+  color: var(--rose-midnight-muted);
 }
 
 /* Worklist values - readable secondary */

@@ -1,43 +1,45 @@
 /**
  * Rose Theme - Input and Form Styles
  * 
- * Phase: Rose Polishing (Production Quality)
+ * Phase: Rose Identity Pass
+ * 
+ * Rose identity: plum-primary buttons, mauve-secondary, teal only for links
  */
 
-/* Input/select in Rose theme - warm paper background */
+/* Input/select in Rose theme - rose-tinted ivory */
 [data-theme="rose-pine"] .autorefresh-control select,
 [data-theme="rose-pine"] .runs-filter-select {
-  background: rgba(255, 250, 243, 0.95);
-  border-color: rgba(144, 132, 156, 0.5);
-  color: #575279;
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .autorefresh-control label,
 [data-theme="rose-pine"] .autorefresh-status {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
-/* Buttons in tables/actions - muted rose for primary, mauve for secondary */
+/* Buttons in tables/actions - plum for primary, mauve for secondary */
 [data-theme="rose-pine"] .run-action-cell .btn-primary,
 [data-theme="rose-pine"] .run-action-cell button[class*='primary'] {
-  background: rgba(40, 105, 131, 0.15);
-  border-color: rgba(40, 105, 131, 0.5);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.18);
+  border-color: rgba(155, 114, 146, 0.45);
+  color: var(--rose-identity-secondary);
 }
 
 [data-theme="rose-pine"] .run-action-cell .btn-secondary,
 [data-theme="rose-pine"] .run-action-cell a.btn,
 [data-theme="rose-pine"] .run-action-cell a[class*='btn'] {
-  background: rgba(144, 132, 156, 0.15);
-  border-color: rgba(144, 132, 156, 0.4);
-  color: #797593;
+  background: rgba(168, 145, 165, 0.15);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-secondary);
 }
 
 [data-theme="rose-pine"] .run-action-cell .btn-secondary:hover,
 [data-theme="rose-pine"] .run-action-cell a.btn:hover,
 [data-theme="rose-pine"] .run-action-cell a[class*='btn']:hover {
-  background: rgba(144, 132, 156, 0.25);
-  color: #575279;
+  background: rgba(168, 145, 165, 0.22);
+  color: var(--rose-text-primary);
 }
 
 /* Queue filter selects - warm cream background */
@@ -113,45 +115,46 @@
 
 /* 
  * Rose button system:
- * - Primary action: deep teal (#1d4e5f) on light tint
- * - Secondary action: muted mauve (#797593) outline
+ * - Primary action: plum/dusty rose (#9b7292) - Rose identity
+ * - Secondary action: mauve (#a89aab) outline
+ * - Teal only for links/focus: (#286983)
  * - Disabled: visible but clearly inactive
- * - Dark-card action: lighter variant for midnight-rose contexts
+ * - Dark-card action: soft rose variant for midnight-rose contexts
  */
 
-/* Primary button - Rose deep teal */
+/* Primary button - Rose identity (plum/dusty rose) */
 [data-theme="rose-pine"] .btn-primary,
 [data-theme="rose-pine"] button[class*='primary'],
 [data-theme="rose-pine"] .btn:not([class*='secondary']):not([class*='danger']):not([class*='success']) {
-  background: rgba(40, 105, 131, 0.15);
-  border-color: rgba(40, 105, 131, 0.5);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.18);
+  border-color: rgba(155, 114, 146, 0.5);
+  color: var(--rose-identity-secondary);
   font-weight: 600;
 }
 
 [data-theme="rose-pine"] .btn-primary:hover,
 [data-theme="rose-pine"] button[class*='primary']:hover,
 [data-theme="rose-pine"] .btn:not([class*='secondary']):not([class*='danger']):not([class*='success']):hover {
-  background: rgba(40, 105, 131, 0.22);
-  border-color: rgba(40, 105, 131, 0.6);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.25);
+  border-color: rgba(155, 114, 146, 0.65);
+  color: var(--rose-identity-secondary);
 }
 
-/* Secondary button - muted mauve outline */
+/* Secondary button - mauve outline */
 [data-theme="rose-pine"] .btn-secondary,
 [data-theme="rose-pine"] button[class*='secondary'],
 [data-theme="rose-pine"] a.btn {
   background: transparent;
-  border-color: rgba(144, 132, 156, 0.4);
-  color: #797593;
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-secondary);
 }
 
 [data-theme="rose-pine"] .btn-secondary:hover,
 [data-theme="rose-pine"] button[class*='secondary']:hover,
 [data-theme="rose-pine"] a.btn:hover {
-  background: rgba(144, 132, 156, 0.1);
-  border-color: rgba(144, 132, 156, 0.5);
-  color: #575279;
+  background: rgba(168, 145, 165, 0.15);
+  border-color: var(--rose-border-emphasis);
+  color: var(--rose-text-primary);
 }
 
 /* Danger button - muted rose */
@@ -159,13 +162,13 @@
 [data-theme="rose-pine"] button[class*='danger'] {
   background: rgba(180, 99, 122, 0.12);
   border-color: rgba(180, 99, 122, 0.4);
-  color: #9b2c4a;
+  color: var(--rose-accent-danger);
 }
 
 [data-theme="rose-pine"] .btn-danger:hover,
 [data-theme="rose-pine"] button[class*='danger']:hover {
   background: rgba(180, 99, 122, 0.18);
-  color: #9b2c4a;
+  color: var(--rose-accent-danger);
 }
 
 /* Success button - forest green */
@@ -173,13 +176,13 @@
 [data-theme="rose-pine"] button[class*='success'] {
   background: rgba(86, 148, 127, 0.12);
   border-color: rgba(86, 148, 127, 0.4);
-  color: #2d6a4f;
+  color: var(--rose-accent-success);
 }
 
 [data-theme="rose-pine"] .btn-success:hover,
 [data-theme="rose-pine"] button[class*='success']:hover {
   background: rgba(86, 148, 127, 0.18);
-  color: #2d6a4f;
+  color: var(--rose-accent-success);
 }
 
 /* Disabled button - visible but inactive */
@@ -187,28 +190,28 @@
 [data-theme="rose-pine"] button:disabled,
 [data-theme="rose-pine"] .btn.disabled {
   opacity: 0.45;
-  background: rgba(144, 132, 156, 0.1);
-  border-color: rgba(144, 132, 156, 0.25);
-  color: #9890a9;
+  background: rgba(168, 145, 165, 0.1);
+  border-color: var(--rose-border-subtle);
+  color: var(--rose-text-muted);
   cursor: not-allowed;
 }
 
-/* Dark-card action buttons (for midnight-rose contexts) - lighter variant */
+/* Dark-card action buttons (for midnight-rose contexts) - soft rose variant */
 [data-theme="rose-pine"] .worklist-item .btn-primary,
 [data-theme="rose-pine"] .proposal-row .btn-primary,
 [data-theme="rose-pine"] .worklist-item button[class*='primary'],
 [data-theme="rose-pine"] .proposal-row button[class*='primary'] {
-  background: rgba(144, 200, 220, 0.15);
-  border-color: rgba(144, 200, 220, 0.4);
-  color: rgba(144, 200, 220, 0.9);
+  background: rgba(220, 185, 210, 0.18);
+  border-color: rgba(220, 185, 210, 0.45);
+  color: rgba(220, 185, 210, 0.95);
 }
 
 [data-theme="rose-pine"] .worklist-item .btn-primary:hover,
 [data-theme="rose-pine"] .proposal-row .btn-primary:hover,
 [data-theme="rose-pine"] .worklist-item button[class*='primary']:hover,
 [data-theme="rose-pine"] .proposal-row button[class*='primary']:hover {
-  background: rgba(144, 200, 220, 0.22);
-  color: rgba(144, 200, 220, 1);
+  background: rgba(220, 185, 210, 0.25);
+  color: rgba(220, 185, 210, 1);
 }
 
 [data-theme="rose-pine"] .worklist-item .btn-secondary,
@@ -216,24 +219,24 @@
 [data-theme="rose-pine"] .worklist-item button[class*='secondary'],
 [data-theme="rose-pine"] .proposal-row button[class*='secondary'] {
   background: transparent;
-  border-color: rgba(144, 132, 156, 0.35);
-  color: rgba(180, 170, 190, 0.75);
+  border-color: var(--rose-midnight-border);
+  color: rgba(200, 190, 210, 0.8);
 }
 
 [data-theme="rose-pine"] .worklist-item .btn-secondary:hover,
 [data-theme="rose-pine"] .proposal-row .btn-secondary:hover,
 [data-theme="rose-pine"] .worklist-item button[class*='secondary']:hover,
 [data-theme="rose-pine"] .proposal-row button[class*='secondary']:hover {
-  background: rgba(144, 132, 156, 0.15);
-  border-color: rgba(144, 132, 156, 0.45);
-  color: rgba(200, 190, 210, 0.9);
+  background: rgba(168, 145, 165, 0.15);
+  border-color: rgba(220, 185, 210, 0.5);
+  color: rgba(220, 185, 210, 0.95);
 }
 
-/* Focus states - Rose teal ring */
+/* Focus states - soft rose ring (not teal) */
 [data-theme="rose-pine"] .btn:focus-visible,
 [data-theme="rose-pine"] button:focus-visible,
 [data-theme="rose-pine"] select:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(40, 105, 131, 0.25);
-  border-color: rgba(40, 105, 131, 0.6);
+  box-shadow: 0 0 0 2px rgba(155, 114, 146, 0.3);
+  border-color: rgba(155, 114, 146, 0.6);
 }

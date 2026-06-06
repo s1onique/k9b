@@ -1,8 +1,9 @@
 /**
  * Rose Theme - LLM Activity and Misc Components
  * 
- * Phase: Rose Contrast Rescue Pass
+ * Phase: Rose Identity Pass
  * 
+ * Rose identity: blush surfaces, dusty rose accents
  * Owned surfaces: LLM activity table, notification table
  */
 
@@ -40,57 +41,57 @@
 }
 
 [data-theme="rose-pine"] .notification-table tbody tr:hover {
-  background: rgba(144, 132, 156, 0.12);
+  background: rgba(155, 114, 146, 0.1);
 }
 
 /* Notification table wrapper - Rose palette, NOT inherited dark */
 [data-theme="rose-pine"] .notification-table-wrapper {
-  background: rgba(242, 233, 225, 0.85);
-  border-color: rgba(144, 132, 156, 0.4);
-  box-shadow: 0 4px 12px rgba(144, 132, 156, 0.15);
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+  box-shadow: 0 4px 12px rgba(168, 145, 165, 0.15);
 }
 
 /* Notification table controls - Rose form elements */
 [data-theme="rose-pine"] .notification-table-controls {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
 [data-theme="rose-pine"] .notification-table-controls select {
-  background: rgba(255, 250, 243, 0.95);
-  border-color: rgba(144, 132, 156, 0.5);
-  color: #575279;
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .notification-table-controls input {
-  background: rgba(255, 250, 243, 0.95);
-  border-color: rgba(144, 132, 156, 0.5);
-  color: #575279;
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-primary);
 }
 
 [data-theme="rose-pine"] .notification-table-controls input::placeholder {
-  color: #9890a9;
+  color: var(--rose-text-muted);
 }
 
 /* Notification detail text - readable secondary */
 [data-theme="rose-pine"] .notification-detail {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
 /* Notification run/cluster meta - visible secondary */
 [data-theme="rose-pine"] .notification-run-cluster {
-  color: #797593;
+  color: var(--rose-text-secondary);
 }
 
-/* Notification artifact links - Rose accent styling */
+/* Notification artifact links - Rose identity styling */
 [data-theme="rose-pine"] .notification-table td a.artifact-link {
-  background: rgba(40, 105, 131, 0.06);
-  border-color: rgba(40, 105, 131, 0.35);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.08);
+  border-color: rgba(155, 114, 146, 0.4);
+  color: var(--rose-identity-secondary);
   font-weight: 500;
   text-decoration: none;
 }
 
 [data-theme="rose-pine"] .notification-table td a.artifact-link:hover {
-  background: rgba(40, 105, 131, 0.12);
-  color: #1d4e5f;
+  background: rgba(155, 114, 146, 0.15);
+  color: var(--rose-identity-secondary);
 }
