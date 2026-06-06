@@ -1,7 +1,7 @@
 /**
  * Theme Switch Component
  * 
- * Provides user-facing toggle between Dark and Solarized Light themes.
+ * Provides user-facing toggle between Dark, Solarized Light, and Rose themes.
  * Uses a native <select> element for simple, accessible theme switching.
  */
 
@@ -32,6 +32,7 @@ export const ThemeSwitch = () => {
         >
           <option value="dark">Dark</option>
           <option value="solarized-light">Solarized Light</option>
+          <option value="rose-pine">Rose</option>
         </select>
       </label>
     </div>

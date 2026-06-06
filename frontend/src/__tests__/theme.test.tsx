@@ -181,6 +181,88 @@ describe("Theme System", () => {
   });
 
   // ========================================================================
+  // Rose Theme Tests
+  // ========================================================================
+
+  test("Rose theme is present in the theme selector", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    const themeSelect = screen.getByRole("combobox", { name: /Select theme/i });
+    
+    // Verify Rose option is present in the dropdown
+    const roseOption = themeSelect.querySelector('option[value="rose-pine"]');
+    expect(roseOption).toBeInTheDocument();
+    expect(roseOption).toHaveTextContent("Rose");
+    
+    // Verify all three options are present
+    expect(themeSelect).toHaveProperty("options");
+    expect(themeSelect.options.length).toBe(3);
+  });
+
+  test("Selecting Rose applies the rose-pine theme and persists", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify initial state is dark
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    const themeSelect = screen.getByRole("combobox", { name: /Select theme/i });
+
+    // Select Rose
+    await user.selectOptions(themeSelect, "rose-pine");
+
+    // Verify theme was switched to rose-pine
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("rose-pine");
+    });
+    expect(themeSelect).toHaveValue("rose-pine");
+    expect(storageMock.getItem("dashboard-theme")).toBe("rose-pine");
+  });
+
+  test("Rose theme persists on reload", async () => {
+    // Simulate a page load with rose-pine theme stored
+    storageMock.setItem("dashboard-theme", "rose-pine");
+    document.documentElement.setAttribute("data-theme", "rose-pine");
+
+    render(<App />);
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // The theme switch should show Rose as selected
+    const themeSelect = screen.getByRole("combobox", { name: /Select theme/i });
+    expect(themeSelect).toHaveValue("rose-pine");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("rose-pine");
+  });
+
+  test("Rose -> Dark theme switching works correctly", async () => {
+    const user = userEvent.setup();
+    
+    // Pre-set rose-pine theme before rendering
+    document.documentElement.setAttribute("data-theme", "rose-pine");
+    storageMock.setItem("dashboard-theme", "rose-pine");
+
+    render(<App />);
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Verify initial state is rose-pine
+    expect(document.documentElement.getAttribute("data-theme")).toBe("rose-pine");
+
+    const themeSelect = screen.getByRole("combobox", { name: /Select theme/i });
+    expect(themeSelect).toHaveValue("rose-pine");
+
+    // Select Dark
+    await user.selectOptions(themeSelect, "dark");
+
+    // Verify theme was switched back to dark
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    });
+    expect(themeSelect).toHaveValue("dark");
+    expect(storageMock.getItem("dashboard-theme")).toBe("dark");
+  });
+
+  // ========================================================================
   // Solarized Light Theme Workflow-Critical Surface Tests
   // ========================================================================
 
