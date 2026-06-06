@@ -116,14 +116,18 @@ class VMAlertCRDDiscoveryStrategy(DiscoveryStrategy):
             )
 
             if result.returncode != 0:
-                stderr = result.stderr.lower()
-                if "not found" in stderr or "no resources" in stderr:
+                stderr_lower = result.stderr.lower()
+                if "not found" in stderr_lower or "no resources" in stderr_lower:
                     _logger.debug(
                         "vmalert CRD discovery: VMAlert CRD not installed",
                     )
                     return DiscoveryResult(sources=(), errors=(), strategy=self.name)
-                errors.append(f"kubectl failed: {result.stderr[:200]}")
-                _logger.warning("vmalert CRD discovery failed: %s", errors[-1])
+                # Detect Forbidden errors for structured logging - errors returned in DiscoveryResult
+                if "forbidden" in stderr_lower:
+                    errors.append(f"kubectl failed: Forbidden - {result.stderr[:200]}")
+                else:
+                    errors.append(f"kubectl failed: {result.stderr[:200]}")
+                # Do NOT emit unstructured warning - orchestrator handles structured event
                 return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
 
             data = json.loads(result.stdout)
@@ -146,13 +150,13 @@ class VMAlertCRDDiscoveryStrategy(DiscoveryStrategy):
 
         except subprocess.TimeoutExpired:
             errors.append("kubectl get vmalerts timed out")
-            _logger.warning("vmalert CRD discovery timed out")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except FileNotFoundError:
             errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for vmalert CRD discovery")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except json.JSONDecodeError as exc:
             errors.append(f"Failed to parse kubectl output: {exc}")
-            _logger.warning("Failed to parse vmalert CRD discovery output: %s", exc)
+            # Do NOT emit unstructured warning - orchestrator handles structured event
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 

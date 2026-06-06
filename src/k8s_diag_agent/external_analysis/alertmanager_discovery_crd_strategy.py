@@ -111,14 +111,18 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
             if result.returncode != 0:
-                stderr = result.stderr.lower()
-                if "not found" in stderr or "no resources" in stderr:
+                stderr_lower = result.stderr.lower()
+                if "not found" in stderr_lower or "no resources" in stderr_lower:
                     _logger.debug(
                         "Alertmanager CRD discovery: no Alertmanager CRDs found in any namespace",
                     )
                     return DiscoveryResult(sources=(), errors=(), strategy=self.name)
-                errors.append(f"kubectl failed: {result.stderr[:200]}")
-                _logger.warning("Alertmanager CRD discovery failed: %s", errors[-1])
+                # Detect Forbidden errors for structured logging - errors returned in DiscoveryResult
+                if "forbidden" in stderr_lower:
+                    errors.append(f"kubectl failed: Forbidden - {result.stderr[:200]}")
+                else:
+                    errors.append(f"kubectl failed: {result.stderr[:200]}")
+                # Do NOT emit unstructured warning - orchestrator handles structured event
                 return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
 
             data = json.loads(result.stdout)
@@ -212,14 +216,18 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
             if result.returncode != 0:
-                stderr = result.stderr.lower()
-                if "not found" in stderr or "no resources" in stderr:
+                stderr_lower = result.stderr.lower()
+                if "not found" in stderr_lower or "no resources" in stderr_lower:
                     _logger.debug(
                         "Prometheus CRD config discovery: no Prometheus CRDs found",
                     )
                     return DiscoveryResult(sources=(), errors=(), strategy=self.name)
-                errors.append(f"kubectl prometheuses failed: {result.stderr[:200]}")
-                _logger.warning("Prometheus CRD config discovery failed: %s", errors[-1])
+                # Detect Forbidden errors for structured logging - errors returned in DiscoveryResult
+                if "forbidden" in stderr_lower:
+                    errors.append(f"kubectl prometheuses failed: Forbidden - {result.stderr[:200]}")
+                else:
+                    errors.append(f"kubectl prometheuses failed: {result.stderr[:200]}")
+                # Do NOT emit unstructured warning - orchestrator handles structured event
                 return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
 
             data = json.loads(result.stdout)

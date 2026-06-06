@@ -57,6 +57,7 @@ from .alertmanager_discovery_strategies import (
     PrometheusCRDConfigDiscoveryStrategy,
     ServiceHeuristicDiscoveryStrategy,
 )
+from .discovery_structured_logging import emit_discovery_strategy_failure
 
 # Module logger for debug output
 _logger = logging.getLogger(__name__)
@@ -215,10 +216,13 @@ def discover_alertmanagers(
             inventory.add_source(source)
 
         if result.errors:
-            _logger.warning(
-                "Alertmanager discovery strategy %s completed with errors: %s",
-                strategy.name,
-                result.errors,
+            # Emit structured WARNING event for strategy failure (uses shared helper)
+            # Do NOT emit unstructured log - strategy failures are handled via structured events
+            emit_discovery_strategy_failure(
+                component="alertmanager-discovery",
+                strategy_name=strategy.name,
+                errors=result.errors,
+                cluster_context=context,
             )
         else:
             _logger.debug(

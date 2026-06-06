@@ -34,6 +34,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from .discovery_structured_logging import emit_discovery_strategy_failure
+
 # Import models from dedicated module
 from .vmalert_discovery_models import (
     _ORIGIN_PRIORITY,
@@ -194,10 +196,13 @@ def discover_vmalerts(
             inventory.add_source(source)
 
         if result.errors:
-            _logger.warning(
-                "vmalert discovery strategy %s completed with errors: %s",
-                strategy.name,
-                result.errors,
+            # Emit structured WARNING event for strategy failure (uses shared helper)
+            # Do NOT emit unstructured log - strategy failures are handled via structured events
+            emit_discovery_strategy_failure(
+                component="vmalert-discovery",
+                strategy_name=strategy.name,
+                errors=result.errors,
+                cluster_context=context,
             )
         else:
             _logger.debug(

@@ -80,3 +80,6 @@ ui/server_run_detail_reads.py handle_run_detail_route graceful run detail route 
 # === Manual Next Check Execution ===
 ui/server_next_check_execution.py execute_manual_next_check manual execution fallback boundary - docs/security-exception-audit.md ~322
 ui/server_next_check_execution.py handle_next_check_execution execution endpoint catch-all boundary - HTTP endpoint error isolation, no credential exposure
+
+# === Discovery Structured Logging ===
+external_analysis/discovery_structured_logging.py emit_discovery_strategy_failure structured logging fallback - non-fatal fallback for log emission failures, preserves error diagnostics
