@@ -1,0 +1,236 @@
+/**
+ * Rose Theme - Cards and Panels
+ * 
+ * Phase: Rose Polishing (Production Quality)
+ * 
+ * Rose palette: warm cream surfaces, dusty rose borders, plum text
+ */
+
+/* Provider execution cards - harmonized with warm cream shell */
+[data-theme="rose-pine"] .provider-execution {
+  background: rgba(242, 233, 225, 0.85);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .provider-execution-line {
+  background: rgba(255, 250, 243, 0.9);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .provider-execution-summary {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .provider-execution-note {
+  color: #9890a9;
+}
+
+/* Review enrichment panel */
+[data-theme="rose-pine"] .review-enrichment {
+  background: rgba(242, 233, 225, 0.92);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .review-enrichment-summary {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .review-enrichment-grid strong {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .review-enrichment-item ul {
+  color: #797593;
+}
+
+/* Cluster assessment */
+[data-theme="rose-pine"] .cluster-assessment {
+  background: rgba(255, 250, 243, 0.92);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .recommended-action {
+  background: rgba(234, 157, 52, 0.08);
+  border-color: rgba(234, 157, 52, 0.3);
+}
+
+[data-theme="rose-pine"] .recommended-action p {
+  color: #575279;
+}
+
+/* Drilldown cards */
+[data-theme="rose-pine"] .drilldown-card {
+  background: rgba(255, 250, 243, 0.92);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .drilldown-card.available {
+  border-color: rgba(86, 148, 127, 0.4);
+  background: rgba(86, 148, 127, 0.06);
+}
+
+[data-theme="rose-pine"] .drilldown-card.missing {
+  border-color: rgba(180, 99, 122, 0.4);
+  background: rgba(180, 99, 122, 0.06);
+}
+
+/* Related cards */
+[data-theme="rose-pine"] .related-card {
+  background: rgba(242, 233, 225, 0.88);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+/* Cluster detail */
+[data-theme="rose-pine"] .cluster-detail-panel {
+  background: rgba(255, 250, 243, 0.92);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .cluster-summary-card {
+  background: rgba(242, 233, 225, 0.88);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .cluster-summary-card strong {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .cluster-detail-body {
+  color: #575279;
+}
+
+/* Fleet metrics */
+[data-theme="rose-pine"] .fleet-metrics article {
+  background: rgba(242, 233, 225, 0.88);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+/* LLM historical */
+[data-theme="rose-pine"] .llm-historical {
+  background: rgba(242, 233, 225, 0.88);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .llm-historical summary {
+  color: #9890a9;
+}
+
+/* Orphaned checks */
+[data-theme="rose-pine"] .next-check-orphaned {
+  background: rgba(242, 233, 225, 0.88);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .next-check-orphaned li {
+  color: #575279;
+}
+
+/* Queue explanation block */
+[data-theme="rose-pine"] .queue-explanation-block {
+  background: rgba(242, 233, 225, 0.88);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .queue-explanation-actions__label {
+  color: #9890a9;
+}
+
+/* Next check plan cards */
+[data-theme="rose-pine"] .next-check-plan-card {
+  background: rgba(255, 250, 243, 0.92);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .next-check-plan-meta strong {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .next-check-plan-flags {
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .plan-gating {
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .plan-normalization {
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .plan-stale-note {
+  color: #9890a9;
+}
+
+/* Advisory lower sections container */
+[data-theme="rose-pine"] .advisory-lower-sections {
+  background: rgba(242, 233, 225, 0.5);
+}
+
+/* Lower section base */
+[data-theme="rose-pine"] .advisory-lower-section {
+  background: rgba(255, 250, 243, 0.85);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+/* Section labels - readable secondary, not ghosted */
+[data-theme="rose-pine"] .advisory-lower-section-label {
+  color: #797593;
+  font-weight: 600;
+}
+
+/* Proposal row actions - softer secondary actions */
+[data-theme="rose-pine"] .proposal-row-actions {
+  color: #797593;
+}
+
+/* Proposal artifacts - softer chip styling with muted rose accent */
+[data-theme="rose-pine"] .artifact-chip {
+  background: rgba(40, 105, 131, 0.06);
+  border-color: rgba(40, 105, 131, 0.35);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .artifact-chip:hover {
+  background: rgba(40, 105, 131, 0.12);
+  color: #1d4e5f;
+}
+
+/* Execution history filter */
+[data-theme="rose-pine"] .execution-history-filters {
+  background: rgba(242, 233, 225, 0.85);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .filter-label {
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .filter-count {
+  color: #9890a9;
+}
+
+/* Recent runs */
+[data-theme="rose-pine"] .recent-runs-list {
+  background: rgba(242, 233, 225, 0.85);
+}
+
+[data-theme="rose-pine"] .recent-runs-item {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .recent-runs-item:hover {
+  background: rgba(144, 132, 156, 0.15);
+}
+
+[data-theme="rose-pine"] .recent-runs-item.selected {
+  background: rgba(40, 105, 131, 0.1);
+  border-color: rgba(40, 105, 131, 0.3);
+}
+
+[data-theme="rose-pine"] .recent-runs-label {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .recent-runs-time {
+  color: #9890a9;
+}

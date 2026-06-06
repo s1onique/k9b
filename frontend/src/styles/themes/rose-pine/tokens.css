@@ -1,0 +1,84 @@
+/**
+ * Rose Theme - Theme Variables Override
+ * 
+ * Extracted from: themes.css [data-theme="rose-pine"]
+ * Phase: Rose Polishing (Production Quality)
+ * 
+ * Rose Theme Palette (based on Rose Pine Dawn, tuned for operators):
+ * - Warm ivory/rose-tinted backgrounds
+ * - Cream/rose-white cards
+ * - Deep plum/ink for primary text
+ * - Muted mauve-gray for secondary text
+ * - Dusty rose/taupe borders
+ * - Mature rose for primary accents
+ * - Restrained lavender/plum for secondary accents
+ * - Midnight rose / deep aubergine for dark surfaces
+ */
+
+[data-theme="rose-pine"] {
+  /* ============================================================
+     ROSE PALETTE CSS VARIABLES
+     These variables centralize repeated Rose colors for easier tuning.
+     Component overrides should consume these variables where applicable.
+     ============================================================ */
+  --rose-text-primary: #575279;
+  --rose-text-secondary: #797593;
+  --rose-text-muted: #9890a9;
+  --rose-text-accent: #907aa9;
+  
+  --rose-border-default: rgba(144, 132, 156, 0.4);
+  --rose-border-subtle: rgba(144, 132, 156, 0.25);
+  --rose-border-emphasis: rgba(144, 132, 156, 0.6);
+  
+  --rose-surface-cream: rgba(242, 233, 225, 0.88);
+  --rose-surface-ivory: rgba(255, 250, 243, 0.95);
+  --rose-surface-warm: rgba(242, 233, 225, 0.92);
+  
+  --rose-accent-primary: #1d4e5f;
+  --rose-accent-secondary: #907aa9;
+  --rose-accent-warning: #b45309;
+  --rose-accent-success: #2d6a4f;
+  --rose-accent-danger: #9b2c4a;
+  
+  /* ============================================================
+     TOKEN ADOPTION STATUS
+     
+     Rose palette variables now exist in tokens.css, but most component
+     override files still use literal palette values. Migration to consume
+     these variables is planned as future debt if needed for centralized tuning.
+     
+     Known debt: tokens.css centralizes palette, but tables.css, inputs.css,
+     status-pills.css, cards-panels.css, advisory.css, artifacts.css still
+     hardcode literal values for now.
+     ============================================================ */
+  
+  /* ============================================================
+     COMPONENT TOKENS
+     ============================================================ */
+  
+  /* Hero/Header text hierarchy - deep plum for readability */
+  --hero-title-color: var(--rose-text-primary);
+  --hero-run-text: var(--rose-text-primary);
+  --hero-run-id: var(--rose-text-secondary);
+  --hero-run-muted: var(--rose-text-muted);
+  
+  /* Nav integration with warm cream shell */
+  --nav-bg: rgba(242, 233, 225, 0.92);
+  --nav-border: var(--rose-border-default);
+  
+  /* Table contrast - Rose palette */
+  --table-header-bg: var(--rose-surface-cream);
+  --table-header-text: var(--rose-text-secondary);
+  --table-body-text: var(--rose-text-primary);
+  --table-row-hover: rgba(144, 132, 156, 0.18);
+  --table-border: var(--rose-border-subtle);
+  
+  /* Chip/pill contrast - mauve-gray */
+  --chip-bg: rgba(144, 132, 156, 0.15);
+  --chip-border: rgba(144, 132, 156, 0.35);
+  --chip-text: var(--rose-text-secondary);
+  
+  /* Status pill definition */
+  --status-pill-border-width: 1px;
+  --status-pill-border-style: solid;
+}

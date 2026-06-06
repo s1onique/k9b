@@ -1,0 +1,346 @@
+/**
+ * Rose Theme - Status Pills and Badges
+ * 
+ * Phase: Rose Polishing (Production Quality)
+ * 
+ * Rose palette adaptations:
+ * - Success: forest green (#2d6a4f)
+ * - Warning: deep gold/amber (#b45309)
+ * - Danger: muted rose (#9b2c4a)
+ * - Info: deep teal (#1d4e5f)
+ */
+
+/* Triage pills */
+[data-theme="rose-pine"] .triage-pill.triaged {
+  background: rgba(86, 148, 127, 0.18);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .triage-pill.not-triaged {
+  background: rgba(234, 157, 52, 0.18);
+  color: #b45309;
+}
+
+/* Action state badges */
+[data-theme="rose-pine"] .action-state-badge {
+  border: 1px solid transparent;
+}
+
+[data-theme="rose-pine"] .action-state-ready {
+  background: rgba(86, 148, 127, 0.15);
+  border-color: rgba(86, 148, 127, 0.35);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .action-state-approval {
+  background: rgba(234, 157, 52, 0.15);
+  border-color: rgba(234, 157, 52, 0.35);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .action-state-inactive {
+  background: rgba(144, 132, 156, 0.12);
+  border-color: rgba(144, 132, 156, 0.3);
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .action-state-unknown {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: #9890a9;
+}
+
+/* Queue status pills */
+[data-theme="rose-pine"] .queue-status-pill {
+  background: rgba(144, 132, 156, 0.1);
+  border: 1px solid transparent;
+}
+
+[data-theme="rose-pine"] .queue-status-pill-approved-ready {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.35);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .queue-status-pill-safe-ready {
+  background: rgba(86, 148, 127, 0.12);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .queue-status-pill-approval-needed {
+  background: rgba(234, 157, 52, 0.12);
+  border-color: rgba(234, 157, 52, 0.3);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .queue-status-pill-failed {
+  background: rgba(180, 99, 122, 0.12);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: #9b2c4a;
+}
+
+[data-theme="rose-pine"] .queue-status-pill-completed {
+  background: rgba(86, 148, 127, 0.12);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .queue-status-pill-duplicate-or-stale {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: #9890a9;
+}
+
+/* Plan status pills */
+[data-theme="rose-pine"] .plan-status-pill-safe {
+  background: rgba(86, 148, 127, 0.12);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .plan-status-pill-approval {
+  background: rgba(234, 157, 52, 0.12);
+  border-color: rgba(234, 157, 52, 0.3);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .plan-status-pill-duplicate {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .plan-status-pill-approved {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .plan-status-pill-stale {
+  background: rgba(180, 99, 122, 0.12);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: #9b2c4a;
+}
+
+/* Confidence badges */
+[data-theme="rose-pine"] .confidence-badge {
+  background: rgba(40, 105, 131, 0.12);
+  border: 1px solid rgba(40, 105, 131, 0.3);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-critical,
+[data-theme="rose-pine"] .confidence-badge.level-high {
+  background: rgba(180, 99, 122, 0.12);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: #9b2c4a;
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-medium {
+  background: rgba(234, 157, 52, 0.12);
+  border-color: rgba(234, 157, 52, 0.3);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-low {
+  background: rgba(86, 148, 127, 0.12);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-default {
+  background: rgba(144, 132, 156, 0.12);
+  border-color: rgba(144, 132, 156, 0.3);
+  color: #9890a9;
+}
+
+/* Priority pills */
+[data-theme="rose-pine"] .priority-pill-primary {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .priority-pill-secondary {
+  background: rgba(234, 157, 52, 0.1);
+  border-color: rgba(234, 157, 52, 0.25);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .priority-pill-fallback {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: #9890a9;
+}
+
+/* Outcome pills */
+[data-theme="rose-pine"] .outcome-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="rose-pine"] .outcome-pill-executed-success {
+  background: rgba(86, 148, 127, 0.12);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .outcome-pill-executed-failed {
+  background: rgba(180, 99, 122, 0.12);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: #9b2c4a;
+}
+
+[data-theme="rose-pine"] .outcome-pill-timed-out {
+  background: rgba(234, 157, 52, 0.12);
+  border-color: rgba(234, 157, 52, 0.3);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .outcome-pill-approval-required {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .outcome-pill-approved {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .outcome-pill-approval-stale {
+  background: rgba(234, 157, 52, 0.1);
+  border-color: rgba(234, 157, 52, 0.25);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .outcome-pill-approval-orphaned,
+[data-theme="rose-pine"] .outcome-pill-not-used,
+[data-theme="rose-pine"] .outcome-pill-unknown {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: #9890a9;
+}
+
+/* Safety pills */
+[data-theme="rose-pine"] .safety-pill {
+  background: rgba(234, 157, 52, 0.15);
+  color: #b45309;
+}
+
+/* Discovery pills */
+[data-theme="rose-pine"] .next-check-discovery-pill {
+  background: rgba(242, 233, 225, 0.92);
+  border-color: rgba(144, 132, 156, 0.35);
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .next-check-discovery-pill-safe {
+  background: rgba(86, 148, 127, 0.1);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .next-check-discovery-pill-approval {
+  background: rgba(234, 157, 52, 0.1);
+  border-color: rgba(234, 157, 52, 0.3);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .next-check-discovery-pill-approved {
+  background: rgba(40, 105, 131, 0.1);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .next-check-discovery-pill-duplicate {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.3);
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .next-check-discovery-pill-stale {
+  background: rgba(180, 99, 122, 0.1);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: #9b2c4a;
+}
+
+/* Cluster badge */
+[data-theme="rose-pine"] .next-check-cluster-badge {
+  background: rgba(40, 105, 131, 0.1);
+  border-color: rgba(40, 105, 131, 0.35);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .next-check-cluster-badge:hover {
+  background: rgba(40, 105, 131, 0.18);
+}
+
+/* Lifecycle chip */
+[data-theme="rose-pine"] .lifecycle-chip {
+  background: rgba(40, 105, 131, 0.1);
+  border-color: rgba(40, 105, 131, 0.25);
+  color: #1d4e5f;
+}
+
+/* Focus preset button */
+[data-theme="rose-pine"] .focus-preset-button {
+  border-color: rgba(144, 132, 156, 0.4);
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .focus-preset-button.active,
+[data-theme="rose-pine"] .focus-preset-button:focus-visible {
+  border-color: rgba(40, 105, 131, 0.6);
+  background: rgba(40, 105, 131, 0.1);
+  color: #1d4e5f;
+}
+
+/* Status pills base */
+[data-theme="rose-pine"] .status-pill {
+  border: 1px solid transparent;
+}
+
+[data-theme="rose-pine"] .status-pill-degraded {
+  background: rgba(180, 99, 122, 0.18);
+  color: #9b2c4a;
+  border-color: rgba(180, 99, 122, 0.35);
+}
+
+[data-theme="rose-pine"] .status-pill-healthy {
+  background: rgba(86, 148, 127, 0.2);
+  color: #2d6a4f;
+  border-color: rgba(86, 148, 127, 0.4);
+}
+
+[data-theme="rose-pine"] .status-pill-pending {
+  background: rgba(234, 157, 52, 0.2);
+  color: #b45309;
+  border-color: rgba(234, 157, 52, 0.4);
+}
+
+/* Review badges - Rose palette */
+[data-theme="rose-pine"] .status-pill-fully-reviewed {
+  background: rgba(86, 148, 127, 0.2);
+  color: #2d6a4f;
+  border-color: rgba(86, 148, 127, 0.4);
+}
+
+[data-theme="rose-pine"] .status-pill-unreviewed {
+  background: rgba(234, 157, 52, 0.2);
+  color: #b45309;
+  border-color: rgba(234, 157, 52, 0.4);
+}
+
+[data-theme="rose-pine"] .status-pill-partially-reviewed {
+  background: rgba(144, 132, 156, 0.15);
+  color: #9890a9;
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .status-pill-no-executions {
+  background: rgba(40, 105, 131, 0.15);
+  color: #1d4e5f;
+  border-color: rgba(40, 105, 131, 0.35);
+}

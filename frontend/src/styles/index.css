@@ -109,8 +109,19 @@
 @import url('./components/review-enrichment.css');
 @import url('./components/cluster-assessment.css');
 
-/* 5. Theme-specific overrides (imported AFTER component base styles) */
+/* 5. Theme-specific overrides (imported AFTER component base styles)
+   
+   Theme overrides are loaded before the remaining legacy monolith, but they use
+   theme-qualified selectors such as [data-theme="rose-pine"] .selector. These
+   selectors intentionally have higher specificity than the legacy untargeted
+   .selector rules that follow.
+   
+   If a new theme needs component overrides, add them here in the same pattern. */
 @import url('./themes/solarized-light.css');
+@import url('./themes/rose-pine.css');
 
-/* 6. Legacy component styles (remaining monolith) */
+/* 6. Legacy component styles (remaining monolith)
+   
+   Legacy styles use untargeted .selector rules. Theme overrides win because
+   they use [data-theme="theme-name"] .selector which has higher specificity. */
 @import url('../index.css');

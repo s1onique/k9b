@@ -1,0 +1,203 @@
+/**
+ * Rose Theme - Artifacts and Links
+ * 
+ * Phase: Rose Polishing (Production Quality)
+ * 
+ * Rose palette: muted teal for links, muted rose for primary actions
+ */
+
+/* Artifact links - Rose muted teal */
+[data-theme="rose-pine"] .artifact-link {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.4);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .artifact-link:hover {
+  background: rgba(40, 105, 131, 0.15);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .run-artifact-link {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.4);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .cluster-summary-artifact-link {
+  background: rgba(234, 157, 52, 0.08);
+  border-color: rgba(234, 157, 52, 0.4);
+  color: #b45309;
+}
+
+[data-theme="rose-pine"] .cluster-summary-artifact-link:hover {
+  background: rgba(234, 157, 52, 0.15);
+  color: #92400e;
+}
+
+[data-theme="rose-pine"] .exec-summary-item:hover {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.35);
+  color: #1d4e5f;
+}
+
+/* Follow-up blocks */
+[data-theme="rose-pine"] .follow-up-block {
+  background: rgba(40, 105, 131, 0.06);
+  border-color: rgba(40, 105, 131, 0.3);
+}
+
+[data-theme="rose-pine"] .follow-up-summary {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .follow-up-action {
+  color: #797593;
+}
+
+/* Action links - muted teal for toggles */
+[data-theme="rose-pine"] .toggle-details-button {
+  color: #1d4e5f;
+  opacity: 0.85;
+}
+
+[data-theme="rose-pine"] .toggle-details-button:hover {
+  opacity: 1;
+}
+
+/* Eyebrow text - muted lavender */
+[data-theme="rose-pine"] .eyebrow {
+  color: #907aa9;
+  opacity: 0.9;
+}
+
+/* Plan rationale */
+[data-theme="rose-pine"] .plan-rationale-item {
+  background: rgba(144, 132, 156, 0.1);
+  color: #797593;
+}
+
+/* Primary reason */
+[data-theme="rose-pine"] .primary-reason {
+  background-color: rgba(234, 157, 52, 0.08);
+  color: #b45309;
+}
+
+/* Queue empty state */
+[data-theme="rose-pine"] .queue-empty-state .link {
+  color: #1d4e5f;
+}
+
+/* Approval note colors */
+[data-theme="rose-pine"] .next-check-approval-note {
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .next-check-approval-note-success {
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .next-check-approval-note-error {
+  color: #9b2c4a;
+}
+
+/* Plan blocking reason */
+[data-theme="rose-pine"] .plan-blocking-reason {
+  color: #9b2c4a;
+}
+
+/* Not runnable explanation */
+[data-theme="rose-pine"] .not-runnable-explanation {
+  background: rgba(144, 132, 156, 0.1);
+  color: #9890a9;
+}
+
+/* Next check execution */
+[data-theme="rose-pine"] .next-check-execution {
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .next-check-execution-warning {
+  color: #b45309;
+}
+
+/* Run row */
+[data-theme="rose-pine"] .run-row-actions .action-primary {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .run-row-actions .action-secondary {
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .run-row-actions .action-tertiary {
+  color: #9890a9;
+}
+
+/* Execution error in runs */
+[data-theme="rose-pine"] .runs-execution-error {
+  color: #9b2c4a;
+}
+
+/* Diagnostic pack review */
+[data-theme="rose-pine"] .diagnostic-pack-review-summary {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .diagnostic-pack-provider {
+  color: #797593;
+}
+
+/* Review action hint */
+[data-theme="rose-pine"] .review-action-hint {
+  color: #9890a9;
+}
+
+/* LLM stats */
+[data-theme="rose-pine"] .run-stat-label {
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .llm-provider-breakdown {
+  color: #9890a9;
+}
+
+/* Cluster controls */
+[data-theme="rose-pine"] .cluster-controls label,
+[data-theme="rose-pine"] .cluster-controls select {
+  color: #797593;
+}
+
+/* Proposal controls */
+[data-theme="rose-pine"] .proposal-controls label {
+  color: #797593;
+}
+
+/* Queue card title */
+[data-theme="rose-pine"] .queue-card-title {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .queue-card-reason-label {
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .queue-card-signal {
+  color: #9890a9;
+}
+
+/* Notification history table - Rose palette */
+[data-theme="rose-pine"] .notification-table th {
+  background: rgba(242, 233, 225, 0.9);
+  color: #797593;
+  border-bottom-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .notification-table td {
+  color: #575279;
+  border-bottom-color: rgba(144, 132, 156, 0.25);
+}
+
+[data-theme="rose-pine"] .notification-table tbody tr:hover {
+  background: rgba(144, 132, 156, 0.12);
+}

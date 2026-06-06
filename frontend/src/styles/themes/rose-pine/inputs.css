@@ -1,0 +1,107 @@
+/**
+ * Rose Theme - Input and Form Styles
+ * 
+ * Phase: Rose Polishing (Production Quality)
+ */
+
+/* Input/select in Rose theme - warm paper background */
+[data-theme="rose-pine"] .autorefresh-control select,
+[data-theme="rose-pine"] .runs-filter-select {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .autorefresh-control label,
+[data-theme="rose-pine"] .autorefresh-status {
+  color: #9890a9;
+}
+
+/* Buttons in tables/actions - muted rose for primary, mauve for secondary */
+[data-theme="rose-pine"] .run-action-cell .btn-primary,
+[data-theme="rose-pine"] .run-action-cell button[class*='primary'] {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.5);
+  color: #1d4e5f;
+}
+
+[data-theme="rose-pine"] .run-action-cell .btn-secondary,
+[data-theme="rose-pine"] .run-action-cell a.btn,
+[data-theme="rose-pine"] .run-action-cell a[class*='btn'] {
+  background: rgba(144, 132, 156, 0.15);
+  border-color: rgba(144, 132, 156, 0.4);
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .run-action-cell .btn-secondary:hover,
+[data-theme="rose-pine"] .run-action-cell a.btn:hover,
+[data-theme="rose-pine"] .run-action-cell a[class*='btn']:hover {
+  background: rgba(144, 132, 156, 0.25);
+  color: #575279;
+}
+
+/* Queue filter selects - warm cream background */
+[data-theme="rose-pine"] .next-check-filter-row select,
+[data-theme="rose-pine"] .next-check-control-row select {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .next-check-filter-row select:hover,
+[data-theme="rose-pine"] .next-check-control-row select:hover {
+  border-color: rgba(144, 132, 156, 0.7);
+}
+
+/* LLM activity filter selects - harmonize with warm shell */
+[data-theme="rose-pine"] .llm-activity-filters select {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .llm-activity-filters select:hover {
+  border-color: rgba(144, 132, 156, 0.7);
+}
+
+/* Cluster controls selects - warm cream background */
+[data-theme="rose-pine"] .cluster-controls select {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+/* Queue search input - warm cream background */
+[data-theme="rose-pine"] .queue-search input {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .queue-search input::placeholder {
+  color: #9890a9;
+}
+
+[data-theme="rose-pine"] .queue-search input:focus {
+  border-color: rgba(40, 105, 131, 0.6);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(40, 105, 131, 0.1);
+}
+
+/* Proposal controls inputs - warm cream */
+[data-theme="rose-pine"] .proposal-controls input {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+/* Filter selects */
+[data-theme="rose-pine"] .filter-select {
+  background: rgba(255, 250, 243, 0.95);
+  border-color: rgba(144, 132, 156, 0.45);
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .filter-select:focus {
+  border-color: #286983;
+}

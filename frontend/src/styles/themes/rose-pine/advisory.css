@@ -1,0 +1,74 @@
+/**
+ * Rose Theme - Advisory Sections
+ * 
+ * Phase: Rose Polishing (Production Quality)
+ * 
+ * Rose palette: muted mauve borders, plum text, muted rose accents
+ */
+
+/* Top concerns section */
+[data-theme="rose-pine"] .advisory-concerns-section {
+  border-left-color: rgba(144, 132, 156, 0.4);
+}
+
+[data-theme="rose-pine"] .advisory-concern-row {
+  color: #575279;
+  border-bottom-color: rgba(144, 132, 156, 0.15);
+}
+
+/* Evidence gaps section */
+[data-theme="rose-pine"] .advisory-gaps-section {
+  border-left-color: rgba(144, 132, 156, 0.4);
+}
+
+[data-theme="rose-pine"] .advisory-gap-row {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .advisory-gap-marker {
+  color: #9890a9;
+}
+
+/* Next checks section - priority readability */
+[data-theme="rose-pine"] .advisory-next-checks-section {
+  border-left-color: rgba(144, 132, 156, 0.4);
+}
+
+[data-theme="rose-pine"] .advisory-check-row {
+  border-bottom-color: rgba(144, 132, 156, 0.15);
+}
+
+[data-theme="rose-pine"] .advisory-check-intent {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .advisory-check-cluster {
+  background: rgba(144, 132, 156, 0.15);
+  color: #797593;
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .advisory-check-cmd {
+  background: rgba(242, 233, 225, 0.8);
+  color: #575279;
+  border-color: rgba(144, 132, 156, 0.25);
+}
+
+/* Focus guidance section */
+[data-theme="rose-pine"] .advisory-focus-notes-section {
+  border-left-color: rgba(144, 132, 156, 0.35);
+}
+
+[data-theme="rose-pine"] .advisory-focus-note-row {
+  color: #797593;
+}
+
+/* Runs list detached mode notice */
+[data-theme="rose-pine"] .runs-detached-notice {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .runs-detached-notice .muted {
+  color: #797593;
+}
