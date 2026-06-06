@@ -14,7 +14,7 @@
 [data-theme="rose-pine"] .runs-filter-button {
   background: rgba(168, 145, 165, 0.12);
   border-color: rgba(168, 145, 165, 0.4);
-  color: var(--rose-text-secondary);
+  color: var(--rose-text-strong);
 }
 
 [data-theme="rose-pine"] .runs-filter-button:hover {
