@@ -129,6 +129,18 @@ doctrines:
     manual_only: true
     notes: Beta-specific guidance, active during beta phase.
 
+  - id: css-ownership
+    title: CSS Ownership
+    file: docs/doctrine/css-ownership.md
+    applies_to:
+      - css-creation
+      - css-modification
+      - theme-changes
+    agent_rules: []
+    required_checks: []
+    manual_only: true
+    notes: Guidance only - prevents theme tokens and raw colors in component CSS.
+
   # Planned doctrines (files to be created):
   - id: operator-path-truth
     title: Operator Path Truth
